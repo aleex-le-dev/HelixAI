@@ -1,0 +1,18 @@
+<!doctype html>
+<!--
+  Page vide, chargée une seule fois, en « file:// », par une fenêtre cachée.
+
+  Jusqu'à la 0.22.0 l'interface était servie depuis le disque : ses préférences
+  et son identité vivaient dans le stockage de l'origine « file:// ». Servie
+  désormais sous « helix://app », elle en aurait retrouvé un vide, et aurait
+  demandé de tout reconfigurer et de se reconnecter. Cette page n'existe que
+  pour relire cet ancien stockage et le transmettre (voir
+  `reprendreAncienStockage` dans electron/main.cjs).
+-->
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Reprise</title>
+  </head>
+  <body></body>
+</html>

@@ -1,0 +1,191 @@
+import { apiFetch } from "./endpoint";
+import { t, tf } from "@/lib/i18n";
+
+/**
+ * Connecteurs, côté interface.
+ *
+ * Un guichet, et rien de plus. Ce module n'a jamais connaissance d'une
+ * commande à exécuter : il envoie un identifiant du catalogue et les secrets
+ * saisis, l'instance retrouve la commande dans le sien. C'est ce qui fait que
+ * l'interface ne peut pas choisir ce qui tourne sur la machine de l'entreprise,
+ * même modifiée par quelqu'un qui la contrôlerait.
+ *
+ * Règle miroir de celle du courrier : le secret part vers l'instance et n'en
+ * revient jamais. L'état renvoyé ne porte que le **nom** des variables
+ * renseignées.
+ */
+
+export interface ChampSecret {
+  nom: string;
+  libelle: string;
+  aide: string;
+}
+
+export type Categorie = string;
+
+export interface EntreeCatalogue {
+  id: string;
+  label: string;
+  description: string;
+  categorie: Categorie;
+  secrets: ChampSecret[];
+  documentation?: string;
+  /** Service qui publie son propre serveur : branchement par le navigateur. */
+  url?: string;
+  /**
+   * `auto` : l'instance s'enregistre elle-même auprès du service, il n'y a
+   * rien à préparer. `appli` : une application doit être créée une fois chez
+   * le service, et son identifiant collé ici.
+   */
+  oauth?: "auto" | "appli";
+  /** Où créer cette application, quand `oauth` vaut « appli ». */
+  console?: string;
+  /** Livré avec Helix : déjà là, ne s'ajoute ni ne se retire. */
+  integre?: true;
+}
+
+export interface ConnecteurInstalle {
+  id: string;
+  label: string;
+  description: string;
+  /** Noms des variables renseignées. Jamais leur valeur. */
+  secretsFournis: string[];
+  depuis: string;
+  libre: boolean;
+  running: boolean;
+  toolCount: number;
+  error?: string;
+  /** Branché par autorisation dans le navigateur. */
+  distant?: boolean;
+  autoriseDepuis?: string;
+}
+
+export interface EtatConnecteurs {
+  catalogue: EntreeCatalogue[];
+  categories: Categorie[];
+  installes: ConnecteurInstalle[];
+  chiffrementDonnees: boolean;
+  commandeLibre: boolean;
+}
+
+export interface Resultat {
+  ok: boolean;
+  message: string;
+  etat?: EtatConnecteurs;
+}
+
+/** Groupe d'outils tel que l'instance le voit. */
+export interface GroupeOutils {
+  id: string;
+  label: string;
+  description: string;
+  actif: boolean;
+  outils: number;
+  obstacle?: string;
+}
+
+/**
+ * Signal interne : la liste des connecteurs vient de changer.
+ *
+ * L'écran des réglages et la puce du composeur lisent la même chose à deux
+ * endroits. Sans ce signal, brancher Notion depuis les réglages laissait le
+ * menu du composeur afficher l'ancienne liste jusqu'au prochain rechargement.
+ */
+export const CONNECTEURS_CHANGE = "helix:connecteurs-change";
+
+export function signalerChangement(): void {
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new Event(CONNECTEURS_CHANGE));
+  }
+}
+
+/** `null` si l'instance ne répond pas : l'écran le dit plutôt que d'afficher du vide. */
+export async function etat(): Promise<EtatConnecteurs | null> {
+  try {
+    const res = await apiFetch("/helix/connecteurs");
+    if (!res.ok) return null;
+    return (await res.json()) as EtatConnecteurs;
+  } catch {
+    return null;
+  }
+}
+
+/** Groupes d'outils réellement proposés au modèle. `null` si instance muette. */
+export async function outils(): Promise<GroupeOutils[] | null> {
+  try {
+    const res = await apiFetch("/helix/outils");
+    if (!res.ok) return null;
+    const corps = (await res.json()) as { groupes: GroupeOutils[] };
+    return corps.groupes;
+  } catch {
+    return null;
+  }
+}
+
+async function poster(chemin: string, corps: unknown): Promise<Resultat> {
+  try {
+    const res = await apiFetch(chemin, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(corps),
+    });
+    const recu = (await res.json().catch(() => ({}))) as Partial<Resultat> & {
+      error?: { message?: string };
+    };
+    if (recu.error?.message) return { ok: false, message: recu.error.message };
+    return {
+      ok: recu.ok === true,
+      message: recu.message ?? tf("L'opération a échoué ({0}).", res.status),
+      etat: recu.etat,
+      ...("adresse" in recu ? { adresse: (recu as { adresse?: string }).adresse } : {}),
+      ...("pret" in recu ? { pret: (recu as { pret?: boolean }).pret } : {}),
+    };
+  } catch {
+    return {
+      ok: false,
+      message: t("L'instance n'a pas répondu. Vérifiez qu'elle est démarrée, puis recommencez."),
+    };
+  }
+}
+
+/**
+ * Branche un connecteur du catalogue.
+ *
+ * On n'envoie que l'identifiant et les secrets. L'instance démarre le serveur
+ * avant d'enregistrer quoi que ce soit : un refus n'a donc rien laissé derrière
+ * lui, et le message rendu dit ce qui a manqué.
+ */
+export async function ajouter(
+  id: string,
+  secrets: Record<string, string>,
+): Promise<Resultat> {
+  const resultat = await poster("/helix/connecteurs/ajouter", { id, secrets });
+  if (resultat.ok) signalerChangement();
+  return resultat;
+}
+
+/**
+ * Lance l'autorisation d'un service distant.
+ *
+ * Rend soit `pret` (l'instance était déjà autorisée), soit `adresse`, la page
+ * du service à ouvrir dans le navigateur. Cette page est celle du service,
+ * chez lui : le mot de passe de la personne n'est jamais vu par Helix.
+ */
+export async function connecter(
+  id: string,
+  identifiants?: { clientId?: string; clientSecret?: string },
+): Promise<Resultat & { adresse?: string; pret?: boolean }> {
+  const resultat = (await poster("/helix/connecteurs/connecter", {
+    id,
+    ...identifiants,
+  })) as Resultat & { adresse?: string; pret?: boolean };
+  if (resultat.pret) signalerChangement();
+  return resultat;
+}
+
+/** Retire un connecteur : ses outils disparaissent, son secret est effacé. */
+export async function retirer(id: string): Promise<Resultat> {
+  const resultat = await poster("/helix/connecteurs/retirer", { id });
+  if (resultat.ok) signalerChangement();
+  return resultat;
+}

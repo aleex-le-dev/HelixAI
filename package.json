@@ -1,0 +1,110 @@
+{
+  "name": "helix-plateforme",
+  "private": true,
+  "version": "0.27.0",
+  "license": "AGPL-3.0-only",
+  "author": {
+    "name": "Medhi Clabaut (Helix Agence, SIREN 994 907 145)",
+    "email": "contact@helix-agence.fr",
+    "url": "https://helix-agence.fr"
+  },
+  "type": "module",
+  "main": "electron/main.cjs",
+  "scripts": {
+    "dev": "vite",
+    "gateway": "node gateway/src/index.ts",
+    "app": "npm run build:gateway && electron .",
+    "package": "npm run build && electron-builder --publish never",
+    "build:gateway": "esbuild gateway/src/index.ts --bundle --platform=node --target=node20 --format=cjs --outfile=dist-gateway/index.cjs --external:pg-native && esbuild gateway/tools/motdepasse.ts --bundle --platform=node --target=node20 --format=cjs --outfile=dist-gateway/motdepasse.cjs --external:pg-native",
+    "build": "tsc --noEmit && npm run typecheck:gateway && vite build && npm run build:gateway",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit && npm run typecheck:gateway",
+    "i18n": "node scripts/i18n.mjs",
+    "i18n-passerelle": "node scripts/i18n-passerelle.mjs",
+    "securite": "node scripts/securite.mjs",
+    "motdepasse": "node --experimental-strip-types gateway/tools/motdepasse.ts",
+    "typecheck:gateway": "tsc --noEmit -p tsconfig.gateway.json",
+    "package:signe": "node scripts/signature/construire.mjs",
+    "verifier:signature": "node scripts/signature/verifier.mjs"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "electron-updater": "^6.8.9",
+    "lucide-react": "^0.469.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^7.18.2"
+  },
+  "build": {
+    "appId": "fr.helix.plateforme",
+    "copyright": "Copyright © 2026 Medhi Clabaut — Helix Agence, SIREN 994 907 145",
+    "productName": "Helix",
+    "protocols": {
+      "name": "Invitation Helix",
+      "schemes": [
+        "helix"
+      ],
+      "role": "Viewer"
+    },
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "dist/**/*",
+      "dist-gateway/**/*",
+      "electron/**/*",
+      "build/icon.png"
+    ],
+    "extraResources": [
+      {
+        "from": "dist-gateway",
+        "to": "dist-gateway"
+      }
+    ],
+    "mac": {
+      "category": "public.app-category.productivity",
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.plist",
+      "notarize": false,
+      "extendInfo": {
+        "NSAppleEventsUsageDescription": "Helix pilote le clavier de votre Mac pour réaliser les actions que vous approuvez dans Cowork.",
+        "NSSystemAdministrationUsageDescription": "Helix a besoin de l'Accessibilité pour déplacer la souris et saisir au clavier, uniquement pour les actions que vous approuvez.",
+        "NSMicrophoneUsageDescription": "Helix utilise le micro pour la dictée et l'enregistrement des réunions. Le son est transcrit par votre instance, sans service extérieur."
+      }
+    },
+    "win": {
+      "target": [
+        "nsis"
+      ]
+    },
+    "linux": {
+      "target": [
+        "AppImage"
+      ],
+      "category": "Office"
+    }
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.1",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.4",
+    "autoprefixer": "^10.4.20",
+    "electron": "^33.4.11",
+    "electron-builder": "^26.15.3",
+    "esbuild": "^0.28.1",
+    "pdfjs-dist": "^6.3.289",
+    "pg": "^8.23.0",
+    "postcss": "^8.4.49",
+    "tailwindcss": "^3.4.17",
+    "typescript": "^5.6.3",
+    "vite": "^6.0.5"
+  }
+}

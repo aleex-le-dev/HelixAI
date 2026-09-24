@@ -1,0 +1,180 @@
+/* =============================================================================
+ * TOKENS DE DESIGN HELIX
+ * Source de verite : charte du site Helix (helix-agence.fr + dossier Helix 2).
+ * Toutes les couleurs sont des triplets HSL « H S% L% » (sans wrapper hsl()),
+ * consommes via Tailwind avec `hsl(var(--token) / <alpha-value>)`.
+ * AUCUNE valeur hexadecimale en dur dans les composants : on passe par ces tokens.
+ * ========================================================================== */
+
+:root {
+  /* --- Base neutre : sombre chaud sur creme ------------------------------- */
+  --primary: 30 8% 9%; /* #19170F texte & boutons pleins (dominant) */
+  --primary-foreground: 40 22% 97%;
+  --background: 40 22% 97%; /* #F9F6EF creme */
+  --foreground: 30 8% 9%;
+  --card: 40 22% 97%;
+  --card-foreground: 30 8% 9%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 30 8% 9%;
+
+  --muted: 40 16% 93%; /* surfaces atténuées */
+  --muted-foreground: 30 6% 38%; /* texte secondaire */
+  --secondary: 40 16% 93%;
+  --secondary-foreground: 30 8% 9%;
+
+  --border: 40 10% 88%;
+  --input: 40 10% 88%;
+  --ring: 30 8% 9%;
+
+  /* --- Accents ------------------------------------------------------------ */
+  --accent: 162 70% 38%; /* #1DA57C vert emeraude : accent interactif, badges, liens */
+  --accent-foreground: 40 22% 97%;
+  --info: 221 83% 53%; /* #2563EB bleu : encarts d'information */
+  --info-foreground: 40 22% 97%;
+
+  /* --- Etats -------------------------------------------------------------- */
+  --destructive: 0 84% 60%; /* rouge : deconnexion, zone de danger */
+  --destructive-foreground: 0 0% 100%;
+  --success: 142 71% 45%; /* coche verte */
+  --success-foreground: 0 0% 100%;
+  --warning: 38 92% 50%; /* bandeau jaune */
+  --warning-foreground: 30 8% 9%;
+
+  /* --- Voile de modale ----------------------------------------------------- */
+  /*
+   * Un voile doit toujours ASSOMBRIR ce qu'il recouvre : c'est ce qui pousse la
+   * page en arriere-plan. Il ne peut donc pas s'appuyer sur un neutre, dont
+   * l'echelle se retourne en sombre — le voile virerait alors au blanc laiteux.
+   * D'ou ce token dedie, sombre dans les deux themes.
+   */
+  --overlay: 240 10% 10%;
+
+  /* --- Barre laterale ----------------------------------------------------- */
+  --sidebar: 40 20% 96%; /* legerement distincte de la zone principale */
+  --sidebar-foreground: 30 8% 9%;
+  --sidebar-muted: 30 6% 45%;
+  --sidebar-border: 40 12% 90%;
+  --sidebar-active: 40 24% 99%; /* pastille claire surelevee de l'element actif */
+
+  /* --- Echelle de neutres (gris chauds) ----------------------------------- */
+  --neutral-15: 240 10% 10%;
+  --neutral-30: 240 8% 20%;
+  --neutral-40: 240 8% 35%;
+  --neutral-50: 240 8% 50%;
+  --neutral-60: 240 4% 60%;
+  --neutral-70: 240 4% 75%;
+  --neutral-80: 240 3% 86%;
+  --neutral-90: 0 0% 95%;
+
+  /* --- Rayons ------------------------------------------------------------- */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius: 16px; /* --radius-lg */
+  --radius-lg: 16px;
+  --radius-xl: 24px;
+  --radius-2xl: 32px;
+  --radius-full: 9999px;
+
+  /* --- Ombres (tres discretes) -------------------------------------------- */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.03);
+  --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.04);
+  --shadow-lg: 0 4px 16px rgba(0, 0, 0, 0.06);
+  --shadow-pop: 0 8px 30px rgba(0, 0, 0, 0.08);
+
+  /* --- Echelle typographique (rem) ---------------------------------------- */
+  --text-xs: 0.75rem; /* 12 */
+  --text-sm: 0.875rem; /* 14 */
+  --text-base: 1rem; /* 16 */
+  --text-lg: 1.125rem; /* 18 */
+  --text-xl: 1.25rem; /* 20 */
+  --text-2xl: 1.5rem; /* 24 */
+  --text-3xl: 1.875rem; /* 30 */
+  --text-4xl: 2.25rem; /* 36 */
+  --text-5xl: 3rem; /* 48 */
+
+  /* --- Echelle d'espacement (marque) -------------------------------------- */
+  --gap-element: 16px;
+  --gap-card: 24px;
+  --gap-content: 56px;
+
+  /* --- Transitions -------------------------------------------------------- */
+  --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-base: 300ms cubic-bezier(0.4, 0, 0.2, 1);
+
+  /* --- Typographie -------------------------------------------------------- */
+ --font-body: "Satoshi", "Satoshi Fallback", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Satoshi", "Satoshi Fallback", ui-sans-serif, system-ui, sans-serif;
+
+  /* Indique au systeme quelles couleurs natives employer (ascenseurs, champs). */
+  color-scheme: light;
+}
+
+/* =============================================================================
+ * THEME SOMBRE
+ * Aucune couleur n'est ecrite ailleurs que dans ce fichier : basculer le theme
+ * revient a redefinir les memes tokens, et toute l'application suit.
+ *
+ * Ce n'est pas la palette claire inversee. Un creme inverse donne un gris bleu
+ * mort ; on garde ici la meme dominante chaude, ramenee dans les valeurs
+ * basses. L'accent emeraude est legerement eclairci : a 38 % de luminosite il
+ * passait sous le seuil de lisibilite sur fond sombre.
+ * ========================================================================== */
+
+:root[data-theme="sombre"] {
+  --primary: 40 20% 94%; /* les boutons pleins s'inversent : clair sur sombre */
+  --primary-foreground: 30 8% 10%;
+  --background: 30 8% 8%;
+  --foreground: 40 18% 93%;
+  --card: 30 7% 11%;
+  --card-foreground: 40 18% 93%;
+  --popover: 30 7% 13%;
+  --popover-foreground: 40 18% 93%;
+
+  --muted: 30 6% 16%;
+  --muted-foreground: 40 7% 64%;
+  --secondary: 30 6% 16%;
+  --secondary-foreground: 40 18% 93%;
+
+  --border: 30 6% 20%;
+  --input: 30 6% 20%;
+  --ring: 40 18% 93%;
+
+  --accent: 162 62% 46%;
+  --accent-foreground: 30 8% 8%;
+  --info: 221 83% 63%;
+  --info-foreground: 30 8% 8%;
+
+  --destructive: 0 72% 58%;
+  --destructive-foreground: 40 18% 96%;
+  --success: 142 60% 48%;
+  --success-foreground: 30 8% 8%;
+  --warning: 38 88% 56%;
+  --warning-foreground: 30 8% 10%;
+
+  /* Le fond est deja tres bas : seul un noir franc creuse encore l'ecart. */
+  --overlay: 0 0% 0%;
+
+  --sidebar: 30 8% 10%;
+  --sidebar-foreground: 40 18% 93%;
+  --sidebar-muted: 40 6% 60%;
+  --sidebar-border: 30 6% 18%;
+  --sidebar-active: 30 6% 17%; /* pastille surelevee : plus claire que le rail */
+
+  /* Echelle de neutres retournee : ce qui etait clair devient sombre. */
+  --neutral-15: 0 0% 95%;
+  --neutral-30: 240 3% 86%;
+  --neutral-40: 240 4% 75%;
+  --neutral-50: 240 4% 60%;
+  --neutral-60: 240 8% 50%;
+  --neutral-70: 240 8% 32%;
+  --neutral-80: 240 8% 24%;
+  --neutral-90: 240 10% 14%;
+
+  /* Sur fond sombre une ombre portee ne se voit plus : il faut l'appuyer. */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.45);
+  --shadow-lg: 0 4px 16px rgba(0, 0, 0, 0.5);
+  --shadow-pop: 0 8px 30px rgba(0, 0, 0, 0.6);
+
+  color-scheme: dark;
+}

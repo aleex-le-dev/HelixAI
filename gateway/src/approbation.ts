@@ -1,0 +1,755 @@
+import { randomBytes } from "node:crypto";
+import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { dirname, join } from "node:path";
+import { journaliser } from "./audit.ts";
+import { apercuEnvoi, envoiSansAccord, presenterMessage } from "./courrier.ts";
+
+/**
+ * Approbation des actions de l'agent.
+ *
+ * Le sélecteur « Approuver pour moi » de Cowork promettait un contrôle qui
+ * n'existait pas : trois niveaux affichés, aucun appliqué. Ce module est la
+ * chose réelle.
+ *
+ * Deux principes gouvernent tout ce qui suit.
+ *
+ * 1. **La barrière est ici, pas dans le navigateur.** Un contrôle posé dans
+ *    l'interface ne protège de rien : il suffit d'appeler `/v1/chat/completions`
+ *    avec `tools: true` pour le contourner. Le niveau est lu et appliqué par la
+ *    passerelle, quel que soit le client ; l'interface ne fait que l'afficher.
+ *
+ * 2. **Un seul mécanisme.** Le contrôle de l'écran avait déjà tout ce qu'il
+ *    faut : file d'attente, flux d'évènements vers l'interface, délai
+ *    d'expiration, trace au journal. Le dupliquer pour les fichiers aurait donné
+ *    deux files, deux flux et deux comportements qui divergent au premier
+ *    correctif. Le noyau vit donc ici, et `computer.ts` s'en sert.
+ */
+
+/* ------------------------------------------------------------------ */
+/* Niveau                                                              */
+/* ------------------------------------------------------------------ */
+
+export type Niveau = "tout" | "modifications" | "chaque";
+
+export const NIVEAUX: Niveau[] = ["tout", "modifications", "chaque"];
+
+export const estNiveau = (valeur: unknown): valeur is Niveau =>
+  typeof valeur === "string" && (NIVEAUX as string[]).includes(valeur);
+
+/**
+ * Niveau à l'installation.
+ *
+ * Ni le plus permissif ni le plus bavard. Un agent qui explore librement mais
+ * demande avant de toucher est utilisable dès la première minute, et ne peut
+ * pas abîmer un dossier avant que son propriétaire ait compris ce qu'il fait.
+ */
+export const NIVEAU_DEFAUT: Niveau = "modifications";
+
+/**
+ * Où le niveau est conservé.
+ *
+ * Volontairement **hors** des collections de `db.ts`. Celles-ci se synchronisent
+ * entre les postes par `PUT /helix/data/<collection>` : y ranger le niveau
+ * aurait donné à n'importe quel poste authentifié le moyen de le remettre à
+ * « tout » par une route générique, c'est-à-dire exactement le contournement
+ * que ce module existe pour empêcher. Il se change par une route dédiée, qui
+ * exige une séance et laisse une trace.
+ */
+const fichierNiveau = () =>
+  join(process.env.HELIX_DATA_DIR ?? join(homedir(), ".helix", "data"), "approbation.json");
+
+let niveauCourant: Niveau | null = null;
+
+export function niveau(): Niveau {
+  if (niveauCourant) return niveauCourant;
+  try {
+    const lu = JSON.parse(readFileSync(fichierNiveau(), "utf8")) as { niveau?: unknown };
+    // Un fichier absent, illisible ou porteur d'une valeur inconnue ne doit pas
+    // ouvrir les vannes : on retombe sur le niveau d'installation.
+    niveauCourant = estNiveau(lu.niveau) ? lu.niveau : NIVEAU_DEFAUT;
+  } catch {
+    niveauCourant = NIVEAU_DEFAUT;
+  }
+  return niveauCourant;
+}
+
+/** Change le niveau et le grave sur disque. Le redémarrage le retrouve. */
+export function definirNiveau(valeur: Niveau, qui: string): void {
+  const ancien = niveau();
+  niveauCourant = valeur;
+
+  const fichier = fichierNiveau();
+  try {
+    const dir = dirname(fichier);
+    if (!existsSync(dir)) mkdirSync(dir, { recursive: true, mode: 0o700 });
+    // Écriture atomique, comme le magasin de db.ts : un poste qui lit pendant
+    // l'écriture ne doit jamais tomber sur un fichier tronqué.
+    const temp = `${fichier}.tmp`;
+    writeFileSync(temp, JSON.stringify({ niveau: valeur }), { encoding: "utf8", mode: 0o600 });
+    renameSync(temp, fichier);
+  } catch (err) {
+    console.error(
+      "[approbation] niveau non conservé sur disque :",
+      err instanceof Error ? err.message : err,
+    );
+  }
+
+  journaliser("approbation.niveau", qui, { ancien, nouveau: valeur });
+}
+
+/* ------------------------------------------------------------------ */
+/* Ce qui compte comme « modifier »                                    */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Outils du serveur de fichiers qui ne font qu'observer.
+ *
+ * Liste établie sur les noms réels rendus par
+ * `@modelcontextprotocol/server-filesystem` (14 outils) et non sur une
+ * supposition. Les quatre absents modifient : `write_file`, `edit_file`,
+ * `create_directory`, `move_file`.
+ *
+ * Le sens de la liste est important : on énumère ce qui est **inoffensif**, et
+ * tout le reste est traité comme modifiant. Une mise à jour du serveur qui
+ * ajouterait `delete_file` serait donc soumise à approbation dès le premier
+ * appel, sans que personne ait à y penser. L'inverse aurait laissé passer.
+ */
+const FICHIERS_LECTURE = new Set([
+  "read_file",
+  "read_text_file",
+  "read_media_file",
+  "read_multiple_files",
+  "list_directory",
+  "list_directory_with_sizes",
+  "directory_tree",
+  "search_files",
+  "get_file_info",
+  "list_allowed_directories",
+]);
+
+/** Outils bureautiques qui ne font que lire (`bureau.ts`). */
+const BUREAU_LECTURE = new Set(["lire_document"]);
+
+/** Outils des connecteurs Google Drive et Slack, tous de lecture (`drive.ts`, `slack.ts`). */
+const DRIVE_LECTURE = new Set(["drive__chercher", "drive__recents", "drive__dossier", "drive__lire"]);
+const SLACK_LECTURE = new Set(["slack__salons", "slack__messages", "slack__fil", "slack__chercher"]);
+
+/**
+ * Dit si un outil change quelque chose.
+ *
+ * Le connecteur de courrier (`courrier__`) lit, et dépose des brouillons :
+ * consulter une boîte ne modifie rien et ne demande donc rien au niveau
+ * « Demander avant de modifier » ; déposer un brouillon, si. Les lectures sont
+ * reconnues par leur nom exact : un outil de courrier inconnu modifie.
+ *
+ * Les actions d'écran ne passent pas par ici : `computer.ts` a sa propre
+ * classification, plus fine (une capture observe, un clic agit).
+ *
+ * **Un outil dont on ne sait rien modifie.** Depuis que l'instance peut se voir
+ * ajouter des connecteurs, les noms qui arrivent ici ne sont plus connus
+ * d'avance : Notion en apporte des dizaines, un serveur interne en apportera
+ * d'autres. La liste de lecture ne vaut donc que pour le serveur qui l'a
+ * inspirée, celui des fichiers. Sans cette restriction, un connecteur exposant
+ * un outil nommé `search_files` ou `read_file` — noms parfaitement banals —
+ * aurait hérité du laissez-passer du serveur de fichiers et agi sans rien
+ * demander. On échoue fermé : ce qu'on ne reconnaît pas passe par l'approbation.
+ */
+const SERVEUR_FICHIERS = "fichiers";
+const COURRIER_LECTURE = new Set(["courrier__derniers", "courrier__chercher", "courrier__lire"]);
+const BIBLIOTHEQUE_LECTURE = new Set(["bibliotheque__chercher", "bibliotheque__lire", "reunions__chercher", "reunions__lire"]);
+/** Le contrôle du code web lit des fichiers et ne touche à rien (controleWeb.ts). */
+const CONTROLE_LECTURE = new Set(["controle__site_web"]);
+
+/**
+ * Outils qui, par défaut, demandent à chaque fois, quel que soit le niveau,
+ * même à un agent « autonome », et dont l'accord ne se retient jamais d'un
+ * appel à l'autre.
+ *
+ * Un mail envoyé ne se reprend pas. Le niveau « Tout approuver » dit « fais ce
+ * que tu veux dans mes dossiers », pas « écris à mes clients en mon nom » ; un
+ * accord donné pour un premier mail ne couvre pas le suivant, qui n'a ni les
+ * mêmes destinataires ni le même texte.
+ *
+ * Une personne peut choisir d'envoyer sans confirmation (Connecteurs, Courrier,
+ * `envoiSansAccord`) : l'envoi suit alors les règles ordinaires, sans carte au
+ * niveau « Tout approuver » ni pour un agent autonome. Aux autres niveaux,
+ * chaque mail reste montré en entier.
+ */
+const TOUJOURS_DEMANDER = new Set(["courrier__envoyer"]);
+
+export const demandeToujours = (outil: string) => TOUJOURS_DEMANDER.has(outil) && !envoiSansAccord();
+
+export function modifie(outil: string): boolean {
+  if (outil.startsWith("courrier__")) return !COURRIER_LECTURE.has(outil);
+  // Le connecteur d'agenda est en lecture seule : il n'émet que des PROPFIND et
+  // des REPORT, jamais une écriture CalDAV. Voir agenda.ts.
+  if (outil.startsWith("agenda__")) return false;
+  /*
+   * Google Drive et Slack sont en lecture seule (drive.ts, slack.ts). Ils sont
+   * reconnus par leurs noms exacts, pas par leur préfixe : un serveur MCP ajouté
+   * sous l'identifiant « slack » apporterait des `slack__…` qui, eux, peuvent
+   * écrire, et ne doivent pas hériter du laissez-passer.
+   */
+  if (DRIVE_LECTURE.has(outil) || SLACK_LECTURE.has(outil) || BIBLIOTHEQUE_LECTURE.has(outil) || CONTROLE_LECTURE.has(outil)) return false;
+  if (outil.startsWith("bureau__")) return !BUREAU_LECTURE.has(outil.slice("bureau__".length));
+
+  const separateur = outil.indexOf("__");
+  // Un nom sans préfixe vient de la boucle d'outils d'origine, avant que les
+  // noms ne soient qualifiés : il désignait déjà le serveur de fichiers.
+  const serveur = separateur === -1 ? SERVEUR_FICHIERS : outil.slice(0, separateur);
+  if (serveur !== SERVEUR_FICHIERS) return true;
+
+  const court = separateur === -1 ? outil : outil.slice(separateur + 2);
+  return !FICHIERS_LECTURE.has(court);
+}
+
+/* ------------------------------------------------------------------ */
+/* Dire ce que l'agent veut faire, en français                         */
+/* ------------------------------------------------------------------ */
+
+/** `~/Comptabilite/bilan.txt` se lit ; `/Users/martine/...` s'oublie. */
+function abreger(chemin: string): string {
+  const maison = homedir();
+  return chemin === maison || chemin.startsWith(`${maison}/`)
+    ? `~${chemin.slice(maison.length)}`
+    : chemin;
+}
+
+/** Premier chemin désigné par les arguments, quel que soit le nom du champ. */
+function chemin(args: Record<string, unknown>): string | null {
+  for (const cle of ["path", "chemin", "source", "paths"]) {
+    const valeur = args[cle];
+    if (typeof valeur === "string" && valeur) return valeur;
+    if (Array.isArray(valeur) && typeof valeur[0] === "string") return valeur[0];
+  }
+  return null;
+}
+
+const texteOu = (valeur: unknown, defaut: string) =>
+  typeof valeur === "string" && valeur ? abreger(valeur) : defaut;
+
+/**
+ * Phrase soumise à l'utilisateur.
+ *
+ * « L'agent veut écrire dans ~/Comptabilite/bilan.txt » et non
+ * « fichiers__write_file ». Personne n'approuve ce qu'il ne comprend pas, et un
+ * utilisateur qui ne comprend pas finit par tout approuver par lassitude.
+ */
+export function resumerOutil(outil: string, args: Record<string, unknown>): string {
+  const cible = chemin(args);
+  const ou = cible ? abreger(cible) : "un emplacement non précisé";
+
+  if (outil.startsWith("bureau__")) {
+    const nom = outil.slice("bureau__".length);
+    /*
+     * L'instance complète l'extension absente (bureau.ts, `cheminSur`) : la
+     * carte nommait « rapport » un fichier qui s'écrira « rapport.docx ».
+     */
+    const ext = ({ creer_document: ".docx", creer_classeur: ".xlsx", creer_presentation: ".pptx", creer_pdf: ".pdf" } as Record<string, string>)[nom];
+    const brut = typeof args.chemin === "string" ? args.chemin : "";
+    const fichier = texteOu(ext && brut && !brut.toLowerCase().endsWith(ext) ? brut + ext : brut, "un fichier");
+    switch (nom) {
+      case "creer_document":
+        return `créer le document Word ${fichier}`;
+      case "creer_classeur":
+        return `créer le classeur Excel ${fichier}`;
+      case "creer_presentation":
+        return `créer la présentation ${fichier}`;
+      case "creer_pdf":
+        return `créer le PDF ${fichier}`;
+      case "lire_document":
+        return `lire le document ${fichier}`;
+      default:
+        return `utiliser l'outil bureautique « ${nom} » sur ${fichier}`;
+    }
+  }
+
+  if (outil.startsWith("courrier__")) {
+    const nom = outil.slice("courrier__".length);
+    if (nom === "derniers") return "consulter les derniers messages de votre boîte";
+    if (nom === "chercher") return "chercher des messages dans votre boîte";
+    if (nom === "lire") return "ouvrir un message de votre boîte";
+    if (nom === "brouillon") {
+      const objet = typeof args.objet === "string" && args.objet.trim() ? ` « ${args.objet.trim().slice(0, 80)} »` : "";
+      const pour = typeof args.a === "string" && args.a.trim() ? ` pour ${args.a.trim().slice(0, 120)}` : args.en_reponse_a ? " en réponse à un message" : "";
+      return `préparer le brouillon${objet}${pour} dans votre boîte (il ne sera pas envoyé)`;
+    }
+    if (nom === "envoyer") {
+      const objet = typeof args.objet === "string" && args.objet.trim() ? ` « ${args.objet.trim().slice(0, 80)} »` : "";
+      const pour = typeof args.a === "string" && args.a.trim() ? ` à ${args.a.trim().slice(0, 120)}` : "";
+      return `envoyer le mail${objet}${pour} depuis votre boîte`;
+    }
+    return "utiliser votre messagerie";
+  }
+
+  if (outil === "controle__site_web") return `contrôler le code web du dossier ${texteOu(args.dossier, "de travail")}`;
+  if (outil === "bibliotheque__chercher") return "chercher des documents dans la bibliothèque de l'équipe";
+  if (outil === "bibliotheque__lire") return "lire un document de la bibliothèque de l'équipe";
+  if (outil === "reunions__chercher") return "chercher parmi les réunions transcrites";
+  if (outil === "reunions__lire") return "lire le compte rendu et la transcription d'une réunion";
+
+  // Au niveau « Demander pour tout », les lectures de Drive et de Slack passent ici.
+  if (DRIVE_LECTURE.has(outil)) {
+    if (outil === "drive__lire") return "lire un fichier de votre Google Drive";
+    if (outil === "drive__chercher") return "chercher des fichiers dans votre Google Drive";
+    return "consulter la liste des fichiers de votre Google Drive";
+  }
+  if (SLACK_LECTURE.has(outil)) {
+    const salon = typeof args.salon === "string" && args.salon ? ` #${args.salon.replace(/^#/, "").slice(0, 80)}` : "";
+    if (outil === "slack__salons") return "consulter la liste des salons Slack lisibles";
+    if (outil === "slack__chercher") return `chercher des messages dans Slack${salon ? `, salon${salon}` : ""}`;
+    return `lire les messages du salon Slack${salon || " demandé"}`;
+  }
+
+  /*
+   * Outil d'un connecteur ajouté. On ne sait pas ce qu'il fait, mais on sait
+   * d'où il vient, et c'est ce qui compte pour décider : « utiliser l'outil
+   * API-post-page du connecteur notion » se comprend, là où la phrase de repli
+   * du serveur de fichiers annonçait une action « sur un emplacement non
+   * précisé », c'est-à-dire rien.
+   */
+  const prefixe = outil.indexOf("__");
+  if (prefixe > 0 && outil.slice(0, prefixe) !== "fichiers") {
+    return `utiliser l'outil « ${outil.slice(prefixe + 2)} » du connecteur « ${outil.slice(0, prefixe)} »`;
+  }
+
+  const separateur = outil.indexOf("__");
+  const nom = separateur === -1 ? outil : outil.slice(separateur + 2);
+
+  switch (nom) {
+    case "write_file":
+      return `écrire dans ${ou}`;
+    case "edit_file":
+      return `modifier ${ou}`;
+    case "create_directory":
+      return `créer le dossier ${ou}`;
+    case "move_file":
+      return `déplacer ${ou} vers ${texteOu(args.destination, "un autre emplacement")}`;
+    case "read_file":
+    case "read_text_file":
+      return `lire ${ou}`;
+    case "read_media_file":
+      return `ouvrir l'image ${ou}`;
+    case "read_multiple_files": {
+      const liste = args.paths;
+      const combien = Array.isArray(liste) ? liste.length : 0;
+      return combien > 1 ? `lire ${combien} fichiers, dont ${ou}` : `lire ${ou}`;
+    }
+    case "list_directory":
+    case "list_directory_with_sizes":
+      return `lister le contenu de ${ou}`;
+    case "directory_tree":
+      return `parcourir l'arborescence de ${ou}`;
+    case "search_files":
+      return `chercher des fichiers dans ${ou}`;
+    case "get_file_info":
+      return `consulter les informations de ${ou}`;
+    case "list_allowed_directories":
+      return "lister les dossiers auxquels il a accès";
+    default:
+      return `utiliser l'outil « ${nom} » sur ${ou}`;
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Noyau : file d'attente, évènements, expiration                      */
+/* ------------------------------------------------------------------ */
+
+export type Nature = "ecran" | "outil";
+
+export interface Demande {
+  id: string;
+  nature: Nature;
+  /** Ce que l'agent veut faire, en français courant. */
+  resume: string;
+  /** Contexte pour l'interface et le journal. Jamais de contenu de fichier. */
+  detail: Record<string, unknown>;
+  createdAt: number;
+  /**
+   * Compte au nom duquel l'action est demandée.
+   *
+   * C'est **lui seul** qui voit la demande et qui y répond. Sans ce champ, la
+   * file était commune : n'importe quelle séance de l'instance lisait le corps
+   * entier d'un mail qu'un agent s'apprêtait à envoyer pour un collègue, et
+   * pouvait répondre « oui » à sa place. Une approbation n'a de sens que si
+   * c'est la personne concernée qui l'accorde.
+   *
+   * Absent pour une demande qui n'a pas de compte identifiable (essai depuis
+   * un poste sans séance) : elle reste alors visible de toute séance, faute de
+   * quelqu'un à qui la réserver.
+   */
+  pour?: string;
+  /** Charge propre au contrôle d'écran, relayée telle quelle à l'interface. */
+  action?: unknown;
+}
+
+export interface Evenement {
+  type: string;
+  [k: string]: unknown;
+}
+
+/** Issue d'une demande. L'expiration n'est pas un refus : on le dit autrement. */
+export type Issue = "accord" | "refus" | "expiration";
+
+/**
+ * Issue et auteur de la réponse. Sans l'auteur, le journal consignait comme
+ * « approuvé par » la personne qui avait **demandé** : sur une instance
+ * partagée, impossible de dire qui avait réellement dit oui.
+ */
+export interface Reponse {
+  issue: Issue;
+  /** Compte qui a répondu ; absent si personne n'a répondu à temps. */
+  par?: string;
+}
+
+/**
+ * Deux minutes, comme le contrôle de l'écran.
+ *
+ * Assez pour revenir d'une autre fenêtre, trop court pour qu'une demande
+ * oubliée laisse une tâche suspendue toute la nuit. Sans réponse, l'action
+ * n'est pas faite.
+ */
+export const DELAI = 120_000;
+
+interface Attente {
+  demande: Demande;
+  resoudre: (reponse: Reponse) => void;
+}
+
+const attentes = new Map<string, Attente>();
+const abonnes = new Set<(evenement: Evenement) => void>();
+
+export function surEvenement(fn: (evenement: Evenement) => void): () => void {
+  abonnes.add(fn);
+  return () => abonnes.delete(fn);
+}
+
+export function emettre(evenement: Evenement): void {
+  for (const fn of abonnes) {
+    try {
+      fn(evenement);
+    } catch {
+      /* un abonné défaillant ne doit pas bloquer les autres */
+    }
+  }
+}
+
+/**
+ * Demandes en attente, telles que `pour` a le droit de les voir.
+ *
+ * `pour` omis rend tout : réservé aux appels internes (journal, arrêt). Toute
+ * route HTTP doit passer le compte de la séance.
+ */
+export function enAttente(nature?: Nature, pour?: string): Demande[] {
+  return [...attentes.values()]
+    .map((a) => a.demande)
+    .filter((d) => nature === undefined || d.nature === nature)
+    .filter((d) => pour === undefined || destineA(d, pour));
+}
+
+/** Cette demande concerne-t-elle ce compte ? */
+export const destineA = (d: Demande, qui: string): boolean =>
+  d.pour === undefined || d.pour === qui || d.pour === "agent";
+
+/**
+ * Réponse d'un humain.
+ *
+ * `nature` cloisonne les deux surfaces : la route du contrôle d'écran ne doit
+ * pas pouvoir résoudre une demande d'outil, ni l'inverse.
+ */
+export function repondre(id: string, accord: boolean, nature: Nature, par: string): boolean {
+  const attente = attentes.get(id);
+  if (!attente) return false;
+  if (attente.demande.nature !== nature) return false;
+  /*
+   * Et c'est la personne concernée qui répond, pas une autre. Le journal
+   * nommait bien qui avait dit oui, mais il le nommait après coup : un
+   * collègue pouvait autoriser l'envoi d'un mail préparé pour quelqu'un
+   * d'autre. Une demande destinée à personne en particulier reste ouverte.
+   */
+  if (!destineA(attente.demande, par)) return false;
+
+  attentes.delete(id);
+  attente.resoudre({ issue: accord ? "accord" : "refus", par });
+  emettre({ type: "approbation_resolue", id, accord, nature: attente.demande.nature });
+  return true;
+}
+
+/** Pose une demande et attend la réponse d'un humain. */
+export function demander(demande: Omit<Demande, "id" | "createdAt">): Promise<Reponse> {
+  const id = `apr_${randomBytes(8).toString("base64url")}`;
+  const complete: Demande = { ...demande, id, createdAt: Date.now() };
+
+  return new Promise<Reponse>((resoudre) => {
+    attentes.set(id, { demande: complete, resoudre });
+    emettre({ type: "approbation_demandee", ...complete });
+
+    setTimeout(() => {
+      if (attentes.delete(id)) {
+        emettre({ type: "approbation_expiree", id, nature: complete.nature });
+        resoudre({ issue: "expiration" });
+      }
+    }, DELAI).unref?.();
+  });
+}
+
+/* ------------------------------------------------------------------ */
+/* Portée d'une approbation                                            */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Le cas des tâches longues.
+ *
+ * Un plan découpé enchaîne vingt appels d'outils sur dix minutes. Demander
+ * vingt fois, c'est obtenir vingt « oui » distraits puis l'abandon du réglage :
+ * un garde-fou qu'on désactive ne garde rien.
+ *
+ * Une réponse vaut donc pour **les actions de même nature dans le même
+ * dossier, jusqu'à la fin de la demande en cours**. Approuver l'écriture d'une
+ * facture dans ~/Comptabilite couvre les suivantes du même lot ; écrire
+ * ailleurs redemande. La mémoire meurt avec la requête HTTP : rien ne
+ * survit d'une demande à l'autre, et surtout pas au redémarrage.
+ *
+ * Un refus se retient de la même façon. Sans cela, un agent qui insiste
+ * reposerait vingt fois la question qu'on vient de refuser, et une absence de
+ * réponse laisserait la tâche se cogner au délai d'expiration à chaque appel,
+ * soit quarante minutes de blocage pour un utilisateur parti déjeuner.
+ */
+interface Souvenir {
+  accord: boolean;
+  /** Ce qui a produit la décision : une réponse, ou personne au bout. */
+  issue: Issue;
+}
+
+const contextes = new Map<string, Map<string, Souvenir>>();
+
+/** Ouvre la mémoire d'une demande. À refermer, sans faute, en `finally`. */
+export function ouvrirDemande(): string {
+  const id = `dem_${randomBytes(8).toString("base64url")}`;
+  contextes.set(id, new Map());
+  return id;
+}
+
+export function fermerDemande(id: string): void {
+  contextes.delete(id);
+}
+
+/** Clé de portée : ce que couvre une réponse déjà donnée. */
+function portee(outil: string, args: Record<string, unknown>, courant: Niveau): string {
+  const cible = chemin(args);
+  /*
+   * Sans chemin, l'outil lui-même est la portée : approuver un brouillon ne
+   * doit pas couvrir l'outil d'un connecteur qui, lui non plus, n'a pas de
+   * chemin. Pour un brouillon, le destinataire en fait partie.
+   */
+  if (!cible) {
+    const pour = outil === "courrier__brouillon" ? `|${String(args.a ?? args.en_reponse_a ?? "")}` : "";
+    return `${outil}${pour}|*`;
+  }
+  const dossier = dirname(cible);
+
+  /*
+   * Un déplacement a deux extrémités. Autoriser « sortir un fichier de
+   * ~/Comptabilite » ne dit rien de l'endroit où il atterrit : sans la
+   * destination dans la clé, un second déplacement vers un tout autre dossier
+   * passerait sur l'accord donné pour le premier.
+   */
+  const vers =
+    typeof args.destination === "string" && args.destination
+      ? `>${dirname(args.destination)}`
+      : "";
+
+  /*
+   * Au niveau « Demander pour tout », la portée est plus serrée : approuver une
+   * lecture ne doit pas approuver une écriture. Au niveau « Demander avant de
+   * modifier », seules les modifications passent ici : les regrouper par
+   * dossier est précisément ce qui rend un lot de fichiers supportable.
+   */
+  return courant === "chaque" ? `${outil}|${dossier}${vers}` : `ecriture|${dossier}${vers}`;
+}
+
+/* ------------------------------------------------------------------ */
+/* La barrière                                                         */
+/* ------------------------------------------------------------------ */
+
+/**
+ * `parLaPersonne` : le refus vient d'elle (ou de son silence), pas d'une règle.
+ * La boucle de travail ne réessaie pas une action que la personne a refusée.
+ */
+export type Verdict = { autorise: true } | { autorise: false; message: string; parLaPersonne?: boolean };
+
+/** Formats binaires qu'un outil de texte ne sait pas produire. */
+const FORMATS_BUREAU = /\.(docx|xlsx|pptx|pdf|doc|xls|ppt|odt|ods|odp)$/i;
+
+/**
+ * Un « document Word » écrit par l'outil de fichiers n'en est pas un.
+ *
+ * `write_file` écrit du texte brut. Un modèle qui n'a pas les outils
+ * bureautiques (atelier non préparé) produisait ainsi un « rapport.docx » fait
+ * de texte, que Word refuse d'ouvrir, et l'annonçait comme fait ; la personne
+ * devait même l'approuver. Mesuré le 23/09/2026 avec qwen3-8b, consignes
+ * contraires comprises : les consignes ne suffisent pas, d'où ce contrôle,
+ * posé au seul point de passage de tous les appels d'outils.
+ */
+function fauxDocument(outil: string, args: Record<string, unknown>): string | null {
+  // Un nom sans préfixe désigne déjà le serveur de fichiers (voir `modifie`).
+  if (outil.includes("__") && !outil.startsWith(`${SERVEUR_FICHIERS}__`)) return null;
+  const nom = outil.includes("__") ? outil.slice(outil.indexOf("__") + 2) : outil;
+  if (nom !== "write_file" && nom !== "edit_file") return null;
+  const cible = typeof args.path === "string" ? args.path : "";
+  if (!FORMATS_BUREAU.test(cible)) return null;
+  return (
+    `Refusé : ${cible} est un format bureautique binaire, et l'outil de fichiers n'écrit que du texte brut. ` +
+    "Le fichier obtenu ne s'ouvrirait pas. Utilise les outils « bureau__… » s'ils te sont proposés ; " +
+    "sinon, dis à l'utilisateur que l'atelier bureautique n'est pas préparé (panneau de droite de Cowork) " +
+    "et propose un fichier .md ou .txt à la place."
+  );
+}
+
+/** Ce que reçoit le modèle quand l'action ne part pas. Il doit pouvoir enchaîner. */
+function messageDeRefus(resume: string, issue: Issue, couvert: boolean): string {
+  const base =
+    issue === "expiration"
+      ? `Personne n'a répondu à temps à la demande d'approbation pour ${resume} : ` +
+        "l'action n'a pas été faite."
+      : `L'utilisateur a refusé que tu puisses ${resume}. L'action n'a pas été faite.`;
+
+  const etendue = couvert
+    ? " Ce refus vaut pour les actions de même nature au même endroit, jusqu'à la fin de cette demande."
+    : "";
+
+  return (
+    `${base}${etendue} Ne la retente pas à l'identique, ni sous un autre nom au même endroit. ` +
+    "Poursuis avec ce que tu peux faire sans elle, et dis clairement à l'utilisateur ce qui n'a " +
+    // Le modèle racontait « le système refuse toute écriture, vérifiez vos autorisations » :
+    // la personne, qui venait de cliquer « Refuser », lisait une panne qui n'existait pas.
+    "pas pu être fait et pourquoi : ce n'est ni une panne ni un problème de droits d'accès."
+  );
+}
+
+/**
+ * Point de passage obligé de tout appel d'outil de la boucle de conversation.
+ *
+ * Appelée depuis `chat.ts`, le seul endroit d'où les outils de fichiers, de
+ * bureautique et de courrier sont exécutés. Un client qui appelle la route de
+ * conversation en direct avec `tools: true` passe par la même boucle : il n'y a
+ * pas de porte dérobée à côté.
+ */
+export async function verifierOutil(
+  contexte: string | null,
+  outil: string,
+  args: Record<string, unknown>,
+  qui: string,
+  /** Nom de l'employé OpenClaw qui demande, pour que la carte dise qui veut agir. */
+  employe?: string,
+  /** Demander quoi qu'il arrive (un agent qui traite un mail reçu, voir serveurOutils.ts). */
+  forcer = false,
+): Promise<Verdict> {
+  /*
+   * Les actions d'écran gardent leur propre barrière, dans computer.ts : elle
+   * connaît la différence entre une capture et un clic, et sait convertir les
+   * coordonnées. Redemander ici produirait deux fenêtres pour un seul clic.
+   */
+  if (outil.startsWith("ecran__")) return { autorise: true };
+
+  // Avant tout niveau et toute carte : on ne fait pas approuver un fichier voué à être illisible.
+  const faux = fauxDocument(outil, args);
+  if (faux) return { autorise: false, message: faux };
+
+  const courant = niveau();
+  if (TOUJOURS_DEMANDER.has(outil)) {
+    if (!forcer && !demandeToujours(outil) && courant === "tout") return { autorise: true };
+    return verifierEnvoi(contexte, outil, args, qui, courant, employe);
+  }
+  /*
+   * « Tout approuver » vaut pour ce que l'entreprise demande elle-même, pas
+   * pour ce qu'un texte venu du dehors fait faire : `forcer` traverse le
+   * niveau. C'est le cas d'un agent déclenché par un mail reçu (serveurOutils.ts).
+   */
+  if (courant === "tout" && !forcer) return { autorise: true };
+  if (courant === "modifications" && !modifie(outil)) return { autorise: true };
+
+  let resume = resumerOutil(outil, args);
+  // Une réponse se juge à ce qu'elle répond : la carte nomme l'expéditeur et l'objet du message.
+  if (outil === "courrier__brouillon" && !args.a && args.en_reponse_a) {
+    const origine = await presenterMessage(Math.trunc(Number(args.en_reponse_a)), typeof args.dossier === "string" && args.dossier ? args.dossier : undefined);
+    if (origine) resume = `préparer une réponse à ${origine} dans votre boîte (elle ne sera pas envoyée)`;
+  }
+  const cle = portee(outil, args, courant);
+  const memoire = contexte ? contextes.get(contexte) : undefined;
+
+  const deja = memoire?.get(cle);
+  if (deja) {
+    return deja.accord
+      ? { autorise: true }
+      : { autorise: false, message: messageDeRefus(resume, deja.issue, true), parLaPersonne: true };
+  }
+
+  // Le journal dit ce que l'agent a voulu toucher, jamais ce qu'il y a dedans.
+  journaliser("outil.demande", qui, { outil, cible: chemin(args), niveau: courant });
+
+  const { issue, par } = await demander({
+    nature: "outil",
+    resume,
+    pour: qui,
+    detail: { outil, cible: chemin(args), niveau: courant, portee: cle, ...(employe ? { employe } : {}) },
+  });
+
+  const accord = issue === "accord";
+  memoire?.set(cle, { accord, issue });
+
+  // L'entrée est au nom de qui a répondu ; la personne pour qui l'agent
+  // travaillait figure dans le détail. Sans réponse, personne n'a décidé.
+  journaliser(accord ? "outil.approuve" : "outil.refuse", par ?? "personne", {
+    outil,
+    cible: chemin(args),
+    issue,
+    pour: qui,
+  });
+
+  return accord
+    ? { autorise: true }
+    : { autorise: false, message: messageDeRefus(resume, issue, Boolean(memoire)), parLaPersonne: true };
+}
+
+/**
+ * Envoi d'un mail : la carte montre le mail tel qu'il partira (destinataires
+ * résolus, objet, texte entier), et chaque envoi redemande.
+ *
+ * Un refus se retient pour ce mail précis, à l'identique : un agent qui
+ * insiste ne repose pas la question qu'on vient de refuser. Un autre texte ou
+ * d'autres destinataires font un autre mail, donc une autre question.
+ */
+async function verifierEnvoi(
+  contexte: string | null,
+  outil: string,
+  args: Record<string, unknown>,
+  qui: string,
+  courant: Niveau,
+  employe?: string,
+): Promise<Verdict> {
+  const prepare = await apercuEnvoi(args);
+  // Un mail qu'on ne sait pas composer n'est pas soumis : le modèle lit pourquoi et corrige.
+  if (!prepare.ok) return { autorise: false, message: prepare.content };
+  const { apercu } = prepare;
+  const resume = `${apercu.enReponse ? "envoyer une réponse" : "envoyer un mail"} à ${apercu.a.slice(0, 200)}, objet « ${apercu.objet.slice(0, 120)} »`;
+
+  const cle = `${outil}|${JSON.stringify([apercu.a, apercu.cc, apercu.objet, apercu.corps])}`;
+  const memoire = contexte ? contextes.get(contexte) : undefined;
+  const deja = memoire?.get(cle);
+  if (deja && !deja.accord) return { autorise: false, message: messageDeRefus(resume, deja.issue, false), parLaPersonne: true };
+
+  // Ni adresses ni texte au journal : il dit qu'un envoi a été soumis, pas à qui ni quoi.
+  journaliser("outil.demande", qui, { outil, niveau: courant });
+  const { issue, par } = await demander({
+    nature: "outil",
+    resume,
+    pour: qui,
+    detail: { outil, niveau: courant, envoi: apercu, ...(employe ? { employe } : {}) },
+  });
+  const accord = issue === "accord";
+  if (!accord) memoire?.set(cle, { accord, issue });
+  journaliser(accord ? "outil.approuve" : "outil.refuse", par ?? "personne", { outil, issue, pour: qui });
+  return accord ? { autorise: true } : { autorise: false, message: messageDeRefus(resume, issue, false), parLaPersonne: true };
+}

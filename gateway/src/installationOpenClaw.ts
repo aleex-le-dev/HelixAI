@@ -1,0 +1,320 @@
+import { createHash } from "node:crypto";
+import { execFile } from "node:child_process";
+import { createWriteStream, existsSync, mkdirSync, rmSync, renameSync, symlinkSync, readlinkSync, unlinkSync } from "node:fs";
+import { homedir, release, platform, arch, tmpdir } from "node:os";
+import { join } from "node:path";
+import { Readable } from "node:stream";
+import { pipeline } from "node:stream/promises";
+import { deployment } from "./deployment.ts";
+import { journaliser } from "./audit.ts";
+import { t, tf } from "./langue.ts";
+
+/**
+ * Installe OpenClaw pour les employés, depuis l'interface, sans droits
+ * d'administrateur et sans toucher au reste de la machine.
+ *
+ * Même chemin que l'installateur « sans root » documenté par OpenClaw
+ * (`install-cli.sh`, docs.openclaw.ai/install/installer), refait ici pas à pas
+ * plutôt que d'exécuter un script téléchargé :
+ *
+ *  1. un Node officiel (dernière version 24 LTS publiée par nodejs.org, ou celle
+ *     du profil), dont l'archive est vérifiée contre `SHASUMS256.txt` avant
+ *     d'être ouverte ;
+ *  2. OpenClaw installé par le npm de ce Node, dans ce même dossier, à la
+ *     version qu'Helix a éprouvée (ou celle du profil), avec l'autorisation de
+ *     scripts d'installation limitée au seul paquet `openclaw` (npm 11.16+) ;
+ *  3. vérification : `openclaw --version`.
+ *
+ * Tout vit dans `<données>/openclaw-moteur`. Le Node du système, la
+ * configuration du shell et toute installation personnelle d'OpenClaw restent
+ * tels quels. Désinstaller, c'est supprimer ce dossier.
+ */
+
+/** Version d'OpenClaw sur laquelle la configuration écrite par Helix a été éprouvée. */
+export const VERSION_OPENCLAW_EPROUVEE = "2026.9.4";
+
+const racine = () =>
+  join(process.env.HELIX_DATA_DIR ?? join(homedir(), ".helix", "data"), "openclaw-moteur");
+
+/** Exécutable d'OpenClaw installé par Helix (disposition « préfixe global » du Node privé). */
+export const binaireGere = () => join(racine(), "node", "bin", "openclaw");
+
+export type Etape = "repos" | "preparation" | "node" | "openclaw" | "verification" | "termine" | "erreur";
+
+export interface EtatInstallation {
+  etape: Etape;
+  message: string;
+  /** Avancement du téléchargement de Node, de 0 à 100. */
+  avancement?: number;
+  version?: string;
+  /** Version remplacée, quand c'était une mise à jour. */
+  de?: string;
+}
+
+let etat: EtatInstallation = { etape: "repos", message: "" };
+let enCours: Promise<void> | null = null;
+
+export function etatInstallation(): EtatInstallation {
+  return etat;
+}
+
+function executer(bin: string, args: string[], env: NodeJS.ProcessEnv, delaiMs: number): Promise<{ ok: boolean; sortie: string; erreur: string }> {
+  return new Promise((resolve) => {
+    execFile(bin, args, { env, timeout: delaiMs, maxBuffer: 32 * 1024 * 1024 }, (err, sortie, erreur) =>
+      resolve({ ok: !err, sortie: String(sortie), erreur: String(erreur) || (err ? err.message : "") }),
+    );
+  });
+}
+
+/** Archive officielle de Node pour cette machine, ou la raison pour laquelle il n'y en a pas. */
+function plateformeNode(): { dossier: string; cleIndex: string } | { erreur: string } {
+  const a = arch() === "arm64" ? "arm64" : arch() === "x64" ? "x64" : null;
+  if (!a) return { erreur: `Processeur non pris en charge par OpenClaw (${arch()}).` };
+  if (platform() === "darwin") {
+    // Node 24 exige macOS 13.5 ou plus récent (Darwin 22.6).
+    const [maj = 0, min = 0] = release().split(".").map(Number);
+    if (maj < 22 || (maj === 22 && min < 6)) {
+      return { erreur: "OpenClaw demande macOS 13.5 ou plus récent sur cette machine." };
+    }
+    return { dossier: `darwin-${a}`, cleIndex: `osx-${a}-tar` };
+  }
+  if (platform() === "linux") return { dossier: `linux-${a}`, cleIndex: `linux-${a}` };
+  return { erreur: "L'installation automatique d'OpenClaw est prévue pour macOS et Linux." };
+}
+
+/** `fetch`, avec une erreur en français quand le réseau manque (« fetch failed » sinon). */
+async function telecharger(url: string, delaiMs: number): Promise<Response> {
+  try {
+    return await fetch(url, { signal: AbortSignal.timeout(delaiMs) });
+  } catch {
+    throw new Error(`${new URL(url).host} est injoignable : vérifiez l'accès à internet de cette machine.`);
+  }
+}
+
+/** Dernière version 24 LTS publiée, 24.16 au moins (plancher d'OpenClaw), sauf version imposée. */
+async function versionNode(cleIndex: string): Promise<string> {
+  const imposee = deployment().openclaw?.node;
+  if (imposee) return imposee.replace(/^v/, "");
+  const r = await telecharger("https://nodejs.org/dist/index.json", 20_000);
+  if (!r.ok) throw new Error(`nodejs.org a répondu ${r.status}.`);
+  const liste = (await r.json()) as { version: string; lts: string | false; files: string[] }[];
+  const retenue = liste.find((v) => {
+    const [maj = 0, min = 0] = v.version.replace(/^v/, "").split(".").map(Number);
+    return maj === 24 && min >= 16 && v.lts && v.files.includes(cleIndex);
+  });
+  if (!retenue) throw new Error("Aucune version de Node 24 compatible n'est publiée pour cette machine.");
+  return retenue.version.replace(/^v/, "");
+}
+
+async function installerNode(): Promise<string> {
+  const p = plateformeNode();
+  if ("erreur" in p) throw new Error(p.erreur);
+  const version = await versionNode(p.cleIndex);
+  const nom = `node-v${version}-${p.dossier}`;
+  const dossierNode = join(racine(), nom);
+  const lien = join(racine(), "node");
+  if (existsSync(join(dossierNode, "bin", "node"))) {
+    relier(lien, nom);
+    return version;
+  }
+
+  const base = `https://nodejs.org/dist/v${version}`;
+  const sommes = await telecharger(`${base}/SHASUMS256.txt`, 20_000);
+  if (!sommes.ok) throw new Error(`Empreintes de Node introuvables (${sommes.status}).`);
+  const attendue = (await sommes.text())
+    .split("\n")
+    .map((l) => l.trim().split(/\s+/))
+    .find(([, f]) => f === `${nom}.tar.gz`)?.[0];
+  if (!attendue) throw new Error("Empreinte de l'archive de Node introuvable.");
+
+  const archive = join(tmpdir(), `helix-${nom}-${Date.now()}.tar.gz`);
+  const r = await telecharger(`${base}/${nom}.tar.gz`, 10 * 60_000);
+  if (!r.ok || !r.body) throw new Error(`Téléchargement de Node impossible (${r.status}).`);
+  const total = Number(r.headers.get("content-length") ?? 0);
+  const empreinte = createHash("sha256");
+  let recu = 0;
+  const flux = Readable.fromWeb(r.body as import("node:stream/web").ReadableStream<Uint8Array>);
+  flux.on("data", (morceau: Buffer) => {
+    empreinte.update(morceau);
+    recu += morceau.length;
+    if (total > 0) etat = { ...etat, avancement: Math.round((recu / total) * 100) };
+  });
+  try {
+    await pipeline(flux, createWriteStream(archive, { mode: 0o600 }));
+  } catch {
+    rmSync(archive, { force: true });
+    throw new Error("Le téléchargement de Node s'est interrompu : vérifiez la connexion, puis réessayez.");
+  }
+  if (empreinte.digest("hex") !== attendue) {
+    rmSync(archive, { force: true });
+    throw new Error("L'archive de Node ne correspond pas à son empreinte officielle : installation arrêtée.");
+  }
+
+  mkdirSync(racine(), { recursive: true, mode: 0o700 });
+  const provisoire = join(racine(), `.extraction-${Date.now()}`);
+  mkdirSync(provisoire, { recursive: true });
+  const t = await executer("/usr/bin/tar", ["-xzf", archive, "-C", provisoire], process.env, 5 * 60_000);
+  rmSync(archive, { force: true });
+  if (!t.ok) {
+    rmSync(provisoire, { recursive: true, force: true });
+    throw new Error(`Extraction de Node impossible : ${t.erreur.slice(-200)}`);
+  }
+  rmSync(dossierNode, { recursive: true, force: true });
+  renameSync(join(provisoire, nom), dossierNode);
+  rmSync(provisoire, { recursive: true, force: true });
+  relier(lien, nom);
+  return version;
+}
+
+/** `<racine>/node` pointe sur la version installée : l'exécutable d'OpenClaw garde un chemin stable. */
+function relier(lien: string, cible: string): void {
+  try {
+    if (readlinkSync(lien) === cible) return;
+    unlinkSync(lien);
+  } catch {
+    /* pas encore de lien */
+  }
+  symlinkSync(cible, lien);
+}
+
+async function installerPaquet(version: string): Promise<string> {
+  const binNode = join(racine(), "node", "bin");
+  const env: NodeJS.ProcessEnv = { ...process.env, PATH: `${binNode}:/usr/bin:/bin:/usr/sbin:/sbin` };
+  for (const k of Object.keys(env)) if (k.startsWith("HELIX_") || k.startsWith("ELECTRON_") || k.startsWith("npm_")) delete env[k];
+  const npm = join(binNode, "npm");
+  const v = await executer(npm, ["--version"], env, 30_000);
+  const [maj = 0, min = 0] = v.sortie.trim().split(".").map(Number);
+  if (!v.ok) throw new Error("npm, livré avec Node, ne répond pas.");
+  const args = ["install", "-g", `openclaw@${version}`, "--no-fund", "--no-audit", "--loglevel=error"];
+  // npm 11.16 et suivants bloquent les scripts d'installation non approuvés : on n'approuve qu'OpenClaw.
+  if (maj > 11 || (maj === 11 && min >= 16)) args.push("--allow-scripts=openclaw");
+  const r = await executer(npm, args, env, 20 * 60_000);
+  if (!r.ok || !existsSync(binaireGere())) throw new Error(`OpenClaw ne s'est pas installé : ${raisonNpm(r.erreur || r.sortie, version)}`);
+  const verif = await executer(binaireGere(), ["--version"], env, 60_000);
+  const trouvee = /(\d{4}\.\d+\.\d+)/.exec(verif.sortie)?.[1];
+  if (!verif.ok || !trouvee) throw new Error("OpenClaw s'est installé mais ne démarre pas.");
+  return trouvee;
+}
+
+/** Version d'OpenClaw qu'Helix installe : celle du profil, sinon celle qu'il a éprouvée. */
+export const versionVisee = () => deployment().openclaw?.version ?? VERSION_OPENCLAW_EPROUVEE;
+
+/** « 2026.9.10 » est plus récente que « 2026.9.4 » : comparaison nombre par nombre, pas en texte. */
+export function plusRecente(a: string, b: string): boolean {
+  const n = (v: string) => v.replace(/^v/, "").split(/[.-]/).slice(0, 3).map((x) => Number.parseInt(x, 10) || 0);
+  const [x, y] = [n(a), n(b)];
+  for (let i = 0; i < 3; i++) if ((x[i] ?? 0) !== (y[i] ?? 0)) return (x[i] ?? 0) > (y[i] ?? 0);
+  return false;
+}
+
+let parue: { version: string | null; at: number } | null = null;
+let releve: Promise<void> | null = null;
+
+/**
+ * Dernière version publiée d'OpenClaw (registre npm, étiquette « latest »),
+ * pour dire à l'écran qu'elle existe. Relue en arrière-plan au plus deux fois
+ * par jour, sans jamais faire attendre l'écran ; `null` tant qu'on ne sait pas
+ * (ou hors ligne). Helix ne l'installe pas d'office : il installe la version
+ * qu'il a éprouvée, et c'est une mise à jour d'Helix qui fait avancer celle-ci.
+ */
+export function versionParue(): string | null {
+  if (!releve && (!parue || Date.now() - parue.at > 12 * 3_600_000)) {
+    releve = (async () => {
+      try {
+        const r = await fetch("https://registry.npmjs.org/openclaw/latest", { signal: AbortSignal.timeout(8000) });
+        const v = r.ok ? ((await r.json()) as { version?: unknown }).version : null;
+        parue = { version: typeof v === "string" && /^\d{4}\.\d+\.\d+$/.test(v) ? v : null, at: Date.now() };
+      } catch {
+        parue = { version: parue?.version ?? null, at: Date.now() };
+      } finally {
+        releve = null;
+      }
+    })();
+  }
+  return parue?.version ?? null;
+}
+
+/** Ce que l'instance des agents fait autour de l'installation (voir employes.ts). */
+export interface Crochets {
+  /** Avant : arrêter l'instance et mettre ses données de côté (mise à jour seulement). */
+  preparer?: () => Promise<void>;
+  /** Une fois le paquet en place : (re)démarrer. Lève une erreur si l'instance ne repart pas. */
+  apres: () => Promise<void>;
+  /** La mise à jour a échoué : remettre les données mises de côté et relancer. */
+  retablir?: () => Promise<void>;
+}
+
+/**
+ * Ce que npm a dit, en une phrase : ses messages bruts portent des chemins de
+ * la machine et un jargon qui n'apprend rien à qui installe.
+ */
+function raisonNpm(sortie: string, version: string): string {
+  if (/notarget|No matching version/i.test(sortie)) return `la version ${version} d'OpenClaw n'est pas publiée`;
+  if (/ENOTFOUND|EAI_AGAIN|ETIMEDOUT|ECONNREFUSED|ECONNRESET|network/i.test(sortie)) {
+    return "le registre npm est injoignable : vérifiez l'accès à internet de cette machine";
+  }
+  if (/ENOSPC/i.test(sortie)) return "il n'y a plus assez de place sur le disque";
+  if (/EACCES|EPERM/i.test(sortie)) return "le dossier d'installation n'est pas accessible en écriture";
+  const ligne = sortie
+    .split("\n")
+    .map((l) => l.replace(/^npm (error|ERR!)\s*/i, "").trim())
+    .find((l) => l && !/log of this run|^A complete log|\/_logs\//i.test(l));
+  return `npm a échoué${ligne ? ` (${ligne.replace(/\/[^\s]+/g, "…").slice(0, 160)})` : ""}`;
+}
+
+/**
+ * Lance l'installation (une seule à la fois) et rend la main aussitôt : l'écran
+ * suit `etatInstallation()`.
+ *
+ * `avant` : la version en place, quand c'est une mise à jour. Une mise à jour
+ * est réversible jusqu'au bout : une nouvelle version d'OpenClaw fait migrer
+ * sa base sans retour possible (une version plus ancienne refuse ensuite de
+ * l'ouvrir), les données sont donc mises de côté avant, et si la nouvelle
+ * version ne démarre pas, l'ancienne est réinstallée et les données remises.
+ */
+export function installerOpenClaw(qui: string, crochets: Crochets, avant?: string): void {
+  if (enCours) return;
+  enCours = (async () => {
+    let paquetChange = false;
+    try {
+      if (avant && crochets.preparer) {
+        etat = { etape: "preparation", message: t("Mise de côté des données de vos agents…") };
+        await crochets.preparer();
+      }
+      etat = { etape: "node", message: t("Téléchargement de Node.js (environ 50 Mo)…"), avancement: 0 };
+      const node = await installerNode();
+      etat = {
+        etape: "openclaw",
+        message: avant ? `Mise à jour d'OpenClaw vers ${versionVisee()} (une à deux minutes)…` : "Installation d'OpenClaw (quelques minutes)…",
+      };
+      paquetChange = true;
+      const version = await installerPaquet(versionVisee());
+      etat = { etape: "verification", message: avant ? "Redémarrage de vos agents…" : "Vérification…" };
+      await crochets.apres();
+      etat = {
+        etape: "termine",
+        message: avant ? `OpenClaw est passé de ${avant} à ${version}.` : `OpenClaw ${version} est installé.`,
+        version,
+        ...(avant ? { de: avant } : {}),
+      };
+      if (avant) journaliser("openclaw.mis_a_jour", qui, { de: avant, a: version, node });
+      else journaliser("openclaw.installe", qui, { version, node, dossier: racine() });
+    } catch (err) {
+      let message = err instanceof Error ? err.message : String(err);
+      if (avant && crochets.retablir) {
+        etat = { etape: "verification", message: tf("Retour à OpenClaw {0}…", avant) };
+        try {
+          if (paquetChange) await installerPaquet(avant);
+          await crochets.retablir();
+          message = `La mise à jour n'a pas abouti (${message.replace(/\.$/, "")}). Vos agents sont revenus à OpenClaw ${avant}, sans rien perdre.`;
+        } catch (err2) {
+          message = `La mise à jour n'a pas abouti, et le retour à OpenClaw ${avant} non plus : ${err2 instanceof Error ? err2.message : String(err2)}`;
+        }
+      }
+      etat = { etape: "erreur", message };
+      journaliser("openclaw.installation_echouee", qui, { raison: message.slice(0, 300), ...(avant ? { de: avant, vers: versionVisee() } : {}) });
+    } finally {
+      enCours = null;
+    }
+  })();
+}

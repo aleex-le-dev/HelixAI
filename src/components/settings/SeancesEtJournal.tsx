@@ -1,0 +1,287 @@
+import { useCallback, useEffect, useState } from "react";
+import { Laptop, ShieldCheck, ShieldAlert, X, ScrollText } from "lucide-react";
+import { apiFetch } from "@/lib/endpoint";
+import { Button } from "@/components/ui/Button";
+import { InfoBox } from "@/components/ui/InfoBox";
+import { Card } from "@/components/settings/SettingsShell";
+import { formaterDateHeure } from "@/lib/formats";
+import { t, tf } from "@/lib/i18n";
+
+/**
+ * Séances ouvertes et journal d'audit.
+ *
+ * Deux questions qu'un utilisateur doit pouvoir se poser seul : « où suis-je
+ * connecté ? » et « que s'est-il passé sur mon compte ? ». Sans écran, ces
+ * garanties existent dans le code mais restent invisibles.
+ */
+
+interface Seance {
+  id: string;
+  poste: string;
+  createdAt: string;
+  lastSeenAt: string;
+  courante?: boolean;
+  /** Ouverte avec « Rester connecté » : elle dure trente jours, il faut le dire. */
+  longue?: boolean;
+}
+
+interface Entree {
+  quand: string;
+  action: string;
+  qui: string;
+  detail: Record<string, unknown>;
+}
+
+interface Integrite {
+  entrees: number;
+  intact: boolean;
+  anomalie?: { ligne: number; raison: string };
+}
+
+const LIBELLES: Record<string, string> = {
+  "connexion.reussie": "Connexion",
+  "connexion.refusee": t("Connexion refusée"),
+  "connexion.bloquee": t("Compte temporairement bloqué"),
+  "compte.cree": t("Compte créé"),
+  "compte.invite": t("Collègue invité"),
+  "seance.ouverte": t("Séance ouverte"),
+  "seance.fermee": t("Séance fermée"),
+  "donnees.ecrites": t("Données enregistrées"),
+  "ecran.demande": t("Action d'écran demandée"),
+  "ecran.approuve": t("Action d'écran autorisée"),
+  "ecran.refuse": t("Action d'écran refusée"),
+  "ecran.execute": t("Action d'écran exécutée"),
+  "outil.appele": t("Outil utilisé"),
+  "outil.demande": t("Autorisation d'outil demandée"),
+  "outil.approuve": t("Outil autorisé"),
+  "outil.refuse": t("Outil refusé"),
+  "approbation.niveau": t("Niveau d'approbation modifié"),
+  "connecteur.ajoute": t("Connecteur ajouté"),
+  "connecteur.retire": t("Connecteur retiré"),
+  "dictee.installee": t("Dictée installée"),
+  "dictee.transcrite": t("Dictée transcrite"),
+  "tarif.modifie": t("Tarif de modèle modifié"),
+  "compte.nom_modifie": t("Nom modifié"),
+  "compte.adresse_modifiee": t("Adresse modifiée"),
+  "compte.adresse_refusee": t("Changement d'adresse refusé"),
+  "compte.supprime": t("Compte supprimé"),
+  "motdepasse.defini": t("Mot de passe choisi"),
+  "motdepasse.redefini": t("Mot de passe redéfini depuis le poste"),
+  "connexion.second_facteur_demande": t("Code de vérification demandé"),
+  "deuxfacteurs.active": t("Double authentification activée"),
+  "deuxfacteurs.desactive": t("Double authentification désactivée"),
+  "deuxfacteurs.codes_regeneres": t("Nouveaux codes de secours"),
+  "connexion.second_facteur_a_activer": t("Double authentification à activer"),
+  "moteur.conditions_acceptees": t("Conditions de LM Studio acceptées"),
+  "donnees.exportees": t("Données exportées"),
+  "ecran.mode_modifie": t("Contrôle de l'écran activé ou désactivé"),
+  "drive.branche": t("Google Drive connecté"),
+  "drive.debranche": t("Google Drive déconnecté"),
+  "drive.acces_perdu": t("Accès à Google Drive perdu"),
+  "slack.branche": t("Slack connecté"),
+  "slack.debranche": t("Slack déconnecté"),
+  "slack.acces_perdu": t("Accès à Slack perdu"),
+  "employe.deploye": "Agent mis en service",
+  "employe.modifie": t("Agent modifié"),
+  "employe.supprime": t("Agent retiré"),
+  "employe.message": t("Message traité par un agent"),
+  "employe.mission_lancee": t("Mission lancée à la main"),
+  "employe.mission_courrier": t("Mail reçu confié à un agent"),
+  "courrier.envoye": t("Mail envoyé par l'assistant"),
+  "employe.liberte": t("Liberté d'action d'un agent changée"),
+  "employe.canal_branche": t("Messagerie branchée sur un agent"),
+  "employe.canal_retire": t("Messagerie retirée d'un agent"),
+  "employe.whatsapp_lie": t("Téléphone WhatsApp lié à un agent"),
+  "employe.acces_accepte": t("Personne acceptée sur un canal"),
+  "employe.outil_openclaw": t("Outil utilisé par un agent"),
+  "employe.document_ajoute": t("Document confié à un agent"),
+  "employe.document_retire": t("Document retiré d'un agent"),
+  "openclaw.installe": t("OpenClaw installé"),
+  "openclaw.mis_a_jour": t("OpenClaw mis à jour"),
+  "openclaw.installation_echouee": t("Installation d'OpenClaw échouée"),
+  "compte.photo_modifiee": t("Photo de profil modifiée"),
+  "fournisseur.ajoute": t("Clé de modèle cloud branchée"),
+  "fournisseur.modifie": t("Clé de modèle cloud modifiée"),
+  "fournisseur.retire": t("Clé de modèle cloud retirée"),
+};
+
+/** Les évènements qui méritent l'œil : refus, blocages, actions sur l'écran. */
+const NOTABLE = new Set([
+  "ecran.mode_modifie",
+  "employe.liberte",
+  "employe.canal_branche",
+  "fournisseur.ajoute",
+  "connexion.refusee",
+  "connexion.bloquee",
+  "deuxfacteurs.desactive",
+  "motdepasse.redefini",
+  "compte.adresse_refusee",
+  "ecran.refuse",
+  "ecran.execute",
+]);
+
+// Suit le format choisi dans Préférences, comme toute date de l'application.
+const heure = (iso: string) => formaterDateHeure(iso);
+
+export function SeancesEtJournal() {
+  const [seances, setSeances] = useState<Seance[]>([]);
+  const [entrees, setEntrees] = useState<Entree[]>([]);
+  const [integrite, setIntegrite] = useState<Integrite | null>(null);
+  /*
+   * Qui regarde quoi. Chacun voit ses propres traces ; l'administrateur de
+   * l'instance voit celles de tout le monde, parce que quelqu'un doit pouvoir
+   * constater ce qui s'y passe. L'écran le dit, plutôt que de laisser croire
+   * que le journal est complet quand il ne l'est pas.
+   */
+  const [administrateur, setAdministrateur] = useState<"profil" | "premier" | null>(null);
+  const [conservation, setConservation] = useState<number | null>(null);
+
+  const charger = useCallback(() => {
+    void apiFetch("/helix/auth/sessions")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d: { sessions?: Seance[] } | null) => setSeances(d?.sessions ?? []))
+      .catch(() => setSeances([]));
+
+    void apiFetch("/helix/audit?limite=50")
+      .then((r) => (r.ok ? r.json() : null))
+      .then(
+        (
+          d: {
+            entrees?: Entree[];
+            integrite?: Integrite;
+            conservationJours?: number;
+            administrateur?: "profil" | "premier" | null;
+          } | null,
+        ) => {
+        setEntrees(d?.entrees ?? []);
+        setIntegrite(d?.integrite ?? null);
+        setConservation(d?.conservationJours ?? null);
+        setAdministrateur(d?.administrateur ?? null);
+      })
+      .catch(() => setEntrees([]));
+  }, []);
+
+  useEffect(charger, [charger]);
+
+  const fermer = async (id: string) => {
+    await apiFetch("/helix/auth/revoke", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id }),
+    });
+    charger();
+  };
+
+  return (
+    <>
+      <Card className="mb-4">
+        <h3 className="mb-1 text-lg font-semibold text-foreground">{t("Postes connectés")}</h3>
+        <p className="mb-4 text-sm text-muted-foreground">
+          {t("Fermez une séance et le poste concerné perd immédiatement l'accès, sans toucher aux autres.")}
+        </p>
+
+        {seances.length === 0 ? (
+          <p className="text-sm text-muted-foreground">{t("Aucune séance ouverte.")}</p>
+        ) : (
+          <ul className="space-y-1.5">
+            {seances.map((s) => (
+              <li
+                key={s.id}
+                className="flex items-center gap-3 rounded-xl border border-border px-3 py-2.5"
+              >
+                <Laptop size={16} strokeWidth={1.75} className="shrink-0 text-muted-foreground" />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm font-medium text-foreground">
+                    {s.poste}
+                    {s.courante && (
+                      <span className="ml-2 rounded-full bg-muted px-2 py-0.5 text-xs font-normal text-muted-foreground">
+                        {t("ce poste")}
+                      </span>
+                    )}
+                    {s.longue && (
+                      <span className="ml-2 rounded-full bg-muted px-2 py-0.5 text-xs font-normal text-muted-foreground">
+                        {t("reste connecté")}
+                      </span>
+                    )}
+                  </span>
+                  <span className="block text-xs text-muted-foreground">
+                    {t("Dernière activité")}{" "}{heure(s.lastSeenAt)}
+                  </span>
+                </span>
+                {!s.courante && (
+                  <Button variant="secondary" size="sm" icon={X} onClick={() => void fermer(s.id)}>
+                    {t("Fermer")}
+                  </Button>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+      </Card>
+
+      <Card>
+        <h3 className="mb-1 flex items-center gap-2 text-lg font-semibold text-foreground">
+          <ScrollText size={18} strokeWidth={1.75} />
+          {t("Journal d'activité")}
+        </h3>
+        <p className="mb-3 text-sm text-muted-foreground">
+          {t("Chaque entrée est liée à la précédente : retirer ou modifier une ligne se voit.")}
+          {conservation ? tf(" Conservé {0} jours, puis effacé.", conservation) : ""}
+        </p>
+        <p className="mb-3 text-sm text-muted-foreground">
+          {administrateur
+            ? tf("Vous administrez cette instance {0} : vous voyez l'activité de tout le monde.", administrateur === "profil"
+                  ? "(désigné dans le profil de déploiement)"
+                  : "(premier compte créé)")
+            : t("Vous voyez vos propres actions, et celles de l'instance elle-même. Celles de vos collègues ne vous regardent pas.")}
+        </p>
+
+        {integrite && (
+          <InfoBox
+            tone={integrite.intact ? "muted" : "warning"}
+            className="mb-3"
+            leading={
+              integrite.intact ? (
+                <ShieldCheck size={15} strokeWidth={1.75} className="text-success" />
+              ) : (
+                <ShieldAlert size={15} strokeWidth={1.75} />
+              )
+            }
+          >
+            {integrite.intact ? (
+              <>{t("Journal intact :")}{" "}{integrite.entrees}{" "}{t("entrée(s) vérifiée(s).")}</>
+            ) : (
+              <>
+                <strong>{t("Journal altéré")}</strong>{" "}{t("à la ligne")}{" "}{integrite.anomalie?.ligne}&nbsp;:{" "}
+                {integrite.anomalie?.raison}.
+              </>
+            )}
+          </InfoBox>
+        )}
+
+        {entrees.length === 0 ? (
+          <p className="text-sm text-muted-foreground">{t("Aucune activité enregistrée.")}</p>
+        ) : (
+          <ul className="max-h-80 space-y-0.5 overflow-y-auto">
+            {entrees.map((e, i) => (
+              <li key={i} className="flex items-baseline gap-3 py-1 text-sm">
+                <span className="w-24 shrink-0 text-xs tabular-nums text-muted-foreground">
+                  {heure(e.quand)}
+                </span>
+                <span
+                  className={
+                    NOTABLE.has(e.action) ? "font-medium text-foreground" : "text-muted-foreground"
+                  }
+                >
+                  {LIBELLES[e.action] ?? e.action}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Card>
+    </>
+  );
+}
+
+export default SeancesEtJournal;

@@ -1,0 +1,130 @@
+// Page du Chat Helix dans VS Code. Aucun appel réseau ici : tout passe par l'extension.
+(() => {
+  const vscode = acquireVsCodeApi();
+  const fil = document.getElementById("fil");
+  const saisie = document.getElementById("saisie");
+  const joindre = document.getElementById("joindre");
+  const envoyer = document.getElementById("envoyer");
+  let enCours = null;
+  let texteEnCours = "";
+  /** « chat » : le Chat de l'instance ; « code » : Helix Code sur le dossier ouvert. */
+  let mode = "chat";
+  const ongletChat = document.getElementById("onglet-chat");
+  const ongletCode = document.getElementById("onglet-code");
+  const choisir = (m) => {
+    mode = m;
+    ongletChat.setAttribute("aria-selected", String(m === "chat"));
+    ongletCode.setAttribute("aria-selected", String(m === "code"));
+    saisie.placeholder = m === "code" ? "Demandez à Helix Code de modifier le projet…" : "Demandez à Helix…";
+    joindre.parentElement.style.visibility = m === "code" ? "hidden" : "visible";
+  };
+  ongletChat.addEventListener("click", () => choisir("chat"));
+  ongletCode.addEventListener("click", () => choisir("code"));
+
+  const echapper = (s) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+
+  /** Rendu simple : blocs de code (avec bouton « Insérer »), code en ligne, gras. Jamais de HTML venu du modèle. */
+  function rendu(texte) {
+    const morceaux = texte.split(/```(\w*)\n?([\s\S]*?)(?:```|$)/g);
+    let html = "";
+    for (let i = 0; i < morceaux.length; i += 3) {
+      html += echapper(morceaux[i])
+        .replace(/`([^`\n]+)`/g, "<code>$1</code>")
+        .replace(/\*\*([^*\n]+)\*\*/g, "<strong>$1</strong>")
+        .replace(/\n/g, "<br>");
+      if (morceaux[i + 2] !== undefined) {
+        html += `<div class="bloc"><button class="inserer" type="button">Insérer</button><pre><code>${echapper(morceaux[i + 2])}</code></pre></div>`;
+      }
+    }
+    return html;
+  }
+
+  function ajouter(classe, html) {
+    fil.querySelector(".accueil")?.remove();
+    const div = document.createElement("div");
+    div.className = `message ${classe}`;
+    div.innerHTML = html;
+    fil.appendChild(div);
+    fil.scrollTop = fil.scrollHeight;
+    return div;
+  }
+
+  function occupe(oui) {
+    envoyer.textContent = oui ? "Arrêter" : "Envoyer";
+    envoyer.classList.toggle("arreter", oui);
+  }
+
+  document.getElementById("formulaire").addEventListener("submit", (e) => {
+    e.preventDefault();
+    if (enCours) return vscode.postMessage({ type: "arreter" });
+    const texte = saisie.value.trim();
+    if (!texte) return;
+    saisie.value = "";
+    vscode.postMessage(mode === "code" ? { type: "code", texte } : { type: "question", texte, joindre: joindre.checked });
+  });
+  saisie.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      document.getElementById("formulaire").requestSubmit();
+    }
+  });
+  document.getElementById("nouveau").addEventListener("click", () => vscode.postMessage({ type: "nouveau" }));
+  fil.addEventListener("click", (e) => {
+    const bouton = e.target.closest(".inserer");
+    if (bouton) vscode.postMessage({ type: "inserer", texte: bouton.nextElementSibling.textContent });
+    if (e.target.closest(".connexion")) vscode.postMessage({ type: "connexion" });
+  });
+
+  window.addEventListener("message", ({ data: m }) => {
+    if (m.type === "question") {
+      ajouter("personne", echapper(m.texte).replace(/\n/g, "<br>") + (m.fichier ? `<span class="piece">${echapper(m.fichier)}</span>` : ""));
+      texteEnCours = "";
+      enCours = ajouter("helix attente", "…");
+      occupe(true);
+    } else if (m.type === "morceau" && enCours) {
+      texteEnCours += m.texte;
+      enCours.classList.remove("attente");
+      enCours.innerHTML = rendu(texteEnCours);
+      fil.scrollTop = fil.scrollHeight;
+    } else if (m.type === "code" && enCours) {
+      // Helix Code : ses actions s'empilent au-dessus de sa réponse.
+      enCours.classList.remove("attente");
+      if (enCours.textContent === "…") enCours.innerHTML = "";
+      if (m.type === "code" && m.texte !== undefined && m.outil === undefined && m.ok === undefined) {
+        texteEnCours += (texteEnCours ? "\n\n" : "") + m.texte;
+        let zone = enCours.querySelector(".reponse");
+        if (!zone) {
+          zone = document.createElement("div");
+          zone.className = "reponse";
+          enCours.appendChild(zone);
+        }
+        zone.innerHTML = rendu(texteEnCours);
+      } else if (m.outil) {
+        const ligne = document.createElement("p");
+        ligne.className = "action encours";
+        ligne.textContent = m.outil;
+        enCours.insertBefore(ligne, enCours.querySelector(".reponse"));
+      } else if (m.ok !== undefined) {
+        const derniere = [...enCours.querySelectorAll(".action.encours")].pop();
+        if (derniere) derniere.className = `action ${m.ok ? "reussie" : "ratee"}`;
+      }
+      fil.scrollTop = fil.scrollHeight;
+    } else if (m.type === "fin" || m.type === "erreur") {
+      if (m.type === "erreur" && enCours) {
+        enCours.classList.remove("attente");
+        if (enCours.textContent === "…") enCours.innerHTML = "";
+        const p = document.createElement("p");
+        p.className = "erreur";
+        p.innerHTML = echapper(m.texte) + (/connectez-vous/i.test(m.texte) ? ` <button type="button" class="connexion">Se connecter</button>` : "");
+        enCours.appendChild(p);
+      }
+      enCours = null;
+      occupe(false);
+      saisie.focus();
+    } else if (m.type === "vider") {
+      fil.innerHTML = "";
+      enCours = null;
+      occupe(false);
+    }
+  });
+})();

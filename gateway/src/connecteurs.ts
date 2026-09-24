@@ -1,0 +1,1523 @@
+import { chiffrer, dechiffrer, chiffrementActif } from "./secret.ts";
+import { db, type StoredCollection } from "./db.ts";
+import { deployment } from "./deployment.ts";
+import { journaliser } from "./audit.ts";
+import {
+  declarer,
+  estDeclare,
+  retirerServeur,
+  startServer,
+  status as mcpStatus,
+  type McpServerConfig,
+} from "./mcp.ts";
+import * as bureau from "./bureau.ts";
+import * as courrier from "./courrier.ts";
+import * as agenda from "./agenda.ts";
+import * as drive from "./drive.ts";
+import * as slack from "./slack.ts";
+import * as computer from "./computer.ts";
+import { nomProduit } from "./marque.ts";
+import {
+  connecteurDuRetour,
+  depuis as oauthDepuis,
+  FournisseurAutorisation,
+  noterDemandeur,
+  oublier as oublierOauth,
+  retoursEnregistres,
+} from "./oauthMcp.ts";
+import { auth } from "@modelcontextprotocol/sdk/client/auth.js";
+import { t, tf } from "./langue.ts";
+
+/**
+ * Catalogue de connecteurs.
+ *
+ * Jusqu'ici la liste des serveurs MCP était une constante d'une seule ligne :
+ * on pouvait l'allumer ou l'éteindre, pas y ajouter quoi que ce soit. Brancher
+ * Notion demandait de recompiler la passerelle.
+ *
+ * Ce module ouvre l'ajout, et pose en même temps la seule barrière qui compte.
+ *
+ * **Un serveur MCP est une commande exécutée sur la machine de l'entreprise.**
+ * Si l'interface choisit cette commande, alors quiconque atteint la passerelle
+ * choisit ce qui tourne sur le serveur : c'est de l'exécution de code à
+ * distance, offerte à n'importe quel salarié d'une instance partagée. La
+ * commande vient donc du catalogue ci-dessous, écrit dans Helix et livré avec
+ * lui. La requête, elle, n'apporte que des secrets — jamais un exécutable.
+ */
+
+/* ------------------------------------------------------------------ */
+/* Le catalogue                                                        */
+/* ------------------------------------------------------------------ */
+
+/** Un secret à demander à l'utilisateur, et à passer par l'environnement. */
+export interface ChampSecret {
+  /** Nom de la variable d'environnement attendue par le serveur. */
+  nom: string;
+  libelle: string;
+  /** Comment l'obtenir, dit à quelqu'un qui n'est pas informaticien. */
+  aide: string;
+}
+
+export interface EntreeCatalogue {
+  id: string;
+  label: string;
+  description: string;
+  /** Rubrique d'affichage, pour que la liste reste lisible quand elle s'allonge. */
+  categorie: Categorie;
+  /**
+   * Commande et arguments, pour un serveur qui tourne sur cette machine.
+   * Absents pour un serveur livré avec Helix (déjà déclaré dans `mcp.ts`, et
+   * répéter sa définition ici garantirait qu'un jour les deux divergent) et
+   * pour un service distant, qui a une `url`.
+   */
+  command?: string;
+  args?: string[];
+  /**
+   * Adresse du serveur MCP **du service lui-même**, quand il en publie un.
+   *
+   * C'est ce qui rend le branchement en un clic possible : rien à installer,
+   * et l'autorisation se donne dans le navigateur (voir oauthMcp.ts).
+   */
+  url?: string;
+  /**
+   * Comment l'autorisation se fait :
+   *  - `auto` : le service accepte que l'instance s'enregistre elle-même
+   *    (RFC 7591). Rien à préparer : on clique, on autorise, c'est fini ;
+   *  - `appli` : le service veut une application déclarée chez lui. Une
+   *    personne la crée une fois, colle l'identifiant et le secret, et ensuite
+   *    le bouton « Se connecter » suffit à tout le monde.
+   */
+  oauth?: "auto" | "appli";
+  /** Où créer l'application, quand `oauth` vaut « appli ». */
+  console?: string;
+  secrets: ChampSecret[];
+  /** Page où l'utilisateur va chercher son secret, ou la documentation du service. */
+  documentation?: string;
+  /** Livré avec le produit : ne s'installe pas, ne se retire pas. */
+  integre?: true;
+}
+
+export type Categorie =
+  | "Livré avec le produit"
+  | "Travail en équipe"
+  | "Développement"
+  | "Documents et données"
+  | "Vente et relation client"
+  | "Web et recherche"
+  | "Paiement et gestion";
+
+export const CATEGORIES: Categorie[] = [
+  "Livré avec le produit",
+  "Travail en équipe",
+  "Développement",
+  "Documents et données",
+  "Vente et relation client",
+  "Web et recherche",
+  "Paiement et gestion",
+];
+
+/**
+ * Ce que Helix sait brancher.
+ *
+ * ── Deux familles, et la différence compte ───────────────────────────────────
+ *
+ * **Les services qui publient leur propre serveur MCP** (`url`) : rien ne
+ * s'installe sur la machine du client. On clique « Se connecter », le service
+ * demande l'autorisation dans le navigateur, et le jeton revient chiffré dans
+ * l'instance. C'est ce que font les plateformes qui vendent « mille outils en
+ * un clic », à ceci près qu'elles gardent les jetons de leurs clients chez
+ * elles : ici, ils ne quittent pas la machine du client.
+ *
+ * **Les serveurs à exécuter** (`command`) : un paquet npm lancé sur la machine
+ * de l'entreprise. Pour ceux-là, la règle d'origine ne bouge pas — la commande
+ * vient de ce catalogue, jamais de la requête, parce que laisser l'interface
+ * choisir la commande reviendrait à offrir l'exécution de code à distance à
+ * quiconque atteint la passerelle.
+ *
+ * ── Ce qui entre ici ─────────────────────────────────────────────────────────
+ *
+ * Rien sans vérification. Chaque adresse de cette liste a été interrogée :
+ * elle répond, elle publie ses métadonnées d'autorisation, et l'on sait si
+ * elle accepte l'enregistrement dynamique. Chaque nom de paquet a été vérifié
+ * sur le registre npm, à l'orthographe exacte — une ligne écrite de mémoire,
+ * avec un nom approchant, ferait installer au client un paquet que quelqu'un
+ * d'autre a publié sous ce nom.
+ *
+ * Vérifié le 2026-09-18.
+ */
+export const CATALOGUE: EntreeCatalogue[] = [
+  {
+    id: "fichiers",
+    label: "Système de fichiers",
+    /*
+     * `{0}` : le nom du produit, posé au moment de servir (`catalogueTraduit`).
+     * Écrit ici en dur, il était calculé au chargement du module, avant que la
+     * marque ne soit lue — « Livré avec l'application » — et jamais traduit.
+     */
+    description: "Lecture et écriture dans l'espace de travail de l'instance. Livré avec {0}.",
+    categorie: "Livré avec le produit",
+    secrets: [],
+    integre: true,
+  },
+
+  /* ---- Services distants : un clic, l'autorisation dans le navigateur ---- */
+  {
+    id: "notion",
+    label: "Notion",
+    description: "Pages, bases de données et commentaires de votre espace Notion.",
+    categorie: "Travail en équipe",
+    url: "https://mcp.notion.com/mcp",
+    oauth: "auto",
+    documentation: "https://www.notion.so",
+    secrets: [],
+  },
+  {
+    id: "linear",
+    label: "Linear",
+    description: "Tickets, projets et cycles Linear : lire, créer, commenter.",
+    categorie: "Développement",
+    url: "https://mcp.linear.app/mcp",
+    oauth: "auto",
+    documentation: "https://linear.app",
+    secrets: [],
+  },
+  {
+    id: "atlassian",
+    label: "Jira et Confluence",
+    description: "Tickets Jira et pages Confluence de votre organisation Atlassian.",
+    categorie: "Travail en équipe",
+    url: "https://mcp.atlassian.com/v1/sse",
+    oauth: "auto",
+    documentation: "https://www.atlassian.com",
+    secrets: [],
+  },
+  {
+    id: "asana",
+    label: "Asana",
+    description: "Tâches, projets et portefeuilles Asana.",
+    categorie: "Travail en équipe",
+    url: "https://mcp.asana.com/sse",
+    oauth: "auto",
+    documentation: "https://asana.com",
+    secrets: [],
+  },
+  {
+    id: "sentry",
+    label: "Sentry",
+    description: "Erreurs, alertes et versions suivies par Sentry.",
+    categorie: "Développement",
+    url: "https://mcp.sentry.dev/mcp",
+    oauth: "auto",
+    documentation: "https://sentry.io",
+    secrets: [],
+  },
+  {
+    id: "intercom",
+    label: "Intercom",
+    description: "Conversations clients et articles d'aide Intercom.",
+    categorie: "Vente et relation client",
+    url: "https://mcp.intercom.com/mcp",
+    oauth: "auto",
+    documentation: "https://www.intercom.com",
+    secrets: [],
+  },
+  {
+    id: "canva",
+    label: "Canva",
+    description: "Créations et gabarits Canva : chercher, produire, exporter.",
+    categorie: "Documents et données",
+    url: "https://mcp.canva.com/mcp",
+    oauth: "auto",
+    documentation: "https://www.canva.com",
+    secrets: [],
+  },
+  {
+    id: "figma",
+    label: "Figma",
+    description: "Fichiers et composants Figma, vus depuis l'agent.",
+    categorie: "Documents et données",
+    url: "https://mcp.figma.com/mcp",
+    oauth: "auto",
+    documentation: "https://www.figma.com",
+    secrets: [],
+  },
+  {
+    id: "webflow",
+    label: "Webflow",
+    description: "Sites, collections et éléments Webflow.",
+    categorie: "Web et recherche",
+    url: "https://mcp.webflow.com/sse",
+    oauth: "auto",
+    documentation: "https://webflow.com",
+    secrets: [],
+  },
+  {
+    id: "wix",
+    label: "Wix",
+    description: "Sites Wix : contenu, boutique, réservations.",
+    categorie: "Web et recherche",
+    url: "https://mcp.wix.com/sse",
+    oauth: "auto",
+    documentation: "https://www.wix.com",
+    secrets: [],
+  },
+  {
+    id: "vercel",
+    label: "Vercel",
+    description: "Projets, déploiements et journaux Vercel.",
+    categorie: "Développement",
+    url: "https://mcp.vercel.com",
+    oauth: "auto",
+    documentation: "https://vercel.com",
+    secrets: [],
+  },
+  {
+    id: "square",
+    label: "Square",
+    description: "Catalogue, commandes et paiements Square.",
+    categorie: "Paiement et gestion",
+    url: "https://mcp.squareup.com/sse",
+    oauth: "auto",
+    documentation: "https://squareup.com",
+    secrets: [],
+  },
+  {
+    id: "paypal",
+    label: "PayPal",
+    description: "Factures, commandes et remboursements PayPal.",
+    categorie: "Paiement et gestion",
+    url: "https://mcp.paypal.com/mcp",
+    oauth: "auto",
+    documentation: "https://www.paypal.com",
+    secrets: [],
+  },
+
+  /* ---- Services distants qui veulent une application déclarée chez eux ---- */
+  {
+    id: "github",
+    label: "GitHub",
+    description: "Dépôts, issues, demandes de fusion et actions GitHub.",
+    categorie: "Développement",
+    url: "https://api.githubcopilot.com/mcp/",
+    oauth: "appli",
+    console: "https://github.com/settings/developers",
+    documentation: "https://docs.github.com/apps/oauth-apps",
+    secrets: [],
+  },
+  {
+    id: "slack-mcp",
+    label: "Slack",
+    description: "Conversations, canaux et fichiers Slack, par le serveur de Slack.",
+    categorie: "Travail en équipe",
+    url: "https://mcp.slack.com/mcp",
+    oauth: "appli",
+    console: "https://api.slack.com/apps",
+    documentation: "https://api.slack.com/authentication/oauth-v2",
+    secrets: [],
+  },
+  {
+    id: "box",
+    label: "Box",
+    description: "Fichiers et dossiers Box.",
+    categorie: "Documents et données",
+    url: "https://mcp.box.com/",
+    oauth: "appli",
+    console: "https://app.box.com/developers/console",
+    documentation: "https://developer.box.com/guides/authentication/oauth2/",
+    secrets: [],
+  },
+  {
+    id: "airtable-mcp",
+    label: "Airtable",
+    description: "Bases, tables et enregistrements Airtable, par le serveur d'Airtable.",
+    categorie: "Documents et données",
+    url: "https://mcp.airtable.com/mcp",
+    oauth: "appli",
+    console: "https://airtable.com/create/oauth",
+    documentation: "https://airtable.com/developers/web/guides/oauth-integrations",
+    secrets: [],
+  },
+
+  /* ---- Serveurs exécutés sur la machine de l'instance, avec un jeton ---- */
+  {
+    id: "notion-jeton",
+    label: "Notion (par jeton)",
+    description:
+      "Même service que « Notion », mais par un jeton d'intégration interne, sans passer par le navigateur.",
+    categorie: "Travail en équipe",
+    command: "npx",
+    args: ["-y", "@notionhq/notion-mcp-server"],
+    documentation: "https://www.notion.so/profile/integrations",
+    secrets: [
+      {
+        nom: "NOTION_TOKEN",
+        libelle: "Jeton d'intégration interne",
+        aide:
+          "Dans Notion, ouvrez Réglages puis Intégrations, et créez une « intégration " +
+          "interne ». Copiez son jeton, puis ouvrez chaque page à partager et " +
+          "utilisez « Connexions » pour y donner accès à cette intégration : Notion ne " +
+          "montre au connecteur que ce que vous lui avez explicitement partagé.",
+      },
+    ],
+  },
+  {
+    id: "github-jeton",
+    label: "GitHub (par jeton)",
+    description: "Dépôts, issues et demandes de fusion, par un jeton personnel.",
+    categorie: "Développement",
+    command: "npx",
+    args: ["-y", "@modelcontextprotocol/server-github"],
+    documentation: "https://github.com/settings/tokens",
+    secrets: [
+      {
+        nom: "GITHUB_PERSONAL_ACCESS_TOKEN",
+        libelle: "Jeton d'accès personnel",
+        aide:
+          "Sur GitHub, ouvrez Settings, Developer settings, Personal access tokens, et " +
+          "créez un jeton « fine-grained ». Ne cochez que les dépôts et les droits dont " +
+          "l'agent a besoin : ce jeton vaut ce que vous lui donnez.",
+      },
+    ],
+  },
+  {
+    id: "gitlab",
+    label: "GitLab",
+    description: "Projets, issues et demandes de fusion GitLab.",
+    categorie: "Développement",
+    command: "npx",
+    args: ["-y", "@modelcontextprotocol/server-gitlab"],
+    documentation: "https://gitlab.com/-/user_settings/personal_access_tokens",
+    secrets: [
+      {
+        nom: "GITLAB_PERSONAL_ACCESS_TOKEN",
+        libelle: "Jeton d'accès personnel",
+        aide:
+          "Dans GitLab, Préférences puis Jetons d'accès personnels. La portée « api » " +
+          "suffit ; limitez-la aux projets concernés si votre instance le permet.",
+      },
+      {
+        nom: "GITLAB_API_URL",
+        libelle: "Adresse de l'API (instance auto-hébergée)",
+        aide:
+          "Pour GitLab.com, laissez https://gitlab.com/api/v4. Pour une instance à vous, " +
+          "mettez son adresse, terminée par /api/v4.",
+      },
+    ],
+  },
+  {
+    id: "slack-jeton",
+    label: "Slack (par jeton)",
+    description: "Canaux, messages et personnes, par un jeton de bot Slack.",
+    categorie: "Travail en équipe",
+    command: "npx",
+    args: ["-y", "@modelcontextprotocol/server-slack"],
+    documentation: "https://api.slack.com/apps",
+    secrets: [
+      {
+        nom: "SLACK_BOT_TOKEN",
+        libelle: "Jeton du bot (xoxb-…)",
+        aide:
+          "Créez une application Slack, ajoutez-lui les droits de lecture des canaux, " +
+          "installez-la dans votre espace, puis copiez le jeton « Bot User OAuth Token ».",
+      },
+      {
+        nom: "SLACK_TEAM_ID",
+        libelle: "Identifiant de l'espace (T…)",
+        aide: "Visible dans l'adresse de votre espace Slack, ou dans les réglages de l'application.",
+      },
+    ],
+  },
+  {
+    id: "airtable-jeton",
+    label: "Airtable (par jeton)",
+    description: "Bases et enregistrements Airtable, par un jeton personnel.",
+    categorie: "Documents et données",
+    command: "npx",
+    args: ["-y", "airtable-mcp-server"],
+    documentation: "https://airtable.com/create/tokens",
+    secrets: [
+      {
+        nom: "AIRTABLE_API_KEY",
+        libelle: "Jeton d'accès personnel",
+        aide:
+          "Sur Airtable, créez un « personal access token » et ne lui donnez accès qu'aux " +
+          "bases que l'agent doit voir.",
+      },
+    ],
+  },
+  {
+    id: "postgres",
+    label: "PostgreSQL",
+    description: "Lecture d'une base PostgreSQL : schémas et requêtes, en lecture seule.",
+    categorie: "Documents et données",
+    command: "npx",
+    args: ["-y", "@modelcontextprotocol/server-postgres"],
+    documentation: "https://www.postgresql.org/docs/",
+    secrets: [
+      {
+        nom: "POSTGRES_CONNECTION_STRING",
+        libelle: "Chaîne de connexion",
+        aide:
+          "De la forme postgresql://utilisateur:motdepasse@serveur:5432/base. Créez de " +
+          "préférence un compte en lecture seule : l'agent n'a pas à pouvoir écrire dans " +
+          "votre base de production.",
+      },
+    ],
+  },
+  {
+    id: "hubspot",
+    label: "HubSpot",
+    description: "Contacts, entreprises et affaires HubSpot.",
+    categorie: "Vente et relation client",
+    command: "npx",
+    args: ["-y", "@hubspot/mcp-server"],
+    documentation: "https://developers.hubspot.com/docs/api/private-apps",
+    secrets: [
+      {
+        nom: "PRIVATE_APP_ACCESS_TOKEN",
+        libelle: "Jeton d'application privée",
+        aide:
+          "Dans HubSpot, Paramètres, Intégrations, Applications privées : créez-en une et " +
+          "ne cochez que les portées dont l'agent a besoin.",
+      },
+    ],
+  },
+  {
+    id: "firecrawl",
+    label: "Firecrawl",
+    description: "Lecture et extraction de pages web, y compris celles qui demandent un rendu.",
+    categorie: "Web et recherche",
+    command: "npx",
+    args: ["-y", "firecrawl-mcp"],
+    documentation: "https://www.firecrawl.dev",
+    secrets: [
+      { nom: "FIRECRAWL_API_KEY", libelle: "Clé d'API", aide: "Elle se crée depuis votre compte Firecrawl." },
+    ],
+  },
+  {
+    id: "tavily",
+    label: "Tavily",
+    description: "Recherche web pensée pour les agents, avec extraits sourcés.",
+    categorie: "Web et recherche",
+    command: "npx",
+    args: ["-y", "tavily-mcp"],
+    documentation: "https://tavily.com",
+    secrets: [
+      { nom: "TAVILY_API_KEY", libelle: "Clé d'API", aide: "Elle se crée depuis votre tableau de bord Tavily." },
+    ],
+  },
+  {
+    id: "exa",
+    label: "Exa",
+    description: "Recherche web sémantique, et lecture du contenu trouvé.",
+    categorie: "Web et recherche",
+    command: "npx",
+    args: ["-y", "exa-mcp-server"],
+    documentation: "https://exa.ai",
+    secrets: [
+      { nom: "EXA_API_KEY", libelle: "Clé d'API", aide: "Elle se crée depuis votre tableau de bord Exa." },
+    ],
+  },
+  {
+    id: "brave",
+    label: "Brave Search",
+    description: "Recherche web et locale par l'API de Brave.",
+    categorie: "Web et recherche",
+    command: "npx",
+    args: ["-y", "@modelcontextprotocol/server-brave-search"],
+    documentation: "https://brave.com/search/api/",
+    secrets: [
+      { nom: "BRAVE_API_KEY", libelle: "Clé d'API", aide: "Elle se crée sur le portail de l'API Brave Search." },
+    ],
+  },
+  {
+    id: "cartes",
+    label: "Google Maps",
+    description: "Lieux, itinéraires et distances.",
+    categorie: "Web et recherche",
+    command: "npx",
+    args: ["-y", "@modelcontextprotocol/server-google-maps"],
+    documentation: "https://developers.google.com/maps/documentation",
+    secrets: [
+      {
+        nom: "GOOGLE_MAPS_API_KEY",
+        libelle: "Clé d'API",
+        aide:
+          "Dans la console Google Cloud, activez Places et Directions, puis créez une clé " +
+          "et restreignez-la à ces API.",
+      },
+    ],
+  },
+  {
+    id: "navigateur",
+    label: "Navigateur (Puppeteer)",
+    description:
+      "Ouvre des pages dans un navigateur sans fenêtre, clique et lit. Rien ne sort de la machine.",
+    categorie: "Web et recherche",
+    command: "npx",
+    args: ["-y", "@modelcontextprotocol/server-puppeteer"],
+    documentation: "https://pptr.dev",
+    secrets: [],
+  },
+  {
+    id: "documentation",
+    label: "Documentation des bibliothèques",
+    description:
+      "Documentation à jour des bibliothèques de code, pour que le modèle cesse d'inventer des fonctions.",
+    categorie: "Développement",
+    command: "npx",
+    args: ["-y", "@upstash/context7-mcp"],
+    documentation: "https://context7.com",
+    secrets: [],
+  },
+  {
+    id: "memoire",
+    label: "Mémoire de travail",
+    description:
+      "Un carnet de notes que l'agent relit d'une conversation à l'autre. Tout reste sur la machine.",
+    categorie: "Livré avec le produit",
+    command: "npx",
+    args: ["-y", "@modelcontextprotocol/server-memory"],
+    documentation: "https://modelcontextprotocol.io",
+    secrets: [],
+  },
+  {
+    id: "reflexion",
+    label: "Réflexion par étapes",
+    description:
+      "Aide le modèle à poser un raisonnement en plusieurs temps avant de répondre. Rien ne sort de la machine.",
+    categorie: "Livré avec le produit",
+    command: "npx",
+    args: ["-y", "@modelcontextprotocol/server-sequential-thinking"],
+    documentation: "https://modelcontextprotocol.io",
+    secrets: [],
+  },
+  {
+    id: "kubernetes",
+    label: "Kubernetes",
+    description: "État d'un cluster Kubernetes : pods, journaux, déploiements.",
+    categorie: "Développement",
+    command: "npx",
+    args: ["-y", "mcp-server-kubernetes"],
+    documentation: "https://kubernetes.io/docs/",
+    secrets: [
+      {
+        nom: "KUBECONFIG",
+        libelle: "Chemin du fichier kubeconfig",
+        aide:
+          "Le chemin, sur la machine de l'instance, du fichier qui donne accès au cluster. " +
+          "Utilisez de préférence un compte de service en lecture seule.",
+      },
+    ],
+  },
+];
+
+export const entreeCatalogue = (id: string): EntreeCatalogue | undefined =>
+  CATALOGUE.find((e) => e.id === id);
+
+/**
+ * Une commande libre est-elle permise sur cette instance ?
+ *
+ * Non par défaut, et le défaut est le seul réglage que la plupart des
+ * installations connaîtront. Le cas avancé existe — un client a son propre
+ * serveur MCP interne — mais il passe par le profil de déploiement, un fichier
+ * que seul l'intégrateur écrit sur la machine hôte, et non par une requête.
+ */
+export const commandeLibreAutorisee = (): boolean =>
+  deployment().connecteursLibres === true;
+
+/* ------------------------------------------------------------------ */
+/* Persistance                                                         */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Collection **interne** du magasin de l'instance.
+ *
+ * Interne veut dire : absente de `COLLECTIONS`, donc jamais distribuée par les
+ * routes de synchronisation `/helix/data/<collection>`. Un jeton Notion
+ * recopié vers chaque poste du parc n'aurait plus rien d'un secret.
+ *
+ * Le secret est de plus chiffré **ici**, avant d'entrer dans le magasin, en
+ * plus du chiffrement que le magasin en fichiers applique déjà. Ce n'est pas
+ * de la superstition : l'implémentation PostgreSQL de db.ts, elle, n'appelle
+ * pas `chiffrer`. Sans cette passe, un client déployé sur PostgreSQL verrait
+ * ses jetons en clair dans une colonne JSONB. C'est le modèle du connecteur
+ * courrier, et pour la même raison.
+ */
+const COLLECTION: StoredCollection = "connecteurs";
+
+interface ConnecteurEnregistre {
+  id: string;
+  label: string;
+  description: string;
+  /** Commande locale, ou adresse distante : l'un ou l'autre, jamais les deux. */
+  command?: string;
+  args?: string[];
+  /** Serveur MCP du service lui-même, autorisé par OAuth (oauthMcp.ts). */
+  url?: string;
+  /** Enveloppes produites par `chiffrer()`, par nom de variable. Jamais de clair. */
+  secrets: Record<string, unknown>;
+  depuis: string;
+  /** Ajouté hors catalogue, sur une instance qui l'autorise explicitement. */
+  libre?: boolean;
+}
+
+/**
+ * Connecteurs en mémoire.
+ *
+ * `toolsForModel()` de mcp.ts est synchrone — c'est le contrat de chat.ts, qui
+ * monte la liste d'outils au début de chaque conversation — alors que la
+ * lecture du magasin est asynchrone. On garde donc l'état sous la main, rempli
+ * une fois au démarrage par `charger()`.
+ */
+let enMemoire: ConnecteurEnregistre[] = [];
+let chargement: Promise<void> | null = null;
+
+async function lire(): Promise<ConnecteurEnregistre[]> {
+  const valeur = await db().read(COLLECTION);
+  if (!Array.isArray(valeur)) return [];
+  return valeur.filter(
+    (c): c is ConnecteurEnregistre =>
+      typeof c === "object" &&
+      c !== null &&
+      typeof (c as ConnecteurEnregistre).id === "string" &&
+      (typeof (c as ConnecteurEnregistre).command === "string" ||
+        typeof (c as ConnecteurEnregistre).url === "string"),
+  );
+}
+
+/**
+ * Place d'un secret de connecteur dans le magasin.
+ *
+ * Elle sert de données associées au chiffrement : l'enveloppe ne se déchiffre
+ * qu'à l'endroit où elle a été écrite. Sans elle, une enveloppe recopiée
+ * depuis une autre collection, ou d'un connecteur vers un autre, se serait
+ * déchiffrée sans broncher. Les enveloppes d'avant (format v1, sans données
+ * associées) continuent de se lire : `dechiffrer` ignore la place pour
+ * celles-là, et la réclame pour les nouvelles.
+ */
+const placeDuSecret = (id: string, nom: string): string => `connecteurs#${id}#${nom}`;
+
+/** Déchiffre les secrets d'un connecteur pour en faire l'environnement du serveur. */
+function environnement(c: ConnecteurEnregistre): Record<string, string> {
+  const env: Record<string, string> = {};
+  for (const [nom, coffre] of Object.entries(c.secrets ?? {})) {
+    const clair = dechiffrer(coffre, placeDuSecret(c.id, nom));
+    if (typeof clair === "string") env[nom] = clair;
+  }
+  return env;
+}
+
+const versConfig = (c: ConnecteurEnregistre): McpServerConfig =>
+  c.url
+    ? {
+        id: c.id,
+        label: c.label,
+        description: c.description,
+        url: c.url,
+        auth: new FournisseurAutorisation(c.id, c.url, retourDe(c.id)),
+        autoStart: true,
+      }
+    : {
+        id: c.id,
+        label: c.label,
+        description: c.description,
+        command: c.command!,
+        args: c.args ?? [],
+        env: environnement(c),
+        autoStart: true,
+      };
+
+/**
+ * Adresse de retour de l'autorisation, telle qu'elle a été enregistrée.
+ *
+ * Elle est fixée au moment où la personne clique « Se connecter », à partir de
+ * l'adresse par laquelle son navigateur atteint l'instance : c'est la seule
+ * qui puisse recevoir le retour. On la garde pour les rafraîchissements de
+ * jeton, qui doivent présenter la même.
+ */
+let retoursConnus = new Map<string, string>();
+const retourDe = (id: string): string => retoursConnus.get(id) ?? "";
+export function memoriserRetour(id: string, retour: string): void {
+  retoursConnus.set(id, retour);
+}
+
+/**
+ * Relit les connecteurs enregistrés et les remet en service.
+ *
+ * À appeler une fois au démarrage, avant `startAutoServers()` : sans cela, la
+ * première conversation après un redémarrage se verrait proposer les seuls
+ * outils de fichiers, alors que l'utilisateur a bel et bien branché Notion la
+ * veille et n'a aucune raison de le rebrancher.
+ */
+export async function charger(): Promise<void> {
+  if (chargement) return chargement;
+  chargement = (async () => {
+    // Avant de déclarer quoi que ce soit : un connecteur distant a besoin de son
+    // adresse de retour pour rafraîchir son jeton (voir `retourDe`).
+    try {
+      retoursConnus = await retoursEnregistres();
+    } catch {
+      retoursConnus = new Map();
+    }
+    try {
+      enMemoire = await lire();
+    } catch (err) {
+      /*
+       * Un magasin illisible — clé de chiffrement absente, par exemple — ne
+       * doit pas empêcher la passerelle de démarrer : le reste de Helix
+       * fonctionne sans connecteurs.
+       */
+      console.error(
+        "[connecteurs] liste illisible :",
+        err instanceof Error ? err.message : err,
+      );
+      enMemoire = [];
+      return;
+    }
+    for (const c of enMemoire) {
+      try {
+        declarer(versConfig(c));
+      } catch (err) {
+        console.error(
+          `[connecteurs] ${c.id} non déclaré :`,
+          err instanceof Error ? err.message : err,
+        );
+      }
+    }
+  })();
+  return chargement;
+}
+
+async function ecrire(liste: ConnecteurEnregistre[]): Promise<void> {
+  enMemoire = liste;
+  await db().write(COLLECTION, liste);
+}
+
+/* ------------------------------------------------------------------ */
+/* État affichable                                                     */
+/* ------------------------------------------------------------------ */
+
+export interface ConnecteurInstalle {
+  id: string;
+  label: string;
+  description: string;
+  /** Noms des variables renseignées. Jamais leur valeur. */
+  secretsFournis: string[];
+  depuis: string;
+  libre: boolean;
+  running: boolean;
+  toolCount: number;
+  error?: string;
+  /** Branché par autorisation dans le navigateur, et non par un jeton collé. */
+  distant?: boolean;
+  /** Date de l'autorisation, pour un service distant. */
+  autoriseDepuis?: string;
+}
+
+export interface EtatConnecteurs {
+  catalogue: EntreeCatalogue[];
+  /** Rubriques, dans l'ordre d'affichage. */
+  categories: Categorie[];
+  installes: ConnecteurInstalle[];
+  /** Le magasin chiffre-t-il réellement au repos sur cette machine ? */
+  chiffrementDonnees: boolean;
+  /** Le profil de déploiement autorise-t-il une commande hors catalogue ? */
+  commandeLibre: boolean;
+}
+
+/**
+ * Le catalogue dans la langue de qui le lit.
+ *
+ * Il est écrit en français, comme constante du module : traduit au chargement,
+ * il le serait une fois pour toutes, hors de toute requête, donc en français.
+ * On le traduit donc ici, au moment de le servir. Les rubriques passent par la
+ * même traduction que la `categorie` de chaque entrée : l'écran les rapproche
+ * par égalité, les deux doivent rester identiques.
+ *
+ * Seuls les textes montrés changent. L'identifiant, la commande et l'adresse du
+ * service restent tels quels : ce sont eux qui disent quoi exécuter.
+ */
+function catalogueTraduit(): EntreeCatalogue[] {
+  return CATALOGUE.map((e) => ({
+    ...e,
+    label: t(e.label),
+    description: e.description.includes("{0}") ? tf(e.description, nomProduit()) : t(e.description),
+    categorie: t(e.categorie) as Categorie,
+    secrets: e.secrets.map((c) => ({ ...c, libelle: t(c.libelle), aide: t(c.aide) })),
+  }));
+}
+
+/** Ce que l'interface affiche. Aucun secret n'y figure, sous aucune forme. */
+export async function etat(): Promise<EtatConnecteurs> {
+  await charger();
+  const serveurs = mcpStatus();
+
+  return {
+    catalogue: catalogueTraduit(),
+    categories: CATEGORIES.map((c) => t(c) as Categorie),
+    installes: await Promise.all(
+      enMemoire.map(async (c) => {
+        const vivant = serveurs.find((s) => s.id === c.id);
+        return {
+          id: c.id,
+          label: t(c.label),
+          description: t(c.description),
+          secretsFournis: Object.keys(c.secrets ?? {}),
+          depuis: c.depuis,
+          libre: c.libre === true,
+          running: vivant?.running ?? false,
+          toolCount: vivant?.toolCount ?? 0,
+          error: vivant?.error,
+          ...(c.url ? { distant: true as const, autoriseDepuis: await oauthDepuis(c.id) } : {}),
+        };
+      }),
+    ),
+    chiffrementDonnees: chiffrementActif(),
+    commandeLibre: commandeLibreAutorisee(),
+  };
+}
+
+/* ------------------------------------------------------------------ */
+/* Ajout                                                               */
+/* ------------------------------------------------------------------ */
+
+export interface Resultat {
+  ok: boolean;
+  message: string;
+}
+
+/** Identifiant sûr : il devient un préfixe de nom d'outil et une clé de magasin. */
+const ID_VALIDE = /^[a-z0-9][a-z0-9_-]{0,31}$/;
+
+/*
+ * Identifiants des connecteurs intégrés. Un serveur MCP libre qui prendrait
+ * l'un d'eux emprunterait leur préfixe d'outils (`courrier__…`) et, avec lui,
+ * leur classement « lecture seule » dans la barrière d'approbation, ou leur
+ * place dans la puce « Outils ». Ils sont donc refusés à l'ajout.
+ */
+const IDS_RESERVES = new Set(["courrier", "agenda", "drive", "slack", "bureau", "ecran", "bibliotheque", "reunions", "controle"]);
+
+/**
+ * Ce que la requête a le droit d'apporter, selon le régime de l'instance.
+ *
+ * Deux chemins, et un seul est ouvert par défaut. Sur le chemin du catalogue,
+ * `command` et `args` sont pris dans la constante de Helix et **ce que la
+ * requête contient à ces noms est ignoré** : c'est la propriété qui rend la
+ * route inoffensive, quelle que soit l'imagination de l'appelant.
+ */
+function resoudreCommande(
+  brut: Record<string, unknown>,
+):
+  | { ok: true; id: string; label: string; description: string; command: string; args: string[]; libre: boolean; attendus: ChampSecret[] }
+  | { ok: false; message: string } {
+  const id = typeof brut.id === "string" ? brut.id.trim().toLowerCase() : "";
+  if (!ID_VALIDE.test(id)) {
+    return {
+      ok: false,
+      message:
+        "Identifiant de connecteur invalide : lettres minuscules, chiffres, tiret " +
+        "et souligné, 32 caractères au plus.",
+    };
+  }
+
+  if (IDS_RESERVES.has(id)) {
+    return {
+      ok: false,
+      message: tf("« {0} » est le nom d'un connecteur intégré : choisissez un autre identifiant.", id),
+    };
+  }
+
+  const entree = entreeCatalogue(id);
+
+  if (entree) {
+    if (entree.url) {
+      return {
+        ok: false,
+        message: tf("« {0} » se branche d'un clic : utilisez « Se connecter », rien n'est à installer.", entree.label),
+      };
+    }
+    if (entree.integre || !entree.command) {
+      return {
+        ok: false,
+        message: tf("« {0} » est livré avec {1} : il est déjà là et n'a pas à être ajouté.", entree.label, nomProduit()),
+      };
+    }
+    return {
+      ok: true,
+      id,
+      label: entree.label,
+      description: entree.description,
+      command: entree.command,
+      args: entree.args ?? [],
+      libre: false,
+      attendus: entree.secrets,
+    };
+  }
+
+  /*
+   * Hors catalogue. C'est le point où la passerelle offrirait l'exécution de
+   * code à distance si elle disait oui : le refus est donc le comportement
+   * normal, et l'autorisation vient d'un fichier posé sur la machine hôte par
+   * l'intégrateur, jamais d'un en-tête, d'un rôle ni d'un réglage d'interface.
+   */
+  if (!commandeLibreAutorisee()) {
+    return {
+      ok: false,
+      message:
+        `Aucun connecteur « ${id} » dans le catalogue de ${nomProduit()}, et cette instance ` +
+        "n'autorise pas les commandes libres. Un serveur MCP est un programme exécuté " +
+        "sur cette machine : " + nomProduit() + " ne lance que les commandes de son catalogue. Pour " +
+        "un serveur interne, l'intégrateur doit régler « connecteursLibres » sur true " +
+        "dans helix.config.json.",
+    };
+  }
+
+  const command = typeof brut.command === "string" ? brut.command.trim() : "";
+  if (!command) {
+    return { ok: false, message: t("Indiquez la commande à exécuter.") };
+  }
+  const args = Array.isArray(brut.args)
+    ? brut.args.filter((a): a is string => typeof a === "string")
+    : [];
+  const label = typeof brut.label === "string" && brut.label.trim() ? brut.label.trim() : id;
+
+  return {
+    ok: true,
+    id,
+    label,
+    description:
+      typeof brut.description === "string" && brut.description.trim()
+        ? brut.description.trim()
+        : "Connecteur ajouté par l'intégrateur.",
+    command,
+    args,
+    libre: true,
+    /*
+     * Une commande libre n'a pas de champs déclarés : on accepte les variables
+     * telles qu'elles sont fournies. Elles resteront chiffrées et passeront
+     * quand même par l'environnement, jamais par la ligne de commande.
+     */
+    attendus: [],
+  };
+}
+
+/** Récupère les secrets de la requête, en n'acceptant que des chaînes non vides. */
+function collecterSecrets(
+  brut: Record<string, unknown>,
+  attendus: ChampSecret[],
+  libre: boolean,
+): { ok: true; secrets: Record<string, string> } | { ok: false; message: string } {
+  const fournis =
+    typeof brut.secrets === "object" && brut.secrets !== null
+      ? (brut.secrets as Record<string, unknown>)
+      : {};
+
+  const secrets: Record<string, string> = {};
+
+  if (libre) {
+    for (const [nom, valeur] of Object.entries(fournis)) {
+      // Un nom de variable d'environnement, et rien d'autre : le reste n'a
+      // aucune chance d'être lu par le serveur et brouillerait le diagnostic.
+      if (!/^[A-Z][A-Z0-9_]*$/.test(nom)) continue;
+      if (typeof valeur === "string" && valeur) secrets[nom] = valeur;
+    }
+    return { ok: true, secrets };
+  }
+
+  for (const champ of attendus) {
+    const valeur = fournis[champ.nom];
+    if (typeof valeur !== "string" || !valeur.trim()) {
+      return { ok: false, message: tf("Renseignez « {0} ».", champ.libelle) };
+    }
+    secrets[champ.nom] = valeur.trim();
+  }
+  return { ok: true, secrets };
+}
+
+/**
+ * Ajoute un connecteur, après l'avoir essayé.
+ *
+ * L'ordre compte, comme pour le courrier : on démarre le serveur et on liste
+ * ses outils **avant** d'écrire quoi que ce soit. Un connecteur enregistré mais
+ * incapable de démarrer est le pire des cas — l'utilisateur croit Notion
+ * branché, l'agent ne voit aucun outil, et personne ne sait où est l'erreur.
+ */
+export async function ajouter(brut: unknown, qui: string): Promise<Resultat> {
+  if (!brut || typeof brut !== "object") {
+    return { ok: false, message: t("Aucun connecteur fourni.") };
+  }
+  await charger();
+
+  const verdict = resoudreCommande(brut as Record<string, unknown>);
+  if (!verdict.ok) return verdict;
+
+  if (enMemoire.some((c) => c.id === verdict.id)) {
+    return {
+      ok: false,
+      message: tf("« {0} » est déjà connecté. Retirez-le d'abord pour le reconfigurer.", verdict.label),
+    };
+  }
+  /*
+   * Un identifiant déjà porté par un serveur livré avec Helix serait écrasé :
+   * les outils du nouveau venu prendraient la place de ceux des fichiers, sous
+   * le même préfixe, et la barrière d'approbation les classerait avec les mauvais.
+   */
+  if (estDeclare(verdict.id)) {
+    return {
+      ok: false,
+      message: tf("L'identifiant « {0} » est déjà utilisé par un serveur de cette instance.", verdict.id),
+    };
+  }
+
+  const recolte = collecterSecrets(
+    brut as Record<string, unknown>,
+    verdict.attendus,
+    verdict.libre,
+  );
+  if (!recolte.ok) return recolte;
+
+  /*
+   * Refus net plutôt que dégradation silencieuse. Un jeton d'intégration donne
+   * accès à l'espace de travail de l'entreprise : l'écrire en clair sur le
+   * disque, même en le disant, n'est pas un compromis acceptable.
+   */
+  if (Object.keys(recolte.secrets).length > 0 && !chiffrementActif()) {
+    return {
+      ok: false,
+      message:
+        "Le chiffrement des données n'est pas actif sur cette machine : " + nomProduit() + " refuse " +
+        "d'enregistrer un jeton d'accès en clair. Déverrouillez le trousseau du compte " +
+        "hôte, ou réglez « chiffrement » sur « fichier » dans helix.config.json, puis " +
+        "recommencez.",
+    };
+  }
+
+  const config: McpServerConfig = {
+    id: verdict.id,
+    label: verdict.label,
+    description: verdict.description,
+    command: verdict.command,
+    args: verdict.args,
+    env: recolte.secrets,
+    autoStart: true,
+  };
+
+  declarer(config);
+  const demarrage = await startServer(verdict.id);
+  if (!demarrage.ok) {
+    // Rien n'est écrit : un échec ne laisse aucune trace sur le disque.
+    await retirerServeur(verdict.id);
+
+    /*
+     * La cause probable d'abord, le détail brut ensuite. L'utilisateur qui
+     * branche Notion a besoin de savoir quoi reprendre ; le message du serveur,
+     * en anglais et souvent obscur, ne sert qu'au diagnostic — et il a déjà été
+     * débarrassé du secret par `mcp.ts` avant d'arriver ici.
+     */
+    const conseil = verdict.attendus.length > 0 || verdict.libre
+      ? "Vérifiez que le jeton saisi est valide, et que cette machine a accès à Internet."
+      : "Vérifiez que cette machine a accès à Internet.";
+
+    return {
+      ok: false,
+      message:
+        `« ${verdict.label} » n'a pas démarré. ${conseil}` +
+        (demarrage.error ? ` Détail technique : ${demarrage.error}` : ""),
+    };
+  }
+
+  const enregistre: ConnecteurEnregistre = {
+    id: verdict.id,
+    label: verdict.label,
+    description: verdict.description,
+    command: verdict.command,
+    args: verdict.args,
+    secrets: Object.fromEntries(
+      Object.entries(recolte.secrets).map(([nom, valeur]) => [
+        nom,
+        chiffrer(valeur, placeDuSecret(verdict.id, nom)),
+      ]),
+    ),
+    depuis: new Date().toISOString(),
+    ...(verdict.libre ? { libre: true } : {}),
+  };
+
+  await ecrire([...enMemoire, enregistre]);
+
+  /*
+   * Le journal nomme qui a branché quoi, et avec quelle commande. Jamais le
+   * secret, ni même les noms des variables suffiraient : ce sont les valeurs
+   * qui sont sensibles, et elles ne sortent pas d'ici.
+   */
+  journaliser("connecteur.ajoute", qui, {
+    connecteur: verdict.id,
+    commande: `${verdict.command} ${verdict.args.join(" ")}`.trim(),
+    horsCatalogue: verdict.libre,
+    outils: mcpStatus().find((s) => s.id === verdict.id)?.toolCount ?? 0,
+  });
+
+  const outils = mcpStatus().find((s) => s.id === verdict.id)?.toolCount ?? 0;
+  return {
+    ok: true,
+    message: tf("« {0} » est connecté : {1} outil(s) disponibles pour vos agents.", verdict.label, outils),
+  };
+}
+
+/* ------------------------------------------------------------------ */
+/* Retrait                                                             */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Retire un connecteur : son serveur s'arrête, ses outils disparaissent de la
+ * conversation suivante, et son secret est effacé du disque.
+ */
+export async function retirer(id: string, qui: string): Promise<Resultat> {
+  await charger();
+
+  const connecteur = enMemoire.find((c) => c.id === id);
+  if (!connecteur) {
+    return {
+      ok: false,
+      message: entreeCatalogue(id)?.integre
+        ? "Ce serveur est livré avec " + nomProduit() + " et ne peut pas être retiré."
+        : `Aucun connecteur « ${id} » sur cette instance.`,
+    };
+  }
+
+  await retirerServeur(id);
+  await ecrire(enMemoire.filter((c) => c.id !== id));
+  /*
+   * Et l'autorisation avec. Retirer un service en gardant son jeton
+   * d'accès reviendrait à laisser une clé dans une porte qu'on dit avoir
+   * fermée : le jeton resterait valable chez le fournisseur.
+   */
+  if (connecteur.url) await oublierOauth(id, qui);
+
+  journaliser("connecteur.retire", qui, { connecteur: id });
+
+  return { ok: true, message: tf("« {0} » a été retiré de cette instance.", connecteur.label) };
+}
+
+/* ------------------------------------------------------------------ */
+/* Se connecter : l'autorisation dans le navigateur                     */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Lance, ou achève, l'autorisation d'un service distant.
+ *
+ * Trois issues possibles, et l'interface les distingue :
+ *  - `pret` : l'instance est déjà autorisée, le service est branché ;
+ *  - `adresse` : il faut ouvrir cette page dans le navigateur de la personne.
+ *    C'est le service qui l'affiche, chez lui, avec son logo et sa liste de
+ *    permissions ; Helix ne voit jamais le mot de passe ;
+ *  - un message d'erreur.
+ *
+ * `base` est l'adresse par laquelle le navigateur atteint l'instance : elle
+ * vient de la requête, parce que c'est la seule que le service pourra
+ * rappeler. Sur un poste, c'est 127.0.0.1 ; sur une instance d'entreprise,
+ * son nom de domaine.
+ */
+export async function connecter(
+  id: string,
+  qui: string,
+  base: string,
+  identifiants?: { clientId?: unknown; clientSecret?: unknown },
+): Promise<{ ok: true; pret?: true; adresse?: string; message: string } | { ok: false; message: string }> {
+  await charger();
+  const entree = entreeCatalogue(id);
+  if (!entree?.url) {
+    return { ok: false, message: t("Ce connecteur ne se branche pas par le navigateur.") };
+  }
+
+  /*
+   * Un jeton d'accès va être conservé : s'il ne peut pas l'être chiffré, on
+   * refuse, comme pour les connecteurs par jeton. Mieux vaut ne pas brancher
+   * que brancher en laissant un secret en clair sur le disque.
+   */
+  if (!chiffrementActif()) {
+    return {
+      ok: false,
+      message:
+        "Le chiffrement des données n'est pas actif sur cette machine : " + nomProduit() +
+        " refuse d'y conserver un jeton d'accès. Déverrouillez le trousseau du compte hôte, " +
+        "ou réglez « chiffrement » sur « fichier » dans helix.config.json.",
+    };
+  }
+
+  const retour = `${base.replace(/\/+$/, "")}/helix/oauth/retour`;
+  memoriserRetour(id, retour);
+  await noterDemandeur(id, entree.url, qui);
+
+  const fournisseur = new FournisseurAutorisation(id, entree.url, retour);
+
+  /*
+   * Service qui n'accepte pas l'enregistrement dynamique : une personne a créé
+   * une application chez lui et colle ici son identifiant. On l'enregistre une
+   * fois pour toutes, et les fois suivantes il n'y a plus rien à saisir.
+   */
+  if (entree.oauth === "appli") {
+    const dejaLa = await fournisseur.clientInformation();
+    const donne = typeof identifiants?.clientId === "string" && identifiants.clientId.trim();
+    if (!dejaLa && !donne) {
+      return {
+        ok: false,
+        message:
+          `${entree.label} demande une application déclarée chez lui. Créez-la` +
+          (entree.console ? ` sur ${entree.console}` : "") +
+          `, indiquez ${retour} comme adresse de retour, puis collez son identifiant ici.`,
+      };
+    }
+    if (donne) {
+      await fournisseur.saveClientInformation({
+        client_id: String(identifiants!.clientId).trim(),
+        ...(typeof identifiants?.clientSecret === "string" && identifiants.clientSecret.trim()
+          ? { client_secret: identifiants.clientSecret.trim() }
+          : {}),
+      });
+    }
+  }
+
+  let resultat: string;
+  try {
+    resultat = await auth(fournisseur as never, { serverUrl: entree.url });
+  } catch (err) {
+    return {
+      ok: false,
+      message: tf("{0} n'a pas pu être contacté : {1}", entree.label, err instanceof Error ? err.message : String(err)),
+    };
+  }
+
+  if (resultat === "AUTHORIZED") {
+    const r = await brancherDistant(entree, qui);
+    return r.ok ? { ok: true, pret: true, message: r.message } : r;
+  }
+
+  if (!fournisseur.adresseAutorisation) {
+    return { ok: false, message: tf("{0} n'a pas indiqué de page d'autorisation.", entree.label) };
+  }
+  journaliser("connecteur.ajoute", qui, { connecteur: id, etape: "autorisation demandée" });
+  return {
+    ok: true,
+    adresse: fournisseur.adresseAutorisation,
+    message: tf("Autorisez {0} dans la page qui vient de s'ouvrir.", entree.label),
+  };
+}
+
+/**
+ * Achève l'autorisation : le service renvoie la personne ici avec un code.
+ *
+ * Route publique, par nécessité — c'est un navigateur qui arrive, sans jeton
+ * d'instance ni séance. Ce qui la protège est le `state` : une valeur tirée au
+ * hasard, retenue au départ, et sans laquelle le code ne mène à rien. Le code
+ * lui-même ne vaut qu'avec le vérificateur PKCE, qui n'a jamais quitté
+ * l'instance.
+ */
+export async function acheverAutorisation(
+  code: string,
+  etat: string,
+): Promise<{ ok: boolean; message: string; label?: string }> {
+  const attendu = await connecteurDuRetour(etat);
+  if (!attendu) return { ok: false, message: t("Cette autorisation n'est plus en attente.") };
+
+  const entree = entreeCatalogue(attendu.id);
+  if (!entree?.url) return { ok: false, message: t("Connecteur inconnu.") };
+
+  const fournisseur = new FournisseurAutorisation(attendu.id, entree.url, attendu.retour);
+  try {
+    const resultat = await auth(fournisseur as never, {
+      serverUrl: entree.url,
+      authorizationCode: code,
+    });
+    if (resultat !== "AUTHORIZED") {
+      return { ok: false, message: tf("{0} n'a pas accordé l'autorisation.", entree.label) };
+    }
+  } catch (err) {
+    return {
+      ok: false,
+      message: tf("Échange refusé par {0} : {1}", entree.label, err instanceof Error ? err.message : String(err)),
+    };
+  }
+
+  memoriserRetour(attendu.id, attendu.retour);
+  const r = await brancherDistant(entree, attendu.pour ?? "systeme");
+  return { ...r, label: entree.label };
+}
+
+/** Enregistre et démarre un service distant, une fois l'autorisation obtenue. */
+async function brancherDistant(
+  entree: EntreeCatalogue,
+  qui: string,
+): Promise<{ ok: true; message: string } | { ok: false; message: string }> {
+  await charger();
+  const enregistre: ConnecteurEnregistre = {
+    id: entree.id,
+    label: entree.label,
+    description: entree.description,
+    url: entree.url!,
+    secrets: {},
+    depuis: new Date().toISOString(),
+  };
+
+  declarer(versConfig(enregistre));
+  const demarrage = await startServer(entree.id);
+  if (!demarrage.ok) {
+    await retirerServeur(entree.id);
+    return {
+      ok: false,
+      message: tf("{0} a autorisé l'accès, mais son serveur n'a pas répondu : {1}.", entree.label, demarrage.error ?? "cause inconnue"),
+    };
+  }
+
+  const sansDoublon = enMemoire.filter((c) => c.id !== entree.id);
+  await ecrire([...sansDoublon, enregistre]);
+  journaliser("connecteur.ajoute", qui, { connecteur: entree.id, distant: true });
+
+  const outils = mcpStatus().find((s) => s.id === entree.id)?.toolCount ?? 0;
+  return { ok: true, message: tf("{0} est branché : {1} outil{2} disponible{3}.", entree.label, outils, outils > 1 ? "s" : "", outils > 1 ? "s" : "") };
+}
+
+/* ------------------------------------------------------------------ */
+/* Groupes d'outils, pour le composeur                                 */
+/* ------------------------------------------------------------------ */
+
+export interface GroupeOutils {
+  id: string;
+  label: string;
+  /** Ce que ce groupe permet, en une phrase. */
+  description: string;
+  /** Les outils sont-ils réellement proposés au modèle en ce moment ? */
+  actif: boolean;
+  outils: number;
+  /** Ce qu'il manque pour que le groupe serve, s'il ne sert pas. */
+  obstacle?: string;
+}
+
+/**
+ * Ce dont l'agent dispose vraiment, groupe par groupe.
+ *
+ * La puce « Outils » du composeur promettait « fichiers, connecteurs » sans
+ * jamais dire lesquels : un interrupteur qui n'annonce rien laisse l'utilisateur
+ * deviner. Cette liste est celle que `chat.ts` assemble pour le modèle, lue aux
+ * mêmes sources, pour qu'elle ne puisse pas mentir.
+ */
+export async function groupes(): Promise<GroupeOutils[]> {
+  await charger();
+
+  const serveurs = mcpStatus();
+  const liste: GroupeOutils[] = [];
+
+  for (const s of serveurs) {
+    liste.push({
+      id: s.id,
+      label: s.label,
+      description: s.description,
+      actif: s.running && s.toolCount > 0,
+      outils: s.toolCount,
+      obstacle: s.error ?? (s.running ? undefined : "Serveur arrêté."),
+    });
+  }
+
+  // La bibliothèque : toujours là, elle lit ce que la personne y voit.
+  liste.push({
+    id: "bibliotheque",
+    // Le nom de l'onglet (« Fichiers »), précisé : « Fichiers » seul désigne déjà le dossier de travail.
+    label: "Fichiers de l'équipe",
+    description: "Chercher et lire les documents de la bibliothèque que vous voyez, en lecture seule.",
+    actif: true,
+    outils: 2,
+  });
+  liste.push({
+    id: "reunions",
+    label: "Réunions",
+    description: "Retrouver ce qui s'est dit et décidé dans les réunions transcrites que vous voyez.",
+    actif: true,
+    outils: 2,
+  });
+
+  const outilsBureau = bureau.toolsForModel().length;
+  liste.push({
+    id: "bureau",
+    label: "Bureautique",
+    description: "Créer et lire des documents Word, Excel, PowerPoint et PDF.",
+    actif: outilsBureau > 0,
+    outils: outilsBureau,
+    obstacle: outilsBureau > 0 ? undefined : "L'atelier bureautique n'est pas installé.",
+  });
+
+  const outilsCourrier = courrier.toolsForModel().length;
+  liste.push({
+    id: "courrier",
+    label: "Courrier",
+    description: courrier.envoiActif()
+      ? "Consulter la boîte de courrier connectée, y préparer des brouillons, et envoyer des mails après votre accord."
+      : "Consulter la boîte de courrier connectée, et y préparer des brouillons.",
+    actif: outilsCourrier > 0,
+    outils: outilsCourrier,
+    obstacle: outilsCourrier > 0 ? undefined : "Aucune boîte connectée.",
+  });
+
+  // L'agenda manquait : ses outils étaient bien proposés au modèle, la puce ne le disait pas.
+  const outilsAgenda = agenda.toolsForModel().length;
+  liste.push({
+    id: "agenda",
+    label: "Agenda",
+    description: "Consulter l'agenda connecté, en lecture seule.",
+    actif: outilsAgenda > 0,
+    outils: outilsAgenda,
+    obstacle: outilsAgenda > 0 ? undefined : "Aucun agenda connecté.",
+  });
+
+  // Google Drive et Slack, lus aux mêmes sources que chat.ts (drive.ts, slack.ts).
+  const outilsDrive = drive.toolsForModel().length;
+  liste.push({
+    id: "drive",
+    label: "Google Drive",
+    description: "Chercher et lire les fichiers du Drive connecté, en lecture seule.",
+    actif: outilsDrive > 0,
+    outils: outilsDrive,
+    obstacle: outilsDrive > 0 ? undefined : "Aucun Google Drive connecté.",
+  });
+  const outilsSlack = slack.toolsForModel().length;
+  liste.push({
+    id: "slack",
+    label: "Slack",
+    description: "Lire les salons où l'application Slack est invitée, en lecture seule.",
+    actif: outilsSlack > 0,
+    outils: outilsSlack,
+    obstacle: outilsSlack > 0 ? undefined : "Aucun Slack connecté.",
+  });
+
+  /*
+   * L'écran passe par `toolsForModel()` de computer.ts plutôt que par son
+   * diagnostic complet : celui-ci prend une vraie capture d'écran, ce qui est
+   * bien trop lourd et bien trop intrusif pour l'ouverture d'un menu.
+   *
+   * Une réserve à dire à l'utilisateur : ces outils ne sont proposés qu'à un
+   * modèle qui sait lire une image. Le menu l'annonce plutôt que de laisser
+   * croire à une capacité qui dépend du modèle choisi.
+   */
+  const outilsEcran = computer.toolsForModel().length;
+  liste.push({
+    id: "ecran",
+    label: "Écran",
+    description: "Voir l'écran et le piloter, avec approbation.",
+    actif: outilsEcran > 0,
+    outils: outilsEcran,
+    obstacle:
+      outilsEcran > 0
+        ? "Réservé aux modèles capables de lire une image."
+        : "Le contrôle de l'écran est désactivé sur cette instance.",
+  });
+
+  /*
+   * Traduit au moment de servir, pour la même raison que le catalogue : ces
+   * textes sont écrits en français ici, et la langue est celle de la requête.
+   */
+  return liste.map((g) => ({
+    ...g,
+    label: t(g.label),
+    description: t(g.description),
+    ...(g.obstacle ? { obstacle: t(g.obstacle) } : {}),
+  }));
+}

@@ -1,0 +1,1093 @@
+import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from "react";
+import { useNavigate } from "react-router-dom";
+import {
+  Check,
+  Loader2,
+  Play,
+  Plus,
+  RefreshCw,
+  Send,
+  Trash2,
+  TriangleAlert,
+  X,
+} from "lucide-react";
+import { Button } from "@/components/ui/Button";
+import { Field, Input, Textarea } from "@/components/ui/Field";
+import { InfoBox } from "@/components/ui/InfoBox";
+import { Modal } from "@/components/ui/Modal";
+import { SegmentedTabs } from "@/components/ui/SegmentedTabs";
+import { Select } from "@/components/ui/Select";
+import { Switch } from "@/components/ui/Switch";
+import { TexteRiche } from "@/components/ui/TexteRiche";
+import { branding } from "@/config/branding";
+import { cn } from "@/lib/cn";
+import { formaterDateHeure } from "@/lib/formats";
+import {
+  attendreReponse,
+  chargerEmployes,
+  decrireRythme,
+  DETAIL_FAMILLE,
+  envoyerMessage,
+  lancerMission,
+  LIBELLE_FAMILLE,
+  LIBELLE_RYTHME,
+  lireActivite,
+  lireEchanges,
+  modifierEmploye,
+  supprimerEmploye,
+  type Echange,
+  type Employe,
+  type EtatEmployes,
+  type Execution,
+  type Famille,
+  type Mission,
+  type Rythme,
+  type Liberte,
+  type DocumentAgent,
+  ACCEPT_DOCUMENTS,
+  envoyerDocument,
+  lireDocuments,
+  retirerDocument,
+  installerOpenClaw,
+  libelleModele,
+  PALIERS,
+} from "@/lib/employes";
+import { lireEtat as lireEtatDeuxFacteurs } from "@/lib/deuxFacteurs";
+import { CanauxEmploye } from "@/components/agents/CanauxEmploye";
+import { ChoixDepuisEspace } from "@/components/agents/ChoixDepuisEspace";
+import { updateAgent } from "@/lib/store/agents";
+import { langue, t, tf, taille } from "@/lib/i18n";
+
+/**
+ * Employés : des agents qui travaillent pour toute l'équipe, jour et nuit, avec
+ * un poste, des outils et des missions planifiées. Chacun leur parle dans sa
+ * propre conversation. Tout se passe côté passerelle (gateway/src/employes.ts) ;
+ * cet écran montre, déploie et converse.
+ */
+
+const message = (err: unknown) => (err instanceof Error ? err.message : String(err));
+
+export function useEmployes() {
+  const [etat, setEtat] = useState<EtatEmployes | null>(null);
+  const [erreur, setErreur] = useState<string | null>(null);
+  const recharger = useCallback(async () => {
+    try {
+      setEtat(await chargerEmployes());
+      setErreur(null);
+    } catch (err) {
+      setErreur(message(err));
+    }
+  }, []);
+  useEffect(() => {
+    void recharger();
+    const t = setInterval(() => void recharger(), 30_000);
+    return () => clearInterval(t);
+  }, [recharger]);
+  return { etat, erreur, recharger };
+}
+
+/* ------------------------------------------------------------------ */
+/* Section de la page Agents                                           */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Mise à jour d'OpenClaw vers la version que cette version de l'application a
+ * éprouvée. Une version parue mais pas encore éprouvée est dite, pas proposée :
+ * la configuration écrite pour les agents n'a été vérifiée que sur l'autre.
+ */
+export function MiseAJourOpenClaw({ etat, recharger }: { etat: EtatEmployes; recharger: () => Promise<void> }) {
+  const [erreur, setErreur] = useState<string | null>(null);
+  const inst = etat.moteur.installation;
+  const enCours = ["preparation", "node", "openclaw", "verification"].includes(inst.etape);
+  useEffect(() => {
+    if (!enCours) return;
+    const t = setInterval(() => void recharger(), 2000);
+    return () => clearInterval(t);
+  }, [enCours, recharger]);
+
+  if (enCours && etat.moteur.installe) {
+    return (
+      <p className="mt-4 flex items-center gap-2 text-sm text-muted-foreground">
+        <Loader2 size={15} strokeWidth={1.75} className="animate-spin" />
+        {inst.message}
+        {inst.etape === "node" && inst.avancement !== undefined && ` ${inst.avancement} %`}
+      </p>
+    );
+  }
+  if (inst.etape === "termine" && inst.de) {
+    return (
+      <InfoBox tone="muted" className="mt-4" leading={<Check size={15} strokeWidth={1.75} />}>
+        {inst.message}{" "}{t("Vos agents ont repris leur travail.")}
+      </InfoBox>
+    );
+  }
+  if (!etat.moteur.miseAJour) {
+    if (!etat.moteur.parue) return null;
+    return (
+      <p className="mt-4 text-xs text-muted-foreground">
+        {t("OpenClaw")}{" "}{etat.moteur.parue}{" "}{t("est paru. Vos agents restent sur la")}{" "}{etat.moteur.version}{t(", la version éprouvée avec")}{" "}{branding.name}{" "}{t(": une prochaine mise à jour de")}{" "}{branding.name}{" "}{t("les y fera passer, une fois vérifiée.")}
+      </p>
+    );
+  }
+  return (
+    <InfoBox tone="info" className="mt-4" leading={<RefreshCw size={15} strokeWidth={1.75} />}>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p>
+          {t("Mise à jour d'OpenClaw disponible :")}{" "}{tf("{0} vers {1}", etat.moteur.version ?? "", etat.moteur.miseAJour)}{t(", la version éprouvée avec cette version de")}{" "}{branding.name}{t(". Vos agents s'interrompent une à deux minutes, le temps de l'installer. Si elle ne démarre pas, tout revient comme avant.")}
+        </p>
+        <Button
+          size="sm"
+          onClick={() => {
+            setErreur(null);
+            void installerOpenClaw()
+              .then(recharger)
+              .catch((err) => setErreur(message(err)));
+          }}
+        >
+          {t("Mettre à jour")}
+        </Button>
+      </div>
+      {(inst.etape === "erreur" || erreur) && <p className="mt-2 text-sm">{erreur ?? inst.message}</p>}
+    </InfoBox>
+  );
+}
+
+const initiales = (nom: string) =>
+  nom
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((m) => m[0]?.toUpperCase())
+    .join("");
+
+export function Statut({ employe, etat }: { employe: Employe; etat: EtatEmployes }) {
+  const [texte, ton] = employe.enPause
+    ? [t("En pause"), "bg-muted text-muted-foreground"]
+    : etat.moteur.enMarche
+      ? [t("En service"), "bg-success/15 text-success"]
+      : [t("Arrêté"), "bg-warning/15 text-foreground"];
+  return (
+    <span className={cn("inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-medium", ton)}>
+      <span className="h-1.5 w-1.5 rounded-full bg-current" />
+      {texte}
+    </span>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Réglages partagés                                                   */
+/* ------------------------------------------------------------------ */
+
+/** Documents de référence : ce qu'il consulte avant de répondre. S'enregistrent tout de suite. */
+function DocumentsAgent({ employe }: { employe: Employe }) {
+  const [documents, setDocuments] = useState<DocumentAgent[] | null>(null);
+  const [depuisEspace, setDepuisEspace] = useState(false);
+  const [occupe, setOccupe] = useState<string | null>(null);
+  const [erreur, setErreur] = useState<string | null>(null);
+  const choix = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    void lireDocuments(employe.id)
+      .then(setDocuments)
+      .catch(() => setDocuments([]));
+  }, [employe.id]);
+
+  const ajouter = async (fichiers: File[]) => {
+    setErreur(null);
+    for (const f of fichiers) {
+      setOccupe(tf("Dépôt de {0}…", f.name));
+      try {
+        setDocuments(await envoyerDocument(employe.id, f, (p) => setOccupe(tf("Dépôt de {0}… {1} %", f.name, Math.round(p * 100)))));
+      } catch (err) {
+        setErreur(message(err));
+        break;
+      }
+    }
+    setOccupe(null);
+  };
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-sm font-medium text-foreground">{t("Ses documents de référence")}</p>
+        <span className="flex gap-1">
+          <Button variant="ghost" size="sm" icon={Plus} disabled={Boolean(occupe)} onClick={() => choix.current?.click()}>
+            {t("Ajouter un fichier")}
+          </Button>
+          <Button variant="ghost" size="sm" disabled={Boolean(occupe)} onClick={() => setDepuisEspace(true)}>
+            {t("Depuis")}{" "}{branding.name}
+          </Button>
+        </span>
+        {depuisEspace && <ChoixDepuisEspace onFermer={() => setDepuisEspace(false)} onChoisis={(f) => void ajouter(f)} />}
+        <input
+          ref={choix}
+          type="file"
+          multiple
+          accept={ACCEPT_DOCUMENTS}
+          className="hidden"
+          onChange={(e) => {
+            const f = Array.from(e.target.files ?? []);
+            e.target.value = "";
+            void ajouter(f);
+          }}
+        />
+      </div>
+      {documents === null ? null : documents.length === 0 ? (
+        <p className="text-xs text-muted-foreground">
+          {t("Aucun. Tarifs, procédures, modèles de contrats : il les consulte avant de répondre.")}
+        </p>
+      ) : (
+        <ul className="space-y-1 rounded-xl border border-border p-2">
+          {documents.map((d) => (
+            <li key={d.nom} className="flex items-center gap-2 px-1 text-sm">
+              <span className="min-w-0 flex-1 truncate text-foreground" title={d.nom}>
+                {d.nom}
+              </span>
+              <span className="shrink-0 text-xs text-muted-foreground">
+                {taille(d.taille)}
+                {!d.lisible && " · texte illisible"}
+              </span>
+              <button
+                type="button"
+                aria-label={`Retirer ${d.nom}`}
+                disabled={Boolean(occupe)}
+                onClick={() => {
+                  setErreur(null);
+                  void retirerDocument(employe.id, d.nom)
+                    .then(setDocuments)
+                    .catch((err) => setErreur(message(err)));
+                }}
+                className="shrink-0 text-muted-foreground hover:text-destructive"
+              >
+                <X size={14} strokeWidth={1.75} />
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      {occupe && (
+        <p className="flex items-center gap-2 text-xs text-muted-foreground">
+          <Loader2 size={13} className="animate-spin" /> {occupe}
+        </p>
+      )}
+      {erreur && <p className="text-xs text-destructive">{erreur}</p>}
+      {(employe.canaux?.length ?? 0) > 0 && (documents?.length ?? 0) > 0 && (
+        <p className="text-xs text-muted-foreground">
+          {t("Les personnes qui lui écrivent sur une messagerie peuvent lui faire citer ces documents.")}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function ChoixOutils({
+  etat,
+  valeur,
+  onChange,
+}: {
+  etat: EtatEmployes;
+  valeur: Famille[];
+  onChange: (v: Famille[]) => void;
+}) {
+  const navigate = useNavigate();
+  const indisponibles = etat.familles.filter((f) => !f.disponible);
+  return (
+    <div className="space-y-2">
+      <p className="text-sm font-medium text-foreground">{t("Ses outils")}</p>
+      <div className="grid gap-2 sm:grid-cols-2">
+        {etat.familles.map(({ id, disponible }) => {
+          const actif = valeur.includes(id);
+          return (
+            <label
+              key={id}
+              className={cn(
+                "flex items-start gap-2.5 rounded-xl border px-3 py-2.5 text-sm",
+                actif ? "border-foreground/30 bg-muted/50" : "border-border",
+                disponible || actif ? "cursor-pointer" : "cursor-not-allowed opacity-55",
+              )}
+            >
+              <input
+                type="checkbox"
+                className="mt-0.5 accent-current"
+                checked={actif}
+                disabled={!disponible && !actif}
+                onChange={() => onChange(actif ? valeur.filter((f) => f !== id) : [...valeur, id])}
+              />
+              <span>
+                <span className="block font-medium text-foreground">{LIBELLE_FAMILLE[id]}</span>
+                <span className="block text-xs text-muted-foreground">
+                  {disponible
+                    ? DETAIL_FAMILLE[id]
+                    : id === "bureau"
+                      ? t("L'atelier bureautique n'est pas encore installé")
+                      : t("Pas encore connecté sur l'instance")}
+                </span>
+              </span>
+            </label>
+          );
+        })}
+      </div>
+      {indisponibles.length > 0 && (
+        <p className="text-xs text-muted-foreground">
+          {t("Pour en ouvrir d'autres :")}{" "}
+          <button type="button" className="underline underline-offset-2" onClick={() => navigate("/parametres/mcp")}>
+            {t("connecter un service")}
+          </button>
+          .
+        </p>
+      )}
+    </div>
+  );
+}
+
+/** Palier de liberté : trois choix. Le dernier se confirme (voir ConfirmationIdentite). */
+function ChoixLiberte({
+  valeur,
+  onChange,
+}: {
+  valeur: Liberte;
+  onChange: (v: Liberte) => void;
+}) {
+  return (
+    <div className="space-y-2">
+      <p className="text-sm font-medium text-foreground">{t("Sa liberté d'action")}</p>
+      <div className="grid gap-2 sm:grid-cols-3">
+        {(Object.keys(PALIERS) as Liberte[]).map((p) => (
+          <button
+            key={p}
+            type="button"
+            onClick={() => onChange(p)}
+            className={cn(
+              "flex flex-col items-start gap-1 rounded-xl border px-3 py-2.5 text-left transition-colors",
+              valeur === p ? "border-foreground/30 bg-muted/50" : "border-border hover:bg-muted/40",
+            )}
+          >
+            <span className="text-sm font-medium text-foreground">{PALIERS[p].titre}</span>
+            <span className="text-xs text-muted-foreground">{PALIERS[p].detail}</span>
+          </button>
+        ))}
+      </div>
+      {valeur === "libre" && (
+        <InfoBox tone="warning" leading={<TriangleAlert size={15} strokeWidth={1.75} />}>
+          {t("Au palier Libre, il peut lancer n'importe quelle commande sur la machine de l'instance, avec les droits de")}{" "}{branding.name}{" "}{t(": installer, modifier, supprimer. Chaque outil qu'il utilise est inscrit au journal d'activité, mais pas le détail de la commande.")}
+        </InfoBox>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Confirmation d'identité pour les deux réglages qui retirent une barrière :
+ * ouvrir le palier « libre », et rendre l'agent autonome. L'instance les
+ * refuse tous les deux sans le mot de passe de la personne (et son code, si la
+ * double authentification est active).
+ */
+function ConfirmationIdentite({
+  raison,
+  motDePasse,
+  onMotDePasse,
+  code,
+  onCode,
+}: {
+  raison: string;
+  motDePasse: string;
+  onMotDePasse: (v: string) => void;
+  code: string;
+  onCode: (v: string) => void;
+}) {
+  const [deuxFacteurs, setDeuxFacteurs] = useState(false);
+  useEffect(() => {
+    void lireEtatDeuxFacteurs()
+      .then((e) => setDeuxFacteurs(e.active))
+      .catch(() => setDeuxFacteurs(false));
+  }, []);
+  return (
+    <div className="space-y-2 rounded-xl border border-border p-3">
+      <p className="text-sm text-foreground">{raison}</p>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <Field label={t("Votre mot de passe")}>
+          <Input
+            type="password"
+            autoComplete="current-password"
+            value={motDePasse}
+            onChange={(e) => onMotDePasse(e.target.value)}
+          />
+        </Field>
+        {deuxFacteurs && (
+          <Field label={t("Code de vérification")}>
+            <Input
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              maxLength={32}
+              value={code}
+              onChange={(e) => onCode(e.target.value)}
+            />
+          </Field>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ChoixModele({ etat, valeur, onChange }: { etat: EtatEmployes; valeur: string; onChange: (v: string) => void }) {
+  const choisi = etat.modeles.find((m) => m.uid === valeur);
+  return (
+    <Field
+      label={t("Son modèle")}
+      hint={
+        !choisi
+          ? t("Son modèle n'est plus disponible : choisissez-en un autre.")
+          : choisi.origine === "local"
+            ? t("Sur vos machines : rien ne sort. Un modèle chargé répond le plus vite.")
+            : tf("Cloud : ses messages partent chez {0}{1}, et sa consommation est facturée.", choisi.fournisseur ?? "le fournisseur", choisi.pays ? ` (${choisi.pays})` : "")
+      }
+    >
+      <Select value={valeur} onChange={onChange} options={etat.modeles.map((m) => ({ value: m.uid, label: libelleModele(m) }))} />
+    </Field>
+  );
+}
+
+function ChoixAutonomie({ valeur, onChange }: { valeur: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <div className="flex items-start justify-between gap-4 rounded-xl border border-border px-3 py-2.5">
+      <div>
+        <p className="text-sm font-medium text-foreground">{t("Agir sans demander d'accord")}</p>
+        <p className="text-xs text-muted-foreground">
+          {valeur
+            ? t("Il modifie les fichiers et prépare ses brouillons de mail sans attendre personne. Un mail à envoyer attend l'accord d'une personne, sauf si l'envoi sans confirmation est permis dans Connecteurs, Courrier. Chaque action reste au journal d'activité, sous son nom.")
+            : t("Chaque modification (écrire un fichier, préparer un brouillon de mail) et chaque envoi de mail attend l'accord d'une personne connectée. Sans réponse sous deux minutes, par exemple la nuit, elle n'est pas faite et il en est averti.")}
+        </p>
+      </div>
+      <Switch checked={valeur} onChange={onChange} label={t("Agir sans demander d'accord")} />
+    </div>
+  );
+}
+
+const HEURES = Array.from({ length: 48 }, (_, i) => `${String(Math.floor(i / 2)).padStart(2, "0")}:${i % 2 ? "30" : "00"}`);
+
+function EditeurMissions({
+  valeur,
+  onChange,
+  courrier,
+}: {
+  valeur: Mission[];
+  onChange: (v: Mission[]) => void;
+  /** Pour « à chaque mail reçu » : une boîte est-elle branchée, et y a-t-il accès ? */
+  courrier: { branchee: boolean; acces: boolean };
+}) {
+  const changer = (i: number, m: Partial<Mission>) => onChange(valeur.map((x, j) => (j === i ? { ...x, ...m } : x)));
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between">
+        <p className="text-sm font-medium text-foreground">{t("Ses missions régulières")}</p>
+        {valeur.length < 12 && (
+          <Button
+            variant="ghost"
+            size="sm"
+            icon={Plus}
+            onClick={() =>
+              onChange([...valeur, { nom: "", consigne: "", rythme: "jours-ouvres", heure: "08:30" }])
+            }
+          >
+            {t("Ajouter une mission")}
+          </Button>
+        )}
+      </div>
+      {valeur.length === 0 ? (
+        <p className="text-xs text-muted-foreground">
+          {t("Aucune : il travaillera quand on lui parle. Une mission, c'est une consigne qu'il suit seul, à l'heure dite ou à chaque mail reçu, puis dont il rend compte.")}
+        </p>
+      ) : (
+        <ul className="space-y-2">
+          {valeur.map((m, i) => (
+            <li key={m.id ?? i} className="space-y-2 rounded-xl border border-border p-3">
+              <div className="flex gap-2">
+                <Input
+                  placeholder={t("Nom de la mission")}
+                  value={m.nom}
+                  maxLength={80}
+                  onChange={(e) => changer(i, { nom: e.target.value })}
+                />
+                <button
+                  type="button"
+                  aria-label={t("Retirer cette mission")}
+                  onClick={() => onChange(valeur.filter((_, j) => j !== i))}
+                  className="shrink-0 rounded-lg px-2 text-muted-foreground hover:text-destructive"
+                >
+                  <X size={16} strokeWidth={1.75} />
+                </button>
+              </div>
+              <Textarea
+                rows={2}
+                placeholder={t("Ce qu'il doit faire, et ce qu'il doit rendre")}
+                value={m.consigne}
+                maxLength={2000}
+                onChange={(e) => changer(i, { consigne: e.target.value })}
+              />
+              <div className="grid grid-cols-2 gap-2">
+                <Select
+                  value={m.rythme}
+                  onChange={(v) => changer(i, { rythme: v as Rythme })}
+                  options={(Object.keys(LIBELLE_RYTHME) as Rythme[]).map((r) => ({ value: r, label: LIBELLE_RYTHME[r] }))}
+                />
+                {m.rythme === "a-chaque-mail" ? (
+                  <Input
+                    placeholder={t("Seulement de… (facultatif)")}
+                    aria-label={t("Seulement les mails dont l'expéditeur contient")}
+                    value={m.filtre?.de ?? ""}
+                    maxLength={120}
+                    onChange={(e) => changer(i, { filtre: { ...m.filtre, de: e.target.value } })}
+                  />
+                ) : (
+                  <Select
+                    value={m.heure}
+                    disabled={m.rythme === "chaque-heure"}
+                    onChange={(v) => changer(i, { heure: v })}
+                    options={HEURES.map((h) => ({ value: h, label: `${Number(h.slice(0, 2))} h ${h.slice(3)}` }))}
+                  />
+                )}
+              </div>
+              {m.rythme === "a-chaque-mail" && (
+                <>
+                  <Input
+                    placeholder={t("Seulement si l'objet contient… (facultatif)")}
+                    aria-label={t("Seulement les mails dont l'objet contient")}
+                    value={m.filtre?.objet ?? ""}
+                    maxLength={120}
+                    onChange={(e) => changer(i, { filtre: { ...m.filtre, objet: e.target.value } })}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    {!courrier.branchee
+                      ? t("Aucune boîte mail n'est branchée : faites-le dans Paramètres, Connecteurs. La mission attendra.")
+                      : !courrier.acces
+                        ? t("Il lui faut l'accès à la boîte mail : cochez « Courrier » dans ses outils ci-dessus.")
+                        : t("La boîte est relevée toutes les deux minutes. Chaque nouveau mail lui est confié, avec la consigne ci-dessus ; s'il doit répondre, il prépare un brouillon. Il n'envoie rien de lui-même : un envoi attend toujours l'accord d'une personne, quels que soient les réglages, puisque le mail vient de l'extérieur.")}
+                  </p>
+                </>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+      {valeur.length > 0 && (
+        <p className="text-xs text-muted-foreground">
+          {t("Les missions tournent tant que l'instance fonctionne : ordinateur allumé et")}{" "}
+          {branding.name}{" "}{t("ouvert (la fenêtre peut être fermée), ou serveur hébergé.")}
+        </p>
+      )}
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Panneau d'un employé                                                */
+/* ------------------------------------------------------------------ */
+
+export function PanneauEmploye({
+  employe,
+  etat,
+  onFermer,
+  onChange,
+  onRetire,
+}: {
+  employe: Employe;
+  etat: EtatEmployes;
+  onFermer: () => void;
+  onChange: () => Promise<void>;
+  /** Appelé quand son propriétaire le retire : l'agent qui l'a fait naître part avec lui. */
+  onRetire?: () => void;
+}) {
+  const [onglet, setOnglet] = useState("discuter");
+  const onglets = [
+    { id: "discuter", label: t("Discuter") },
+    { id: "missions", label: tf("Missions ({0})", employe.missions.length) },
+    { id: "activite", label: t("Activité") },
+    { id: "canaux", label: tf("Canaux ({0})", employe.canaux?.length ?? 0) },
+    ...(employe.estProprietaire ? [{ id: "reglages", label: t("Réglages") }] : []),
+  ];
+  return (
+    <Modal open onClose={onFermer} size="xl">
+      <div className="flex items-start gap-3 pr-8">
+        <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-muted font-semibold text-foreground">
+          {initiales(employe.nom)}
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 className="text-lg font-semibold text-foreground">{employe.nom}</h2>
+            <Statut employe={employe} etat={etat} />
+          </div>
+          <p className="text-xs text-muted-foreground">
+            {t("Créé par")}{" "}{employe.proprietaire}
+            {employe.jetons30Jours > 0 &&
+              tf(" · {0} jetons sur 30 jours", employe.jetons30Jours.toLocaleString(langue()))}
+          </p>
+        </div>
+      </div>
+      <SegmentedTabs className="mt-4" size="sm" options={onglets} value={onglet} onChange={setOnglet} />
+      <div className="mt-4 min-h-[340px]">
+        {onglet === "discuter" && <Conversation employe={employe} />}
+        {onglet === "missions" && <Missions employe={employe} />}
+        {onglet === "activite" && <Activite employe={employe} />}
+        {onglet === "canaux" && <CanauxEmploye employe={employe} etat={etat} onChange={onChange} />}
+        {onglet === "reglages" && (
+          <Reglages
+            employe={employe}
+            etat={etat}
+            onChange={onChange}
+            onRetire={() => {
+              onRetire?.();
+              onFermer();
+            }}
+          />
+        )}
+      </div>
+    </Modal>
+  );
+}
+
+function Conversation({ employe }: { employe: Employe }) {
+  const [echanges, setEchanges] = useState<Echange[]>([]);
+  const [attente, setAttente] = useState<{ question: string; depuis: number } | null>(null);
+  const [texte, setTexte] = useState("");
+  const [erreur, setErreur] = useState<string | null>(null);
+  const [secondes, setSecondes] = useState(0);
+  const fin = useRef<HTMLDivElement>(null);
+  const abandon = useRef<AbortController | null>(null);
+
+  const suivre = useCallback(
+    async (travail: string, question: string, depuis: number) => {
+      abandon.current?.abort();
+      const controle = new AbortController();
+      abandon.current = controle;
+      setAttente({ question, depuis });
+      try {
+        await attendreReponse(employe.id, travail, controle.signal);
+        const r = await lireEchanges(employe.id);
+        setEchanges(r.echanges);
+        setAttente(null);
+      } catch (err) {
+        if (controle.signal.aborted) return;
+        setErreur(message(err));
+        setAttente(null);
+      }
+    },
+    [employe.id],
+  );
+
+  useEffect(() => {
+    void lireEchanges(employe.id)
+      .then((r) => {
+        setEchanges(r.echanges);
+        // Un message encore en cours, envoyé avant d'avoir quitté l'écran : on le reprend.
+        if (r.enCours) void suivre(r.enCours.travail, r.enCours.question, Date.parse(r.enCours.depuis));
+      })
+      .catch((err) => setErreur(message(err)));
+    return () => abandon.current?.abort();
+  }, [employe.id, suivre]);
+
+  useEffect(() => {
+    if (!attente) return;
+    const t = setInterval(() => setSecondes(Math.round((Date.now() - attente.depuis) / 1000)), 1000);
+    return () => clearInterval(t);
+  }, [attente]);
+
+  // Entre accolades : les navigateurs récents font rendre une promesse à
+  // `scrollIntoView`, et React prendrait cette valeur pour une fonction de nettoyage.
+  useEffect(() => {
+    fin.current?.scrollIntoView({ block: "end" });
+  }, [echanges, attente]);
+
+  const envoyer = async () => {
+    const question = texte.trim();
+    if (!question || attente) return;
+    setErreur(null);
+    /*
+     * L'attente s'affiche dès l'envoi : quand l'instance des agents démarre
+     * (ou ne s'ouvre pas), la passerelle peut mettre jusqu'à 45 s à répondre,
+     * et rien ne bougeait à l'écran, bouton « Envoyer » toujours actif.
+     */
+    const depuis = Date.now();
+    setSecondes(0);
+    setAttente({ question, depuis });
+    try {
+      const travail = await envoyerMessage(employe.id, question);
+      setTexte("");
+      void suivre(travail, question, depuis);
+    } catch (err) {
+      setAttente(null);
+      setErreur(message(err));
+    }
+  };
+
+  const touche = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+      e.preventDefault();
+      void envoyer();
+    }
+  };
+
+  return (
+    <div className="flex h-[420px] flex-col">
+      <div className="flex-1 space-y-4 overflow-y-auto pr-1">
+        {echanges.length === 0 && !attente && (
+          <p className="pt-10 text-center text-sm text-muted-foreground">
+            {t("Demandez-lui ce que vous voulez dans le cadre de son poste.")}
+          </p>
+        )}
+        {echanges.map((x, i) => (
+          <div key={i} className="space-y-2">
+            <Bulle question={x.question} />
+            <TexteRiche
+              texte={x.reponse}
+              className={cn("text-sm leading-relaxed", x.ok ? "text-foreground" : "text-muted-foreground")}
+            />
+            <p className="text-[11px] text-muted-foreground">{formaterDateHeure(x.quand)}</p>
+          </div>
+        ))}
+        {attente && (
+          <div className="space-y-2">
+            <Bulle question={attente.question} />
+            <p className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Loader2 size={15} strokeWidth={1.75} className="animate-spin" />
+              {employe.nom}{" "}{t("y travaille")}
+              {secondes > 5 &&
+                (secondes >= 60
+                  ? tf(" depuis {0} min {1} s", Math.floor(secondes / 60), secondes % 60)
+                  : tf(" depuis {0} s", secondes))}
+              {t(". Vous pouvez fermer : la réponse vous attendra ici.")}
+            </p>
+          </div>
+        )}
+        <div ref={fin} />
+      </div>
+      {erreur && (
+        <InfoBox tone="warning" className="mt-2" leading={<TriangleAlert size={15} strokeWidth={1.75} />}>
+          {erreur}
+        </InfoBox>
+      )}
+      <div className="mt-3 flex items-end gap-2">
+        <Textarea
+          rows={2}
+          value={texte}
+          maxLength={8000}
+          disabled={employe.enPause}
+          placeholder={employe.enPause ? tf("{0} est en pause.", employe.nom) : tf("Écrire à {0}…", employe.nom)}
+          onChange={(e) => setTexte(e.target.value)}
+          onKeyDown={touche}
+        />
+        <Button icon={Send} disabled={!texte.trim() || Boolean(attente) || employe.enPause} onClick={() => void envoyer()}>
+          {t("Envoyer")}
+        </Button>
+      </div>
+      <p className="mt-1.5 text-[11px] text-muted-foreground">
+        {t("Cette conversation n'est visible que par vous.")}{" "}{employe.nom}{" "}{t("peut en garder des notes utiles à son travail.")}
+      </p>
+    </div>
+  );
+}
+
+function Bulle({ question }: { question: string }) {
+  return (
+    <div className="flex justify-end">
+      <p className="max-w-[80%] whitespace-pre-wrap rounded-2xl bg-muted px-3.5 py-2 text-sm text-foreground">{question}</p>
+    </div>
+  );
+}
+
+function Missions({ employe }: { employe: Employe }) {
+  const [info, setInfo] = useState<string | null>(null);
+  const [lancee, setLancee] = useState<string | null>(null);
+  if (employe.missions.length === 0) {
+    return (
+      <p className="pt-10 text-center text-sm text-muted-foreground">
+        {t("Aucune mission planifiée.")}
+        {employe.estProprietaire && t(" Ajoutez-en dans Réglages.")}
+      </p>
+    );
+  }
+  return (
+    <div className="space-y-2">
+      {employe.missions.map((m) => (
+        <div key={m.id} className="rounded-xl border border-border p-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <p className="text-sm font-medium text-foreground">{m.nom}</p>
+              <p className="text-xs text-muted-foreground">
+                {decrireRythme(m)}
+                {!m.planifiee &&
+                  !employe.enPause &&
+                  (m.rythme === "a-chaque-mail" ? t(" · en attente d'une boîte mail, voir Réglages") : t(" · non planifiée, voir Réglages"))}
+                {employe.enPause && t(" · suspendue pendant la pause")}
+              </p>
+            </div>
+            {employe.estProprietaire && m.id && m.planifiee && (
+              <Button
+                variant="secondary"
+                size="sm"
+                icon={Play}
+                disabled={lancee === m.id}
+                onClick={() => {
+                  setLancee(m.id ?? null);
+                  setInfo(null);
+                  void lancerMission(employe.id, m.id ?? "")
+                    .then(() =>
+                      setInfo(
+                        m.rythme === "a-chaque-mail"
+                          ? tf("« {0} » traite le dernier mail reçu : son compte rendu arrivera dans Activité.", m.nom)
+                          : tf("« {0} » est lancée : son compte rendu arrivera dans Activité.", m.nom),
+                      ),
+                    )
+                    .catch((err) => setInfo(message(err)))
+                    .finally(() => setLancee(null));
+                }}
+              >
+                {m.rythme === "a-chaque-mail" ? t("Essayer sur le dernier mail") : t("Lancer maintenant")}
+              </Button>
+            )}
+          </div>
+          <p className="mt-2 whitespace-pre-wrap text-sm text-muted-foreground">{m.consigne}</p>
+        </div>
+      ))}
+      {info && <InfoBox tone="muted">{info}</InfoBox>}
+      {!employe.estProprietaire && (
+        <p className="text-xs text-muted-foreground">
+          {t("Seule la personne qui l'a créé (")}{employe.proprietaire}{t(") peut modifier ou lancer ses missions.")}
+        </p>
+      )}
+    </div>
+  );
+}
+
+const STATUT_EXECUTION: Record<string, string> = {
+  ok: t("Terminée"),
+  error: t("Échec"),
+  skipped: t("Reportée (modèle injoignable)"),
+  running: t("En cours"),
+};
+
+function Activite({ employe }: { employe: Employe }) {
+  const [executions, setExecutions] = useState<Execution[] | null>(null);
+  const [erreur, setErreur] = useState<string | null>(null);
+  // L'instance n'a pas pu dire ses exécutions : la liste montrée n'est pas complète, et on le dit.
+  const [avertissement, setAvertissement] = useState<string | null>(null);
+  const charger = useCallback(() => {
+    void lireActivite(employe.id)
+      .then((r) => {
+        setErreur(null);
+        setExecutions(r.executions);
+        setAvertissement(r.avertissement ?? null);
+      })
+      .catch((err) => setErreur(message(err)));
+  }, [employe.id]);
+  useEffect(charger, [charger]);
+
+  if (erreur) return <InfoBox tone="warning">{erreur}</InfoBox>;
+  if (!executions) return <Loader2 size={18} strokeWidth={1.75} className="mx-auto mt-10 animate-spin text-muted-foreground" />;
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between">
+        <p className="text-xs text-muted-foreground">{t("Les dernières missions faites, avec leur compte rendu.")}</p>
+        <Button variant="ghost" size="sm" icon={RefreshCw} onClick={charger}>
+          {t("Actualiser")}
+        </Button>
+      </div>
+      {avertissement && (
+        <InfoBox tone="warning" leading={<TriangleAlert size={15} strokeWidth={1.75} />}>
+          {avertissement}
+        </InfoBox>
+      )}
+      {executions.length === 0 ? (
+        !avertissement && <p className="pt-8 text-center text-sm text-muted-foreground">{t("Aucune mission faite pour l'instant.")}</p>
+      ) : (
+        <ul className="max-h-[360px] space-y-2 overflow-y-auto">
+          {executions.map((x, i) => (
+            <li key={i} className="rounded-xl border border-border p-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-sm font-medium text-foreground">{x.mission}</p>
+                <p className="text-xs text-muted-foreground">
+                  {STATUT_EXECUTION[x.statut] ?? x.statut} · {x.quand ? formaterDateHeure(x.quand) : ""}
+                  {x.dureeMs ? ` · ${Math.round(x.dureeMs / 1000)} s` : ""}
+                </p>
+              </div>
+              {x.resume && <TexteRiche texte={x.resume} className="mt-2 text-sm text-muted-foreground" />}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+function Reglages({
+  employe,
+  etat,
+  onChange,
+  onRetire,
+}: {
+  employe: Employe;
+  etat: EtatEmployes;
+  onChange: () => Promise<void>;
+  onRetire: () => void;
+}) {
+  const [poste, setPoste] = useState(employe.poste);
+  const [outils, setOutils] = useState<Famille[]>(employe.outils);
+  const [toutes, setToutes] = useState(Boolean(employe.toutesLesFamilles));
+  const [missions, setMissions] = useState<Mission[]>(employe.missions);
+  const [autonome, setAutonome] = useState(Boolean(employe.autonome));
+  const [modele, setModele] = useState(employe.modele);
+  const [liberte, setLiberte] = useState<Liberte>(employe.liberte ?? "encadre");
+  const [motDePasse, setMotDePasse] = useState("");
+  const [code, setCode] = useState("");
+  const [occupe, setOccupe] = useState(false);
+  const [info, setInfo] = useState<string | null>(null);
+  const [confirmer, setConfirmer] = useState(false);
+
+  /*
+   * Deux réglages retirent une barrière, et l'instance redemande le mot de
+   * passe pour les deux : ouvrir le palier « libre », et rendre l'agent
+   * autonome, c'est-à-dire lui permettre d'agir sans jamais demander.
+   */
+  const aConfirmer =
+    (liberte === "libre" && employe.liberte !== "libre") ||
+    (autonome && !employe.autonome);
+
+  const agir = async (action: () => Promise<{ avertissement?: string } | void>, succes: string) => {
+    setOccupe(true);
+    setInfo(null);
+    try {
+      const r = await action();
+      setInfo(r && r.avertissement ? r.avertissement : succes);
+      await onChange();
+    } catch (err) {
+      setInfo(message(err));
+    } finally {
+      setOccupe(false);
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between rounded-xl border border-border px-3 py-2.5">
+        <div>
+          <p className="text-sm font-medium text-foreground">{employe.enPause ? t("En pause") : t("En service")}</p>
+          <p className="text-xs text-muted-foreground">
+            {t("En pause, il ne répond plus et ses missions sont suspendues.")}
+          </p>
+        </div>
+        <Switch
+          checked={!employe.enPause}
+          label={t("En service")}
+          onChange={(v) =>
+            void agir(() => modifierEmploye(employe.id, { enPause: !v }), v ? tf("{0} reprend le travail.", employe.nom) : tf("{0} est en pause.", employe.nom))
+          }
+        />
+      </div>
+      <Field label={t("Son poste")}>
+        <Textarea rows={4} value={poste} maxLength={50000} onChange={(e) => setPoste(e.target.value)} />
+      </Field>
+      <div className="flex items-start justify-between gap-4 rounded-xl border border-border px-3 py-2.5">
+        <div>
+          <p className="text-sm font-medium text-foreground">{t("Tous les services branchés")}</p>
+          <p className="text-xs text-muted-foreground">
+            {toutes
+              ? t("Il se sert de tout ce qui est branché sur l'instance, y compris ce qui le sera plus tard.")
+              : t("Il ne se sert que des services cochés ci-dessous.")}
+          </p>
+        </div>
+        <Switch checked={toutes} onChange={setToutes} label={t("Tous les services branchés")} />
+      </div>
+      {!toutes && <ChoixOutils etat={etat} valeur={outils} onChange={setOutils} />}
+      <EditeurMissions
+        valeur={missions}
+        onChange={setMissions}
+        courrier={{
+          branchee: Boolean(etat.familles.find((f) => f.id === "courrier")?.disponible),
+          acces: toutes || outils.includes("courrier"),
+        }}
+      />
+      <DocumentsAgent employe={employe} />
+      <ChoixModele etat={etat} valeur={modele} onChange={setModele} />
+      <ChoixAutonomie valeur={autonome} onChange={setAutonome} />
+      <ChoixLiberte valeur={liberte} onChange={setLiberte} />
+      {aConfirmer && (
+        <ConfirmationIdentite
+          raison={
+            liberte === "libre" && employe.liberte !== "libre"
+              ? t("Ouvrir le palier Libre donne à cet agent les commandes de la machine : confirmez que c'est bien vous.")
+              : t("Rendre cet agent autonome retire la demande d'accord avant chacune de ses actions : confirmez que c'est bien vous.")
+          }
+          motDePasse={motDePasse}
+          onMotDePasse={setMotDePasse}
+          code={code}
+          onCode={setCode}
+        />
+      )}
+      {info && <InfoBox tone="muted">{info}</InfoBox>}
+      <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border pt-4">
+        {confirmer ? (
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-sm text-foreground">
+              {t("Retirer")}{" "}{employe.nom}{" "}{t("? Ses missions, son espace et les conversations de chacun avec lui disparaissent.")}
+            </span>
+            <Button
+              variant="destructive"
+              size="sm"
+              disabled={occupe}
+              onClick={() =>
+                void agir(async () => {
+                  await supprimerEmploye(employe.id);
+                  onRetire();
+                }, tf("{0} a été retiré.", employe.nom))
+              }
+            >
+              {t("Retirer")}
+            </Button>
+            <Button variant="ghost" size="sm" onClick={() => setConfirmer(false)}>
+              {t("Annuler")}
+            </Button>
+          </div>
+        ) : (
+          <Button variant="ghost" size="sm" icon={Trash2} onClick={() => setConfirmer(true)}>
+            {t("Retirer")}{" "}{employe.nom}
+          </Button>
+        )}
+        <Button
+          disabled={occupe || !poste.trim()}
+          onClick={() =>
+            void agir(
+              async () => {
+                const r = await modifierEmploye(employe.id, {
+                  poste,
+                  outils,
+                  toutesLesFamilles: toutes,
+                  missions,
+                  autonome,
+                  modele,
+                  liberte,
+                  ...(aConfirmer ? { motDePasse, code: code.trim() || undefined } : {}),
+                });
+                /*
+                 * L'agent et son employé ne font qu'un : ses instructions (celles
+                 * que le Chat lui donne) suivent le poste. Seulement une fois
+                 * l'instance d'accord : recopiés avant, un enregistrement refusé
+                 * (mission « à chaque mail » sans accès au courrier, instance
+                 * injoignable) laissait le Chat et l'agent 24/7 obéir à deux
+                 * fiches de poste différentes (vu à l'essai).
+                 */
+                if (employe.agentId && poste !== employe.poste) {
+                  updateAgent(employe.agentId, { instructions: r.employe.poste });
+                  window.dispatchEvent(new Event("helix:agents-changed"));
+                }
+                return r;
+              },
+              t("Modifications enregistrées."),
+            )
+          }
+        >
+          {occupe ? t("Enregistrement…") : t("Enregistrer")}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+export default PanneauEmploye;

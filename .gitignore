@@ -1,0 +1,15 @@
+node_modules
+dist
+dist-ssr
+*.local
+.DS_Store
+.vite
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+dist-gateway
+release
+
+# Paquets de l'extension VS Code (se refont avec vsce)
+*.vsix

@@ -1,0 +1,343 @@
+import { useEffect, useMemo, useState } from "react";
+import { useSearchParams, useLocation } from "react-router-dom";
+import { TriangleAlert } from "lucide-react";
+import { LogoMark } from "@/components/ui/Logo";
+import { Composer } from "@/components/chat/Composer";
+import { OutilsChip } from "@/components/chat/OutilsChip";
+import { ImageChip } from "@/components/chat/ImageChip";
+import type { Format } from "@/lib/images";
+import { InfoBox } from "@/components/ui/InfoBox";
+import { SuggestionList } from "@/components/chat/SuggestionList";
+import { MessageList } from "@/components/chat/MessageList";
+import { FirstRun } from "@/components/onboarding/FirstRun";
+import { ProjectSelector, AgentSelector } from "@/components/chat/ContextSelectors";
+import { useChat } from "@/hooks/useChat";
+import { useProfile } from "@/hooks/useProfile";
+import { useAttachments } from "@/hooks/useAttachments";
+import { useModels } from "@/hooks/useModels";
+import { buildSystemPrompt, type NiveauRaisonnement } from "@/lib/store/profile";
+import { getSession, memoriserAgent, rattacherProjet } from "@/lib/store/sessions";
+import { currentUser } from "@/lib/store/identity";
+import { useSessions, notifySessionsChanged } from "@/hooks/useSessions";
+import { useAgents } from "@/hooks/useAgents";
+import { useCompetences } from "@/hooks/useCompetences";
+import { DEFAULT_AGENT } from "@/lib/store/agents";
+import { instance } from "@/lib/instance";
+import { branding, features } from "@/config/branding";
+import { t, tf } from "@/lib/i18n";
+
+/** Ecran Chat : accueil vide, puis conversation (captures 1 a 5). */
+export function HomePage() {
+  const [draft, setDraft] = useState("");
+  /** Bouton « Image » : le prochain envoi crée une image au lieu d'une réponse. */
+  const [modeImage, setModeImage] = useState(false);
+  const [formatImage, setFormatImage] = useState<Format>("carre");
+  const { profile, update } = useProfile();
+  const { models, loading: modelsLoading, refresh: refreshModels } = useModels();
+
+  // Préférences du profil comme valeurs par défaut, surchargeables à la volée.
+  const modelUid = profile.preferredModelUid;
+  const effort = profile.preferredEffort ?? "moyen";
+  const jointes = useAttachments(modelUid);
+
+  // Agent sélectionné : ses instructions définissent le rôle, le profil privé
+  // de l'utilisateur y ajoute son contexte et sa mémoire.
+  const { selectable } = useAgents();
+  const [agentId, setAgentId] = useState(DEFAULT_AGENT.id);
+  const agent = selectable.find((a) => a.id === agentId) ?? DEFAULT_AGENT;
+
+  // Les procédures de l'entreprise valent aussi dans le Chat : c'est là que la
+  // plupart des demandes arrivent.
+  const { consignes: consignesCompetences } = useCompetences();
+  const systemPrompt = useMemo(
+    () => buildSystemPrompt(profile, branding.name, agent.instructions, consignesCompetences),
+    [profile, agent.instructions, consignesCompetences],
+  );
+
+  // Une session menée sur un modèle local reste liée à cette machine.
+  const origin = useMemo(() => {
+    const model = models.find((m) => m.uid === modelUid);
+    return model && model.backendId !== "lmstudio" ? "cloud" : "local";
+  }, [models, modelUid]);
+
+  // L'agent peut interdire les outils : son réglage prime sur l'interrupteur.
+  const toolsOn = profile.outilsChat ?? false;
+  const setToolsOn = (actif: boolean) => update({ outilsChat: actif });
+  const toolsAllowed = agent.toolsEnabled;
+  const chat = useChat({
+    model: modelUid,
+    effort,
+    systemPrompt,
+    origin,
+    tools: toolsOn && toolsAllowed,
+  });
+
+  // La conversation affichée suit l'URL : « /?c=<id> » rouvre une session,
+  // « / » ouvre une conversation neuve.
+  // `location.key` change à chaque navigation, même vers la même adresse :
+  // cliquer « Nouveau Chat » depuis une conversation en cours la réinitialise.
+  const [params] = useSearchParams();
+  const location = useLocation();
+  const sessionId = params.get("c");
+  /*
+   * « /?projet=<id> » ouvre un chat neuf déjà destiné à un projet : c'est le
+   * chemin du bouton « Nouveau Chat » de l'écran Projets.
+   */
+  const projetDemande = params.get("projet");
+  const { open, reset } = chat;
+
+  /*
+   * Projet choisi pour un chat qui n'existe pas encore. La conversation ne naît
+   * qu'à la première question (`useChat.send`) : jusque-là il n'y a rien à
+   * ranger, on retient donc le choix et on l'applique dès la création.
+   */
+  const [projetNeuf, setProjetNeuf] = useState<string | null>(projetDemande);
+
+  useEffect(() => {
+    // Ouvrir ou recommencer une conversation efface le choix en attente :
+    // il visait le chat neuf, pas celui qu'on rouvre.
+    setProjetNeuf(sessionId ? null : projetDemande);
+    if (!sessionId) {
+      reset();
+      return;
+    }
+    const session = getSession(sessionId);
+    if (session) {
+      open(session);
+      /*
+       * Un Chat rouvert reprend SON agent. Il repartait avec l'agent par
+       * défaut, sans le dire : mêmes questions, autres réponses. Dans le même
+       * effet que `open`, pour que l'agent et la conversation changent
+       * ensemble (sinon l'effet de mémorisation ci-dessous écrirait l'agent
+       * précédent dans le Chat qu'on vient d'ouvrir).
+       */
+      setAgentId(session.agentId ?? DEFAULT_AGENT.id);
+    }
+  }, [sessionId, projetDemande, location.key, open, reset]);
+
+  // Relu à chaque changement de conversation, pour afficher le classement à jour.
+  const { sessions } = useSessions();
+  const idEnCours = chat.session?.id ?? null;
+  const enCours = idEnCours
+    ? (sessions.find((s) => s.id === idEnCours) ?? getSession(idEnCours) ?? null)
+    : null;
+
+  /*
+   * Le chat affiché vient d'être supprimé (depuis la barre latérale) : l'écran
+   * repart à neuf. Sans cela, il restait affiché et la suite de la
+   * conversation s'enregistrait dans une session disparue, donc nulle part.
+   */
+  useEffect(() => {
+    if (idEnCours && !getSession(idEnCours)) reset();
+  }, [sessions, idEnCours, reset]);
+
+  // L'agent choisi est retenu avec le Chat : à sa création, et à chaque changement.
+  useEffect(() => {
+    if (!idEnCours) return;
+    const session = getSession(idEnCours);
+    if (!session || session.ownerId !== currentUser().id || session.agentId === agentId) return;
+    if (!session.agentId && agentId === DEFAULT_AGENT.id) return;
+    memoriserAgent(idEnCours, agentId, agent.name);
+  }, [idEnCours, agentId, agent.name]);
+
+  /*
+   * L'agent de ce Chat a été supprimé depuis : c'est l'agent par défaut qui
+   * répond, et on le dit plutôt que de laisser croire que rien n'a changé.
+   */
+  const agentDisparu =
+    enCours?.agentId && enCours.agentId !== DEFAULT_AGENT.id && !selectable.some((a) => a.id === enCours.agentId)
+      ? (enCours.agentNom ?? "")
+      : null;
+
+  useEffect(() => {
+    if (!idEnCours || !projetNeuf) return;
+    const session = getSession(idEnCours);
+    // Garde : on ne range que le chat que ce composer vient de créer, jamais
+    // un chat déjà classé ou appartenant à quelqu'un d'autre.
+    if (session && !session.projectId && session.ownerId === currentUser().id) {
+      rattacherProjet(idEnCours, projetNeuf, currentUser());
+      notifySessionsChanged();
+    }
+    setProjetNeuf(null);
+  }, [idEnCours, projetNeuf]);
+
+  const selecteurProjet = features.projets ? (
+    <ProjectSelector
+      side={chat.messages.length > 0 ? "top" : "bottom"}
+      value={enCours ? (enCours.projectId ?? null) : projetNeuf}
+      disabledReason={
+        enCours && enCours.ownerId !== currentUser().id
+          ? t("Seule la personne qui a ouvert ce chat peut le ranger dans un projet.")
+          : undefined
+      }
+      onChange={(projectId) => {
+        if (!enCours) {
+          setProjetNeuf(projectId);
+          return;
+        }
+        rattacherProjet(enCours.id, projectId, currentUser());
+        notifySessionsChanged();
+      }}
+    />
+  ) : null;
+
+  const submit = () => {
+    const text = draft;
+    const pieces = jointes.pieces;
+    setDraft("");
+    if (modeImage) {
+      void chat.creerImage(text, formatImage);
+      return;
+    }
+    jointes.vider();
+    void chat.send(text, pieces);
+  };
+
+  /*
+   * Première mise en route d'un poste autonome : aucun modèle disponible, on
+   * propose de l'installer. Un poste rattaché à une instance n'a rien à
+   * installer — ses modèles sont ceux de l'instance.
+   */
+  if (
+    !instance().remote &&
+    !modelsLoading &&
+    models.length === 0 &&
+    chat.messages.length === 0
+  ) {
+    return <FirstRun onReady={refreshModels} />;
+  }
+
+  /*
+   * Deux choses valent la peine d'être dites avant l'envoi : un fichier
+   * refusé, et une image confiée à un modèle qui ne sait pas la lire — ce
+   * dernier cas ne produit aucune erreur, juste une réponse à côté.
+   */
+  const avertissements = (
+    <>
+      {agentDisparu !== null && (
+        <InfoBox
+          tone="muted"
+          className="mt-2"
+          leading={<TriangleAlert size={15} strokeWidth={1.75} />}
+        >
+          {agentDisparu
+            ? tf("L'agent de ce Chat, « {0} », a été supprimé : c'est l'agent par défaut qui répond désormais.", agentDisparu)
+            : t("L'agent de ce Chat a été supprimé : c'est l'agent par défaut qui répond désormais.")}
+        </InfoBox>
+      )}
+      {jointes.avertissementImage && (
+        <InfoBox
+          tone="warning"
+          className="mt-2"
+          leading={<TriangleAlert size={15} strokeWidth={1.75} />}
+        >
+          {jointes.avertissementImage}
+        </InfoBox>
+      )}
+      {jointes.erreurs.length > 0 && (
+        <InfoBox
+          tone="muted"
+          className="mt-2"
+          leading={<TriangleAlert size={15} strokeWidth={1.75} />}
+        >
+          {jointes.erreurs.map((e) => (
+            <p key={e.nom}>
+              <strong>{e.nom}</strong> : {e.raison}.
+            </p>
+          ))}
+        </InfoBox>
+      )}
+    </>
+  );
+
+  const composer = (
+    <Composer
+      placeholder={
+        modeImage
+          ? t("Décrivez l'image à créer...")
+          : t("Posez votre question... @ pour mentionner un document ou une transcription")
+      }
+      value={draft}
+      onChange={setDraft}
+      onSubmit={submit}
+      busy={chat.busy}
+      onStop={chat.stop}
+      pieces={jointes.pieces}
+      onAjouterFichiers={(f) => void jointes.ajouter(f)}
+      onRetirerPiece={jointes.retirer}
+      onCreerImage={() => setModeImage(true)}
+      accessoire={modeImage ? <ImageChip onFermer={() => setModeImage(false)} format={formatImage} onFormat={setFormatImage} /> : null}
+      modelUid={modelUid}
+      onModelChange={(uid) => update({ preferredModelUid: uid })}
+      effort={effort}
+      onEffortChange={(e) =>
+        update({ preferredEffort: e as NiveauRaisonnement })
+      }
+      contextBar={
+        <>
+          {selecteurProjet}
+          <AgentSelector
+            value={agentId}
+            onChange={setAgentId}
+            side={chat.messages.length > 0 ? "top" : "bottom"}
+          />
+          <OutilsChip
+            actif={toolsOn}
+            onChange={setToolsOn}
+            autorise={toolsAllowed}
+            nomAgent={agent.name}
+          />
+        </>
+      }
+    />
+  );
+
+  /* --- Conversation en cours ------------------------------------------- */
+  if (chat.messages.length > 0) {
+    return (
+      <div className="flex h-full flex-col">
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          <div className="mx-auto w-full max-w-[760px] px-6 py-8">
+            <MessageList messages={chat.messages} />
+          </div>
+        </div>
+        <div className="shrink-0 px-6 pb-5">
+          <div className="mx-auto w-full max-w-[760px]">
+            {composer}
+            {avertissements}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  /* --- Accueil (état vide) --------------------------------------------- */
+  return (
+    <div className="flex h-full flex-col overflow-y-auto">
+      <div className="mx-auto flex w-full max-w-[760px] flex-1 flex-col justify-center px-6 pb-20 pt-12">
+        <div className="mb-7 flex items-center justify-center gap-3">
+          <LogoMark size={44} animated />
+          <h1 className="text-3xl font-medium tracking-tight text-foreground">
+            {t("Sur quoi voulez-vous travailler ?")}
+          </h1>
+        </div>
+
+        {composer}
+        {avertissements}
+
+        <div className="mt-5 px-1">
+          <SuggestionList
+            onDemander={(question, outils) => {
+              setDraft(question);
+              // Une question sur le courrier ou l'agenda n'a de sens qu'avec
+              // les outils : les laisser coupés donnerait une réponse à côté.
+              if (outils) setToolsOn(true);
+            }}
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export default HomePage;

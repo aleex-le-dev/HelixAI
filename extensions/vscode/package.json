@@ -1,0 +1,97 @@
+{
+  "name": "helix-ai",
+  "displayName": "Helix AI",
+  "description": "Le Chat de votre instance Helix dans VS Code : vos modèles, sur votre machine ou celle de votre entreprise.",
+  "version": "0.2.0",
+  "publisher": "helix-agence",
+  "license": "AGPL-3.0-only",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/medhiclb/HelixAI"
+  },
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "AI",
+    "Chat"
+  ],
+  "main": "./extension.js",
+  "activationEvents": [],
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "helix",
+          "title": "Helix AI",
+          "icon": "media/helix.svg"
+        }
+      ]
+    },
+    "views": {
+      "helix": [
+        {
+          "type": "webview",
+          "id": "helix.chat",
+          "name": "Chat"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "helix.expliquer",
+        "title": "Helix : expliquer la sélection"
+      },
+      {
+        "command": "helix.ameliorer",
+        "title": "Helix : améliorer la sélection"
+      },
+      {
+        "command": "helix.nouveau",
+        "title": "Helix : nouveau Chat"
+      },
+      {
+        "command": "helix.seConnecter",
+        "title": "Helix : se connecter (pour Helix Code)"
+      },
+      {
+        "command": "helix.seDeconnecter",
+        "title": "Helix : se déconnecter"
+      }
+    ],
+    "menus": {
+      "editor/context": [
+        {
+          "command": "helix.expliquer",
+          "when": "editorHasSelection",
+          "group": "helix@1"
+        },
+        {
+          "command": "helix.ameliorer",
+          "when": "editorHasSelection",
+          "group": "helix@2"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Helix AI",
+      "properties": {
+        "helix.adresse": {
+          "type": "string",
+          "default": "http://127.0.0.1:8787",
+          "description": "Adresse de l'instance Helix. Par défaut, celle de l'application Helix de cet ordinateur."
+        },
+        "helix.jeton": {
+          "type": "string",
+          "default": "",
+          "description": "Jeton d'instance. Vide : lu dans ~/.helix/data/instance-token, pour l'instance de cet ordinateur."
+        },
+        "helix.modele": {
+          "type": "string",
+          "default": "",
+          "description": "Modèle à utiliser (identifiant Helix). Vide : Helix choisit, comme en mode Auto."
+        }
+      }
+    }
+  }
+}

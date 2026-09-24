@@ -1,0 +1,199 @@
+@import "./tokens.css";
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* --- Police de marque : Satoshi (variable 300-900) ------------------------ */
+@font-face {
+  font-family: "Satoshi";
+  src: url("/fonts/satoshi.woff2") format("woff2");
+  font-weight: 300 900;
+  font-display: swap;
+  font-style: normal;
+}
+@font-face {
+  font-family: "Satoshi Fallback";
+  src: local("Arial");
+  ascent-override: 92.36%;
+  descent-override: 21.95%;
+  line-gap-override: 9.14%;
+  size-adjust: 109.35%;
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    font-feature-settings: "ss01", "cv01";
+  }
+
+  /*
+   * Focus clavier : discret et aux couleurs de la marque.
+   * `:focus-visible` ne se declenche qu'au clavier, jamais a la souris — un
+   * clic ne doit pas encadrer l'element.
+   */
+  :where(a, button, input, select, [tabindex]):focus-visible {
+    @apply outline-none ring-2 ring-accent/50 ring-offset-1 ring-offset-background;
+  }
+
+  /*
+   * Les zones de saisie multiligne vivent deja dans une carte qui marque le
+   * focus (voir .composer-surface) : leur ajouter un anneau dessinerait un
+   * rectangle en trop.
+   */
+  :where(textarea):focus-visible {
+    @apply outline-none ring-0;
+  }
+
+  /* Barres de defilement discretes. */
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply rounded-full bg-neutral-80;
+    background-clip: padding-box;
+    border: 3px solid transparent;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-neutral-70;
+    background-clip: padding-box;
+    border: 3px solid transparent;
+  }
+}
+
+@keyframes popover {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* Animation discrete du mark (helice) : flottement + leger balancement. */
+@keyframes logo-helix {
+  0% {
+    transform: translateY(0) rotate(-1.5deg);
+  }
+  50% {
+    transform: translateY(-5px) rotate(1.5deg);
+  }
+  100% {
+    transform: translateY(0) rotate(-1.5deg);
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .animate-logo {
+    animation: logo-helix 4s ease-in-out infinite;
+    transform-origin: center;
+    will-change: transform;
+  }
+}
+
+/* center-aligned popovers must preserve their horizontal centering while animating */
+.popover-center {
+  animation: popover-center 120ms ease-out;
+}
+@keyframes popover-center {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@layer utilities {
+  /*
+   * Place réservée aux commandes de fenêtre du système (macOS les fait flotter
+   * au-dessus du contenu quand la barre de titre est masquée). Sans effet dans
+   * un navigateur, où il n'y a rien à contourner.
+   */
+  .titlebar-inset {
+    padding-top: 0.75rem;
+  }
+  :root[data-desktop="1"] .titlebar-inset {
+    /* Les pastilles occupent la bande 16-28 px : on démarre franchement dessous. */
+    padding-top: 2.5rem;
+  }
+
+  /*
+   * Barre de défilement discrète pour la navigation latérale : le contenu doit
+   * rester atteignable sur une fenêtre courte sans qu'une barre grise vienne
+   * couper le rail en deux.
+   */
+  .scrollbar-discret {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--border)) transparent;
+  }
+  .scrollbar-discret::-webkit-scrollbar {
+    width: 6px;
+  }
+  .scrollbar-discret::-webkit-scrollbar-thumb {
+    background-color: hsl(var(--border));
+    border-radius: 3px;
+  }
+  .scrollbar-discret::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  /* La bande de titre déplace la fenêtre ; les commandes restent cliquables. */
+  :root[data-desktop="1"] .titlebar-drag {
+    -webkit-app-region: drag;
+  }
+  :root[data-desktop="1"] .titlebar-drag button,
+  :root[data-desktop="1"] .titlebar-drag a,
+  :root[data-desktop="1"] .titlebar-drag input {
+    -webkit-app-region: no-drag;
+  }
+  .fenetre-poignee {
+    display: none;
+  }
+  :root[data-desktop="1"] .fenetre-poignee {
+    display: block;
+    -webkit-app-region: drag;
+  }
+  /* Une commande posée sur la poignée reste une commande, jamais une zone de glisser. */
+  :root[data-desktop="1"] :is(button, a, input, textarea, select, [role="button"], [role="dialog"]) {
+    -webkit-app-region: no-drag;
+  }
+
+  /*
+   * Logo de marque : les visuels livrés sont des tracés noirs sur fond blanc
+   * OPAQUE (pas de canal alpha). Il faut donc effacer ce blanc au montage.
+   *
+   * En clair, `multiply` suffit : le blanc disparaît, le tracé noir reste.
+   * En sombre, multiplier ne peut qu'assombrir — le tracé noir se fondrait
+   * dans le fond et le logo deviendrait invisible. On inverse alors l'image
+   * (tracé blanc sur noir) et on efface le noir avec `screen` : même geste,
+   * résultat lisible dans les deux thèmes.
+   */
+  .logo-marque {
+    mix-blend-mode: multiply;
+  }
+  :root[data-theme="sombre"] .logo-marque {
+    filter: invert(1);
+    mix-blend-mode: screen;
+  }
+
+  /* Fond en pointillés (ecrans Cowork / Code). */
+  .bg-dotted {
+    background-image: radial-gradient(
+      hsl(var(--border)) 1px,
+      transparent 1px
+    );
+    background-size: 22px 22px;
+  }
+}

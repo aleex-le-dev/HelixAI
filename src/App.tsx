@@ -1,0 +1,181 @@
+import {
+  createBrowserRouter,
+  createHashRouter,
+  RouterProvider,
+  Navigate,
+  type RouteObject,
+} from "react-router-dom";
+import { useEffect, useState } from "react";
+import { features } from "@/config/branding";
+import { isSignedIn, clearCurrentUser } from "@/lib/store/identity";
+import { SEANCE_EXPIREE } from "@/lib/endpoint";
+import { LoginPage } from "@/pages/LoginPage";
+import { InstanceSetupPage } from "@/pages/InstanceSetupPage";
+import { isConfigured } from "@/lib/instance";
+import { surInvitation, type InvitationRecue } from "@/lib/invitations";
+import { useApparence } from "@/hooks/useApparence";
+import { AppLayout } from "@/components/layout/AppLayout";
+import { HomePage } from "@/pages/HomePage";
+import { CoworkPage } from "@/pages/CoworkPage";
+import { CodePage } from "@/pages/CodePage";
+import { ProjetsPage } from "@/pages/ProjetsPage";
+import { AgentsPage } from "@/pages/AgentsPage";
+import { BibliothequePage } from "@/pages/BibliothequePage";
+import { GroupesPage } from "@/pages/GroupesPage";
+import { ReunionsPage } from "@/pages/ReunionsPage";
+import { TachesPage } from "@/pages/TachesPage";
+import { SettingsLayout } from "@/components/settings/SettingsShell";
+import {
+  ProfilSettings,
+  PreferencesSettings,
+  SecuriteSettings,
+  PersonnalisationSettings,
+  BotRecorderSettings,
+  McpSettings,
+  ApiSettings,
+  UsageSettings,
+  AbonnementSettings,
+  ModelesSettings,
+  ConfidentialiteSettings,
+  AppsSettings,
+  ImportSettings,
+  EcranSettings,
+} from "@/pages/ParametresPages";
+
+/** Route incluse seulement si son module est actif dans l'édition livrée. */
+const when = (on: boolean, route: RouteObject): RouteObject[] => (on ? [route] : []);
+
+/**
+ * Choix du routeur, selon d'où l'interface est chargée.
+ *
+ * L'application empaquetée ouvre son interface depuis le disque (`file://`).
+ * Un routeur qui écrit des chemins d'URL y transforme « /cowork » en
+ * `file:///cowork` — un fichier qui n'existe pas. La page se ré-affiche tant
+ * qu'on ne fait que naviguer, mais **le moindre rechargement donne un écran
+ * blanc**, définitivement : le bouton « Réessayer », un rafraîchissement, un
+ * plantage du rendu.
+ *
+ * Le routeur à ancre met le chemin après un « # », que le système de fichiers
+ * ignore. Le serveur de développement, lui, garde des adresses propres.
+ */
+/*
+ * Depuis la 0.23.0, l'interface livrée est servie sous `helix://app` et non
+ * plus depuis le disque. Le routeur à ancre reste le bon choix pour elle, et
+ * pour une raison de plus que le chemin : un routeur d'historique remplace
+ * l'adresse entière à chaque navigation, **paramètres compris**. Or l'adresse
+ * de départ porte le jeton d'instance que l'application remet à son interface
+ * (`?token=`, voir electron/main.cjs). Mesuré : un clic sur « Réglages »
+ * effaçait ce jeton, toutes les requêtes suivantes repartaient sans
+ * autorisation, l'instance répondait 401, et l'application se croyait
+ * déconnectée. Avec l'ancre, le chemin vit après le « # » et les paramètres
+ * restent intacts.
+ */
+const servieParLApplication =
+  typeof window !== "undefined" && !/^https?:$/.test(window.location.protocol);
+const creerRouteur = servieParLApplication ? createHashRouter : createBrowserRouter;
+
+const router = creerRouteur([
+  {
+    element: <AppLayout />,
+    children: [
+      { path: "/", element: <HomePage /> },
+      ...when(features.cowork, { path: "/cowork", element: <CoworkPage /> }),
+      ...when(features.code, { path: "/code", element: <CodePage /> }),
+      ...when(features.projets, { path: "/projets", element: <ProjetsPage /> }),
+      ...when(features.agents, { path: "/agents", element: <AgentsPage /> }),
+      ...when(features.bibliotheque, { path: "/bibliotheque", element: <BibliothequePage /> }),
+      ...when(features.reunions, { path: "/reunions", element: <ReunionsPage /> }),
+      ...when(features.groupes, { path: "/groupes", element: <GroupesPage /> }),
+      ...when(features.taches, { path: "/taches", element: <TachesPage /> }),
+      {
+        path: "/parametres",
+        element: <SettingsLayout />,
+        children: [
+          { index: true, element: <Navigate to="profil" replace /> },
+          { path: "profil", element: <ProfilSettings /> },
+          { path: "preferences", element: <PreferencesSettings /> },
+          { path: "securite", element: <SecuriteSettings /> },
+          { path: "personnalisation", element: <PersonnalisationSettings /> },
+          { path: "bot-recorder", element: <BotRecorderSettings /> },
+          { path: "mcp", element: <McpSettings /> },
+          { path: "ecran", element: <EcranSettings /> },
+          /*
+           * Ancienne adresse conservée : elle redirige vers l'écran unique.
+           * Un poste qui l'avait en favori, ou un lien noté quelque part,
+           * doit continuer de tomber au bon endroit.
+           */
+          { path: "integrations", element: <Navigate to="../mcp" replace /> },
+          { path: "api", element: <ApiSettings /> },
+          { path: "usage", element: <UsageSettings /> },
+          ...when(features.abonnement, {
+            path: "abonnement",
+            element: <AbonnementSettings />,
+          }),
+          { path: "modeles", element: <ModelesSettings /> },
+          { path: "confidentialite", element: <ConfidentialiteSettings /> },
+          { path: "apps", element: <AppsSettings /> },
+          { path: "importer", element: <ImportSettings /> },
+        ],
+      },
+      { path: "*", element: <HomePage /> },
+    ],
+  },
+]);
+
+export default function App() {
+  // Deux préalables, dans cet ordre : savoir à quoi le poste est rattaché
+  // (machine seule ou instance d'entreprise), puis qui l'utilise. Profils,
+  // mémoire et sessions sont ainsi toujours rattachés à quelqu'un (ADR-010).
+  const [configured, setConfigured] = useState(() => isConfigured());
+  const [signedIn, setSignedIn] = useState(() => isSignedIn());
+  /*
+   * Invitation arrivée par lien `helix://rejoindre`, cliquée dans un mail.
+   *
+   * Elle ne concerne pas que le premier lancement : une personne qui utilise
+   * déjà Helix sur son poste peut être invitée sur l'instance d'un collègue.
+   * L'écran de rattachement s'ouvre alors par-dessus l'application, en disant
+   * ce que cela change et en laissant renoncer.
+   */
+  const [invitation, setInvitation] = useState<InvitationRecue | null>(null);
+  useEffect(() => surInvitation(setInvitation), []);
+
+  /*
+   * Monté ici, au-dessus de tout : l'écran de configuration et celui de
+   * connexion doivent eux aussi être sombres à minuit. Le thème est un état de
+   * la fenêtre, pas une propriété d'un écran connecté.
+   */
+  useApparence();
+
+  /*
+   * L'instance peut cesser de reconnaître ce poste : séance expirée au bout de
+   * douze heures, révoquée depuis un autre poste, ou instance réinstallée. On
+   * revient alors à l'écran de connexion, plutôt que de laisser l'utilisateur
+   * face à une application qui affiche son nom et refuse tout.
+   */
+  useEffect(() => {
+    const expiree = () => {
+      clearCurrentUser().finally(() => setSignedIn(false));
+    };
+    window.addEventListener(SEANCE_EXPIREE, expiree);
+    return () => window.removeEventListener(SEANCE_EXPIREE, expiree);
+  }, []);
+
+  if (!configured || invitation) {
+    return (
+      <InstanceSetupPage
+        invitation={invitation}
+        onAnnuler={configured ? () => setInvitation(null) : undefined}
+        onReady={() => {
+          // L'adresse de la passerelle est figée à l'import : on recharge pour
+          // que toute l'application parte sur la bonne instance.
+          window.location.reload();
+          setConfigured(true);
+        }}
+      />
+    );
+  }
+
+  if (!signedIn) return <LoginPage onSignedIn={() => setSignedIn(true)} />;
+
+  return <RouterProvider router={router} />;
+}

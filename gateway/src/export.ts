@@ -1,0 +1,160 @@
+import { db } from "./db.ts";
+import type { Demandeur } from "./authz.ts";
+import { publicAccounts, etatDeuxFacteurs } from "./accounts.ts";
+import { listSessions } from "./usersession.ts";
+import { consommationDe } from "./usage.ts";
+import { jours as joursDuJournal, lire as lireJournal, journaliser } from "./audit.ts";
+import { listerGroupes } from "./groupes.ts";
+import { elementsDe } from "./bibliotheque.ts";
+import { reunionsDe } from "./reunions.ts";
+
+/**
+ * Export des données d'une personne (RGPD, articles 15 et 20).
+ *
+ * Le droit d'accès porte sur tout ce que l'instance détient **sur** la
+ * personne ; le droit à la portabilité, sur ce qu'elle a fourni, dans un
+ * format structuré et lisible par une machine. Un seul fichier JSON couvre les
+ * deux, et chaque rubrique dit d'où elle vient.
+ *
+ * Règles de périmètre, les mêmes que partout ailleurs :
+ *  - la personne est celle de la séance, jamais un identifiant envoyé ;
+ *  - rien de ce qui appartient à un collègue n'y entre, sauf ce qu'il lui a
+ *    explicitement partagé (conversations) ou ce qu'ils ont en commun
+ *    (projets dont elle est membre), et c'est alors marqué comme tel ;
+ *  - aucun secret : ni empreinte de mot de passe, ni secret du second facteur,
+ *    ni codes de secours, ni jeton de séance, ni mot de passe de connecteur.
+ */
+
+const FORMAT = "helix-export";
+const VERSION = 1;
+
+const tableau = (v: unknown): Record<string, unknown>[] =>
+  Array.isArray(v) ? v.filter((x): x is Record<string, unknown> => typeof x === "object" && x !== null) : [];
+
+const memeEmail = (a: unknown, b: string) =>
+  typeof a === "string" && a.trim().toLowerCase() === b.trim().toLowerCase();
+
+const designe = (liste: unknown, qui: Demandeur) =>
+  Array.isArray(liste) &&
+  liste.some(
+    (p) =>
+      (p as { userId?: string }).userId === qui.userId ||
+      memeEmail((p as { email?: string }).email, qui.email),
+  );
+
+export interface ExportDonnees {
+  format: typeof FORMAT;
+  version: typeof VERSION;
+  genereLe: string;
+  compte: unknown;
+  profil: unknown;
+  conversations: { role: "proprietaire" | "partagee-avec-vous"; conversation: unknown }[];
+  projets: { role: "proprietaire" | "membre"; projet: unknown }[];
+  taches: unknown[];
+  agents: unknown[];
+  /** Employés OpenClaw qu'elle a déployés, et ce qu'elle a dit à chacun (les siens et ceux des collègues). */
+  employes: unknown[];
+  echangesAvecLesEmployes: unknown;
+  clesModeles: unknown[];
+  /** Groupes dont elle est membre, et si elle en est responsable. */
+  groupes: { nom: string; description: string; responsable: boolean; membres: number }[];
+  /** Ses dossiers et documents de la bibliothèque (le contenu se télécharge depuis l'écran). */
+  bibliotheque: unknown[];
+  /** Ses réunions : compte rendu et transcription (le son, s'il est gardé, s'écoute depuis l'écran). */
+  reunions: unknown[];
+  consommation: unknown;
+  seances: unknown[];
+  journal: unknown[];
+  nonInclus: string[];
+}
+
+export async function exporterDonnees(qui: Demandeur): Promise<ExportDonnees> {
+  const compte = (await publicAccounts()).find((a) => a.id === qui.userId) ?? null;
+  const deuxFacteurs = await etatDeuxFacteurs(qui.userId);
+
+  const profils = (await db().read("profiles")) as Record<string, unknown> | null;
+  const profil = profils && typeof profils === "object" ? (profils[`profile:${qui.userId}`] ?? null) : null;
+
+  /*
+   * Conversations : les siennes, et celles qu'un collègue lui a partagées
+   * nommément. Pas celles simplement ouvertes à toute l'organisation : elles
+   * sont lisibles, mais ce ne sont pas des données sur elle.
+   */
+  const conversations: ExportDonnees["conversations"] = [];
+  for (const c of tableau(await db().read("sessions"))) {
+    if (c.ownerId === qui.userId) conversations.push({ role: "proprietaire", conversation: c });
+    else if (designe(c.sharedWith, qui)) conversations.push({ role: "partagee-avec-vous", conversation: c });
+  }
+
+  const projets: ExportDonnees["projets"] = [];
+  for (const p of tableau(await db().read("projects"))) {
+    if (p.ownerId === qui.userId) projets.push({ role: "proprietaire", projet: p });
+    else if (designe(p.members, qui)) projets.push({ role: "membre", projet: p });
+  }
+
+  const taches = tableau(await db().read("tasks")).filter((t) => t.ownerId === qui.userId);
+  // Ses agents seulement : un agent d'organisation écrit par un collègue est à lui.
+  const agents = tableau(await db().read("agents")).filter((a) => a.ownerId === qui.userId);
+  const employes = tableau(await db().read("employes")).filter((e) => e.ownerId === qui.userId);
+  // Ses clés de modèles cloud : le fournisseur et les modèles, jamais la clé elle-même.
+  const clesModeles = tableau(await db().read("clesModeles"))
+    .filter((c) => c.ownerId === qui.userId)
+    .map(({ cle: _cle, ...reste }) => ({ ...reste, fin: typeof _cle === "string" ? _cle.slice(-4) : "" }));
+  const groupes = (await listerGroupes())
+    .filter((g) => g.membres.includes(qui.userId))
+    .map((g) => ({ nom: g.nom, description: g.description, responsable: g.responsables.includes(qui.userId), membres: g.membres.length }));
+  const bibliotheque = (await elementsDe(qui.userId)).map(({ favoris: _f, ...e }) => e);
+  const tousEchanges = (await db().read("echangesEmployes")) as Record<string, unknown> | null;
+  const echangesAvecLesEmployes =
+    tousEchanges && typeof tousEchanges === "object" ? (tousEchanges[qui.userId] ?? {}) : {};
+
+  /*
+   * Journal : les entrées dont elle est l'auteur. Tout le journal conservé,
+   * pas seulement les cinquante dernières lignes de l'écran Sécurité.
+   */
+  const journal: unknown[] = [];
+  for (const jour of [...joursDuJournal()].reverse()) {
+    for (const e of lireJournal(Number.MAX_SAFE_INTEGER, jour).reverse()) {
+      if (e.qui === qui.userId) journal.push(e);
+    }
+  }
+
+  const resultat: ExportDonnees = {
+    format: FORMAT,
+    version: VERSION,
+    genereLe: new Date().toISOString(),
+    compte: compte ? { ...compte, deuxFacteurs } : null,
+    profil,
+    conversations,
+    projets,
+    taches,
+    agents,
+    employes,
+    echangesAvecLesEmployes,
+    clesModeles,
+    groupes,
+    bibliotheque,
+    reunions: (await reunionsDe(qui.userId)).map(({ reunion, segments }) => ({ ...reunion, transcription: segments })),
+    consommation: await consommationDe(qui.userId),
+    seances: await listSessions(qui.userId),
+    journal,
+    nonInclus: [
+      "Mot de passe, secret du second facteur et codes de secours : l'instance n'en garde que des empreintes, qui ne se relisent pas.",
+      "Jetons de séance : ce sont des clés d'accès, un export ne doit pas en transporter.",
+      "Réglages de l'instance (connecteurs, boîte de courrier, agenda, tarifs des modèles) : ils appartiennent à l'instance, pas à une personne.",
+      "Fichiers de votre dossier de travail : ils sont restés sur le disque, là où vous les avez rangés.",
+      "Contenu des documents de votre bibliothèque : leur liste figure ici ; chacun se télécharge depuis la Bibliothèque, tel que vous l'avez déposé.",
+      "Conversations d'autres personnes ouvertes à toute l'organisation : lisibles par vous, mais ce ne sont pas des données vous concernant.",
+    ],
+  };
+
+  journaliser("donnees.exportees", qui.userId, {
+    conversations: conversations.length,
+    projets: projets.length,
+    taches: taches.length,
+    agents: agents.length,
+    employes: employes.length,
+    entreesDeJournal: journal.length,
+  });
+  return resultat;
+}

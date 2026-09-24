@@ -492,10 +492,9 @@ export function PreferencesSettings() {
       <Apparence />
 
       {/*
-       * Le français reste la langue d'origine du produit : c'est en français
-       * qu'il est écrit, et c'est lui qui sert de clé aux traductions. Mais
-       * l'interface se choisit désormais, anglais et chinois compris
-       * (src/lib/i18n.ts).
+       * L'anglais est la langue de référence et la langue par défaut du
+       * logiciel ; les phrases françaises servent de clés aux traductions
+       * (src/lib/i18n.ts). L'interface se choisit parmi les trois langues.
        */}
       <ChoixLangue />
 

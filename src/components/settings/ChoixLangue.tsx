@@ -61,7 +61,7 @@ export function ChoixLangue() {
               <span className="min-w-0 flex-1">
                 <span className="block text-sm font-medium text-foreground">{l.natif}</span>
                 <span className="block text-xs text-muted-foreground">
-                  {l.code === "fr"
+                  {l.code === "en"
                     ? t("Langue d'origine du logiciel")
                     : `${part} %${t(" de l'interface traduite")}`}
                 </span>
@@ -73,7 +73,7 @@ export function ChoixLangue() {
       </div>
 
       <p className="text-xs leading-relaxed text-muted-foreground">
-        {t("Ce que vous écrivez — chats, documents, procédures — n'est jamais traduit. Certains messages venus de l'instance restent en français.")}
+        {t("Ce que vous écrivez (Chats, documents, procédures) n'est jamais traduit. Certains messages venus de l'instance peuvent rester en français.")}
       </p>
     </div>
   );

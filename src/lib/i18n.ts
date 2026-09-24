@@ -39,9 +39,15 @@ import zh from "@/i18n/zh.json";
  * évidemment jamais touché.
  */
 
+/*
+ * L'anglais d'abord : c'est la langue de référence du logiciel, celle qu'il
+ * prend par défaut (décision de la 0.26.0, rappelée par le client le
+ * 25/09/2026). Les phrases françaises restent les clés du catalogue : c'est
+ * une affaire de code, pas ce que l'écran présente.
+ */
 export const LANGUES = [
-  { code: "fr", nom: "Français", natif: "Français" },
   { code: "en", nom: "Anglais", natif: "English" },
+  { code: "fr", nom: "Français", natif: "Français" },
   { code: "zh", nom: "Chinois", natif: "中文" },
 ] as const;
 

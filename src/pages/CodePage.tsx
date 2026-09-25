@@ -1,5 +1,9 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { PanelRight, TriangleAlert } from "lucide-react";
+import { SessionsRecentes } from "@/components/code/SessionsCode";
+import { useSessionsCode } from "@/hooks/useSessionsCode";
+import { signalerSessionsCode } from "@/lib/code";
 import { LogoMark } from "@/components/ui/Logo";
 import { IconButton } from "@/components/ui/IconButton";
 import { SuiviCodePanel } from "@/components/code/SuiviCode";
@@ -40,6 +44,48 @@ export function CodePage() {
     effort: profile.preferredEffort ?? "moyen",
   });
 
+  /*
+   * L'adresse dit quelle session est affichée : `/code?s=<id>` une session de
+   * la liste, `/code` l'accueil. Ouvrir Code ne reprend donc plus la dernière
+   * session (demandé par Medhi le 25/09/2026, comme dans Claude Code) : on la
+   * rouvre depuis la liste. Revenir à l'accueil n'arrête pas une session qui
+   * travaille : elle continue, et se rouvre depuis la liste (`nouvelle`).
+   */
+  const [params, setParams] = useSearchParams();
+  const demandee = params.get("s");
+  const { sessions } = useSessionsCode();
+  const { ouvrir, nouvelle, sessionId } = code;
+  useEffect(() => {
+    // La liste se relit à chaque passage : une session ouverte ailleurs (ligne de commande, extension) y apparaît.
+    signalerSessionsCode();
+    if (demandee) {
+      void ouvrir(demandee).then((h) => {
+        if (h) setDossier(h.session.dossier);
+      });
+    } else if (sessionId) {
+      nouvelle();
+    }
+    // Seule l'adresse décide ; `sessionId` est lu tel qu'il est à ce moment.
+  }, [demandee]);
+  /*
+   * Une session vient de naître (première demande) ou d'être relancée par
+   * l'instance : l'adresse la désigne, pour qu'un rechargement ou la barre
+   * latérale la retrouvent. Seulement quand elle change depuis rien ou depuis
+   * celle de l'adresse : au retour sur l'accueil, l'ancienne ne doit pas
+   * revenir.
+   */
+  const precedente = useRef(sessionId);
+  useEffect(() => {
+    const avant = precedente.current;
+    precedente.current = sessionId;
+    if (sessionId && sessionId !== avant && sessionId !== demandee && (avant === null || avant === demandee)) {
+      setParams({ s: sessionId }, { replace: true });
+    }
+  }, [sessionId, demandee, setParams]);
+  const navigate = useNavigate();
+  // Le dossier de la session affichée ; sur l'accueil, celui qu'on a choisi pour la prochaine.
+  const dossierAffiche = (sessionId && sessions.find((s) => s.id === sessionId)?.dossier) || dossier || code.status?.projectDir;
+
   const submit = () => {
     const text = draft;
     setDraft("");
@@ -64,11 +110,14 @@ export function CodePage() {
       }
       contextBar={
         <DossierTravailChip
-          dossier={dossier ?? code.status?.projectDir}
+          dossier={dossierAffiche}
           onChange={(chemin) => {
             setDossier(chemin);
-            // Changer de projet, c'est repartir d'une conversation vierge.
-            code.reset();
+            /*
+             * Changer de projet, c'est une nouvelle session dans ce dossier.
+             * Celle qu'on quitte n'est plus arrêtée : elle reste dans la liste.
+             */
+            if (sessionId || demandee) navigate("/code");
           }}
         />
       }
@@ -132,7 +181,7 @@ export function CodePage() {
         {suiviOuvert && (
           <SuiviCodePanel
             suivi={code.suivi}
-            dossier={dossier ?? code.status?.projectDir}
+            dossier={dossierAffiche}
             onFermer={() => setSuiviOuvert(false)}
             className="fixed inset-y-0 right-0 z-40 shadow-lg lg:static lg:z-auto lg:shadow-none"
           />
@@ -164,6 +213,9 @@ export function CodePage() {
               {code.error}
             </InfoBox>
           )}
+
+          {/* Une session demandée par l'adresse se charge : pas de liste en attendant. */}
+          {!demandee && <SessionsRecentes />}
         </div>
       </div>
     </div>

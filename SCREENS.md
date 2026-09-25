@@ -153,6 +153,21 @@ Ce qui ne fonctionne pas :
 Ce qui fonctionne : sessions OpenCode, choix du dossier de projet, envoi de
 consignes, interruption, flux d'évènements relayé par la passerelle (`useCode`).
 
+**Sessions de Code, séparées des Chats** (25/09/2026, `src/components/code/SessionsCode.tsx`,
+`useSessionsCode`, registre `gateway/src/sessionsCode.ts`). En mode Code, la barre
+latérale montre « Sessions de Code » à la place des Chats, rangées par dossier de
+projet (titre = début de la première demande, date ou heure), avec « Nouvelle
+session » au lieu de « Nouveau Chat » et « Rechercher une session... » ; une croix
+au survol retire une session de la liste (sa conversation reste chez OpenCode). Les
+Chats ne montrent rien de Code, et inversement. L'adresse dit ce qui est affiché :
+`/code` est l'accueil (sélecteur de dossier, saisie, « Sessions récentes »), `/code?s=<id>`
+une session, dont l'historique est relu chez OpenCode ; ouvrir Code ne reprend plus
+la dernière session. Revenir à l'accueil n'arrête pas une session qui travaille :
+rouverte, elle reprend son flux là où l'instance l'a vu, dans la même bulle. Vu dans
+le navigateur le 25/09/2026 (instance jetable, deux dossiers, une session rouverte
+après redémarrage de la passerelle, une autre rouverte pendant que l'agent écrivait) ;
+pas vu dans l'application de bureau.
+
 **Panneau de suivi** (25/09/2026, `src/components/code/SuiviCode.tsx`) : à droite
 dès qu'une conversation existe, ouvert d'office à partir de 1 024 px, par-dessus
 l'écran en dessous (bouton « Afficher le suivi », croix pour le masquer). Cartes

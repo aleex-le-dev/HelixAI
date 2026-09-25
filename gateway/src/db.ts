@@ -121,6 +121,11 @@ export const COLLECTIONS_INTERNES = [
    * morceaux sont à part, un fichier chiffré par document.
    */
   "connaissances",
+  /*
+   * Sessions de Helix Code (sessionsCode.ts) : propriétaire, dossier, titre et
+   * dates. Leur contenu reste chez OpenCode ; chacun ne liste que les siennes.
+   */
+  "sessionsCode",
 ] as const;
 
 export type StoredCollection = Collection | (typeof COLLECTIONS_INTERNES)[number];

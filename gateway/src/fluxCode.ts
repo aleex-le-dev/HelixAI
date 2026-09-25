@@ -209,6 +209,12 @@ function traduireEnfant(
 }
 
 export const sessionSuivie = (sessionID: string): boolean => sessions.has(sessionID);
+
+/** Dernier numéro publié pour cette session (0 s'il n'y en a pas) : pour la suivre sans rien rejouer. */
+export function dernierNumero(sessionID: string): number {
+  const tampon = sessions.get(sessionID)?.tampon ?? [];
+  return tampon.length ? (tampon[tampon.length - 1]!.durable?.seq ?? 0) : 0;
+}
 export const dossierSuivi = (sessionID: string): string | undefined => sessions.get(sessionID)?.dossier;
 
 function publier(sessionID: string, suivi: Suivi, type: string, data: Record<string, unknown>, durable = true): void {

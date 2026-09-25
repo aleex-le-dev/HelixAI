@@ -74,6 +74,58 @@ export async function sendCodePrompt(
   return { relance: body.helixRelance?.sessionID, messageID: body.data?.id };
 }
 
+/** Une session de Code dans la liste de la personne (gateway/src/sessionsCode.ts). */
+export interface SessionCodeResume {
+  id: string;
+  titre: string;
+  dossier: string;
+  creee: string;
+  maj: string;
+}
+
+/** Une session rouverte : son historique, relu chez OpenCode par l'instance. */
+export interface HistoriqueCode {
+  session: SessionCodeResume;
+  messages: {
+    role: "user" | "assistant";
+    texte: string;
+    raisonnement?: string;
+    outils: { callID: string; tool: string; input: Record<string, unknown>; etat: "encours" | "fini" | "echec"; apercu?: string }[];
+  }[];
+  /** L'agent y travaille encore. */
+  enCours: boolean;
+  /** Dernier numéro d'évènement vu par l'instance : pour suivre la suite sans rien rejouer. */
+  dernier: number;
+}
+
+/**
+ * Évènement de fenêtre : la liste des sessions de Code a changé (une session
+ * ouverte, une demande envoyée, une session retirée). La barre latérale et
+ * l'accueil de Code s'y rafraîchissent.
+ */
+export const SESSIONS_CODE_CHANGEES = "helix:sessions-code";
+export const signalerSessionsCode = () => window.dispatchEvent(new Event(SESSIONS_CODE_CHANGEES));
+
+export async function listerSessionsCode(): Promise<SessionCodeResume[]> {
+  const res = await apiFetch(`/helix/code/sessions`);
+  if (!res.ok) throw new Error(tf("Sessions de code indisponibles ({0})", res.status));
+  const corps = (await res.json()) as { sessions?: SessionCodeResume[] };
+  return Array.isArray(corps.sessions) ? corps.sessions : [];
+}
+
+export async function historiqueSessionCode(id: string): Promise<HistoriqueCode> {
+  const res = await apiFetch(`/helix/code/sessions/${encodeURIComponent(id)}`);
+  const corps = (await res.json().catch(() => ({}))) as HistoriqueCode & { error?: { message?: string } };
+  if (!res.ok) throw new Error(corps?.error?.message ?? tf("Session introuvable ({0})", res.status));
+  return corps;
+}
+
+/** Retire une session de la liste. Sa conversation reste chez l'agent de code. */
+export async function retirerSessionCode(id: string): Promise<boolean> {
+  const res = await apiFetch(`/helix/code/sessions/${encodeURIComponent(id)}`, { method: "DELETE" });
+  return res.ok;
+}
+
 /** Demande l'arrêt. Rend `false` si l'instance ne l'a pas confirmé. */
 export async function interruptCode(sessionID: string): Promise<boolean> {
   try {
@@ -319,6 +371,18 @@ export function nomOutil(tool: string): string {
   if (tool.startsWith("helix_") && tool.includes("__")) return tool.slice("helix_".length);
   return OUTILS_CONNUS[tool] ? `fichiers__${OUTILS_CONNUS[tool]}` : `code__${tool}`;
 }
+
+/** « 14:32 » aujourd'hui, « 24 sept. » cette année, « 24/09/2025 » avant. */
+export function dateCourte(iso: string, maintenant = new Date()): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  if (d.toDateString() === maintenant.toDateString()) return d.toLocaleTimeString(locale(), { hour: "2-digit", minute: "2-digit" });
+  if (d.getFullYear() === maintenant.getFullYear()) return d.toLocaleDateString(locale(), { day: "numeric", month: "short" });
+  return d.toLocaleDateString(locale());
+}
+
+/** Dernier élément d'un chemin : le nom du dossier du projet. */
+export const nomDossier = (chemin: string) => chemin.replace(/\/+$/, "").split("/").pop() || chemin;
 
 /** « 45 s », « 2 min 05 s », « 1 h 03 min ». */
 export function dureeCourte(ms: number): string {

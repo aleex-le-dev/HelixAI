@@ -372,6 +372,24 @@ for (const chemin of ["../../../../etc/passwd", "/etc/passwd", "..%2F..%2Fetc%2F
     });
     verifier(`${route}, identifiant de session détourné → 400`, r.status === 400, r.status);
   }
+  /*
+   * Liste des sessions de Code (sessionsCode.ts, 25/09/2026) : séance requise,
+   * chacun ne voit que les siennes, un identifiant détourné ne sort pas de la
+   * route. Le refus d'une session d'autrui (403 sur prompt, interrupt et flux)
+   * a été vérifié à la main sur une instance jetable avec OpenCode : ici,
+   * OpenCode reste éteint.
+   */
+  const listeSans = await appel("/helix/code/sessions", { headers: avecJeton });
+  verifier("sessions de Code au jeton seul → 401", listeSans.status === 401, listeSans.status);
+  const liste = await appel("/helix/code/sessions", { headers: avecSeance });
+  const corpsListe = await liste.json().catch(() => ({}));
+  verifier("sessions de Code avec séance → 200, liste vide", liste.status === 200 && Array.isArray(corpsListe.sessions) && corpsListe.sessions.length === 0, `${liste.status} ${JSON.stringify(corpsListe).slice(0, 80)}`);
+  const inconnue = await appel("/helix/code/sessions/ses_inconnue", { headers: avecSeanceB });
+  verifier("historique d'une session de Code inconnue → 404", inconnue.status === 404, inconnue.status);
+  const detourneeH = await appel(`/helix/code/sessions/${encodeURIComponent("ses_x/../../file")}`, { headers: avecSeance });
+  verifier("historique, identifiant de session détourné → 400", detourneeH.status === 400, detourneeH.status);
+  const retrait = await appel("/helix/code/sessions/ses_inconnue", { method: "DELETE", headers: avecSeance });
+  verifier("retirer une session de Code qui n'est pas la sienne ou n'existe pas → 404", retrait.status === 404, retrait.status);
   const eteint = await appel("/helix/code/events?sessionID=ses_essai", { headers: avecSeance });
   const etat = await (await appel("/helix/code", { headers: avecJeton })).json().catch(() => ({}));
   verifier("le flux de Helix Code n'allume pas le moteur (503, OpenCode éteint)", eteint.status === 503 && etat.running === false, `${eteint.status} ${JSON.stringify(etat).slice(0, 80)}`);

@@ -9,8 +9,11 @@ import {
   argumentsOutil,
   actionOutil,
   texteAttente,
+  historiqueSessionCode,
+  signalerSessionsCode,
   type CodeEvent,
   type CodeStatus,
+  type HistoriqueCode,
   type ReglagesCode,
 } from "@/lib/code";
 import type { Message, ToolTrace } from "./useChat";
@@ -133,6 +136,8 @@ export function useCode(dossier?: string, reglages: ReglagesCode = {}) {
   const [messages, setMessages] = useState<Message[]>(memoire.messages.current);
   const [busy, setBusy] = useState(memoire.busy.current);
   const [suivi, setSuivi] = useState<SuiviCode | null>(memoire.suivi.current);
+  /** Session affichée (celle que l'adresse `/code?s=` désigne une fois ouverte). */
+  const [sessionId, setSessionId] = useState<string | null>(memoire.session.current);
   /** Miroir de `busy`, lisible depuis les fonctions mémorisées. */
   const busyRef = memoire.busy;
   const marquerOccupe = useCallback((valeur: boolean) => {
@@ -161,6 +166,7 @@ export function useCode(dossier?: string, reglages: ReglagesCode = {}) {
       setMessages(memoire.messages.current);
       setBusy(memoire.busy.current);
       setSuivi(memoire.suivi.current);
+      setSessionId(memoire.session.current);
     };
     memoire.abonnes.add(suivre);
     suivre();
@@ -456,6 +462,7 @@ export function useCode(dossier?: string, reglages: ReglagesCode = {}) {
           const ouverte = await createCodeSession(reglagesEnvoi, dossier);
           if (generationRef.current !== generation) return;
           sessionRef.current = ouverte;
+          prevenir();
         }
       } catch (err) {
         if (generationRef.current !== generation) return;
@@ -512,7 +519,10 @@ export function useCode(dossier?: string, reglages: ReglagesCode = {}) {
           tour.sessionID = relance;
           tour.enAttente = [];
           listen(relance);
+          prevenir();
         }
+        // La liste des sessions de Code : titre (la première demande) et date viennent de changer.
+        signalerSessionsCode();
         if (messageID === undefined) {
           // Réponse sans identifiant : on ne peut pas trier, on prend tout.
           tour.actif = true;
@@ -604,5 +614,99 @@ export function useCode(dossier?: string, reglages: ReglagesCode = {}) {
     marquerOccupe(false);
   }, [commit, marquerOccupe]);
 
-  return { status, messages, busy, error, send, stop, reset, suivi };
+  /**
+   * Revenir à l'accueil de Code pour une nouvelle session, **sans arrêter**
+   * celle qui travaille : comme dans Claude Code, elle continue et se retrouve
+   * dans la liste des sessions, où on la rouvre pour voir la suite (`ouvrir`).
+   * Seul l'écran s'en détache : son flux se ferme, ses échos ne touchent plus
+   * la conversation suivante (`generation`).
+   */
+  const nouvelle = useCallback(() => {
+    generationRef.current += 1;
+    fluxRef.current?.fermer();
+    fluxRef.current = null;
+    sessionRef.current = null;
+    tourRef.current = null;
+    memoire.arretee.current = false;
+    memoire.suivi.current = null;
+    setError(undefined);
+    commit([]);
+    marquerOccupe(false);
+  }, [commit, marquerOccupe]);
+
+  /**
+   * Rouvre une session de la liste : son historique est relu chez OpenCode par
+   * l'instance (rien n'est gardé en double ici). Si l'agent y travaille encore,
+   * l'écran se rebranche sur son flux à partir du dernier évènement vu par
+   * l'instance, et la suite s'affiche comme si l'on n'était jamais parti.
+   * La session déjà affichée (retour depuis une autre page) n'est pas relue :
+   * sa conversation est en mémoire, flux compris.
+   */
+  const ouvrir = useCallback(
+    async (id: string): Promise<HistoriqueCode | null> => {
+      if (sessionRef.current === id) return null;
+      nouvelle();
+      const generation = generationRef.current;
+      let h: HistoriqueCode;
+      try {
+        h = await historiqueSessionCode(id);
+      } catch (err) {
+        if (generationRef.current === generation) setError(err instanceof Error ? err.message : String(err));
+        return null;
+      }
+      if (generationRef.current !== generation) return null;
+      const dossierSession = h.session.dossier;
+      const liste: Message[] = h.messages.map((m) =>
+        m.role === "user"
+          ? { id: newId(), role: "user", content: m.texte }
+          : {
+              id: newId(),
+              role: "assistant",
+              content: m.texte,
+              ...(m.raisonnement ? { reasoning: m.raisonnement } : {}),
+              tools: m.outils.map((o) => ({
+                name: nomOutil(o.tool),
+                args: argumentsOutil(o.input),
+                running: o.etat === "encours",
+                ok: o.etat === "fini",
+                preview: o.apercu,
+                ...actionOutil(o.tool, o.input, dossierSession),
+              })),
+            },
+      );
+      sessionRef.current = id;
+      dernierSeqRef.current.set(id, h.dernier);
+      if (h.enCours) {
+        /*
+         * L'agent travaille encore : sa réponse commencée (le dernier message,
+         * s'il est de lui) reçoit la suite du flux, outils en cours compris,
+         * au lieu d'une seconde bulle qui répéterait le début.
+         */
+        const derniere = liste[liste.length - 1];
+        const outils = new Map<string, number>();
+        let replyId: string;
+        if (derniere?.role === "assistant") {
+          replyId = derniere.id;
+          const brut = h.messages[h.messages.length - 1]!;
+          brut.outils.forEach((o, i) => o.etat === "encours" && o.callID && outils.set(o.callID, i));
+          liste[liste.length - 1] = { ...derniere, streaming: true, statut: t("L'agent travaille encore sur cette session...") };
+        } else {
+          replyId = newId();
+          liste.push({ id: replyId, role: "assistant", content: "", streaming: true, statut: t("L'agent travaille encore sur cette session...") });
+        }
+        tourRef.current = { replyId, sessionID: id, actif: true, enAttente: [], fini: false, outils };
+        memoire.suivi.current = suiviNeuf();
+        dernierSigneRef.current = Date.now();
+        commit(liste);
+        marquerOccupe(true);
+        listen(id);
+      } else {
+        commit(liste);
+      }
+      return h;
+    },
+    [nouvelle, commit, marquerOccupe, listen],
+  );
+
+  return { status, messages, busy, error, send, stop, reset, suivi, sessionId, nouvelle, ouvrir };
 }

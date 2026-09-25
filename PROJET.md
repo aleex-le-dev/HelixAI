@@ -781,6 +781,24 @@ navigateur plus tard le même jour (séance posée par l'API, sans mot de passe 
 voir « Petit modèle, petit contexte » plus bas), mais sans connecteur branché. Pas essayé non plus : un vrai connecteur avec compte (Drive,
 Slack, courrier) dans Code, l'extension VS Code avec un connecteur.
 
+**Sessions de Code séparées des Chats** (25/09/2026, demandé par Medhi, « comme dans
+Claude Code »). Avant, les sessions n'existaient que chez OpenCode (qui garde leurs
+messages) et dans la mémoire de la passerelle (`modeleDeSession`, perdu au
+redémarrage) et de l'écran (qui rouvrait toujours la dernière). Désormais un registre
+(`gateway/src/sessionsCode.ts`, collection interne `sessionsCode`) retient pour chaque
+session ouverte par `POST /helix/code/session` sa propriétaire, son dossier, son titre
+(début de la première demande), son modèle et ses dates ; le contenu reste chez
+OpenCode, relu à l'ouverture (`GET /session/<id>/message`), jamais recopié. Routes
+`GET /helix/code/sessions`, `GET` et `DELETE /helix/code/sessions/<id>` (séance
+requise, chacun les siennes) ; une session du registre refuse (403) demande, arrêt et
+flux venant d'une autre personne, vérifié à la main avec deux comptes. Les sessions de
+la ligne de commande et de l'extension y entrent aussi. Un registre illisible lève au
+lieu d'être réécrit vide. **Les sessions ouvertes avant ce changement ne sont pas
+listées** (on ne sait pas à qui elles sont) : elles restent intactes chez OpenCode, rien
+n'a été effacé. L'effacement d'un compte retire ses sessions du registre et les efface
+chez OpenCode quand son serveur tourne (journal : `sessionsCode`, `sessionsCodeEffacees`) ;
+pas essayé. L'écran : voir SCREENS.md, écran Code.
+
 La séance du terminal est un fichier en clair (`~/.helix/cli-seance`, 0600, dossier
 0700), comme les outils de ligne de commande habituels : un trousseau demanderait une
 dépendance native. Contrepartie assumée, écrite dans SECURITE.md § 22.
@@ -2419,6 +2437,11 @@ ne restent ici que les points ouverts.*
     petit par un autre programme (Eden) après le démarrage d'OpenCode. Le vrai remède
     au modèle qui relit tout reste de ne pas le partager : c'est au client de voir si
     Eden et Helix doivent se partager Qwen3 8B.
+23. **Sessions de Code** (§ 3.11) : les voir dans l'application de bureau ; décider
+    avec le client si les sessions d'avant le 25/09 doivent être rattachées (sur une
+    instance à un seul compte, on pourrait les lui attribuer ; pas fait) ; renommer une
+    session (pas fait, le titre est la première demande) ; l'effacement d'un compte avec
+    des sessions de Code, pas essayé.
 
 **Titulaire des droits** : tranché le 24/09/2026, « Medhi Clabaut » (entreprise
 individuelle, SIREN 994 907 145), partout ; mentions légales et section

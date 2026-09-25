@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { ENREGISTREMENT_CHANGE, enregistrementCourant } from "@/lib/reunions";
-import { NavLink, useNavigate, useSearchParams } from "react-router-dom";
+import { NavLink, useLocation, useNavigate, useSearchParams } from "react-router-dom";
+import { SessionsCodeListe } from "@/components/code/SessionsCode";
 import { ShareSessionModal } from "@/components/chat/ShareSessionModal";
 import {
   PanelLeft,
@@ -388,8 +389,16 @@ function SecondaryItem({ item }: { item: NavItem }) {
   );
 }
 
+/**
+ * Le mode Code a sa propre liste : ses sessions, rangées par dossier, et non
+ * les Chats (demandé par Medhi le 25/09/2026, comme dans Claude Code). Les
+ * Chats, eux, ne montrent plus rien de Code.
+ */
+const enModeCode = (chemin: string) => chemin === "/code" || chemin.startsWith("/code/");
+
 function ExpandedSidebar({ onToggle }: { onToggle: () => void }) {
   const navigate = useNavigate();
+  const modeCode = enModeCode(useLocation().pathname);
   const [recherche, setRecherche] = useState("");
   const [aide, setAide] = useState(false);
   return (
@@ -422,11 +431,11 @@ function ExpandedSidebar({ onToggle }: { onToggle: () => void }) {
         <div className="shrink-0 px-3 pt-3">
           <button
             type="button"
-            onClick={() => navigate("/")}
+            onClick={() => navigate(modeCode ? "/code" : "/")}
             className="flex w-full items-center gap-2.5 rounded-xl border border-sidebar-border bg-sidebar-active px-3 py-2 text-sm font-medium text-foreground shadow-sm transition-colors hover:bg-muted"
           >
             <Plus size={18} strokeWidth={1.75} />
-            <span>{t("Nouveau Chat")}</span>
+            <span>{modeCode ? t("Nouvelle session") : t("Nouveau Chat")}</span>
           </button>
         </div>
 
@@ -441,15 +450,15 @@ function ExpandedSidebar({ onToggle }: { onToggle: () => void }) {
         <div className="shrink-0 px-3 pt-2">
           <SearchInput
             variant="ghost"
-            placeholder={t("Rechercher un chat...")}
-            aria-label={t("Rechercher un chat")}
+            placeholder={modeCode ? t("Rechercher une session...") : t("Rechercher un chat...")}
+            aria-label={modeCode ? t("Rechercher une session") : t("Rechercher un chat")}
             value={recherche}
             onChange={(e) => setRecherche(e.target.value)}
           />
         </div>
 
-        {/* Liste des chats, ou état vide */}
-        <SessionList recherche={recherche} />
+        {/* Liste des chats (ou des sessions de Code, en mode Code), ou état vide */}
+        {modeCode ? <SessionsCodeListe recherche={recherche} /> : <SessionList recherche={recherche} />}
       </div>
 
       {/* Pied de barre */}
@@ -528,6 +537,7 @@ function RailItem({ item, primaire }: { item: NavItem; primaire?: boolean }) {
 
 function CollapsedSidebar({ onToggle }: { onToggle: () => void }) {
   const navigate = useNavigate();
+  const modeCode = enModeCode(useLocation().pathname);
   const [aide, setAide] = useState(false);
   return (
     /*
@@ -557,9 +567,9 @@ function CollapsedSidebar({ onToggle }: { onToggle: () => void }) {
 
         <button
           type="button"
-          aria-label={t("Nouveau Chat")}
-          title={t("Nouveau Chat")}
-          onClick={() => navigate("/")}
+          aria-label={modeCode ? t("Nouvelle session") : t("Nouveau Chat")}
+          title={modeCode ? t("Nouvelle session") : t("Nouveau Chat")}
+          onClick={() => navigate(modeCode ? "/code" : "/")}
           className="mt-3 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-sidebar-border bg-sidebar-active text-foreground shadow-sm transition-colors hover:bg-muted"
         >
           <Plus size={18} strokeWidth={1.75} />

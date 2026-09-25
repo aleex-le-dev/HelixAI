@@ -1,6 +1,6 @@
 import { Check, Languages } from "lucide-react";
 import { cn } from "@/lib/cn";
-import { LANGUES, changerLangue, couverture, langue, t } from "@/lib/i18n";
+import { LANGUES, changerLangue, langue, t } from "@/lib/i18n";
 
 /**
  * Choisir la langue de l'interface.
@@ -22,7 +22,12 @@ import { LANGUES, changerLangue, couverture, langue, t } from "@/lib/i18n";
  * Que tout soit traduit. Ce qui vient de l'instance — messages d'erreur de la
  * passerelle, résultats d'outils — reste en français quand il ne figure pas au
  * catalogue, et le contenu écrit par les utilisateurs n'est évidemment jamais
- * touché. La couverture affichée est mesurée, pas déclarée.
+ * touché.
+ *
+ * Plus de ligne sous chaque langue (« 100 % de l'interface traduite »,
+ * « Langue d'origine du logiciel ») : retirée à la demande de Medhi le
+ * 25/09/2026, qui la jugeait inutile, celui qui choisit sa langue s'attend à
+ * la lire partout.
  */
 export function ChoixLangue() {
   const courante = langue();
@@ -41,7 +46,6 @@ export function ChoixLangue() {
       <div className="grid gap-2 sm:grid-cols-3">
         {LANGUES.map((l) => {
           const active = l.code === courante;
-          const part = l.code === "fr" ? 100 : partTraduite(l.code);
           return (
             <button
               key={l.code}
@@ -58,14 +62,7 @@ export function ChoixLangue() {
                   : "border-border hover:bg-muted",
               )}
             >
-              <span className="min-w-0 flex-1">
-                <span className="block text-sm font-medium text-foreground">{l.natif}</span>
-                <span className="block text-xs text-muted-foreground">
-                  {l.code === "en"
-                    ? t("Langue d'origine du logiciel")
-                    : `${part} %${t(" de l'interface traduite")}`}
-                </span>
-              </span>
+              <span className="min-w-0 flex-1 text-sm font-medium text-foreground">{l.natif}</span>
               {active && <Check size={15} strokeWidth={2.5} className="shrink-0 text-foreground" />}
             </button>
           );
@@ -77,12 +74,6 @@ export function ChoixLangue() {
       </p>
     </div>
   );
-}
-
-/** Part de l'interface réellement traduite, mesurée sur le catalogue. */
-function partTraduite(code: "en" | "zh"): number {
-  const { traduites, total } = couverture(code);
-  return total === 0 ? 0 : Math.round((traduites / total) * 100);
 }
 
 export default ChoixLangue;

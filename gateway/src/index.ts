@@ -9,6 +9,7 @@ import https from "node:https";
 import { tlsMaterial } from "./tls.ts";
 import { createHash, randomBytes } from "node:crypto";
 import * as debit from "./debit.ts";
+import * as clesApi from "./clesApi.ts";
 import * as flux from "./flux.ts";
 import * as invitations from "./invitations.ts";
 import {
@@ -371,6 +372,29 @@ async function handleChat(
    * Mais `tools: true` demande à *l'instance* d'agir — lire et écrire des
    * fichiers, piloter l'écran. Cela engage une personne, donc exige une séance.
    */
+  /*
+   * Appel par clé d'API (clesApi.ts) : la titulaire est déjà résolue, mais une
+   * clé ne fait jamais agir l'instance. `tools: true` (fichiers, écran,
+   * connecteurs de la personne, exécutés par la passerelle) est refusé ; les
+   * outils que le programme fournit et exécute lui-même (`tools: [...]`)
+   * passent, comme pour OpenCode. `tools: false` est l'interrupteur de
+   * l'écran : il n'a pas de sens ici et ferait passer par le découpage des
+   * tâches, dont les évènements ne sont pas du format OpenAI.
+   */
+  const idCle = parCleApi.get(req);
+  if (idCle) {
+    if (body.tools === true) {
+      return send(res, 403, {
+        error: {
+          message: t(
+            "Une clé d'API ne fait pas agir l'instance : les outils exécutés par elle (tools: true) sont refusés. Les outils que votre programme fournit et exécute lui-même restent possibles.",
+          ),
+        },
+      });
+    }
+    if (typeof body.tools === "boolean") delete body.tools;
+  }
+
   const qui = await demandeur(req, url);
   if (body.tools === true && !qui) {
     return send(res, 401, {
@@ -400,7 +424,25 @@ async function handleChat(
     qui?.userId ?? (parEmploye && typeof employe === "string" ? (await employes.employe(employe))?.ownerId : undefined);
 
   // Le journal doit pouvoir dire au nom de qui l'agent a touché ces fichiers.
-  await handleChatRequest(body, res, req, qui?.userId ?? parEmploye, titulaire);
+  await handleChatRequest(
+    body,
+    res,
+    req,
+    qui?.userId ?? parEmploye,
+    titulaire,
+    idCle ? { parCleApi: true, nonFlux: body.stream !== true } : {},
+  );
+  if (idCle && qui) {
+    // Au journal de la titulaire : la route, le modèle demandé, l'issue. Jamais les messages ni la réponse.
+    journaliser("api.appel", qui.userId, {
+      cle: idCle,
+      route: "/v1/chat/completions",
+      modele: typeof body.model === "string" ? body.model.slice(0, 120) : null,
+      flux: body.stream === true,
+      bases: Array.isArray(body.connaissances) ? body.connaissances.length : 0,
+      statut: res.statusCode,
+    });
+  }
 }
 
 /* --------------------------- routes provisionnement --------------------------- */
@@ -1065,6 +1107,14 @@ async function avecSeance(
  */
 const identites = new WeakMap<http.IncomingMessage, Demandeur | null>();
 
+/**
+ * Requêtes arrivées avec une clé d'API, et l'identifiant de cette clé. Posé
+ * par `traiterParCle`, avec l'identité de la titulaire dans `identites` :
+ * `demandeur()` rend alors la titulaire, et rien de ce que la requête porte
+ * par ailleurs (en-tête de séance, billet) n'y change quoi que ce soit.
+ */
+const parCleApi = new WeakMap<http.IncomingMessage, string>();
+
 async function demandeur(req: http.IncomingMessage, url: URL): Promise<Demandeur | null> {
   if (identites.has(req)) return identites.get(req) ?? null;
   const resolu = await resoudreDemandeur(req, url);
@@ -1338,8 +1388,16 @@ const routeReunion = (chemin: string) => chemin === "/helix/reunions" || chemin.
  */
 const routeEntrainement = (chemin: string) => chemin === "/helix/entrainement" || chemin.startsWith("/helix/entrainement/");
 
+/*
+ * Clés d'API personnelles : les lister, en créer, en révoquer engagent une
+ * personne, et chacune ne voit que les siennes. Une séance, jamais une clé
+ * (une clé n'atteint aucune route `/helix/*`, voir `ROUTES_CLE`).
+ */
+const routeClesApi = (chemin: string) => chemin === "/helix/cles-api" || chemin.startsWith("/helix/cles-api/");
+
 const exigeSeance = (methode: string, chemin: string) =>
   EXECUTION.some((r) => r.methode === methode && r.chemin === chemin) ||
+  routeClesApi(chemin) ||
   routeEntrainement(chemin) ||
   routeEmploye(chemin) ||
   routeFournisseur(chemin) ||
@@ -3643,6 +3701,112 @@ async function handleFournisseurs(
   send(res, 404, { error: { message: tf("Route inconnue : {0} {1}", req.method, path) } });
 }
 
+/* --------------------------------- clés d'API --------------------------------- */
+
+/**
+ * Paramètres → API développeur : les clés de la personne connectée, et les
+ * adresses où l'API se joint, telles que la passerelle les sert vraiment
+ * (chiffrée ou non, ouverte au réseau ou non). Séance exigée par la barrière
+ * (`routeClesApi`) ; une clé n'arrive jamais jusqu'ici (`ROUTES_CLE`).
+ */
+async function handleClesApi(
+  req: http.IncomingMessage,
+  res: http.ServerResponse,
+  url: URL,
+  path: string,
+): Promise<void> {
+  const qui = await demandeur(req, url);
+  if (!qui) return send(res, 401, sansSeance());
+  const [id, action] = path.split("/").slice(3);
+  const corps = async () => {
+    const b = await readJson(req).catch(() => ({}));
+    return b && typeof b === "object" && !Array.isArray(b) ? (b as Record<string, unknown>) : {};
+  };
+  const repondre = <T,>(r: clesApi.Resultat<T>, succes: (v: T) => unknown) =>
+    r.ok ? send(res, 200, succes(r.valeur)) : send(res, r.statut, { error: { message: r.message } });
+
+  if (!id && req.method === "GET") {
+    const schema = tls ? "https" : "http";
+    return send(res, 200, {
+      cles: await clesApi.clesDe(qui.userId),
+      limite: clesApi.CLES_PAR_PERSONNE_MAX,
+      parMinute: clesApi.PAR_MINUTE,
+      adresses: {
+        // Sur la machine de l'instance : toujours joignable.
+        locale: `${schema}://localhost:${PORT}/v1`,
+        // Depuis une autre machine : seulement si l'instance est ouverte aux collègues.
+        reseau: surLeReseau() ? propositions(PORT, Boolean(tls)).map((p) => ({ url: `${p.url}/v1`, genre: p.genre })) : [],
+        chiffre: Boolean(tls),
+      },
+    });
+  }
+  if (!id && req.method === "POST") {
+    const b = await corps();
+    return repondre(await clesApi.creerCle(qui.userId, { nom: b.nom, jours: b.jours }), (v) => v);
+  }
+  if (id && !action && req.method === "POST") {
+    return repondre(await clesApi.renommerCle(qui.userId, id, (await corps()).nom), (cle) => ({ cle }));
+  }
+  if (id && action === "revoquer" && req.method === "POST") {
+    return repondre(await clesApi.revoquerCle(qui.userId, id), () => ({ ok: true }));
+  }
+  send(res, 404, { error: { message: tf("Route inconnue : {0} {1}", req.method, path) } });
+}
+
+/**
+ * Ce qu'une clé d'API ouvre, et rien d'autre : l'API compatible OpenAI.
+ * Liste fermée, comme `EXECUTION` : une route ajoutée plus tard n'est pas
+ * ouverte aux clés par omission, il faut l'écrire ici.
+ */
+const ROUTES_CLE: { methode: string; chemin: string }[] = [
+  { methode: "GET", chemin: "/v1/models" },
+  { methode: "POST", chemin: "/v1/chat/completions" },
+];
+
+/**
+ * Requête portant `Authorization: Bearer hlx_…`. La clé remplace, pour les
+ * seules `ROUTES_CLE`, le jeton d'instance **et** la séance : elle dit à la
+ * fois que l'appelant a le droit de parler et au nom de qui. Inconnue,
+ * révoquée ou expirée : 401. Trop d'appels dans la minute : 429.
+ */
+async function traiterParCle(
+  req: http.IncomingMessage,
+  res: http.ServerResponse,
+  url: URL,
+  path: string,
+  secret: string,
+): Promise<void> {
+  const cle = await clesApi.verifierCle(secret);
+  if (!cle) {
+    return send(res, 401, { error: { message: t("Clé d'API inconnue, révoquée ou expirée."), code: "cle_invalide" } });
+  }
+  const verdict = debit.verifierCleApi(cle.id, clesApi.PAR_MINUTE);
+  if (!verdict.ok) {
+    res.setHeader("Retry-After", String(verdict.retenteDans ?? 60));
+    return send(res, 429, {
+      error: {
+        message: tf("Trop de requêtes avec cette clé ({0} par minute au plus). Réessayez dans {1} s.", clesApi.PAR_MINUTE, verdict.retenteDans),
+        code: "debit_depasse",
+      },
+    });
+  }
+  // Le compte peut avoir été supprimé, ou n'avoir plus le droit d'entrer (second facteur imposé depuis).
+  const qui = await profilDe(cle.userId);
+  if (!qui) {
+    return send(res, 401, { error: { message: t("Le compte de cette clé n'a plus accès à l'instance."), code: "cle_invalide" } });
+  }
+  identites.set(req, qui);
+  parCleApi.set(req, cle.id);
+
+  if (req.method === "GET" && path === "/v1/models") {
+    await handleModels(req, res, url, true);
+    journaliser("api.appel", qui.userId, { cle: cle.id, route: path, statut: res.statusCode });
+    return;
+  }
+  if (req.method === "POST" && path === "/v1/chat/completions") return handleChat(req, res, url);
+  send(res, 404, { error: { message: tf("Route inconnue : {0} {1}", req.method, path) } });
+}
+
 /* ------------------------------------ groupes ---------------------------------- */
 
 /**
@@ -4165,6 +4329,36 @@ const traiter = (
     return res.end();
   }
 
+  /*
+   * Clés d'API personnelles (clesApi.ts), avant le jeton d'instance : une clé
+   * le remplace, mais seulement sur les `ROUTES_CLE`. Ailleurs, elle est
+   * refusée sans même être vérifiée, et elle ne se présente que dans
+   * `Authorization: Bearer` — jamais dans l'adresse, où elle finirait dans un
+   * historique ou le journal d'un proxy.
+   */
+  if (clesApi.cleMalPlacee(req, url)) {
+    return send(res, 401, {
+      error: {
+        message: t(
+          "Une clé d'API se présente dans l'en-tête Authorization: Bearer, jamais dans l'adresse ni ailleurs. Par prudence, révoquez celle-ci et créez-en une autre.",
+        ),
+        code: "cle_mal_placee",
+      },
+    });
+  }
+  const cleApi = clesApi.clePresentee(req);
+  if (cleApi) {
+    if (!ROUTES_CLE.some((r) => r.methode === req.method && r.chemin === path)) {
+      return send(res, 403, {
+        error: {
+          message: t("Une clé d'API n'ouvre que l'API compatible OpenAI (/v1/models, /v1/chat/completions)."),
+          code: "hors_portee",
+        },
+      });
+    }
+    return void traiterParCle(req, res, url, path, cleApi).catch((err) => erreurInattendue(res, err));
+  }
+
   // Toute route autre que le contrôle de présence exige le jeton d'instance :
   // la passerelle donne accès aux données, aux fichiers et à l'exécution
   // d'outils, elle ne peut pas être ouverte sur le réseau.
@@ -4469,6 +4663,7 @@ const traiter = (
       return handleEmployes(req, res, url, path);
     }
     if (routeFournisseur(path)) return handleFournisseurs(req, res, url, path);
+    if (routeClesApi(path)) return handleClesApi(req, res, url, path);
     if (routeGroupe(path)) return handleGroupes(req, res, url, path);
     if (routeBibliotheque(path)) return handleBibliotheque(req, res, url, path);
     if (routeConnaissances(path)) return handleConnaissances(req, res, url, path);
@@ -4511,29 +4706,31 @@ const traiter = (
     send(res, 404, { error: { message: tf("Route inconnue : {0} {1}", req.method, path) } });
   };
 
-  run().catch((err) => {
-    /*
-     * Une exception imprévue ne se raconte pas au client.
-     *
-     * Son message porte des chemins absolus de la machine hôte, des erreurs
-     * d'OpenSSL, des messages de la base — de quoi dresser la carte du serveur
-     * en provoquant des erreurs. Le détail va au journal de l'instance, que
-     * son administrateur lit ; le client reçoit un numéro pour qu'on puisse
-     * retrouver la ligne correspondante.
-     */
-    const reference = randomBytes(4).toString("hex");
-    console.error(`[gateway] ${reference}`, err);
-    if (!res.headersSent) {
-      send(res, 500, {
-        error: {
-          message: tf("Erreur interne de l'instance (référence {0}). Le détail est dans le journal du serveur.", reference),
-        },
-      });
-    } else {
-      res.end();
-    }
-  });
+  run().catch((err) => erreurInattendue(res, err));
 };
+
+/**
+ * Une exception imprévue ne se raconte pas au client.
+ *
+ * Son message porte des chemins absolus de la machine hôte, des erreurs
+ * d'OpenSSL, des messages de la base — de quoi dresser la carte du serveur
+ * en provoquant des erreurs. Le détail va au journal de l'instance, que
+ * son administrateur lit ; le client reçoit un numéro pour qu'on puisse
+ * retrouver la ligne correspondante.
+ */
+function erreurInattendue(res: http.ServerResponse, err: unknown): void {
+  const reference = randomBytes(4).toString("hex");
+  console.error(`[gateway] ${reference}`, err);
+  if (!res.headersSent) {
+    send(res, 500, {
+      error: {
+        message: tf("Erreur interne de l'instance (référence {0}). Le détail est dans le journal du serveur.", reference),
+      },
+    });
+  } else {
+    res.end();
+  }
+}
 
 const server = tls
   ? https.createServer({ cert: tls.cert, key: tls.key }, handler)

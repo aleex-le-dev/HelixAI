@@ -10,6 +10,7 @@ import { oublierChatsDesImages, oublierImagesDe } from "./images.ts";
 import { oublierPersonneConnaissances } from "./connaissances.ts";
 import { oublierPersonneEntrainement } from "./entrainement.ts";
 import { oublierSessionsCode } from "./sessionsCode.ts";
+import { oublierClesDe } from "./clesApi.ts";
 import { api, enMarche } from "./opencode.ts";
 
 /**
@@ -17,7 +18,7 @@ import { api, enMarche } from "./opencode.ts";
  *
  * Ce qui disparaît : le compte, son profil (instructions, mémoire), ses
  * conversations, ses tâches, ses agents, les employés qu'il avait déployés et
- * ce qu'il a dit aux employés, sa consommation, ses séances, et toute mention
+ * ce qu'il a dit aux employés, sa consommation, ses séances, ses clés d'API, et toute mention
  * de lui dans les projets et les partages de ses collègues. (Côté OpenClaw,
  * conversations et agents sont retirés par `employes.oublierPersonne`, appelé
  * avant ; faute d'instance en marche, le balayage du démarrage s'en charge.)
@@ -178,6 +179,8 @@ export async function effacerCompte(
   par: "titulaire" | "outil local",
 ): Promise<Apercu> {
   await revokeAll(userId);
+  // Ses clés d'API aussi, d'abord : un programme qui les porte ne doit plus rien obtenir pendant l'effacement.
+  const clesApi = await oublierClesDe(userId);
 
   const { apercu, projetsApres, sessionsApres, tachesApres, agentsApres, employesApres } = await calculer(
     userId,
@@ -251,6 +254,7 @@ export async function effacerCompte(
     sessionsCodeEffacees,
     lignesDeConsommation,
     imagesEffacees,
+    clesApi,
   });
   return apercu;
 }

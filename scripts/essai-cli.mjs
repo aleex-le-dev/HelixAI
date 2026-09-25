@@ -16,7 +16,7 @@
  * dix secondes à deux minutes par réponse.
  */
 import { spawn, spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -43,6 +43,10 @@ const ESPACE = join(BANC, "espace");
 for (const d of [DONNEES, PROJET, ESPACE, join(BANC, "lume")]) mkdirSync(d, { recursive: true });
 const G = `http://127.0.0.1:${PORT}`;
 const SEANCE = join(BANC, "cli-seance");
+const CONFIG = join(BANC, "helix.config.json");
+writeFileSync(CONFIG, JSON.stringify({ connecteursLibres: true }));
+const CARNET = join(BANC, "carnet.txt");
+const TRACE = join(BANC, "trace-mcp.txt");
 
 const passerelle = spawn(process.execPath, [join(RACINE, "gateway", "src", "index.ts")], {
   env: {
@@ -54,6 +58,8 @@ const passerelle = spawn(process.execPath, [join(RACINE, "gateway", "src", "inde
     HELIX_LUME_DIR: join(BANC, "lume"),
     HELIX_EXO_URL: "http://127.0.0.1:9/v1",
     ...(AVEC_MODELE ? {} : { HELIX_LMSTUDIO_URL: "http://127.0.0.1:9/v1" }),
+    // Commandes libres permises à cette instance jetable seulement : le connecteur d'essai (mcp-essai.mjs) n'est pas au catalogue.
+    HELIX_CONFIG: CONFIG,
     HELIX_GATEWAY_HOST: "",
   },
   stdio: ["ignore", "pipe", "pipe"],
@@ -363,6 +369,45 @@ try {
       const contenu = existsSync(fichier) ? readFileSync(fichier, "utf8") : "";
       verifier(`Code : bonjour.txt écrit dans le dossier courant (${Math.round(r.ms / 1000)} s)`, /Bonjour depuis le terminal/.test(contenu), r.sortie + r.erreur);
       verifier("Code : l'action s'affiche (« ✓ Écriture bonjour.txt »)", /✓ Écriture bonjour\.txt/.test(r.sortie), r.sortie);
+    }
+    /*
+     * Un connecteur MCP dans Helix Code (ajouté le 25/09/2026) : le serveur
+     * d'essai scripts/mcp-essai.mjs, sans compte. La trace qu'il écrit prouve
+     * de l'extérieur si l'outil a été exécuté ou non.
+     */
+    const lire = (f) => (existsSync(f) ? readFileSync(f, "utf8") : "");
+    {
+      const ajout = await api("/helix/connecteurs/ajouter", {
+        methode: "POST",
+        seance,
+        corps: { id: "carnet", label: "Carnet d'essai", command: process.execPath, args: [join(RACINE, "scripts", "mcp-essai.mjs"), CARNET, TRACE] },
+      });
+      verifier("connecteur MCP d'essai ajouté", ajout.ok, await ajout.text());
+      const p = cliEnFond(["code", "Ajoute la note « réunion jeudi » dans le carnet de l'équipe. Utilise l'outil carnet prévu pour cela, pas un fichier."]);
+      let demande = null;
+      for (let i = 0; i < 300 && !demande; i++) {
+        await attendre(1000);
+        const r = await api("/helix/approbation", { seance });
+        demande = r.ok ? (await r.json()).enAttente?.[0] : null;
+      }
+      verifier("Code : l'outil du connecteur demande un accord, à la personne qui a envoyé la demande", demande?.detail?.outil === "carnet__noter", JSON.stringify(demande) + p.sortie());
+      if (demande) await api("/helix/approbation/repondre", { methode: "POST", seance, corps: { id: demande.id, accord: false } });
+      const r = await p.fin;
+      verifier(`Code : refusé, l'outil n'est pas exécuté (${Math.round(r.ms / 1000)} s)`, !/noter/.test(lire(TRACE)), lire(TRACE) + r.sortie);
+      verifier("Code : le refus s'affiche (« ✗ Connecteur carnet »)", /✗ Connecteur carnet/.test(r.sortie), r.sortie);
+    }
+    if (PYTHON) {
+      const t = terminal(["code", "Note dans le carnet de l'équipe : livraison vendredi. Utilise l'outil carnet prévu pour cela, pas un fichier."], [
+        ["Autoriser \\? \\[o/N\\]", "o\r", 400],
+        ["Accordé", "", 20],
+        ["✓ Connecteur carnet", "", 120],
+      ]);
+      // spawnSync a bloqué ce processus : on laisse passer la fermeture des connexions gardées ouvertes.
+      await attendre(300);
+      verifier("Code : la question d'accord s'affiche au terminal, « o » accorde, « ✓ Connecteur carnet »", t.ok, t.manque + "\n" + t.sortie);
+      verifier("Code : accordé, l'outil du connecteur est exécuté", /noter .*livraison vendredi/i.test(lire(TRACE)) && /livraison vendredi/i.test(lire(CARNET)), lire(TRACE));
+      const journalAudit = readdirSync(join(DONNEES, "audit")).filter((f) => f.endsWith(".jsonl")).map((f) => readFileSync(join(DONNEES, "audit", f), "utf8")).join("");
+      verifier("Code : l'appel est au journal (outil.appele, surface « code »)", /"action":"outil\.appele"[^\n]*"outil":"carnet__noter"[^\n]*"surface":"code"/.test(journalAudit), journalAudit.slice(-600));
     }
     if (PYTHON) {
       const t = terminal(["code"], [

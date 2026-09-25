@@ -74,7 +74,7 @@ import { installerOpenClaw, etatInstallation } from "./installationOpenClaw.ts";
 import { listerEspace, lireFichierEspace } from "./espace.ts";
 import { consommationDe } from "./usage.ts";
 import { servirOutils, auteurEmploye } from "./serveurOutils.ts";
-import { servirOutilsCode, noterDemande as noterDemandeCode } from "./outilsCode.ts";
+import { servirOutilsCode, noterDemande as noterDemandeCode, rafraichirOutilsCode } from "./outilsCode.ts";
 import { FAMILLES, outilsDeFamille } from "./outils.ts";
 import {
   publicAccounts,
@@ -157,10 +157,17 @@ import {
   stopServer as stopCodeServer,
   assurerModele as assurerModeleCode,
   toutLePoste,
-  fluxSession as fluxSessionCode,
   varianteDe,
   refModele,
+  idMessage as idMessageCode,
 } from "./opencode.ts";
+import {
+  suivreSession as suivreSessionCode,
+  sessionSuivie as sessionCodeSuivie,
+  ecouterDossier as ecouterDossierCode,
+  abonner as abonnerCode,
+  type EvenementCode,
+} from "./fluxCode.ts";
 import type { ChatRequest } from "./types.ts";
 
 /* --------------------------------- utilitaires --------------------------------- */
@@ -2059,19 +2066,47 @@ async function handleCodeSession(
     });
   }
 
-  const upstream = await codeApi("/api/session", {
+  /*
+   * Session de l'**ancienne** API d'OpenCode : c'est la seule qui propose au
+   * modèle les outils MCP, donc les connecteurs de l'instance (outilsCode.ts).
+   * La passerelle traduit son flux dans celui qu'attendent les clients
+   * (fluxCode.ts). Le modèle part avec chaque demande (`refModele`).
+   */
+  const dossier = projectDir();
+  const creation = await creerSessionCode(dossier, modele, reglage.variante);
+  if ("erreur" in creation) return send(res, creation.statut, { error: { message: creation.erreur } });
+  // Même forme de réponse qu'avant (`data.id`) : l'écran, la ligne de commande et l'extension la lisent.
+  send(res, 200, { data: { id: creation.id } });
+}
+
+/**
+ * Ouvre une session de Helix Code et la fait suivre par la passerelle, avant
+ * toute demande : `/event` ne rejoue rien, un évènement émis avant l'écoute
+ * serait perdu.
+ */
+async function creerSessionCode(
+  dossier: string,
+  modele: string,
+  variante: string | undefined,
+): Promise<{ id: string } | { erreur: string; statut: number }> {
+  const upstream = await codeApi(`/session?directory=${encodeURIComponent(dossier)}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      location: { directory: projectDir() },
-      model: refModele(modele, reglage.variante),
-    }),
+    body: "{}",
   });
-  const corps = (await upstream.json().catch(() => ({}))) as { data?: { id?: string } };
-  if (corps.data?.id) {
-    modeleDeSession.set(corps.data.id, { modele, variante: reglage.variante, dossier: projectDir() });
+  const corps = (await upstream.json().catch(() => ({}))) as { id?: unknown };
+  const id = typeof corps.id === "string" && SESSION_CODE.test(corps.id) ? corps.id : undefined;
+  if (!upstream.ok || !id) {
+    return { erreur: t("L'agent de code n'a pas ouvert de session."), statut: upstream.ok ? 502 : upstream.status };
   }
-  send(res, upstream.status, corps);
+  modeleDeSession.set(id, { modele, variante, dossier });
+  suivreSessionCode(id, dossier);
+  try {
+    await ecouterDossierCode(dossier);
+  } catch {
+    return { erreur: t("Flux d'événements indisponible."), statut: 502 };
+  }
+  return { id };
 }
 
 /**
@@ -2143,12 +2178,14 @@ async function handleCodePrompt(
   }
   /*
    * La personne a changé de modèle ou de niveau depuis l'ouverture de la
-   * session : on l'applique à la session avant d'envoyer. Sans cela, le
+   * session : la demande part avec le nouveau réglage. Sans cela, le
    * sélecteur changeait d'affichage et la demande partait sur l'ancien réglage.
+   * L'ancienne API d'OpenCode prend le modèle à chaque demande : il suffit de
+   * le retenir.
    */
-  // Session inconnue (ouverte avant un redémarrage de la passerelle) : on applique.
-  const connue = modeleDeSession.get(body.sessionID);
-  if (body.model !== undefined || body.effort !== undefined) {
+  // Session inconnue (ouverte avant un redémarrage de la passerelle) : réglage de l'instance, dossier courant.
+  let connue = modeleDeSession.get(body.sessionID);
+  if (!connue || body.model !== undefined || body.effort !== undefined) {
     const voulu = await reglageCode(body.model, body.effort);
     if ("erreur" in voulu) return send(res, 503, { error: { message: voulu.erreur } });
     if (!connue || voulu.modele !== connue.modele || voulu.variante !== connue.variante) {
@@ -2162,21 +2199,23 @@ async function handleCodePrompt(
           },
         });
       }
-      const change = await codeApi(`/api/session/${body.sessionID}/model`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ model: refModele(voulu.modele, voulu.variante) }),
-      });
-      if (!change.ok) {
-        return send(res, 502, { error: { message: t("Le changement de modèle n'a pas été accepté par l'agent de code.") } });
-      }
-      modeleDeSession.set(body.sessionID, {
-        dossier: connue?.dossier ?? projectDir(),
-        modele: voulu.modele,
-        variante: voulu.variante,
-      });
+      connue = { dossier: connue?.dossier ?? projectDir(), modele: voulu.modele, variante: voulu.variante };
+      modeleDeSession.set(body.sessionID, connue);
     }
   }
+  const reglageEnvoi = connue;
+  /*
+   * La passerelle écoute le dossier avant d'envoyer (`/event` ne rejoue rien) ;
+   * `assurerModele` a pu redémarrer OpenCode, et l'écoute avec lui.
+   */
+  if (!sessionCodeSuivie(body.sessionID)) suivreSessionCode(body.sessionID, reglageEnvoi.dossier);
+  try {
+    await ecouterDossierCode(reglageEnvoi.dossier);
+  } catch {
+    return send(res, 502, { error: { message: t("Flux d'événements indisponible.") } });
+  }
+  // Un connecteur branché ou retiré depuis : OpenCode relit la liste des outils (outilsCode.ts).
+  await rafraichirOutilsCode(reglageEnvoi.dossier);
 
   /*
    * Une demande de site : Helix pose d'abord un design professionnel dans le
@@ -2202,19 +2241,35 @@ async function handleCodePrompt(
    * appel d'outil peut arriver avant la réponse d'OpenCode.
    */
   const auteur = await demandeur(req, new URL(req.url ?? "/", "http://localhost"));
-  const dossierDemande = modeleDeSession.get(body.sessionID)?.dossier ?? projectDir();
+  const dossierDemande = reglageEnvoi.dossier;
   if (auteur) noterDemandeCode(body.sessionID, auteur.userId, dossierDemande);
 
-  const envoyer = (session: string) =>
-    codeApi(`/api/session/${session}/prompt`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ prompt: { text: texteEnvoye } }),
-    });
+  /*
+   * `prompt_async` rend la main tout de suite (204), comme le faisait la
+   * nouvelle API. L'identifiant du message est choisi ici, au format
+   * d'OpenCode, et rendu aux clients (`data.id`) : c'est par lui qu'ils
+   * reconnaissent leur demande dans le flux (`session.next.prompted`).
+   */
+  const envoyer = async (session: string, reglage: { modele: string; variante?: string; dossier: string }) => {
+    const messageID = idMessageCode();
+    const reponse = await codeApi(
+      `/session/${session}/prompt_async?directory=${encodeURIComponent(reglage.dossier)}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          messageID,
+          ...refModele(reglage.modele, reglage.variante),
+          parts: [{ type: "text", text: texteEnvoye }],
+        }),
+      },
+    );
+    await reponse.text().catch(() => "");
+    return { ok: reponse.ok, statut: reponse.status, messageID };
+  };
 
   let envoi = Date.now();
-  const upstream = await envoyer(body.sessionID);
-  let text = await upstream.text();
+  const upstream = await envoyer(body.sessionID, reglageEnvoi);
 
   /*
    * La demande a-t-elle atteint le modèle ?
@@ -2247,26 +2302,14 @@ async function handleCodePrompt(
     const dossier = perdue?.dossier ?? projectDir();
     console.log(`[code] demande jamais arrivée au modèle : nouvelle session (${modele ?? "aucun modèle"}).`);
     if (modele) {
-      const creation = await codeApi("/api/session", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ location: { directory: dossier }, model: refModele(modele, perdue?.variante) }),
-      });
-      const nouvelle = ((await creation.json().catch(() => ({}))) as { data?: { id?: string } }).data?.id;
-      if (nouvelle) {
-        modeleDeSession.set(nouvelle, { modele, variante: perdue?.variante, dossier });
+      const creation = await creerSessionCode(dossier, modele, perdue?.variante);
+      if ("id" in creation) {
+        const nouvelle = creation.id;
         if (auteur) noterDemandeCode(nouvelle, auteur.userId, dossier);
         envoi = Date.now();
-        const second = await envoyer(nouvelle);
-        const texteSecond = await second.text();
+        const second = await envoyer(nouvelle, { modele, variante: perdue?.variante, dossier });
         if (second.ok && (await attendreAppel(body.text, envoi))) {
-          let corps: Record<string, unknown> = {};
-          try {
-            corps = JSON.parse(texteSecond) as Record<string, unknown>;
-          } catch {
-            /* réponse illisible : on transmet au moins la relance */
-          }
-          return send(res, 200, { ...corps, helixRelance: { sessionID: nouvelle } });
+          return send(res, 200, { data: { id: second.messageID }, helixRelance: { sessionID: nouvelle } });
         }
       }
     }
@@ -2278,17 +2321,13 @@ async function handleCodePrompt(
       },
     });
   }
-  /*
-   * Relais brut de la réponse d'OpenCode : `send` n'irait pas, il ré-encoderait
-   * un corps déjà sérialisé. Les en-têtes, eux, doivent être les mêmes que
-   * partout ailleurs — ils manquaient tous ici.
-   */
-  res.writeHead(upstream.status, {
-    "Content-Type": "application/json; charset=utf-8",
-    ...entetesOrigine(req),
-    ...ENTETES_SECURITE,
-  });
-  res.end(text || "{}");
+  if (!upstream.ok) {
+    return send(res, upstream.statut >= 400 && upstream.statut < 600 ? upstream.statut : 502, {
+      error: { message: t("La demande n'a pas été acceptée par l'agent de code.") },
+    });
+  }
+  // Même forme de réponse qu'avec la nouvelle API : `data.id`, l'identifiant du message.
+  send(res, 200, { data: { id: upstream.messageID } });
 }
 
 async function handleCodeInterrupt(
@@ -2300,7 +2339,8 @@ async function handleCodeInterrupt(
   if (!SESSION_CODE.test(body.sessionID)) {
     return send(res, 400, { error: { message: t("`sessionID` invalide.") } });
   }
-  const upstream = await codeApi(`/api/session/${body.sessionID}/interrupt`, {
+  const dossier = modeleDeSession.get(body.sessionID)?.dossier ?? projectDir();
+  const upstream = await codeApi(`/session/${body.sessionID}/abort?directory=${encodeURIComponent(dossier)}`, {
     method: "POST",
   });
   send(res, upstream.status, { ok: upstream.ok });
@@ -2340,18 +2380,27 @@ async function handleCodeEvents(
 
   /*
    * `after` : l'écran qui se réabonne donne le dernier événement reçu, pour
-   * ne pas se voir rejouer toute la session (OpenCode le fait sinon).
+   * ne pas se voir rejouer toute la session.
    */
   const apresBrut = url.searchParams.get("after");
   const apres = apresBrut && /^\d{1,12}$/.test(apresBrut) ? Number(apresBrut) : undefined;
-  let amont: http.IncomingMessage;
+
+  /*
+   * Le flux est celui que la passerelle fabrique (fluxCode.ts) à partir de
+   * `/event` d'OpenCode. Une session qu'elle ne suit pas (ouverte avant un
+   * redémarrage) n'est suivie que si OpenCode la connaît : un identifiant
+   * inventé n'occupe rien.
+   */
+  const dossier = modeleDeSession.get(sessionID)?.dossier ?? projectDir();
   try {
-    amont = await fluxSessionCode(sessionID, apres);
+    if (!sessionCodeSuivie(sessionID)) {
+      const existe = await codeApi(`/session/${sessionID}?directory=${encodeURIComponent(dossier)}`);
+      await existe.text().catch(() => "");
+      if (!existe.ok) return send(res, 404, { error: { message: t("Session de code inconnue.") } });
+      suivreSessionCode(sessionID, dossier);
+    }
+    await ecouterDossierCode(dossier);
   } catch {
-    return send(res, 502, { error: { message: t("Flux d'événements indisponible.") } });
-  }
-  if (amont.statusCode !== 200) {
-    amont.resume();
     return send(res, 502, { error: { message: t("Flux d'événements indisponible.") } });
   }
   res.writeHead(200, entetesFlux(req));
@@ -2361,32 +2410,29 @@ async function handleCodeEvents(
    * un agent silencieux, et aucun intermédiaire ne ferme un flux muet.
    */
   const veille = setInterval(() => res.write(": veille\n\n"), 20_000);
-  const finir = () => {
-    clearInterval(veille);
-    amont.destroy();
-    res.end();
-  };
-  req.on("close", finir);
   /*
    * Fin d'un tour de Code (« step.ended » avec « stop ») : Helix repasse sur
-   * les pages du projet, si un design y a été posé (design.ts). Le flux, lui,
-   * est relayé tel quel.
+   * les pages du projet, si un design y a été posé (design.ts). Seulement
+   * pour un évènement qui arrive, pas pour l'historique rejoué à l'ouverture.
    */
-  let reste = "";
-  amont.on("data", (morceau: Buffer) => {
-    res.write(morceau);
-    const texte = reste + morceau.toString();
-    reste = texte.slice(-400);
-    if (/session\.next\.step\.ended/.test(texte) && /"finish"\s*:\s*"stop"/.test(texte)) {
-      const dossier = modeleDeSession.get(sessionID)?.dossier ?? projectDir();
+  let enDirect = false;
+  const desabonner = abonnerCode(sessionID, apres, (evenement: EvenementCode) => {
+    res.write(`data: ${JSON.stringify(evenement)}\n\n`);
+    if (enDirect && evenement.type === "session.next.step.ended" && evenement.data.finish === "stop") {
+      const dossierTour = modeleDeSession.get(sessionID)?.dossier ?? projectDir();
       setTimeout(() => {
-        const n = corrigerPages(dossier);
+        const n = corrigerPages(dossierTour);
         if (n > 0) console.log(`[code] design : ${n} page(s) remise(s) sur la feuille du projet.`);
       }, 1500);
     }
   });
-  amont.on("end", finir);
-  amont.on("error", finir);
+  enDirect = true;
+  const finir = () => {
+    clearInterval(veille);
+    desabonner();
+    res.end();
+  };
+  req.on("close", finir);
 }
 
 /* ------------------------------- routes MCP ----------------------------------- */

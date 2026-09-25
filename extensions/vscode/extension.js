@@ -230,7 +230,8 @@ async function demanderAuCode(contexte, etat, texte, surEvenement, signal) {
         if (ev.type === "session.next.text.ended" && d.text) surEvenement({ type: "texte", texte: d.text });
         else if (ev.type === "session.next.tool.called") {
           const cible = d.input?.filePath || d.input?.path || d.input?.command || d.input?.pattern || "";
-          surEvenement({ type: "outil", outil: `${OUTILS[d.tool] || d.tool} ${cible}`.trim() });
+          // Connecteurs de l'instance : « helix_drive__chercher » chez OpenCode, « drive__chercher » ici.
+          surEvenement({ type: "outil", outil: `${OUTILS[d.tool] || String(d.tool ?? "").replace(/^helix_/, "")} ${cible}`.trim() });
         } else if (ev.type === "session.next.tool.failed") surEvenement({ type: "outil-fin", ok: false });
         else if (ev.type === "session.next.tool.success") surEvenement({ type: "outil-fin", ok: true });
         else if (ev.type === "session.next.step.failed") throw new Error(d.error?.message || "L'agent de code a interrompu la tâche.");

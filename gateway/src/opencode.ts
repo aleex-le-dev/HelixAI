@@ -383,27 +383,33 @@ async function writeConfig(dir: string): Promise<void> {
  * Le guet de l'écran Code (useCode.ts) reste en place derrière : si une
  * demande ne démarre pas en 12 secondes, il la relance dans une session neuve.
  * La chauffe évite l'attente ; le guet couvre ce qu'elle n'aurait pas prévu.
+ *
+ * Depuis le 25/09/2026, Helix Code passe par l'ancienne API d'OpenCode (voir
+ * fluxCode.ts) : la chauffe aussi, pour chauffer le moteur qui servira.
+ * Mesuré le même jour : sur un modèle inconnu, la session échoue en quelques
+ * millisecondes (« Model not found »), sans appeler de modèle.
  */
 async function chauffer(sur: number, dossier: string): Promise<void> {
   const base = `http://127.0.0.1:${sur}`;
   const entetes = { Authorization: enteteServeur(), "Content-Type": "application/json" };
+  const d = `?directory=${encodeURIComponent(dossier)}`;
   try {
-    const creation = await fetch(`${base}/api/session`, {
+    const creation = await fetch(`${base}/session${d}`, {
+      method: "POST",
+      headers: entetes,
+      body: "{}",
+      signal: AbortSignal.timeout(5000),
+    });
+    const corps = (await creation.json().catch(() => ({}))) as { id?: string };
+    const id = corps.id;
+    if (!id) return;
+    await fetch(`${base}/session/${encodeURIComponent(id)}/prompt_async${d}`, {
       method: "POST",
       headers: entetes,
       body: JSON.stringify({
-        location: { directory: dossier },
-        model: { providerID: "helix", id: "chauffe-helix-sans-modele" },
+        model: { providerID: "helix", modelID: "chauffe-helix-sans-modele" },
+        parts: [{ type: "text", text: "chauffe" }],
       }),
-      signal: AbortSignal.timeout(5000),
-    });
-    const corps = (await creation.json().catch(() => ({}))) as { data?: { id?: string } };
-    const id = corps.data?.id;
-    if (!id) return;
-    await fetch(`${base}/api/session/${encodeURIComponent(id)}/prompt`, {
-      method: "POST",
-      headers: entetes,
-      body: JSON.stringify({ prompt: { text: "chauffe" } }),
       signal: AbortSignal.timeout(5000),
     }).catch(() => {});
     // Le temps que l'exécution échoue, comme prévu.
@@ -539,6 +545,9 @@ export function enMarche(): boolean {
   return Boolean(port && child && !child.killed);
 }
 
+/** Port du serveur en cours, ou `null` : distingue un OpenCode redémarré du précédent. */
+export const portEnCours = (): number | null => (enMarche() ? port : null);
+
 export async function status(): Promise<CodeStatus> {
   const binary = await locate();
   return {
@@ -608,9 +617,16 @@ export function varianteDe(effort?: string): string | undefined {
   return niveau && niveau in NIVEAUX_EFFORT ? niveau : undefined;
 }
 
-/** Référence de modèle au format d'OpenCode : toujours le fournisseur de l'instance. */
-export function refModele(id: string, variante?: string): { providerID: string; id: string; variant?: string } {
-  return { providerID: "helix", id, ...(variante ? { variant: variante } : {}) };
+/**
+ * Modèle et variante d'une demande, au format de l'ancienne API d'OpenCode :
+ * toujours le fournisseur de l'instance. Ils partent avec chaque demande
+ * (`prompt_async`) ; la nouvelle API les fixait sur la session.
+ */
+export function refModele(
+  id: string,
+  variante?: string,
+): { model: { providerID: string; modelID: string }; variant?: string } {
+  return { model: { providerID: "helix", modelID: id }, ...(variante ? { variant: variante } : {}) };
 }
 
 /** Un port TCP libre sur la boucle locale, attribué par le système. */
@@ -628,27 +644,23 @@ function portLibre(): Promise<number> {
 }
 
 /**
- * Ouvre le flux d'événements d'une session, **sans délai d'inactivité**.
+ * Ouvre le flux d'événements de l'ancienne API pour un dossier (`/event`),
+ * **sans délai d'inactivité**. C'est fluxCode.ts qui le lit et le traduit.
  *
- * `fetch` (undici) coupe une réponse qui ne reçoit rien pendant cinq minutes.
- * Or OpenCode n'envoie rien entre deux tours, ni pendant qu'un modèle lent
- * réfléchit : mesuré le 23/09/2026, un flux au repos se fermait à 301 s pile.
- * L'écran perdait alors son abonnement sans le savoir, et la demande suivante
- * ne montrait plus rien. `http.request` n'a pas ce délai.
- *
- * `apres` : dernier numéro d'événement déjà reçu. OpenCode rejoue sinon tout
- * l'historique de la session à chaque ouverture (vérifié).
+ * `fetch` (undici) coupe une réponse qui ne reçoit rien pendant cinq minutes :
+ * mesuré le 23/09/2026 sur le flux d'une session, fermé à 301 s pile, et
+ * l'écran perdait son abonnement sans le savoir. `http.request` n'a pas ce
+ * délai.
  */
-export async function fluxSession(sessionID: string, apres?: number): Promise<http.IncomingMessage> {
+export async function fluxEvenements(dossier: string): Promise<http.IncomingMessage> {
   const actif = await ensureServer();
   if (!actif) throw new Error(lastError ?? "OpenCode indisponible.");
-  const suite = apres !== undefined ? `?after=${apres}` : "";
   return new Promise((resolve, reject) => {
     const requete = http.request(
       {
         host: "127.0.0.1",
         port: actif,
-        path: `/api/session/${encodeURIComponent(sessionID)}/event${suite}`,
+        path: `/event?directory=${encodeURIComponent(dossier)}`,
         headers: { Authorization: enteteServeur(), Accept: "text/event-stream" },
       },
       resolve,
@@ -656,6 +668,32 @@ export async function fluxSession(sessionID: string, apres?: number): Promise<ht
     requete.on("error", reject);
     requete.end();
   });
+}
+
+/*
+ * Identifiant de message au format d'OpenCode (`msg_` + 12 chiffres
+ * hexadécimaux de temps + 14 caractères au hasard), croissant comme les
+ * siens : OpenCode range les messages d'une session par identifiant, un nom
+ * pris au hasard pouvait donc passer avant les messages précédents. Recopié de
+ * packages/opencode/src/id/id.ts à la révision v1.18.32. La passerelle le
+ * choisit elle-même pour le rendre aux clients à l'envoi : ils reconnaissent
+ * ainsi dans le flux les évènements de LEUR demande (`session.next.prompted`).
+ */
+let dernierInstant = 0;
+let compteur = 0;
+export function idMessage(): string {
+  const maintenant = Date.now();
+  if (maintenant !== dernierInstant) {
+    dernierInstant = maintenant;
+    compteur = 0;
+  }
+  compteur++;
+  const valeur = BigInt(maintenant) * 0x1000n + BigInt(compteur);
+  const temps = Buffer.alloc(6);
+  for (let i = 0; i < 6; i++) temps[i] = Number((valeur >> BigInt(40 - 8 * i)) & 0xffn);
+  const signes = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+  const hasard = [...randomBytes(14)].map((o) => signes[o % 62]).join("");
+  return `msg_${temps.toString("hex")}${hasard}`;
 }
 
 /** Appelle l'API OpenCode, en démarrant le serveur au besoin. */

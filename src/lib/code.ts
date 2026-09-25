@@ -249,6 +249,12 @@ const OUTILS_CONNUS: Record<string, string> = {
 
 /** Nom affichable d'un outil d'OpenCode, au format « serveur__outil » de l'affichage. */
 export function nomOutil(tool: string): string {
+  /*
+   * Connecteurs de l'instance servis à l'agent de code (outilsCode.ts) :
+   * OpenCode les nomme « helix_<serveur>__<outil> ». Sans le préfixe, c'est le
+   * nom que l'affichage connaît déjà depuis le Chat (« drive__chercher »…).
+   */
+  if (tool.startsWith("helix_") && tool.includes("__")) return tool.slice("helix_".length);
   return OUTILS_CONNUS[tool] ? `fichiers__${OUTILS_CONNUS[tool]}` : `code__${tool}`;
 }
 

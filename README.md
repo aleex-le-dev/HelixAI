@@ -773,9 +773,10 @@ l'agent d'orchestration par défaut. Aucun tiret cadratin dans les textes affich
   consultent pas encore ;
 - **Ligne de commande `helix`** (25/09/2026) : Chat et Helix Code dans un terminal,
   avec les outils et la barrière d'approbation de l'instance (voir « Ligne de
-  commande » plus haut). Pas encore livrée avec l'application empaquetée ; les
-  connecteurs n'atteignent pas encore Helix Code (limite de l'API actuelle
-  d'OpenCode), seulement `helix chat --outils` ;
+  commande » plus haut). Pas encore livrée avec l'application empaquetée. Les
+  connecteurs (serveurs MCP, courrier, Drive…) marchent aussi dans Helix Code depuis
+  le 25/09/2026, derrière la même barrière : vérifié avec un serveur MCP d'essai
+  sans compte, pas encore avec un vrai connecteur à compte ;
 - **Entraîner un modèle** (Paramètres, 25/09/2026) : apprendre à un petit modèle
   ouvert (Qwen3, Apache 2.0) les faits de son organisation à partir d'exemples, le
   comparer au modèle de départ, puis l'installer dans LM Studio. Vérifié de bout en

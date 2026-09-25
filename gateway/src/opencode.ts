@@ -63,6 +63,15 @@ const motDePasseServeur = randomBytes(24).toString("base64url");
 const enteteServeur = (): string =>
   "Basic " + Buffer.from(`opencode:${motDePasseServeur}`).toString("base64");
 
+/**
+ * Clé que présente OpenCode au serveur d'outils de la passerelle
+ * (`/helix/code/outils`, outilsCode.ts). Le jeton d'instance ne suffit pas :
+ * il est sur chaque poste du parc, et cette route fait agir les connecteurs
+ * sans séance. Tirée à chaque démarrage, gardée en mémoire, écrite seulement
+ * dans la configuration d'OpenCode (fichier 0600, qui porte déjà le jeton).
+ */
+export const cleOutils = randomBytes(24).toString("base64url");
+
 let child: ChildProcess | null = null;
 let port: number | null = null;
 let starting: Promise<number | null> | null = null;
@@ -303,6 +312,29 @@ async function writeConfig(dir: string): Promise<void> {
          * fois le dossier choisi, l'agent n'en sort pas.
          */
         permission: { external_directory: "deny", doom_loop: "deny", question: "deny" },
+        /*
+         * Les connecteurs de l'instance (Drive, Slack, courrier, agenda,
+         * serveurs MCP du catalogue), servis par la passerelle elle-même et non
+         * par leurs serveurs : chaque appel repasse ainsi par la barrière
+         * d'approbation et le journal (voir outilsCode.ts).
+         *
+         * `timeout` : OpenCode coupe un appel d'outil MCP au bout de ce délai
+         * (5 secondes par défaut, d'après son schéma de configuration). Une
+         * carte d'accord attend jusqu'à deux minutes (`DELAI`, approbation.ts) :
+         * coupé avant, l'agent aurait tenu pour échouée une action que la
+         * personne était en train d'approuver. `oauth: false` : un refus de la
+         * passerelle ne doit pas lancer chez OpenCode une autorisation OAuth.
+         */
+        mcp: {
+          helix: {
+            type: "remote",
+            url: `http://localhost:${PORT}/helix/code/outils`,
+            headers: { Authorization: `Bearer ${instanceToken()}`, "X-Helix-Cle": cleOutils },
+            enabled: true,
+            oauth: false,
+            timeout: 130_000,
+          },
+        },
         autoupdate: false,
         disabled_providers: ["opencode", "anthropic", "openai", "google", "openrouter"],
       },

@@ -72,6 +72,7 @@ import { installerOpenClaw, etatInstallation } from "./installationOpenClaw.ts";
 import { listerEspace, lireFichierEspace } from "./espace.ts";
 import { consommationDe } from "./usage.ts";
 import { servirOutils, auteurEmploye } from "./serveurOutils.ts";
+import { servirOutilsCode, noterDemande as noterDemandeCode } from "./outilsCode.ts";
 import { FAMILLES, outilsDeFamille } from "./outils.ts";
 import {
   publicAccounts,
@@ -2178,6 +2179,16 @@ async function handleCodePrompt(
     }
   }
 
+  /*
+   * Qui envoie cette demande : les connecteurs que l'agent de code appellera
+   * pendant ce tour travailleront pour cette personne, et c'est à elle que
+   * les cartes d'accord iront (outilsCode.ts). Noté avant l'envoi : le premier
+   * appel d'outil peut arriver avant la réponse d'OpenCode.
+   */
+  const auteur = await demandeur(req, new URL(req.url ?? "/", "http://localhost"));
+  const dossierDemande = modeleDeSession.get(body.sessionID)?.dossier ?? projectDir();
+  if (auteur) noterDemandeCode(body.sessionID, auteur.userId, dossierDemande);
+
   const envoyer = (session: string) =>
     codeApi(`/api/session/${session}/prompt`, {
       method: "POST",
@@ -2228,6 +2239,7 @@ async function handleCodePrompt(
       const nouvelle = ((await creation.json().catch(() => ({}))) as { data?: { id?: string } }).data?.id;
       if (nouvelle) {
         modeleDeSession.set(nouvelle, { modele, variante: perdue?.variante, dossier });
+        if (auteur) noterDemandeCode(nouvelle, auteur.userId, dossier);
         envoi = Date.now();
         const second = await envoyer(nouvelle);
         const texteSecond = await second.text();
@@ -3945,6 +3957,19 @@ const traiter = (
       return handleCodePrompt(req, res);
     if (req.method === "POST" && path === "/helix/code/interrupt")
       return handleCodeInterrupt(req, res);
+    /*
+     * Serveur d'outils de l'agent de code : appelé par OpenCode, sans séance,
+     * sur preuve de la clé écrite dans sa configuration (outilsCode.ts). La
+     * personne pour qui il travaille est retrouvée par la passerelle, jamais
+     * lue dans la requête.
+     */
+    if (path === "/helix/code/outils") {
+      const corps = req.method === "POST" ? await readJson(req).catch(() => undefined) : undefined;
+      if (!(await servirOutilsCode(req, res, corps))) {
+        send(res, 403, { error: { message: t("Accès réservé à l'agent de code de l'instance.") } });
+      }
+      return;
+    }
     if (req.method === "GET" && path === "/helix/code/events") {
       /*
        * `sessionID` et non plus `session` : depuis que ce flux exige une séance,

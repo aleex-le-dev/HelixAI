@@ -228,6 +228,23 @@ for (const chemin of ["../../../../etc/passwd", "/etc/passwd", "..%2F..%2Fetc%2F
   verifier("lire une collection par un chemin détourné est refusé", !corps.includes("passwordHash") && !corps.includes("hash"), `${r.status} ${corps.slice(0, 60)}`);
 }
 
+/*
+ * Serveur d'outils de l'agent de code (outilsCode.ts, ajouté le 25/09/2026) :
+ * il fait agir les connecteurs sans séance, sur la seule preuve de la clé
+ * écrite dans la configuration d'OpenCode. Ni le jeton d'un poste, ni une
+ * séance, ni une clé devinée ne doivent l'ouvrir.
+ */
+{
+  const initialiser = JSON.stringify({ jsonrpc: "2.0", id: 0, method: "tools/list", params: {} });
+  const mcp = { Accept: "application/json, text/event-stream" };
+  const sansJeton = await appel("/helix/code/outils", { method: "POST", headers: { "Content-Type": "application/json", ...mcp }, body: initialiser });
+  verifier("outils de l'agent de code sans jeton → 401", sansJeton.status === 401, sansJeton.status);
+  const auJeton = await appel("/helix/code/outils", { method: "POST", headers: { ...avecSeance, ...mcp }, body: initialiser });
+  verifier("outils de l'agent de code au jeton et à la séance, sans la clé → 403", auJeton.status === 403, auJeton.status);
+  const fausseCle = await appel("/helix/code/outils", { method: "POST", headers: { ...avecSeance, ...mcp, "X-Helix-Cle": "cle-devinee-de-la-bonne-longueur-00000" }, body: initialiser });
+  verifier("outils de l'agent de code avec une clé devinée → 403", fausseCle.status === 403, fausseCle.status);
+}
+
 /* ------------------------------------------------------------------------- */
 console.log("\n7. Fin de séance");
 {

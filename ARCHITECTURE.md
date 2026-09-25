@@ -2,7 +2,7 @@
 
 > Document de cadrage technique : les décisions prises, et où en est leur mise en œuvre.
 > Les écrans sont inventoriés dans [`SCREENS.md`](./SCREENS.md), l'usage et l'exploitation
-> dans [`README.md`](./README.md), la sécurité dans [`SECURITE.md`](./SECURITE.md).
+> dans [`docs/GUIDE.md`](./docs/GUIDE.md), la sécurité dans [`SECURITE.md`](./SECURITE.md).
 > Statut : les grands choix sont arrêtés ; les points encore ouverts portent la marque ⚠.
 > Chaque ADR indique ce qui est **implémenté** et ce qui reste une intention.
 > Dernière mise à jour : 21/09/2026 (0.25.0).
@@ -226,7 +226,7 @@ dizaines d'intégrations OAuth est un projet en soi.
    serveurs métier spécifiques au client. Les serveurs tournent sur la machine et
    dialoguent en JSON-RPC sur l'entrée et la sortie standard : **aucune donnée de
    l'entreprise ne quitte le poste**. Le code du serveur, lui, est récupéré une première
-   fois sur le registre npm par `npx` (voir README, « Ce qui sort de la machine »).
+   fois sur le registre npm par `npx` (voir docs/GUIDE.md, « Ce qui sort de la machine »).
 2. **[Composio](https://composio.dev)** pour les **connecteurs SaaS externes** (500+ apps).
    Rationnel retenu : *un connecteur Gmail ou Slack envoie de toute façon les données vers
    un service américain* — la perte marginale de souveraineté est faible, et le gain de

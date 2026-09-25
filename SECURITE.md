@@ -1510,7 +1510,7 @@ recherche web et un `exec` y figurent.
 **Extensions installées à la demande** depuis npm, dans le dossier d'état de
 l'instance : `@openclaw/duckduckgo-plugin` (recherche web), `@openclaw/whatsapp`,
 `@openclaw/discord`, `@openclaw/slack`, `@openclaw/mattermost`. Ce sont des
-téléchargements de code, listés dans README § « Ce qui sort de la machine ».
+téléchargements de code, listés dans docs/GUIDE.md § « Ce qui sort de la machine ».
 
 ### 14.2 Installation d'OpenClaw depuis l'interface (0.13.0)
 

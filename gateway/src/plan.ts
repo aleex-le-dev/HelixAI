@@ -102,10 +102,18 @@ export function consigneDePlan(
     "Juge d'abord la demande ci-dessous, avec la conversation qui la précède.",
     "- Si c'est une question, une conversation, ou un travail qui se fait en une ou deux",
     '  actions simples, réponds exactement : {"etapes": []}',
+    // Vu le 25/09/2026 : « combien de jours de congés, et combien coûte la baguette ? » découpée en deux étapes.
+    "- Une question qui porte sur plusieurs points reste une question : {\"etapes\": []}.",
     "- Sinon, découpe-le en étapes simples, dans l'ordre, sans en oublier.",
     "",
     "Règles du découpage :",
     `- Au maximum ${MAX_ETAPES} étapes, une action concrète par étape.`,
+    /*
+     * La langue : cette consigne est en français, et Qwen3 8B y alignait ses
+     * étapes même pour une demande en anglais (vu le 25/09/2026 : « Rechercher le
+     * nombre de jours de congés... » sous une question anglaise, écran en anglais).
+     */
+    "- Écris l'objectif et les étapes dans la langue de la demande (en anglais si elle est en anglais).",
     "- Si le travail porte sur une liste (des fichiers, des clients, des mails), une étape",
     "  qui la relève d'abord, puis des étapes qui la traitent par petits paquets.",
     ...regles,
@@ -170,6 +178,7 @@ export function consigneDeSousPlan(
     "en un ou deux appels d'outils. Si elle porte sur une liste (des fichiers, des clients),",
     "répartis la liste en citant les éléments : « Renommer les factures a.pdf, b.pdf et c.pdf ».",
     "Ne répète pas ce qui est déjà fait.",
+    "Écris les étapes dans la langue de l'objectif général.",
     'Si elle ne peut vraiment pas être découpée davantage, réponds {"etapes": []}.',
     "",
     'Réponds UNIQUEMENT par un objet JSON : {"etapes": ["...", "..."]}',
@@ -418,6 +427,7 @@ export function consigneDEtape(
     etape,
     "",
     "Fais uniquement cette étape, avec les outils. Ne fais pas les suivantes.",
+    "Réponds dans la langue de la demande générale (en anglais si elle est en anglais).",
     "",
     "N'INVENTE RIEN : ni un nom de fichier, de dossier ou de client, ni un montant,",
     "ni un total, ni une date. Toute valeur vient soit d'une liste que tu as obtenue,",
@@ -461,7 +471,9 @@ export function consigneDePartie(
     "Écris directement le texte de cette partie, précédé de son intertitre (« ## … »).",
     "Ne répète pas ce qui précède, n'annonce pas la suite, et ne commente pas ton travail.",
     derniere ? "C'est la dernière partie : tu peux conclure l'ensemble." : "Ce n'est pas la dernière partie : ne conclus pas l'ensemble.",
-    "N'invente ni chiffre, ni nom, ni fait qui ne soit pas dans la demande : si une information manque, écris-le entre crochets.",
+    "N'invente ni chiffre, ni nom, ni fait qui ne soit pas dans la demande ou dans les passages des bases de connaissances fournis plus haut : si une information manque, écris-le entre crochets.",
+    // Même raison que dans consigneDePlan : la consigne est en français, la réponse suit la demande.
+    "Écris dans la langue du document à rédiger (en anglais s'il est demandé en anglais).",
   ]
     .filter((l) => l !== "")
     .join("\n");
@@ -604,6 +616,21 @@ export function strategie(model: {
  * courte qui commence comme une réplique (non, oui, mais, et si, pourquoi…),
  * est donc tranchée ici, avant de demander quoi que ce soit au modèle.
  */
+/**
+ * Une question, sans outils : rien à découper. Au-delà des quinze mots de
+ * `estReplique`, qwen3-8b découpait encore une question en deux points en deux
+ * « étapes » (vu le 25/09/2026, malgré la règle de consigneDePlan), ce qui
+ * donnait deux intertitres pour deux phrases. Une seule ligne, quarante mots
+ * au plus, qui finit par un point d'interrogation.
+ */
+export function estQuestionSimple(demande: string): boolean {
+  const texte = demande.trim();
+  if (!/[?？]$/.test(texte) || /\n\s*\n/.test(texte)) return false;
+  const ideogrammes = (texte.match(/[\u3400-\u9fff\uf900-\ufaff]/g) ?? []).length;
+  const latins = texte.replace(/[\u3400-\u9fff\uf900-\ufaff]/g, " ").split(/\s+/).filter((m) => /[\p{L}\p{N}]/u.test(m)).length;
+  return latins + Math.ceil(ideogrammes / 2) <= 40;
+}
+
 export function estReplique(demande: string): boolean {
   const texte = sansAccents(demande).trim();
   /*

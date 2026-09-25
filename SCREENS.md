@@ -584,7 +584,7 @@ refaits ce jour-là.
 Pas un écran, mais une surface : `helix` dans un terminal (Chat, `chat --outils`,
 `code`), avec les actions de l'agent affichées « ✓ Écriture bonjour.txt » et les
 demandes d'accord « Autoriser ? [o/N] ». Textes en français seulement
-(`cli/textes.mjs`). Détail dans README.md.
+(`cli/textes.mjs`). Détail dans docs/GUIDE.md.
 
 ### Extension VS Code (24/09/2026)
 

@@ -28,6 +28,7 @@ import {
   consigneDeComplement,
   consigneDePartie,
   consigneDePlan,
+  estQuestionSimple,
   estReplique,
   consigneDeRevue,
   consigneDeSousPlan,
@@ -1367,9 +1368,16 @@ export async function handleChatRequest(
      * était fait, mais le contrôle n'avait pas le temps de le constater.
      */
     const budgetEtape = Math.max(4, Math.trunc(Number(process.env.HELIX_BUDGET_ETAPE)) || regime.budgetParEtape);
-    /** Le message système de la conversation, repris par chaque étape. */
+    /**
+     * Le message système de la conversation, repris par chaque étape. Pris dans
+     * `messages`, et non plus dans `body.messages` : c'est là que les passages
+     * des bases de connaissances ont été ajoutés. Vu le 25/09/2026 : une
+     * question en deux parties, découpée en deux étapes, répondait « consultez
+     * les RH » alors que la base contenait la réponse, que chaque étape ne
+     * recevait pas.
+     */
     const fondation = (): unknown[] =>
-      body.messages[0] && (body.messages[0] as { role?: string }).role === "system" ? [body.messages[0]] : [];
+      messages[0] && (messages[0] as { role?: string }).role === "system" ? [messages[0]] : [];
 
     /**
      * Une question d'organisation au modèle, sans outils, qui attend du JSON.
@@ -1421,7 +1429,7 @@ export async function handleChatRequest(
      * retapait le texte, 42 actions, jamais d'enregistrement.
      */
     const pilotageEcran = outilsEcran.length > 0;
-    if (regime.decoupe && !avecImage && !pilotageEcran && demande.trim() && !estReplique(demande)) {
+    if (regime.decoupe && !avecImage && !pilotageEcran && demande.trim() && !estReplique(demande) && !(!avecOutils && estQuestionSimple(demande))) {
       emitHelix(res, { type: "plan_debut", regime: regime.raison });
       plan = lirePlan(
         await demanderAuModele(

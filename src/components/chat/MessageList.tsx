@@ -98,7 +98,8 @@ function PlanSuivi({ etapes, revue }: { etapes: EtapePlan[]; revue?: "encours" |
     <div className="mb-2.5 rounded-xl border border-border bg-muted/40 px-3 py-2.5">
       <p className="mb-2 text-xs font-medium text-muted-foreground">
         {t("Plan de travail :")}{" "}
-        {tf(faites > 1 ? "{0} étapes faites sur {1}" : "{0} étape faite sur {1}", faites, aFaire.length)}
+        {/* Deux appels écrits en entier : un modèle choisi par une condition échappait au relevé (i18n.mjs), donc à la traduction. */}
+        {faites > 1 ? tf("{0} étapes faites sur {1}", faites, aFaire.length) : tf("{0} étape faite sur {1}", faites, aFaire.length)}
       </p>
       <ol className="space-y-1.5">
         {etapes.map((e, i) => (

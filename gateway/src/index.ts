@@ -58,6 +58,7 @@ import { chargerReglagesEcran, configEcran, definirModeEcran, modeModifiable } f
 import { readFileSync } from "node:fs";
 import * as images from "./images.ts";
 import { contenuLogiciel, logicielsTrouves, pageLogiciel } from "./importLocal.ts";
+import * as entrainement from "./entrainement.ts";
 import { corrigerPages, estDemandeDeSite, preparerDesign } from "./design.ts";
 import { arreterMachine, arreterMachineEnPartant, choisirSysteme, demarrerMachine, diagnosticMachine, effacerMachine, preparationMachineEnCours, progressionMachine, systemeMachine } from "./machine.ts";
 import { apercuEffacement, effacerCompte, sansComptesDisparus } from "./effacement.ts";
@@ -1314,8 +1315,16 @@ const routeConnaissances = (chemin: string) => chemin === "/helix/connaissances"
 // Réunions : enregistrer, transcrire, envoyer le bot engagent quelqu'un ; lire est filtré pour lui.
 const routeReunion = (chemin: string) => chemin === "/helix/reunions" || chemin.startsWith("/helix/reunions/");
 
+/*
+ * Entraîner un modèle : installer le moteur télécharge plusieurs Go, entraîner
+ * occupe la machine, et les exemples sont ceux de quelqu'un. Tout le préfixe
+ * exige une séance ; chaque projet n'est rendu qu'à son auteur.
+ */
+const routeEntrainement = (chemin: string) => chemin === "/helix/entrainement" || chemin.startsWith("/helix/entrainement/");
+
 const exigeSeance = (methode: string, chemin: string) =>
   EXECUTION.some((r) => r.methode === methode && r.chemin === chemin) ||
+  routeEntrainement(chemin) ||
   routeEmploye(chemin) ||
   routeFournisseur(chemin) ||
   routeEspace(chemin) ||
@@ -3101,6 +3110,63 @@ async function handleImagesInstaller(req: http.IncomingMessage, res: http.Server
   send(res, 202, await images.etatImages());
 }
 
+/* ---------------------------- entraînement ----------------------------- */
+
+/**
+ * Entraîner un modèle sur ses exemples (entrainement.ts). Une seule entrée :
+ * `GET /helix/entrainement` rend l'état de la machine, le travail en cours et
+ * les projets de la personne ; le reste suit `/helix/entrainement/<action>`.
+ */
+async function handleEntrainement(req: http.IncomingMessage, res: http.ServerResponse, url: URL, action: string): Promise<void> {
+  const qui = await demandeur(req, url);
+  if (!qui) return send(res, 401, sansSeance());
+  const u = qui.userId;
+  const corps = (req.method === "POST" ? await readJson(req).catch(() => ({})) : {}) as Record<string, unknown>;
+  try {
+    switch (`${req.method} ${action}`) {
+      case "GET ":
+        return send(res, 200, await entrainement.etat(u));
+      case "GET projet":
+        return send(res, 200, entrainement.detailProjet(u, url.searchParams.get("id")));
+      case "POST installer":
+        void entrainement.installer(u).catch(() => undefined);
+        return send(res, 202, await entrainement.etat(u));
+      case "POST desinstaller":
+        entrainement.desinstaller(u);
+        return send(res, 200, await entrainement.etat(u));
+      case "POST projets":
+        return send(res, 200, entrainement.creerProjet(u, corps.nom));
+      case "POST renommer":
+        return send(res, 200, entrainement.renommer(u, corps.projet, corps.nom));
+      case "POST exemples":
+        return send(res, 200, entrainement.enregistrerExemples(u, corps.projet, corps.exemples, corps.propositions));
+      case "POST importer":
+        return send(res, 200, entrainement.importer(u, corps.projet, corps.contenu, corps.nom));
+      case "POST generer":
+        return send(res, 202, entrainement.generer(u, corps.projet, corps.texte, corps.source));
+      case "POST lancer":
+        return send(res, 202, entrainement.entrainer(u, corps.projet));
+      case "POST arreter":
+        return send(res, 200, { arrete: entrainement.arreter(u) });
+      case "POST comparer":
+        return send(res, 202, entrainement.comparer(u, corps.projet, corps.questions));
+      case "POST publier":
+        return send(res, 202, entrainement.publier(u, corps.projet));
+      case "POST retirer":
+        return send(res, 200, await entrainement.retirer(u, corps.projet));
+      case "POST supprimer":
+        await entrainement.supprimer(u, corps.projet);
+        return send(res, 200, { ok: true });
+      default:
+        return send(res, 404, { error: { message: tf("Route inconnue : {0} {1}", req.method, url.pathname) } });
+    }
+  } catch (err) {
+    const statut = err instanceof entrainement.ErreurEntrainement ? err.statut : 500;
+    if (statut === 500) console.error("[gateway] entrainement", err);
+    return send(res, statut, { error: { message: err instanceof Error ? err.message : String(err) } });
+  }
+}
+
 /** Lance une création ; l'écran suit son avancement sur /helix/images/travail/<id>. */
 async function handleImagesCreer(req: http.IncomingMessage, res: http.ServerResponse, url: URL): Promise<void> {
   const qui = await demandeur(req, url);
@@ -4070,6 +4136,7 @@ const traiter = (
     if (req.method === "POST" && path === "/helix/machine/effacer") return handleMachineAction(req, res, url, "effacer");
     if (req.method === "GET" && path === "/helix/machine/ecran") return handleMachineEcran(req, res, url);
     if (req.method === "GET" && path === "/helix/images") return handleImagesEtat(req, res, url);
+    if (routeEntrainement(path)) return handleEntrainement(req, res, url, path === "/helix/entrainement" ? "" : path.slice("/helix/entrainement/".length));
     if (req.method === "GET" && path === "/helix/import/logiciels") return handleImportLogiciels(req, res, url);
     if ((req.method === "GET" || req.method === "POST") && path.startsWith("/helix/import/logiciel/")) return handleImportLogiciels(req, res, url, path.slice("/helix/import/logiciel/".length));
     if (req.method === "POST" && path === "/helix/images/installer") return handleImagesInstaller(req, res, url, "installer");
@@ -4296,6 +4363,8 @@ function arreterProprement(): void {
   if (arretEnCours) return;
   arretEnCours = true;
   stopCodeServer();
+  // Un entraînement orphelin garderait plusieurs Go de mémoire graphique.
+  entrainement.arreterEnPartant();
   stopLmStudioIfStarted();
   employes.arreterEmployes();
   // La machine de l'agent garderait 3 Go de mémoire après la fermeture.

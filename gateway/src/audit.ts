@@ -61,6 +61,15 @@ export type AuditAction =
   | "images.installees"
   | "images.desinstallees"
   | "images.creee"
+  /* Entraînement d'un modèle sur ses propres exemples (entrainement.ts). */
+  | "entrainement.installe"
+  | "entrainement.desinstalle"
+  | "entrainement.projet_cree"
+  | "entrainement.projet_supprime"
+  | "entrainement.paires_generees"
+  | "entrainement.termine"
+  | "entrainement.publie"
+  | "entrainement.retire"
   | "import.logiciel"
   | "outil.appele"
   /*

@@ -64,10 +64,44 @@ const PAGES = donnees.pages as PlanPage[];
 /* Est-ce une demande de site ?                                        */
 /* ------------------------------------------------------------------ */
 
-const WEB = /\b(site|page|landing|vitrine|portfolio|blog|boutique|e-?commerce|html|css|web|interface|maquette|accueil|homepage|website|webpage|front-?end|app web|application web|formulaire)\b/i;
+/*
+ * Reconnaître une demande de site, sans prendre une demande de code pour une.
+ *
+ * L'ancienne règle cherchait un seul mot parmi « site, page, interface,
+ * formulaire, html, css, web… ». « Ajoute une interface User en TypeScript »,
+ * « corrige la validation du formulaire côté serveur » ou « la page 3 de l'API
+ * renvoie une erreur » devenaient des demandes de site : un dossier design/ et
+ * une consigne de couleurs et de polices partaient avec, et un petit modèle
+ * s'y perdait (constaté en relisant la règle le 25/09/2026, à la demande de
+ * Medhi).
+ *
+ * Désormais, trois familles de mots, comparées sans accents :
+ *  - les mots sans ambiguïté (site, landing, vitrine, portfolio, page web,
+ *    page d'accueil…) suffisent ;
+ *  - les mots ambigus (page, interface, formulaire, maquette, html, css…) ne
+ *    comptent qu'avec un verbe de création (crée, fais, conçois, build…) ;
+ *  - et jamais à côté d'un mot de programmation (TypeScript, type, API,
+ *    serveur, classe, fonction, test, bug…), qui dit que la demande porte sur
+ *    du code, pas sur un écran à dessiner.
+ * Le dossier déjà commencé reste protégé par `projetDejaCommence`.
+ */
+const SITE_SUR = /\b(site|sites|landing|vitrine|portfolio|website|webpage|homepage|page web|pages web|page d'accueil|page daccueil|application web|app web|site web|e-?commerce|boutique en ligne|blog)\b/;
+const SITE_AMBIGU = /\b(page|pages|interface|interfaces|formulaire|formulaires|maquette|maquettes|accueil|html|css|front-?end|web|boutique|ecran|ecrans|form|ui)\b/;
+const CREATION = /\b(cree|creer|creez|crees|fais|faire|faites|fait|construis|construire|construisez|concois|concevoir|developpe|developper|realise|realiser|genere|generer|monte|monter|dessine|dessiner|refais|refaire|embellis|embellir|habille|habiller|design|designer|create|build|make|design|generate|develop|mock ?up|plus (beau|belle|beaux|belles|joli|jolie|moderne|professionnel|professionnelle|pro|attrayant|attrayante)|more (beautiful|modern|professional))\b/;
+const CODE_CONTEXTE = /\b(typescript|javascript|python|java|rust|golang|php|type|types|typage|api|apis|endpoint|endpoints|route|routes|serveur|server|backend|back-?end|base de donnees|database|sql|requete|requetes|query|classe|classes|class|fonction|fonctions|function|methode|methodes|method|variable|variables|test|tests|unitaire|bug|bugs|erreur|erreurs|error|exception|stack ?trace|pagination|schema|migration|module|modules|package|dependance|dependances|import|export|refactor|refactorise|refactoriser|compile|compilation|script|scripts|regex|json|cli|terminal|props|enum|struct)\b/;
+
+const sansAccents = (texte: string) =>
+  texte
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[’]/g, "'");
 
 export function estDemandeDeSite(texte: string): boolean {
-  return WEB.test(texte);
+  const t = sansAccents(texte);
+  if (CODE_CONTEXTE.test(t) && !SITE_SUR.test(t)) return false;
+  if (SITE_SUR.test(t)) return !CODE_CONTEXTE.test(t) || CREATION.test(t);
+  return SITE_AMBIGU.test(t) && CREATION.test(t);
 }
 
 /* ------------------------------------------------------------------ */

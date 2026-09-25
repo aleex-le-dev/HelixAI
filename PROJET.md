@@ -2297,11 +2297,13 @@ ne restent ici que les points ouverts.*
 13. **Le modèle de l'écran Code** : Qwen3 8B y est faible (répétitions, guide de
     design ignoré sans les filets de design.ts). Un modèle fait pour le code
     (Qwen3-Coder, Devstral) ou une clé cloud ferait mieux.
-14. **Détection de design trop large** : une demande de code ordinaire qui contient
-    « interface », « page » ou « formulaire » (« ajoute une interface User ») dans un
-    dossier sans page ni feuille de style pose encore design/ et sa consigne.
-    L'expression `WEB` de `estDemandeDeSite` (design.ts) serait à resserrer avec le
-    client.
+14. **Détection de design** : resserrée le 25/09/2026 (`estDemandeDeSite`, design.ts).
+    Les mots sûrs (site, landing, vitrine, portfolio, page d'accueil…) suffisent ; les
+    mots ambigus (page, interface, formulaire, maquette, html, css) demandent un verbe
+    de création ; un mot de programmation (TypeScript, type, API, serveur, classe,
+    fonction, test, bug…) écarte la demande, sauf création d'un site. 26 phrases
+    d'essai sur 26 (`npm run essai:design`). Reste : l'éprouver sur les vraies
+    demandes du client.
 15. **Le garde d'Eden**, l'instance OpenClaw personnelle du client (script hors
     Helix), recharge Qwen3 8B à ses propres réglages : il peut couper une réponse
     d'Helix en cours, et **gêne l'entraînement** sur un Mac de 16 Go. Qwen3 8B chargé

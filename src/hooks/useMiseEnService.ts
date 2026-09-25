@@ -66,6 +66,7 @@ export function useMiseEnService(
           liberte: "encadre",
           agentId: agent.id,
           visibilite: agent.visibility,
+          connaissances: agent.connaissances ?? [],
           ...(agent.modelUid ? { modele: agent.modelUid } : {}),
         });
         // Les documents choisis à la création partent maintenant que son espace existe.
@@ -116,6 +117,27 @@ export function useMiseEnService(
       void modifierEmploye(e.id, { description: agent.description.trim() }).catch(() => undefined);
     }
   }, [agents, etat]);
+
+  /*
+   * Bases de connaissances de l'agent : son employé les suit. Le propriétaire
+   * les change sur la carte de l'agent (AgentsPage) ; on les recopie ici,
+   * chaque fois qu'elles diffèrent. L'instance ne s'en sert que pour ce qui
+   * est ouvert à toute l'équipe (connaissances.ts, `chercherPourEmploye`).
+   */
+  const basesEnvoyees = useRef(new Map<string, string>());
+  useEffect(() => {
+    if (!etat) return;
+    for (const e of etat.employes) {
+      const agent = agents.find((a) => a.id === e.agentId);
+      if (!agent || !e.estProprietaire) continue;
+      const voulues = [...(agent.connaissances ?? [])].sort().join(",");
+      if ([...(e.connaissances ?? [])].sort().join(",") === voulues || basesEnvoyees.current.get(e.id) === voulues) continue;
+      basesEnvoyees.current.set(e.id, voulues);
+      void modifierEmploye(e.id, { connaissances: agent.connaissances ?? [] })
+        .then(() => recharger())
+        .catch(() => basesEnvoyees.current.delete(e.id));
+    }
+  }, [agents, etat, recharger]);
 
   /** Nouvel essai après une erreur (réseau coupé pendant l'installation, par exemple). */
   const reessayer = useCallback(

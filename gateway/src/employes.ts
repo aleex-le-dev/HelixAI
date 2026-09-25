@@ -15,6 +15,7 @@ import { binaireGere, etatInstallation, plusRecente, versionParue, versionVisee,
 import * as courrier from "./courrier.ts";
 import { DOCUMENT_MAX, LIBELLE_DOCUMENT_MAX, MESSAGE_DISQUE_PLEIN, placeSuffisante } from "./televersement.ts";
 import { t, tf } from "./langue.ts";
+import { OUTIL_EMPLOYE } from "./connaissances.ts";
 
 /**
  * Employés : des agents OpenClaw déployés et pilotés par Helix.
@@ -199,6 +200,13 @@ export interface Employe {
   visibilite?: "personnel" | "organisation";
   /** « Autoriser les outils » de l'agent : toutes les familles branchées, y compris celles branchées plus tard. */
   toutesLesFamilles?: boolean;
+  /**
+   * Bases de connaissances de l'agent (`Agent.connaissances`), recopiées par
+   * l'écran de son propriétaire. L'employé y cherche par l'outil
+   * `connaissances__chercher`, et n'y lit que ce qui est ouvert à toute
+   * l'équipe (connaissances.ts, `chercherPourEmploye`).
+   */
+  connaissances?: string[];
   ownerId: string;
   createdAt: string;
   updatedAt: string;
@@ -797,6 +805,17 @@ function ecrireEspace(e: Employe): void {
       ? `- ${majuscule(DESCRIPTION_FAMILLE[f])} (outils ${familles.map((x) => `\`${prefixe}__${x}__…\``).join(", ")}).${ou}`
       : `- ${majuscule(DESCRIPTION_FAMILLE[f])} : débranché pour l'instant, dis-le si on te le demande.`;
   });
+  /*
+   * Ses bases de connaissances : un outil à part, hors des familles, qu'il a
+   * dès que son agent a des bases (même sans « Autoriser les outils »). Les
+   * noms des bases ne sont pas écrits ici : l'espace est relu par le modèle,
+   * donc par quiconque lui parle, et une base privée ne doit pas s'y nommer.
+   */
+  const outilBases = `${prefixe}__${OUTIL_EMPLOYE}`;
+  const aDesBases = (e.connaissances?.length ?? 0) > 0;
+  if (aDesBases) {
+    outils.push(`- Les bases de connaissances de l'équipe qui te sont confiées, en lecture (outil \`${outilBases}\`).`);
+  }
   const client = deployment().client;
   const ecrire = (nom: string, lignes: string[]) =>
     writeFileSync(join(espace, nom), `${lignes.join("\n")}\n`, { mode: 0o600 });
@@ -813,6 +832,13 @@ function ecrireEspace(e: Employe): void {
           "## Documents de référence",
           "Documents confiés par l'équipe, dans ton espace. Consulte-les (outil `read`) avant de répondre sur ce qu'ils couvrent, et cite celui dont tu te sers.",
           ...documents.map((d) => `- \`${d.lecture}\`${d.lecture !== d.fichier ? ` (texte de ${d.nom})` : ""}`),
+          "",
+        ]
+      : []),
+    ...(aDesBases
+      ? [
+          "## Bases de connaissances",
+          `Des documents de l'équipe te sont confiés dans des bases de connaissances. Avant de répondre sur l'entreprise (règles, tarifs, procédures, clients, contrats), cherche d'abord avec l'outil \`${outilBases}\`, en posant la question en une phrase complète. Réponds ensuite à partir des passages trouvés, et cite le document dont tu te sers, par exemple « (source : nom du document) ». Si l'outil ne trouve rien, dis que ces documents n'en parlent pas.`,
           "",
         ]
       : []),
@@ -1255,6 +1281,15 @@ function nettoyerOutils(v: unknown): Famille[] {
   return Array.isArray(v) ? [...new Set(v.filter((x): x is Famille => FAMILLES.includes(x as Famille)))] : [];
 }
 
+/**
+ * Identifiants de bases, rien d'autre : le droit de lire se décide à chaque
+ * recherche (connaissances.ts), pas ici. Dix au plus, comme au Chat.
+ */
+const ID_BASE = /^kb_[A-Za-z0-9_-]{1,40}$/;
+function nettoyerConnaissances(v: unknown): string[] {
+  return Array.isArray(v) ? [...new Set(v.filter((x): x is string => typeof x === "string" && ID_BASE.test(x)))].slice(0, 10) : [];
+}
+
 function nettoyerMissions(v: unknown): Mission[] {
   if (!Array.isArray(v)) return [];
   return v.slice(0, 12).flatMap((m): Mission[] => {
@@ -1346,6 +1381,7 @@ export async function deployer(brut: Record<string, unknown>, qui: string, model
     ...(brut.toutesLesFamilles === true ? { toutesLesFamilles: true } : {}),
     ...(typeof brut.description === "string" && brut.description.trim() ? { description: brut.description.trim().slice(0, 500) } : {}),
     ...(typeof brut.agentId === "string" && brut.agentId ? { agentId: brut.agentId.slice(0, 80) } : {}),
+    ...(nettoyerConnaissances(brut.connaissances).length > 0 ? { connaissances: nettoyerConnaissances(brut.connaissances) } : {}),
     visibilite: brut.visibilite === "personnel" ? "personnel" : "organisation",
     missions: nettoyerMissions(brut.missions),
     enPause: false,
@@ -1398,6 +1434,7 @@ export async function deployer(brut: Record<string, unknown>, qui: string, model
     autonome: Boolean(e.autonome),
     liberte: e.liberte,
     modele,
+    connaissances: e.connaissances?.length ?? 0,
   });
   return { ok: true, valeur: e, ...(avertissement ? { avertissement } : {}) };
 }
@@ -1419,6 +1456,10 @@ export async function modifier(id: string, brut: Record<string, unknown>, qui: s
   if (typeof brut.poste === "string" && brut.poste.trim()) e.poste = brut.poste.trim().slice(0, POSTE_MAX);
   if (brut.outils !== undefined) e.outils = nettoyerOutils(brut.outils);
   if (typeof brut.toutesLesFamilles === "boolean") e.toutesLesFamilles = brut.toutesLesFamilles;
+  if (brut.connaissances !== undefined) {
+    const ids = nettoyerConnaissances(brut.connaissances);
+    e.connaissances = ids.length > 0 ? ids : undefined;
+  }
   if (typeof brut.description === "string") e.description = brut.description.trim().slice(0, 500) || undefined;
   if (brut.visibilite === "personnel" || brut.visibilite === "organisation") e.visibilite = brut.visibilite;
   const missionsAvant = e.missions;
@@ -1445,6 +1486,7 @@ export async function modifier(id: string, brut: Record<string, unknown>, qui: s
     outils: e.outils,
     missions: e.missions.length,
     modele: e.modele,
+    connaissances: e.connaissances?.length ?? 0,
   });
   return { ok: true, valeur: e, ...(avertissement ? { avertissement } : {}) };
 }

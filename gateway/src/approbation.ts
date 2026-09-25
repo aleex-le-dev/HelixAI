@@ -158,6 +158,8 @@ const SLACK_LECTURE = new Set(["slack__salons", "slack__messages", "slack__fil",
 const SERVEUR_FICHIERS = "fichiers";
 const COURRIER_LECTURE = new Set(["courrier__derniers", "courrier__chercher", "courrier__lire"]);
 const BIBLIOTHEQUE_LECTURE = new Set(["bibliotheque__chercher", "bibliotheque__lire", "reunions__chercher", "reunions__lire"]);
+/** Recherche d'un employé dans les bases de connaissances de son agent (connaissances.ts) : ne touche à rien. */
+const CONNAISSANCES_LECTURE = new Set(["connaissances__chercher"]);
 /** Le contrôle du code web lit des fichiers et ne touche à rien (controleWeb.ts). */
 const CONTROLE_LECTURE = new Set(["controle__site_web"]);
 
@@ -191,7 +193,7 @@ export function modifie(outil: string): boolean {
    * sous l'identifiant « slack » apporterait des `slack__…` qui, eux, peuvent
    * écrire, et ne doivent pas hériter du laissez-passer.
    */
-  if (DRIVE_LECTURE.has(outil) || SLACK_LECTURE.has(outil) || BIBLIOTHEQUE_LECTURE.has(outil) || CONTROLE_LECTURE.has(outil)) return false;
+  if (DRIVE_LECTURE.has(outil) || SLACK_LECTURE.has(outil) || BIBLIOTHEQUE_LECTURE.has(outil) || CONNAISSANCES_LECTURE.has(outil) || CONTROLE_LECTURE.has(outil)) return false;
   if (outil.startsWith("bureau__")) return !BUREAU_LECTURE.has(outil.slice("bureau__".length));
 
   const separateur = outil.indexOf("__");
@@ -287,6 +289,7 @@ export function resumerOutil(outil: string, args: Record<string, unknown>): stri
   if (outil === "bibliotheque__chercher") return "chercher des documents dans la bibliothèque de l'équipe";
   if (outil === "bibliotheque__lire") return "lire un document de la bibliothèque de l'équipe";
   if (outil === "reunions__chercher") return "chercher parmi les réunions transcrites";
+  if (outil === "connaissances__chercher") return "chercher dans les bases de connaissances de l'équipe";
   if (outil === "reunions__lire") return "lire le compte rendu et la transcription d'une réunion";
 
   // Au niveau « Demander pour tout », les lectures de Drive et de Slack passent ici.

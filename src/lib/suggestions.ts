@@ -1,10 +1,11 @@
 import type { LucideIcon } from "lucide-react";
-import { Mail, Calendar, Bot, SquareCheck, MailOpen, CalendarClock, BookOpenText } from "lucide-react";
+import { Mail, Calendar, Bot, SquareCheck, MailOpen, CalendarClock, BookOpenText, CalendarX, Import } from "lucide-react";
 import { etat as etatCourrier } from "@/lib/courrier";
 import { etat as etatAgenda } from "@/lib/agenda";
 import { listerBases } from "@/lib/connaissances";
 import { visibleTo as agentsVisibles } from "@/lib/store/agents";
-import { visibleTo as tachesVisibles } from "@/lib/store/tasks";
+import { estClose, jourDe, situation, visibleTo as tachesVisibles } from "@/lib/store/tasks";
+import { visibleTo as sessionsVisibles } from "@/lib/store/sessions";
 import { currentUser } from "@/lib/store/identity";
 import { t, tf } from "@/lib/i18n";
 
@@ -29,8 +30,24 @@ import { t, tf } from "@/lib/i18n";
 
 export type Suggestion =
   | { icone: LucideIcon; libelle: string; genre: "aller"; chemin: string }
-  | { icone: LucideIcon; libelle: string; genre: "demander"; question: string; outils: true };
+  | { icone: LucideIcon; libelle: string; genre: "demander"; question: string; outils: true }
+  /** Attache la base à la zone de saisie : la question suivante y cherche. */
+  | { icone: LucideIcon; libelle: string; genre: "base"; base: string };
 
+/** Quatre au plus : au-delà, la liste se lit comme un menu, plus comme une idée. */
+const NOMBRE = 4;
+
+/*
+ * Toujours pertinentes (demandé par Medhi le 25/09/2026). Chaque suggestion
+ * n'apparaît que si elle correspond à l'état réel du poste, et elles sont
+ * rangées de la plus utile à la moins utile, pour n'en garder que quatre :
+ *  1. ce qui attend la personne (tâches en retard, puis tâches ouvertes) ;
+ *  2. se servir de ce qui est déjà branché (une base, le courrier, l'agenda) ;
+ *  3. pour un tout nouveau poste, reprendre ses Chats d'une autre IA ;
+ *  4. brancher ce qui manque, puis créer un premier agent ou une tâche.
+ * Ce qui est déjà fait ne revient pas : « Créer votre premier agent » restait
+ * affiché à qui en avait cinq.
+ */
 export async function suggestionsDuMoment(): Promise<Suggestion[]> {
   const [courrier, agenda, bases] = await Promise.all([
     etatCourrier().catch(() => null),
@@ -39,9 +56,24 @@ export async function suggestionsDuMoment(): Promise<Suggestion[]> {
   ]);
   const moi = currentUser();
   const agents = agentsVisibles(moi);
-  const taches = tachesVisibles(moi);
+  const ouvertes = tachesVisibles(moi).filter((x) => !estClose(x));
+  const aujourdhui = jourDe(new Date());
+  const enRetard = ouvertes.filter((x) => situation(x, aujourdhui) === "retard").length;
+  const chats = sessionsVisibles(moi).length;
 
   const liste: Suggestion[] = [];
+
+  if (enRetard > 0) {
+    liste.push({ icone: CalendarX, libelle: enRetard === 1 ? t("Voir votre tâche en retard") : tf("Voir vos {0} tâches en retard", enRetard), genre: "aller", chemin: "/taches" });
+  } else if (ouvertes.length > 0) {
+    liste.push({ icone: SquareCheck, libelle: ouvertes.length === 1 ? t("Reprendre votre tâche ouverte") : tf("Reprendre vos {0} tâches ouvertes", ouvertes.length), genre: "aller", chemin: "/taches" });
+  }
+
+  // La base la plus récemment modifiée : c'est celle qu'on vient de remplir.
+  const base = [...(bases ?? [])]
+    .filter((b) => b.documents.some((d) => d.etat === "pret"))
+    .sort((x, y) => y.updatedAt.localeCompare(x.updatedAt))[0];
+  if (base) liste.push({ icone: BookOpenText, libelle: tf("Poser une question à « {0} »", base.nom), genre: "base", base: base.id });
 
   if (courrier?.configure) {
     liste.push({
@@ -51,15 +83,7 @@ export async function suggestionsDuMoment(): Promise<Suggestion[]> {
       question: t("Résume mes derniers mails, en signalant ceux qui attendent une réponse."),
       outils: true,
     });
-  } else {
-    liste.push({
-      icone: Mail,
-      libelle: t("Connecter votre messagerie"),
-      genre: "aller",
-      chemin: "/parametres/mcp",
-    });
   }
-
   if (agenda?.configure) {
     liste.push({
       icone: CalendarClock,
@@ -68,34 +92,22 @@ export async function suggestionsDuMoment(): Promise<Suggestion[]> {
       question: t("Qu'est-ce que j'ai dans mon agenda cette semaine ?"),
       outils: true,
     });
-  } else {
-    liste.push({
-      icone: Calendar,
-      libelle: t("Connecter votre agenda"),
-      genre: "aller",
-      chemin: "/parametres/mcp",
-    });
   }
 
-  // Une base : on propose de l'interroger ; aucune : d'en créer une. Instance injoignable : rien.
-  if (bases && bases.length > 0) {
-    liste.push({
-      icone: BookOpenText,
-      libelle: tf("Interroger « {0} »", bases[0]!.nom),
-      genre: "aller",
-      chemin: "/bibliotheque?vue=connaissances",
-    });
-  } else if (bases) {
-    liste.push({ icone: BookOpenText, libelle: t("Créer une base de connaissances"), genre: "aller", chemin: "/bibliotheque?vue=connaissances" });
-  }
+  // Un poste neuf, sans aucun Chat : son historique est peut-être ailleurs.
+  if (chats === 0) liste.push({ icone: Import, libelle: t("Reprendre vos Chats d'une autre IA"), genre: "aller", chemin: "/parametres/importer" });
+
+  if (!courrier?.configure && courrier !== null) liste.push({ icone: Mail, libelle: t("Connecter votre messagerie"), genre: "aller", chemin: "/parametres/mcp" });
+  if (!agenda?.configure && agenda !== null) liste.push({ icone: Calendar, libelle: t("Connecter votre agenda"), genre: "aller", chemin: "/parametres/mcp" });
 
   if (agents.length === 0) {
     liste.push({ icone: Bot, libelle: t("Créer votre premier agent"), genre: "aller", chemin: "/agents" });
-  } else if (taches.length === 0) {
+  } else if (ouvertes.length === 0) {
     liste.push({ icone: SquareCheck, libelle: t("Créer une tâche à confier à un agent"), genre: "aller", chemin: "/taches" });
-  } else {
-    liste.push({ icone: SquareCheck, libelle: t("Voir où en sont vos tâches"), genre: "aller", chemin: "/taches" });
   }
 
-  return liste;
+  // Aucune base prête et l'instance répond : en créer une (une base vide ou en cours d'indexation n'a rien à dire).
+  if (!base && bases) liste.push({ icone: BookOpenText, libelle: t("Créer une base de connaissances"), genre: "aller", chemin: "/bibliotheque?vue=connaissances" });
+
+  return liste.slice(0, NOMBRE);
 }

@@ -381,6 +381,7 @@ export function HomePage() {
               // les outils : les laisser coupés donnerait une réponse à côté.
               if (outils) setToolsOn(true);
             }}
+            onBase={(base) => setBasesChoisies((avant) => (avant.includes(base) ? avant : [...avant, base]))}
           />
         </div>
       </div>

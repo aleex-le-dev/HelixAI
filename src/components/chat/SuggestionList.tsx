@@ -12,9 +12,12 @@ import { t } from "@/lib/i18n";
  */
 export function SuggestionList({
   onDemander,
+  onBase,
 }: {
   /** Pose une question au Chat ; `outils` demande de les activer pour elle. */
   onDemander?: (question: string, outils: boolean) => void;
+  /** Attache une base de connaissances à la zone de saisie. */
+  onBase?: (base: string) => void;
 }) {
   const navigate = useNavigate();
   const [liste, setListe] = useState<Suggestion[]>([]);
@@ -42,7 +45,11 @@ export function SuggestionList({
               <button
                 type="button"
                 onClick={() =>
-                  s.genre === "aller" ? navigate(s.chemin) : onDemander?.(s.question, s.outils)
+                  s.genre === "aller"
+                    ? navigate(s.chemin)
+                    : s.genre === "base"
+                      ? onBase?.(s.base)
+                      : onDemander?.(s.question, s.outils)
                 }
                 className="flex w-full items-center gap-3 rounded-lg px-2 py-2 text-left text-sm text-foreground transition-colors hover:bg-muted"
               >

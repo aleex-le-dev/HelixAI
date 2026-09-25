@@ -7,7 +7,9 @@ puisse la vérifier lui-même plutôt que de nous croire.
 La dernière passe complète, ses vingt-trois trouvailles et ce qui en restait ouvert
 sont au § 17 ; ce qui a été fermé depuis, au § 18 ; la surface ajoutée par les liens
 `helix://` de la 0.24.0, au § 19 ; et le jeton d'instance retiré du dossier de
-travail, au § 20.
+travail, au § 20. Les surfaces ajoutées le 24/09/2026 sont au § 21, celles du
+25/09/2026 (images des Chats partagés, bases de connaissances, entraînement,
+ligne de commande et outils de Code) au § 22.
 
 ---
 
@@ -241,7 +243,8 @@ chiffrement et le journal, **n'étaient vérifiés par aucune compilation**.
 qu'on lui demande **refuse**. Il n'accepte jamais par défaut.
 
 **La batterie de sécurité** (`npm run securite`, 0.27.0). Elle démarre une
-instance jetable et l'attaque de l'extérieur : 66 vérifications, chacune
+instance jetable et l'attaque de l'extérieur : 66 vérifications à sa création,
+125 le 25/09/2026 (toutes réussies ce jour-là), chacune
 disant ce qu'elle attend et ce qu'elle a obtenu — routes sans jeton et sans
 séance, compte ouvert sans invitation, mot de passe trop court, énumération des
 comptes, force brute freinée, mots de passe et jetons absents du disque et du
@@ -933,7 +936,9 @@ existent), jetons de séance (des clés d'accès), réglages de l'instance
 fichiers du dossier de travail (restés sur le disque), et les conversations de
 collègues simplement ouvertes à l'organisation (lisibles, mais pas des données
 sur la personne), et le contenu des documents de la bibliothèque (leur liste y est ;
-chacun se télécharge depuis l'écran, tel qu'il a été déposé).
+chacun se télécharge depuis l'écran, tel qu'il a été déposé). Les bases de
+connaissances (§ 22.2) n'y sont pas encore, pas même leurs métadonnées : c'est un
+manque, à combler.
 
 Chaque export est tracé (`donnees.exportees`, avec les nombres d'éléments,
 jamais le contenu). Toutes les réponses de la passerelle portent
@@ -2299,10 +2304,196 @@ curl -s -H "Authorization: Basic $(printf 'opencode:<mot de passe>' | base64)" \
 ## 21. Les surfaces ajoutées le 24 septembre 2026
 
 - **Téléchargements de modèles et de moteurs** (images, Lume, LibreOffice de la machine macOS) : jamais « la dernière version ». Chaque fichier est pris à une révision précise et vérifié par sha256 avant usage ; une empreinte fausse efface le fichier. L'application Lume est en plus vérifiée par sa signature (équipe Cua AI).
-- **Images créées** : rangées dans les données de l'instance, servies (`/helix/images/fichier/<id>`) à la seule personne qui les a créées ; identifiant de 128 bits vérifié par expression régulière avant tout accès disque.
+- **Images créées** : rangées dans les données de l'instance, servies (`/helix/images/fichier/<id>`) à la seule personne qui les a créées (depuis le 25/09/2026, aussi à qui voit le Chat où elles ont été créées : § 22.1) ; identifiant de 128 bits vérifié par expression régulière avant tout accès disque.
 - **Import depuis les logiciels du poste** (`/helix/import/...`) : séance exigée **et** demande venue de la boucle locale ; sinon refus. La base de Cursor est ouverte en lecture seule, par un programme lancé sans shell, avec un identifiant de conversation filtré avant d'entrer dans la requête SQL.
 - **Extension VS Code** : le jeton d'instance et la séance restent dans le processus de l'extension (la page du Chat n'appelle rien elle-même, CSP à nonce) ; la séance est dans le SecretStorage de VS Code ; le mot de passe n'est jamais gardé.
 - **Machine de l'agent** : Docker publié sur 127.0.0.1 seulement ; la machine macOS n'est joignable que depuis le Mac (réseau NAT de la virtualisation d'Apple) ; effacement réservé à une machine non choisie.
 - **Chats du poste** : fichier chiffré par safeStorage, 0600, écrit par renommage.
-- `npm run securite` vérifie désormais onze routes de plus (images, import, machine) : sans séance, 401. 77 contrôles au total.
+- `npm run securite` vérifie désormais onze routes de plus (images, import, machine) : sans séance, 401. 77 contrôles au total ce jour-là (125 le 25/09/2026, § 22).
+
+## 22. Les surfaces ajoutées le 25 septembre 2026
+
+`npm run securite` compte désormais **125 contrôles, tous réussis le 25/09/2026**.
+Ajoutés ce jour-là, par branche : 14 sur les images d'un Chat partagé (13, plus la
+connexion d'une collègue), 6 sur les bases de connaissances et 9 de leurs routes
+ajoutées aux listes « sans jeton » et « sans séance », 16 sur l'entraînement, 3 sur
+la route d'outils de Code.
+
+### 22.1 Images d'un Chat partagé
+
+`gateway/src/images.ts` (`imageVisible`), `gateway/src/authz.ts` (`voitConversation`,
+désormais exportée), `gateway/src/index.ts`.
+
+- Une image se voit par **son auteur** et par **qui voit le Chat où elle a été
+  créée**, et par personne d'autre. Tout autre demandeur reçoit **404, que l'image
+  existe ou non**.
+- L'identifiant du Chat est retenu à la création (`chat` dans
+  `<données>/images/index.json`). Il faut un Chat **qui contient l'image**, que le
+  demandeur voit, **et** qui soit celui de la création : un identifiant recopié dans
+  le Chat de quelqu'un d'autre, ou dans son propre Chat, n'ouvre rien. Une image
+  d'avant ce changement (sans `chat`) suit une règle de repli : un Chat **de son
+  auteur** qui la contient.
+- Réponse pour un collègue en `Cache-Control: no-store`, pour qu'un partage retiré
+  cesse aussitôt de servir l'image ; l'auteur garde `private, max-age=86400`.
+- Le relevé « image vers Chats » gardé en mémoire ne contient que les champs de
+  visibilité, pas les messages.
+- Effacement d'un compte : ses images (fichiers et registre) partent avec lui
+  (`oublierImagesDe`) ; avant, elles restaient sur le disque. Un registre illisible
+  n'est jamais réécrit vide : il est mis de côté (`index.<date>.illisible.json`), et
+  l'effacement de compte ne réécrit rien sur un registre illisible. Ce cas n'a pas été
+  provoqué.
+- Contrôlé par `npm run securite` (section 7 de la batterie), avec de fausses images
+  posées à la main : auteur 200 ; collègue 404 sans partage, 200 en `no-store` une fois
+  le Chat partagé ; ancienne image par la règle de repli ; image d'un autre Chat de
+  l'auteur 404 ; identifiant recopié 404 ; partage retiré, 404 aussitôt ; Chat ouvert
+  à l'organisation 200 ; identifiant inventé ou mal formé 404.
+- Limite : l'image n'apparaît au collègue que si le Chat a été synchronisé vers
+  l'instance. Pas essayé avec une vraie image sur un second poste.
+
+### 22.2 Bases de connaissances
+
+`gateway/src/connaissances.ts`, routes `/helix/connaissances*`.
+
+- **Droits hérités de la Bibliothèque** (« Fichiers » à l'écran) : une base a la
+  même visibilité que ses objets (vous seul, des groupes, toute l'équipe) ; **seul
+  son propriétaire** la modifie, y ajoute ou en retire des documents.
+- **Voir une base ne donne pas accès à ses documents.** À chaque recherche, seuls
+  comptent les documents que la personne voit dans la Bibliothèque au moment de la
+  question ; les autres ne sont ni nommés ni cités, l'écran dit seulement combien il
+  y en a. On n'ajoute à une base que des documents qu'on voit, et l'indexation lit le
+  texte avec les droits de la personne qui a ajouté le document.
+- Une base choisie (par un agent partagé, par exemple) que la personne ne voit pas
+  est ignorée par l'instance, et l'écran le dit.
+- Préfixe `/helix/connaissances` entier sous séance (`routeConnaissances` dans
+  `exigeSeance`). Le champ `connaissances` du corps de `POST /v1/chat/completions`
+  n'est lu qu'avec une séance.
+- **Au repos** : métadonnées dans la collection interne `connaissances`, chiffrée,
+  jamais synchronisée vers les postes ; un index par document et par base, 0600,
+  chiffré par `chiffrerOctets` lié à `connaissances:<base>:<document>`. Vérifié : les
+  fichiers commencent par l'en-tête chiffré `HLXF1`, ni un mot du document ni le nom
+  de la base n'y apparaissent en clair.
+- Effacement d'un compte : ses bases et leurs index partent ; ses documents ajoutés
+  aux bases de collègues en sont retirés (`effacement.ts`).
+- Journal : `connaissances.base_creee`, `base_modifiee`, `base_supprimee`,
+  `documents_ajoutes`, `document_retire`, avec identifiants et nombres, jamais de
+  texte.
+- Vérifié avec un second compte le 25/09/2026 : base privée ni listée, ni lisible
+  (404), ni modifiable (404), ni cherchable (0 passage, « 1 ignorée ») ; base ouverte
+  à toute l'équipe mais documents privés : 0 document nommé, 0 passage.
+
+Ce qui n'est pas protégé :
+
+- Les passages viennent de documents : un document piégé arrive dans le prompt. La
+  consigne le désigne comme une donnée, rien de plus n'est garanti ; en Cowork, outils
+  actifs, c'est la barrière d'approbation qui protège.
+- Les citations sont enregistrées avec le Chat : qui voit un Chat partagé voit les
+  extraits cités (600 caractères au plus chacun), comme il voit déjà la réponse.
+- Si le profil impose un modèle `embed` distant (`models.embed`), le texte des
+  documents part chez ce fournisseur ; l'écran de la base affiche le modèle qui a
+  indexé chaque document.
+- Les bases ne sont pas dans l'export RGPD (§ 7.1). Un document supprimé de la
+  Bibliothèque garde son index sur le disque jusqu'à ce que le propriétaire de la base
+  l'en retire ; il n'est plus jamais servi.
+
+### 22.3 Entraînement d'un modèle
+
+`gateway/src/entrainement.ts`, routes `/helix/entrainement*`.
+
+- Préfixe entier sous séance (`routeEntrainement` dans `exigeSeance`). Chaque projet
+  n'est rendu qu'à son auteur (404 sinon) ; son identifiant, **24 caractères
+  hexadécimaux tirés au sort**, est contrôlé avant tout accès disque.
+- **Projet chiffré au repos** (exemples, propositions, comparaisons) par la clé des
+  données (`chiffrerOctets`, lié à son identifiant) ; un projet illisible n'est jamais
+  réécrit. Les fichiers d'entraînement en clair n'existent que pendant le calcul et
+  sont effacés après, y compris quand la passerelle s'arrête (vérifié par SIGTERM en
+  plein calcul).
+- Aucun exemple ne devient argument de commande : tout passe par des fichiers. Scripts
+  Python constants, `spawn` sans shell, Python en mode isolé (`-I`) et environnement
+  réduit, Hugging Face hors ligne après installation. Exception documentée : le
+  convertisseur GGUF, lancé avec `-s` parce qu'il ne se lance pas en mode isolé.
+- Paquets du Mac installés par `pip --require-hashes --only-binary=:all: --no-deps`
+  contre des empreintes SHA-256 relevées sur PyPI ; modèles de départ pris à une
+  révision et vérifiés par empreinte. Sur NVIDIA, paquets figés à la version mais
+  **sans empreintes** (les roues CUDA de PyTorch viennent de son propre dépôt). Un vrai
+  refus d'empreinte par pip n'a pas été provoqué : c'est le comportement documenté de
+  `--require-hashes`.
+- Suppression bornée : seul un dossier sous `<modèles LM Studio>/helix-entrainement`
+  peut être effacé. Un modèle en train de répondre n'est ni déchargé ni effacé.
+- Journal : `entrainement.installe`, `desinstalle`, `projet_cree`, `projet_supprime`,
+  `paires_generees`, `termine`, `publie`, `retire`.
+- 16 contrôles dans la batterie : routes fermées sans jeton et sans séance,
+  identifiants détournés, projet chiffré sur le disque.
+
+Ce qui n'est pas protégé : **le modèle installé est visible de toute l'instance** dans
+le sélecteur, et ce qu'il a appris peut ressortir dans les Chats des collègues ; LM
+Studio ne cloisonne pas par personne. L'écran le dit avant l'installation.
+
+### 22.4 Ligne de commande et outils de Code
+
+`cli/helix.mjs`, `gateway/src/outilsCode.ts`, `gateway/src/opencode.ts`.
+
+**Route `/helix/code/outils`, réservée à l'agent de code de l'instance.** Hors du
+tableau `EXECUTION` (OpenCode n'a pas de séance), elle exige le jeton d'instance
+**et** une clé tirée à chaque démarrage de la passerelle (`X-Helix-Cle`), écrite
+seulement dans la configuration d'OpenCode (fichier 0600 qui porte déjà le jeton) et
+comparée en temps constant. Sans jeton, 401 ; sans clé ou avec une clé devinée, 403,
+même avec une séance (« Accès réservé à l'agent de code de l'instance. »). Contrôlé
+par 3 vérifications de la batterie.
+
+- Chaque appel passe par `verifierOutil` puis `executerOutil`, et est scellé au
+  journal (`surface: "code"`).
+- Le serveur de fichiers de Cowork, la bureautique, le contrôle du code web et
+  l'écran ne sont pas servis : ils agiraient hors du dossier du projet.
+- OpenCode ne dit pas de quelle session vient un appel. Si toutes les sessions qui
+  travaillent appartiennent à la même personne, la carte d'accord va chez elle ;
+  sinon (deux personnes, session inconnue), **refus sans carte**. Seul le refus
+  « session inconnue » a été observé ; le cas « deux personnes » n'a pas été essayé.
+- Un appel abandonné par OpenCode avant l'accord n'est pas exécuté après coup.
+- À ce jour, OpenCode 1.18.32 ne propose pas ces outils aux sessions de sa nouvelle
+  API : la route est en place, sans être utilisée par Helix Code.
+
+**La ligne de commande `helix`.**
+
+- **Jeton d'instance** : `--jeton` ou `HELIX_JETON`, sinon lu dans
+  `~/.helix/data/instance-token` **seulement si l'adresse est locale**. L'envoyer à
+  une instance d'entreprise lui donnerait la clé de l'instance du poste.
+- **Transport** : même règle que l'application. Sans schéma, https est supposé (sauf
+  boucle locale) ; http vers une autre machine est refusé avant tout envoi.
+- **Mot de passe** : tapé sans écho, envoyé une fois à `POST /helix/auth/verify`,
+  jamais écrit. Double authentification : défi puis code
+  (`/helix/auth/deux-facteurs`), écrit mais pas essayé au terminal. Un compte qui doit
+  activer le second facteur ou choisir son premier mot de passe est renvoyé vers
+  l'application.
+- **Séance** : `~/.helix/cli-seance` (ou `HELIX_CLI_SEANCE`), rangée **par adresse
+  d'instance** (une séance n'est envoyée qu'à l'instance qui l'a ouverte), écrite de
+  façon atomique en 0600, dossier en 0700. Poste nommé « Terminal (<machine>) » à
+  l'instance, visible et révocable dans Sécurité. **Contrepartie assumée** : fichier
+  en clair, protégé par les permissions du compte, comme les outils de ligne de
+  commande habituels ; un trousseau demanderait une dépendance native.
+- **Déconnexion** : la séance est d'abord fermée sur l'instance, puis oubliée ; si
+  l'instance ne répond pas, elle est oubliée et la ligne de commande dit qu'elle
+  expirera d'elle-même.
+- Un fichier de séance illisible n'est **jamais réécrit par-dessus** ; la ligne de
+  commande dit de le supprimer soi-même.
+- **Approbations** : elle n'écoute que les demandes de sa propre séance
+  (`/helix/approbation/evenements`) et répond par un booléen explicite. Seuls « o » ou
+  « oui » accordent ; toute autre réponse, Ctrl+C ou Ctrl+D refusent. Sans terminal,
+  elle ne répond rien et l'expiration (deux minutes) vaut refus.
+- Sans `--outils`, le Chat passe par l'API compatible au jeton seul, comme l'extension
+  VS Code, avec une consigne qui interdit au modèle de prétendre avoir agi.
+- Pas essayé : une instance d'entreprise en https à certificat auto-signé (Node le
+  refuse par défaut, il faudrait `NODE_EXTRA_CA_CERTS`), Windows.
+
+### 22.5 Deux protections de données, venues avec
+
+- **Fichier des Chats du poste illisible** (`electron/grandStockage.cjs`,
+  `src/lib/store/grandStockage.ts`, `sync.ts`) : il n'est jamais écrasé sans copie
+  `sessions.<date>.illisible.enc`, et la synchronisation ne pousse pas une collection
+  illisible tant que l'instance ne l'a pas rendue. Sans cela, un trousseau refusé au
+  démarrage menait à l'envoi d'une liste d'un seul Chat, que l'instance aurait prise
+  pour la suppression voulue de tous les autres. Vérifié par simulation, pas dans
+  l'application de bureau.
+- **Import par morceaux** (`importLocal.ts`) : le contenu n'est rendu que pour des clés
+  de la liste relevée par la passerelle ; aucun chemin venu de la requête n'est lu.
+  Vérifié avec `claude-code:../../etc/passwd` : ignorée.
 

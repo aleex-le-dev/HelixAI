@@ -19,7 +19,9 @@ l'écran Code adossé à OpenCode, le contrôle de l'écran sous approbation, le
 séances, les agents toujours actifs (OpenClaw, installé tout seul), les groupes, la
 bibliothèque, les réunions transcrites sur la machine et le bot de réunion, le
 branchement d'une trentaine de services (dont douze en un clic, par autorisation dans
-le navigateur), et la synchronisation de plusieurs postes vers une instance. Ce qui reste annoncé sans
+le navigateur), la synchronisation de plusieurs postes vers une instance, et depuis le
+25/09/2026 les bases de connaissances citées dans le Chat, la ligne de commande
+`helix` et l'entraînement d'un petit modèle sur Mac. Ce qui reste annoncé sans
 fonctionner est listé en fin de document.
 
 ## Démarrer
@@ -92,6 +94,36 @@ npm run dev
 L'interface est sur `http://localhost:5173`, la passerelle sur
 `http://localhost:8787` (Vite la sert derrière `/api`).
 
+### Ligne de commande
+
+`helix` (`cli/helix.mjs`, Node 20 ou plus, sans dépendance) parle à l'instance comme
+l'interface : il affiche, et transmet vos réponses ; modèles, outils, barrière
+d'approbation et journal restent ceux de l'instance. Sur un poste qui a le dépôt :
+`npm link` (ou `node cli/helix.mjs`). L'application empaquetée ne l'installe pas
+encore.
+
+```
+helix                          Chat interactif
+helix chat "question"          Une question, une réponse (aussi : cat notes.txt | helix chat "résume")
+helix chat --outils            Chat avec les outils de l'instance ; séance requise
+helix code "demande"           Helix Code sur le dossier courant (sans demande : interactif)
+helix connexion [--compte adresse@exemple.fr]
+helix deconnexion
+helix modeles                  Modèles de l'instance
+helix outils                   Groupes d'outils et niveau d'accord de l'instance
+helix aide
+```
+
+Options : `--adresse URL` (ou `HELIX_ADRESSE`, défaut `http://127.0.0.1:8787`),
+`--jeton` (ou `HELIX_JETON` ; à défaut, le jeton de l'application du poste, lu
+seulement pour une adresse locale), `--modele`, `--effort`, `--outils`. Dans une
+conversation : `/nouveau`, `/modele [NOM]`, `/aide`, `/quitter` (ou Ctrl+D) ; Ctrl+C
+arrête la réponse en cours. Une demande d'accord s'affiche en entier, « Autoriser ?
+[o/N] » : seuls « o » ou « oui » accordent. Sans terminal, rien n'est accordé et
+l'expiration vaut refus. Essai automatique : `npm run essai:cli` (ajouter
+`-- --modele` avec LM Studio). Vérifié sur macOS seulement ; textes en français
+seulement.
+
 ### Passerelle modèles
 
 `gateway/` est le seul point de contact avec l'inférence (cf.
@@ -154,6 +186,9 @@ Toutes exigent le jeton d'instance, sauf `GET /` et `GET /health`. Celles marqu�
 | `…/canaux` (`GET`, `POST`), `…/canaux/<type>/retirer`, `…/canaux/whatsapp/qr`, `…/demandes`, `…/demandes/<canal>/<code>/accepter` | Messageries d'un employé, liaison WhatsApp par QR, personnes à accepter | oui |
 | `GET`/`POST /helix/fournisseurs`, `POST …/essayer`, `POST …/<id>`, `…/<id>/supprimer` | Clés de modèles cloud (SECURITE.md § 15) | oui |
 | `POST /helix/employes/<id>/outils` | Serveur d'outils MCP de l'employé, appelé par l'instance OpenClaw (clé `X-Helix-Cle`) | non, clé |
+| `GET`/`POST /helix/connaissances`, `GET …/documents`, `POST …/chercher`, `GET`/`POST …/<id>`, `POST …/<id>/{documents,retirer,reindexer,supprimer}` | Bases de connaissances (SECURITE.md § 22.2) ; champ `connaissances` du corps de `POST /v1/chat/completions` | oui |
+| `GET /helix/entrainement`, `GET …/projet?id=`, `POST …/{installer,desinstaller,projets,renommer,exemples,importer,generer,lancer,arreter,comparer,publier,retirer,supprimer}` | Entraîner un modèle (SECURITE.md § 22.3) | oui |
+| `/helix/code/outils` | Connecteurs servis par MCP à l'agent de code de l'instance (jeton et clé `X-Helix-Cle`, SECURITE.md § 22.4) | non, clé |
 
 #### Variables d'environnement
 
@@ -695,6 +730,7 @@ gateway/src/                Passerelle : routage par rôle, outils, écran, donn
                             comptes, séances, chiffrement, audit, TLS, plan
                             d'étapes, atelier bureautique, agents OpenClaw,
                             groupes, bibliothèque, réunions
+cli/helix.mjs               Ligne de commande « helix » (textes dans cli/textes.mjs)
 electron/main.cjs           Processus principal : lance la passerelle, CSP, TOFU TLS
 electron/botReunion.cjs     Bot de réunion (fenêtre cachée), et son préchargement
 ```
@@ -727,6 +763,25 @@ l'agent d'orchestration par défaut. Aucun tiret cadratin dans les textes affich
   et Cursor installés sur le poste ;
 - Extension VS Code (`extensions/vscode/`) : Chat, Helix Code sur le dossier
   ouvert, expliquer ou améliorer une sélection ;
+- **Bases de connaissances** (RAG, 25/09/2026) : dans Fichiers, onglet « Bases de
+  connaissances », on rassemble des documents que l'instance indexe sur la machine
+  (modèle d'embeddings de LM Studio, index chiffrés). Un Chat qui a des bases (celles
+  de l'agent, du projet, ou cochées dans la pastille « Connaissances ») répond à partir
+  des passages trouvés et cite ses sources sous la réponse ; chacun n'y lit que les
+  documents qu'il voit dans Fichiers. Essayé de bout en bout dans l'interface ; Cowork
+  avec des bases et de vrais PDF ne l'ont pas été. Les employés OpenClaw ne les
+  consultent pas encore ;
+- **Ligne de commande `helix`** (25/09/2026) : Chat et Helix Code dans un terminal,
+  avec les outils et la barrière d'approbation de l'instance (voir « Ligne de
+  commande » plus haut). Pas encore livrée avec l'application empaquetée ; les
+  connecteurs n'atteignent pas encore Helix Code (limite de l'API actuelle
+  d'OpenCode), seulement `helix chat --outils` ;
+- **Entraîner un modèle** (Paramètres, 25/09/2026) : apprendre à un petit modèle
+  ouvert (Qwen3, Apache 2.0) les faits de son organisation à partir d'exemples, le
+  comparer au modèle de départ, puis l'installer dans LM Studio. Vérifié de bout en
+  bout sur un Mac à puce Apple de 16 Go (MLX-LM) ; le chemin des cartes NVIDIA (QLoRA)
+  est écrit mais n'a jamais été essayé sur une vraie machine, et l'écran le dit. Le
+  modèle installé est visible de toute l'instance ;
 - Projets, Agents, Tâches : création, persistance, partage, et exécution d'une tâche
   par un agent avec avancement du Kanban et trace des outils ; des cartes qui
   s'enchaînent (une carte attend les autres, part d'elle-même après elles et reçoit
@@ -798,7 +853,8 @@ l'agent d'orchestration par défaut. Aucun tiret cadratin dans les textes affich
   l'écran le dit (0.24.0) ;
 - **trois langues** : français, anglais, chinois. Le choix se fait dans
   Réglages, Préférences, vaut pour ce poste, et recharge la page pour que tout
-  change d'un coup. 1 842 phrases, traduites à 100 % dans les deux langues
+  change d'un coup. 1 842 phrases en 0.25.0 ; le 25/09/2026, 2 301 dans
+  l'interface et 650 dans la passerelle, traduites à 100 % dans les deux langues
   (`npm run i18n` le mesure). Ce que vous écrivez n'est jamais traduit (0.25.0) ;
 - **Paramètres → Abonnement** : l'offre d'hébergement des modèles, quatre
   formules, avec ce qu'elles comprennent. Éteinte par défaut en marque blanche.

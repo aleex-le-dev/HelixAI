@@ -11,7 +11,7 @@ refaite à l'envers.
 | | |
 |---|---|
 | Version | 0.27.0 (`package.json`) |
-| Dernière mise à jour | 23 septembre 2026 |
+| Dernière mise à jour | 25 septembre 2026 |
 | Documents liés | [ARCHITECTURE.md](ARCHITECTURE.md), [SECURITE.md](SECURITE.md), [SCREENS.md](SCREENS.md), [SIGNATURE.md](SIGNATURE.md), [README.md](README.md) |
 
 ---
@@ -663,11 +663,120 @@ local, conforme à la règle du § 1) :
    un garde-fou npm qui empêche une publication accidentelle du paquet. HelixAI est
    une application, pas une bibliothèque npm.
 
+**Ajouté le 25/09/2026** (relevé à la source ce jour-là, détail aux § 3.10 et 3.12) :
+
+| Brique | Éditeur | Licence | Usage | Remarque |
+|---|---|---|---|---|
+| nomic-embed-text v1.5 (embeddings) | Nomic AI | Apache 2.0 | bases de connaissances | déjà installé dans LM Studio, rien téléchargé |
+| AnythingLLM | Mintplex Labs | MIT | idées seulement (révision `ad97bc8d…`) | aucun code recopié, notice `gateway/rag/LICENCE-anything-llm.txt` |
+| LangChain.js, découpeur de texte | LangChain | MIT | code porté dans `decoupage.ts` (révision `e4a3d1bd…`) | notice `gateway/rag/LICENCE-langchainjs.txt` |
+| MLX, MLX-LM | Apple (ml-explore) | MIT | entraînement sur Mac | 0.32.2 et 0.31.3 |
+| Qwen3 0.6B, 1.7B, 4B Instruct 2507 (départ d'un entraînement) | Alibaba (Qwen) | Apache 2.0 | entraînement | révisions épinglées, empreintes vérifiées |
+| transformers, peft, accelerate ; bitsandbytes ; PyTorch ; llama.cpp | Hugging Face ; bitsandbytes ; PyTorch ; ggml-org | Apache 2.0 ; MIT ; BSD-3 ; MIT | entraînement sur carte NVIDIA | versions figées, **sans empreintes** pour les paquets NVIDIA |
+| Unsloth | Unsloth AI | cœur Apache 2.0, mais `unsloth_zoo` LGPL-3.0-or-later et Studio AGPL-3.0 | **non utilisé** | décision à prendre par Medhi (§ 3.12) |
+
+Écartés pour le RAG : LanceDB, better-sqlite3 / sqlite-vec et le reclassement par
+onnxruntime-node (modules natifs, § 3.10) ; Orama (licence déclarée « NOASSERTION »
+par GitHub le 25/09/2026, non vérifiée plus avant).
+
 Pour mémoire, si un client exige un modèle de dictée européen, deux existent,
 vérifiés sur leurs fiches : Kyutai STT 1B, français et anglais (laboratoire parisien, licence CC-BY 4.0, un milliard de
 paramètres, documenté pour carte graphique NVIDIA : fonctionnement sur Mac à
 éprouver) ; Voxtral Mini de Mistral (Apache 2.0, français compris, environ cinq
 milliards de paramètres, soit dix fois Whisper small).
+
+### 3.10 Bases de connaissances : sans module natif, avec les droits de Fichiers
+
+Décidé le 25/09/2026. Des **bases de connaissances**, sur le modèle des espaces de
+travail d'AnythingLLM : on y rassemble des documents de Fichiers (la Bibliothèque, dans
+le code) ; l'instance les découpe, les vectorise avec le modèle d'embeddings de la
+machine et garde des index chiffrés. Un Chat ou Cowork qui a des bases (celles de
+l'agent, du projet, ou cochées dans la zone de saisie) reçoit les passages proches de
+la question, et l'écran cite sous la réponse ceux que la réponse utilise.
+
+Pourquoi ainsi :
+
+- **Pas de base vectorielle native.** LanceDB (le défaut d'AnythingLLM),
+  better-sqlite3 / sqlite-vec et le reclassement par onnxruntime-node sont des modules
+  natifs ; la passerelle est un seul fichier CommonJS construit par esbuild et lancé
+  par le Node d'Electron 33. Un index par document, chargé en mémoire et comparé par
+  force brute (l'idée de Vectra), tient : mesuré sur la boucle, 8 ms pour 10 000
+  morceaux, 86 à 167 ms et environ 750 Mo pour 100 000.
+- **Recherche hybride** : produit scalaire plus BM25, fusion par rang (RRF). Par le
+  sens seul, 9 bonnes réponses au rang 1 sur 10 ; avec les mots, 10 sur 10.
+- **Aucune copie des documents.** Une base référence des documents de Fichiers ; le
+  texte indexé est celui que la Bibliothèque a déjà extrait sur le poste.
+- **Voir une base ne donne pas accès à ses documents.** À chaque question, seuls
+  comptent les documents que la personne voit dans Fichiers à ce moment-là. C'est la
+  seule règle qui empêche une base ouverte à l'équipe de faire fuir un document privé.
+- **Recouvrement de 150 caractères** (et non 20 comme AnythingLLM) : avec 20, une
+  phrase coupée à la frontière n'est entière dans aucun morceau.
+- **Seules les sources citées sont mises en avant.** Mesuré avec nomic : 0,68 à 0,80
+  pour le passage qui répond, 0,63 à 0,71 pour des passages sans rapport. Aucun seuil
+  ne les sépare ; les numéros [n] écrits par le modèle, si.
+- Le modèle d'embeddings est celui du rôle `embed` du routeur, jamais un modèle branché
+  par une clé personnelle d'office.
+
+### 3.11 Ligne de commande : un client de plus, qui ne décide rien
+
+Demandé le 25/09/2026 : « HelixAI Code dans un terminal, comme Claude Code, Codex CLI
+ou OpenCode CLI ». `helix` (`cli/helix.mjs`) est un client de plus de la passerelle,
+comme l'interface et l'extension VS Code dont il reprend la manière, sans dépendance
+(Node 20 et plus). Il affiche et transmet les réponses de la personne ; modèles,
+outils, barrière d'approbation et journal restent ceux de l'instance. **Seuls « o » ou
+« oui » accordent** une demande d'approbation ; sans terminal, il ne répond rien et
+l'expiration vaut refus.
+
+Les connecteurs n'atteignaient pas Helix Code : OpenCode tient sa propre boucle
+d'outils. Lui donner les commandes des serveurs MCP aurait été simple et **pas sûr** :
+il les aurait appelés sans barrière d'approbation, sans journal, et aurait reçu leurs
+secrets. La passerelle les sert donc elle-même à OpenCode, par MCP, sur
+`/helix/code/outils` (`outilsCode.ts`), derrière la barrière. OpenCode ne dit pas de
+quelle session vient un appel : si les sessions qui travaillent appartiennent toutes
+à la même personne, la carte d'accord va chez elle ; sinon, **refus sans carte**, parce
+qu'une carte envoyée à la mauvaise personne lui ferait approuver l'action d'un autre.
+
+Ce que cela donne aujourd'hui (mesuré le 25/09/2026, OpenCode 1.18.32) : les sessions
+de la nouvelle API d'OpenCode, celles qu'ouvre Helix Code, ne proposent pas les outils
+MCP au modèle. **Les connecteurs ne sont donc pas utilisables dans Helix Code**, ni à
+l'écran ni au terminal ; ils le sont par `helix chat --outils`. Repasser Code sur
+l'ancienne API aurait changé tout le flux d'évènements : pas fait.
+
+La séance du terminal est un fichier en clair (`~/.helix/cli-seance`, 0600, dossier
+0700), comme les outils de ligne de commande habituels : un trousseau demanderait une
+dépendance native. Contrepartie assumée, écrite dans SECURITE.md § 22.
+
+### 3.12 Entraîner un modèle : MLX-LM et QLoRA, pas Unsloth
+
+Demandé le 25/09/2026 : « entraîner un modèle sur des trucs précis », simplement,
+depuis le logiciel, avec Unsloth et d'autres briques ouvertes. Livré : Paramètres >
+Entraîner un modèle, en quatre étapes (exemples, entraîner, comparer, installer dans
+LM Studio), et `gateway/src/entrainement.ts`.
+
+- **Sur Mac, MLX-LM (MIT), LoRA.** Unsloth sur Mac passe lui-même par MLX : inspecté
+  en lecture seule le 25/09/2026, son application installe mlx 0.32.1 et mlx-lm 0.31.3
+  dans un environnement de 4,4 Go, et bascule sur `unsloth_zoo.mlx`. Aller directement à
+  MLX-LM, c'est le même moteur, sans 4 Go de plus. Piloter l'application Unsloth du
+  poste a été écarté (authentification propre, bêta, données d'une autre application).
+- **Sur carte NVIDIA, transformers + peft, QLoRA 4 bits** (Apache 2.0, bitsandbytes
+  MIT). Écrit d'après la documentation, **jamais essayé sur une vraie machine**, et
+  l'écran le dit.
+- **Unsloth n'est pas utilisé pour sa licence** : le cœur est Apache 2.0 mais dépend
+  d'`unsloth_zoo`, LGPL-3.0-or-later, et Studio est AGPL-3.0 ; la règle du projet
+  (Apache 2.0 ou MIT) l'écarte tel quel. **À trancher par Medhi** : sur NVIDIA, Unsloth
+  irait environ deux fois plus vite avec la même méthode, et la LGPL utilisée comme
+  bibliothèque dans un environnement séparé est compatible avec l'AGPL. S'il l'accepte,
+  seul `SCRIPT_NVIDIA_ENTRAINER` change.
+- **Exemples d'ancrage** : 30 questions ordinaires répondues par le modèle de départ
+  lui-même, mêlées aux exemples. Mesuré sur Qwen3 1.7B : sans eux, 12 faits sur 15 et
+  « la capitale de l'Italie est Verona » ; avec eux et une échelle LoRA de 10, 15 sur 15.
+- **Rien n'est appris sans accord** : les paires tirées d'un document par le modèle du
+  Chat vont dans « propositions à relire ».
+- **Le modèle installé n'est jamais choisi d'office** : constaté à l'écran, il devenait
+  le raccourci « Rapide » du sélecteur. Les modèles de `helix-entrainement/` portent
+  `entraine: true` et sont écartés du choix automatique.
+- Un nouvel entraînement s'écrit à côté de l'ancien : arrêté ou raté, il ne fait pas
+  perdre le modèle qui marchait.
 
 ---
 
@@ -792,6 +901,19 @@ deux sont corrigés et vérifiés. À retenir : un banc d'essai qui recrée le c
 nominal ne remplace pas un lancement de l'application livrée, sur de vraies
 données.
 
+### Ce qui a été ajouté le 25/09/2026
+
+Détail dans [SECURITE.md](SECURITE.md) § 22. `npm run securite` compte désormais
+**125 contrôles, tous réussis le 25/09/2026** (77 la veille).
+
+| Surface | Règle |
+|---|---|
+| Images d'un Chat partagé | Visibles de leur auteur et de qui voit le Chat **où elles ont été créées** (`voitConversation`) ; tout autre demandeur reçoit 404, que l'image existe ou non. Un identifiant recopié dans un autre Chat n'ouvre rien. Réponse `no-store` pour un collègue, pour qu'un partage retiré cesse aussitôt |
+| Bases de connaissances | Droits hérités de Fichiers : une base a la visibilité des objets de la Bibliothèque, seul son propriétaire la modifie, et à chaque question seuls comptent les documents que la personne voit. Index chiffrés, 0600. Préfixe `/helix/connaissances` entier sous séance |
+| Entraînement | Préfixe `/helix/entrainement` entier sous séance ; projet rendu à son seul auteur, identifiant de 24 caractères hexadécimaux tiré au sort ; projet chiffré au repos, jamais réécrit s'il est illisible ; aucun exemple en argument de commande |
+| Outils de Code | `/helix/code/outils` réservée à l'agent de code de l'instance : jeton **et** clé tirée à chaque démarrage (`X-Helix-Cle`), comparée en temps constant ; chaque appel passe par la barrière et le journal |
+| Ligne de commande | Jeton du poste lu **seulement pour une adresse locale** ; http vers une autre machine refusé avant tout envoi ; mot de passe tapé sans écho et jamais écrit ; séance rangée par adresse d'instance |
+
 ### Principes à tenir
 
 - **Échec fermé.** Un contrôle de sécurité qui ne comprend pas ce qu'on lui demande
@@ -852,6 +974,19 @@ données.
   travail d'un employé (ses notes) est commune à tous ceux qui lui parlent, et
   l'écran le dit. Ses propres outils de fichiers ne sortent pas de son espace
   (`tools.fs.workspaceOnly`) ; tout ce qui touche l'entreprise passe par Helix.
+- **Bases de connaissances** (25/09/2026) : un document piégé (« ignore tes
+  instructions ») arrive dans le prompt avec ses passages. La consigne le désigne comme
+  une donnée, rien de plus n'est garanti ; en Cowork, c'est la barrière d'approbation
+  qui protège. Les extraits cités sont gardés avec le Chat : qui voit un Chat partagé
+  les voit, comme il voit déjà la réponse. Un modèle `embed` distant imposé par le
+  profil ferait partir le texte des documents chez ce fournisseur (l'écran de la base
+  affiche le modèle qui a indexé chaque document).
+- **Modèle entraîné** (25/09/2026) : une fois installé, il est visible de toute
+  l'instance dans le sélecteur, et ce qu'il a appris peut ressortir dans les Chats des
+  collègues ; LM Studio ne cloisonne pas par personne. L'écran le dit avant
+  l'installation.
+- **Séance de la ligne de commande** en clair sur le disque, protégée par les
+  permissions du compte (§ 3.11).
 
 ---
 
@@ -1891,7 +2026,8 @@ construits ». L'écran explique le clic droit → Ouvrir, tant que l'applicatio
 n'est pas signée.
 
 **La sécurité, attaquée plutôt que relue** : `npm run securite` lance une
-instance jetable et frappe à chaque porte (66 vérifications : routes sans
+instance jetable et frappe à chaque porte (66 vérifications en 0.27.0, 125 le
+25/09/2026, toutes réussies : routes sans
 jeton ou sans séance, énumération de comptes, force brute, billets réutilisés,
 CORS, en-têtes, chemins détournés, fin de séance, secrets au journal, écoute
 réseau). Elle a trouvé un vrai défaut : une variable `HELIX_GATEWAY_HOST` vide
@@ -1912,9 +2048,121 @@ débordements, textes coupés, images cassées et erreurs, en français, anglais
 et chinois. Aucun défaut d'affichage. Corrigé au passage : l'accueil saluait
 par l'identifiant (« Bonjour, medhi.clabaut ») au lieu du prénom.
 
+### Fait le 25/09/2026 : bases de connaissances, ligne de commande, entraînement, corrections
+
+Quatre branches fusionnées dans main le même jour. Les décisions sont aux § 3.10,
+3.11 et 3.12, la sécurité au § 4 et dans SECURITE.md § 22.
+
+**Bases de connaissances (RAG).** Onglet « Bases de connaissances » dans Fichiers,
+pastille « Connaissances » de la zone de saisie (Chat et Cowork), bases d'un agent et
+d'un projet, sources citées sous la réponse. Mesuré par la branche le 25/09/2026 (Apple
+M4, passerelle d'essai, quatre documents fictifs, `text-embedding-nomic-embed-text-v1.5`
+et `qwen3-8b` déjà chargés) : 309 morceaux indexés en 16,1 s, environ 24 par seconde ;
+sur 10 questions dont la réponse n'est que dans les documents, le bon passage au rang 1
+dix fois sur dix en hybride (neuf par le sens seul) ; 12 à 20 ms par question à chaud,
+361 ms à froid ; au Chat, 9 réponses justes sur 9, chacune citant [1], et à la question
+sans réponse, « les passages n'en parlent pas » sans citation ; question de suite « Et
+pour un employé ? » juste. Second compte : base privée ni listée, ni lisible, ni
+cherchable ; base ouverte mais documents privés, 0 document nommé, 0 passage. Index en
+0600, chiffrés (en-tête `HLXF1`), 1,1 Mo pour 300 morceaux.
+**Essayé de bout en bout dans l'interface le 25/09/2026**, par la personne qui a
+fusionné : base créée, deux documents indexés par
+`text-embedding-nomic-embed-text-v1.5`, recherche d'essai correcte, puis un Chat avec la
+base attachée a répondu juste (27 jours de congés, baguette à 1,30 euro) avec les deux
+sources citées sous la réponse.
+*Pas essayé* : Cowork avec des bases (outils actifs) ; de vrais PDF et documents Office
+(seuls des fichiers texte ont été indexés) ; une vraie base de 100 000 morceaux (seule
+la boucle de recherche a été mesurée) et la mémoire de l'application avec un gros
+cache ; la reprise de l'indexation après un arrêt en plein travail ; l'effet des
+préfixes `search_document:` / `search_query:` ; PostgreSQL comme magasin ; l'instance
+empaquetée, Windows et Linux.
+
+**Ligne de commande `helix`.** `helix` (Chat interactif), `helix chat "question"` (aussi
+par un tube), `helix chat --outils` (outils de l'instance, séance requise),
+`helix code` sur le dossier courant, `connexion`, `deconnexion`, `modeles`, `outils`.
+Installation sur un poste qui a le dépôt : `npm link` ou `node cli/helix.mjs`.
+Vérifié par la branche le 25/09/2026 : `npm run essai:cli` 31 sur 31 sans modèle, 41 sur
+41 avec qwen3-8b (écriture mise en attente d'accord, refusée puis accordée au
+pseudo-terminal par « o » ; Code écrit `bonjour.txt` au bon contenu ; Ctrl+C rend la
+main). Connecteurs dans Code : route connectée et appelée depuis l'ancienne API
+d'OpenCode, **pas proposée par la nouvelle** (§ 3.11).
+*Pas essayé* : une vraie demande d'accord par un connecteur (Drive, Slack, courrier) et
+le mail affiché en entier dans la carte ; la double authentification au terminal ; une
+instance d'entreprise en https à certificat auto-signé (Node le refuse, il faudrait
+`NODE_EXTRA_CA_CERTS`) ; Windows ; le refus « deux personnes en même temps » de
+`outilsCode.ts` (seul « session inconnue » a été observé) ; qu'OpenCode cesse vraiment
+d'écrire après Ctrl+C. La ligne de commande ne parle que français (textes dans
+`cli/textes.mjs`).
+
+**Entraîner un modèle.** Paramètres > Entraîner un modèle, quatre étapes. Vérifié par
+la branche le 25/09/2026 (Mac mini M4, 16 Go, macOS 27) : moteur installé par la route
+en 15 s (34 paquets vérifiés par empreinte, 435 Mo), Qwen3 1.7B téléchargé (4,06 Go en
+3 min 15, empreintes conformes) ; de bout en bout, 26 exemples appris et 4 mis de côté,
+entraînement en 2 min 38 (2 min 43 annoncées), erreur sur les exemples mis de côté de
+4,05 à 0,022, 8 faits justes sur 8 à la comparaison ; installé dans LM Studio en 9 s
+(1,84 Go), puis interrogé par le Chat de Helix : réponse juste ; retrait complet. Arrêt
+en plein calcul, par le bouton ou par l'arrêt de la passerelle : rien de laissé, le
+modèle précédent gardé. Chemin GGUF (celui du PC NVIDIA) essayé sur le Mac : conversion
+Q8_0 en 19 s, mêmes réponses.
+**Vérification du 25/09/2026 par la personne qui a fusionné** : écran vu ; « Tirer des
+exemples d'un document » essayé avec Qwen3 8B : l'ancienne consigne ne rendait que 2
+paires sur un règlement de 5 faits ; consigne corrigée (« Couvre chacun des faits »),
+8 paires couvrant les 5 faits. L'installation du moteur (4 Go) et un entraînement
+complet **n'ont pas été refaits** dans cette vérification.
+*Pas essayé* : tout le chemin NVIDIA sauf la conversion GGUF (PyTorch CUDA, QLoRA,
+comparaison et fusion par peft) ; Qwen3 0.6B et Qwen3 4B Instruct 2507 (empreintes
+relevées, jamais téléchargés en entier ni entraînés) ; Windows, Linux, macOS 14 et 15 ;
+un vrai refus d'empreinte par pip ; des jeux de centaines d'exemples ; deux personnes à
+la fois sur une instance partagée.
+
+**Images d'un Chat partagé** (ancien point 12). Une image se voit par son auteur et par
+qui voit le Chat où elle a été créée ; toute autre demande reçoit 404. Relevé
+« image vers Chats » gardé en mémoire : mesuré le 25/09/2026 sur 2 000 Chats de 40
+messages (164 Mo), 930 à 1 025 ms pour le refaire, puis 0,3 ms. Les images d'un compte
+effacé partent avec lui (elles restaient sur le disque). Vérifié par `npm run securite`
+avec de fausses images posées à la main ; *pas essayé* : une vraie image créée puis vue
+par un collègue sur un second poste. L'image n'apparaît au collègue que si le Chat a été
+synchronisé vers l'instance.
+
+**Import par morceaux** (ancien point 14). La liste arrive par pages de 50 conversations
+(ou 64 Mo de fichiers) lues ligne à ligne, les plus récentes d'abord, 5 000 au plus ;
+seul le contenu des Chats choisis est ensuite chargé, par lots, **avant** la création
+des projets et des agents. Mesuré le 25/09/2026 sur un jeu factice de 2 000
+conversations Claude Code (4,7 Go, HOME jetable) : 2 000 proposées au lieu de 500, boucle
+de la passerelle bloquée 9 à 14 ms au pire au lieu de 1 372 à 1 588 ms, mémoire au pic
+109 à 173 Mo au lieu de 295 Mo, première page en 0,1 s. Une clé inventée
+(`claude-code:../../etc/passwd`) est ignorée. Cursor : `sqlite3` ne bloque plus la
+passerelle. **Vu à l'écran le 25/09/2026** : 5 lots pour Claude Code, 19 Chats listés ;
+Cursor, à 0 conversation, a son bouton désactivé. *Pas essayé* : Cursor sur une vraie
+base, Codex (même code, pas mesuré).
+
+**Douze défauts de ce qui avait été ajouté le 24/09, corrigés.** Registre des images
+illisible réécrit par-dessus (désormais mis de côté, `index.<date>.illisible.json`) ;
+installation d'images sans progression ; modèle d'image retiré pendant la préparation
+d'une création ; images d'un compte effacé gardées ; import Cursor affiché
+« undefined » ; textes hors traduction ; **fichier des Chats illisible écrasé sans
+copie** (le schéma de la perte du 24/09, sans prétendre que c'en était la cause :
+désormais copie `sessions.<date>.illisible.enc`, et `sync.push` ne pousse pas une
+collection illisible tant que l'instance ne l'a pas rendue ; vérifié avec un faux module
+electron, 50 Chats récupérables au lieu de perdus, **pas essayé dans l'application de
+bureau**) ; design posé sur un site existant (ne se pose plus que dans un dossier sans
+page ni feuille de style) ; relecture d'un classeur qui avalait la cellule suivant une
+cellule vide mise en forme ; onglet Code de VS Code muet ; flux Code de VS Code laissé
+ouvert ; changement de système pendant la préparation de la machine (refusé, 409). Les
+défauts 1, 2, 3 et 12 ont été corrigés sur lecture du code, sans reproduction ; le
+paquet `.vsix` n'a pas été refait ; rien n'a été lancé dans VS Code.
+
+**Interface et traductions.** À l'écran, la Bibliothèque s'appelle « Fichiers » : les
+nouveaux textes le disent (« Ajouter depuis Fichiers », etc.). Durées et similarités
+s'affichent avec la virgule décimale de la langue (`toLocaleString`). Trois messages
+d'erreur gardés avec un document (`d.erreur`) sont déclarés dans `PHRASES_GARDEES`, en
+fin de `gateway/src/connaissances.ts`, pour que `scripts/i18n-passerelle.mjs` les
+relève. Catalogues le 25/09/2026 : interface 2 301 phrases, passerelle 650, anglais et
+chinois à 100 %. `npm run securite` : 125 contrôles, tous réussis.
+
 ### Ce qui reste à faire
 
-*Liste refaite le 24/09/2026 au soir. Ce qui est fait est décrit plus haut ;
+*Liste refaite le 25/09/2026. Ce qui est fait est décrit plus haut ;
 ne restent ici que les points ouverts.*
 
 **Ce qui dépend du client**
@@ -1938,31 +2186,78 @@ ne restent ici que les points ouverts.*
    mail personnelle du client de `src/lib/store/identity.ts` et
    `src/data/mock/user.ts`.
 
+6. **Licence d'Unsloth** (§ 3.12) : `unsloth_zoo` est LGPL-3.0-or-later et Unsloth
+   Studio AGPL-3.0, hors de la règle Apache 2.0 ou MIT. Non utilisé : l'entraînement
+   passe par MLX-LM (Mac) et QLoRA avec transformers et peft (NVIDIA). **Décision à
+   prendre par Medhi** ; s'il l'accepte, seul `SCRIPT_NVIDIA_ENTRAINER` change.
+
 **Ce qui attend une machine qu'on n'a pas**
 
-6. **Qwen-Image** (texte lisible dans l'image) : 48 Go ou carte de 24 Go.
-7. **Machine macOS de Cowork** (Lume) : Mac de 32 Go.
-8. **Windows et Linux** : images, machine de l'agent, dictée, jamais essayés
-   sur place.
+7. **Qwen-Image** (texte lisible dans l'image) : 48 Go ou carte de 24 Go.
+8. **Machine macOS de Cowork** (Lume) : Mac de 32 Go.
+9. **Windows et Linux** : images, machine de l'agent, dictée, ligne de commande
+   (mode brut du terminal, chemins), jamais essayés sur place.
+10. **Entraînement sur carte NVIDIA** : installation de PyTorch CUDA, QLoRA, comparaison
+    et fusion par peft jamais essayés sur une vraie machine (seule la conversion GGUF
+    l'a été, sur le Mac) ; paquets NVIDIA figés à la version mais sans empreintes.
+    Aussi : Qwen3 0.6B (Mac de 8 Go) et Qwen3 4B Instruct 2507 (Mac de 32 Go, NVIDIA
+    12 Go) jamais téléchargés en entier ni entraînés ; macOS 14 et 15.
 
 **Ce qu'on peut faire ici**
 
-9. **Extension VS Code** : première vraie question tapée dans VS Code par le
-   client ; publication sur la place de marché (compte éditeur à créer).
-10. **Import Cursor** : l'éprouver sur de vraies conversations (le poste du
-    client n'a que des brouillons vides).
-11. **Le modèle de l'écran Code** : Qwen3 8B y est faible (répétitions, guide de
+11. **Extension VS Code** : première vraie question tapée dans VS Code par le
+    client ; publication sur la place de marché (compte éditeur à créer). Les deux
+    corrections du 25/09 (onglet Code muet, flux laissé ouvert) sont vérifiées par
+    simulation seulement, et le `.vsix` n'a pas été refait.
+12. **Import Cursor** : l'éprouver sur de vraies conversations (le poste du
+    client n'a que des brouillons vides). Import Codex par morceaux : pas mesuré.
+13. **Le modèle de l'écran Code** : Qwen3 8B y est faible (répétitions, guide de
     design ignoré sans les filets de design.ts). Un modèle fait pour le code
     (Qwen3-Coder, Devstral) ou une clé cloud ferait mieux.
-12. **Images d'un Chat partagé** : aujourd'hui visibles de leur seul auteur ;
-    les servir à qui voit le Chat.
-13. **Le garde d'Eden** (script du client, hors Helix) recharge Qwen3 8B à ses
-    propres réglages et peut couper une réponse d'Helix en cours : à harmoniser
-    si le client le demande.
-14. **Import des longues conversations** : `importLocal.ts` lit les fichiers
-    d'un coup, la passerelle ne répond plus à rien pendant ce temps (mesuré le
-    24/09/2026 : 0,9 s pour les 20 conversations Claude Code du client, 416 Mo
-    de fichiers) ; à lire par morceaux si des postes en ont des milliers.
+14. **Détection de design trop large** : une demande de code ordinaire qui contient
+    « interface », « page » ou « formulaire » (« ajoute une interface User ») dans un
+    dossier sans page ni feuille de style pose encore design/ et sa consigne.
+    L'expression `WEB` de `estDemandeDeSite` (design.ts) serait à resserrer avec le
+    client.
+15. **Le garde d'Eden**, l'instance OpenClaw personnelle du client (script hors
+    Helix), recharge Qwen3 8B à ses propres réglages : il peut couper une réponse
+    d'Helix en cours, et **gêne l'entraînement** sur un Mac de 16 Go. Qwen3 8B chargé
+    avec 28 160 jetons retient 10,4 Go de mémoire graphique, MLX échoue alors
+    (« Insufficient Memory ») ; l'entraînement décharge les modèles au repos, mais un
+    programme du poste (sans doute ce garde, ou un autre client de LM Studio) recharge
+    Qwen3 8B dans la minute : deux lancements sur huit se sont arrêtés ainsi le
+    25/09/2026. Le message le dit et il suffit de relancer ; une vraie parade demande
+    d'harmoniser avec ce garde, si le client le demande. Helix n'y touche pas.
+16. **Serveurs MCP dans HelixAI Code** (§ 3.11) : bloqués par la nouvelle API
+    d'OpenCode, qui ne propose pas les outils MCP au modèle (mesuré avec OpenCode
+    1.18.32). La route `/helix/code/outils` et sa barrière sont prêtes ; à revérifier à
+    chaque mise à jour d'OpenCode, puis de bout en bout (appel, carte d'accord chez la
+    bonne personne, journal). D'ici là, les connecteurs passent par
+    `helix chat --outils`.
+17. **Livrer la ligne de commande avec l'application** : elle n'est pas dans le paquet,
+    ni dans le `PATH` (par exemple un lien depuis Réglages) ; l'essayer sur le poste du
+    client. Traductions anglaise et chinoise de ses textes (`cli/textes.mjs`), si le
+    client le demande. Documenter `NODE_EXTRA_CA_CERTS` pour une instance à certificat
+    auto-signé.
+18. **Employés OpenClaw et bases de connaissances** : les employés ne consultent pas
+    encore les bases de leur agent ; seuls le Chat et Cowork le font. Il faudrait un
+    outil `connaissances__chercher` limité à ce qui est ouvert à toute l'équipe, comme
+    la Bibliothèque.
+19. **Bases de connaissances hors de l'export RGPD** : `/helix/export` ne contient pas
+    les bases (métadonnées). Et un document supprimé de Fichiers reste listé dans la
+    base (« supprimés depuis ») jusqu'à ce que le propriétaire l'y retire ; son index
+    reste sur le disque jusque-là, sans plus jamais être servi.
+20. **À essayer dans l'application de bureau** : le fichier des Chats illisible (copie
+    `.illisible.enc`, pas de poussée vers l'instance), l'écran d'import par morceaux et
+    son bilan ; Cowork avec des bases de connaissances ; de vrais PDF et documents
+    Office dans une base ; une vraie image vue par un collègue sur un second poste.
+21. **Petits restes du 25/09** : un poste dont le fichier des Chats est illisible ne
+    les montre qu'une fois l'instance relue, sans bandeau qui le signale (il faudrait
+    le bandeau et ses textes) ; au bureau, `ajouterSessionsImportees` compte comme
+    gardé ce qui est en mémoire, et si l'écriture du fichier échoue ensuite, le repli
+    vers le stockage du navigateur peut dépasser son quota sans que le bilan le dise ;
+    un petit modèle entraîné garde des traces hors de propos (la Joconde attribuée à la
+    fondatrice imaginaire), d'où le conseil de deux ou trois formulations par fait.
 
 **Titulaire des droits** : tranché le 24/09/2026, « Medhi Clabaut » (entreprise
 individuelle, SIREN 994 907 145), partout ; mentions légales et section

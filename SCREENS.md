@@ -106,7 +106,21 @@ photos et fichiers », « Créer une image ») ; « Créer une image » pose une
 pastille **« Image · modèle × »** dont le menu règle le format (carré,
 portrait, paysage) et le modèle (conseillé en premier, taille à télécharger,
 « pas encore vérifié avec Helix » quand c'est le cas, installation suivie en
-direct). L'image apparaît dans le Chat avec « Télécharger ».
+direct). L'image apparaît dans le Chat avec « Télécharger ». Depuis le
+25/09/2026, elle est visible aussi de qui voit le Chat partagé où elle a été
+créée.
+
+Ajouté le 25/09/2026 : la pastille **« Connaissances »** de la zone de saisie
+(`ConnaissancesChip.tsx`, aussi dans Cowork) ouvre la liste des bases de
+connaissances à cocher (nombre de passages, « Indexation en cours »), avec
+« Gérer les bases de connaissances » ; son libellé devient le nom de la base, ou
+« {0} bases ». Le choix est gardé avec le Chat. Sous la réponse, **« Sources »** :
+les passages que la réponse cite par leur numéro [n], mis en avant ; les autres,
+repliés, « non cités ». Les bases de l'agent choisi ou du projet où le Chat est rangé
+sont consultées aussi (« Par l'agent… », « Par le projet… »). Une base qu'on ne voit
+pas est dite « ignorée », un document indexé par un autre modèle est signalé.
+**Essayé dans l'interface le 25/09/2026** : un Chat avec une base de deux documents a
+répondu juste, les deux sources citées sous la réponse.
 
 ### `/cowork` Cowork
 
@@ -160,6 +174,11 @@ chat neuf (appliqué à sa création) ou en cours, et « Retirer du projet ». C
 un **classement personnel** : les membres du projet ne voient pas le chat, sauf
 partage explicite, et le menu le dit. Seul le propriétaire d'un chat le range.
 
+**Bases de connaissances d'un projet** (25/09/2026) : la fiche d'un projet a une
+section « Bases de connaissances » (`ChoixBases.tsx`) : les Chats rangés dans ce
+projet y cherchent avant de répondre, chaque membre n'y lisant que ce qu'il a le droit
+de voir. Pas vu à l'écran lors de la vérification du 25/09.
+
 ### `/agents` Agents
 
 `src/pages/AgentsPage.tsx`. Captures 12 à 14.
@@ -172,6 +191,11 @@ sélectionnable dans le Chat et exécutable sur une tâche.
 **Depuis 0.14.0, plus d'onglet Employés** : chaque agent créé est mis en service tout
 seul, et sa carte ouvre la fiche décrite ci-dessous (état « En service », ou l'étape de
 sa mise en service, dont l'installation d'OpenClaw la première fois).
+
+**Bases de connaissances d'un agent** (25/09/2026) : à la création d'un agent et sur
+sa carte (« Connaissances de {0} »), le choix des bases que le Chat consulte avec cet
+agent. Seul le Chat (et Cowork) s'en sert : l'employé OpenClaw de l'agent ne les
+consulte pas encore. Pas vu à l'écran lors de la vérification du 25/09.
 
 **Fiche d'un agent en service** (0.11.0, `src/components/agents/Employes.tsx`) : des agents
 OpenClaw qui travaillent pour toute l'équipe. « Déployer un employé » ouvre un
@@ -255,6 +279,23 @@ ligne : Télécharger, Renommer, Qui peut le voir, Déplacer, Supprimer (propri�
 seulement). Le menu contextuel au clic droit des captures n'est pas repris : les
 mêmes actions sont dans le menu « ... » de chaque ligne.
 
+À l'écran, ce module s'appelle **« Fichiers »** ; le code et cette documentation
+gardent « Bibliothèque ». Les textes ajoutés le 25/09/2026 disent « Fichiers ».
+
+**Onglet « Bases de connaissances »** (25/09/2026,
+`src/components/bibliotheque/BasesConnaissances.tsx`). Une base rassemble des
+documents de Fichiers : « Nouvelle base » (nom, description, « Qui peut s'en
+servir »), puis sur sa fiche « Ajouter depuis Fichiers », « Importer un fichier »
+(le document entre d'abord dans Fichiers), « Tout réindexer », « Modifier »,
+« Supprimer la base » (les documents restent dans Fichiers). Tableau des documents :
+état (En attente, Découpage..., progression « {0} sur {1} passages », Prêt, Sans
+texte, Échec), passages, « Indexé par {0} en {1} s », Réindexer, Retirer de la base.
+Les documents qu'on ne voit pas ne sont pas nommés (« {0} autre(s) document(s) ... ne
+vous sont pas visibles »). Encadré **« Essayer une question »** : passages trouvés,
+similarité, « mots trouvés », durée. Durées et similarités avec la virgule décimale
+de la langue. **Vu le 25/09/2026** : base créée, deux documents indexés par
+`text-embedding-nomic-embed-text-v1.5`, recherche d'essai correcte.
+
 ### `/reunions` Réunions
 
 `src/pages/ReunionsPage.tsx`, `src/lib/reunions.ts`, `gateway/src/reunions.ts`,
@@ -289,7 +330,9 @@ la fiche d'une réunion.
 ## 5. Paramètres
 
 `src/components/settings/SettingsShell.tsx` pour la navigation,
-`src/pages/ParametresPages.tsx` pour les pages. Douze entrées, toutes atteignables.
+`src/pages/ParametresPages.tsx` pour les pages. Quinze entrées, toutes atteignables
+(seize avec Abonnement, éteint en marque blanche), relevées dans `SettingsShell.tsx`
+le 25/09/2026.
 
 | Route | Écran | État |
 |---|---|---|
@@ -299,6 +342,10 @@ la fiche d'une réunion.
 | `/parametres/personnalisation` | Personnalisation de l'IA | ✅ **fonctionne** |
 | `/parametres/bot-recorder` | Bot Recorder | ✅ **fonctionne** (0.16.0) |
 | `/parametres/mcp` | Connecteurs | ✅ **fonctionne** |
+| `/parametres/modeles` | Modèles cloud | ✅ **fonctionne** |
+| `/parametres/entrainement` | Entraîner un modèle | ✅ **fonctionne sur Mac à puce Apple** (25/09/2026) ; carte NVIDIA pas essayée, et l'écran le dit |
+| `/parametres/abonnement` | Abonnement | ⚠ **écran sans paiement branché**, et il le dit |
+| `/parametres/importer` | Importer depuis d'autres IA | ✅ **fonctionne** (24/09/2026, par morceaux depuis le 25/09) |
 | `/parametres/ecran` | Contrôle de l'écran | ✅ **fonctionne** |
 | `/parametres/integrations` | (redirige vers Connecteurs) | ↪ **supprimé** |
 | `/parametres/api` | API développeur | ❌ **écran d'attente assumé** |
@@ -489,6 +536,47 @@ logiciels de cet ordinateur »** liste les logiciels d'IA trouvés (Claude Code,
 Codex, Cursor : nombre de conversations, instructions ; ChatGPT et Claude :
 pourquoi on ne peut pas les lire), avec « Reprendre ». La suite est celle de
 l'import d'archive : choix des Chats et des projets, place disponible, bilan.
+
+**Par morceaux, depuis le 25/09/2026** : pendant la lecture, « Lecture des
+conversations : {0} sur {1}... » (les plus récentes d'abord) ; à l'import, « Chargement
+des Chats : {0} sur {1}... », avant la création des projets et des agents. Un Chat
+devenu illisible entre-temps est compté à part dans le bilan. Un logiciel sans
+conversation ni instructions a son bouton désactivé. **Vu le 25/09/2026** : 5 lots pour
+Claude Code, 19 Chats listés ; Cursor, à 0 conversation, bouton désactivé.
+
+### Entraîner un modèle (25/09/2026)
+
+Paramètres > **Entraîner un modèle** (`src/components/settings/EntrainerModele.tsx`).
+En tête : ce que la machine permet (raison, modèle de départ et sa licence,
+avertissement « pas encore essayé » quand c'est le cas), puis « Installer le moteur
+d'entraînement » avec la place et le téléchargement annoncés, ou « Retirer le
+moteur ». « Vos modèles » : un modèle par sujet, avec son nombre d'exemples, « à
+relire », « entraîné », « installé ». Puis quatre étapes :
+
+1. **Exemples** : saisie question et réponse, « Importer un CSV ou un JSONL »,
+   « Tirer des exemples d'un document » (lu par le modèle du Chat ; les paires vont
+   dans « propositions à relire », avec « Tout garder » et « Tout écarter » : rien
+   n'est appris sans accord).
+2. **Entraîner** : durée estimée, place du modèle, exemples mis de côté ; pendant le
+   calcul, pas, erreur sur les exemples appris et mis de côté, temps restant,
+   mémoire, et « Arrêter ».
+3. **Comparer** : les exemples mis de côté et jusqu'à cinq questions libres, au modèle
+   de départ et au modèle entraîné, côte à côte, sans note automatique.
+4. **Installer** dans LM Studio, après l'avertissement que le modèle sera visible de
+   toute l'équipe ; « Retirer de LM Studio ». Le modèle apparaît dans le sélecteur du
+   Chat sans devenir « Rapide ».
+
+**Vu le 25/09/2026** : l'écran ; « Tirer des exemples d'un document » avec Qwen3 8B,
+8 paires couvrant les 5 faits d'un règlement. L'installation du moteur et un
+entraînement complet ont été vus dans le navigateur par la branche d'origine, pas
+refaits ce jour-là.
+
+### Ligne de commande `helix` (25/09/2026)
+
+Pas un écran, mais une surface : `helix` dans un terminal (Chat, `chat --outils`,
+`code`), avec les actions de l'agent affichées « ✓ Écriture bonjour.txt » et les
+demandes d'accord « Autoriser ? [o/N] ». Textes en français seulement
+(`cli/textes.mjs`). Détail dans README.md.
 
 ### Extension VS Code (24/09/2026)
 

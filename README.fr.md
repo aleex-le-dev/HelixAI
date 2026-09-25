@@ -51,10 +51,10 @@ installation peut installer pour vous sur macOS.
 ## Fonctions
 
 - **Chat** avec des modèles locaux **choisis pour chaque machine** : Helix installe le modèle
-  ouvert (Apache 2.0 ou MIT) le mieux noté qui tient dans sa mémoire et qui a été essayé avec
-  Helix, par exemple Qwen3 4B sur un Mac de 8 Go ou Qwen3.5 9B dès 16 Go, et propose les autres
-  que la machine peut faire tourner (Mistral, gpt-oss, GLM, DeepSeek sur les plus grosses). Les
-  modèles cloud marchent avec votre propre clé. Pièces jointes, dictée (Whisper, sur la machine), création d'images
+  ouvert (Apache 2.0 ou MIT) le mieux noté qui tient dans sa mémoire, du petit portable à la
+  station de travail, et propose les autres qu'elle peut faire tourner. Le catalogue couvre
+  Qwen, Mistral (Magistral, Ministral), OpenAI gpt-oss, Z.ai GLM, IBM Granite, Ai2 OLMo, Meta et
+  DeepSeek. Les modèles cloud marchent avec votre propre clé. Pièces jointes, dictée (Whisper, sur la machine), création d'images
   (Z-Image Turbo, FLUX.2 klein).
 - **Bases de connaissances (RAG)** : rassemblez des documents, l'instance les indexe sur
   la machine, et les réponses citent les passages utilisés. Chacun n'y retrouve que les

@@ -1817,9 +1817,16 @@ fenêtre sur macOS ne coupe plus la passerelle (les employés continuent).
   une réserve de 30 % de la RAM (3 à 8 Go) ; sur PC, un modèle dense doit tenir
   dans la carte NVIDIA (`nvidia-smi`), un modèle à experts peut déborder en RAM ;
   sans carte, seulement petits modèles ou à experts. À chaque machine, le mieux
-  noté qui tient ET qui est `verifie` est installé ; les autres sont proposés
-  dans « À installer » (6 au plus), marqués « pas encore vérifié avec Helix ».
-  Aujourd'hui seuls Qwen3 et Qwen3-VL sont vérifiés.
+  noté qui tient est installé, **essayé avec Helix ou non** (décidé par Medhi le
+  26/09/2026 : « installer en fonction du PC le meilleur modèle ») ; s'il ne se
+  charge pas, les suivants du classement, puis le plus léger vérifié. Pour piloter
+  l'écran, seuls les modèles essayés à ce geste (Qwen3-VL) sont installés : un
+  modèle qui ne sait pas désigner un point clique à côté. Mesuré par `recommend` le
+  26/09/2026 sur Mac à puce Apple : 8 Go Qwen3.5 4B, 16 et 24 Go Qwen3.5 9B, 32 à
+  128 Go Qwen3.8 27B, 256 Go DeepSeek V4 Flash ; PC NVIDIA 8 ou 12 Go avec 32 Go de
+  RAM Qwen3.5 35B A3B. Les autres sont proposés dans « À installer » (6 au plus),
+  marqués « pas encore vérifié avec Helix ». Aujourd'hui seuls Qwen3, Qwen3.5 9B et
+  Qwen3-VL sont vérifiés.
   Kimi K3 (43,6), GLM-5.3 (44,8), MiniMax : plusieurs centaines de Go, serveur
   seulement, donc par prestataire ou clé. En local : GLM-4.7 Flash (MIT, 16 Go,
   14,9) et DeepSeek V4 Flash (MIT, 150 Go, 34,3, machines de 256 Go) ajoutés.

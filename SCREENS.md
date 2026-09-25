@@ -4,7 +4,7 @@
 route, et dit pour chacun **ce qui fonctionne et ce qui est une maquette**.
 
 Il remplace l'inventaire de cadrage rédigé en juillet 2026 à partir des 45
-captures de référence (`screenshots/`). Cet inventaire décrivait ce qu'il fallait
+captures de référence (`screenshots/`, gardées sur le poste de Medhi et hors du dépôt depuis le 25/09/2026 : elles montrent un autre produit). Cet inventaire décrivait ce qu'il fallait
 construire ; celui-ci décrit ce qui existe.
 
 **Comment lire.** « Maquette » signifie : l'écran s'affiche, il est complet et

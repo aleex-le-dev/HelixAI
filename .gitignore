@@ -13,3 +13,6 @@ release
 
 # Paquets de l'extension VS Code (se refont avec vsce)
 *.vsix
+
+# Captures de référence du cadrage (autre produit) : gardées sur le poste, pas dans le dépôt.
+screenshots/

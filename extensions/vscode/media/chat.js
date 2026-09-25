@@ -90,6 +90,21 @@
       // Helix Code : ses actions s'empilent au-dessus de sa réponse.
       enCours.classList.remove("attente");
       if (enCours.textContent === "…") enCours.innerHTML = "";
+      // Le modèle lit la demande, attend son tour ou se charge : une ligne qui se réécrit, retirée dès qu'il répond.
+      const statut = enCours.querySelector(".statut");
+      if (m.statut !== undefined) {
+        if (!m.statut) statut?.remove();
+        else if (statut) statut.textContent = m.statut;
+        else {
+          const p = document.createElement("p");
+          p.className = "statut";
+          p.textContent = m.statut;
+          enCours.insertBefore(p, enCours.querySelector(".reponse"));
+        }
+        fil.scrollTop = fil.scrollHeight;
+        return;
+      }
+      statut?.remove();
       if (m.type === "code" && m.texte !== undefined && m.outil === undefined && m.ok === undefined) {
         texteEnCours += (texteEnCours ? "\n\n" : "") + m.texte;
         let zone = enCours.querySelector(".reponse");

@@ -172,7 +172,7 @@ function ToolTraces({ traces }: { traces: ToolTrace[] }) {
   return (
     <div className="mb-2 space-y-1">
       {traces.map((t, i) => {
-        const detail = toolDetail(t.args);
+        const detail = t.cible ?? (t.libelle ? null : toolDetail(t.args));
         const open = ouverte === i;
         return (
           <div key={`${t.name}-${i}`} className="text-xs">
@@ -191,7 +191,7 @@ function ToolTraces({ traces }: { traces: ToolTrace[] }) {
               )}
               <Wrench size={11} strokeWidth={1.75} className="shrink-0" />
               <span className="truncate">
-                {libelleOutil(t.name)}
+                {t.libelle ?? libelleOutil(t.name)}
                 {detail && <span className="opacity-70"> · {detail}</span>}
               </span>
             </button>

@@ -20,6 +20,9 @@ import { instanceToken } from "./auth.ts";
 import { models } from "./router.ts";
 import { deployment } from "./deployment.ts";
 import { t, tf } from "./langue.ts";
+import { CONSIGNES_CODE } from "./allegementCode.ts";
+import { optionsDeChargement } from "./backends.ts";
+import type { ModelInfo } from "./types.ts";
 
 /**
  * Moteur de l'écran Code : OpenCode en mode serveur (ARCHITECTURE.md, ADR-003).
@@ -197,6 +200,36 @@ function dossierConfig(): string {
  */
 const cheminConfig = (): string => join(dossierConfig(), "opencode.json");
 
+/**
+ * Taille de conversation d'un modèle local, dite à OpenCode (`limit`).
+ *
+ * Sans elle, OpenCode ne résume jamais une conversation qui s'allonge : lu
+ * dans son code (1.18.32), `limit.context` à 0 veut dire « pas de limite
+ * connue », et le résumé automatique ne se déclenche que passé
+ * `context - output`. Sur Qwen3 8B chargé à 28 160 jetons (constat du
+ * 25/09/2026), une session longue finissait donc par dépasser ce que LM Studio
+ * accepte, au lieu d'être résumée. Et `output` n'était pas donné non plus :
+ * OpenCode demandait 32 000 jetons de réponse (relevé dans la demande), plus
+ * que tout le contexte.
+ *
+ * Seulement quand on la connaît : celle du chargement en cours (`lms ps`), ou
+ * celle avec laquelle Helix le chargera lui-même (`optionsDeChargement`). Un
+ * chargement fait ensuite par un autre programme avec une taille plus petite
+ * n'est pas vu avant le prochain démarrage d'OpenCode. La réponse est bornée
+ * au quart du contexte, 8 192 jetons au plus : de quoi écrire un fichier, et
+ * trois quarts pour la demande et l'historique avant le résumé.
+ */
+function limiteDe(m: ModelInfo): { context: number; output: number } | undefined {
+  if (m.backendKind !== "lmstudio") return undefined;
+  const options = optionsDeChargement();
+  const i = options.indexOf("--context-length");
+  const parHelix = i >= 0 ? Number(options[i + 1]) : undefined;
+  const contexte = m.contexteCharge ?? (m.loaded ? undefined : parHelix);
+  if (!contexte || !Number.isFinite(contexte) || contexte < 4096) return undefined;
+  const borne = m.contexteMax ? Math.min(contexte, m.contexteMax) : contexte;
+  return { context: borne, output: Math.min(8192, Math.floor(borne / 4)) };
+}
+
 async function writeConfig(dir: string): Promise<void> {
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
 
@@ -243,8 +276,14 @@ async function writeConfig(dir: string): Promise<void> {
   const variantes = Object.fromEntries(
     Object.keys(NIVEAUX_EFFORT).map((niveau) => [niveau, { effort: niveau }]),
   );
-  const modelEntries: Record<string, { name: string; variants: Record<string, { effort: string }> }> = {};
-  for (const m of usable) modelEntries[m.id] = { name: `${m.id} (${m.backendLabel})`, variants: variantes };
+  const modelEntries: Record<
+    string,
+    { name: string; variants: Record<string, { effort: string }>; limit?: { context: number; output: number } }
+  > = {};
+  for (const m of usable) {
+    const limite = limiteDe(m);
+    modelEntries[m.id] = { name: `${m.id} (${m.backendLabel})`, variants: variantes, ...(limite ? { limit: limite } : {}) };
+  }
   if (Object.keys(modelEntries).length === 0) {
     modelEntries["auto"] = { name: "Automatique", variants: variantes };
   }
@@ -311,7 +350,23 @@ async function writeConfig(dir: string): Promise<void> {
          * explique (vérifié, même banc). C'est aussi la règle de Helix : une
          * fois le dossier choisi, l'agent n'en sort pas.
          */
-        permission: { external_directory: "deny", doom_loop: "deny", question: "deny" },
+        /*
+         * `skill` refusé aussi (25/09/2026) : les compétences extérieures sont
+         * coupées (OPENCODE_DISABLE_EXTERNAL_SKILLS), et la seule qui reste,
+         * livrée avec OpenCode, sert à modifier sa propre configuration, que
+         * Helix écrit. Un outil refusé disparaît de la liste envoyée au modèle :
+         * 165 jetons de moins à chaque lecture (mesuré), plus sa présentation
+         * dans les consignes.
+         */
+        permission: { external_directory: "deny", doom_loop: "deny", question: "deny", skill: "deny" },
+        /*
+         * Des consignes courtes à la place de celles d'OpenCode, écrites pour
+         * son terminal (allegementCode.ts) : 2 098 jetons relus à chaque appel
+         * dont le modèle a perdu le début, mesuré le 25/09/2026. Pour l'agent
+         * principal et le sous-agent généraliste ; l'explorateur a déjà les
+         * siennes, courtes.
+         */
+        agent: { build: { prompt: CONSIGNES_CODE }, general: { prompt: CONSIGNES_CODE } },
         /*
          * Les connecteurs de l'instance (Drive, Slack, courrier, agenda,
          * serveurs MCP du catalogue), servis par la passerelle elle-même et non

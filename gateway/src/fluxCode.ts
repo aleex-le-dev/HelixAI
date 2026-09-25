@@ -74,6 +74,13 @@ interface Suivi {
   auditeurs: Set<Auditeur>;
   /** Dernier signe de vie envoyé pendant qu'un texte s'écrit. */
   dernierSigne: number;
+  /**
+   * Nature de chaque part en cours (« reasoning », « text », « tool ») : un
+   * morceau (`message.part.delta`) ne dit que l'identifiant de sa part, et les
+   * clients veulent savoir si l'agent réfléchit ou écrit. Vidé à chaque
+   * demande.
+   */
+  natures: Map<string, string>;
   vu: number;
 }
 
@@ -81,6 +88,22 @@ const sessions = new Map<string, Suivi>();
 const TAMPON_MAX = 2000;
 const OCTETS_MAX = 2_000_000;
 const SESSIONS_MAX = 200;
+
+/**
+ * Sessions de sous-agents (outil `task` d'OpenCode) → session suivie qui les a
+ * lancées. OpenCode les ouvre lui-même (`session.created` avec `parentID`) ;
+ * leurs évènements ne portent que leur propre identifiant. Sans ce lien, une
+ * sous-tâche de plusieurs minutes n'avait qu'une ligne « task » à l'écran.
+ */
+const enfants = new Map<string, { parent: string; callID?: string }>();
+const ENFANTS_MAX = 500;
+
+/** La session suivie à qui rapporter ce qui se passe dans `sessionID` (elle-même, ou le parent d'un sous-agent). */
+export function destinataireDe(sessionID: string): { session: string; sousTache: boolean } | undefined {
+  if (sessions.has(sessionID)) return { session: sessionID, sousTache: false };
+  const lien = enfants.get(sessionID);
+  return lien && sessions.has(lien.parent) ? { session: lien.parent, sousTache: true } : undefined;
+}
 
 /** Voir l'en-tête : au centième de seconde, douze chiffres jusqu'en 2286. */
 let numero = Math.floor(Date.now() / 10);
@@ -114,11 +137,84 @@ export function suivreSession(sessionID: string, dossier: string): void {
     octets: 0,
     auditeurs: new Set(),
     dernierSigne: 0,
+    natures: new Map(),
     vu: Date.now(),
   });
 }
 
+/**
+ * Où en est le modèle d'une session, pendant qu'il lit la demande ou attend son
+ * tour (attenteModele.ts) : `helix.statut`, sans numéro, jamais rejoué, comme
+ * `helix.activite`. C'est ce qui tient le guet de silence des clients au
+ * repos pendant une lecture de plusieurs minutes.
+ */
+export function publierStatut(sessionID: string, donnees: Record<string, unknown>): void {
+  const suivi = sessions.get(sessionID);
+  if (suivi) publier(sessionID, suivi, "helix.statut", donnees, false);
+}
+
+/**
+ * Ce qu'un appel d'outil a d'utile à montrer, sans son contenu : le chemin, le
+ * motif, la première ligne d'une commande, la description d'une sous-tâche.
+ * Un fichier écrit par un sous-agent n'a pas à traverser le flux en entier.
+ */
+function cibleCourte(entree: unknown): Record<string, string> {
+  const e = (entree ?? {}) as Record<string, unknown>;
+  const garde: Record<string, string> = {};
+  for (const cle of ["filePath", "path", "pattern", "url", "description", "subagent_type"]) {
+    if (typeof e[cle] === "string") garde[cle] = (e[cle] as string).slice(0, 300);
+  }
+  if (typeof e.command === "string") garde.command = e.command.split("\n")[0]!.slice(0, 200);
+  return garde;
+}
+
+/**
+ * Un évènement d'un sous-agent, rapporté à la session qui l'a lancé : ses
+ * appels d'outils (`helix.soustache`) et ses signes de vie. Rien de son texte :
+ * le sous-agent rend un seul message à l'agent principal, qui le résume.
+ */
+function traduireEnfant(
+  enfant: string,
+  lien: { parent: string; callID?: string },
+  type: string | undefined,
+  p: Record<string, unknown>,
+): void {
+  const suivi = sessions.get(lien.parent);
+  if (!suivi) return;
+  if (type === "message.part.delta") {
+    if (Date.now() - suivi.dernierSigne < 1000) return;
+    suivi.dernierSigne = Date.now();
+    publier(lien.parent, suivi, "helix.activite", { sousTache: true }, false);
+    return;
+  }
+  if (type !== "message.part.updated") return;
+  const part = (p.part ?? {}) as PartV1;
+  if (part.type !== "tool") return;
+  const etat = part.state ?? {};
+  if (etat.status === "pending" || !etat.status) return;
+  publier(
+    lien.parent,
+    suivi,
+    "helix.soustache",
+    {
+      sousSession: enfant,
+      ...(lien.callID ? { parentCallID: lien.callID } : {}),
+      callID: part.callID ?? part.id ?? "",
+      tool: part.tool ?? "outil",
+      input: cibleCourte(etat.input),
+      etat: etat.status === "completed" ? "fini" : etat.status === "error" ? "echec" : "encours",
+    },
+    false,
+  );
+}
+
 export const sessionSuivie = (sessionID: string): boolean => sessions.has(sessionID);
+
+/** Dernier numéro publié pour cette session (0 s'il n'y en a pas) : pour la suivre sans rien rejouer. */
+export function dernierNumero(sessionID: string): number {
+  const tampon = sessions.get(sessionID)?.tampon ?? [];
+  return tampon.length ? (tampon[tampon.length - 1]!.durable?.seq ?? 0) : 0;
+}
 export const dossierSuivi = (sessionID: string): string | undefined => sessions.get(sessionID)?.dossier;
 
 function publier(sessionID: string, suivi: Suivi, type: string, data: Record<string, unknown>, durable = true): void {
@@ -164,7 +260,7 @@ interface PartV1 {
   tool?: string;
   callID?: string;
   reason?: string;
-  state?: { status?: string; input?: unknown; output?: unknown; error?: unknown };
+  state?: { status?: string; input?: unknown; output?: unknown; error?: unknown; metadata?: { sessionId?: unknown } };
 }
 
 /**
@@ -178,7 +274,30 @@ export function traduire(brut: { type?: string; properties?: Record<string, unkn
   const p = brut.properties ?? {};
   // Mesuré le 25/09/2026 : chaque évènement d'une session porte `sessionID` à la racine de `properties`.
   const sessionID = typeof p.sessionID === "string" ? p.sessionID : "";
-  const suivi = sessionID ? sessions.get(sessionID) : undefined;
+
+  /*
+   * Un sous-agent naît (outil `task`) : OpenCode ouvre une session dont
+   * `parentID` est la nôtre (schéma lu dans OpenCode 1.18.32 : `session.created`
+   * porte `{ sessionID, info: { id, parentID } }`, et sa propre ligne de
+   * commande suit les sous-agents de la même façon).
+   */
+  if (brut.type === "session.created" || brut.type === "session.updated") {
+    const info = p.info as { id?: unknown; parentID?: unknown } | undefined;
+    if (typeof info?.id === "string" && typeof info.parentID === "string" && destinataireDe(info.parentID)) {
+      const racine = destinataireDe(info.parentID)!.session;
+      if (!enfants.has(info.id)) {
+        if (enfants.size >= ENFANTS_MAX) enfants.delete(enfants.keys().next().value!);
+        enfants.set(info.id, { parent: racine });
+      }
+    }
+    return;
+  }
+  const lienEnfant = sessionID ? enfants.get(sessionID) : undefined;
+  // Une question d'un sous-agent se refuse comme celle de l'agent principal (plus bas) : elle le bloquerait aussi.
+  const question = brut.type === "permission.asked" || brut.type === "question.asked";
+  if (lienEnfant && !question) return traduireEnfant(sessionID, lienEnfant, brut.type, p);
+
+  const suivi = sessionID ? (sessions.get(sessionID) ?? (lienEnfant ? sessions.get(lienEnfant.parent) : undefined)) : undefined;
   if (!suivi) return;
 
   switch (brut.type) {
@@ -187,6 +306,7 @@ export function traduire(brut: { type?: string; properties?: Record<string, unkn
       if (info?.role === "user" && typeof info.id === "string" && !suivi.demandes.has(info.id)) {
         suivi.demandes.add(info.id);
         suivi.echecDit = false;
+        suivi.natures.clear();
         publier(sessionID, suivi, "session.next.prompted", { messageID: info.id });
       }
       return;
@@ -197,17 +317,20 @@ export function traduire(brut: { type?: string; properties?: Record<string, unkn
        * que les textes entiers. Mais ils tiennent tout ce qui arrive pour un
        * signe de vie (guet de silence de 90 s, src/hooks/useCode.ts) : sans ce
        * signal, un long raisonnement de Qwen3 passait pour un agent muet. Au
-       * plus un par seconde, sans numéro, jamais rejoué.
+       * plus un par seconde, sans numéro, jamais rejoué. `phase` dit si
+       * l'agent réfléchit ou écrit, pour le panneau de suivi de l'écran Code.
        */
       if (Date.now() - suivi.dernierSigne < 1000) return;
       suivi.dernierSigne = Date.now();
-      publier(sessionID, suivi, "helix.activite", {}, false);
+      const nature = typeof p.partID === "string" ? suivi.natures.get(p.partID) : undefined;
+      publier(sessionID, suivi, "helix.activite", nature ? { phase: nature === "reasoning" ? "reflexion" : "ecriture" } : {}, false);
       return;
     }
     case "message.part.updated": {
       const part = (p.part ?? {}) as PartV1;
       if (!part.messageID || suivi.demandes.has(part.messageID)) return; // le texte de la personne
       const id = part.id ?? "";
+      if (id && part.type && suivi.natures.size < 5000) suivi.natures.set(id, part.type);
       switch (part.type) {
         case "step-start":
           suivi.echecDit = false;
@@ -225,7 +348,25 @@ export function traduire(brut: { type?: string; properties?: Record<string, unkn
         case "tool": {
           const appel = part.callID ?? id;
           const etat = part.state ?? {};
-          if (etat.status === "pending" || !etat.status) return;
+          // La sous-tâche a sa session : ses outils seront rapportés sous cet appel (voir `traduireEnfant`).
+          const enfant = etat.metadata?.sessionId;
+          if (part.tool === "task" && typeof enfant === "string" && /^ses_[A-Za-z0-9]{1,64}$/.test(enfant)) {
+            const lien = enfants.get(enfant);
+            if (lien) lien.callID = appel;
+            else enfants.set(enfant, { parent: sessionID, callID: appel });
+          }
+          if (etat.status === "pending" || !etat.status) {
+            /*
+             * L'agent écrit les arguments de l'outil : un fichier entier pour
+             * `write`, parfois plusieurs minutes sur un petit modèle, sans
+             * aucun morceau de texte. C'est un signe de vie, et le panneau dit
+             * quel outil se prépare.
+             */
+            if (Date.now() - suivi.dernierSigne < 1000) return;
+            suivi.dernierSigne = Date.now();
+            publier(sessionID, suivi, "helix.activite", { phase: "outil", tool: part.tool ?? "outil" }, false);
+            return;
+          }
           if (!suivi.appels.has(appel)) {
             suivi.appels.add(appel);
             publier(sessionID, suivi, "session.next.tool.called", {

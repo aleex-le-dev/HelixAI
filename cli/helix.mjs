@@ -41,18 +41,43 @@ const gras = style("1");
 
 /** Ce qui a été écrit en dernier finit-il par un retour à la ligne ? */
 let enDebutDeLigne = true;
+/**
+ * Une ligne d'état réécrite sur place (« Le modèle lit la demande (1 min 12 s,
+ * 45 %)... »), seulement dans un vrai terminal : elle s'efface dès que quelque
+ * chose d'autre s'écrit. Hors terminal (sortie redirigée), un état ne s'écrit
+ * qu'en changeant, sur une ligne à lui.
+ */
+const surPlace = Boolean(process.stdout.isTTY);
+let etatAffiche = false;
+function effacerEtat() {
+  if (!etatAffiche) return;
+  process.stdout.write("\r\x1b[2K");
+  etatAffiche = false;
+  enDebutDeLigne = true;
+}
+function etatSurPlace(texte) {
+  if (!surPlace) return;
+  if (!enDebutDeLigne && !etatAffiche) process.stdout.write("\n");
+  const largeur = process.stdout.columns ? process.stdout.columns - 1 : 100;
+  process.stdout.write(`\r\x1b[2K${discret(texte.length > largeur ? `${texte.slice(0, largeur - 1)}…` : texte)}`);
+  etatAffiche = true;
+  enDebutDeLigne = false;
+}
 function ecrire(texte) {
   if (!texte) return;
+  effacerEtat();
   process.stdout.write(texte);
   enDebutDeLigne = texte.endsWith("\n");
 }
 /** Une ligne à part, même si une réponse était en train de s'écrire. */
 function ligne(texte = "") {
+  effacerEtat();
   if (!enDebutDeLigne) process.stdout.write("\n");
   process.stdout.write(`${texte}\n`);
   enDebutDeLigne = true;
 }
 const avertir = (texte) => {
+  effacerEtat();
   if (!enDebutDeLigne) process.stderr.write("\n");
   process.stderr.write(`${texte}\n`);
   enDebutDeLigne = true;
@@ -533,7 +558,19 @@ function libelleOutil(nom, args = {}, base) {
   const lisible =
     typeof cible === "string" ? cheminLisible(cible, base) : typeof args.command === "string" ? args.command.split("\n")[0].slice(0, 120) : typeof args.pattern === "string" ? args.pattern : typeof args.url === "string" ? args.url : "";
   if (serveur && serveur !== "fichiers") return `${libelleConnecteur(serveur, court)}${lisible ? ` ${lisible}` : ""}`;
+  // Une sous-tâche dit ce qu'elle fait (sa description, écrite par l'agent pour la personne) : « ✓ task » ne disait rien.
+  if (court === "task" && typeof args.description === "string" && args.description.trim()) return `${OUTILS.task} : ${args.description.trim()}`;
   return `${OUTILS[court] ?? court}${lisible ? ` ${lisible}` : ""}`;
+}
+
+/** La liste de tâches que tient l'agent (`todowrite`), une ligne par tâche. */
+function lignesTaches(args) {
+  if (!Array.isArray(args?.todos)) return [];
+  const marque = { completed: "✓", in_progress: "▸", cancelled: "✗" };
+  return args.todos
+    .filter((t) => typeof t?.content === "string" && t.content.trim())
+    .slice(0, 30)
+    .map((t) => `  ${marque[t.status] ?? "·"} ${t.content.trim()}`);
 }
 
 const premiereLigne = (texte) => String(texte ?? "").trim().split("\n")[0].slice(0, 200);
@@ -754,6 +791,16 @@ function traduire(brut) {
   const d = brut?.data ?? {};
   const erreur = (e) => (typeof e === "string" ? e : typeof e?.message === "string" ? e.message : "");
   if (type === "session.next.prompted" && typeof d.messageID === "string") return { genre: "demande", messageID: d.messageID };
+  // Le modèle n'a encore rien rendu : il lit, attend son tour ou se charge (gateway/src/attenteModele.ts).
+  if (type === "helix.statut" && ["lecture", "attente", "chargement", "fin"].includes(d.etat)) {
+    const nombre = (v) => (typeof v === "number" && Number.isFinite(v) ? v : undefined);
+    const ecoule = Math.max(0, (nombre(d.timestamp) ?? Date.now()) - (nombre(d.depuis) ?? Date.now()));
+    return { genre: "attente", etat: d.etat, depuis: Date.now() - ecoule, progression: nombre(d.progression), jetons: nombre(d.jetons), sousTache: d.sousTache === true };
+  }
+  if (type === "helix.activite") return { genre: "activite", phase: d.phase, outil: typeof d.tool === "string" ? d.tool : undefined, sousTache: d.sousTache === true };
+  if (type === "helix.soustache" && (d.etat === "fini" || d.etat === "echec")) {
+    return { genre: "sous-outil", outil: String(d.tool ?? "outil"), args: d.input ?? {}, ok: d.etat === "fini" };
+  }
   if (type === "session.next.text.ended" && typeof d.text === "string") return { genre: "texte", texte: d.text };
   if (type === "session.next.tool.called") return { genre: "outil", callID: String(d.callID ?? ""), outil: String(d.tool ?? "outil"), args: d.input ?? {} };
   if (type === "session.next.tool.success") return { genre: "outil-fin", callID: String(d.callID ?? ""), ok: true };
@@ -792,7 +839,18 @@ async function ouvrirSessionCode(ctx, etat) {
  * (src/hooks/useCode.ts).
  */
 async function demandeCode(ctx, etat, texte, signal) {
-  const tour = { messageID: undefined, connu: false, actif: false, attente: [], outils: new Map(), ecrit: false };
+  const tour = { messageID: undefined, connu: false, actif: false, attente: [], outils: new Map(), ecrit: false, modele: null };
+  /** « Le modèle lit la demande (1 min 12 s, 45 %, environ 3 000 jetons)... », comme l'écran Code. */
+  const texteModele = (a) => {
+    const duree = T.duree(Date.now() - a.depuis);
+    if (a.etat === "chargement") return T.codeChargement(duree);
+    if (a.etat === "attente") return T.codeAttenteTour(duree);
+    const environ = a.jetons ? (a.jetons >= 1000 ? Math.round(a.jetons / 1000) * 1000 : a.jetons).toLocaleString("fr-FR") : "";
+    const detail = [duree, a.progression !== undefined ? T.pourcent(a.progression) : "", environ ? T.environJetons(environ) : ""].filter(Boolean).join(", ");
+    return T.codeLecture(detail, a.sousTache);
+  };
+  // Dans un terminal, le temps de lecture avance à la seconde ; l'instance n'en envoie que toutes les dix.
+  const horloge = surPlace ? setInterval(() => tour.modele && etatSurPlace(texteModele(tour.modele)), 1000) : null;
   let finir;
   let echouer;
   const fin = new Promise((ok, ko) => {
@@ -807,15 +865,49 @@ async function demandeCode(ctx, etat, texte, signal) {
       return;
     }
     if (!tour.actif) return;
+    // Le modèle a rendu quelque chose : il ne lit plus.
+    if (ev.genre !== "attente") tour.modele = null;
     switch (ev.genre) {
+      case "attente": {
+        if (ev.etat === "fin") {
+          effacerEtat();
+          break;
+        }
+        const change = !tour.modele || tour.modele.etat !== ev.etat;
+        tour.modele = ev;
+        if (surPlace) etatSurPlace(texteModele(ev));
+        else if (change) ligne(discret(texteModele(ev)));
+        break;
+      }
+      case "activite":
+        // Dans un terminal seulement : ce qui se passe entre deux lignes, effacé dès que la suite s'écrit.
+        if (!surPlace || ev.sousTache) break;
+        if (ev.phase === "reflexion") etatSurPlace(T.codeReflexion);
+        else if (ev.phase === "outil" && ev.outil) etatSurPlace(T.codePreparation(OUTILS[ev.outil] ?? ev.outil));
+        else effacerEtat();
+        break;
       case "texte":
         if (ev.texte.trim()) {
           ligne(ev.texte.trim());
           tour.ecrit = true;
         }
         break;
-      case "outil":
-        tour.outils.set(ev.callID, libelleOutil(ev.outil, ev.args, etat.dossier));
+      case "outil": {
+        const libelle = libelleOutil(ev.outil, ev.args, etat.dossier);
+        tour.outils.set(ev.callID, libelle);
+        if (ev.outil === "todowrite") {
+          const taches = lignesTaches(ev.args);
+          if (taches.length) {
+            ligne(discret(T.codeTaches));
+            taches.forEach((t) => ligne(discret(t)));
+          }
+        }
+        // Une sous-tâche peut durer des minutes : on la dit quand elle commence, pas seulement à la fin.
+        if (ev.outil === "task") ligne(discret(`▸ ${libelle}`));
+        break;
+      }
+      case "sous-outil":
+        ligne(discret(`  ↳ ${ev.ok ? "✓" : "✗"} ${libelleOutil(ev.outil, ev.args, etat.dossier)}`));
         break;
       case "outil-fin": {
         const libelle = tour.outils.get(ev.callID) ?? T.codeEchec;
@@ -922,6 +1014,8 @@ async function demandeCode(ctx, etat, texte, signal) {
       signal.addEventListener("abort", () => ko(Object.assign(new Error("arret"), { name: "AbortError" })), { once: true });
     });
   } finally {
+    if (horloge) clearInterval(horloge);
+    effacerEtat();
     flux.abort();
   }
 }

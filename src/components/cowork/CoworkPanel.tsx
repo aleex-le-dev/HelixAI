@@ -1,6 +1,5 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState } from "react";
 import {
-  ChevronDown,
   FileText,
   FolderOpen,
   Globe,
@@ -17,6 +16,7 @@ import { t } from "@/lib/i18n";
 import { useComputer } from "@/hooks/useComputer";
 import { ecranMachine } from "@/lib/machine";
 import { Modal } from "@/components/ui/Modal";
+import { PanelCard } from "@/components/ui/PanelCard";
 
 /** Fichier touché par l'agent pendant la conversation. */
 export interface TouchedFile {
@@ -34,42 +34,6 @@ const LIBELLE_ACTION: Record<TouchedFile["action"], string> = {
   modifié: t("Modifié"),
   ajouté: t("Ajouté"),
 };
-
-/** Carte de section repliable du panneau droit. */
-function PanelCard({
-  title,
-  headerRight,
-  defaultOpen = true,
-  children,
-}: {
-  title: string;
-  headerRight?: ReactNode;
-  defaultOpen?: boolean;
-  children: ReactNode;
-}) {
-  const [open, setOpen] = useState(defaultOpen);
-  return (
-    <section className="rounded-xl border border-border bg-card">
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        className="flex w-full items-center gap-2 px-3.5 py-3 text-left"
-        aria-expanded={open}
-      >
-        <span className="text-sm font-semibold text-foreground">{title}</span>
-        <span className="ml-auto flex items-center gap-2 text-muted-foreground">
-          {headerRight}
-          <ChevronDown
-            size={16}
-            strokeWidth={1.75}
-            className={cn("transition-transform", !open && "-rotate-90")}
-          />
-        </span>
-      </button>
-      {open && <div className="px-3.5 pb-3.5 pt-0">{children}</div>}
-    </section>
-  );
-}
 
 /**
  * L'écran de la machine de l'agent, en direct.

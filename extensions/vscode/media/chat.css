@@ -29,5 +29,6 @@ button.arreter { background: var(--vscode-inputValidation-errorBorder, var(--vsc
 .action::before { content: "… "; }
 .action.reussie::before { content: "✓ "; color: var(--vscode-testing-iconPassed, var(--vscode-foreground)); }
 .action.ratee::before { content: "✗ "; color: var(--vscode-errorForeground); }
+.statut { margin: 2px 0; font-size: 0.9em; font-style: italic; color: var(--vscode-descriptionForeground); }
 .reponse { margin-top: 6px; }
 .connexion { margin-left: 6px; }

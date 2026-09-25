@@ -107,6 +107,21 @@ Les actions qui demandent votre accord s'affichent ici et attendent votre répon
   codeStatutRetente: (motif) => (motif ? `Le modèle n'a pas répondu (${motif}). Nouvelle tentative...` : "Le modèle n'a pas répondu. Nouvelle tentative..."),
   codeResume: "La conversation est longue : l'agent la résume pour continuer...",
   codeEchec: "L'agent de code a interrompu la tâche.",
+  // Pendant que le modèle n'a encore rien rendu (helix.statut, gateway/src/attenteModele.ts), mêmes mots que l'écran Code.
+  codeLecture: (detail, sousTache) => `${sousTache ? "Le modèle lit la demande de la sous-tâche" : "Le modèle lit la demande"} (${detail})...`,
+  codeAttenteTour: (duree) => `Le modèle termine une autre demande avant celle-ci (${duree})...`,
+  codeChargement: (duree) => `Le modèle se charge en mémoire (${duree})...`,
+  codeReflexion: "L'agent réfléchit...",
+  codePreparation: (libelle) => `L'agent prépare : ${libelle}...`,
+  codeTaches: "Tâches :",
+  environJetons: (n) => `environ ${n} jetons`,
+  pourcent: (p) => `${p} %`,
+  duree: (ms) => {
+    const s = Math.max(0, Math.floor(ms / 1000));
+    if (s < 60) return `${s} s`;
+    const m = Math.floor(s / 60);
+    return m < 60 ? `${m} min ${String(s % 60).padStart(2, "0")} s` : `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, "0")} min`;
+  },
   codeFluxPerdu: "Le flux de l'agent s'est interrompu.",
   codeFin: {
     length: "Réponse interrompue : la limite de longueur du modèle est atteinte.",
@@ -163,9 +178,10 @@ export const OUTILS = {
   grep: "Recherche",
   bash: "Commande",
   webfetch: "Page web",
-  todowrite: "Liste de tâches",
-  todoread: "Liste de tâches",
-  task: "Sous-agent",
+  todowrite: "Liste de tâches mise à jour",
+  todoread: "Lecture de la liste de tâches",
+  // Suivie de la description que l'agent en donne : « Sous-tâche : explorer le dossier src ».
+  task: "Sous-tâche",
   // Serveur de fichiers de l'instance
   read_file: "Lecture",
   read_text_file: "Lecture",

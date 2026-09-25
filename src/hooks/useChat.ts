@@ -23,6 +23,13 @@ export interface ToolTrace {
   running: boolean;
   ok?: boolean;
   preview?: string;
+  /**
+   * Libellé et cible déjà mis en mots par qui connaît l'outil (l'écran Code,
+   * `actionOutil`) : « Sous-tâche : explorer le dossier src » plutôt que
+   * « task ». Absents, l'affichage les tire du nom et des arguments.
+   */
+  libelle?: string;
+  cible?: string;
 }
 
 /** Une étape du plan suivi par l'agent, et où il en est. */

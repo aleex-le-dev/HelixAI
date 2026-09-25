@@ -795,15 +795,88 @@ laisse partir (note écrite, `outil.appele` au journal avec `surface: "code"`) ;
 route de l'écran, lecture accordée par l'API d'approbation, flux traduit complet
 (`prompted`, `tool.called` `helix_carnet__lire_carnet`, `tool.success`, fin « stop »),
 reprise par `after` ; deux personnes au travail en même temps : refus sans carte
-(`titulaire-inconnu` au journal), outil non exécuté. **Pas vu dans le navigateur** :
-l'écran Code demande une connexion, et un assistant ne tape pas de mot de passe ; son
-parcours HTTP est celui qui a été essayé, et seul l'affichage du nom de l'outil a
-changé (`nomOutil`). Pas essayé non plus : un vrai connecteur avec compte (Drive,
+(`titulaire-inconnu` au journal), outil non exécuté. L'écran Code a été vu dans le
+navigateur plus tard le même jour (séance posée par l'API, sans mot de passe tapé ;
+voir « Petit modèle, petit contexte » plus bas), mais sans connecteur branché. Pas essayé non plus : un vrai connecteur avec compte (Drive,
 Slack, courrier) dans Code, l'extension VS Code avec un connecteur.
+
+**Sessions de Code séparées des Chats** (25/09/2026, demandé par Medhi, « comme dans
+Claude Code »). Avant, les sessions n'existaient que chez OpenCode (qui garde leurs
+messages) et dans la mémoire de la passerelle (`modeleDeSession`, perdu au
+redémarrage) et de l'écran (qui rouvrait toujours la dernière). Désormais un registre
+(`gateway/src/sessionsCode.ts`, collection interne `sessionsCode`) retient pour chaque
+session ouverte par `POST /helix/code/session` sa propriétaire, son dossier, son titre
+(début de la première demande), son modèle et ses dates ; le contenu reste chez
+OpenCode, relu à l'ouverture (`GET /session/<id>/message`), jamais recopié. Routes
+`GET /helix/code/sessions`, `GET` et `DELETE /helix/code/sessions/<id>` (séance
+requise, chacun les siennes) ; une session du registre refuse (403) demande, arrêt et
+flux venant d'une autre personne, vérifié à la main avec deux comptes. Les sessions de
+la ligne de commande et de l'extension y entrent aussi. Un registre illisible lève au
+lieu d'être réécrit vide. **Les sessions ouvertes avant ce changement ne sont pas
+listées** (on ne sait pas à qui elles sont) : elles restent intactes chez OpenCode, rien
+n'a été effacé. L'effacement d'un compte retire ses sessions du registre et les efface
+chez OpenCode quand son serveur tourne (journal : `sessionsCode`, `sessionsCodeEffacees`) ;
+pas essayé. L'écran : voir SCREENS.md, écran Code.
 
 La séance du terminal est un fichier en clair (`~/.helix/cli-seance`, 0600, dossier
 0700), comme les outils de ligne de commande habituels : un trousseau demanderait une
 dépendance native. Contrepartie assumée, écrite dans SECURITE.md § 22.
+
+**Petit modèle, petit contexte, et voir où en est l'agent** (25/09/2026). Constat de
+Medhi : « Aucun signe de l'agent de code depuis 90 secondes » pendant que l'agent
+travaillait, puis des lignes « ✓ task » sans détail. Relevé dans le journal de LM
+Studio le même jour : une demande d'OpenCode de 18 141 jetons lue en 146,9 s
+(123 jetons/s) par Qwen3 8B (contexte 28 160, une demande à la fois), parce que le
+modèle, partagé avec d'autres programmes (51 demandes d'OpenClaw ce jour-là, autour de
+18 000 jetons chacune), avait perdu ce qu'il avait déjà lu. Trois choses changent :
+
+- **La passerelle dit ce que fait le modèle avant son premier mot**
+  (`gateway/src/attenteModele.ts`). OpenCode joint à chaque appel l'identifiant de sa
+  session (`X-Session-Id`, `x-parent-session-id` pour un sous-agent, lu dans son
+  code) ; tant que le relais (`chat.ts`) n'a rien reçu du modèle, la session reçoit
+  toutes les dix secondes un `helix.statut` : lecture, attente de son tour (le modèle
+  génère pour un autre programme), chargement, avec le temps écoulé et la taille
+  approximative. Pour LM Studio sur le poste, l'état vient de `lms ps --json` (lecture
+  seule, une fois par dix secondes au plus) ; le pourcentage lu vient de son journal
+  (« Prompt processing progress »), et seulement quand on sait que c'est notre
+  lecture (le modèle lit, personne en file, un seul appel de la passerelle sur ce
+  modèle). LM Studio au repos deux fois de suite alors que rien n'est reçu : plus de
+  statut, et le guet de silence des clients dit sa vraie panne.
+- **La demande est allégée** (`gateway/src/allegementCode.ts`). Mesuré au tokeniseur de
+  Qwen3 sur une instance jetable, demande la plus simple sans historique :
+  **8 025 jetons avant, 2 803 après** (−65 %). Consignes d'OpenCode 2 098 → 446
+  (`agent.build.prompt`) ; descriptions des outils livrés raccourcies dans le relais,
+  seulement si elles commencent par le texte d'OpenCode 1.18.32, paramètres
+  inchangés (bash 1 334 → 369, task 867 → 469, todowrite 659 → 253…) ; `skill` refusé
+  (165, sans usage pour Helix) ; bibliothèque et réunions servies à Code seulement si
+  elles ont quelque chose pour la personne (718 à vide). `webfetch` reste, raccourci.
+  Et OpenCode apprend la taille du contexte chargé (`limit`, `limiteDe` d'opencode.ts) :
+  sans elle, il ne résumait jamais une conversation qui s'allonge et demandait 32 000
+  jetons de réponse, plus que tout le contexte.
+- **Un panneau de suivi dans l'écran Code**, à droite comme dans Cowork
+  (`SuiviCode.tsx`, `lib/suiviCode.ts`) : ce que l'agent fait maintenant (lecture avec
+  barre de progression, réflexion, outil et sa cible), sa liste de tâches
+  (`todowrite`), les sous-tâches (`task`) avec leur description et leurs propres
+  outils (rapportés par `fluxCode.ts`, `helix.soustache`), les fichiers touchés, le
+  temps total. Les lignes d'outils du fil disent aussi ce qu'elles font
+  (`actionOutil`) : « Sous-tâche : Liste les fichiers du dossier » au lieu de
+  « task ». Mêmes mots dans `helix code` (ligne d'état réécrite sur place dans un
+  terminal) et, simplement, dans l'extension VS Code (0.2.3, `.vsix` pas refait).
+
+Vérifié le 25/09/2026 sur ce poste, instance jetable (port 8896), Qwen3 8B de LM Studio
+partagé : dans l'écran Code du navigateur, une tâche avec sous-tâche, liste de tâches
+et deux fichiers écrits, 3 min 49 s en tout, le panneau montrant d'abord « Le modèle
+termine une autre demande avant celle-ci » (LM Studio occupé ailleurs), puis « Le
+modèle lit la demande (33 s, environ 3 000 jetons) » avec « 1 en file », puis la
+sous-tâche et son outil, les fichiers, « Terminé » ; une demande de 7 815 jetons lue
+en 43,1 s avec la barre à 32 puis 63 % ; aucun message de panne. Au passage, dans ce
+banc, OpenCode a mis 20 s entre l'envoi et le début de son travail pour chaque
+nouvelle session (5 s une autre fois, 0 s dans les essais du matin) : pas compris, pas
+touché. *Pas essayé* : l'état « chargement » avec un vrai modèle à charger, la lecture
+d'un sous-agent assez longue pour s'afficher, l'extension VS Code et la ligne de
+commande dans un vrai terminal devant un modèle lent (`npm run essai:cli` reste vert :
+31 sur 31 sans modèle, 48 sur 48 avec ; `npm run securite` : 152 sur 152), un contexte chargé plus petit par un autre
+programme après le démarrage d'OpenCode (non vu par `limit`).
 
 ### 3.12 Entraîner un modèle : MLX-LM sur Mac, Unsloth sur carte NVIDIA
 
@@ -2383,8 +2456,9 @@ ne restent ici que les points ouverts.*
 16. **Serveurs MCP dans HelixAI Code** (§ 3.11) : ils marchent depuis le 25/09/2026,
     par l'ancienne API d'OpenCode et un flux traduit par la passerelle
     (`fluxCode.ts`), vérifiés de bout en bout avec un serveur d'essai sans compte
-    (`npm run essai:cli -- --modele`). Reste : les voir dans l'écran Code du
-    navigateur (non regardé, connexion requise) et dans l'extension VS Code (nom de
+    (`npm run essai:cli -- --modele`). L'écran Code a été regardé dans le navigateur
+    le 25/09/2026 (panneau de suivi, § 3.11), sans connecteur branché. Reste : un
+    connecteur dans l'écran Code, et l'extension VS Code (nom de
     l'outil sans le préfixe `helix_`, changé mais pas essayé, `.vsix` pas refait) ;
     essayer un vrai
     connecteur à compte ; à chaque mise à jour d'OpenCode, relire si la nouvelle API
@@ -2433,6 +2507,21 @@ ne restent ici que les points ouverts.*
     reçus, ce que le bilan dit) ; un petit modèle entraîné garde des traces hors de
     propos (la Joconde attribuée à la fondatrice imaginaire), d'où le conseil de deux
     ou trois formulations par fait.
+22. **Helix Code avec un petit modèle** (§ 3.11, 25/09/2026) : à voir dans
+    l'application de bureau (le panneau de suivi n'a été regardé que dans le
+    navigateur, instance jetable) ; refaire le `.vsix` 0.2.3 de l'extension et l'y
+    essayer ; mesurer la qualité des réponses de Qwen3 8B avec les consignes courtes
+    sur de vraies tâches (une seule tâche essayée : juste, mais la liste de tâches
+    réécrite avec un seul élément) ; comprendre les 20 s qu'OpenCode a mises à
+    démarrer chaque session du banc ; `limit` ne suit pas un modèle rechargé plus
+    petit par un autre programme (Eden) après le démarrage d'OpenCode. Le vrai remède
+    au modèle qui relit tout reste de ne pas le partager : c'est au client de voir si
+    Eden et Helix doivent se partager Qwen3 8B.
+23. **Sessions de Code** (§ 3.11) : les voir dans l'application de bureau ; décider
+    avec le client si les sessions d'avant le 25/09 doivent être rattachées (sur une
+    instance à un seul compte, on pourrait les lui attribuer ; pas fait) ; renommer une
+    session (pas fait, le titre est la première demande) ; l'effacement d'un compte avec
+    des sessions de Code, pas essayé.
 
 **Titulaire des droits** : tranché le 24/09/2026, « Medhi Clabaut » (entreprise
 individuelle, SIREN 994 907 145), partout ; mentions légales et section

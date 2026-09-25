@@ -92,6 +92,7 @@ const ROUTES = [
   ["POST", "/helix/computer/action"], ["GET", "/helix/code/session"], ["POST", "/helix/flux/ticket"],
   ["GET", "/helix/bibliotheque"], ["GET", "/helix/reunions"], ["GET", "/helix/fournisseurs"],
   ["POST", "/helix/openclaw/installer"], ["GET", "/helix/reseau"], ["POST", "/helix/invitations/inviter"],
+  ["GET", "/helix/entrainement"], ["POST", "/helix/entrainement/lancer"],
 ];
 for (const [methode, chemin] of ROUTES) {
   const r = await appel(chemin, { method: methode, headers: { "Content-Type": "application/json" }, body: methode === "POST" ? "{}" : undefined });
@@ -116,6 +117,10 @@ const SEANCE_REQUISE = [
   ["GET", "/helix/images/fichier/0123456789abcdef0123456789abcdef"], ["GET", "/helix/images/travail/abc"],
   ["GET", "/helix/import/logiciels"], ["GET", "/helix/import/logiciel/claude-code"],
   ["GET", "/helix/machine"], ["POST", "/helix/machine/effacer"],
+  // Ajoutés le 25/09/2026 : entraîner un modèle (installer, projets, calculs, LM Studio).
+  ["GET", "/helix/entrainement"], ["POST", "/helix/entrainement/installer"], ["POST", "/helix/entrainement/desinstaller"],
+  ["POST", "/helix/entrainement/projets"], ["GET", "/helix/entrainement/projet?id=0123456789abcdef01234567"],
+  ["POST", "/helix/entrainement/lancer"], ["POST", "/helix/entrainement/publier"], ["POST", "/helix/entrainement/supprimer"],
 ];
 for (const [methode, chemin] of SEANCE_REQUISE) {
   const r = await appel(chemin, { method: methode, headers: avecJeton, body: methode === "POST" ? "{}" : undefined });
@@ -226,6 +231,23 @@ for (const chemin of ["../../../../etc/passwd", "/etc/passwd", "..%2F..%2Fetc%2F
   const r = await appel("/helix/data/..%2Faccounts", { headers: avecSeance });
   const corps = await r.text();
   verifier("lire une collection par un chemin détourné est refusé", !corps.includes("passwordHash") && !corps.includes("hash"), `${r.status} ${corps.slice(0, 60)}`);
+}
+
+/* ------------------------------------------------------------------------- */
+console.log("\n6 bis. Entraînement : un projet ne se désigne que par son identifiant");
+{
+  for (const id of ["../../accounts", "..%2F..%2Faccounts", "0123456789abcdef01234567"]) {
+    const r = await appel(`/helix/entrainement/projet?id=${encodeURIComponent(id)}`, { headers: avecSeance });
+    const corps = await r.text();
+    verifier(`projet « ${id} » introuvable, rien de lu`, r.status === 404 && !corps.includes("passwordHash"), `${r.status} ${corps.slice(0, 60)}`);
+  }
+  const cree = await appel("/helix/entrainement/projets", { method: "POST", headers: avecSeance, body: JSON.stringify({ nom: "Essai ../../ ; rm -rf /" }) });
+  const projet = await cree.json();
+  verifier("un projet se crée sous un identifiant tiré au sort", cree.status === 200 && /^[0-9a-f]{24}$/.test(projet.id ?? ""), `${cree.status} ${projet.id}`);
+  const brut = readdirSync(join(DONNEES, "entrainement")).map((n) => readFileSync(join(DONNEES, "entrainement", n, "projet.hlx")).subarray(0, 5).toString("latin1"));
+  verifier("le projet est chiffré sur le disque", brut.length > 0 && brut.every((b) => b === "HLXF1"), brut.join(","));
+  const suppr = await appel("/helix/entrainement/supprimer", { method: "POST", headers: avecSeance, body: JSON.stringify({ projet: projet.id }) });
+  verifier("son auteur peut le supprimer", suppr.status === 200, suppr.status);
 }
 
 /* ------------------------------------------------------------------------- */

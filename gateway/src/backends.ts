@@ -90,6 +90,8 @@ async function lmStudioMetadata(): Promise<Map<string, Partial<ModelInfo>>> {
       ...(entry.type ? { nature: entry.type } : {}),
       ...(typeof entry.vision === "boolean" ? { voit: entry.vision } : {}),
       ...(typeof entry.trainedForToolUse === "boolean" ? { outils: entry.trainedForToolUse } : {}),
+      // Rangé par l'entraînement sous son propre éditeur (entrainement.ts).
+      ...((entry.path ?? "").startsWith("helix-entrainement/") ? { entraine: true } : {}),
     });
   }
 

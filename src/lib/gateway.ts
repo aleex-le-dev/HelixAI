@@ -29,6 +29,8 @@ export interface GatewayModel {
   fournisseur?: string;
   /** Présent quand le modèle vient d'une clé personnelle (la sienne : les autres ne le voient pas). */
   proprietaire?: string;
+  /** Entraîné sur la machine de l'instance : choisissable, jamais choisi d'office. */
+  entraine?: boolean;
 }
 
 export interface BackendStatus {

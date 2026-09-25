@@ -73,6 +73,11 @@ export interface ModelInfo {
   voit?: boolean;
   /** Déclaré par LM Studio : sait appeler des outils. */
   outils?: boolean;
+  /**
+   * Entraîné sur cette machine (entrainement.ts). Choisissable dans le
+   * sélecteur, jamais choisi d'office : c'est un petit modèle spécialisé.
+   */
+  entraine?: boolean;
   /** Le modèle émet un canal de raisonnement séparé. */
   reasoning?: boolean;
   /** Voir `BackendConfig` : origine, clé personnelle, pays, fournisseur. */

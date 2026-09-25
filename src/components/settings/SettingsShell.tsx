@@ -17,6 +17,7 @@ import {
   Search,
   Cloud,
   CreditCard,
+  GraduationCap,
 } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { features } from "@/config/branding";
@@ -41,6 +42,7 @@ export const settingsNav: NavEntry[] = [
   // « Intégrations » a été retirée, elle menait à un second écran du même objet.
   { label: t("Connecteurs"), path: "/parametres/mcp", icon: Blocks },
   { label: t("Modèles cloud"), path: "/parametres/modeles", icon: Cloud },
+  { label: t("Entraîner un modèle"), path: "/parametres/entrainement", icon: GraduationCap },
   { label: t("Contrôle de l'écran"), path: "/parametres/ecran", icon: MonitorCog },
   { label: t("API développeur"), path: "/parametres/api", icon: CodeXml },
   { label: t("Mon usage"), path: "/parametres/usage", icon: Activity },

@@ -424,8 +424,9 @@ async function empreinte(chemin: string): Promise<string> {
  * Télécharge un fichier en reprenant là où il s'était arrêté (un modèle de
  * plusieurs Go ne recommence pas de zéro après une coupure), puis vérifie son
  * empreinte. Mauvaise empreinte : le fichier est effacé, jamais utilisé.
+ * Sert aussi aux modèles de base de l'entraînement (entrainement.ts).
  */
-async function telecharger(url: string, destination: string, sha256: string, taille: number, avancer: (fait: number) => void): Promise<void> {
+export async function telecharger(url: string, destination: string, sha256: string, taille: number, avancer: (fait: number) => void): Promise<void> {
   const partiel = `${destination}.partiel`;
   let deja = 0;
   try {

@@ -213,7 +213,8 @@ export function ModelBehaviorPicker({
   const selected = models.find((m) => m.uid === value);
   const label = selected?.id ?? (loading ? t("Chargement...") : error ? t("Hors ligne") : t("Auto"));
 
-  const pourConverser = useMemo(() => models.filter((m) => m.roles.includes("chat")), [models]);
+  // Les raccourcis ne proposent jamais un modèle entraîné sur la machine : il reste dans la liste, à choisir soi-même.
+  const pourConverser = useMemo(() => models.filter((m) => m.roles.includes("chat") && !m.entraine), [models]);
   const rapide = useMemo(() => leRapide(pourConverser), [pourConverser]);
   const capable = useMemo(() => leCapable(pourConverser), [pourConverser]);
 

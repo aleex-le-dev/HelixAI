@@ -87,8 +87,14 @@ export async function resolve(opts: {
         };
       }
     } else {
-      // Un modèle cloud branché par une clé coûte à quelqu'un : il n'est jamais choisi d'office.
-      const eligible = all.filter((m) => m.roles.includes(role) && m.origine !== "cle");
+      /*
+       * Un modèle cloud branché par une clé coûte à quelqu'un : il n'est jamais
+       * choisi d'office. Un modèle entraîné ici non plus : 1,7 milliard de
+       * paramètres appris sur les faits d'un projet ; chargé, il passait
+       * devant le modèle de conversation (vu le 25/09/2026, il devenait le
+       * choix « Rapide » du sélecteur).
+       */
+      const eligible = all.filter((m) => m.roles.includes(role) && m.origine !== "cle" && !m.entraine);
       if (eligible.length === 0) {
         return { error: tf("Aucun modèle disponible pour le rôle « {0} ».", role) };
       }

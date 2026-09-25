@@ -1,0 +1,257 @@
+{
+ "releve": "2026-09-25",
+ "mac": [
+  {
+   "paquet": "annotated-doc==0.0.5",
+   "empreintes": [
+    "117bac03a25ede5df5440e855b32d556049ca169ead221505badf432fed4b101"
+   ]
+  },
+  {
+   "paquet": "anyio==4.15.1",
+   "empreintes": [
+    "6152fdbbf9a77fdec97731721bebf7c4c44f7c29b424b0065826173efc7ed101"
+   ]
+  },
+  {
+   "paquet": "certifi==2026.7.22",
+   "empreintes": [
+    "62f22742b58a1a33014a2b6b706588a8d7e2a88ae7bd1a6ebe8c992928483775"
+   ]
+  },
+  {
+   "paquet": "click==8.5.0",
+   "empreintes": [
+    "255bc9599cf7748b4b1a446ccc735421bd08a2ae529a8b88597d3de5664ee360"
+   ]
+  },
+  {
+   "paquet": "filelock==4.0.3",
+   "empreintes": [
+    "30cd166e2aee2c7534ce2c33c6367c4cd051b8368e20e2c4eb0c34f699bacfab"
+   ]
+  },
+  {
+   "paquet": "fsspec==2026.9.0",
+   "empreintes": [
+    "8dd6e646e99ea382bd85f97a45e6b526a442d79423a7dc673f1e2756d05fcb5f"
+   ]
+  },
+  {
+   "paquet": "h11==0.16.0",
+   "empreintes": [
+    "63cf8bbe7522de3bf65932fda1d9c2772064ffb3dae62d55932da54b31cb6c86"
+   ]
+  },
+  {
+   "paquet": "hf-xet==1.6.0",
+   "empreintes": [
+    "f0906082d9932ae0c0057fa194041c22b4e2cdb46b2592ef3b91f020d62a081a"
+   ]
+  },
+  {
+   "paquet": "httpcore==1.0.9",
+   "empreintes": [
+    "2d400746a40668fc9dec9810239072b40b4484b640a8c38fd654a024c7a1bf55"
+   ]
+  },
+  {
+   "paquet": "httpx==0.28.1",
+   "empreintes": [
+    "d909fcccc110f8c7faf814ca82a9a4d816bc5a6dbfea25d6591d6985b8ba59ad"
+   ]
+  },
+  {
+   "paquet": "huggingface-hub==1.33.0",
+   "empreintes": [
+    "04e434b06e100eddbce9a6e817d72693a7884b10a79bd67ab48080d5c07eb899"
+   ]
+  },
+  {
+   "paquet": "idna==3.20",
+   "empreintes": [
+    "ab7ae7122974553370f0bdb919e1a960b2cd1bc1ef0276416d896db81c14582c"
+   ]
+  },
+  {
+   "paquet": "jinja2==3.1.6",
+   "empreintes": [
+    "85ece4451f492d0c13c5dd7c13a64681a86afae63a5f347908daf103ce6d2f67"
+   ]
+  },
+  {
+   "paquet": "markdown-it-py==4.2.0",
+   "empreintes": [
+    "9f7ebbcd14fe59494226453aed97c1070d83f8d24b6fc3a3bcf9a38092641c4a"
+   ]
+  },
+  {
+   "paquet": "markupsafe==3.0.3",
+   "empreintes": [
+    "e1c1493fb6e50ab01d20a22826e57520f1284df32f2d8601fdd90b6304601419",
+    "4bd4cd07944443f5a265608cc6aab442e4f74dff8088b0dfc8238647b8f6ae9a",
+    "1872df69a4de6aead3491198eaf13810b565bdbeec3ae2dc8780f14458ec73ce",
+    "116bb52f642a37c115f517494ea5feb03889e04df47eeff5b130b1808ce7c219",
+    "c47a551199eb8eb2121d4f0f15ae0f923d31350ab9280078d1e5f12b249e0026"
+   ]
+  },
+  {
+   "paquet": "mdurl==0.1.2",
+   "empreintes": [
+    "84008a41e51615a49fc9966191ff91509e3c40b939176e643fd50a5c2196b8f8"
+   ]
+  },
+  {
+   "paquet": "mlx==0.32.2",
+   "empreintes": [
+    "fe8c1ecdad687259944b76d67621b00536b00194557588a4604a45efcd238d8e",
+    "c8b6ac97e9b0f0c3df50563af6a6e9aab72e9bc2872c8962fcfa84792013a1fe",
+    "a1d43722f22d95435ce344bacbaed09128b5b982b12a1b7d5f0b695696e7a84f",
+    "238b50d2ee3917c836e73f9446011518b79ff094940eb0107fa6cd17d02a2eca",
+    "e507dc67d268cf78254e17756f25057198fe74791508fcbd1e6d967673a8d374",
+    "e0828c96a6b988afbe6f07cc39adc0470eba9121f7e356623a8fb9d9a6397533",
+    "77217798a2b036bae9f213b851d4cde4581893787c9964458b7d471f86036bd6",
+    "cf63fd5c32258ab07523b06401c20ee2280bf56e26e991d05bf6fd8a4d42d1f6",
+    "68560fd648c5bb900aa6f6765cd74c5a8abaf092d97d73584a57b7545966c227",
+    "65d3d29b66045ed8dd2d8e437c8770de325843c364f7b7c38cd8ae90a7eec854",
+    "daebf84dfb857d70e87b1b98189a057e691e99a4a2b9f6f64cadebad917f8964",
+    "df8c75e509de868fca148dfeb38d92ce956eed386569c87caeb72bd16d2d6962",
+    "c99e3b6451bb4a55071cf19594f564435bd88de77008f377e611a40a8bbfb328",
+    "8fc433e35a7058e30f7a225c39fce06ba41394fe8e9fd67383b70f0b06de398c",
+    "3503617e3aa6a8e411df53236d5bca039fcca97556f1ade1c4e5cc8a64de52d2"
+   ]
+  },
+  {
+   "paquet": "mlx-lm==0.31.3",
+   "empreintes": [
+    "758cfddf1180053b7613db76fad3d246a331a2a905808e1164a275621fc983b8"
+   ]
+  },
+  {
+   "paquet": "mlx-metal==0.32.2",
+   "empreintes": [
+    "3825fff379dbc107dd3413e564a06caeaa24819910ec49c0439e454c06a1b9b8",
+    "55a369250d220b2cf10213a87a2ac1b1a420608c5b35b1df4e7147ac8e32f121",
+    "e6abeac9ac5265830c9c1541b6f96e9be37a85c2446763a46ad466c63a3837ab"
+   ]
+  },
+  {
+   "paquet": "numpy==2.5.3",
+   "empreintes": [
+    "f59a878c33d6b88122d80d239bb3b845d58708750b0cb06a09aebb9b18ec696c",
+    "a72f874bc9e10e4b8f80426fb49716d5141f64442a0c8418065093ec8017fbb0",
+    "92f30e89b8ee0ecf363033576c422b2f58fed6a80bed0aa48dff6d14c654663e",
+    "f9a2353b37a1a9e78fd82b27ad7e2a32a2d036604d18f02b05e3136c62ca3b09",
+    "012e66aca395d795496446e52aeeb5866312a5d4d3f27da270e5a0b43f70dc5c",
+    "adc1ada2662f8a5f960b8a10d9986897e7499ef07e06d4cfe7197f8cce923c07"
+   ]
+  },
+  {
+   "paquet": "packaging==26.3",
+   "empreintes": [
+    "d7193f7c8e4e93f444fde0262bf90af30e16fa0ad0ad44cb553c87339b23cd1c"
+   ]
+  },
+  {
+   "paquet": "protobuf==7.36.2",
+   "empreintes": [
+    "cbc70b17ee27e28894c7fee8bb04be1abead49e936bc70eb60052531eee2079e",
+    "bdb3a345d48db958e6ce1f18e508beb0cc981d64f24088427549c866cd039f1e"
+   ]
+  },
+  {
+   "paquet": "pygments==2.21.0",
+   "empreintes": [
+    "2363c69b61c4a97c838da3b130dcd6468f4848992b21a82f2a63ec34377137d9"
+   ]
+  },
+  {
+   "paquet": "pyyaml==6.0.3",
+   "empreintes": [
+    "02ea2dfa234451bbb8772601d7b8e426c2bfa197136796224e50e35a78777956",
+    "652cb6edd41e718550aad172851962662ff2681490a8a711af6a4d288dd96824",
+    "fc09d0aa354569bc501d4e787133afc08552722d3ab34836a80547331bb5d4a0",
+    "2283a07e2c21a2aa78d9c4442724ec1eb15f5e42a723b99cb3d822d48f5f7ad1",
+    "34d5fcd24b8445fadc33f9cf348c1047101756fd760b4dacb5c3e99755703310"
+   ]
+  },
+  {
+   "paquet": "regex==2026.9.10",
+   "empreintes": [
+    "7dcad477c49c4c626a6c4fcd71b39a971aa217060cc40a6569fd24edcc0fa509",
+    "f2f43bf4e47ff7ce9e585558706d698c6204d0f80bf2207766382ed817c8e9f4",
+    "debc629e98b95abaea1cf3057ca296151f348c697c9b8a59d18013adb302c0dd",
+    "b43456de605c8ee77eb75f07bc1ee44ba27f9cee22207deb77d495e954b7d953",
+    "880ac684c27176464c00c3fdc456116364f5ebc70da07aad0c2d4a7ba45e98db",
+    "866de9f98df0611d7b62b3a8729d3284a64c0cc6edd90bb95a533e443a4939cb",
+    "ef5a059ea1c6ee5d1c7e99a2484e628608d010921efe876c6f0e2029d2f35eca",
+    "d8c668af8f7bdb1d18739c27d30cd9f4b371495a883f75a002fb7a39d740fecd",
+    "fd6bd89b9fc06018d35851cab0240adb7dd84d51941b19f6574ac90cd54e3ae5",
+    "14caa05ce39ec70437af5aac8814c50ee6628f4a90353871c059692f448a164f"
+   ]
+  },
+  {
+   "paquet": "rich==15.0.0",
+   "empreintes": [
+    "33bd4ef74232fb73fe9279a257718407f169c09b78a87ad3d296f548e27de0bb"
+   ]
+  },
+  {
+   "paquet": "safetensors==0.8.0",
+   "empreintes": [
+    "c80201d22cbf405b80647a60ada77bba06c8fba2da2743ba1e89cdcc39a81f25"
+   ]
+  },
+  {
+   "paquet": "sentencepiece==0.2.2",
+   "empreintes": [
+    "bc7b0b1da20f856bfac5f84b2673fe534b167e41980b27442ca8f78c2b7eb77e",
+    "8f1f61592e7cabd45d49ce8cc0ef42ca655c091e037153754fb3fa59725b5914",
+    "69e9dc8078e128286ed3b975e37c837ba96e215a50c3ef9f3f8b7ab9e5a832a0",
+    "443ac618c7a2a1377cf5c82581fbb849591d14e656d5e5a3e4682d4e36a34e4e",
+    "1edb10e520e4bddf74d85b0f5ae74cc2d60c2b448885080bfb618bc2b3a49f6b",
+    "38111ed1f79268f399c505028023d5eaaf0ab4e5eafceb709468b0d3323e7838",
+    "77c3ce990b23441e5ecfa5bce181fd6f408b564aeb6d7e1d1e7de9c5612501c8",
+    "201a8e0f55501a76e08dbf2c54bc45f4642b379271e89c667d517bfbc2191f2a",
+    "c62bd361cec1f5b556eb8210264ecfff37486cd990c3386cc00310f26c54090a",
+    "79bac5a251f23a7341e28fda9ce0d5319edf45328239ce037c0682936f137906"
+   ]
+  },
+  {
+   "paquet": "shellingham==1.5.4",
+   "empreintes": [
+    "7ecfff8f2fd72616f7481040475a65b2bf8af90a56c89140852d1120324e8686"
+   ]
+  },
+  {
+   "paquet": "tokenizers==0.23.2",
+   "empreintes": [
+    "986670e43691469dcee610ea0f846f91a8f84e91fc6f7a48d4c064414c0ec2bf"
+   ]
+  },
+  {
+   "paquet": "tqdm==4.70.1",
+   "empreintes": [
+    "c293e525e6fef9c20e8728fd4612df02a0aa31bb5fe91ecd93e123b1b7bffa73"
+   ]
+  },
+  {
+   "paquet": "transformers==5.17.0",
+   "empreintes": [
+    "78ec1ce21579b38dfb83950a0658cd119f87212a2fcfdff478096ce9d6c03801"
+   ]
+  },
+  {
+   "paquet": "typer==0.27.2",
+   "empreintes": [
+    "b3a5fc4342d5fc8fda8fc3010b1cf117e9249aab7fae800c2eff62fd3842d97d"
+   ]
+  },
+  {
+   "paquet": "typing-extensions==4.16.0",
+   "empreintes": [
+    "481caa481374e813c1b176ada14e97f1f67a4539ce9cfeb3f350d78d6370c2e8"
+   ]
+  }
+ ]
+}

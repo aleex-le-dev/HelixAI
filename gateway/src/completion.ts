@@ -23,7 +23,8 @@ export type Completion =
 
 /** Modèle de conversation à utiliser : local et chargé d'abord, puis local, puis celui du prestataire. */
 async function choisir(qui: string): Promise<{ model: ModelInfo } | { error: string }> {
-  const tous = (await models()).filter((m) => m.roles.includes("chat") && !m.proprietaire);
+  // Un modèle entraîné sur la machine n'est jamais pris d'office (router.ts).
+  const tous = (await models()).filter((m) => m.roles.includes("chat") && !m.proprietaire && !m.entraine);
   const locaux = tous.filter((m) => (m.origine ?? "local") === "local");
   const local = locaux.find((m) => m.loaded) ?? locaux[0];
   if (local) return { model: local };

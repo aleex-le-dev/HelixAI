@@ -50,6 +50,7 @@ import { etat as etatSlack, type EtatSlack } from "@/lib/slack";
 import type { ServiceMaison } from "@/components/settings/Connecteurs";
 import { Usage } from "@/components/settings/Usage";
 import { ModelesCloud } from "@/components/settings/ModelesCloud";
+import { EntrainerModele } from "@/components/settings/EntrainerModele";
 import { TelechargerApps } from "@/components/settings/TelechargerApps";
 import { ImporterChats } from "@/components/settings/ImporterChats";
 import {
@@ -1227,6 +1228,21 @@ export function ModelesSettings() {
       subtitle={t("Les modèles d'un fournisseur, par votre propre clé, pour vous ou pour toute l'équipe.")}
     >
       <ModelesCloud />
+    </SettingsPage>
+  );
+}
+
+/*
+ * Entraîner un modèle sur ses propres exemples, sur la machine de l'instance
+ * (gateway/src/entrainement.ts).
+ */
+export function EntrainementSettings() {
+  return (
+    <SettingsPage
+      title={t("Entraîner un modèle")}
+      subtitle={t("Apprenez à un petit modèle ouvert les faits de votre société, sur cette machine, puis retrouvez-le dans le sélecteur de modèles.")}
+    >
+      <EntrainerModele />
     </SettingsPage>
   );
 }

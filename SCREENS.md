@@ -195,9 +195,24 @@ sa mise en service, dont l'installation d'OpenClaw la première fois).
 **Bases de connaissances d'un agent** (25/09/2026) : à la création d'un agent et sur
 sa carte (« Connaissances de {0} »), le choix des bases que le Chat consulte avec cet
 agent. Depuis le 25/09/2026, l'employé OpenClaw de l'agent y cherche aussi (sa fiche,
-ses missions, ses messageries), dans ce qui est ouvert à toute l'équipe seulement :
-une phrase le dit sous le choix des bases, à la création et dans « Connaissances de
-{0} ». Pas vu à l'écran : vérifié par les routes seulement.
+ses missions, ses messageries). Sous le choix des bases, « Ce qu'il lit hors du Chat »
+(`src/components/agents/LectureBases.tsx`) dit ce qu'il lira **réellement**, calculé par
+l'instance comme son outil le fait (`POST /helix/employes/<id>/connaissances`), base par
+base : « lue : 1 document(s) sur 2 », « non lue : base privée », « non lue : partagée à
+des groupes », « non lue : partagée à des groupes dont vous n'êtes pas membre ». En tête,
+la règle qui s'applique : pour un agent personnel sans messagerie, sans mission à chaque
+mail, encadré et sans outil qui écrit, « il lit ce qui est ouvert à toute l'équipe et ce
+qui est partagé aux groupes dont vous êtes membre, jamais vos documents privés », plus
+l'avertissement qu'il cesse de les lire dès que l'une de ces conditions tombe, et que
+ce qu'il a déjà noté dans sa mémoire peut y rester ; sinon, « il ne lit que ce qui est
+ouvert à toute l'équipe, parce que : » et la liste des raisons (ouvert à toute
+l'organisation, messagerie, mission à chaque mail, liberté au-delà d'« Encadré »,
+outils qui écrivent ou envoient, nommés). Agent pas encore en service : la phrase le dit.
+**Vu le 25/09/2026** dans le navigateur, avec une instance jetable : agent personnel
+sans outils (« lue : 1 document(s) sur 2 » pour une base partagée au groupe Compta, le
+second document étant privé), agent d'organisation avec outils (deux raisons, « non
+lue : partagée à des groupes »). La carte d'un employé sans agent dit désormais
+« Personnel » quand il l'est (elle disait « Organisation » pour tous).
 
 **Fiche d'un agent en service** (0.11.0, `src/components/agents/Employes.tsx`) : des agents
 OpenClaw qui travaillent pour toute l'équipe. « Déployer un employé » ouvre un
@@ -552,6 +567,16 @@ devenu illisible entre-temps est compté à part dans le bilan. Un logiciel sans
 conversation ni instructions a son bouton désactivé. **Vu le 25/09/2026** : 5 lots pour
 Claude Code, 19 Chats listés ; Cursor, à 0 conversation, bouton désactivé.
 
+**Où les Chats ont vraiment été gardés** (25/09/2026) : dans l'application de bureau,
+le bilan attend l'écriture du fichier chiffré. Si le fichier l'a refusée, l'encart passe
+en avertissement et le dit : Chats gardés pour l'instant dans le stockage du navigateur
+(quelques Mo), ou, si celui-ci est plein aussi, seulement en mémoire et perdus à la
+fermeture ; puis si l'instance en a reçu la copie ou non (et quoi faire). **Vu le
+25/09/2026** dans l'application de bureau, profil d'essai, dossier des Chats rendu non
+inscriptible et stockage du navigateur rempli : « 2 Chat(s) repris sur 2. Ni le fichier
+chiffré de cet ordinateur ni le stockage du navigateur n'ont pu les garder […] L'instance
+en a reçu la copie : ils y restent. »
+
 ### Entraîner un modèle (25/09/2026)
 
 Paramètres > **Entraîner un modèle** (`src/components/settings/EntrainerModele.tsx`).
@@ -862,6 +887,22 @@ Tout est embarqué : l'aide fonctionne sans Internet. En pied de fenêtre, l'adr
 support de l'intégrateur, le lien vers son site, et un bouton qui copie les
 informations techniques (version, cadre d'exécution, adresse d'instance, système) —
 ni messages, ni documents, ni clés.
+
+**Bandeau « fichier des Chats illisible »** (25/09/2026,
+`src/components/layout/AvisChatsIllisibles.tsx`) : par-dessus l'écran, où que l'on
+soit, quand le fichier chiffré des Chats du poste n'a pas pu être lu au démarrage. Il
+dit ce qui s'est passé (trousseau refusé ou verrouillé, fichier qui ne se déchiffre pas,
+fichier qui ne s'ouvre pas), que rien n'est effacé avec le chemin de la copie gardée,
+ce qui va se passer selon ce que l'instance a répondu (en cours de relecture, Chats
+rendus avec leur nombre, aucun Chat sur l'instance, instance pas relue, instance
+injoignable, place pleine), et ce que la personne peut faire (redémarrer, autoriser le
+trousseau, contacter l'administrateur). Une croix le ferme ; il revient si la situation
+change. Il ne promet jamais le retour des Chats tant que l'instance ne les a pas rendus.
+**Vu le 25/09/2026** dans l'application de bureau (profil d'essai, fichier remplacé par
+des octets quelconques) : « Vos Chats sont revenus depuis l'instance » avec les trois
+Chats dans la liste, puis, l'instance coupée, « L'instance n'est pas joignable : vos
+Chats reviendront d'elle au prochain démarrage où elle répondra ». Pas vu : le trousseau
+refusé (ce cas n'a pas été provoqué).
 
 Depuis 0.16.0, toutes les entrées de la navigation mènent à un écran qui fonctionne.
 Depuis 0.22.0, plus rien n'est grisé au pied de la barre.

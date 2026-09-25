@@ -353,7 +353,10 @@ function CarteEmploye({ employe, etat, onOuvrir }: { employe: Employe; etat: Eta
           </span>
           <div className="min-w-0 flex-1">
             <p className="truncate font-medium text-foreground">{employe.nom}</p>
-            <p className="text-xs text-muted-foreground">{t("Organisation · par")}{" "}{employe.proprietaire}</p>
+            <p className="text-xs text-muted-foreground">
+              {/* Un employé personnel n'est vu que de son propriétaire : l'étiquette « Organisation » le disait ouvert à tous. */}
+              {employe.visibilite === "personnel" ? t("Personnel") : <>{t("Organisation · par")}{" "}{employe.proprietaire}</>}
+            </p>
           </div>
         </div>
         <p className="line-clamp-2 text-sm text-muted-foreground">{employe.poste}</p>

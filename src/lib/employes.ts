@@ -55,7 +55,7 @@ export interface Employe {
   agentId?: string;
   visibilite?: "personnel" | "organisation";
   toutesLesFamilles?: boolean;
-  /** Bases de connaissances de l'agent : il n'y lit que ce qui est ouvert à toute l'équipe. */
+  /** Bases de connaissances de l'agent : ce qu'il y lit, `lectureDesBases` le dit. */
   connaissances?: string[];
   ownerId: string;
   createdAt: string;

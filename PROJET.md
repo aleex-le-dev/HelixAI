@@ -731,6 +731,25 @@ Pourquoi ainsi :
   surtout, sa boucle appelle le modèle plusieurs fois par tâche, c'est à lui de chercher
   quand il en a besoin. Pas de citations sous la réponse : l'employé nomme le document
   dans son texte (« (source : … ) »), sa fiche de poste le lui demande.
+- **Employés OpenClaw et bases partagées à un groupe** (décidé le 25/09/2026,
+  l'après-midi, à la demande du client). Règle : un document ne sort d'un employé que
+  vers des gens qui ont le droit de le voir. Le seul cas où le code établit sûrement
+  qui reçoit ce qu'il lit est celui où **tout ce qui sort de lui ne va qu'à son
+  propriétaire** : agent personnel (personne d'autre ne le voit, ne lui parle, ne lit
+  ses comptes rendus), sans messagerie, sans mission « à chaque mail », en liberté
+  « Encadré », sans outil qui écrit ou envoie là où d'autres lisent (fichiers de
+  l'équipe, documents Office, mails, donc sans « Autoriser les outils »). Il lit alors
+  aussi les bases et les documents partagés aux groupes dont son propriétaire est
+  membre à cet instant : son seul destinataire les voit lui-même. Jamais les documents
+  privés du propriétaire (la question du point 18 reste au client). Tout est relu à
+  chaque appel (`employes.ts`, `lectureDesBases`) : ouvert à l'organisation, branché à
+  une messagerie, doté d'un outil qui écrit, sorti du groupe, il revient aussitôt à la
+  règle de l'équipe. Pourquoi pas plus large : un agent partagé à des groupes précis
+  n'existe pas dans le code (un agent est personnel ou d'organisation), et un agent
+  d'organisation parle à tout le monde ; ces cas gardent la règle de l'équipe. Limite
+  dite à l'écran : ce qu'il a déjà noté dans sa mémoire OpenClaw y reste quand son
+  audience s'élargit. L'écran de l'agent dit, base par base, ce qu'il lira et pourquoi
+  pas le reste.
 
 ### 3.11 Ligne de commande : un client de plus, qui ne décide rien
 
@@ -951,14 +970,16 @@ données.
 ### Ce qui a été ajouté le 25/09/2026
 
 Détail dans [SECURITE.md](SECURITE.md) § 22. `npm run securite` compte désormais
-**152 contrôles, tous réussis le 25/09/2026** (77 la veille ; dont 5 pour le flux de
+**167 contrôles, tous réussis le 25/09/2026** (77 la veille ; dont 5 pour le flux de
 Helix Code fabriqué par la passerelle, § 3.11, 15 pour les employés et les bases de
-connaissances, § 3.10, et 7 pour l'export RGPD et l'effacement).
+connaissances, § 3.10, 7 pour l'export RGPD et l'effacement, et, l'après-midi, 14 pour
+les employés et les bases partagées à un groupe, plus une route sans séance).
 
 | Surface | Règle |
 |---|---|
 | Images d'un Chat partagé | Visibles de leur auteur et de qui voit le Chat **où elles ont été créées** (`voitConversation`) ; tout autre demandeur reçoit 404, que l'image existe ou non. Un identifiant recopié dans un autre Chat n'ouvre rien. Réponse `no-store` pour un collègue, pour qu'un partage retiré cesse aussitôt |
 | Bases de connaissances | Droits hérités de Fichiers : une base a la visibilité des objets de la Bibliothèque, seul son propriétaire la modifie, et à chaque question seuls comptent les documents que la personne voit. Index chiffrés, 0600. Préfixe `/helix/connaissances` entier sous séance |
+| Employés et bases | Ce qui est ouvert à toute l'équipe ; en plus, les bases et documents partagés aux groupes du propriétaire **seulement** si tout ce qui sort de l'employé ne va qu'à lui (personnel, sans messagerie, sans mission à chaque mail, encadré, sans outil qui écrit). Jamais un document privé. Relu à chaque appel |
 | Entraînement | Préfixe `/helix/entrainement` entier sous séance ; projet rendu à son seul auteur, identifiant de 24 caractères hexadécimaux tiré au sort ; projet chiffré au repos, jamais réécrit s'il est illisible ; aucun exemple en argument de commande |
 | Outils de Code | `/helix/code/outils` réservée à l'agent de code de l'instance : jeton **et** clé tirée à chaque démarrage (`X-Helix-Cle`), comparée en temps constant ; chaque appel passe par la barrière et le journal |
 | Ligne de commande | Jeton du poste lu **seulement pour une adresse locale** ; http vers une autre machine refusé avant tout envoi ; mot de passe tapé sans écho et jamais écrit ; séance rangée par adresse d'instance |
@@ -2243,6 +2264,52 @@ une troisième question de la même conversation il a répondu sans rappeler l'o
 l'application (port 18800) a redémarré à 10 h 23, avant que la passerelle d'essai
 n'existe (10 h 28) : sans lien avec l'essai.
 
+**Employés et bases partagées à un groupe** (l'après-midi du 25/09/2026, § 3.10). Un
+employé personnel dont rien ne sort vers d'autres que son propriétaire lit aussi les
+bases partagées aux groupes de ce propriétaire ; l'écran « Connaissances de … » dit ce
+qu'il lira, base par base, et pourquoi pas le reste (`LectureBases.tsx`,
+`POST /helix/employes/<id>/connaissances`). La carte d'un employé sans agent disait
+« Organisation » même pour un employé personnel : corrigé. Vérifié le 25/09/2026 :
+`npm run securite` 167 contrôles, tous réussis (14 de plus en section 7 ter : lecture du
+groupe, rien du groupe étranger ni du privé, fermeture dès l'élargissement par la
+visibilité, les outils, la liberté, une messagerie Telegram, la sortie du groupe, et
+réouverture quand la condition revient). De bout en bout sur ce poste, passerelle
+d'essai sur 8899 (données jetables) et OpenClaw 2026.9.4 d'essai sur le port 18877
+(dossier temporaire ; ni `~/.openclaw`, ni 18789, ni 18800), `qwen3-8b` et
+`text-embedding-nomic-embed-text-v1.5` déjà chargés : base « Base Compta » partagée au
+groupe Compta, avec la grille du groupe et une note privée d'Alice ; l'employé
+personnel d'Alice répond « PAPAYE-3150 (source : Tarifs-Compta.txt) » en 108 s, et au
+code du coffre d'Alice « ne figure pas » (en 21 s, en inventant au passage un nom de
+document, « Règles-Compta.txt ») ; ouvert à l'organisation, la même question posée par
+Bruno ne ramène rien (journal : `regle: "equipe"`, 0 passage), et « cherche dans ta
+mémoire » non plus (l'employé n'avait rien noté). Écran vu dans le navigateur (instance
+jetable) : agent personnel sans outils, « lue : 1 document(s) sur 2 » ; agent
+d'organisation avec outils, deux raisons et « non lue : partagée à des groupes ».
+*Pas essayé* : dans l'application de bureau ; sur une messagerie réelle ; un
+employé qui a noté un passage de groupe dans sa mémoire puis est ouvert à l'équipe.
+
+**Fichier des Chats illisible : le bandeau, et le bilan d'import** (anciens restes du
+point 21). Un bandeau par-dessus l'écran dit ce qui s'est passé, où est la copie, ce
+que l'instance a répondu, et quoi faire (`AvisChatsIllisibles.tsx`). La copie
+`.illisible.enc` est faite dès la lecture ; un fichier qu'on n'a pas pu copier n'est
+jamais remplacé ; le blocage de la poussée survit à un rechargement de la fenêtre. Au
+bureau, le bilan d'import attend l'écriture du fichier et dit si les Chats sont dans
+le fichier, dans le stockage du navigateur ou seulement en mémoire, et si l'instance en
+a la copie ; quand le navigateur refuse aussi, la mémoire reste la source de lecture
+(avant, la liste lue redevenait l'ancienne, et la poussée suivante l'aurait envoyée).
+**Vu le 25/09/2026 dans l'application de bureau** (Electron de développement, profil
+d'essai `HELIX_PROFIL_ESSAI`, `HELIX_DATA_DIR` temporaire, passerelle jetable sur 8898,
+jamais `~/.helix/poste`) : fichier remplacé par des octets quelconques → copie faite au
+démarrage, bandeau, trois Chats rendus par l'instance ; instance coupée → « pas
+joignable », rien poussé ; dossier des Chats non inscriptible et stockage du navigateur
+rempli → import de deux Chats par l'écran : « ils ne sont qu'en mémoire […] L'instance
+en a reçu la copie ». *Pas provoqué* : le trousseau refusé ou verrouillé. Une sonde
+lancée avec un dossier personnel d'essai est restée bloquée (sans doute une demande du
+trousseau à l'écran) et a été arrêtée au bout d'une minute ; les essais ont ensuite
+gardé le vrai dossier personnel ; dans `~/.helix`, l'application d'essai n'écrit que le
+fichier du thème (`electron/main.cjs`, `fichierTheme`), réécrit à 15 h 32 avec la même
+valeur, « clair ».
+
 ### Ce qui reste à faire
 
 *Liste refaite le 25/09/2026. Ce qui est fait est décrit plus haut ;
@@ -2329,12 +2396,17 @@ ne restent ici que les points ouverts.*
     client le demande. Documenter `NODE_EXTRA_CA_CERTS` pour une instance à certificat
     auto-signé.
 18. **Employés OpenClaw et bases de connaissances** : fait le 25/09/2026 (outil
-    `connaissances__chercher`, ce qui est ouvert à toute l'équipe seulement, § 3.10).
-    Reste : le voir dans l'application de bureau (choisir les bases sur la carte d'un
-    agent en service, puis lui parler) ; l'essayer sur une messagerie ; décider avec
-    le client si un agent **personnel** sans messagerie ni mission « à chaque mail »
-    pourrait lire avec les droits de son propriétaire (non fait : sa mémoire OpenClaw
-    et ses comptes rendus garderaient ce qu'il a lu).
+    `connaissances__chercher`, § 3.10) ; l'après-midi, un agent personnel dont rien ne
+    sort vers d'autres (sans messagerie, sans mission « à chaque mail », encadré, sans
+    outil qui écrit) lit aussi les bases partagées aux groupes de son propriétaire, et
+    l'écran de l'agent dit ce qu'il lira. Reste : le voir dans l'application de bureau
+    (vu dans le navigateur seulement) ; l'essayer sur une messagerie ; décider avec le
+    client (a) si un tel agent pourrait lire aussi les **documents privés** de son
+    propriétaire (non fait : sa mémoire OpenClaw les garderait si l'agent est ouvert
+    ensuite), (b) s'il faut une visibilité « partagé à des groupes » pour les agents,
+    qui ouvrirait le même droit à un agent de groupe (n'existe pas : un agent est
+    personnel ou d'organisation), (c) que faire de la mémoire d'un employé dont
+    l'audience s'élargit (aujourd'hui gardée, l'écran le dit).
 19. **Export RGPD** : fait le 25/09/2026, `/helix/export` contient désormais les bases
     de connaissances (sans vecteurs), les images créées (liste et demandes) et les
     projets d'entraînement (exemples) ; l'effacement d'un compte retire aussi ses
@@ -2342,17 +2414,23 @@ ne restent ici que les points ouverts.*
     (7 contrôles de plus, section 7 quater de `npm run securite`). Reste : un document supprimé de Fichiers reste listé dans la
     base (« supprimés depuis ») jusqu'à ce que le propriétaire l'y retire ; son index
     reste sur le disque jusque-là, sans plus jamais être servi.
-20. **À essayer dans l'application de bureau** : le fichier des Chats illisible (copie
-    `.illisible.enc`, pas de poussée vers l'instance), l'écran d'import par morceaux et
-    son bilan ; Cowork avec des bases de connaissances ; de vrais PDF et documents
-    Office dans une base ; une vraie image vue par un collègue sur un second poste.
-21. **Petits restes du 25/09** : un poste dont le fichier des Chats est illisible ne
-    les montre qu'une fois l'instance relue, sans bandeau qui le signale (il faudrait
-    le bandeau et ses textes) ; au bureau, `ajouterSessionsImportees` compte comme
-    gardé ce qui est en mémoire, et si l'écriture du fichier échoue ensuite, le repli
-    vers le stockage du navigateur peut dépasser son quota sans que le bilan le dise ;
-    un petit modèle entraîné garde des traces hors de propos (la Joconde attribuée à la
-    fondatrice imaginaire), d'où le conseil de deux ou trois formulations par fait.
+20. **À essayer dans l'application de bureau** : le fichier des Chats illisible est vu
+    le 25/09/2026 dans l'application de développement, profil d'essai (fichier abîmé,
+    instance coupée, écriture refusée) ; reste le **trousseau refusé ou verrouillé**
+    (jamais provoqué) et l'application empaquetée. Aussi : l'écran d'import par
+    morceaux avec un vrai logiciel ; Cowork avec des bases de connaissances ; de vrais
+    PDF et documents Office dans une base ; une vraie image vue par un collègue sur un
+    second poste.
+21. **Petits restes du 25/09** : le bandeau du fichier des Chats illisible et le bilan
+    d'import au bureau sont faits (« Fait le 25/09/2026 », plus haut). Restent : un Chat
+    ouvert sur un poste dont l'instance n'a pas été relue (fichier illisible, instance
+    injoignable) n'est pas envoyé, et le démarrage suivant le remplace par la liste de
+    l'instance (le bandeau le dit, rien ne le fusionne) ; après un repli vers le
+    stockage du navigateur, le démarrage suivant relit le fichier chiffré, qui n'a pas
+    les Chats gardés dans le navigateur (ils reviennent de l'instance si elle les a
+    reçus, ce que le bilan dit) ; un petit modèle entraîné garde des traces hors de
+    propos (la Joconde attribuée à la fondatrice imaginaire), d'où le conseil de deux
+    ou trois formulations par fait.
 
 **Titulaire des droits** : tranché le 24/09/2026, « Medhi Clabaut » (entreprise
 individuelle, SIREN 994 907 145), partout ; mentions légales et section

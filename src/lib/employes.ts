@@ -55,6 +55,8 @@ export interface Employe {
   agentId?: string;
   visibilite?: "personnel" | "organisation";
   toutesLesFamilles?: boolean;
+  /** Bases de connaissances de l'agent : il n'y lit que ce qui est ouvert à toute l'équipe. */
+  connaissances?: string[];
   ownerId: string;
   createdAt: string;
   modele: string;
@@ -213,6 +215,8 @@ export interface NouvelEmploye {
   description?: string;
   /** Toutes les familles d'outils branchées, y compris celles branchées plus tard. */
   toutesLesFamilles?: boolean;
+  /** Bases de connaissances de l'agent. */
+  connaissances?: string[];
   /** Exigés pour le palier « libre ». */
   motDePasse?: string;
   code?: string;
@@ -228,7 +232,7 @@ export async function deployerEmploye(
 export async function modifierEmploye(
   id: string,
   changements: Partial<
-    Pick<Employe, "poste" | "outils" | "missions" | "enPause" | "autonome" | "modele" | "liberte" | "description" | "toutesLesFamilles">
+    Pick<Employe, "poste" | "outils" | "missions" | "enPause" | "autonome" | "modele" | "liberte" | "description" | "toutesLesFamilles" | "connaissances">
   > & {
     motDePasse?: string;
     code?: string;

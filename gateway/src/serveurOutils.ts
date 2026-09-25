@@ -6,6 +6,7 @@ import { employe, cleValide, famillesEffectives, nomOpenClaw, prefixerNoms, trai
 import { outilsDeFamille, executerOutil, cibleDe, type DefinitionOutil } from "./outils.ts";
 import { demandeToujours, modifie, verifierOutil } from "./approbation.ts";
 import { journaliser } from "./audit.ts";
+import { OUTIL_EMPLOYE, chercherPourEmploye, outilEmploye } from "./connaissances.ts";
 
 /**
  * Serveur d'outils des employés : les outils d'Helix, servis par MCP à
@@ -25,9 +26,13 @@ import { journaliser } from "./audit.ts";
  * à chaque redémarrage de la passerelle.
  */
 
-/** Ce qu'un employé voit en ce moment : ses familles, et ce que chacune offre. */
+/**
+ * Ce qu'un employé voit en ce moment : ses familles, et ce que chacune offre ;
+ * plus la recherche dans ses bases de connaissances, si son agent en a.
+ */
 function outilsDe(e: Employe): DefinitionOutil[] {
-  return famillesEffectives(e).flatMap((f) => outilsDeFamille(f));
+  const familles = famillesEffectives(e).flatMap((f) => outilsDeFamille(f));
+  return (e.connaissances?.length ?? 0) > 0 ? [...familles, outilEmploye()] : familles;
 }
 
 /** L'auteur tel que le journal le retient : l'employé, pas une personne. */
@@ -100,12 +105,21 @@ export async function servirOutils(
       if (!verdict.autorise) return texte(verdict.message, true);
     }
 
+    /*
+     * Ses bases de connaissances : celles de son agent, relues à chaque appel,
+     * et seulement ce qui y est ouvert à toute l'équipe (connaissances.ts,
+     * `chercherPourEmploye`, où la règle est justifiée). Traité avant
+     * `executerOutil`, qui rangerait ce nom parmi les outils MCP des fichiers.
+     */
+    const bases = nom === OUTIL_EMPLOYE ? await chercherPourEmploye(courant.connaissances ?? [], args, qui) : null;
     // Plusieurs personnes lui parlent : dans la bibliothèque, il ne voit que ce qui est ouvert à toute l'équipe.
-    const r = await executerOutil(nom, args, { userId: qui, groupes: [] });
+    const r = bases ?? (await executerOutil(nom, args, { userId: qui, groupes: [] }));
+    // Le journal dit combien de passages sont sortis, jamais lesquels ni la question.
     journaliser("outil.appele", qui, {
       outil: nom,
       cible: cibleDe(args),
       ok: r.ok,
+      ...(bases ? { bases: courant.connaissances?.length ?? 0, passages: bases.passages } : {}),
       ...(sansAccord ? { sansAccord: true } : {}),
     });
     // Le résultat part tel quel : il porte des données (un mail, un fichier) qu'on ne réécrit pas.

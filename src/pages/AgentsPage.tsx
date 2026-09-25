@@ -268,8 +268,9 @@ function AgentCard({
       </button>
       {/*
         * Bases de connaissances de l'agent : son propriétaire les change ici.
-        * Elles valent dans le Chat ; l'employé toujours actif (OpenClaw) ne
-        * les consulte pas encore.
+        * Dans le Chat, chacun y lit ce qu'il a le droit de voir ; l'employé
+        * toujours actif (OpenClaw) les consulte par un outil, avec seulement
+        * ce qui est ouvert à toute l'équipe (useMiseEnService les lui recopie).
         */}
       {features.bibliotheque && (canDelete || nombreBases > 0) && (
         <button
@@ -287,6 +288,9 @@ function AgentCard({
           <h2 className="pr-8 text-lg font-semibold text-foreground">{tf("Connaissances de {0}", agent.name)}</h2>
           <p className="mt-1 text-sm text-muted-foreground">
             {t("Dans le Chat, avec cet agent, les passages utiles de ces bases sont donnés au modèle avant chaque réponse, et cités sous la réponse. Chaque personne n'y lit que ce qu'elle a le droit de voir.")}
+          </p>
+          <p className="mt-2 text-sm text-muted-foreground">
+            {t("Depuis sa fiche, ses missions et ses messageries, l'agent cherche aussi dans ces bases et cite ses sources, mais seulement dans les bases et les documents ouverts à toute l'équipe : plusieurs personnes lui parlent, rien de privé ne doit en sortir.")}
           </p>
           <div className="mt-4">
             <ChoixBases valeur={bases} onChange={setBases} />
@@ -592,7 +596,7 @@ function AgentModal({
               <ChoixBases
                 valeur={connaissances}
                 onChange={setConnaissances}
-                aide={t("Dans le Chat, l'agent y cherche avant de répondre et cite ses sources.")}
+                aide={t("L'agent y cherche avant de répondre et cite ses sources. Hors du Chat (sa fiche, ses missions, ses messageries), seulement dans ce qui est ouvert à toute l'équipe.")}
               />
             </div>
           )}

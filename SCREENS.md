@@ -194,8 +194,10 @@ sa mise en service, dont l'installation d'OpenClaw la première fois).
 
 **Bases de connaissances d'un agent** (25/09/2026) : à la création d'un agent et sur
 sa carte (« Connaissances de {0} »), le choix des bases que le Chat consulte avec cet
-agent. Seul le Chat (et Cowork) s'en sert : l'employé OpenClaw de l'agent ne les
-consulte pas encore. Pas vu à l'écran lors de la vérification du 25/09.
+agent. Depuis le 25/09/2026, l'employé OpenClaw de l'agent y cherche aussi (sa fiche,
+ses missions, ses messageries), dans ce qui est ouvert à toute l'équipe seulement :
+une phrase le dit sous le choix des bases, à la création et dans « Connaissances de
+{0} ». Pas vu à l'écran : vérifié par les routes seulement.
 
 **Fiche d'un agent en service** (0.11.0, `src/components/agents/Employes.tsx`) : des agents
 OpenClaw qui travaillent pour toute l'équipe. « Déployer un employé » ouvre un

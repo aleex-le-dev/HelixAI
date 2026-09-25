@@ -2316,7 +2316,8 @@ curl -s -H "Authorization: Basic $(printf 'opencode:<mot de passe>' | base64)" \
 
 ## 22. Les surfaces ajoutées le 25 septembre 2026
 
-`npm run securite` compte désormais **125 contrôles, tous réussis le 25/09/2026**.
+`npm run securite` compte désormais **140 contrôles, tous réussis le 25/09/2026** (125,
+plus 15 sur les employés et les bases de connaissances, ajoutés le même jour, § 22.2).
 Ajoutés ce jour-là, par branche : 14 sur les images d'un Chat partagé (13, plus la
 connexion d'une collègue), 6 sur les bases de connaissances et 9 de leurs routes
 ajoutées aux listes « sans jeton » et « sans séance », 16 sur l'entraînement, 3 sur
@@ -2380,6 +2381,26 @@ désormais exportée), `gateway/src/index.ts`.
 - Journal : `connaissances.base_creee`, `base_modifiee`, `base_supprimee`,
   `documents_ajoutes`, `document_retire`, avec identifiants et nombres, jamais de
   texte.
+- **Employés OpenClaw** (ajouté le 25/09/2026) : l'outil `connaissances__chercher` de
+  leur serveur d'outils ne compte que les bases **et** les documents ouverts à toute
+  l'équipe (`chercherPourEmploye`, `equipeSeulement`), avec l'identité `employe:<id>`,
+  qui ne possède rien : ni les droits du propriétaire de l'agent, ni ceux de qui lui
+  parle, car l'appel ne dit pas pour qui l'employé travaille et ce qu'il lit ressort
+  vers d'autres (collègues, messageries, mémoire). Seulement les bases de **son** agent,
+  relues à chaque appel. Aucun droit ajouté au canal d'OpenClaw : même route, même clé
+  `X-Helix-Cle`, et ce qu'on y lit (ouvert à l'équipe) l'était déjà par la famille
+  « bibliothèque ». Refusé aux personnes qui écrivent sur une messagerie, sauf
+  `outilsEntreprise`. Sa fiche de poste (`SOUL.md`, relue par le modèle) nomme l'outil,
+  jamais les bases. Journal : `outil.appele` avec le nombre de bases et de passages,
+  jamais la question.
+- Contrôlé par `npm run securite` (section 6 ter, faux modèle d'embeddings et faux
+  OpenClaw) : l'outil n'est proposé qu'à un employé qui a des bases ; il rend le passage
+  d'un document ouvert, avec son nom ; ni le document privé du propriétaire de l'agent
+  (même rangé dans une base ouverte), ni celui d'une collègue (dans sa base privée, ou
+  dans une base qu'elle a ouverte), ni le nom d'une base privée ; bases privées seules :
+  aucun passage ; sans la clé, clé devinée, séance d'une collègue sans clé : 403 ;
+  `SOUL.md` sans nom de base. De bout en bout avec un vrai OpenClaw et qwen3-8b le même
+  jour : aucun secret dans les réponses (PROJET.md).
 - Vérifié avec un second compte le 25/09/2026 : base privée ni listée, ni lisible
   (404), ni modifiable (404), ni cherchable (0 passage, « 1 ignorée ») ; base ouverte
   à toute l'équipe mais documents privés : 0 document nommé, 0 passage.

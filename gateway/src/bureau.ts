@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { basename, dirname, extname, isAbsolute, join, resolve as normaliser, sep } from "node:path";
 import { interpreteur, bureautiquePresente } from "./atelier.ts";
 import { workspace } from "./mcp.ts";
+import { estProtege } from "./zonesProtegees.ts";
 
 /**
  * Outils bureautiques de Cowork.
@@ -135,12 +136,21 @@ async function cheminSur(brut: unknown, extension: string | null): Promise<Verdi
         erreur: `Ce fichier est un lien qui pointe hors de l'espace de travail : choisis un autre nom sous ${racine}.`,
       };
     }
-    return { ok: true, chemin: reel };
+    return protege(reel) ? { ok: false, erreur: REFUS_ZONE } : { ok: true, chemin: reel };
   } catch {
     // Il n'existe pas encore : c'est le cas normal d'une création.
-    return { ok: true, chemin: complet };
+    return protege(complet) ? { ok: false, erreur: REFUS_ZONE } : { ok: true, chemin: complet };
   }
 }
+
+/*
+ * Les zones protégées (zonesProtegees.ts, revue du 25/09/2026) : avec « Tout
+ * mon poste », l'espace est le dossier personnel, et un document produit ou lu
+ * dans `~/.helix/data` ou `~/.ssh` n'y a rien à faire.
+ */
+const REFUS_ZONE =
+  "Cet emplacement est protégé (données de l'instance, clés, réglages d'autres logiciels) : choisis un dossier de documents.";
+const protege = (chemin: string): string | null => (estProtege(chemin) ? chemin : null);
 
 /* --------------------------------- scripts ------------------------------------ */
 

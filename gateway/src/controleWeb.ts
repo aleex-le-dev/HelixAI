@@ -2,6 +2,7 @@ import { existsSync, lstatSync, readdirSync, readFileSync, realpathSync, statSyn
 import { dirname, extname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { Script } from "node:vm";
 import { workspace } from "./mcp.ts";
+import { estProtege } from "./zonesProtegees.ts";
 
 /**
  * Contrôle objectif d'un site ou d'une application web (HTML, CSS, JavaScript).
@@ -60,7 +61,10 @@ function lister(dossier: string): string[] {
          */
         const s = lstatSync(chemin);
         if (s.isSymbolicLink()) continue;
-        if (s.isDirectory()) pile.push(chemin);
+        // Un dossier de données sans point (`HELIX_DATA_DIR=~/HelixDonnees`) n'est pas parcouru non plus.
+        if (s.isDirectory()) {
+          if (!estProtege(chemin)) pile.push(chemin);
+        }
         else if (s.isFile() && WEB.has(extname(nom).toLowerCase()) && s.size <= TAILLE_MAX) trouves.push(chemin);
       } catch {
         /* disparu, ou lien cassé : ignoré */
@@ -370,6 +374,7 @@ export async function callTool(nom: string, args: Record<string, unknown>): Prom
     dossier = realpathSync(isAbsolute(demande) ? demande : resolve(racine, demande));
     const reel = realpathSync(racine);
     if (dossier !== reel && !dossier.startsWith(reel + sep)) return { ok: false, content: "Ce dossier est hors du dossier de travail." };
+    if (estProtege(dossier)) return { ok: false, content: "Ce dossier est protégé (données de l'instance, clés, réglages) : il ne se contrôle pas." };
     if (!statSync(dossier).isDirectory()) return { ok: false, content: "Ce chemin n'est pas un dossier." };
   } catch {
     return { ok: false, content: `Dossier « ${demande} » introuvable dans le dossier de travail.` };

@@ -18,7 +18,8 @@ import {
   propositions,
   reglerReseau,
 } from "./reseau.ts";
-import { origineDuRole } from "./roles.ts";
+import { estAdministrateur, origineDuRole } from "./roles.ts";
+import { estProtege } from "./zonesProtegees.ts";
 import { PORT, HOST, surLeReseau } from "./config.ts";
 import {
   discover,
@@ -395,7 +396,7 @@ async function handleChat(
   const employe = req.headers["x-helix-employe"];
   const cle = req.headers["x-helix-cle"];
   const parEmploye =
-    !qui && typeof employe === "string" && employes.cleValide(typeof cle === "string" ? cle : undefined)
+    !qui && typeof employe === "string" && employes.cleValide(typeof cle === "string" ? cle : undefined, employe)
       ? auteurEmploye(employe)
       : undefined;
 
@@ -2701,6 +2702,15 @@ async function handleWorkspace(
   } else {
     const verdict = validerDossier(body.dossier as string, "cowork");
     if (!verdict.ok) return send(res, 400, { error: { message: verdict.raison } });
+    /*
+     * Choisir une zone protégée comme dossier de l'équipe reviendrait à l'ouvrir
+     * à tous (zonesProtegees.ts, revue du 25/09/2026) : `~/.helix/data`, `~/.ssh`
+     * et leurs voisins ne se désignent pas. Un dossier qui en contient un reste
+     * possible (le dossier personnel) : la zone y est alors filtrée partout.
+     */
+    if (estProtege(verdict.chemin)) {
+      return send(res, 400, { error: { message: t("Ce dossier est protégé (données de l'instance, clés, réglages d'autres logiciels) : il ne peut pas devenir le dossier de l'équipe.") } });
+    }
     chemins = [verdict.chemin];
   }
 
@@ -3438,10 +3448,33 @@ async function handleImagesFichier(req: http.IncomingMessage, res: http.ServerRe
 const depuisCePoste = (req: http.IncomingMessage) => /^(::1|127\.|::ffff:127\.)/.test(req.socket.remoteAddress ?? "");
 
 async function handleImportLogiciels(req: http.IncomingMessage, res: http.ServerResponse, url: URL, id?: string): Promise<void> {
+  /*
+   * Revue du 25/09/2026 : la boucle locale ne prouvait rien sur une instance
+   * partagée. Un outil qui tourne sur le serveur (le bash de Helix Code, un
+   * script d'employé) appelle `http://127.0.0.1:<port>/…` et passe pour « le
+   * poste », jetons en `?token=` et `?session=`. Il recevait les
+   * conversations Claude Code, Codex et Cursor du compte qui fait tourner le
+   * serveur. Trois barrières désormais, en plus de la boucle locale :
+   *  1. jetons en en-têtes seulement, jamais dans l'adresse (ni billet de
+   *     flux) : l'écran les pose ainsi, un lien ou un script bricolé non ;
+   *  2. instance partagée (`share`, ou écoute sur le réseau) : refus, toujours.
+   *     Ces fichiers sont ceux du serveur, pas ceux de la personne ;
+   *  3. le compte doit être celui qui administre l'instance (roles.ts : sur un
+   *     poste autonome, le premier compte, celui qui l'a mise en route).
+   */
+  if (["token", "session", "flux"].some((p) => url.searchParams.has(p))) {
+    return send(res, 400, { error: { message: t("Jetons en en-têtes seulement pour cette route, jamais dans l'adresse.") } });
+  }
+  if (instancePartagee()) {
+    return send(res, 403, { error: { message: t("L'import depuis les logiciels du poste est fermé sur une instance partagée : ces fichiers seraient ceux du serveur, pas les vôtres. Utilisez l'export du logiciel (Paramètres, Importer).") } });
+  }
   const qui = await demandeur(req, url);
   if (!qui) return send(res, 401, sansSeance());
   if (!depuisCePoste(req)) {
     return send(res, 403, { error: { message: t("L'import depuis les logiciels se fait sur le poste où ils sont installés, pas depuis une instance distante.") } });
+  }
+  if (!(await estAdministrateur(qui.userId))) {
+    return send(res, 403, { error: { message: t("Seul le titulaire de ce poste peut reprendre les historiques de ses logiciels.") } });
   }
   if (!id) return send(res, 200, { logiciels: await logicielsTrouves() });
   /*
@@ -3813,7 +3846,10 @@ async function handleBibliotheque(req: http.IncomingMessage, res: http.ServerRes
     return repondre(await bibliotheque.marquerFavori(id, b.favori === true, moi), () => ({ ok: true }));
   }
   if (id && action === "supprimer" && req.method === "POST") {
-    return repondre(await bibliotheque.supprimerElement(id, moi), (v) => v);
+    const r = await bibliotheque.supprimerElement(id, moi);
+    // Un document supprimé quitte aussi les bases de connaissances, index compris (connaissances.ts).
+    if (r.ok) await connaissances.retirerDocumentsPartout(r.valeur.documents).catch(() => 0);
+    return repondre(r, (v) => ({ supprimes: v.supprimes }));
   }
   if (id && !action && req.method === "POST") {
     return repondre(await bibliotheque.modifierElement(id, await corps(), moi), (element) => ({ element }));
@@ -3939,7 +3975,7 @@ async function handleEmployes(
   // Un agent personnel n'existe que pour son propriétaire : pour les autres, il est introuvable.
   if (id) {
     const cible = await employes.employe(id);
-    if (cible && !employes.visiblePar(cible, qui.userId)) {
+    if (cible && !employes.visiblePar(cible, qui.userId, qui.groupes ?? [])) {
       return send(res, 404, { error: { message: t("Agent introuvable.") } });
     }
   }
@@ -3950,12 +3986,12 @@ async function handleEmployes(
   const repondre = <T,>(r: employes.Resultat<T>, succes: (v: T) => unknown) =>
     r.ok
       ? send(res, 200, { ...(succes(r.valeur) as object), ...(r.avertissement ? { avertissement: r.avertissement } : {}) })
-      : send(res, r.statut, { error: { message: r.message } });
+      : send(res, r.statut, { error: { message: r.message, ...(r.code ? { code: r.code } : {}), ...(r.details ? { details: r.details } : {}) } });
 
   // GET /helix/employes : l'équipe, ce qu'on peut leur donner, et l'état du moteur.
   if (!id && req.method === "GET") {
     const comptes = await publicAccounts();
-    const liste = (await employes.listerEmployes()).filter((e) => employes.visiblePar(e, qui.userId));
+    const liste = (await employes.listerEmployes()).filter((e) => employes.visiblePar(e, qui.userId, qui.groupes ?? []));
     // Les modèles que cette personne peut donner à un employé : les siens, ceux de l'équipe et de la machine.
     const modeles = (await models(true)).filter(
       (m) => m.roles.includes("chat") && (!m.proprietaire || m.proprietaire === qui.userId),
@@ -4142,14 +4178,27 @@ async function handleEmployes(
     if (!e) return send(res, 404, { error: { message: t("Agent introuvable.") } });
     const b = await corps();
     const lecture = employes.lectureDesBases(e);
-    const groupesLus = lecture.groupes ? await groupes.groupesDe(e.ownerId) : null;
     const bases = await connaissances.lecturePourEmploye(
       Array.isArray(b.bases) ? b.bases : (e.connaissances ?? []),
       auteurEmploye(e.id),
-      groupesLus,
+      await employes.lecteursDe(e, lecture),
       { userId: qui.userId, groupes: qui.groupes ?? [] },
     );
     return send(res, 200, { ...lecture, bases });
+  }
+  /*
+   * Sa mémoire mise de côté (employes.ts, `viderMemoire`) : la liste des
+   * copies (des nombres et des dates), les restaurer, les supprimer. Réservé
+   * à son propriétaire.
+   */
+  if (action === "memoire" && !sous && req.method === "GET") {
+    return repondre(await employes.copiesMemoire(id, qui.userId), (v) => v);
+  }
+  if (action === "memoire" && sous && sousAction === "restaurer" && req.method === "POST") {
+    return repondre(await employes.restaurerMemoire(id, sous, qui.userId), (v) => v);
+  }
+  if (action === "memoire" && sous && sousAction === "supprimer" && req.method === "POST") {
+    return repondre(await employes.supprimerCopieMemoire(id, sous, qui.userId), () => ({ ok: true }));
   }
   // Canaux : les brancher, les retirer, lier WhatsApp, accepter les personnes qui écrivent.
   if (action === "canaux" && !sous && req.method === "GET") {

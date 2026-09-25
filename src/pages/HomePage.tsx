@@ -13,7 +13,7 @@ import { SuggestionList } from "@/components/chat/SuggestionList";
 import { MessageList } from "@/components/chat/MessageList";
 import { FirstRun } from "@/components/onboarding/FirstRun";
 import { ProjectSelector, AgentSelector } from "@/components/chat/ContextSelectors";
-import { useChat } from "@/hooks/useChat";
+import { arreterReponse, useChat } from "@/hooks/useChat";
 import { useProfile } from "@/hooks/useProfile";
 import { useAttachments } from "@/hooks/useAttachments";
 import { useModels } from "@/hooks/useModels";
@@ -156,7 +156,11 @@ export function HomePage() {
    * conversation s'enregistrait dans une session disparue, donc nulle part.
    */
   useEffect(() => {
-    if (idEnCours && !getSession(idEnCours)) reset();
+    if (idEnCours && !getSession(idEnCours)) {
+      // Supprimé : sa réponse en cours n'a plus nulle part où s'enregistrer.
+      arreterReponse(idEnCours);
+      reset();
+    }
   }, [sessions, idEnCours, reset]);
 
   // L'agent choisi est retenu avec le Chat : à sa création, et à chaque changement.

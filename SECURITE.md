@@ -821,6 +821,25 @@ fichiers qui y tient l'agent : cela n'a pas changé.
 L'opération est tracée (`donnees.ecrites`, collection `cowork.espace`). Le même
 contrôle s'applique au dossier de projet de l'écran Code.
 
+**Zones protégées (25/09/2026, § 22.6).** Le serveur de fichiers ne sait borner que
+par ses dossiers de lancement : avec « Tout mon poste », c'est le dossier personnel
+entier, et l'agent y lisait `~/.helix/data` (jeton d'instance, OpenClaw de Helix,
+mémoire des employés), `~/.ssh`, `~/.claude`, `~/.codex`. La passerelle lit donc les
+arguments de chaque appel au serveur de fichiers avant de le transmettre
+(`callTool`, `mcp.ts`) : un chemin (`path`, `paths`, `source`, `destination`) dont le
+chemin **réel**, liens résolus, tombe dans une zone protégée est refusé sans que le
+serveur soit appelé ; les résultats de `search_files` et `directory_tree` sont élagués
+des noms qui y sont. La liste (`gateway/src/zonesProtegees.ts`) : `HELIX_DATA_DIR`
+(dont `openclaw/` et `openclaw-moteur/`), `~/.helix`, `~/.openclaw`, `~/.ssh`,
+`~/.gnupg`, `~/.aws`, `~/.azure`, `~/.kube`, `~/.docker`, `~/.password-store`,
+`~/.netrc`, `~/.npmrc`, `~/.git-credentials`, `~/.config`, `~/.claude`,
+`~/.claude.json`, `~/.codex`, `~/.cursor`, `~/Library/Keychains`, et le profil de
+l'application de bureau (`~/Library/Application Support/Helix`). Ces dossiers ne
+peuvent pas non plus être choisis comme dossier de l'équipe (400). Ce n'est pas une
+liste de tout ce qui est secret : un fichier sensible rangé ailleurs par la personne
+reste lisible par l'agent, comme n'importe quel document. `list_directory` n'est pas
+filtré : le premier niveau montre qu'un `.ssh` existe, sans rien en ouvrir.
+
 Les serveurs MCP tournent en local et dialoguent en JSON-RPC sur l'entrée et la
 sortie standard : aucune donnée de l'entreprise ne transite par un service
 tiers. Le code du serveur, lui, est récupéré une première fois sur le registre
@@ -1725,6 +1744,11 @@ refusés (400, 403) ; un tel lien n'est même pas listé (sa taille trahirait la
 cible). Fichiers cachés omis. Mesuré : `../helix.config.json` 400, lien vers
 `/etc/hosts` 403 et absent de la liste.
 
+**Complété le 25/09/2026 (§ 22.6)** : « omis » ne valait que pour la liste, la lecture
+rendait `.helix/data/instance-token` quand le dossier de l'équipe était le dossier
+personnel. Tout segment en point est désormais refusé (403), et tout chemin réel situé
+dans une zone protégée (`zonesProtegees.ts`) aussi, lien symbolique compris.
+
 
 ---
 
@@ -2308,7 +2332,7 @@ curl -s -H "Authorization: Basic $(printf 'opencode:<mot de passe>' | base64)" \
 
 - **Téléchargements de modèles et de moteurs** (images, Lume, LibreOffice de la machine macOS) : jamais « la dernière version ». Chaque fichier est pris à une révision précise et vérifié par sha256 avant usage ; une empreinte fausse efface le fichier. L'application Lume est en plus vérifiée par sa signature (équipe Cua AI).
 - **Images créées** : rangées dans les données de l'instance, servies (`/helix/images/fichier/<id>`) à la seule personne qui les a créées (depuis le 25/09/2026, aussi à qui voit le Chat où elles ont été créées : § 22.1) ; identifiant de 128 bits vérifié par expression régulière avant tout accès disque.
-- **Import depuis les logiciels du poste** (`/helix/import/...`) : séance exigée **et** demande venue de la boucle locale ; sinon refus. La base de Cursor est ouverte en lecture seule, par un programme lancé sans shell, avec un identifiant de conversation filtré avant d'entrer dans la requête SQL.
+- **Import depuis les logiciels du poste** (`/helix/import/...`) : séance exigée **et** demande venue de la boucle locale ; sinon refus. *Insuffisant sur une instance partagée, fermé le 25/09/2026 (§ 22.6) : refus si l'instance est partagée, jetons en en-têtes seulement, compte administrateur exigé.* La base de Cursor est ouverte en lecture seule, par un programme lancé sans shell, avec un identifiant de conversation filtré avant d'entrer dans la requête SQL.
 - **Extension VS Code** : le jeton d'instance et la séance restent dans le processus de l'extension (la page du Chat n'appelle rien elle-même, CSP à nonce) ; la séance est dans le SecretStorage de VS Code ; le mot de passe n'est jamais gardé.
 - **Machine de l'agent** : Docker publié sur 127.0.0.1 seulement ; la machine macOS n'est joignable que depuis le Mac (réseau NAT de la virtualisation d'Apple) ; effacement réservé à une machine non choisie.
 - **Chats du poste** : fichier chiffré par safeStorage, 0600, écrit par renommage.
@@ -2316,7 +2340,7 @@ curl -s -H "Authorization: Basic $(printf 'opencode:<mot de passe>' | base64)" \
 
 ## 22. Les surfaces ajoutées le 25 septembre 2026
 
-`npm run securite` compte désormais **167 contrôles, tous réussis le 25/09/2026** (125 à midi, plus 15 sur les employés et les bases de connaissances, § 22.2, 5 sur le flux de Helix Code, § 22.4, 7 sur l'export RGPD et l'effacement, § 7.1, puis, l'après-midi, 14 sur les employés et les bases partagées à un groupe et 1 route de plus sans séance, § 22.2).
+`npm run securite` compte désormais **206 contrôles, tous réussis le 26/09/2026** (125 à midi le 25, plus 15 sur les employés et les bases de connaissances, § 22.2, 5 sur le flux de Helix Code, § 22.4, 7 sur l'export RGPD et l'effacement, § 7.1, puis, l'après-midi, 14 sur les employés et les bases partagées à un groupe et 1 route de plus sans séance, § 22.2 ; le soir, 34 sur les agents de groupes, la mémoire des employés, la clé par employé, l'effacement et l'export des bases, § 22.2, dont 3 routes sans séance ; le reste venu de la fusion du 26/09).
 Ajoutés ce jour-là, par branche : 14 sur les images d'un Chat partagé (13, plus la
 connexion d'une collègue), 6 sur les bases de connaissances et 9 de leurs routes
 ajoutées aux listes « sans jeton » et « sans séance », 16 sur l'entraînement, 3 sur
@@ -2376,8 +2400,10 @@ désormais exportée), `gateway/src/index.ts`.
   chiffré par `chiffrerOctets` lié à `connaissances:<base>:<document>`. Vérifié : les
   fichiers commencent par l'en-tête chiffré `HLXF1`, ni un mot du document ni le nom
   de la base n'y apparaissent en clair.
-- Effacement d'un compte : ses bases et leurs index partent ; ses documents ajoutés
-  aux bases de collègues en sont retirés (`effacement.ts`).
+- Effacement d'un compte : ses bases et leurs index partent ; ses documents rangés
+  dans les bases de collègues en sont retirés, index compris (`effacement.ts`). Jusqu'au
+  25/09/2026 au soir, cette phrase était fausse : seul le filtre « ajouté par lui »
+  existait, et seul le propriétaire d'une base y ajoute (voir plus bas).
 - Journal : `connaissances.base_creee`, `base_modifiee`, `base_supprimee`,
   `documents_ajoutes`, `document_retire`, avec identifiants et nombres, jamais de
   texte.
@@ -2387,8 +2413,8 @@ désormais exportée), `gateway/src/index.ts`.
   qui ne possède rien : ni les droits du propriétaire de l'agent, ni ceux de qui lui
   parle, car l'appel ne dit pas pour qui l'employé travaille et ce qu'il lit ressort
   vers d'autres (collègues, messageries, mémoire). Seulement les bases de **son** agent,
-  relues à chaque appel. Aucun droit ajouté au canal d'OpenClaw : même route, même clé
-  `X-Helix-Cle`, et ce qu'on y lit (ouvert à l'équipe) l'était déjà par la famille
+  relues à chaque appel. Aucun droit ajouté au canal d'OpenClaw : même route, même en-tête
+  `X-Helix-Cle` (une clé par employé depuis le 25/09 au soir), et ce qu'on y lit (ouvert à l'équipe) l'était déjà par la famille
   « bibliothèque ». Refusé aux personnes qui écrivent sur une messagerie, sauf
   `outilsEntreprise`. Sa fiche de poste (`SOUL.md`, relue par le modèle) nomme l'outil,
   jamais les bases. Journal : `outil.appele` avec le nombre de bases et de passages,
@@ -2420,13 +2446,11 @@ désormais exportée), `gateway/src/index.ts`.
   - aucune famille **qui écrit ou envoie** là où d'autres lisent : fichiers de l'équipe
     (et les connecteurs qui s'y rattachent), documents Office, mails (brouillons compris) ;
     « Autoriser les outils » les donne toutes.
-  Jamais ses documents privés : l'identité reste `employe:<id>`, qui ne possède rien.
   Dès qu'une condition tombe (ouvert à l'organisation, messagerie branchée, outil
   ajouté, palier élargi, propriétaire sorti du groupe), l'appel suivant revient à la
-  règle de l'équipe. **Pas traité** : un agent partagé à des groupes précis (la
-  visibilité d'un agent est personnelle ou d'organisation dans le code actuel ; ce cas
-  garde la règle de l'équipe) ; la famille « bibliothèque » de ses outils reste à ce
-  qui est ouvert à l'équipe. Route de l'écran : `POST /helix/employes/<id>/connaissances`,
+  règle de l'équipe. La famille « bibliothèque » de ses outils reste à ce qui est
+  ouvert à l'équipe. (Le soir même : ses documents privés aussi, et les agents de
+  groupes, voir plus bas.) Route de l'écran : `POST /helix/employes/<id>/connaissances`,
   propriétaire seul (une collègue : 404), qui ne nomme pas une base que le propriétaire
   ne voit pas. Journal : `outil.appele` porte `regle` et `horsEquipe` (nombres, jamais
   de texte).
@@ -2443,6 +2467,67 @@ désormais exportée), `gateway/src/index.ts`.
   un vrai OpenClaw 2026.9.4 d'essai et qwen3-8b : réponse juste et citée pour la
   propriétaire, rien du document privé, rien pour un collègue une fois l'agent ouvert à
   l'organisation.
+- **Agents de groupes, privé du propriétaire, mémoire** (ajouté le 25/09/2026, le soir ;
+  `employes.ts` : `lectureDesBases`, `lecteursDe`, `elargissement`, `viderMemoire` ;
+  `connaissances.ts` : option `lecteurs` de `chercher`). La recherche ne compte que ce
+  que **chacun** des lecteurs voit, relus à chaque appel :
+  - agent **personnel** aux cinq conditions : le lecteur est son propriétaire, droits
+    entiers : ses documents et bases privés comptent, jamais ceux d'une autre personne ;
+  - agent **de groupes** (visibilité « groupes », `Employe.groupes`, `Agent.groupIds`)
+    aux mêmes conditions de sortie : son propriétaire, plus un lecteur par groupe qui ne
+    possède rien et n'est membre que de ce groupe. Ne passe que ce qui est ouvert à
+    l'équipe ou partagé à chacun des groupes, et que le propriétaire voit : aucun
+    document privé, et rien qu'un membre d'un seul des groupes ne pourrait voir ;
+  - visibilité : `visiblePar(e, qui, groupes)` (404 pour un non-membre sur toutes les
+    routes de l'employé), `voitAgent` pour la synchronisation, qui retire aussi d'un
+    agent un groupe dont son auteur n'est pas membre ; modification par le seul auteur
+    (`estProprietaire`, et 403 sur les routes de l'employé). Les postes relisent les
+    groupes chaque minute et re-tirent Chats et agents s'ils ont changé (`sync.ts`) ;
+  - **mémoire** : un changement qui élargit son audience (rang propriétaire < groupes <
+    ouverte, ou groupe ajouté) alors qu'il a pu lire hors de l'équipe (trace
+    `memoires-employes/<id>/lectures.json`, écrite à chaque passage hors équipe, ou
+    réglages qui le permettaient avec des bases) répond **409** `memoire-a-vider` sans
+    rien faire. Avec `viderMemoire: true` : copie de ses notes chiffrée
+    (`chiffrerOctets`, liée à `memoire-employe:<id>:<copie>`, relue avant tout
+    effacement, 0600, hors du dossier d'OpenClaw), puis `sessions delete` et `memory
+    forget` pour chaque conversation, `effacerArchives`, retrait des notes (tout
+    l'espace sauf les fiches écrites par Helix, `documents/` et `.openclaw/`), `memory
+    reset` de l'index, vérification (plus une conversation, plus une note) ; une étape
+    ratée (instance muette, copie impossible, employé au travail) : le changement n'est
+    pas fait. Restaurer n'est permis qu'au propriétaire et tant que l'audience n'est pas
+    plus large qu'au moment de la copie. Journal : `employe.memoire_videe` (notes,
+    octets, conversations, raisons), `memoire_non_videe` (l'étape), `memoire_restauree`,
+    `memoire_copie_supprimee` ; jamais de contenu.
+  - **Clé par employé** (revue du 25/09) : HMAC-SHA256 de la clé de l'instance et de
+    `employe:<id>`, écrite dans la configuration d'OpenClaw pour son seul fournisseur et
+    son seul serveur d'outils, comparée en temps constant à l'identifiant de l'adresse
+    (ou de `X-Helix-Employe`). Avant, une clé commune ouvrait le serveur d'outils de
+    tout employé : avec `openclaw.json`, on lisait les bases de groupe d'un employé
+    personnel. La configuration est réécrite au démarrage suivant ; vérifié avec un vrai
+    OpenClaw 2026.9.4 : l'employé répond toujours.
+  - **Effacement et suppression** (revue du 25/09) : ses documents, relevés avant que
+    la Bibliothèque ne les oublie, quittent toutes les bases, celles des collègues
+    comprises, index compris ; un document supprimé de Fichiers aussi
+    (`retirerDocumentsPartout`). **Export** : un document d'une base qu'on ne voit plus
+    n'est pas nommé, il est compté (`documentsQueVousNeVoyezPlus`).
+- Contrôlé par `npm run securite` (section 7 ter et 7 quater, 34 contrôles ajoutés le
+  25/09/2026 au soir, avec le faux OpenClaw qui note ses commandes et tient des
+  conversations par agent) : la clé commune et celle d'un autre employé → 403, la
+  configuration porte la clé propre à chacun ; l'agent personnel lit le privé de sa
+  propriétaire, jamais celui d'une collègue, et plus le document d'une collègue partagé
+  au groupe quand elle en sort ; élargir sans confirmer → 409, rien de vidé ; instance
+  muette → refus, il reste personnel ; confirmé → note et conversation effacées, `memory
+  reset` et `memory forget` appelés, copie `HLXF1` sans le mot de contrôle, fiches
+  intactes, journal en nombres ; copie non restaurable tant qu'il est ouvert, invisible
+  à une collègue, restaurable redevenu personnel ; outil qui écrit et messagerie sans
+  confirmer → 409 ; agent de groupes : partage refusé à un groupe dont on n'est pas
+  membre, non-membre 404 partout, membre sans modification ni activité (403), lit la
+  base du groupe et l'équipe, rien de privé ; synchronisation : membre oui, non-membre
+  non, groupe étranger retiré, ni l'un ni l'autre ne le modifient ; groupe ajouté → 409,
+  puis un document du seul premier groupe n'est plus lu ; retrait sans rien demander ;
+  outil qui envoie → ne lit plus ; sortie du groupe → 404 et plus dans la
+  synchronisation ; index du document d'un compte effacé et d'un document supprimé
+  retirés du disque ; export sans le nom d'un document devenu invisible.
 - Vérifié avec un second compte le 25/09/2026 : base privée ni listée, ni lisible
   (404), ni modifiable (404), ni cherchable (0 passage, « 1 ignorée ») ; base ouverte
   à toute l'équipe mais documents privés : 0 document nommé, 0 passage.
@@ -2457,15 +2542,19 @@ Ce qui n'est pas protégé :
 - Si le profil impose un modèle `embed` distant (`models.embed`), le texte des
   documents part chez ce fournisseur ; l'écran de la base affiche le modèle qui a
   indexé chaque document.
-- Employé qui a lu les bases des groupes de son propriétaire, puis dont l'audience
-  s'élargit : il cesse aussitôt de les lire, mais ce qu'il en a déjà noté dans sa
-  mémoire OpenClaw (fichiers `memory/`, conversations indexées) y reste, et Helix ne
-  l'efface pas. Une personne de la nouvelle audience pourrait l'obtenir en le lui
-  demandant. L'écran de l'agent le dit au propriétaire. Pas observé dans l'essai du
-  25/09/2026 (l'employé n'avait rien noté), mais possible.
-- Les bases sont dans l'export RGPD depuis le 25/09/2026 (§ 7.1). Un document supprimé de la
-  Bibliothèque garde son index sur le disque jusqu'à ce que le propriétaire de la base
-  l'en retire ; il n'est plus jamais servi.
+- Mémoire vidée avant un élargissement : restent hors de portée les pages libérées de
+  la base SQLite de l'agent (aucune ligne ne porte plus le mot de contrôle, le fichier
+  brut si), le registre des tâches d'OpenClaw (`state/openclaw.sqlite`, les questions
+  posées, 7 jours) et ses journaux (les réponses). Aucun outil d'un employé encadré ou
+  étendu ne les lit ; au palier Libre (toute la machine, sous mot de passe), si.
+  Constaté le 25/09/2026 sur l'OpenClaw d'essai.
+- Une mission planifiée qui tournerait pendant le vidage n'est pas détectée (les
+  messages et les mails en cours le sont) : elle pourrait réécrire une note juste après.
+- Un agent de groupes dont le propriétaire a quitté un groupe : il garde l'agent (il
+  en est l'auteur) ; ce qu'il a lu avant reste dans sa mémoire.
+- Les bases sont dans l'export RGPD depuis le 25/09/2026 (§ 7.1). Les mémoires mises
+  de côté d'un employé n'y sont pas ; elles partent avec l'employé et avec le compte de
+  son propriétaire.
 
 ### 22.3 Entraînement d'un modèle
 
@@ -2599,4 +2688,75 @@ par 3 vérifications de la batterie.
 - **Import par morceaux** (`importLocal.ts`) : le contenu n'est rendu que pour des clés
   de la liste relevée par la passerelle ; aucun chemin venu de la requête n'est lu.
   Vérifié avec `claude-code:../../etc/passwd` : ignorée.
+
+### 22.6 Revue du 25/09/2026 : dossier de l'équipe et import local
+
+Deux défauts confirmés par une revue de sécurité, essayés sur une instance jetable,
+corrigés dans la nuit. `npm run securite` : **232 contrôles, tous réussis le
+26/09/2026** (après fusion avec les 34 des agents de groupes, § 22.2), dont 26 ajoutés pour ces deux défauts (section 6 : 4 ; section 10 : 22).
+
+**1. Fichiers internes lisibles par le dossier de l'équipe (élevée).**
+`resoudre` (`espace.ts`) refusait `..` et l'absolu, pas les segments en point : la
+liste cachait les fichiers en point, la lecture les rendait. Avec « Tout mon poste »,
+le dossier de l'équipe est le dossier personnel, et les données de l'instance sont par
+défaut dans `~/.helix/data`. Mesuré par la revue, avant correction :
+`GET /helix/espace/fichier?chemin=.helix/data/openclaw/employes/<id>/memory/….md`
+rendait 200 à toute personne connectée, de même `openclaw.json` (jeton d'OpenClaw),
+`instance-token`, `~/.claude`, `~/.codex`. Le serveur de fichiers MCP de Cowork, lancé
+sur le même dossier, y lisait aussi.
+
+Corrections :
+- `resoudre` refuse tout segment qui commence par un point (403), puis tout chemin
+  réel, liens résolus, situé dans une zone protégée (403). La liste ne montre plus ni
+  les zones ni un lien qui y mène ;
+- la même règle (`estProtege`, `gateway/src/zonesProtegees.ts`) vaut pour le serveur
+  de fichiers MCP (arguments lus avant l'appel, résultats de recherche et d'arbre
+  élagués, § 6), les outils bureautiques (`bureau.ts`, lecture et écriture), le
+  contrôle du code web (`controleWeb.ts`) et la relecture des fichiers modifiés
+  (`chat.ts`) ;
+- une zone protégée ne peut pas devenir le dossier de l'équipe
+  (`POST /helix/mcp/workspace`, 400) ;
+- la fenêtre « Ouvrir tout votre poste à l'agent » dit ce qui reste exclu (données de
+  l'instance, clés et identifiants, `.config`, historiques des autres assistants,
+  trousseaux). Vu à l'écran le 26/09/2026, instance jetable.
+
+Contrôles (section 10) : une seconde instance, avec `HELIX_WORKSPACE` qui contient
+`HELIX_DATA_DIR` (nommé sans point, pour éprouver la règle du chemin réel) : lire
+`donnees/instance-token`, une note de mémoire d'employé, `.helix/cache.txt`, le même
+jeton par un lien `raccourci` → dossier des données, une note par un lien
+`Docs/lien-memoire.md` : 403 ou 404, aucun secret dans la réponse ; `notes.txt` : 200 ;
+la liste montre `notes.txt` sans `donnees` ni `raccourci`. Puis le vrai serveur
+`@modelcontextprotocol/server-filesystem` (14 outils), appelé par `callTool` comme
+la boucle d'un agent : lecture directe, par lien, relative, multiple, déplacement hors
+des données, tous refusés ; recherche et arbre sans les noms protégés ; un fichier
+ordinaire lisible. Sans `npx` ou sans le paquet, cette partie est sautée et le dit.
+
+**2. Import depuis les logiciels du poste contournable sur une instance partagée
+(moyenne).** La seule barrière était la boucle locale (`depuisCePoste`). Sur une
+instance partagée, un outil qui tourne sur le serveur (le bash de Helix Code) appelle
+`http://127.0.0.1:<port>/helix/import/logiciel/claude-code?token=…&session=…` et
+reçoit les conversations Claude Code, Codex et Cursor du compte qui fait tourner le
+serveur. Corrections (`handleImportLogiciels`, `index.ts`) :
+- `?token=`, `?session=` ou `?flux=` dans l'adresse : 400. L'écran pose les jetons en
+  en-têtes ;
+- instance partagée (`instancePartagee()` : `share: true` ou écoute sur le réseau) :
+  403, avant même de lire la séance ;
+- le compte doit administrer l'instance (`estAdministrateur`, `roles.ts` : sur un poste
+  autonome, le premier compte créé) : une collègue inscrite sur le même poste reçoit
+  403.
+
+Contrôles : instance locale ordinaire, titulaire → 200 ; jetons dans l'adresse → 400 ;
+collègue → 403 (section 6). Instance lancée avec `share: true` (sur la boucle locale,
+`tls: false`) : `/helix/import/logiciels`, `/helix/import/logiciel/claude-code` et le
+POST du contenu → 403 depuis la boucle locale (section 10). À l'écran, instance
+locale jetable, le 26/09/2026 : Paramètres > Importer depuis d'autres IA liste Claude
+Code (20 conversations), Codex (6), Cursor (0), et « Reprendre » sur Codex charge la
+liste de ses 6 Chats.
+
+Ce qui n'est pas couvert, et reste vrai : sur un poste autonome, un outil qui tourne
+sous le même compte (le bash de Helix Code, un script) lit `~/.claude` directement,
+sans passer par la passerelle ; la barrière protège les autres personnes d'une
+instance partagée, pas le titulaire de ses propres agents. Le bash de Helix Code
+n'est pas borné par les zones protégées (OpenCode a ses propres outils, pas le serveur
+de fichiers de Cowork).
 

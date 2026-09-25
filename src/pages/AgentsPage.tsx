@@ -8,7 +8,6 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { Modal } from "@/components/ui/Modal";
 import { Field, Input, Textarea } from "@/components/ui/Field";
 import { Switch } from "@/components/ui/Switch";
-import { cn } from "@/lib/cn";
 import { branding } from "@/config/branding";
 import { useAgents } from "@/hooks/useAgents";
 import { useMiseEnService, type EtatMiseEnService } from "@/hooks/useMiseEnService";
@@ -20,6 +19,8 @@ import { optimiserInstructions } from "@/lib/gateway";
 import { ChoixDepuisEspace } from "@/components/agents/ChoixDepuisEspace";
 import { ChoixBases } from "@/components/bibliotheque/ChoixBases";
 import { LectureBases } from "@/components/agents/LectureBases";
+import { ChoixVisibilite } from "@/pages/BibliothequePage";
+import { useGroupes, type Groupe } from "@/lib/groupes";
 import { features } from "@/config/branding";
 import { t, tf } from "@/lib/i18n";
 
@@ -47,29 +48,41 @@ export function AgentsPage() {
   // Employés déployés avant que la création d'un agent ne s'en charge : ils restent visibles.
   const sansAgent = (etat?.employes ?? []).filter((e) => !e.agentId || !agents.some((a) => a.id === e.agentId));
 
+  // Un employé sans agent se range selon sa propre visibilité (absente : organisation).
+  const ongletDe = (v: string | undefined) => (v === "personnel" ? "personnels" : v === "groupes" ? "groupes" : "organisation");
   const counts = useMemo(
     () => ({
       tous: agents.length + sansAgent.length,
-      organisation: agents.filter((a) => a.visibility === "organisation").length + sansAgent.length,
-      personnels: agents.filter((a) => a.visibility === "personnel").length,
+      organisation: agents.filter((a) => a.visibility === "organisation").length + sansAgent.filter((e) => ongletDe(e.visibilite) === "organisation").length,
+      groupes: agents.filter((a) => a.visibility === "groupes").length + sansAgent.filter((e) => ongletDe(e.visibilite) === "groupes").length,
+      personnels: agents.filter((a) => a.visibility === "personnel").length + sansAgent.filter((e) => ongletDe(e.visibilite) === "personnels").length,
     }),
-    [agents, sansAgent.length],
+    [agents, sansAgent],
   );
 
   const q = query.trim().toLowerCase();
   const filtered = useMemo(() => {
     const byTab = agents.filter((a) =>
-      tab === "tous" ? true : tab === "organisation" ? a.visibility === "organisation" : a.visibility === "personnel",
+      tab === "tous"
+        ? true
+        : tab === "organisation"
+          ? a.visibility === "organisation"
+          : tab === "groupes"
+            ? a.visibility === "groupes"
+            : a.visibility === "personnel",
     );
     return q
       ? byTab.filter((a) => a.name.toLowerCase().includes(q) || a.description.toLowerCase().includes(q))
       : byTab;
   }, [agents, tab, q]);
-  const autres = tab === "personnels" ? [] : sansAgent.filter((e) => !q || e.nom.toLowerCase().includes(q));
+  const autres = sansAgent.filter((e) => (tab === "tous" || ongletDe(e.visibilite) === tab) && (!q || e.nom.toLowerCase().includes(q)));
+  const { etat: etatGroupes } = useGroupes();
+  const tousLesGroupes = etatGroupes?.groupes ?? [];
 
   const tabs = [
     { id: "tous", label: tf("Tous ({0})", counts.tous) },
     { id: "organisation", label: tf("Organisation ({0})", counts.organisation) },
+    { id: "groupes", label: tf("Groupes ({0})", counts.groupes) },
     { id: "personnels", label: tf("Personnels ({0})", counts.personnels) },
   ];
   const panneau = etat?.employes.find((e) => e.id === ouvert) ?? null;
@@ -129,6 +142,7 @@ export function AgentsPage() {
               agent={agent}
               employe={employeDe(agent.id)}
               etat={etat}
+              groupes={tousLesGroupes}
               miseEnService={etats[agent.id]}
               canDelete={agent.ownerId === me.id}
               onOuvrir={(id) => setOuvert(id)}
@@ -143,7 +157,7 @@ export function AgentsPage() {
             />
           ))}
           {autres.map((e) => (
-            <CarteEmploye key={e.id} employe={e} etat={etat} onOuvrir={() => setOuvert(e.id)} />
+            <CarteEmploye key={e.id} employe={e} etat={etat} groupes={tousLesGroupes} onOuvrir={() => setOuvert(e.id)} />
           ))}
         </ul>
       )}
@@ -172,6 +186,16 @@ export function AgentsPage() {
       )}
     </div>
   );
+}
+
+/** « Personnel », « Organisation », ou « Groupes : Compta, RH » (un groupe supprimé est dit tel). */
+function libelleVisibilite(visibilite: AgentVisibility | undefined, ids: string[] | undefined, groupes: Groupe[]): string {
+  if (visibilite === "personnel") return t("Personnel");
+  if (visibilite === "groupes") {
+    const noms = (ids ?? []).map((id) => groupes.find((g) => g.id === id)?.nom ?? t("Groupe supprimé"));
+    return noms.length > 0 ? tf("Groupes : {0}", noms.join(", ")) : t("Groupes");
+  }
+  return t("Organisation");
 }
 
 /** Ce que la carte dit de l'agent en service : l'état, ou l'étape de sa mise en service. */
@@ -214,6 +238,7 @@ function AgentCard({
   agent,
   employe,
   etat,
+  groupes,
   miseEnService,
   canDelete,
   onOuvrir,
@@ -224,6 +249,7 @@ function AgentCard({
   agent: Agent;
   employe?: Employe;
   etat: EtatEmployes | null;
+  groupes: Groupe[];
   miseEnService?: EtatMiseEnService;
   canDelete: boolean;
   onOuvrir: (employeId: string) => void;
@@ -249,9 +275,7 @@ function AgentCard({
           </span>
           <div className="min-w-0 flex-1">
             <p className="truncate font-medium text-foreground">{agent.name}</p>
-            <p className="text-xs text-muted-foreground">
-              {agent.visibility === "organisation" ? t("Organisation") : t("Personnel")}
-            </p>
+            <p className="truncate text-xs text-muted-foreground">{libelleVisibilite(agent.visibility, agent.groupIds, groupes)}</p>
           </div>
         </div>
         {agent.description && <p className="line-clamp-2 text-sm text-muted-foreground">{agent.description}</p>}
@@ -339,7 +363,17 @@ function AgentCard({
 }
 
 /** Employé déployé sans agent (avant que la création d'un agent ne s'en charge). */
-function CarteEmploye({ employe, etat, onOuvrir }: { employe: Employe; etat: EtatEmployes | null; onOuvrir: () => void }) {
+function CarteEmploye({
+  employe,
+  etat,
+  groupes,
+  onOuvrir,
+}: {
+  employe: Employe;
+  etat: EtatEmployes | null;
+  groupes: Groupe[];
+  onOuvrir: () => void;
+}) {
   return (
     <li>
       <button
@@ -355,7 +389,11 @@ function CarteEmploye({ employe, etat, onOuvrir }: { employe: Employe; etat: Eta
             <p className="truncate font-medium text-foreground">{employe.nom}</p>
             <p className="text-xs text-muted-foreground">
               {/* Un employé personnel n'est vu que de son propriétaire : l'étiquette « Organisation » le disait ouvert à tous. */}
-              {employe.visibilite === "personnel" ? t("Personnel") : <>{t("Organisation · par")}{" "}{employe.proprietaire}</>}
+              {employe.visibilite === "personnel" || employe.visibilite === "groupes" ? (
+                libelleVisibilite(employe.visibilite, employe.groupes, groupes)
+              ) : (
+                <>{t("Organisation · par")}{" "}{employe.proprietaire}</>
+              )}
             </p>
           </div>
         </div>
@@ -371,6 +409,7 @@ interface NewAgent {
   description: string;
   instructions: string;
   visibility: AgentVisibility;
+  groupIds: string[];
   hidePrompt: boolean;
   toolsEnabled: boolean;
   connaissances: string[];
@@ -386,6 +425,10 @@ function AgentModal({
   onCreate: (data: NewAgent, fichiers: File[]) => void;
 }) {
   const [visibility, setVisibility] = useState<AgentVisibility>("personnel");
+  const [groupIds, setGroupIds] = useState<string[]>([]);
+  // Les groupes se choisissent comme dans la Bibliothèque : seulement les siens.
+  const { etat: groupes } = useGroupes();
+  const mesGroupes = (groupes?.groupes ?? []).filter((g) => g.estMembre);
   const [fichiers, setFichiers] = useState<File[]>([]);
   const [optimisation, setOptimisation] = useState(false);
   const [depuisEspace, setDepuisEspace] = useState(false);
@@ -404,6 +447,7 @@ function AgentModal({
     setDescription("");
     setInstructions("");
     setVisibility("personnel");
+    setGroupIds([]);
     setHidePrompt(false);
     setToolsEnabled(true);
     setConnaissances([]);
@@ -495,25 +539,17 @@ function AgentModal({
 
         {/* Colonne droite : formulaire */}
         <div className="space-y-4">
-          <div className="flex items-center gap-3">
+          <div className="space-y-1.5">
             <span className="text-sm font-medium text-foreground">{t("Visibilité")}</span>
-            <div className="inline-flex gap-1.5">
-              {(["personnel", "organisation"] as AgentVisibility[]).map((v) => (
-                <button
-                  key={v}
-                  type="button"
-                  onClick={() => setVisibility(v)}
-                  className={cn(
-                    "rounded-full px-4 py-1.5 text-sm font-medium capitalize transition-colors",
-                    visibility === v
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-muted text-muted-foreground hover:text-foreground",
-                  )}
-                >
-                  {v === "organisation" ? t("Organisation") : t("Personnel")}
-                </button>
-              ))}
-            </div>
+            <ChoixVisibilite
+              visibilite={visibility === "personnel" ? "prive" : visibility}
+              groupes={groupIds}
+              mesGroupes={mesGroupes}
+              onChange={(v, g) => {
+                setVisibility(v === "prive" ? "personnel" : v);
+                setGroupIds(g);
+              }}
+            />
           </div>
 
           <Field label={t("Nom de l'agent")}>
@@ -603,12 +639,12 @@ function AgentModal({
               <ChoixBases
                 valeur={connaissances}
                 onChange={setConnaissances}
-                aide={t("L'agent y cherche avant de répondre et cite ses sources. Hors du Chat (sa fiche, ses missions, ses messageries), seulement dans ce qui est ouvert à toute l'équipe ; aussi dans ce qui est partagé à vos groupes pour un agent personnel sans outils ni messagerie. Sa carte le détaille une fois en service.")}
+                aide={t("L'agent y cherche avant de répondre et cite ses sources. Hors du Chat (sa fiche, ses missions, ses messageries), seulement dans ce qui est ouvert à toute l'équipe ; sans outils ni messagerie, aussi dans tout ce que vous voyez pour un agent personnel, et dans ce qui est partagé à chacun de ses groupes pour un agent de groupes. Sa carte le détaille une fois en service.")}
               />
             </div>
           )}
 
-          {visibility === "organisation" && (
+          {visibility !== "personnel" && (
             <div className="flex items-center justify-between">
               <span className="text-sm text-foreground">
                 {t("Masquer le prompt aux non-administrateurs")}
@@ -634,9 +670,9 @@ function AgentModal({
           {t("Annuler")}
         </Button>
         <Button
-          disabled={!name.trim()}
+          disabled={!name.trim() || (visibility === "groupes" && groupIds.length === 0)}
           onClick={() => {
-            onCreate({ name, description, instructions, visibility, hidePrompt, toolsEnabled, connaissances }, fichiers);
+            onCreate({ name, description, instructions, visibility, groupIds, hidePrompt, toolsEnabled, connaissances }, fichiers);
             reset();
           }}
         >

@@ -84,8 +84,30 @@ export function voitConversation(session: Record<string, unknown>, qui: Demandeu
   return session.visibility === "organisation";
 }
 
+/**
+ * Un agent : son auteur, tout le monde s'il est d'organisation, et, partagé à
+ * des groupes (ajouté le 25/09/2026), les membres de l'un de ces groupes à
+ * l'instant de la demande. Sorti du groupe, on ne le reçoit plus.
+ */
 function voitAgent(agent: Record<string, unknown>, qui: Demandeur): boolean {
-  return agent.ownerId === qui.userId || agent.visibility === "organisation";
+  if (agent.ownerId === qui.userId || agent.visibility === "organisation") return true;
+  return (
+    agent.visibility === "groupes" &&
+    Array.isArray(agent.groupIds) &&
+    agent.groupIds.some((g) => typeof g === "string" && (qui.groupes ?? []).includes(g))
+  );
+}
+
+/**
+ * Un agent ne se partage qu'aux groupes dont son auteur est membre (même
+ * règle que la Bibliothèque) ; ceux qu'il avait déjà restent, pour qu'un
+ * auteur sorti d'un groupe ne le lui retire pas sans le vouloir.
+ */
+function groupesDeLAgent(avant: Record<string, unknown> | undefined, envoye: Record<string, unknown>, qui: Demandeur): Record<string, unknown> {
+  if (!Array.isArray(envoye.groupIds)) return envoye;
+  const deja = Array.isArray(avant?.groupIds) ? avant.groupIds : [];
+  const groupIds = [...new Set(envoye.groupIds.filter((g): g is string => typeof g === "string" && (deja.includes(g) || (qui.groupes ?? []).includes(g))))];
+  return { ...envoye, groupIds };
 }
 
 /** Une tâche appartient à une personne ; rien ne la partage aujourd'hui. */
@@ -267,7 +289,7 @@ export function fusionner(
      * le propriétaire reste celui d'origine, quoi que le poste envoie.
      */
     if (regle.supprime(item, qui)) {
-      resultat.push(envoye);
+      resultat.push(collection === "agents" ? groupesDeLAgent(item, envoye, qui) : envoye);
       continue;
     }
     const retouche = collection === "sessions" ? partageDuProprietaire(item, envoye, qui) : envoye;
@@ -277,7 +299,7 @@ export function fusionner(
   // 2. Les nouveaux enregistrements, s'ils lui appartiennent bien.
   for (const item of apres) {
     if (avantParId.has(String(item.id))) continue;
-    if (regle.modifie(item, qui)) resultat.push(item);
+    if (regle.modifie(item, qui)) resultat.push(collection === "agents" ? groupesDeLAgent(undefined, item, qui) : item);
     else refuses += 1;
   }
 

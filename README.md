@@ -51,9 +51,10 @@ for you on macOS.
 ## Features
 
 - **Chat** with local models **picked for each machine**: Helix installs the best-rated open
-  model (Apache 2.0 or MIT) that fits its memory and has been tested with Helix, for example
-  Qwen3 4B on an 8 GB Mac or Qwen3.5 9B from 16 GB, and suggests the others the machine can
-  run (Mistral, gpt-oss, GLM, DeepSeek on larger ones). Cloud models work with your own API key.
+  model (Apache 2.0 or MIT) that fits its memory, from a small laptop to a workstation, and
+  suggests the others it can run. The catalogue covers Qwen, Mistral (Magistral, Ministral),
+  OpenAI gpt-oss, Z.ai GLM, IBM Granite, Ai2 OLMo, Meta and DeepSeek. Cloud models work with
+  your own API key.
   Attachments, dictation (Whisper, on the machine), image generation (Z-Image Turbo,
   FLUX.2 klein).
 - **Knowledge bases (RAG)**: gather documents, the instance indexes them on the machine,

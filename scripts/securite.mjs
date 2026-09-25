@@ -94,8 +94,27 @@ await new Promise((ok) => fauxModele.listen(PORT_EMBED, "127.0.0.1", ok));
       "  const parent = process.ppid;",
       "  setInterval(() => { try { process.kill(parent, 0); } catch { process.exit(0); } }, 1000);",
       '  process.on("SIGTERM", () => process.exit(0));',
+      /*
+       * Ajouté le 25/09/2026, pour la mémoire des employés (section 7 ter) :
+       * chaque commande est notée dans `appels.log` ; les conversations d'un
+       * agent sont les lignes de `sessions/<agent>` (posées par la batterie),
+       * `sessions delete` en retire une ; un fichier `panne` fait échouer la
+       * liste des conversations, comme une instance qui ne répond pas.
+       */
       "} else {",
-      '  process.stdout.write(a[0] === "automations" || a[0] === "sessions" ? "[]" : "{}");',
+      '  const fs = require("node:fs"), path = require("node:path");',
+      "  const aux = path.join(__dirname, '..', '..');",
+      '  fs.appendFileSync(path.join(aux, "appels.log"), a.join(" ") + "\\n");',
+      '  const agent = a[a.indexOf("--agent") + 1] ?? "";',
+      '  const fichier = path.join(aux, "sessions", agent);',
+      '  const lues = () => (fs.existsSync(fichier) ? fs.readFileSync(fichier, "utf8").split("\\n").filter(Boolean) : []);',
+      '  if (a[0] === "sessions" && a[1] === "delete") {',
+      '    fs.writeFileSync(fichier, lues().filter((k) => k !== a[2]).join("\\n"));',
+      '    process.stdout.write("{}");',
+      '  } else if (a[0] === "sessions") {',
+      '    if (fs.existsSync(path.join(aux, "panne"))) process.exit(1);',
+      '    process.stdout.write(JSON.stringify({ sessions: lues().map((key) => ({ key })) }));',
+      '  } else process.stdout.write(a[0] === "automations" ? "[]" : "{}");',
       "}",
     ].join("\n"),
   );
@@ -202,6 +221,9 @@ const SEANCE_REQUISE = [
   ["POST", "/helix/connaissances/kb_inexistante/documents"], ["POST", "/helix/connaissances/kb_inexistante/supprimer"],
   // Ajouté le 25/09/2026 : ce qu'un employé lira dans ses bases (écran de l'agent).
   ["POST", "/helix/employes/inexistant/connaissances"],
+  // Ajoutés le 25/09/2026 : sa mémoire mise de côté (liste, restaurer, supprimer).
+  ["GET", "/helix/employes/inexistant/memoire"], ["POST", "/helix/employes/inexistant/memoire/copie/restaurer"],
+  ["POST", "/helix/employes/inexistant/memoire/copie/supprimer"],
   // Ajoutés le 25/09/2026 : entraîner un modèle (installer, projets, calculs, LM Studio).
   ["GET", "/helix/entrainement"], ["POST", "/helix/entrainement/installer"], ["POST", "/helix/entrainement/desinstaller"],
   ["POST", "/helix/entrainement/projets"], ["GET", "/helix/entrainement/projet?id=0123456789abcdef01234567"],
@@ -253,6 +275,16 @@ const connexionB = await (await appel("/helix/auth/verify", {
 })).json();
 const SEANCE_B = connexionB.session?.token;
 const avecSeanceB = { ...avecJeton, "X-Helix-Session": SEANCE_B };
+// Un témoin, membre d'aucun groupe (section 7 ter, agents de groupes), connecté lui aussi avant les essais de force brute.
+const creeC = await appel("/helix/auth/create", {
+  method: "POST", headers: avecSeance,
+  body: JSON.stringify({ fullName: "Témoin", email: "temoin@example.test", password: "Temoin2PasseSolide!31" }),
+});
+const compteC = (await creeC.json()).account;
+const connexionC = await (await appel("/helix/auth/verify", {
+  method: "POST", headers: avecJeton, body: JSON.stringify({ accountId: compteC?.id, password: "Temoin2PasseSolide!31" }),
+})).json();
+const avecSeanceC = { ...avecJeton, "X-Helix-Session": connexionC.session?.token };
 verifier("un collègue inscrit par un compte connecté peut se connecter", Boolean(compteB?.id && SEANCE_B), `${creeB.status} ${JSON.stringify(connexionB).slice(0, 80)}`);
 {
   const r = await appel("/helix/auth/create", {
@@ -334,6 +366,22 @@ for (const chemin of ["../../../../etc/passwd", "/etc/passwd", "..%2F..%2Fetc%2F
   const r = await appel("/helix/data/..%2Faccounts", { headers: avecSeance });
   const corps = await r.text();
   verifier("lire une collection par un chemin détourné est refusé", !corps.includes("passwordHash") && !corps.includes("hash"), `${r.status} ${corps.slice(0, 60)}`);
+}
+/*
+ * Import depuis les logiciels du poste (revue du 25/09/2026) : sur cette
+ * instance locale ordinaire, il reste ouvert à qui l'a mise en route ; pas
+ * aux jetons passés dans l'adresse, ni à une collègue. L'instance partagée est
+ * essayée en section 10.
+ */
+{
+  const r = await appel("/helix/import/logiciels", { headers: avecSeance });
+  verifier("instance locale : l'import depuis les logiciels du poste répond au titulaire (200)", r.status === 200, r.status);
+  const url = await appel(`/helix/import/logiciels?token=${encodeURIComponent(JETON)}&session=${encodeURIComponent(SEANCE)}`);
+  verifier("import depuis les logiciels : jetons dans l'adresse refusés", url.status === 400, url.status);
+  const page = await appel(`/helix/import/logiciel/claude-code?token=${encodeURIComponent(JETON)}&session=${encodeURIComponent(SEANCE)}`);
+  verifier("import d'un logiciel : jetons dans l'adresse refusés", page.status === 400, page.status);
+  const collegue = await appel("/helix/import/logiciels", { headers: avecSeanceB });
+  verifier("import depuis les logiciels : une collègue qui n'administre pas le poste → 403", collegue.status === 403, collegue.status);
 }
 
 /*
@@ -569,17 +617,32 @@ console.log("\n7 ter. Employés OpenClaw et bases de connaissances : ce qui est 
       body: JSON.stringify({ nom: "Essai sans bases", poste: "Tu aides.", outils: [], missions: [], visibilite: "organisation" }),
     })).json()).employe;
 
-    const CLE = readFileSync(join(DONNEES, "openclaw", ".cle"), "utf8").trim();
-    const mcp = (id, methode, params, cle = CLE) =>
+    /*
+     * Depuis le 25/09/2026, une clé par employé : HMAC de la clé de
+     * l'instance et de son identifiant, comme la passerelle l'écrit dans la
+     * configuration d'OpenClaw. `cle` absent : celle de l'employé appelé.
+     */
+    const CLE_INSTANCE = readFileSync(join(DONNEES, "openclaw", ".cle"), "utf8").trim();
+    const { createHmac } = await import("node:crypto");
+    const cleDe = (id) => createHmac("sha256", CLE_INSTANCE).update(`employe:${id}`).digest("hex");
+    const mcp = (id, methode, params, cle = cleDe(id)) =>
       appel(`/helix/employes/${id}/outils`, {
         method: "POST",
         headers: { ...avecJeton, Accept: "application/json, text/event-stream", ...(cle ? { "X-Helix-Cle": cle } : {}) },
         body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: methode, params }),
       });
-    const chercher = async (question, id = employe?.id, cle = CLE) => {
+    const chercher = async (question, id = employe?.id, cle = cleDe(id)) => {
       const r = await mcp(id, "tools/call", { name: "connaissances__chercher", arguments: { question } }, cle);
       return { status: r.status, texte: await r.text() };
     };
+    const ancienneCle = await chercher("code de la salle de réunion", employe?.id, CLE_INSTANCE);
+    verifier("la clé commune d'avant ne suffit plus (403)", ancienneCle.status === 403, ancienneCle.status);
+    const configOc = readFileSync(join(DONNEES, "openclaw", "openclaw.json"), "utf8");
+    verifier(
+      "la configuration d'OpenClaw porte la clé propre à chaque employé, jamais la clé de l'instance",
+      configOc.includes(cleDe(employe?.id)) && configOc.includes(cleDe(sansBases?.id)) && !configOc.includes(CLE_INSTANCE),
+      "clé absente ou clé de l'instance écrite",
+    );
 
     const liste = await (await mcp(employe?.id, "tools/list", {})).text();
     verifier("l'outil connaissances__chercher est proposé à l'employé qui a des bases", liste.includes("connaissances__chercher"), liste.slice(0, 80));
@@ -644,8 +707,10 @@ console.log("\n7 ter. Employés OpenClaw et bases de connaissances : ce qui est 
     const groupeCompta = (await (await appel("/helix/groupes", { method: "POST", headers: avecSeance, body: JSON.stringify({ nom: "Compta-Essai", membres: [compteB?.id] }) })).json()).groupe;
     const groupeRh = (await (await appel("/helix/groupes", { method: "POST", headers: avecSeanceB, body: JSON.stringify({ nom: "RH-Essai" }) })).json()).groupe;
     const tarifs = await documentGroupe(avecSeance, "Tarifs-Compta.txt", "Tarifs du groupe compta. Le code tarifaire du groupe est PAPAYE-3150.", [groupeCompta?.id]);
+    // Un document de la collègue, partagé au groupe : la propriétaire le voit tant qu'elle en est membre (KIWI-8080).
+    const budget = await documentGroupe(avecSeanceB, "Budget-Compta.txt", "Budget du groupe compta. Le code budgétaire du groupe est KIWI-8080.", [groupeCompta?.id]);
     const primes = await documentGroupe(avecSeanceB, "Primes-RH.txt", "Ressources humaines. La prime secrète du trimestre est CERISE-4096.", [groupeRh?.id]);
-    const kbCompta = await baseGroupe(avecSeance, "Base-Compta-Essai", [groupeCompta?.id], [tarifs, priveA, equipe]);
+    const kbCompta = await baseGroupe(avecSeance, "Base-Compta-Essai", [groupeCompta?.id], [tarifs, priveA, equipe, budget]);
     const kbRh = await baseGroupe(avecSeanceB, "Base-RH-Essai-6620", [groupeRh?.id], [primes]);
     const pretesGroupes = async () => {
       for (const [id, entete] of [[kbCompta, avecSeance], [kbRh, avecSeanceB]]) {
@@ -668,34 +733,107 @@ console.log("\n7 ter. Employés OpenClaw et bases de connaissances : ce qui est 
     const modifierPerso = (b) => appel(`/helix/employes/${perso?.id}`, { method: "POST", headers: avecSeance, body: JSON.stringify(b) });
     const QUESTION_GROUPE = "Quel est le code tarifaire du groupe compta ?";
 
+    const cleAutre = await chercher(QUESTION_GROUPE, perso?.id, cleDe(employe?.id));
+    verifier("la clé d'un autre employé sur le serveur d'outils de celui-ci → 403, rien de lu", cleAutre.status === 403 && !cleAutre.texte.includes("PAPAYE"), cleAutre.status);
     const lu = await chercher(QUESTION_GROUPE, perso?.id);
     verifier("un employé personnel, sans messagerie ni outil qui écrit, lit la base partagée au groupe de sa propriétaire", lu.status === 200 && lu.texte.includes("PAPAYE-3150") && lu.texte.includes("Tarifs-Compta.txt"), lu.texte.slice(0, 160));
-    const nonLu = await chercher("prime secrète du trimestre ressources humaines coffre personnel salaire confidentiel", perso?.id);
+    const nonLu = await chercher("prime secrète du trimestre ressources humaines salaire confidentiel Bernard", perso?.id);
     verifier(
-      "il ne lit ni la base d'un groupe dont elle n'est pas membre, ni ses documents privés, ni ceux d'une collègue",
-      nonLu.status === 200 && !nonLu.texte.includes("CERISE") && !nonLu.texte.includes("ZEBRE") && !nonLu.texte.includes("MANGUE") && !nonLu.texte.includes("Base-RH-Essai"),
+      "il ne lit ni la base d'un groupe dont elle n'est pas membre, ni les documents privés d'une collègue",
+      nonLu.status === 200 && !nonLu.texte.includes("CERISE") && !nonLu.texte.includes("MANGUE") && !nonLu.texte.includes("Base-RH-Essai"),
       nonLu.texte.slice(0, 160),
     );
+    // Décidé le 25/09/2026 (point 18) : il ne travaille que pour elle, il lit donc aussi ses documents privés.
+    const privePropre = await chercher("Quel est le code du coffre personnel ?", perso?.id);
+    verifier("il lit le document privé de sa propriétaire (il ne produit que pour elle)", privePropre.texte.includes("ZEBRE-7731"), privePropre.texte.slice(0, 120));
     const ecran = await (await appel(`/helix/employes/${perso?.id}/connaissances`, { method: "POST", headers: avecSeance, body: JSON.stringify({ bases: [kbCompta, kbRh, kbEquipe] }) })).json();
     const vueCompta = ecran.bases?.find((b) => b.id === kbCompta);
     const vueRh = ecran.bases?.find((b) => b.id === kbRh);
     verifier(
-      "l'écran de l'agent dit ce qu'il lira : la base du groupe (2 documents sur 3), pas celle d'un groupe étranger, sans la nommer",
-      ecran.groupes === true && vueCompta?.lue === true && vueCompta?.documentsLus === 2 && vueRh?.lue === false && vueRh?.raison === "inconnue" && !JSON.stringify(ecran).includes("Base-RH-Essai"),
+      "l'écran de l'agent dit ce qu'il lira : la base du groupe (4 documents sur 4, le privé de la propriétaire compris), pas celle d'un groupe étranger, sans la nommer",
+      ecran.regle === "proprietaire" && vueCompta?.lue === true && vueCompta?.documentsLus === 4 && vueRh?.lue === false && vueRh?.raison === "inconnue" && !JSON.stringify(ecran).includes("Base-RH-Essai"),
       JSON.stringify(ecran).slice(0, 200),
     );
     const ecranB = await appel(`/helix/employes/${perso?.id}/connaissances`, { method: "POST", headers: avecSeanceB, body: JSON.stringify({ bases: [kbCompta] }) });
     verifier("cet écran n'est rendu qu'à sa propriétaire (collègue : 404)", ecranB.status === 404 || ecranB.status === 403, ecranB.status);
 
+    /*
+     * Sa mémoire, quand son audience s'élargit (ajouté le 25/09/2026,
+     * employes.ts, `viderMemoire`). La batterie pose une note dans son
+     * espace et une conversation chez le faux OpenClaw, qui les efface comme
+     * le vrai quand on le lui demande.
+     */
+    const { mkdirSync: creerDossier, writeFileSync: ecrire } = await import("node:fs");
+    const espacePerso = join(DONNEES, "openclaw", "employes", perso?.id ?? "x");
+    const poserMemoire = (agent = perso?.id) => {
+      const espace = join(DONNEES, "openclaw", "employes", agent ?? "x");
+      creerDossier(join(espace, "memory"), { recursive: true });
+      ecrire(join(espace, "memory", "2026-09-25.md"), "Code du coffre de la propriétaire : ZEBRE-7731.\n");
+      creerDossier(join(AUX, "sessions"), { recursive: true });
+      ecrire(join(AUX, "sessions", `helix-${agent}`), `agent:helix-${agent}:helix-0123456789abcdef01234567\n`);
+    };
+    poserMemoire();
+    const refus = await modifierPerso({ visibilite: "organisation" });
+    const corpsRefus = await refus.json();
+    verifier(
+      "élargir son audience sans confirmer : 409, rien n'est changé ni vidé",
+      refus.status === 409 && corpsRefus.error?.code === "memoire-a-vider" && existsSync(join(espacePerso, "memory", "2026-09-25.md")) && (await chercher(QUESTION_GROUPE, perso?.id)).texte.includes("PAPAYE"),
+      `${refus.status} ${JSON.stringify(corpsRefus).slice(0, 100)}`,
+    );
+    ecrire(join(AUX, "panne"), "");
+    const enPanne = await modifierPerso({ visibilite: "organisation", viderMemoire: true });
+    rmSync(join(AUX, "panne"), { force: true });
+    const apresPanne = (await (await appel("/helix/employes", { headers: avecSeance })).json()).employes?.find((e) => e.id === perso?.id);
+    verifier(
+      "mémoire impossible à vider (instance muette) : l'élargissement est refusé, et il reste personnel",
+      enPanne.status === 409 && apresPanne?.visibilite === "personnel" && existsSync(join(espacePerso, "memory", "2026-09-25.md")),
+      `${enPanne.status} ${apresPanne?.visibilite}`,
+    );
+    const vide = await modifierPerso({ visibilite: "organisation", viderMemoire: true });
+    const corpsVide = await vide.json();
+    const copies = readdirSync(join(DONNEES, "memoires-employes", perso?.id ?? "x")).filter((n) => n.endsWith(".hlx"));
+    const copie = copies.length ? readFileSync(join(DONNEES, "memoires-employes", perso?.id ?? "x", copies[0])) : Buffer.alloc(0);
+    const appels = readFileSync(join(AUX, "appels.log"), "utf8");
+    verifier(
+      "confirmé : sa note et sa conversation sont effacées, l'index de sa mémoire remis à zéro, puis l'élargissement fait",
+      vide.status === 200 && corpsVide.employe?.visibilite === "organisation" && !existsSync(join(espacePerso, "memory", "2026-09-25.md")) &&
+        readFileSync(join(AUX, "sessions", `helix-${perso?.id}`), "utf8").trim() === "" &&
+        appels.includes(`memory reset --agent helix-${perso?.id} --yes`) && appels.includes(`memory forget --agent helix-${perso?.id} --session`),
+      `${vide.status} ${JSON.stringify(corpsVide).slice(0, 120)}`,
+    );
+    verifier(
+      "la copie mise de côté est chiffrée, sans le mot de contrôle en clair, et ses fiches de poste sont toujours là",
+      copie.subarray(0, 5).toString("latin1") === "HLXF1" && !copie.includes("ZEBRE") && existsSync(join(espacePerso, "SOUL.md")),
+      copie.subarray(0, 5).toString("latin1"),
+    );
+    const journalMemoire = readdirSync(join(DONNEES, "audit")).filter((n) => n.endsWith(".jsonl")).map((n) => readFileSync(join(DONNEES, "audit", n), "utf8")).join("");
+    verifier(
+      "le journal note le vidage par des nombres (notes, conversations), jamais leur contenu",
+      /"employe\.memoire_videe".*"fichiers":1.*"conversations":1/.test(journalMemoire) && !journalMemoire.includes("ZEBRE"),
+      "entrée absente ou contenu écrit",
+    );
+    const listeCopies = await (await appel(`/helix/employes/${perso?.id}/memoire`, { headers: avecSeance })).json();
+    const copieB = await appel(`/helix/employes/${perso?.id}/memoire`, { headers: avecSeanceB });
+    verifier(
+      "sa propriétaire voit la copie, non restaurable tant qu'il est ouvert ; une collègue ne la voit pas",
+      listeCopies.copies?.length === 1 && listeCopies.copies[0].restaurable === false && copieB.status === 403,
+      `${JSON.stringify(listeCopies).slice(0, 100)} ${copieB.status}`,
+    );
+    const restaurerTot = await appel(`/helix/employes/${perso?.id}/memoire/${listeCopies.copies?.[0]?.id}/restaurer`, { method: "POST", headers: avecSeance, body: "{}" });
+    verifier("la restaurer pendant qu'il est ouvert à l'organisation est refusé", restaurerTot.status === 409 && !existsSync(join(espacePerso, "memory", "2026-09-25.md")), restaurerTot.status);
+
     // L'audience s'élargit : l'appel suivant ne lit plus que ce qui est ouvert à l'équipe.
-    await modifierPerso({ visibilite: "organisation" });
     const ouvert = await chercher(QUESTION_GROUPE, perso?.id);
     const equipeToujours = await chercher("Quel est le code de la salle de réunion ?", perso?.id);
     verifier("ouvert à toute l'organisation, il ne lit plus la base du groupe dès l'appel suivant", !ouvert.texte.includes("PAPAYE") && equipeToujours.texte.includes("LOTUS-2468"), `${ouvert.texte.slice(0, 80)} | ${equipeToujours.texte.slice(0, 60)}`);
     await modifierPerso({ visibilite: "personnel" });
     verifier("redevenu personnel, il la relit (rien n'est gardé d'un appel à l'autre)", (await chercher(QUESTION_GROUPE, perso?.id)).texte.includes("PAPAYE-3150"), "non relue");
+    const restaurer = await (await appel(`/helix/employes/${perso?.id}/memoire/${listeCopies.copies?.[0]?.id}/restaurer`, { method: "POST", headers: avecSeance, body: "{}" })).json();
+    verifier("redevenu personnel, sa propriétaire peut restaurer sa note", restaurer.fichiers === 1 && existsSync(join(espacePerso, "memory", "2026-09-25.md")), JSON.stringify(restaurer).slice(0, 80));
 
-    await modifierPerso({ outils: ["fichiers"] });
+    const sansConfirmer = await modifierPerso({ outils: ["fichiers"] });
+    verifier("un outil qui écrit ajouté sans confirmer : 409 aussi", sansConfirmer.status === 409, sansConfirmer.status);
+    await modifierPerso({ outils: ["fichiers"], viderMemoire: true });
     verifier("avec un outil qui écrit (fichiers de l'équipe), il ne la lit plus", !(await chercher(QUESTION_GROUPE, perso?.id)).texte.includes("PAPAYE"), "PAPAYE sorti");
     await modifierPerso({ outils: [], toutesLesFamilles: true });
     verifier("avec « Autoriser les outils » (toutes les familles), non plus", !(await chercher(QUESTION_GROUPE, perso?.id)).texte.includes("PAPAYE"), "PAPAYE sorti");
@@ -703,19 +841,108 @@ console.log("\n7 ter. Employés OpenClaw et bases de connaissances : ce qui est 
     verifier("en liberté étendue (web, messages), non plus", !(await chercher(QUESTION_GROUPE, perso?.id)).texte.includes("PAPAYE"), "PAPAYE sorti");
     await modifierPerso({ liberte: "encadre" });
 
-    const canal = await appel(`/helix/employes/${perso?.id}/canaux`, {
+    const canalRefuse = await appel(`/helix/employes/${perso?.id}/canaux`, {
       method: "POST", headers: avecSeance,
       body: JSON.stringify({ type: "telegram", champs: { botToken: "123456:jeton-essai" }, acces: "liste", autorises: ["4242"] }),
+    });
+    verifier("brancher une messagerie sans confirmer : 409, aucun canal", canalRefuse.status === 409, canalRefuse.status);
+    const canal = await appel(`/helix/employes/${perso?.id}/canaux`, {
+      method: "POST", headers: avecSeance,
+      body: JSON.stringify({ type: "telegram", champs: { botToken: "123456:jeton-essai" }, acces: "liste", autorises: ["4242"], viderMemoire: true }),
     });
     const surMessagerie = await chercher(QUESTION_GROUPE, perso?.id);
     const ecranCanal = await (await appel(`/helix/employes/${perso?.id}/connaissances`, { method: "POST", headers: avecSeance, body: JSON.stringify({}) })).json();
     verifier(
       "joint sur une messagerie, il ne la lit plus, et l'écran dit pourquoi",
-      canal.status === 200 && !surMessagerie.texte.includes("PAPAYE") && ecranCanal.groupes === false && ecranCanal.raisons?.includes("messagerie"),
+      canal.status === 200 && !surMessagerie.texte.includes("PAPAYE") && ecranCanal.regle === "equipe" && ecranCanal.raisons?.includes("messagerie"),
       `${canal.status} ${surMessagerie.texte.slice(0, 60)} ${JSON.stringify(ecranCanal.raisons)}`,
     );
     await appel(`/helix/employes/${perso?.id}/canaux/telegram/retirer`, { method: "POST", headers: avecSeance, body: "{}" });
     verifier("messagerie retirée, il la relit", (await chercher(QUESTION_GROUPE, perso?.id)).texte.includes("PAPAYE-3150"), "non relue");
+
+    /*
+     * Agent partagé à des groupes (ajouté le 25/09/2026) : seuls les membres
+     * le voient et l'utilisent ; son employé lit ce qui est partagé à chacun
+     * de ses groupes, jamais un document privé. Une troisième personne,
+     * membre d'aucun groupe, sert de témoin.
+     */
+    const deGroupe = (await (await appel("/helix/employes", {
+      method: "POST", headers: avecSeance,
+      body: JSON.stringify({
+        nom: "Essai groupe", poste: "Tu aides le groupe compta.", outils: [], missions: [], liberte: "encadre",
+        visibilite: "groupes", groupes: [groupeCompta?.id], connaissances: [kbCompta, kbPriveeA, kbEquipe, kbRh],
+      }),
+    })).json()).employe;
+    verifier("un agent se partage à un groupe de sa propriétaire", deGroupe?.visibilite === "groupes" && deGroupe?.groupes?.[0] === groupeCompta?.id, JSON.stringify(deGroupe).slice(0, 100));
+    const refusRh = await appel("/helix/employes", {
+      method: "POST", headers: avecSeance,
+      body: JSON.stringify({ nom: "Essai RH", poste: "Tu aides.", outils: [], missions: [], visibilite: "groupes", groupes: [groupeRh?.id] }),
+    });
+    verifier("pas à un groupe dont elle n'est pas membre (400)", refusRh.status === 400, refusRh.status);
+    const listeDe = async (entete) => ((await (await appel("/helix/employes", { headers: entete })).json()).employes ?? []).map((e) => e.id);
+    const temoin = {
+      liste: (await listeDe(avecSeanceC)).includes(deGroupe?.id),
+      message: (await appel(`/helix/employes/${deGroupe?.id}/message`, { method: "POST", headers: avecSeanceC, body: JSON.stringify({ texte: "bonjour" }) })).status,
+      modifier: (await appel(`/helix/employes/${deGroupe?.id}`, { method: "POST", headers: avecSeanceC, body: JSON.stringify({ visibilite: "organisation" }) })).status,
+      echanges: (await appel(`/helix/employes/${deGroupe?.id}/echanges`, { headers: avecSeanceC })).status,
+    };
+    verifier("un non-membre ne le voit pas, ne lui parle pas, ne le modifie pas (404)", !temoin.liste && temoin.message === 404 && temoin.modifier === 404 && temoin.echanges === 404, JSON.stringify(temoin));
+    const membre = {
+      liste: (await listeDe(avecSeanceB)).includes(deGroupe?.id),
+      modifier: (await appel(`/helix/employes/${deGroupe?.id}`, { method: "POST", headers: avecSeanceB, body: JSON.stringify({ visibilite: "organisation" }) })).status,
+      activite: (await appel(`/helix/employes/${deGroupe?.id}/activite`, { headers: avecSeanceB })).status,
+    };
+    verifier("un membre du groupe le voit, sans pouvoir le modifier ni lire son activité (403)", membre.liste && membre.modifier === 403 && membre.activite === 403, JSON.stringify(membre));
+    const luGroupe = await chercher("code tarifaire du groupe compta, salle de réunion, coffre personnel, prime secrète RH, salaire confidentiel", deGroupe?.id);
+    verifier(
+      "son employé lit la base du groupe et ce qui est ouvert à l'équipe, rien de privé (ni la base privée de sa propriétaire, ni son document privé rangé dans la base du groupe)",
+      luGroupe.texte.includes("PAPAYE-3150") && (await chercher("Quel est le code de la salle de réunion ?", deGroupe?.id)).texte.includes("LOTUS-2468") && !(await chercher("Quel est le code du coffre personnel ?", deGroupe?.id)).texte.includes("ZEBRE") && !luGroupe.texte.includes("ZEBRE") && !luGroupe.texte.includes("CERISE") && !luGroupe.texte.includes("MANGUE") && !luGroupe.texte.includes("Base-Privee-A"),
+      luGroupe.texte.replace(/\s+/g, " ").slice(0, 1500),
+    );
+    // La collection des agents synchronisée entre les postes suit la même règle (authz.ts).
+    const agentsA = (await (await appel("/helix/data/agents", { headers: avecSeance })).json()).value ?? [];
+    const agentGroupe = { id: "agent-essai-groupe", name: "Agent de groupe", description: "", instructions: "Secret de fabrication", visibility: "groupes", groupIds: [groupeCompta?.id, groupeRh?.id], hidePrompt: false, ownerId: compte.account.id, organisationId: "org_default", toolsEnabled: false, createdAt: "", updatedAt: "" };
+    await appel("/helix/data/agents", { method: "PUT", headers: avecSeance, body: JSON.stringify({ value: [...agentsA, agentGroupe] }) });
+    const agentsDe = async (entete) => (await (await appel("/helix/data/agents", { headers: entete })).json()).value ?? [];
+    const pourA = (await agentsDe(avecSeance)).find((a) => a.id === agentGroupe.id);
+    verifier("partagé à un groupe dont elle n'est pas membre, ce groupe est retiré de l'agent", pourA && JSON.stringify(pourA.groupIds) === JSON.stringify([groupeCompta?.id]), JSON.stringify(pourA?.groupIds));
+    verifier(
+      "la synchronisation le donne au membre, pas au non-membre",
+      (await agentsDe(avecSeanceB)).some((a) => a.id === agentGroupe.id) && !(await agentsDe(avecSeanceC)).some((a) => a.id === agentGroupe.id),
+      "mauvaise visibilité",
+    );
+    await appel("/helix/data/agents", { method: "PUT", headers: avecSeanceC, body: JSON.stringify({ value: [{ ...agentGroupe, instructions: "Détourné", ownerId: compteC?.id }] }) });
+    await appel("/helix/data/agents", { method: "PUT", headers: avecSeanceB, body: JSON.stringify({ value: [{ ...pourA, instructions: "Détourné" }] }) });
+    const apresEssais = (await agentsDe(avecSeance)).find((a) => a.id === agentGroupe.id);
+    verifier("ni le non-membre ni le membre ne peuvent le modifier", apresEssais?.instructions === "Secret de fabrication" && apresEssais?.ownerId === compte.account.id, apresEssais?.instructions);
+
+    // Élargir un agent de groupe : un groupe ajouté (vide ici) demande aussi de vider sa mémoire.
+    const groupeVide = (await (await appel("/helix/groupes", { method: "POST", headers: avecSeance, body: JSON.stringify({ nom: "Vide-Essai" }) })).json()).groupe;
+    const ajoutGroupe = await appel(`/helix/employes/${deGroupe?.id}`, { method: "POST", headers: avecSeance, body: JSON.stringify({ groupes: [groupeCompta?.id, groupeVide?.id] }) });
+    verifier("un groupe ajouté sans confirmer : 409", ajoutGroupe.status === 409, ajoutGroupe.status);
+    const ajoutConfirme = await (await appel(`/helix/employes/${deGroupe?.id}`, { method: "POST", headers: avecSeance, body: JSON.stringify({ groupes: [groupeCompta?.id, groupeVide?.id], viderMemoire: true }) })).json();
+    const luDeuxGroupes = await chercher(QUESTION_GROUPE, deGroupe?.id);
+    verifier(
+      "confirmé, il ne lit plus un document partagé au seul premier groupe : un membre du second le recevrait",
+      ajoutConfirme.employe?.groupes?.length === 2 && !luDeuxGroupes.texte.includes("PAPAYE") && luDeuxGroupes.status === 200,
+      luDeuxGroupes.texte.slice(0, 100),
+    );
+    const retrait = await appel(`/helix/employes/${deGroupe?.id}`, { method: "POST", headers: avecSeance, body: JSON.stringify({ groupes: [groupeCompta?.id] }) });
+    verifier("retirer un groupe ne demande rien, et il relit la base du groupe", retrait.status === 200 && (await chercher(QUESTION_GROUPE, deGroupe?.id)).texte.includes("PAPAYE-3150"), retrait.status);
+    await appel(`/helix/employes/${deGroupe?.id}`, { method: "POST", headers: avecSeance, body: JSON.stringify({ outils: ["courrier"], viderMemoire: true }) });
+    verifier("doté d'un outil qui envoie (mails), il ne la lit plus dès l'appel suivant", !(await chercher(QUESTION_GROUPE, deGroupe?.id)).texte.includes("PAPAYE"), "PAPAYE sorti");
+    await appel(`/helix/employes/${deGroupe?.id}`, { method: "POST", headers: avecSeance, body: JSON.stringify({ outils: [] }) });
+
+    // Un membre qui quitte le groupe ne voit plus l'agent, ni dans l'équipe des employés ni dans la synchronisation.
+    const quitte = await appel(`/helix/groupes/${groupeCompta?.id}/quitter`, { method: "POST", headers: avecSeanceB, body: "{}" });
+    verifier(
+      "sortie du groupe, la collègue ne voit plus l'agent ni son employé (404)",
+      quitte.status === 200 && !(await listeDe(avecSeanceB)).includes(deGroupe?.id) &&
+        (await appel(`/helix/employes/${deGroupe?.id}/echanges`, { headers: avecSeanceB })).status === 404 &&
+        !(await agentsDe(avecSeanceB)).some((a) => a.id === agentGroupe.id),
+      quitte.status,
+    );
+    await appel(`/helix/groupes/${groupeCompta?.id}`, { method: "POST", headers: avecSeance, body: JSON.stringify({ membres: [compte.account.id, compteB?.id] }) });
 
     // L'employé d'organisation du début, avec la même base : toujours la règle de l'équipe.
     await appel(`/helix/employes/${employe?.id}`, { method: "POST", headers: avecSeance, body: JSON.stringify({ connaissances: [kbCompta, kbEquipe] }) });
@@ -729,10 +956,13 @@ console.log("\n7 ter. Employés OpenClaw et bases de connaissances : ce qui est 
     );
 
     // La propriétaire quitte le groupe : lu depuis les groupes à cet instant, l'accès se referme aussitôt.
+    const avantSortie = await chercher("Quel est le code budgétaire du groupe compta ?", perso?.id);
+    verifier("membre du groupe, son employé personnel lit le document de la collègue partagé au groupe", avantSortie.texte.includes("KIWI-8080"), avantSortie.texte.slice(0, 80));
     const sortie = await appel(`/helix/groupes/${groupeCompta?.id}`, {
       method: "POST", headers: avecSeance, body: JSON.stringify({ membres: [compteB?.id], responsables: [compteB?.id] }),
     });
-    verifier("sortie du groupe, son employé personnel ne lit plus la base de ce groupe", sortie.status === 200 && !(await chercher(QUESTION_GROUPE, perso?.id)).texte.includes("PAPAYE"), sortie.status);
+    const apresSortie = await chercher("Quel est le code budgétaire du groupe compta ?", perso?.id);
+    verifier("sortie du groupe, son employé personnel ne lit plus le document de la collègue partagé à ce groupe", sortie.status === 200 && !apresSortie.texte.includes("KIWI"), `${sortie.status} ${apresSortie.texte.slice(0, 80)}`);
   }
 }
 
@@ -753,12 +983,58 @@ console.log("\n7 quater. Export RGPD et effacement : bases, images, entraînemen
   verifier("l'export contient la liste de ses images", Array.isArray(exportB.imagesCreees), typeof exportB.imagesCreees);
   const exportA = JSON.stringify(await (await appel("/helix/export", { headers: avecSeance })).json());
   verifier("l'export d'une collègue ne contient ni sa base ni son projet", !exportA.includes(nomBase) && !exportA.includes("Projet-De-B-7731"), "trouvé");
+
+  /*
+   * Ajoutés le 25/09/2026 : deux documents de B, ouverts à l'équipe, rangés
+   * par A dans sa propre base. L'un redevient privé : l'export de A ne le
+   * nomme plus. L'autre reste : l'effacement du compte de B doit retirer son
+   * index du disque, bien que B ne soit pas le propriétaire de la base.
+   */
+  const docB = async (nom, texte) =>
+    (await (await appel("/helix/bibliotheque/documents", {
+      method: "POST", headers: avecSeanceB, body: JSON.stringify({ nom, contenu: Buffer.from(texte).toString("base64"), texte, visibilite: "organisation" }),
+    })).json()).element?.id;
+  const cache = await docB("Visible-puis-cache-9921.txt", "Un document que sa propriétaire refermera.");
+  const docEfface = await docB("Doc-De-B-Efface-4410.txt", "Un document dont l'auteure effacera son compte.");
+  const baseA = (await (await appel("/helix/connaissances", { method: "POST", headers: avecSeance, body: JSON.stringify({ nom: "Base-A-Export", visibilite: "prive" }) })).json()).base;
+  await appel(`/helix/connaissances/${baseA?.id}/documents`, { method: "POST", headers: avecSeance, body: JSON.stringify({ documents: [cache, docEfface] }) });
+  const indexDe = (doc) => join(DONNEES, "connaissances", baseA?.id ?? "x", `${doc}.index`);
+  for (let i = 0; i < 60 && !(existsSync(indexDe(cache)) && existsSync(indexDe(docEfface))); i++) await attendre(500);
+  await appel(`/helix/bibliotheque/${cache}`, { method: "POST", headers: avecSeanceB, body: JSON.stringify({ visibilite: "prive" }) });
+  const exportCache = await (await appel("/helix/export", { headers: avecSeance })).json();
+  const saBase = exportCache.basesDeConnaissances?.bases?.find((b) => b.nom === "Base-A-Export");
+  verifier(
+    "l'export ne nomme pas un document rangé dans sa base qu'elle ne voit plus, il le compte",
+    saBase && !JSON.stringify(exportCache).includes("Visible-puis-cache-9921") && saBase.documentsQueVousNeVoyezPlus === 1 && saBase.documents.some((d) => d.nom === "Doc-De-B-Efface-4410.txt"),
+    JSON.stringify(saBase).slice(0, 160),
+  );
+  const indexAvant = existsSync(indexDe(docEfface));
   const efface = await appel("/helix/compte/effacer", { method: "POST", headers: avecSeanceB, body: JSON.stringify({ password: MDP_B }) });
   verifier("effacer son compte réussit", efface.status === 200, efface.status);
   const restes = existsSync(join(DONNEES, "entrainement", projet.id ?? "absent"));
   verifier("l'effacement retire ses projets d'entraînement du disque", projet.id && !restes, restes ? "dossier resté" : projet.id);
   const bases = JSON.stringify(await (await appel("/helix/connaissances", { headers: avecSeance })).json());
   verifier("l'effacement retire ses bases de connaissances", !bases.includes(nomBase), "trouvée");
+  const baseApres = (await (await appel(`/helix/connaissances/${baseA?.id}`, { headers: avecSeance })).json()).base;
+  verifier(
+    "l'effacement retire son document de la base d'une collègue, et son index du disque",
+    indexAvant && !existsSync(indexDe(docEfface)) && !(baseApres?.documents ?? []).some((d) => d.id === docEfface),
+    `index avant : ${indexAvant}, après : ${existsSync(indexDe(docEfface))}`,
+  );
+  // Un document supprimé de Fichiers quitte aussi les bases, index compris.
+  const aSupprimer = (await (await appel("/helix/bibliotheque/documents", {
+    method: "POST", headers: avecSeance, body: JSON.stringify({ nom: "A-supprimer-3307.txt", contenu: Buffer.from("Bientôt supprimé.").toString("base64"), texte: "Bientôt supprimé.", visibilite: "prive" }),
+  })).json()).element?.id;
+  await appel(`/helix/connaissances/${baseA?.id}/documents`, { method: "POST", headers: avecSeance, body: JSON.stringify({ documents: [aSupprimer] }) });
+  for (let i = 0; i < 60 && !existsSync(indexDe(aSupprimer)); i++) await attendre(500);
+  const indexeAvant = existsSync(indexDe(aSupprimer));
+  await appel(`/helix/bibliotheque/${aSupprimer}/supprimer`, { method: "POST", headers: avecSeance, body: "{}" });
+  const baseFin = (await (await appel(`/helix/connaissances/${baseA?.id}`, { headers: avecSeance })).json()).base;
+  verifier(
+    "un document supprimé de Fichiers quitte la base, et son index le disque",
+    indexeAvant && !existsSync(indexDe(aSupprimer)) && !(baseFin?.documents ?? []).some((d) => d.id === aSupprimer),
+    `index avant : ${indexeAvant}`,
+  );
 }
 
 /* ------------------------------------------------------------------------- */
@@ -798,6 +1074,163 @@ verifier("le mot de passe n'apparaît pas dans le journal", !journal.includes("M
     }
     verifier(`injoignable depuis le réseau (${ip})`, !joignable, "la passerelle répond sur l'interface réseau");
   }
+}
+
+/* ------------------------------------------------------------------------- */
+/*
+ * Revue du 25/09/2026. Une seconde instance, **partagée** (`share: true`, mais
+ * écoutant sur la boucle locale et en clair : rien ne s'ouvre au réseau le
+ * temps de l'essai), dont le dossier de l'équipe contient le dossier des
+ * données, comme « Tout mon poste » avec `~/.helix/data`. Le dossier des
+ * données porte ici un nom sans point, pour éprouver la règle du chemin réel
+ * et pas seulement celle des segments en point.
+ */
+console.log("\n10. Dossier de l'équipe contenant les données de l'instance, instance partagée");
+{
+  const { mkdirSync, writeFileSync, symlinkSync } = await import("node:fs");
+  const ESPACE = mkdtempSync(join(tmpdir(), "helix-securite-espace-"));
+  const DONNEES2 = join(ESPACE, "donnees");
+  const MEMOIRE = join(DONNEES2, "openclaw", "employes", "e1", "memory");
+  mkdirSync(MEMOIRE, { recursive: true });
+  writeFileSync(join(MEMOIRE, "note.md"), "SECRET-MEMOIRE-EMPLOYE-4412");
+  mkdirSync(join(ESPACE, ".helix"), { recursive: true });
+  writeFileSync(join(ESPACE, ".helix", "cache.txt"), "SECRET-DOSSIER-POINT-8820");
+  writeFileSync(join(ESPACE, "notes.txt"), "document ordinaire de l'équipe");
+  mkdirSync(join(ESPACE, "Docs"), { recursive: true });
+  // Deux liens sans point dans le nom : l'un vers le dossier des données, l'autre vers un fichier qu'il contient.
+  symlinkSync(DONNEES2, join(ESPACE, "raccourci"));
+  symlinkSync(join(MEMOIRE, "note.md"), join(ESPACE, "Docs", "lien-memoire.md"));
+  const PROFIL2 = join(ESPACE, "..", `${ESPACE.split("/").pop()}-profil.json`);
+  writeFileSync(PROFIL2, JSON.stringify({ share: true, tls: false, backends: [{ id: "lmstudio", enabled: false }, { id: "exo", enabled: false }] }));
+  const PORT2 = await portLibre();
+  const G2 = `http://127.0.0.1:${PORT2}`;
+  const seconde = spawn(process.execPath, [join(RACINE, "gateway", "src", "index.ts")], {
+    env: {
+      ...process.env,
+      HELIX_CONFIG: PROFIL2,
+      HELIX_GATEWAY_PORT: String(PORT2),
+      HELIX_GATEWAY_HOST: "127.0.0.1",
+      HELIX_DATA_DIR: DONNEES2,
+      HELIX_WORKSPACE: ESPACE,
+      HELIX_LMSTUDIO_URL: "http://127.0.0.1:9/v1",
+      HELIX_EXO_URL: "http://127.0.0.1:9/v1",
+    },
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  let journal2 = "";
+  seconde.stdout.on("data", (b) => (journal2 += b));
+  seconde.stderr.on("data", (b) => (journal2 += b));
+  for (let i = 0; i < 60; i++) {
+    try {
+      await fetch(`${G2}/health`);
+      break;
+    } catch {
+      await attendre(250);
+    }
+  }
+  const JETON2 = readFileSync(join(DONNEES2, "instance-token"), "utf8").trim();
+  const appel2 = (chemin, options = {}) => fetch(`${G2}${chemin}`, { redirect: "manual", ...options });
+  const MDP2 = "Troisieme2Passe!93";
+  const cree = await (await appel2("/helix/auth/create", {
+    method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${JETON2}` },
+    body: JSON.stringify({ fullName: "Titulaire", email: "titulaire@example.test", password: MDP2 }),
+  })).json();
+  const avec2 = { "Content-Type": "application/json", Authorization: `Bearer ${JETON2}`, "X-Helix-Session": cree.session?.token ?? "" };
+  verifier("seconde instance (partagée) : le premier compte s'ouvre", Boolean(cree.session?.token), JSON.stringify(cree).slice(0, 80) + journal2.slice(-200));
+
+  const lire = async (chemin) => {
+    const r = await appel2(`/helix/espace/fichier?chemin=${encodeURIComponent(chemin)}`, { headers: avec2 });
+    return { statut: r.status, corps: await r.text() };
+  };
+  const secrets = [JETON2, "SECRET-MEMOIRE-EMPLOYE-4412", "SECRET-DOSSIER-POINT-8820"];
+  for (const chemin of [
+    "donnees/instance-token",
+    "donnees/openclaw/employes/e1/memory/note.md",
+    ".helix/cache.txt",
+    "raccourci/instance-token",
+    "Docs/lien-memoire.md",
+  ]) {
+    const r = await lire(chemin);
+    verifier(`espace : lire « ${chemin} » → 403 ou 404`, (r.statut === 403 || r.statut === 404) && !secrets.some((s) => r.corps.includes(s)), `${r.statut} ${r.corps.slice(0, 60)}`);
+  }
+  {
+    const r = await lire("notes.txt");
+    verifier("espace : un fichier ordinaire du dossier de l'équipe reste lisible", r.statut === 200 && r.corps.includes("document ordinaire"), `${r.statut} ${r.corps.slice(0, 60)}`);
+  }
+  {
+    const racine = await (await appel2("/helix/espace?chemin=", { headers: avec2 })).json();
+    const noms = (racine.entrees ?? []).map((e) => e.nom);
+    verifier("espace : la liste montre les documents mais ni les données ni le lien vers elles", noms.includes("notes.txt") && !noms.includes("donnees") && !noms.includes("raccourci"), JSON.stringify(noms));
+    const dans = await appel2("/helix/espace?chemin=raccourci", { headers: avec2 });
+    verifier("espace : lister le dossier des données par un lien → refusé", dans.status === 403 || dans.status === 404, dans.status);
+  }
+  {
+    const r = await appel2("/helix/mcp/workspace", { method: "POST", headers: avec2, body: JSON.stringify({ dossier: DONNEES2, motDePasse: MDP2 }) });
+    verifier("le dossier des données ne peut pas devenir le dossier de l'équipe", r.status === 400, r.status);
+  }
+  for (const chemin of ["/helix/import/logiciels", "/helix/import/logiciel/claude-code"]) {
+    const r = await appel2(chemin, { headers: avec2 });
+    verifier(`instance partagée : ${chemin} → 403, même depuis la boucle locale`, r.status === 403, r.status);
+  }
+  {
+    const r = await appel2(`/helix/import/logiciel/codex?depuis=0`, { method: "POST", headers: avec2, body: JSON.stringify({ cles: ["x"] }) });
+    verifier("instance partagée : reprendre le contenu d'un logiciel → 403", r.status === 403, r.status);
+  }
+
+  /*
+   * Le serveur de fichiers MCP de Cowork, pour de vrai : le même processus
+   * `@modelcontextprotocol/server-filesystem` que lance la passerelle, avec le
+   * même dossier, appelé par `callTool` comme le fait la boucle d'un agent.
+   * Il faut `npx` et le paquet (téléchargé une première fois) : sans eux,
+   * l'essai est sauté et le dit.
+   */
+  const avant = { ws: process.env.HELIX_WORKSPACE, dd: process.env.HELIX_DATA_DIR, cfg: process.env.HELIX_CONFIG };
+  process.env.HELIX_WORKSPACE = ESPACE;
+  process.env.HELIX_DATA_DIR = DONNEES2;
+  process.env.HELIX_CONFIG = PROFIL2;
+  const mcp = await import(join(RACINE, "gateway", "src", "mcp.ts"));
+  const demarre = await mcp.startServer("fichiers");
+  if (!demarre.ok) {
+    console.log(`  · serveur de fichiers MCP indisponible (${String(demarre.error).slice(0, 80)}) : essai de l'agent sauté`);
+  } else {
+    const noms = mcp.toolsForModel().map((o) => o.function.name);
+    const lireOutil = noms.includes("fichiers__read_text_file") ? "fichiers__read_text_file" : "fichiers__read_file";
+    for (const chemin of [join(DONNEES2, "instance-token"), join(ESPACE, "raccourci", "instance-token"), join(ESPACE, "Docs", "lien-memoire.md"), "donnees/openclaw/employes/e1/memory/note.md"]) {
+      const r = await mcp.callTool(lireOutil, { path: chemin });
+      verifier(`agent : lire « ${chemin.replace(ESPACE, "<espace>")} » est refusé`, !r.ok && !secrets.some((s) => r.content.includes(s)), r.content.slice(0, 80));
+    }
+    {
+      const r = await mcp.callTool("fichiers__read_multiple_files", { paths: [join(ESPACE, "notes.txt"), join(DONNEES2, "instance-token")] });
+      verifier("agent : lire plusieurs fichiers dont un protégé est refusé", !secrets.some((s) => r.content.includes(s)), r.content.slice(0, 80));
+    }
+    {
+      const r = await mcp.callTool("fichiers__move_file", { source: join(DONNEES2, "instance-token"), destination: join(ESPACE, "jeton.txt") });
+      verifier("agent : sortir un fichier des données par un déplacement est refusé", !r.ok && !existsSync(join(ESPACE, "jeton.txt")), r.content.slice(0, 80));
+    }
+    {
+      // Motif en glob : c'est ce qu'attend la version actuelle du serveur (« note » seul ne trouve rien).
+      const r = await mcp.callTool("fichiers__search_files", { path: ESPACE, pattern: "**/note*" });
+      verifier("agent : une recherche rend les documents mais pas les noms des fichiers protégés", r.content.includes("notes.txt") && !r.content.includes("memory"), r.content.slice(0, 120));
+    }
+    {
+      const r = await mcp.callTool("fichiers__directory_tree", { path: ESPACE });
+      verifier("agent : l'arbre du dossier ne descend pas dans les données", r.content.includes("notes.txt") && !r.content.includes("instance-token") && !r.content.includes("memory"), r.content.slice(0, 120));
+    }
+    {
+      const r = await mcp.callTool(lireOutil, { path: join(ESPACE, "notes.txt") });
+      verifier("agent : un fichier ordinaire du dossier de l'équipe reste lisible", r.ok && r.content.includes("document ordinaire"), r.content.slice(0, 80));
+    }
+    await mcp.stopServer("fichiers");
+  }
+  for (const [cle, valeur] of [["HELIX_WORKSPACE", avant.ws], ["HELIX_DATA_DIR", avant.dd], ["HELIX_CONFIG", avant.cfg]]) {
+    if (valeur === undefined) delete process.env[cle];
+    else process.env[cle] = valeur;
+  }
+
+  seconde.kill();
+  await attendre(300);
+  rmSync(ESPACE, { recursive: true, force: true });
+  rmSync(PROFIL2, { force: true });
 }
 
 passerelle.kill();

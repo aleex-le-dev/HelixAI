@@ -3,6 +3,7 @@ import { DOCUMENT_MAX, LIBELLE_DOCUMENT_MAX } from "./televersement.ts";
 import { join, relative, isAbsolute, sep } from "node:path";
 import { workspace } from "./mcp.ts";
 import { t } from "./langue.ts";
+import { estProtege } from "./zonesProtegees.ts";
 
 /**
  * Parcourir le dossier de travail de l'équipe, et en relire un fichier.
@@ -35,8 +36,19 @@ function resoudre(relatif: string): Resultat<{ racine: string; reel: string }> {
     return { ok: false, statut: 404, message: t("Le dossier de travail de l'équipe est introuvable.") };
   }
   const demande = (relatif || "").replace(/^[/\\]+/, "");
-  if (isAbsolute(demande) || demande.split(/[/\\]/).includes("..")) {
+  const segments = demande.split(/[/\\]/);
+  if (isAbsolute(demande) || segments.includes("..")) {
     return { ok: false, statut: 400, message: t("Chemin refusé.") };
+  }
+  /*
+   * Aucun segment en point (revue du 25/09/2026). La liste les cachait déjà ;
+   * la lecture ne les refusait pas, et avec « Tout mon poste » le dossier de
+   * l'équipe est le dossier personnel : `.helix/data/instance-token` se lisait
+   * en 200 par n'importe quelle personne connectée. Un dossier caché n'est pas
+   * un document d'équipe.
+   */
+  if (segments.some((s) => s.startsWith("."))) {
+    return { ok: false, statut: 403, message: t("Chemin refusé.") };
   }
   let reel: string;
   try {
@@ -46,6 +58,11 @@ function resoudre(relatif: string): Resultat<{ racine: string; reel: string }> {
   }
   if (reel !== racine && !reel.startsWith(racine + sep)) {
     return { ok: false, statut: 403, message: t("Hors du dossier de travail.") };
+  }
+  // Chemin réel, liens résolus : un lien anodin vers les données de l'instance
+  // ou vers ~/.ssh est refusé comme sa cible (zonesProtegees.ts).
+  if (estProtege(reel)) {
+    return { ok: false, statut: 403, message: t("Cet emplacement est protégé : ni l'équipe ni les agents n'y ont accès.") };
   }
   return { ok: true, valeur: { racine, reel } };
 }
@@ -67,6 +84,8 @@ export function listerEspace(relatif: string): Resultat<{ chemin: string; entree
       // Un lien qui sort du dossier n'est même pas montré (sa taille trahirait déjà la cible).
       const cible = realpathSync(join(reel, nom));
       if (cible !== racine && !cible.startsWith(racine + sep)) continue;
+      // Les données de l'instance, les clés, les réglages : pas même le nom.
+      if (estProtege(cible)) continue;
       const s = statSync(cible);
       entrees.push({
         nom,

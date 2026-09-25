@@ -740,16 +740,47 @@ Pourquoi ainsi :
   « Encadré », sans outil qui écrit ou envoie là où d'autres lisent (fichiers de
   l'équipe, documents Office, mails, donc sans « Autoriser les outils »). Il lit alors
   aussi les bases et les documents partagés aux groupes dont son propriétaire est
-  membre à cet instant : son seul destinataire les voit lui-même. Jamais les documents
-  privés du propriétaire (la question du point 18 reste au client). Tout est relu à
+  membre à cet instant : son seul destinataire les voit lui-même. (Le soir même, ses
+  documents privés aussi : voir le point suivant.) Tout est relu à
   chaque appel (`employes.ts`, `lectureDesBases`) : ouvert à l'organisation, branché à
   une messagerie, doté d'un outil qui écrit, sorti du groupe, il revient aussitôt à la
-  règle de l'équipe. Pourquoi pas plus large : un agent partagé à des groupes précis
-  n'existe pas dans le code (un agent est personnel ou d'organisation), et un agent
-  d'organisation parle à tout le monde ; ces cas gardent la règle de l'équipe. Limite
-  dite à l'écran : ce qu'il a déjà noté dans sa mémoire OpenClaw y reste quand son
-  audience s'élargit. L'écran de l'agent dit, base par base, ce qu'il lira et pourquoi
+  règle de l'équipe. L'écran de l'agent dit, base par base, ce qu'il lira et pourquoi
   pas le reste.
+- **Les trois questions du point 18, tranchées** (25/09/2026, le soir ; Medhi : « fais
+  au mieux »). Toujours la même règle : ce qui sort de l'employé ne va qu'à des gens qui
+  ont le droit de le voir, relu à chaque appel, sans cache (`lecteursDe`).
+  - **Agents partagés à des groupes** : visibilité « Groupes » à côté de « Personnel » et
+    « Organisation », choisie comme dans la Bibliothèque (seulement ses groupes). Seuls
+    les membres de ces groupes à l'instant voient l'agent, le reçoivent par la
+    synchronisation (`authz.ts`), lui parlent ; qui quitte le groupe ne le voit plus
+    (404) ; seul son propriétaire le modifie. Son employé, s'il remplit les mêmes
+    conditions de sortie, lit en plus ce qui est partagé à **chacun** de ses groupes (et
+    que son propriétaire voit) : un document partagé au seul groupe A n'est pas lu par
+    l'agent des groupes A et B, un membre de B le recevrait. La règle tient quand un
+    groupe change de membres. Jamais un document privé, de personne.
+  - **Documents privés du propriétaire** : un agent personnel qui remplit les cinq
+    conditions lit tout ce que son propriétaire voit, ses documents et bases privés
+    compris : il ne produit que pour lui. Jamais le privé d'une autre personne.
+  - **La mémoire quand l'audience s'élargit** : un changement qui élargit l'audience
+    d'un employé qui a pu lire hors de l'équipe (visibilité, groupe ajouté, messagerie,
+    mission à chaque mail, liberté, outil qui écrit) est refusé tant que son
+    propriétaire n'a pas confirmé à l'écran ; confirmé, Helix met ses notes de côté
+    (copie chiffrée hors du dossier d'OpenClaw, restaurable par le propriétaire tant que
+    l'audience n'est pas plus large qu'au moment de la copie), efface ses conversations
+    chez OpenClaw (`sessions delete`, `memory forget`, archives), ses notes, l'index de
+    sa mémoire (`memory reset`), vérifie, et seulement alors applique le changement. Une
+    étape ratée : le changement n'est pas fait, l'écran le dit. « A pu lire » : une trace
+    notée à chaque passage lu hors de l'équipe, ou des réglages qui le permettaient avec
+    des bases (on ne suppose pas qu'il ne s'en est pas servi).
+  - Où OpenClaw 2026.9.4 garde la mémoire d'un agent, relevé sur l'OpenClaw d'essai le
+    25/09 : notes dans son espace (`MEMORY.md`, `memory/*.md`, tout fichier écrit),
+    conversations et index dans `agents/<agent>/agent/openclaw-agent.sqlite`, archives
+    dans `agents/<agent>/sessions/`. **Restent hors de portée du vidage** : les pages
+    libérées de cette base SQLite (plus aucune ligne ne porte le mot de contrôle, mais
+    le fichier brut le garde), le registre des tâches d'OpenClaw
+    (`state/openclaw.sqlite`, les questions posées, gardées 7 jours) et ses journaux
+    (`journaux/`, les réponses). Aucun outil d'un employé encadré ou étendu ne les
+    atteint ; au palier Libre, qui lit toute la machine (sous mot de passe), si.
 
 ### 3.11 Ligne de commande : un client de plus, qui ne décide rien
 
@@ -1043,10 +1074,15 @@ données.
 ### Ce qui a été ajouté le 25/09/2026
 
 Détail dans [SECURITE.md](SECURITE.md) § 22. `npm run securite` compte désormais
-**167 contrôles, tous réussis le 25/09/2026** (77 la veille ; dont 5 pour le flux de
+**206 contrôles, tous réussis le 26/09/2026** (77 le 24/09 ; dont 5 pour le flux de
 Helix Code fabriqué par la passerelle, § 3.11, 15 pour les employés et les bases de
-connaissances, § 3.10, 7 pour l'export RGPD et l'effacement, et, l'après-midi, 14 pour
-les employés et les bases partagées à un groupe, plus une route sans séance).
+connaissances, § 3.10, 7 pour l'export RGPD et l'effacement, et, l'après-midi du 25, 14 pour
+les employés et les bases partagées à un groupe, plus une route sans séance ; le soir, 34
+pour les agents de groupes, le privé du propriétaire, la mémoire vidée avant
+élargissement, la clé par employé, les index effacés avec le compte et l'export filtré,
+§ 3.10 et SECURITE § 22.2). Puis 26 pour les deux défauts de la revue du 25/09
+(dossier de l'équipe, import local ; SECURITE.md § 22.6) : **232 contrôles, tous
+réussis le 26/09/2026**.
 
 | Surface | Règle |
 |---|---|
@@ -1056,6 +1092,8 @@ les employés et les bases partagées à un groupe, plus une route sans séance)
 | Entraînement | Préfixe `/helix/entrainement` entier sous séance ; projet rendu à son seul auteur, identifiant de 24 caractères hexadécimaux tiré au sort ; projet chiffré au repos, jamais réécrit s'il est illisible ; aucun exemple en argument de commande |
 | Outils de Code | `/helix/code/outils` réservée à l'agent de code de l'instance : jeton **et** clé tirée à chaque démarrage (`X-Helix-Cle`), comparée en temps constant ; chaque appel passe par la barrière et le journal |
 | Ligne de commande | Jeton du poste lu **seulement pour une adresse locale** ; http vers une autre machine refusé avant tout envoi ; mot de passe tapé sans écho et jamais écrit ; séance rangée par adresse d'instance |
+| Dossier de l'équipe (revue du 25/09) | Avec « Tout mon poste », `GET /helix/espace/fichier?chemin=.helix/data/…` rendait le jeton d'instance et la mémoire des employés à toute personne connectée, et l'agent de Cowork lisait `~/.ssh`, `~/.claude`. Désormais : segments en point refusés, **zones protégées** (`zonesProtegees.ts` : données de l'instance, `~/.helix`, clés, `.config`, historiques des autres assistants, trousseaux) refusées sur leur chemin réel, dans l'espace, le serveur de fichiers MCP, la bureautique et le contrôle web ; la fenêtre « Tout mon poste » le dit |
+| Import depuis les logiciels (revue du 25/09) | La boucle locale ne suffisait pas sur une instance partagée (un outil du serveur appelait `127.0.0.1` avec `?token=`). Désormais : 403 si l'instance est partagée, jetons en en-têtes seulement, compte administrateur exigé |
 
 ### Principes à tenir
 
@@ -1817,9 +1855,16 @@ fenêtre sur macOS ne coupe plus la passerelle (les employés continuent).
   une réserve de 30 % de la RAM (3 à 8 Go) ; sur PC, un modèle dense doit tenir
   dans la carte NVIDIA (`nvidia-smi`), un modèle à experts peut déborder en RAM ;
   sans carte, seulement petits modèles ou à experts. À chaque machine, le mieux
-  noté qui tient ET qui est `verifie` est installé ; les autres sont proposés
-  dans « À installer » (6 au plus), marqués « pas encore vérifié avec Helix ».
-  Aujourd'hui seuls Qwen3 et Qwen3-VL sont vérifiés.
+  noté qui tient est installé, **essayé avec Helix ou non** (décidé par Medhi le
+  26/09/2026 : « installer en fonction du PC le meilleur modèle ») ; s'il ne se
+  charge pas, les suivants du classement, puis le plus léger vérifié. Pour piloter
+  l'écran, seuls les modèles essayés à ce geste (Qwen3-VL) sont installés : un
+  modèle qui ne sait pas désigner un point clique à côté. Mesuré par `recommend` le
+  26/09/2026 sur Mac à puce Apple : 8 Go Qwen3.5 4B, 16 et 24 Go Qwen3.5 9B, 32 à
+  128 Go Qwen3.8 27B, 256 Go DeepSeek V4 Flash ; PC NVIDIA 8 ou 12 Go avec 32 Go de
+  RAM Qwen3.5 35B A3B. Les autres sont proposés dans « À installer » (6 au plus),
+  marqués « pas encore vérifié avec Helix ». Aujourd'hui seuls Qwen3, Qwen3.5 9B et
+  Qwen3-VL sont vérifiés.
   Kimi K3 (43,6), GLM-5.3 (44,8), MiniMax : plusieurs centaines de Go, serveur
   seulement, donc par prestataire ou clé. En local : GLM-4.7 Flash (MIT, 16 Go,
   14,9) et DeepSeek V4 Flash (MIT, 150 Go, 34,3, machines de 256 Go) ajoutés.
@@ -2413,6 +2458,17 @@ ne restent ici que les points ouverts.*
    (pas de carte NVIDIA ici). À vérifier sur une vraie machine : que pip résout la pile
    avec les deux roues, que `@@MOTEUR@@unsloth` sort bien, et le gain de vitesse réel.
 
+**Fait le 26/09/2026 : une réponse du Chat continue quand on quitte son Chat.**
+Signalé par Medhi : ouvrir un autre Chat ou en commencer un nouveau arrêtait la
+réponse (`open` et `reset` de `useChat` appelaient « Arrêter »). La réponse vit
+maintenant hors de l'écran, rattachée à son Chat (`reponsesEnCours`), continue, et
+s'enregistre dans son Chat à la fin ; l'écran s'y rabonne en revenant, et la barre
+latérale montre une roue sur le Chat qui écrit encore. Seul « Arrêter » l'arrête ;
+un Chat supprimé arrête la sienne. Vérifié dans le navigateur : poème lancé, nouveau
+Chat ouvert, roue visible, Chat rouvert en direct (plan qui avance), réponse finie
+pendant qu'un autre Chat était affiché, et enregistrée. Limite : une page rechargée
+ou l'application fermée coupe la réponse (rien n'est gardé avant sa fin).
+
 **Ce qui attend une machine qu'on n'a pas**
 
 7. **Qwen-Image** (texte lisible dans l'image) : 48 Go ou carte de 24 Go.
@@ -2475,21 +2531,34 @@ ne restent ici que les points ouverts.*
     `connaissances__chercher`, § 3.10) ; l'après-midi, un agent personnel dont rien ne
     sort vers d'autres (sans messagerie, sans mission « à chaque mail », encadré, sans
     outil qui écrit) lit aussi les bases partagées aux groupes de son propriétaire, et
-    l'écran de l'agent dit ce qu'il lira. Reste : le voir dans l'application de bureau
-    (vu dans le navigateur seulement) ; l'essayer sur une messagerie ; décider avec le
-    client (a) si un tel agent pourrait lire aussi les **documents privés** de son
-    propriétaire (non fait : sa mémoire OpenClaw les garderait si l'agent est ouvert
-    ensuite), (b) s'il faut une visibilité « partagé à des groupes » pour les agents,
-    qui ouvrirait le même droit à un agent de groupe (n'existe pas : un agent est
-    personnel ou d'organisation), (c) que faire de la mémoire d'un employé dont
-    l'audience s'élargit (aujourd'hui gardée, l'écran le dit).
+    l'écran de l'agent dit ce qu'il lira. Le soir, les trois questions tranchées (§ 3.10) :
+    agents partagés à des groupes, documents privés lus par l'agent personnel de leur
+    propriétaire, mémoire mise de côté et vidée avant tout élargissement de l'audience.
+    Vérifié le 25/09/2026 : `npm run securite` (206 contrôles après la fusion du 26/09), et avec l'OpenClaw
+    2026.9.4 d'essai et qwen3-8b (instance jetable 8899, OpenClaw 18877) : l'agent
+    personnel d'Alice rend son code privé ZEBRE-7731 et l'écrit dans
+    `memory/2026-09-25.md` ; ouvert à l'organisation après confirmation (7,4 s pour
+    vider : 1 note, 1 conversation), un collègue lui demande ce code, il répond que les
+    documents n'en parlent pas ; l'agent du groupe Compta répond à Bernard
+    « PAPAYE-3150 » sans le privé d'Alice ; sorti du groupe, Bernard reçoit 404 ; clé
+    par employé en place, l'employé répond toujours après la réécriture de la
+    configuration. Reste : le voir dans l'application de bureau ; l'essayer sur une
+    vraie messagerie ; au palier Libre, les restes hors mémoire (pages libérées de sa
+    base SQLite, registre des tâches, journaux d'OpenClaw) lui sont lisibles, le dire
+    au client ; une mission planifiée qui tournerait pendant le vidage n'est pas
+    détectée (seuls les messages et mails en cours le sont).
 19. **Export RGPD** : fait le 25/09/2026, `/helix/export` contient désormais les bases
     de connaissances (sans vecteurs), les images créées (liste et demandes) et les
     projets d'entraînement (exemples) ; l'effacement d'un compte retire aussi ses
     projets d'entraînement et le modèle rangé dans LM Studio, qu'il oubliait
-    (7 contrôles de plus, section 7 quater de `npm run securite`). Reste : un document supprimé de Fichiers reste listé dans la
-    base (« supprimés depuis ») jusqu'à ce que le propriétaire l'y retire ; son index
-    reste sur le disque jusque-là, sans plus jamais être servi.
+    (7 contrôles de plus, section 7 quater de `npm run securite`). Corrigé le soir
+    (revue du 25/09) : un document supprimé de Fichiers quitte toutes les bases, index
+    compris (`retirerDocumentsPartout`) ; l'effacement d'un compte retire ses documents
+    des bases des collègues (relevés avant que la Bibliothèque ne les oublie : le filtre
+    « ajouté par lui » n'attrapait rien) ; l'export ne nomme plus un document rangé dans
+    une base que la personne ne voit plus, il le compte ; et une clé par employé
+    (HMAC de la clé de l'instance et de son identifiant) remplace la clé commune, qui
+    ouvrait le serveur d'outils de n'importe quel employé. 4 contrôles de plus.
 20. **À essayer dans l'application de bureau** : le fichier des Chats illisible est vu
     le 25/09/2026 dans l'application de développement, profil d'essai (fichier abîmé,
     instance coupée, écriture refusée) ; reste le **trousseau refusé ou verrouillé**
@@ -2522,6 +2591,16 @@ ne restent ici que les points ouverts.*
     instance à un seul compte, on pourrait les lui attribuer ; pas fait) ; renommer une
     session (pas fait, le titre est la première demande) ; l'effacement d'un compte avec
     des sessions de Code, pas essayé.
+24. **Zones protégées et import local** (revue du 25/09/2026, SECURITE.md § 22.6) :
+    corrigés et vérifiés par `npm run securite` et dans le navigateur (instance
+    jetable). Restent : les voir dans l'application de bureau avec le vrai « Tout mon
+    poste » (dossier personnel réel, `~/.helix/data` réel) ; le bash de Helix Code
+    n'est pas borné par ces zones (OpenCode a ses propres outils, fichiers de Helix Code
+    non touchés par cette correction) : à décider avec le client ; la liste des zones
+    est celle des emplacements connus, pas une garantie sur tout secret du poste ;
+    Windows et Linux (trousseaux, `%APPDATA%`) pas couverts ; le choix « Depuis Helix »
+    de l'écran d'un employé n'a été vérifié que par l'API (pas d'employé sur l'instance
+    jetable).
 
 **Titulaire des droits** : tranché le 24/09/2026, « Medhi Clabaut » (entreprise
 individuelle, SIREN 994 907 145), partout ; mentions légales et section

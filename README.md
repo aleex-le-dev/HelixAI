@@ -769,8 +769,8 @@ l'agent d'orchestration par défaut. Aucun tiret cadratin dans les textes affich
   de l'agent, du projet, ou cochées dans la pastille « Connaissances ») répond à partir
   des passages trouvés et cite ses sources sous la réponse ; chacun n'y lit que les
   documents qu'il voit dans Fichiers. Essayé de bout en bout dans l'interface ; Cowork
-  avec des bases et de vrais PDF ne l'ont pas été. Les employés OpenClaw ne les
-  consultent pas encore ;
+  avec des bases et de vrais PDF ne l'ont pas été. Les employés OpenClaw les
+  consultent aussi, dans ce qui est ouvert à toute l'équipe seulement ;
 - **Ligne de commande `helix`** (25/09/2026) : Chat et Helix Code dans un terminal,
   avec les outils et la barrière d'approbation de l'instance (voir « Ligne de
   commande » plus haut). Pas encore livrée avec l'application empaquetée ; les

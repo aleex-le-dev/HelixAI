@@ -716,6 +716,21 @@ Pourquoi ainsi :
   ne les sépare ; les numéros [n] écrits par le modèle, si.
 - Le modèle d'embeddings est celui du rôle `embed` du routeur, jamais un modèle branché
   par une clé personnelle d'office.
+- **Employés OpenClaw : seulement ce qui est ouvert à toute l'équipe** (décidé le
+  25/09/2026). L'employé d'un agent cherche dans les bases de cet agent par un outil,
+  `connaissances__chercher`, servi par son serveur d'outils comme ses autres outils
+  Helix. N'y comptent que les bases **et** les documents ouverts à toute l'équipe, ni
+  les droits du propriétaire de l'agent, ni ceux de qui lui parle. Pourquoi : l'appel
+  d'outil arrive d'OpenClaw sans dire pour qui l'employé travaille à cet instant
+  (plusieurs conversations, missions sans personne, mails reçus, messageries), et ce
+  qu'il lit sort de lui (réponse à un collègue, message Telegram, brouillon, notes de
+  sa mémoire relues ensuite). Avec les droits du propriétaire, un document privé
+  sortirait vers quelqu'un qui n'a pas à le voir. C'est la règle de sa famille
+  « bibliothèque ». Un outil plutôt que l'injection des passages : l'employé appelle le
+  modèle sans séance, et le champ `connaissances` du Chat n'est lu qu'avec une séance ;
+  surtout, sa boucle appelle le modèle plusieurs fois par tâche, c'est à lui de chercher
+  quand il en a besoin. Pas de citations sous la réponse : l'employé nomme le document
+  dans son texte (« (source : … ) »), sa fiche de poste le lui demande.
 
 ### 3.11 Ligne de commande : un client de plus, qui ne décide rien
 
@@ -2160,6 +2175,40 @@ fin de `gateway/src/connaissances.ts`, pour que `scripts/i18n-passerelle.mjs` le
 relève. Catalogues le 25/09/2026 : interface 2 301 phrases, passerelle 650, anglais et
 chinois à 100 %. `npm run securite` : 125 contrôles, tous réussis.
 
+**Employés OpenClaw et bases de connaissances** (ancien point 18, § 3.10). Les bases
+d'un agent sont recopiées sur son employé (`Employe.connaissances`, par l'écran du
+propriétaire, `useMiseEnService.ts`) ; l'employé a l'outil `connaissances__chercher`
+dès qu'il en a (même sans « Autoriser les outils »), refusé aux messageries comme ses
+autres outils Helix sauf si on les leur ouvre ; sa fiche de poste lui dit de chercher
+avant de répondre et de citer le document, sans nommer les bases. L'écran de l'agent
+le dit en une phrase (création et « Connaissances de … »).
+Mesuré le 25/09/2026 sur ce poste (Mac mini M4, 16 Go), passerelle d'essai sur le port
+8897 avec données et dossier personnel jetables, instance OpenClaw 2026.9.4 d'essai sur
+le port 18897 (ni `~/.openclaw`, ni l'instance de l'application), `qwen3-8b` et
+`text-embedding-nomic-embed-text-v1.5` déjà chargés dans LM Studio : un agent à trois
+bases (« Agence », ouverte à l'équipe, avec une grille tarifaire, un règlement et une
+note privée de sa propriétaire ; « Perso Alice », privée ; « Paie », ouverte par une
+collègue mais contenant son dossier de salaire privé). Déploiement 8,9 s. « Combien coûte
+une traduction de 2 000 mots livrée en urgence ? » : outil appelé, 2 passages, réponse
+juste (240 + 30 % = 312 euros) « (source : Grille tarifaire 2026.txt) », en 84 s. Une
+mission lancée à la main (« trois heures de relecture, remise fidélité ») : compte rendu
+juste (135 euros, 8 % dès le dixième projet) avec la source, en 80 s. « Quel est le
+salaire annuel de Bruno ? », demandé par Bruno lui-même, et « le code du coffre
+d'Alice ? », demandé par Alice : « les documents n'en parlent pas », aucun secret ;
+appelé en direct, l'outil ne cite que les deux documents ouverts. Le journal dit
+`outil.appele`, `bases: 3`, `passages: 2`, sans la question.
+`npm run securite` : 140 contrôles, tous réussis (15 de plus, section 6 ter, avec un
+faux modèle d'embeddings et un faux OpenClaw). Catalogues : interface 2 302 phrases,
+passerelle 650, anglais et chinois à 100 %. *Pas essayé* : une messagerie (Telegram…)
+avec `outilsEntreprise` ouvert ; une base de groupe (exclue par la règle, non
+vérifiée à l'écran) ; l'écran lui-même (la recopie des bases par `useMiseEnService`
+n'a été éprouvée que par la route, pas dans l'application de bureau) ; de gros
+documents. Constaté : qwen3-8b écrit encore du gras Markdown malgré la consigne, et à
+une troisième question de la même conversation il a répondu sans rappeler l'outil
+(juste, les passages étaient dans la conversation). L'instance OpenClaw de
+l'application (port 18800) a redémarré à 10 h 23, avant que la passerelle d'essai
+n'existe (10 h 28) : sans lien avec l'essai.
+
 ### Ce qui reste à faire
 
 *Liste refaite le 25/09/2026. Ce qui est fait est décrit plus haut ;
@@ -2239,10 +2288,13 @@ ne restent ici que les points ouverts.*
     client. Traductions anglaise et chinoise de ses textes (`cli/textes.mjs`), si le
     client le demande. Documenter `NODE_EXTRA_CA_CERTS` pour une instance à certificat
     auto-signé.
-18. **Employés OpenClaw et bases de connaissances** : les employés ne consultent pas
-    encore les bases de leur agent ; seuls le Chat et Cowork le font. Il faudrait un
-    outil `connaissances__chercher` limité à ce qui est ouvert à toute l'équipe, comme
-    la Bibliothèque.
+18. **Employés OpenClaw et bases de connaissances** : fait le 25/09/2026 (outil
+    `connaissances__chercher`, ce qui est ouvert à toute l'équipe seulement, § 3.10).
+    Reste : le voir dans l'application de bureau (choisir les bases sur la carte d'un
+    agent en service, puis lui parler) ; l'essayer sur une messagerie ; décider avec
+    le client si un agent **personnel** sans messagerie ni mission « à chaque mail »
+    pourrait lire avec les droits de son propriétaire (non fait : sa mémoire OpenClaw
+    et ses comptes rendus garderaient ce qu'il a lu).
 19. **Bases de connaissances hors de l'export RGPD** : `/helix/export` ne contient pas
     les bases (métadonnées). Et un document supprimé de Fichiers reste listé dans la
     base (« supprimés depuis ») jusqu'à ce que le propriétaire l'y retire ; son index

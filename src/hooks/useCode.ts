@@ -7,11 +7,14 @@ import {
   translate,
   nomOutil,
   argumentsOutil,
+  actionOutil,
+  texteAttente,
   type CodeEvent,
   type CodeStatus,
   type ReglagesCode,
 } from "@/lib/code";
 import type { Message, ToolTrace } from "./useChat";
+import { appliquerSuivi, suiviNeuf, terminerSuivi, type SuiviCode } from "@/lib/suiviCode";
 
 import { ouvrirFlux } from "@/lib/flux";
 import { t } from "@/lib/i18n";
@@ -85,6 +88,8 @@ const memoire = {
   dernierSigne: ref(0),
   /** La dernière demande a été arrêtée : le prochain envoi le dit au modèle. */
   arretee: ref(false),
+  /** Où en est l'agent sur la dernière demande : le panneau de suivi (lib/suiviCode.ts). */
+  suivi: ref<SuiviCode | null>(null),
   /** Écrans abonnés, prévenus à chaque changement. */
   abonnes: new Set<() => void>(),
 };
@@ -120,12 +125,14 @@ export function useCode(dossier?: string, reglages: ReglagesCode = {}) {
     memoire.flux.current = null;
     memoire.tour.current = null;
     memoire.arretee.current = false;
+    memoire.suivi.current = null;
     memoire.generation.current += 1;
   }
 
   const [status, setStatus] = useState<CodeStatus | null>(null);
   const [messages, setMessages] = useState<Message[]>(memoire.messages.current);
   const [busy, setBusy] = useState(memoire.busy.current);
+  const [suivi, setSuivi] = useState<SuiviCode | null>(memoire.suivi.current);
   /** Miroir de `busy`, lisible depuis les fonctions mémorisées. */
   const busyRef = memoire.busy;
   const marquerOccupe = useCallback((valeur: boolean) => {
@@ -144,12 +151,16 @@ export function useCode(dossier?: string, reglages: ReglagesCode = {}) {
   const listRef = memoire.messages;
   const reglagesRef = useRef(reglages);
   reglagesRef.current = reglages;
+  /** Dossier du projet, pour montrer des chemins relatifs dans le suivi. */
+  const dossierRef = useRef<string | undefined>(dossier);
+  dossierRef.current = dossier ?? status?.projectDir;
 
   // Cet écran suit la conversation, qu'elle change par lui ou pendant son absence.
   useEffect(() => {
     const suivre = () => {
       setMessages(memoire.messages.current);
       setBusy(memoire.busy.current);
+      setSuivi(memoire.suivi.current);
     };
     memoire.abonnes.add(suivre);
     suivre();
@@ -196,8 +207,9 @@ export function useCode(dossier?: string, reglages: ReglagesCode = {}) {
    * cachait tout le texte de la réponse : l'affichage ne montre que l'erreur.)
    */
   const terminer = useCallback(
-    (tour: Tour, note?: string) => {
+    (tour: Tour, note?: string, issue: "fini" | "echec" = note ? "echec" : "fini") => {
       tour.fini = true;
+      if (memoire.suivi.current) memoire.suivi.current = terminerSuivi(memoire.suivi.current, issue);
       const current = listRef.current.find((m) => m.id === tour.replyId);
       if (current) {
         // Un outil encore « en cours » quand le tour s'arrête ne se terminera plus.
@@ -234,6 +246,15 @@ export function useCode(dossier?: string, reglages: ReglagesCode = {}) {
       if (!current) return;
       // L'agent reparle : l'avertissement de silence n'a plus lieu d'être.
       if (current.statut && event.kind !== "statut") patch(tour.replyId, { statut: undefined });
+      // Le panneau de suivi : les écrans ne sont prévenus que si quelque chose a changé.
+      if (memoire.suivi.current) {
+        const avant = memoire.suivi.current;
+        const apres = appliquerSuivi(avant, event, dossierRef.current);
+        if (apres !== avant) {
+          memoire.suivi.current = apres;
+          prevenir();
+        }
+      }
 
       switch (event.kind) {
         case "etape":
@@ -244,9 +265,14 @@ export function useCode(dossier?: string, reglages: ReglagesCode = {}) {
            */
           if (tour.fini) {
             tour.fini = false;
+            if (memoire.suivi.current) memoire.suivi.current = { ...memoire.suivi.current, fin: undefined, issue: undefined };
             patch(tour.replyId, { streaming: true, error: undefined });
             marquerOccupe(true);
           }
+          break;
+        case "attente":
+          // Le modèle n'a encore rien rendu : on dit pourquoi, au lieu d'annoncer une panne.
+          patch(tour.replyId, { statut: event.etat === "fin" ? undefined : texteAttente(event) });
           break;
         case "statut":
           patch(tour.replyId, { statut: event.text });
@@ -262,9 +288,10 @@ export function useCode(dossier?: string, reglages: ReglagesCode = {}) {
           });
           break;
         case "tool_start": {
+          const { libelle, cible } = actionOutil(event.tool, event.input, dossierRef.current);
           const traces: ToolTrace[] = [
             ...(current.tools ?? []),
-            { name: nomOutil(event.tool), args: argumentsOutil(event.input), running: true },
+            { name: nomOutil(event.tool), args: argumentsOutil(event.input), running: true, libelle, cible },
           ];
           tour.outils.set(event.callID, traces.length - 1);
           patch(tour.replyId, { tools: traces });
@@ -289,7 +316,8 @@ export function useCode(dossier?: string, reglages: ReglagesCode = {}) {
           terminer(tour, event.message);
           break;
         case "fin":
-          terminer(tour, event.note);
+          // Fin sans « stop » (longueur, filtre) : ce qui est écrit reste une réponse.
+          terminer(tour, event.note, "fini");
           break;
         case "done":
           terminer(tour);
@@ -419,6 +447,7 @@ export function useCode(dossier?: string, reglages: ReglagesCode = {}) {
           statut: sessionRef.current ? undefined : t("Démarrage de l'agent de code..."),
         },
       ]);
+      memoire.suivi.current = suiviNeuf();
       marquerOccupe(true);
       dernierSigneRef.current = Date.now();
 
@@ -435,6 +464,7 @@ export function useCode(dossier?: string, reglages: ReglagesCode = {}) {
           statut: undefined,
           error: err instanceof Error ? err.message : String(err),
         });
+        if (memoire.suivi.current) memoire.suivi.current = terminerSuivi(memoire.suivi.current, "echec");
         marquerOccupe(false);
         return;
       }
@@ -531,6 +561,7 @@ export function useCode(dossier?: string, reglages: ReglagesCode = {}) {
     tourRef.current = null;
     const session = tour?.sessionID ?? sessionRef.current;
     if (session) memoire.arretee.current = true;
+    if (memoire.suivi.current) memoire.suivi.current = terminerSuivi(memoire.suivi.current, "arrete");
     if (tour && !tour.fini) {
       tour.fini = true;
       const current = listRef.current.find((m) => m.id === tour.replyId);
@@ -567,10 +598,11 @@ export function useCode(dossier?: string, reglages: ReglagesCode = {}) {
     sessionRef.current = null;
     tourRef.current = null;
     memoire.arretee.current = false;
+    memoire.suivi.current = null;
     setError(undefined);
     commit([]);
     marquerOccupe(false);
   }, [commit, marquerOccupe]);
 
-  return { status, messages, busy, error, send, stop, reset };
+  return { status, messages, busy, error, send, stop, reset, suivi };
 }

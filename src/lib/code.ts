@@ -5,7 +5,8 @@
  */
 
 import { apiFetch } from "@/lib/endpoint";
-import { t, tf } from "@/lib/i18n";
+import { locale, t, tf } from "@/lib/i18n";
+import { libelleOutil } from "@/lib/libellesOutils";
 
 export interface CodeStatus {
   available: boolean;
@@ -99,6 +100,32 @@ export type CodeEvent =
   | { kind: "tool_end"; callID: string; ok: boolean; preview: string }
   /** Ce qui se passe sans être une réponse : nouvelle tentative, résumé… */
   | { kind: "statut"; text: string }
+  /**
+   * Le modèle n'a encore rien rendu : il lit la demande, attend son tour ou se
+   * charge (`helix.statut`, envoyé par l'instance toutes les dix secondes,
+   * voir gateway/src/attenteModele.ts). « fin » : il commence à répondre.
+   * `depuis` est déjà ramené à l'horloge de cet écran.
+   */
+  | {
+      kind: "attente";
+      etat: "lecture" | "attente" | "chargement" | "fin";
+      depuis: number;
+      jetons?: number;
+      progression?: number;
+      file?: number;
+      sousTache: boolean;
+    }
+  /** Signe de vie : l'agent réfléchit, écrit, ou prépare un outil (sans numéro, jamais rejoué). */
+  | { kind: "activite"; phase?: "reflexion" | "ecriture" | "outil"; tool?: string; sousTache: boolean }
+  /** Un outil d'un sous-agent (outil `task`), rapporté à la session qui l'a lancé. */
+  | {
+      kind: "sous_outil";
+      parentCallID?: string;
+      callID: string;
+      tool: string;
+      input: Record<string, unknown>;
+      etat: "encours" | "fini" | "echec";
+    }
   /** Le moteur a échoué : sans cet événement, l'écran attend indéfiniment. */
   | { kind: "error"; message: string }
   /**
@@ -130,6 +157,41 @@ export function translate(raw: unknown): CodeEvent | null {
 
   if (type === "session.next.prompted" && typeof data.messageID === "string") {
     return { kind: "demande", messageID: data.messageID };
+  }
+  if (type === "helix.statut") {
+    const etat = data.etat;
+    if (etat !== "lecture" && etat !== "attente" && etat !== "chargement" && etat !== "fin") return null;
+    const nombre = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : undefined);
+    /*
+     * Le temps écoulé se compte sur l'horloge de l'instance (`timestamp` de
+     * l'évènement moins `depuis`), puis se reporte sur celle de l'écran : une
+     * instance distante dont l'horloge avance n'affiche pas une attente fausse.
+     */
+    const ecoule = Math.max(0, (nombre(data.timestamp) ?? Date.now()) - (nombre(data.depuis) ?? Date.now()));
+    return {
+      kind: "attente",
+      etat,
+      depuis: Date.now() - ecoule,
+      jetons: nombre(data.jetons),
+      progression: nombre(data.progression),
+      file: nombre(data.file),
+      sousTache: data.sousTache === true,
+    };
+  }
+  if (type === "helix.activite") {
+    const phase = data.phase === "reflexion" || data.phase === "ecriture" || data.phase === "outil" ? data.phase : undefined;
+    return { kind: "activite", phase, tool: typeof data.tool === "string" ? data.tool : undefined, sousTache: data.sousTache === true };
+  }
+  if (type === "helix.soustache") {
+    const etat = data.etat === "fini" || data.etat === "echec" ? data.etat : "encours";
+    return {
+      kind: "sous_outil",
+      parentCallID: typeof data.parentCallID === "string" ? data.parentCallID : undefined,
+      callID: String(data.callID ?? ""),
+      tool: String(data.tool ?? "outil"),
+      input: (data.input as Record<string, unknown>) ?? {},
+      etat,
+    };
   }
   if (type === "session.next.step.started") return { kind: "etape" };
   if (type === "session.next.reasoning.ended" && typeof data.text === "string") {
@@ -256,6 +318,103 @@ export function nomOutil(tool: string): string {
    */
   if (tool.startsWith("helix_") && tool.includes("__")) return tool.slice("helix_".length);
   return OUTILS_CONNUS[tool] ? `fichiers__${OUTILS_CONNUS[tool]}` : `code__${tool}`;
+}
+
+/** « 45 s », « 2 min 05 s », « 1 h 03 min ». */
+export function dureeCourte(ms: number): string {
+  const s = Math.max(0, Math.floor(ms / 1000));
+  if (s < 60) return tf("{0} s", s);
+  const m = Math.floor(s / 60);
+  if (m < 60) return tf("{0} min {1} s", m, String(s % 60).padStart(2, "0"));
+  return tf("{0} h {1} min", Math.floor(m / 60), String(m % 60).padStart(2, "0"));
+}
+
+/** « 18 000 » : une taille de demande arrondie, pour dire un ordre de grandeur. */
+const environ = (jetons: number) => (jetons >= 1000 ? Math.round(jetons / 1000) * 1000 : Math.round(jetons / 100) * 100).toLocaleString(locale());
+
+/**
+ * Ce que l'on dit pendant que le modèle n'a encore rien rendu. Le temps
+ * écoulé, toujours ; la progression, seulement quand l'instance a pu la lire
+ * de façon sûre (voir gateway/src/attenteModele.ts).
+ */
+export function texteAttente(
+  e: { etat: "lecture" | "attente" | "chargement" | "fin"; depuis: number; jetons?: number; progression?: number; sousTache?: boolean },
+  maintenant = Date.now(),
+): string {
+  const duree = dureeCourte(maintenant - e.depuis);
+  if (e.etat === "chargement") return tf("Le modèle se charge en mémoire ({0})...", duree);
+  if (e.etat === "attente") return tf("Le modèle termine une autre demande avant celle-ci ({0})...", duree);
+  if (e.etat === "fin") return t("Le modèle commence à répondre...");
+  const detail = [
+    duree,
+    e.progression !== undefined ? tf("{0} %", e.progression) : undefined,
+    e.jetons ? tf("environ {0} jetons", environ(e.jetons)) : undefined,
+  ]
+    .filter(Boolean)
+    .join(", ");
+  return e.sousTache ? tf("Le modèle lit la demande de la sous-tâche ({0})...", detail) : tf("Le modèle lit la demande ({0})...", detail);
+}
+
+/**
+ * Chemin montré à la personne : relatif au dossier du projet quand il y est,
+ * entier sinon (l'affichage le coupe).
+ */
+export function cheminCourt(chemin: string, dossier?: string): string {
+  if (dossier && chemin.startsWith(`${dossier.replace(/\/$/, "")}/`)) return chemin.slice(dossier.replace(/\/$/, "").length + 1);
+  return chemin;
+}
+
+/**
+ * Ce que fait un outil de l'agent de code, en mots, et sur quoi.
+ *
+ * Constat de Medhi le 25/09/2026 : pendant le travail, l'écran n'affichait que
+ * des lignes « ✓ task », et l'on croyait que tout plantait. Chaque outil a
+ * maintenant un libellé, et sa cible : le fichier lu ou écrit, la commande
+ * lancée, le motif cherché, le connecteur appelé ; une sous-tâche dit ce
+ * qu'elle fait (sa `description`, que l'agent écrit pour la personne).
+ */
+export function actionOutil(tool: string, input: Record<string, unknown> = {}, dossier?: string): { libelle: string; cible?: string } {
+  const texte = (cle: string) => (typeof input[cle] === "string" && (input[cle] as string).trim() ? (input[cle] as string).trim() : undefined);
+  const fichier = texte("filePath") ?? texte("path");
+  const cible = fichier ? cheminCourt(fichier, dossier) : undefined;
+  switch (tool) {
+    case "read":
+      return { libelle: t("Lecture"), cible };
+    case "write":
+      return { libelle: t("Écriture"), cible };
+    case "edit":
+    case "multiedit":
+    case "patch":
+    case "apply_patch":
+      return { libelle: t("Modification"), cible };
+    case "list":
+      return { libelle: t("Contenu d'un dossier"), cible };
+    case "glob":
+      return { libelle: t("Recherche de fichiers"), cible: texte("pattern") };
+    case "grep":
+      return { libelle: t("Recherche dans le code"), cible: texte("pattern") };
+    case "bash": {
+      const commande = texte("command")?.split("\n")[0];
+      return { libelle: t("Commande"), cible: commande && commande.length > 120 ? `${commande.slice(0, 119)}…` : commande };
+    }
+    case "task": {
+      const description = texte("description");
+      return description ? { libelle: tf("Sous-tâche : {0}", description) } : { libelle: t("Sous-tâche") };
+    }
+    case "todowrite":
+      return { libelle: t("Liste de tâches mise à jour") };
+    case "todoread":
+      return { libelle: t("Lecture de la liste de tâches") };
+    case "webfetch":
+      return { libelle: t("Lecture d'une page web"), cible: texte("url") };
+    case "skill":
+      return { libelle: t("Chargement d'une procédure") };
+  }
+  // Connecteurs de l'instance (« helix_drive__chercher ») : le libellé déjà connu du Chat.
+  if (tool.startsWith("helix_") && tool.includes("__")) {
+    return { libelle: libelleOutil(tool.slice("helix_".length)), cible: texte("query") ?? texte("texte") ?? cible };
+  }
+  return { libelle: tool.replace(/_/g, " "), cible };
 }
 
 /**

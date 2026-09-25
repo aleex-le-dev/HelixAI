@@ -153,6 +153,21 @@ Ce qui ne fonctionne pas :
 Ce qui fonctionne : sessions OpenCode, choix du dossier de projet, envoi de
 consignes, interruption, flux d'évènements relayé par la passerelle (`useCode`).
 
+**Panneau de suivi** (25/09/2026, `src/components/code/SuiviCode.tsx`) : à droite
+dès qu'une conversation existe, ouvert d'office à partir de 1 024 px, par-dessus
+l'écran en dessous (bouton « Afficher le suivi », croix pour le masquer). Cartes
+repliables (`PanelCard`, désormais dans `components/ui`) : « En ce moment » (lecture
+de la demande avec temps écoulé, barre de progression quand l'instance la connaît,
+taille approximative ; attente de son tour ; chargement ; réflexion ; outil en cours
+et sa cible ; sous-tâche et son action du moment ; « Terminé », « Arrêté à votre
+demande. » ou « Interrompu »), « Tâches » (liste `todowrite` de l'agent), « Actions »
+(chaque outil, sa durée, et pour une sous-tâche ses propres outils), « Fichiers »
+(Lu, Modifié, Écrit), temps total. Le fil de la conversation dit aussi ce que fait
+chaque outil (« Sous-tâche : … », « Écriture · index.html ») et, pendant la lecture,
+« Le modèle lit la demande (33 s, 32 %, environ 9 000 jetons)... » au lieu de
+l'annonce de panne. Vu dans le navigateur le 25/09/2026 (instance jetable, Qwen3 8B),
+à 1 400 px et à 375 px ; pas vu dans l'application de bureau.
+
 ⚠ **OpenCode n'est pas empaqueté.** Le binaire doit être présent sur la machine
 (`~/.opencode/bin/opencode` ou dans le `PATH`). Sinon l'écran annonce que le
 moteur est absent.

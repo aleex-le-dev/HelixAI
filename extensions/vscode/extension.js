@@ -169,8 +169,40 @@ async function seConnecter(contexte) {
 /* Helix Code                                                          */
 /* ------------------------------------------------------------------ */
 
-/** Nom lisible des outils de l'agent de code. */
-const OUTILS = { read: "Lecture", write: "Écriture", edit: "Modification", list: "Liste", glob: "Recherche", grep: "Recherche", bash: "Commande" };
+/** Nom lisible des outils de l'agent de code, les mêmes que l'écran Code et la ligne de commande. */
+const OUTILS = {
+  read: "Lecture",
+  write: "Écriture",
+  edit: "Modification",
+  list: "Liste",
+  glob: "Recherche",
+  grep: "Recherche",
+  bash: "Commande",
+  webfetch: "Page web",
+  todowrite: "Liste de tâches mise à jour",
+  todoread: "Lecture de la liste de tâches",
+  task: "Sous-tâche",
+};
+
+/** « 45 s », « 2 min 05 s ». */
+function duree(ms) {
+  const s = Math.max(0, Math.floor(ms / 1000));
+  return s < 60 ? `${s} s` : `${Math.floor(s / 60)} min ${String(s % 60).padStart(2, "0")} s`;
+}
+
+/**
+ * Ce que l'on dit pendant que le modèle n'a encore rien rendu (`helix.statut`
+ * de l'instance, toutes les dix secondes) : sans lui, une lecture de deux
+ * minutes ressemblait à une panne. Chaîne vide : le modèle répond, on efface.
+ */
+function texteStatut(d) {
+  const ecoule = duree(Math.max(0, (Number(d.timestamp) || Date.now()) - (Number(d.depuis) || Date.now())));
+  if (d.etat === "chargement") return `Le modèle se charge en mémoire (${ecoule})...`;
+  if (d.etat === "attente") return `Le modèle termine une autre demande avant celle-ci (${ecoule})...`;
+  if (d.etat !== "lecture") return "";
+  const detail = [ecoule, typeof d.progression === "number" ? `${d.progression} %` : ""].filter(Boolean).join(", ");
+  return `${d.sousTache ? "Le modèle lit la demande de la sous-tâche" : "Le modèle lit la demande"} (${detail})...`;
+}
 
 /**
  * Une demande à Helix Code, sur le dossier ouvert dans VS Code. Rend les
@@ -227,11 +259,17 @@ async function demanderAuCode(contexte, etat, texte, surEvenement, signal) {
           continue;
         }
         const d = ev.data || {};
-        if (ev.type === "session.next.text.ended" && d.text) surEvenement({ type: "texte", texte: d.text });
+        if (ev.type === "helix.statut") surEvenement({ type: "statut", statut: texteStatut(d) });
+        else if (ev.type === "session.next.text.ended" && d.text) surEvenement({ type: "texte", texte: d.text });
         else if (ev.type === "session.next.tool.called") {
           const cible = d.input?.filePath || d.input?.path || d.input?.command || d.input?.pattern || "";
-          // Connecteurs de l'instance : « helix_drive__chercher » chez OpenCode, « drive__chercher » ici.
-          surEvenement({ type: "outil", outil: `${OUTILS[d.tool] || String(d.tool ?? "").replace(/^helix_/, "")} ${cible}`.trim() });
+          // Une sous-tâche dit ce qu'elle fait (sa description), au lieu de « task ».
+          const libelle =
+            d.tool === "task" && typeof d.input?.description === "string"
+              ? `${OUTILS.task} : ${d.input.description}`
+              : // Connecteurs de l'instance : « helix_drive__chercher » chez OpenCode, « drive__chercher » ici.
+                `${OUTILS[d.tool] || String(d.tool ?? "").replace(/^helix_/, "")} ${cible}`.trim();
+          surEvenement({ type: "outil", outil: libelle });
         } else if (ev.type === "session.next.tool.failed") surEvenement({ type: "outil-fin", ok: false });
         else if (ev.type === "session.next.tool.success") surEvenement({ type: "outil-fin", ok: true });
         else if (ev.type === "session.next.step.failed") throw new Error(d.error?.message || "L'agent de code a interrompu la tâche.");

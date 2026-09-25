@@ -57,6 +57,9 @@ interface LmsModelEntry {
   vision?: boolean;
   /** Déclaré par LM Studio : le modèle a-t-il appris à appeler des outils ? */
   trainedForToolUse?: boolean;
+  /** `lms ls` : plus grande taille de conversation acceptée ; `lms ps` : celle du chargement en cours. */
+  maxContextLength?: number;
+  contextLength?: number;
 }
 
 /**
@@ -90,6 +93,7 @@ async function lmStudioMetadata(): Promise<Map<string, Partial<ModelInfo>>> {
       ...(entry.type ? { nature: entry.type } : {}),
       ...(typeof entry.vision === "boolean" ? { voit: entry.vision } : {}),
       ...(typeof entry.trainedForToolUse === "boolean" ? { outils: entry.trainedForToolUse } : {}),
+      ...(typeof entry.maxContextLength === "number" ? { contexteMax: entry.maxContextLength } : {}),
       // Rangé par l'entraînement sous son propre éditeur (entrainement.ts).
       ...((entry.path ?? "").startsWith("helix-entrainement/") ? { entraine: true } : {}),
     });
@@ -98,7 +102,11 @@ async function lmStudioMetadata(): Promise<Map<string, Partial<ModelInfo>>> {
   for (const entry of await parse(["ps", "--json"])) {
     const key = entry.modelKey ?? entry.path;
     if (!key) continue;
-    meta.set(key, { ...(meta.get(key) ?? {}), loaded: true });
+    meta.set(key, {
+      ...(meta.get(key) ?? {}),
+      loaded: true,
+      ...(typeof entry.contextLength === "number" ? { contexteCharge: entry.contextLength } : {}),
+    });
   }
 
   return meta;

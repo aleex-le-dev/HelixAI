@@ -2214,8 +2214,13 @@ async function handleCodePrompt(
   } catch {
     return send(res, 502, { error: { message: t("Flux d'événements indisponible.") } });
   }
-  // Un connecteur branché ou retiré depuis : OpenCode relit la liste des outils (outilsCode.ts).
-  await rafraichirOutilsCode(reglageEnvoi.dossier);
+  /*
+   * Un connecteur branché ou retiré depuis, ou une bibliothèque qui a reçu
+   * son premier document : OpenCode relit la liste des outils (outilsCode.ts),
+   * établie pour la personne qui envoie.
+   */
+  const envoyeur = await demandeur(req, new URL(req.url ?? "/", "http://localhost"));
+  await rafraichirOutilsCode(reglageEnvoi.dossier, envoyeur?.userId);
 
   /*
    * Une demande de site : Helix pose d'abord un design professionnel dans le

@@ -21,6 +21,8 @@ import * as slack from "./slack.ts";
 import { journaliser } from "./audit.ts";
 import * as approbation from "./approbation.ts";
 import * as usage from "./usage.ts";
+import { suivreAppelModele } from "./attenteModele.ts";
+import { compacterOutils } from "./allegementCode.ts";
 import {
   ETAPES_TOTALES_MAX,
   PROFONDEUR_MAX,
@@ -822,11 +824,26 @@ export async function handleChatRequest(
    * introuvable » ; sans le message, la personne regarde une bulle vide
    * pendant les quelques secondes que prend la mise en mémoire.
    */
+  /*
+   * Un appel de Helix Code (OpenCode joint l'identifiant de sa session) :
+   * tant que le modèle n'a rien rendu, chargement compris, la passerelle dit
+   * aux clients où il en est (attenteModele.ts). Mesuré le 25/09/2026 :
+   * jusqu'à 146,9 s de lecture avant le premier mot, que l'écran prenait pour
+   * une panne. La taille est affinée juste avant l'envoi.
+   */
+  // Seulement l'appel qui porte les outils : le titre de la session, demandé à côté, n'est pas le travail.
+  const attente =
+    interfaceHelix || !Array.isArray(body.tools) || body.tools.length === 0
+      ? null
+      : suivreAppelModele(req.headers, model.id, backend, JSON.stringify(body.messages).length + JSON.stringify(body.tools).length);
   if (model.backendKind === "lmstudio" && model.loaded === false) {
     signaler({ type: "statut", message: tf("Chargement de {0} en mémoire...", model.id) });
+    attente?.chargement(true);
     const charge = await loadModel(model.id);
+    attente?.chargement(false);
     invalidate();
     if (!charge.ok) {
+      attente?.fin();
       signalerErreur(charge.message);
       res.write("data: [DONE]\n\n");
       res.end();
@@ -955,7 +972,13 @@ export async function handleChatRequest(
         : messages;
     const payload = basePayload(body, model, fil);
     if (callerTools && repetitions < REPETITIONS_ARRETER) {
-      payload.tools = model.backendKind === "lmstudio" ? callerTools.map(adapterPourMoteurLocal) : callerTools;
+      /*
+       * Descriptions des outils livrés d'OpenCode raccourcies (allegementCode.ts) :
+       * mesuré le 25/09/2026, 5 915 jetons d'outils sur 8 025 pour la demande la
+       * plus simple, relus par le modèle chaque fois qu'il en a perdu le début.
+       */
+      const outils = compacterOutils(callerTools);
+      payload.tools = model.backendKind === "lmstudio" ? outils.map(adapterPourMoteurLocal) : outils;
     } else if (callerTools) {
       console.log(`[chat] ${repetitions} actions identiques de suite : outils retirés pour cette réponse.`);
     }
@@ -969,6 +992,15 @@ export async function handleChatRequest(
      * le moteur a envoyé ; la mesure n'y ajoute ni n'y retire un octet.
      */
     let releve: usage.Releve | undefined;
+    // Une ligne au journal pour chaque appel de Helix Code, sans contenu : la taille de ce qui part au modèle.
+    if (attente) {
+      const corpsEnvoye = JSON.stringify(payload);
+      attente.taille(corpsEnvoye.length);
+      const outilsEnvoyes = Array.isArray(payload.tools) ? payload.tools : [];
+      console.log(
+        `[code] appel au modèle ${model.id} : ${corpsEnvoye.length} caractères, dont ${JSON.stringify(outilsEnvoyes).length} pour ${outilsEnvoyes.length} outils`,
+      );
+    }
     try {
       const upstream = await callUpstream(backend, payload, arret.signal);
       if (!upstream.ok || !upstream.body) {
@@ -981,6 +1013,7 @@ export async function handleChatRequest(
         for (;;) {
           const { done, value } = await reader.read();
           if (done) break;
+          attente?.premierMorceau();
           res.write(value);
           lire(value);
         }
@@ -988,6 +1021,7 @@ export async function handleChatRequest(
     } catch (err) {
       if (!arret.signal.aborted) signalerErreur(err instanceof Error ? err.message : String(err));
     } finally {
+      attente?.fin();
       releve?.clore();
       res.end();
     }

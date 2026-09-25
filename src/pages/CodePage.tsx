@@ -1,6 +1,8 @@
 import { useState } from "react";
-import { TriangleAlert } from "lucide-react";
+import { PanelRight, TriangleAlert } from "lucide-react";
 import { LogoMark } from "@/components/ui/Logo";
+import { IconButton } from "@/components/ui/IconButton";
+import { SuiviCodePanel } from "@/components/code/SuiviCode";
 import { Composer } from "@/components/chat/Composer";
 import { DossierTravailChip } from "@/components/chat/DossierTravailChip";
 import { MessageList } from "@/components/chat/MessageList";
@@ -14,6 +16,13 @@ import { t } from "@/lib/i18n";
 /** Ecran Code (capture 9), adossé au moteur OpenCode via la passerelle. */
 export function CodePage() {
   const [draft, setDraft] = useState("");
+  /*
+   * Panneau de suivi ouvert d'office sur un écran large ; sur un écran étroit,
+   * il couvrirait la conversation : on l'ouvre à la demande.
+   */
+  const [suiviOuvert, setSuiviOuvert] = useState(
+    () => typeof window === "undefined" || window.matchMedia("(min-width: 1024px)").matches,
+  );
   const { profile, update } = useProfile();
   /*
    * Dossier choisi pour cette session. Il n'est transmis qu'à l'ouverture de la
@@ -86,24 +95,48 @@ export function CodePage() {
   /* --- Session en cours ------------------------------------------------- */
   if (code.messages.length > 0) {
     return (
-      <div className="flex h-full flex-col bg-dotted">
-        <div className="min-h-0 flex-1 overflow-y-auto">
-          <div className="mx-auto w-full max-w-[760px] px-6 py-8">
-            <MessageList messages={code.messages} />
-            {code.error && (
-              <InfoBox
-                tone="warning"
-                className="mt-4"
-                leading={<TriangleAlert size={15} strokeWidth={1.75} />}
-              >
-                {code.error}
-              </InfoBox>
-            )}
+      <div className="relative flex h-full min-w-0">
+        {!suiviOuvert && (
+          <IconButton
+            icon={PanelRight}
+            label={t("Afficher le suivi")}
+            onClick={() => setSuiviOuvert(true)}
+            className="absolute right-4 top-4 z-20"
+          />
+        )}
+        <section className="flex min-w-0 flex-1 flex-col bg-dotted">
+          <div className="min-h-0 flex-1 overflow-y-auto">
+            <div className="mx-auto w-full max-w-[760px] px-6 py-8">
+              <MessageList messages={code.messages} />
+              {code.error && (
+                <InfoBox
+                  tone="warning"
+                  className="mt-4"
+                  leading={<TriangleAlert size={15} strokeWidth={1.75} />}
+                >
+                  {code.error}
+                </InfoBox>
+              )}
+            </div>
           </div>
-        </div>
-        <div className="shrink-0 px-6 pb-5">
-          <div className="mx-auto w-full max-w-[760px]">{composer}</div>
-        </div>
+          <div className="shrink-0 px-6 pb-5">
+            <div className="mx-auto w-full max-w-[760px]">{composer}</div>
+          </div>
+        </section>
+        {/*
+          Le suivi, à droite comme dans Cowork. Sur un écran étroit, il passe
+          par-dessus tout l'écran, bord droit, au lieu de tasser la
+          conversation (vu à 375 px le 25/09/2026 : dans la colonne, il n'avait
+          plus que 100 px) ; on le referme d'un clic.
+        */}
+        {suiviOuvert && (
+          <SuiviCodePanel
+            suivi={code.suivi}
+            dossier={dossier ?? code.status?.projectDir}
+            onFermer={() => setSuiviOuvert(false)}
+            className="fixed inset-y-0 right-0 z-40 shadow-lg lg:static lg:z-auto lg:shadow-none"
+          />
+        )}
       </div>
     );
   }

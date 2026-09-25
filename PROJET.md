@@ -2290,7 +2290,8 @@ ne restent ici que les points ouverts.*
 11. **Extension VS Code** : première vraie question tapée dans VS Code par le
     client ; publication sur la place de marché (compte éditeur à créer). Les deux
     corrections du 25/09 (onglet Code muet, flux laissé ouvert) sont vérifiées par
-    simulation seulement, et le `.vsix` n'a pas été refait.
+    simulation seulement ; le `.vsix` 0.2.2 (avec ces corrections et les connecteurs
+    dans Helix Code) est refait et installé depuis le 25/09/2026.
 12. **Import Cursor** : l'éprouver sur de vraies conversations (le poste du
     client n'a que des brouillons vides). Import Codex par morceaux : pas mesuré.
 13. **Le modèle de l'écran Code** : Qwen3 8B y est faible (répétitions, guide de

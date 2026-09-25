@@ -7,6 +7,7 @@ import { resolve, invalidate, peutVoir } from "./router.ts";
 import { loadModel } from "./backends.ts";
 import { toolsForModel, hasTools, workspace } from "./mcp.ts";
 import { executerOutil, cibleDe } from "./outils.ts";
+import { cheminReel, estProtege } from "./zonesProtegees.ts";
 import * as computer from "./computer.ts";
 import * as bureau from "./bureau.ts";
 import * as bibliotheque from "./bibliotheque.ts";
@@ -560,6 +561,8 @@ function contenuDesFichiers(chemins: string[]): string {
     if (!/\.(html?|css|m?js|ts|tsx|jsx|json|md|txt|py|php|xml|ya?ml|csv|sql|sh|vue|svelte)$/i.test(c)) continue;
     const absolu = isAbsolute(c) ? c : resoudreChemin(racine, c);
     if (absolu !== racine && !absolu.startsWith(racine + sep)) continue;
+    // Un chemin qu'un agent a visé sans pouvoir l'écrire (zone protégée) ne part pas au modèle par la revue.
+    if (estProtege(cheminReel(absolu))) continue;
     let texte: string;
     try {
       texte = readFileSync(absolu, "utf8");

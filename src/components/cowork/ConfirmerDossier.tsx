@@ -55,6 +55,9 @@ export function ConfirmerDossier({
         {poste ? (
           <>
             {t("Ce qui reste fermé : les dossiers du système. Ce qui vous protège ensuite : la barrière d'approbation, qui demande votre accord avant chaque modification. Vérifiez son réglage à côté du dossier, dans la barre du bas.")}
+            <span className="mt-2 block">
+              {t("Toujours exclus, même du poste entier : les données de cette instance, les clés et identifiants (.ssh, .aws, .gnupg), les réglages des logiciels (.config), les historiques d'autres assistants (.claude, .codex, .cursor) et les trousseaux. Ni l'agent ni l'équipe ne peuvent les lire.")}
+            </span>
           </>
         ) : (
           <>{t("Nouveau dossier :")}{" "}{dossier}</>
@@ -93,7 +96,7 @@ export function ConfirmerDossier({
           {t("Annuler")}
         </Button>
         <Button disabled={occupe || !motDePasse} onClick={() => void valider()}>
-          {occupe ? "Vérification…" : poste ? "Ouvrir tout mon poste" : t("Changer le dossier")}
+          {occupe ? t("Vérification…") : poste ? t("Ouvrir tout mon poste") : t("Changer le dossier")}
         </Button>
       </div>
     </Modal>

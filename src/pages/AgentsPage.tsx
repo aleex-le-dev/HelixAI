@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from "react";
-import { Bot, Loader2, Plus, RefreshCw, Sparkle, Paperclip, Sparkles, Trash2, TriangleAlert, Wrench, X } from "lucide-react";
+import { BookOpenText, Bot, Loader2, Plus, RefreshCw, Sparkle, Paperclip, Sparkles, Trash2, TriangleAlert, Wrench, X } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/Button";
 import { SearchInput } from "@/components/ui/SearchInput";
@@ -18,6 +18,8 @@ import { MiseAJourOpenClaw, PanneauEmploye, Statut, useEmployes } from "@/compon
 import { ACCEPT_DOCUMENTS, retenirFichiers, supprimerEmploye, type Employe, type EtatEmployes } from "@/lib/employes";
 import { optimiserInstructions } from "@/lib/gateway";
 import { ChoixDepuisEspace } from "@/components/agents/ChoixDepuisEspace";
+import { ChoixBases } from "@/components/bibliotheque/ChoixBases";
+import { features } from "@/config/branding";
 import { t, tf } from "@/lib/i18n";
 
 /**
@@ -30,7 +32,7 @@ import { t, tf } from "@/lib/i18n";
  * choisir comme avant.
  */
 export function AgentsPage() {
-  const { agents, create, remove } = useAgents();
+  const { agents, create, update, remove } = useAgents();
   const [tab, setTab] = useState("tous");
   const [query, setQuery] = useState("");
   const [modalOpen, setModalOpen] = useState(false);
@@ -130,6 +132,7 @@ export function AgentsPage() {
               canDelete={agent.ownerId === me.id}
               onOuvrir={(id) => setOuvert(id)}
               onReessayer={() => reessayer(agent.id)}
+              onConnaissances={(ids) => update(agent.id, { connaissances: ids })}
               onDelete={async () => {
                 const e = employeDe(agent.id);
                 if (e && e.estProprietaire) await supprimerEmploye(e.id).catch(() => undefined);
@@ -214,6 +217,7 @@ function AgentCard({
   canDelete,
   onOuvrir,
   onReessayer,
+  onConnaissances,
   onDelete,
 }: {
   agent: Agent;
@@ -223,9 +227,12 @@ function AgentCard({
   canDelete: boolean;
   onOuvrir: (employeId: string) => void;
   onReessayer: () => void;
+  onConnaissances: (ids: string[]) => void;
   onDelete: () => Promise<void>;
 }) {
   const [confirmer, setConfirmer] = useState(false);
+  const [bases, setBases] = useState<string[] | null>(null);
+  const nombreBases = agent.connaissances?.length ?? 0;
   return (
     <li className="group relative flex flex-col gap-2 rounded-2xl border border-border bg-card p-4 transition-shadow hover:shadow-sm">
       <button
@@ -259,6 +266,46 @@ function AgentCard({
           )}
         </div>
       </button>
+      {/*
+        * Bases de connaissances de l'agent : son propriétaire les change ici.
+        * Elles valent dans le Chat ; l'employé toujours actif (OpenClaw) ne
+        * les consulte pas encore.
+        */}
+      {features.bibliotheque && (canDelete || nombreBases > 0) && (
+        <button
+          type="button"
+          disabled={!canDelete}
+          onClick={() => setBases(agent.connaissances ?? [])}
+          className="inline-flex w-fit items-center gap-1.5 rounded-full bg-info/10 px-2 py-0.5 text-[11px] font-medium text-info disabled:cursor-default"
+        >
+          <BookOpenText size={11} strokeWidth={2} />
+          {nombreBases > 0 ? tf("{0} base(s) de connaissances", nombreBases) : t("Ajouter des connaissances")}
+        </button>
+      )}
+      {bases && (
+        <Modal open onClose={() => setBases(null)} size="md">
+          <h2 className="pr-8 text-lg font-semibold text-foreground">{tf("Connaissances de {0}", agent.name)}</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {t("Dans le Chat, avec cet agent, les passages utiles de ces bases sont donnés au modèle avant chaque réponse, et cités sous la réponse. Chaque personne n'y lit que ce qu'elle a le droit de voir.")}
+          </p>
+          <div className="mt-4">
+            <ChoixBases valeur={bases} onChange={setBases} />
+          </div>
+          <div className="mt-5 flex justify-end gap-2">
+            <Button variant="secondary" onClick={() => setBases(null)}>
+              {t("Annuler")}
+            </Button>
+            <Button
+              onClick={() => {
+                onConnaissances(bases);
+                setBases(null);
+              }}
+            >
+              {t("Enregistrer")}
+            </Button>
+          </div>
+        </Modal>
+      )}
       {canDelete &&
         (confirmer ? (
           <span className="absolute right-3 top-3 flex items-center gap-1 rounded-lg bg-card px-1">
@@ -315,6 +362,7 @@ interface NewAgent {
   visibility: AgentVisibility;
   hidePrompt: boolean;
   toolsEnabled: boolean;
+  connaissances: string[];
 }
 
 function AgentModal({
@@ -335,6 +383,7 @@ function AgentModal({
   const choixFichiers = useRef<HTMLInputElement>(null);
   const [hidePrompt, setHidePrompt] = useState(false);
   const [toolsEnabled, setToolsEnabled] = useState(true);
+  const [connaissances, setConnaissances] = useState<string[]>([]);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [instructions, setInstructions] = useState("");
@@ -346,6 +395,7 @@ function AgentModal({
     setVisibility("personnel");
     setHidePrompt(false);
     setToolsEnabled(true);
+    setConnaissances([]);
     setFichiers([]);
     setAvantOptimisation(null);
     setErreurOptimisation(null);
@@ -536,6 +586,17 @@ function AgentModal({
             />
           </div>
 
+          {features.bibliotheque && (
+            <div className="space-y-1.5">
+              <span className="text-sm text-foreground">{t("Bases de connaissances")}</span>
+              <ChoixBases
+                valeur={connaissances}
+                onChange={setConnaissances}
+                aide={t("Dans le Chat, l'agent y cherche avant de répondre et cite ses sources.")}
+              />
+            </div>
+          )}
+
           {visibility === "organisation" && (
             <div className="flex items-center justify-between">
               <span className="text-sm text-foreground">
@@ -564,7 +625,7 @@ function AgentModal({
         <Button
           disabled={!name.trim()}
           onClick={() => {
-            onCreate({ name, description, instructions, visibility, hidePrompt, toolsEnabled }, fichiers);
+            onCreate({ name, description, instructions, visibility, hidePrompt, toolsEnabled, connaissances }, fichiers);
             reset();
           }}
         >

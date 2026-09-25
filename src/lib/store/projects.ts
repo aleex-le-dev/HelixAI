@@ -35,6 +35,8 @@ export interface Project {
   ownerId: string;
   organisationId: string;
   members: ProjectMember[];
+  /** Bases de connaissances consultées par les Chats rangés dans ce projet (chacun n'y lit que ce qu'il voit). */
+  connaissances?: string[];
   createdAt: string;
   updatedAt: string;
 }

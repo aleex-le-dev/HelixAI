@@ -28,6 +28,13 @@ export interface StoredMessage {
   reasoning?: string;
   /** Image créée sur la machine (images.ts) : on garde sa référence, pas ses octets. */
   image?: { id: string; largeur: number; hauteur: number; description: string };
+  /**
+   * Passages des bases de connaissances cités sous la réponse (nom du
+   * document, extrait de 600 caractères au plus). Gardés avec le Chat : qui le
+   * rouvre, ou à qui on le partage, voit d'où venait la réponse, comme il en
+   * voit le texte.
+   */
+  sources?: { n: number; base: string; document: string; documentId: string; extrait: string; debut: number; fin: number; similarite: number }[];
   createdAt: string;
 }
 
@@ -50,6 +57,8 @@ export interface Session {
    */
   agentId?: string;
   agentNom?: string;
+  /** Bases de connaissances choisies dans la zone de saisie pour ce Chat (en plus de celles de l'agent et du projet). */
+  connaissances?: string[];
   ownerId: string;
   visibility: Visibility;
   /** Groupes destinataires quand `visibility === "groupes"`. */
@@ -202,6 +211,12 @@ export function renommerSession(id: string, titre: string): void {
  */
 export function memoriserAgent(id: string, agentId: string, agentNom: string): void {
   persist(all().map((s) => (s.id === id && s.agentId !== agentId ? { ...s, agentId, agentNom } : s)));
+}
+
+/** Retient les bases de connaissances choisies pour un Chat ; même règle que l'agent pour `updatedAt`. */
+export function memoriserConnaissances(id: string, connaissances: string[]): void {
+  const cle = (l?: string[]) => [...(l ?? [])].sort().join(",");
+  persist(all().map((s) => (s.id === id && cle(s.connaissances) !== cle(connaissances) ? { ...s, connaissances } : s)));
 }
 
 /**

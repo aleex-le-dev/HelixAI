@@ -92,6 +92,7 @@ const ROUTES = [
   ["POST", "/helix/computer/action"], ["GET", "/helix/code/session"], ["POST", "/helix/flux/ticket"],
   ["GET", "/helix/bibliotheque"], ["GET", "/helix/reunions"], ["GET", "/helix/fournisseurs"],
   ["POST", "/helix/openclaw/installer"], ["GET", "/helix/reseau"], ["POST", "/helix/invitations/inviter"],
+  ["GET", "/helix/connaissances"], ["POST", "/helix/connaissances/chercher"],
 ];
 for (const [methode, chemin] of ROUTES) {
   const r = await appel(chemin, { method: methode, headers: { "Content-Type": "application/json" }, body: methode === "POST" ? "{}" : undefined });
@@ -116,6 +117,10 @@ const SEANCE_REQUISE = [
   ["GET", "/helix/images/fichier/0123456789abcdef0123456789abcdef"], ["GET", "/helix/images/travail/abc"],
   ["GET", "/helix/import/logiciels"], ["GET", "/helix/import/logiciel/claude-code"],
   ["GET", "/helix/machine"], ["POST", "/helix/machine/effacer"],
+  // Ajoutés le 25/09/2026 : bases de connaissances (connaissances.ts).
+  ["GET", "/helix/connaissances"], ["POST", "/helix/connaissances"], ["GET", "/helix/connaissances/documents"],
+  ["POST", "/helix/connaissances/chercher"], ["GET", "/helix/connaissances/kb_inexistante"],
+  ["POST", "/helix/connaissances/kb_inexistante/documents"], ["POST", "/helix/connaissances/kb_inexistante/supprimer"],
 ];
 for (const [methode, chemin] of SEANCE_REQUISE) {
   const r = await appel(chemin, { method: methode, headers: avecJeton, body: methode === "POST" ? "{}" : undefined });
@@ -244,6 +249,29 @@ for (const chemin of ["../../../../etc/passwd", "/etc/passwd", "..%2F..%2Fetc%2F
   const r = await appel("/helix/data/..%2Faccounts", { headers: avecSeance });
   const corps = await r.text();
   verifier("lire une collection par un chemin détourné est refusé", !corps.includes("passwordHash") && !corps.includes("hash"), `${r.status} ${corps.slice(0, 60)}`);
+}
+
+/* ------------------------------------------------------------------------- */
+console.log("\n6 bis. Bases de connaissances");
+{
+  const nom = "Base-Secrete-Essai-9431";
+  const c = await appel("/helix/connaissances", { method: "POST", headers: avecSeance, body: JSON.stringify({ nom, visibilite: "prive" }) });
+  const base = (await c.json()).base;
+  verifier("créer une base avec une séance", c.status === 200 && base?.id?.startsWith("kb_"), c.status);
+  const brut = readdirSync(DONNEES).filter((f) => f.endsWith(".json")).some((f) => readFileSync(join(DONNEES, f), "utf8").includes(nom));
+  verifier("le nom d'une base n'est pas en clair sur le disque", !brut, "trouvé en clair");
+  const inconnue = await appel("/helix/connaissances/kb_inexistante", { headers: avecSeance });
+  verifier("une base inconnue répond 404", inconnue.status === 404, inconnue.status);
+  const detour = await appel("/helix/connaissances/..%2F..%2Faccounts", { headers: avecSeance });
+  const corpsDetour = await detour.text();
+  verifier("un identifiant détourné ne lit rien", detour.status === 404 && !corpsDetour.includes("hash"), `${detour.status} ${corpsDetour.slice(0, 60)}`);
+  const doc = await appel(`/helix/connaissances/${base?.id}/documents`, { method: "POST", headers: avecSeance, body: JSON.stringify({ documents: ["bib_inexistant"] }) });
+  verifier("ajouter un document qu'on ne voit pas est refusé", doc.status === 404, doc.status);
+  const r = await appel("/helix/connaissances/chercher", {
+    method: "POST", headers: avecSeance, body: JSON.stringify({ bases: ["kb_dun_autre"], question: "salaire du directeur" }),
+  });
+  const rj = await r.json();
+  verifier("chercher dans une base qu'on ne voit pas ne rend rien", r.status === 200 && rj.passages.length === 0 && rj.ignorees === 1, JSON.stringify(rj).slice(0, 80));
 }
 
 /* ------------------------------------------------------------------------- */

@@ -10,6 +10,7 @@ import { executerOutil, cibleDe } from "./outils.ts";
 import * as computer from "./computer.ts";
 import * as bureau from "./bureau.ts";
 import * as bibliotheque from "./bibliotheque.ts";
+import * as connaissances from "./connaissances.ts";
 import * as reunions from "./reunions.ts";
 import { groupesDe } from "./groupes.ts";
 import * as courrier from "./courrier.ts";
@@ -884,6 +885,30 @@ export async function handleChatRequest(
         messages = [{ role: "system", content: note }, ...messages];
       }
     }
+  }
+
+  /*
+   * Bases de connaissances choisies par l'écran (celles de l'agent, du projet,
+   * ou de la zone de saisie) : les passages proches de la question rejoignent
+   * les instructions, et l'écran reçoit de quoi les citer sous la réponse.
+   * Les droits se jugent ici, pas dans l'écran : une base ou un document que
+   * la personne ne voit pas n'en sort pas (connaissances.ts).
+   */
+  if (interfaceHelix && qui && Array.isArray(body.connaissances) && body.connaissances.length > 0) {
+    signaler({ type: "statut", message: t("Recherche dans les bases de connaissances...") });
+    const r = await connaissances.contextePourChat(body.connaissances, messages, qui);
+    messages = avecConsigne(messages, r.consigne);
+    signaler({
+      type: "sources",
+      sources: r.citations,
+      ignorees: r.recherche.ignorees,
+      aReindexer: r.recherche.aReindexer,
+      ...(r.recherche.erreur ? { erreur: r.recherche.erreur } : {}),
+    });
+    signaler({ type: "statut", message: "" });
+    console.log(
+      `[chat] bases de connaissances : ${r.citations.length} passage(s) sur ${r.recherche.morceauxParcourus} morceaux, ${r.recherche.dureeMs} ms`,
+    );
   }
 
   /*

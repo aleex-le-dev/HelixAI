@@ -6,6 +6,7 @@ import { currentUser } from "@/lib/store/identity";
 import { t, tf } from "@/lib/i18n";
 import { creerImage as creerSurLaMachine, type Format, type ImageCreee } from "@/lib/images";
 import type { NiveauRaisonnement } from "@/lib/store/profile";
+import type { Citation } from "@/lib/connaissances";
 import {
   createSession,
   updateSession,
@@ -69,6 +70,12 @@ export interface Message {
   pieces?: { nom: string; type: "texte" | "image" }[];
   /** Image créée en réponse (bouton « Image » du composeur). */
   image?: ImageCreee;
+  /**
+   * Passages des bases de connaissances donnés au modèle pour cette réponse.
+   * `ignorees` : bases choisies que la personne ne voit pas (l'instance les a
+   * écartées) ; `erreur` : les bases n'ont pas pu être consultées.
+   */
+  sources?: { citations: Citation[]; ignorees?: number; aReindexer?: number; erreur?: string };
   error?: string;
 }
 
@@ -99,6 +106,8 @@ interface Options {
   origin?: SessionOrigin;
   /** Autoriser l'agent à utiliser les outils MCP. */
   tools?: boolean;
+  /** Bases de connaissances consultées à chaque question : celles de l'agent, du projet, et le choix de la zone de saisie. */
+  connaissances?: string[];
 }
 
 /** État d'une conversation branchée sur la passerelle, persistée en session. */
@@ -125,6 +134,8 @@ export function useChat(options: Options) {
         content: m.content,
         reasoning: m.reasoning,
         ...(m.image ? { image: m.image } : {}),
+        // Les citations restent avec la réponse : rouvert, le Chat dit encore d'où elle venait.
+        ...(m.sources && m.sources.citations.length > 0 ? { sources: m.sources.citations } : {}),
         createdAt: new Date().toISOString(),
       }));
     updateSession(session.id, { messages: stored, modelUid: options.model });
@@ -253,6 +264,7 @@ export function useChat(options: Options) {
             model: options.model,
             effort: options.effort,
             tools: options.tools,
+            connaissances: options.connaissances,
             signal: controller.signal,
           },
           {
@@ -318,6 +330,10 @@ export function useChat(options: Options) {
                   last.preview = event.preview;
                 }
                 patch(replyId, { tools: [...traces] });
+              } else if (event.type === "sources") {
+                patch(replyId, {
+                  sources: { citations: event.sources ?? [], ignorees: event.ignorees, aReindexer: event.aReindexer, erreur: event.erreur },
+                });
               } else if (event.type === "error") {
                 patch(replyId, { error: event.message });
               } else if (event.type === "statut") {
@@ -412,6 +428,7 @@ export function useChat(options: Options) {
       options.systemPrompt,
       options.origin,
       options.tools,
+      options.connaissances,
       patch,
       commit,
       persist,
@@ -437,6 +454,7 @@ export function useChat(options: Options) {
           content: m.content,
           reasoning: m.reasoning,
           image: m.image,
+          ...(m.sources && m.sources.length > 0 ? { sources: { citations: m.sources } } : {}),
         })),
       );
     },

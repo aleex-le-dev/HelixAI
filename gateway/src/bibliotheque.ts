@@ -514,6 +514,15 @@ export async function documentsVisibles(qui: Qui): Promise<Element[]> {
   return (await charger()).filter((e) => e.type === "document" && peutVoir(e, qui));
 }
 
+/**
+ * Identifiants de tous les documents, sans rien d'autre : une base de
+ * connaissances (connaissances.ts) distingue ainsi un document supprimé d'un
+ * document seulement caché à la personne qui regarde.
+ */
+export async function idsDocuments(): Promise<string[]> {
+  return (await charger()).filter((e) => e.type === "document").map((e) => e.id);
+}
+
 /** Chemin lisible d'un élément (« Clients / Dupont »), pour les agents. */
 export async function cheminDe(id: string): Promise<string> {
   const liste = await charger();

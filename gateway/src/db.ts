@@ -115,6 +115,12 @@ export const COLLECTIONS_INTERNES = [
   // Réunions (reunions.ts) et leurs réglages : titres, comptes rendus ; transcriptions et son sont à part, chiffrés.
   "reunions",
   "reglagesReunions",
+  /*
+   * Bases de connaissances (connaissances.ts) : noms, visibilité, documents
+   * rattachés et état de leur indexation. Les vecteurs et le texte des
+   * morceaux sont à part, un fichier chiffré par document.
+   */
+  "connaissances",
 ] as const;
 
 export type StoredCollection = Collection | (typeof COLLECTIONS_INTERNES)[number];

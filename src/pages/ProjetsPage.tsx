@@ -24,6 +24,8 @@ import { Field, Input, Textarea } from "@/components/ui/Field";
 import { InfoBox } from "@/components/ui/InfoBox";
 import { Avatar } from "@/components/ui/Avatar";
 import { useProjects } from "@/hooks/useProjects";
+import { ChoixBases } from "@/components/bibliotheque/ChoixBases";
+import { features } from "@/config/branding";
 import type { ResultatInvitation } from "@/lib/invitations";
 import { useSessions } from "@/hooks/useSessions";
 import { currentUser } from "@/lib/store/identity";
@@ -383,6 +385,7 @@ function MembersModal({
   } | null>(null);
 
   const [envoiEnCours, setEnvoiEnCours] = useState(false);
+  const { rename } = useProjects();
 
   /*
    * Tous les crochets au-dessus de ce retour, sans exception : React compte
@@ -449,6 +452,20 @@ function MembersModal({
       </p>
 
       <ChatsDuProjet project={project} chats={chats} onNavigate={fermer} />
+
+      {/* Bases de connaissances du projet : les Chats qui y sont rangés les consultent avant de répondre. */}
+      {features.bibliotheque && canManage && (
+        <div className="mt-6">
+          <h3 className="text-sm font-semibold text-foreground">{t("Bases de connaissances")}</h3>
+          <div className="mt-2">
+            <ChoixBases
+              valeur={project.connaissances ?? []}
+              onChange={(ids) => rename(project.id, { connaissances: ids })}
+              aide={t("Les Chats rangés dans ce projet y cherchent avant de répondre. Chaque membre n'y lit que ce qu'il a le droit de voir.")}
+            />
+          </div>
+        </div>
+      )}
 
       <h3 className="mt-6 text-sm font-semibold text-foreground">{t("Membres")}</h3>
 

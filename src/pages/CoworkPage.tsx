@@ -8,6 +8,7 @@ import { MessageList } from "@/components/chat/MessageList";
 import { ApprovalSelector } from "@/components/chat/CoworkSelectors";
 import { DossierTravailChip } from "@/components/chat/DossierTravailChip";
 import { ScreenAccessChip } from "@/components/chat/ScreenAccessChip";
+import { ConnaissancesChip } from "@/components/chat/ConnaissancesChip";
 import { useComputer } from "@/hooks/useComputer";
 import { useApprobation } from "@/hooks/useApprobation";
 import { useAtelier } from "@/hooks/useAtelier";
@@ -224,6 +225,8 @@ function touchedFiles(messages: Message[]): TouchedFile[] {
 export function CoworkPage() {
   const [panelOpen, setPanelOpen] = useState(true);
   const [draft, setDraft] = useState("");
+  // Bases de connaissances consultées avant chaque réponse de Cowork (l'instance vérifie les droits).
+  const [bases, setBases] = useState<string[]>([]);
 
   const { profile, update } = useProfile();
   const { capability: capaciteEcran, disponible: ecranDisponible, pending: demandesEcran, repondre: repondreEcran } = useComputer();
@@ -327,6 +330,7 @@ export function CoworkPage() {
     systemPrompt,
     origin: "local",
     tools: true,
+    connaissances: bases,
   });
 
   const files = useMemo(() => touchedFiles(chat.messages), [chat.messages]);
@@ -430,6 +434,7 @@ export function CoworkPage() {
           />
           <ApprovalSelector />
           <ScreenAccessChip modeleVoit={modeleVoit} />
+          <ConnaissancesChip choisies={bases} onChange={setBases} side={chat.messages.length > 0 ? "top" : "bottom"} />
         </>
       }
     />

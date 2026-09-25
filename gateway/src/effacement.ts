@@ -7,6 +7,7 @@ import { oublierPersonneGroupes } from "./groupes.ts";
 import { elementsDe, oublierPersonneBibliotheque } from "./bibliotheque.ts";
 import { reunionsDe, oublierPersonneReunions } from "./reunions.ts";
 import { oublierChatsDesImages, oublierImagesDe } from "./images.ts";
+import { oublierPersonneConnaissances } from "./connaissances.ts";
 
 /**
  * Suppression d'un compte (RGPD, article 17).
@@ -204,6 +205,7 @@ export async function effacerCompte(
   // Ses groupes : il en sort ; un groupe resté vide disparaît, un groupe sans responsable en reçoit un.
   const groupesQuittes = await oublierPersonneGroupes(userId);
   const elementsBibliotheque = await oublierPersonneBibliotheque(userId);
+  const basesDeConnaissances = await oublierPersonneConnaissances(userId);
   const reunionsEffacees = await oublierPersonneReunions(userId);
   const lignesDeConsommation = await oublierCompte(userId);
   // Ses images créées : fichiers et registre (images.ts).
@@ -223,6 +225,7 @@ export async function effacerCompte(
     mentionsRetirees: apercu.mentionsRetirees,
     groupesQuittes,
     elementsBibliotheque,
+    basesDeConnaissances,
     reunionsEffacees,
     lignesDeConsommation,
     imagesEffacees,

@@ -201,6 +201,41 @@ const PAQUETS_NVIDIA = [
 ];
 const INDEX_TORCH_CUDA = "https://download.pytorch.org/whl/cu128";
 
+/*
+ * Unsloth sur carte NVIDIA, décidé par Medhi le 25/09/2026 : même méthode
+ * (QLoRA 4 bits), environ deux fois plus rapide et moins gourmand en mémoire
+ * graphique d'après ses auteurs. Le cœur est Apache 2.0 ; `unsloth_zoo`, dont
+ * il dépend, est LGPL-3.0-or-later : utilisée comme bibliothèque, dans un
+ * environnement Python séparé et non modifiée, elle est compatible avec
+ * l'AGPL du projet (exception faite à la règle « Apache 2.0 ou MIT », notée
+ * dans PROJET.md § 3.12). Sur Mac, Unsloth passe lui-même par MLX : on garde
+ * MLX-LM directement.
+ *
+ * Les deux roues sont téléchargées par Helix et vérifiées par empreinte
+ * (relevées sur PyPI le 25/09/2026), puis installées depuis le disque ; leurs
+ * dépendances (trl, datasets, xformers, triton...) viennent de PyPI sans
+ * empreinte, comme le reste de la pile NVIDIA. Compatibles avec les versions
+ * figées ci-dessus : torch <2.13, transformers 4.57.6 admis, peft >=0.18.
+ *
+ * Si Unsloth ne s'installe pas ou ne se charge pas (carte trop ancienne,
+ * pilote), l'entraînement repasse par transformers et peft seuls : rien n'est
+ * perdu. Jamais essayé sur une vraie machine NVIDIA.
+ */
+const UNSLOTH = [
+  {
+    fichier: "unsloth-2026.9.11-py3-none-any.whl",
+    url: "https://files.pythonhosted.org/packages/86/ae/d5cfe04b4eb6c3fb3a3e98ec02405a75adca697b14d9ce52816bc3369b1b/unsloth-2026.9.11-py3-none-any.whl",
+    sha256: "3cf44a2adfd3267cb1bb4c6c73442cfc9915cc3232f32c9872295c3a273ed21c",
+    taille: 24_382_135,
+  },
+  {
+    fichier: "unsloth_zoo-2026.9.7-py3-none-any.whl",
+    url: "https://files.pythonhosted.org/packages/5f/fb/c23a8ccb271bb094ae7d1d073e6772099547ef1f146e3246e7416dae284c/unsloth_zoo-2026.9.7-py3-none-any.whl",
+    sha256: "cbfe5f9d22a65e45725929443202cb7d6634d33f0e15d29f17c16ae5b679658d",
+    taille: 1_795_255,
+  },
+];
+
 /**
  * llama.cpp (MIT) sert seulement à convertir le modèle fini en GGUF, le format
  * que LM Studio charge sous Windows et Linux. Source à une version précise,
@@ -271,7 +306,7 @@ function capaciteDe(hw: Hardware, mac: number | null): Capacite {
       moteur: "nvidia",
       base: m,
       verifie: false,
-      raison: tf("Carte NVIDIA de {0} Go : {1}, entraîné en QLoRA. Ce chemin n'a pas encore été essayé sur une vraie machine.", vram, m.nom),
+      raison: tf("Carte NVIDIA de {0} Go : {1}, entraîné en QLoRA par Unsloth (transformers et peft en repli). Ce chemin n'a pas encore été essayé sur une vraie machine.", vram, m.nom),
     };
   }
   if (vram > 0) {
@@ -539,12 +574,27 @@ sys.stdout.write("@@HELIX@@" + json.dumps({"mlx": mx.__version__, "mlx_lm": mlx_
  * Arguments : modèle, dossier des données, dossier de l'adaptateur, réglages (JSON).
  */
 const SCRIPT_NVIDIA_ENTRAINER = String.raw`
-import json, sys, math, torch
-from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig, Trainer, TrainingArguments, TrainerCallback
-from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
-
+import json, sys, math
 modele, donnees, sortie, reglages = sys.argv[1], sys.argv[2], sys.argv[3], json.loads(sys.argv[4])
-tok = AutoTokenizer.from_pretrained(modele)
+CIBLES = ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"]
+
+# Unsloth d'abord (il doit être importé avant transformers), transformers et peft seuls sinon.
+model = None
+try:
+    from unsloth import FastLanguageModel
+    model, tok = FastLanguageModel.from_pretrained(modele, max_seq_length=reglages["longueur"], load_in_4bit=True, dtype=None)
+    model = FastLanguageModel.get_peft_model(model, r=reglages["rang"], lora_alpha=reglages["rang"] * 2, lora_dropout=0.0,
+        target_modules=CIBLES, use_gradient_checkpointing="unsloth")
+    print("@@MOTEUR@@unsloth", flush=True)
+except Exception as err:
+    print("@@MOTEUR@@peft " + type(err).__name__ + ": " + str(err)[:200], flush=True)
+    model = None
+
+import torch
+from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig, Trainer, TrainingArguments, TrainerCallback
+if model is None:
+    from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
+    tok = AutoTokenizer.from_pretrained(modele)
 if tok.pad_token is None:
     tok.pad_token = tok.eos_token
 
@@ -580,11 +630,12 @@ def assembler(lot):
     att = [[1] * len(x["input_ids"]) + [0] * (n - len(x["input_ids"])) for x in lot]
     return {"input_ids": torch.tensor(ids), "labels": torch.tensor(lab), "attention_mask": torch.tensor(att)}
 
-quant = BitsAndBytesConfig(load_in_4bit=True, bnb_4bit_quant_type="nf4", bnb_4bit_use_double_quant=True, bnb_4bit_compute_dtype=torch.bfloat16)
-model = AutoModelForCausalLM.from_pretrained(modele, quantization_config=quant, device_map={"": 0}, torch_dtype=torch.bfloat16)
-model = prepare_model_for_kbit_training(model, use_gradient_checkpointing=True)
-model = get_peft_model(model, LoraConfig(r=reglages["rang"], lora_alpha=reglages["rang"] * 2, lora_dropout=0.0, task_type="CAUSAL_LM",
-    target_modules=["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"]))
+if model is None:
+    quant = BitsAndBytesConfig(load_in_4bit=True, bnb_4bit_quant_type="nf4", bnb_4bit_use_double_quant=True, bnb_4bit_compute_dtype=torch.bfloat16)
+    model = AutoModelForCausalLM.from_pretrained(modele, quantization_config=quant, device_map={"": 0}, torch_dtype=torch.bfloat16)
+    model = prepare_model_for_kbit_training(model, use_gradient_checkpointing=True)
+    model = get_peft_model(model, LoraConfig(r=reglages["rang"], lora_alpha=reglages["rang"] * 2, lora_dropout=0.0, task_type="CAUSAL_LM",
+        target_modules=CIBLES))
 
 class Suivi(TrainerCallback):
     def on_log(self, args, state, control, logs=None, **kw):
@@ -811,6 +862,27 @@ export function installer(qui: string): Promise<void> {
         delai: 60 * 60_000,
         onLigne: suivrePip,
       });
+      // Unsloth : ses deux roues vérifiées par empreinte, puis installées depuis le disque. Un échec n'arrête rien.
+      try {
+        tr.message = t("Installation d'Unsloth (accélère l'entraînement sur carte NVIDIA)...");
+        const roues: string[] = [];
+        for (const u of UNSLOTH) {
+          const chemin = join(racineMoteur(), u.fichier);
+          await telecharger(u.url, chemin, u.sha256, u.taille, (fait) => {
+            tr.fait = fait;
+            tr.total = u.taille;
+          });
+          roues.push(chemin);
+        }
+        await lancer(pythonVenv(), ["-m", "pip", "install", "--extra-index-url", INDEX_TORCH_CUDA, ...PAQUETS_NVIDIA, ...roues], {
+          env: environnement(false),
+          delai: 60 * 60_000,
+          onLigne: suivrePip,
+        });
+        for (const chemin of roues) rmSync(chemin, { force: true });
+      } catch (err) {
+        console.error("[entrainement] Unsloth non installé, repli sur transformers et peft :", err instanceof Error ? err.message : err);
+      }
       // Convertisseur GGUF : sources de llama.cpp à une version précise.
       if (!existsSync(join(dossierLlamaCpp(), "convert_hf_to_gguf.py"))) {
         tr.message = t("Téléchargement du convertisseur GGUF (llama.cpp)...");
@@ -1540,6 +1612,7 @@ export function entrainer(qui: string, id: unknown): Travail {
   const { appris, deCote } = partager(p.exemples);
   void (async () => {
     const debut = Date.now();
+    let moteurNvidia = "";
     let fini = false;
     let enCalcul = false;
     try {
@@ -1586,6 +1659,12 @@ export function entrainer(qui: string, id: unknown): Travail {
         await lancer(pythonVenv(), ["-I", "-c", SCRIPT_NVIDIA_ENTRAINER, dossierBase(b), join(dossier, "donnees"), join(dossier, "adaptateur-nouveau"), JSON.stringify(r)], {
           cwd: dossier,
           onLigne: (l) => {
+            // Le moteur réellement pris : Unsloth, ou transformers et peft en repli (et pourquoi).
+            if (l.startsWith("@@MOTEUR@@")) {
+              moteurNvidia = l.slice(10);
+              console.log("[entrainement] moteur NVIDIA :", moteurNvidia);
+              return;
+            }
             if (!l.startsWith("@@PAS@@")) return;
             try {
               const x = JSON.parse(l.slice(7)) as { pas: number; total: number; perte?: number; validation?: number };
@@ -1617,7 +1696,10 @@ export function entrainer(qui: string, id: unknown): Travail {
       };
       frais.comparaison = null;
       ecrireProjet(frais);
-      journaliser("entrainement.termine", qui, { projet: p.id, base: b.cle, pas: r.pas, secondes: frais.entrainement.secondes, exemples: appris.length });
+      journaliser("entrainement.termine", qui, {
+        projet: p.id, base: b.cle, pas: r.pas, secondes: frais.entrainement.secondes, exemples: appris.length,
+        ...(moteurNvidia ? { unsloth: moteurNvidia === "unsloth" } : {}),
+      });
     } catch (err) {
       const message = err instanceof ErreurEntrainement ? err.message : expliquer(err);
       try {

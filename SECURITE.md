@@ -926,7 +926,10 @@ et celles qu'un collègue lui a partagées **nommément** (marquées comme telle
 ses projets et ceux dont elle est membre, ses tâches, ses agents et ceux qu'elle a
 mis en service (avec ses échanges), ses clés de modèles (sans la clé), ses groupes,
 la liste de ses dossiers et documents de la bibliothèque, ses réunions (compte rendu
-et transcription), sa consommation jour par jour, ses séances et **toutes** ses
+et transcription), ses bases de connaissances et les documents qu'elle a ajoutés aux
+bases des autres (sans passages ni vecteurs), la liste des images qu'elle a créées
+(avec la demande), ses projets d'entraînement (exemples, propositions, comparaison,
+modèle installé) (ces trois rubriques depuis le 25/09/2026), sa consommation jour par jour, ses séances et **toutes** ses
 entrées du journal d'audit (pas seulement les cinquante de l'écran Sécurité).
 
 N'y entrent pas, et le fichier le dit lui-même dans `nonInclus` : mots de
@@ -2391,7 +2394,7 @@ Ce qui n'est pas protégé :
 - Si le profil impose un modèle `embed` distant (`models.embed`), le texte des
   documents part chez ce fournisseur ; l'écran de la base affiche le modèle qui a
   indexé chaque document.
-- Les bases ne sont pas dans l'export RGPD (§ 7.1). Un document supprimé de la
+- Les bases sont dans l'export RGPD depuis le 25/09/2026 (§ 7.1). Un document supprimé de la
   Bibliothèque garde son index sur le disque jusqu'à ce que le propriétaire de la base
   l'en retire ; il n'est plus jamais servi.
 

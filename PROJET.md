@@ -673,7 +673,7 @@ local, conforme à la règle du § 1) :
 | MLX, MLX-LM | Apple (ml-explore) | MIT | entraînement sur Mac | 0.32.2 et 0.31.3 |
 | Qwen3 0.6B, 1.7B, 4B Instruct 2507 (départ d'un entraînement) | Alibaba (Qwen) | Apache 2.0 | entraînement | révisions épinglées, empreintes vérifiées |
 | transformers, peft, accelerate ; bitsandbytes ; PyTorch ; llama.cpp | Hugging Face ; bitsandbytes ; PyTorch ; ggml-org | Apache 2.0 ; MIT ; BSD-3 ; MIT | entraînement sur carte NVIDIA | versions figées, **sans empreintes** pour les paquets NVIDIA |
-| Unsloth | Unsloth AI | cœur Apache 2.0, mais `unsloth_zoo` LGPL-3.0-or-later et Studio AGPL-3.0 | **non utilisé** | décision à prendre par Medhi (§ 3.12) |
+| Unsloth 2026.9.11, unsloth_zoo 2026.9.7 | Unsloth AI | cœur Apache 2.0, `unsloth_zoo` LGPL-3.0-or-later (Studio AGPL-3.0, non utilisé) | entraînement sur carte NVIDIA | **accepté par Medhi le 25/09/2026** ; roues vérifiées par empreinte, repli sur transformers et peft (§ 3.12) |
 
 Écartés pour le RAG : LanceDB, better-sqlite3 / sqlite-vec et le reclassement par
 onnxruntime-node (modules natifs, § 3.10) ; Orama (licence déclarée « NOASSERTION »
@@ -746,7 +746,7 @@ La séance du terminal est un fichier en clair (`~/.helix/cli-seance`, 0600, dos
 0700), comme les outils de ligne de commande habituels : un trousseau demanderait une
 dépendance native. Contrepartie assumée, écrite dans SECURITE.md § 22.
 
-### 3.12 Entraîner un modèle : MLX-LM et QLoRA, pas Unsloth
+### 3.12 Entraîner un modèle : MLX-LM sur Mac, Unsloth sur carte NVIDIA
 
 Demandé le 25/09/2026 : « entraîner un modèle sur des trucs précis », simplement,
 depuis le logiciel, avec Unsloth et d'autres briques ouvertes. Livré : Paramètres >
@@ -758,15 +758,22 @@ LM Studio), et `gateway/src/entrainement.ts`.
   dans un environnement de 4,4 Go, et bascule sur `unsloth_zoo.mlx`. Aller directement à
   MLX-LM, c'est le même moteur, sans 4 Go de plus. Piloter l'application Unsloth du
   poste a été écarté (authentification propre, bêta, données d'une autre application).
-- **Sur carte NVIDIA, transformers + peft, QLoRA 4 bits** (Apache 2.0, bitsandbytes
-  MIT). Écrit d'après la documentation, **jamais essayé sur une vraie machine**, et
-  l'écran le dit.
-- **Unsloth n'est pas utilisé pour sa licence** : le cœur est Apache 2.0 mais dépend
-  d'`unsloth_zoo`, LGPL-3.0-or-later, et Studio est AGPL-3.0 ; la règle du projet
-  (Apache 2.0 ou MIT) l'écarte tel quel. **À trancher par Medhi** : sur NVIDIA, Unsloth
-  irait environ deux fois plus vite avec la même méthode, et la LGPL utilisée comme
-  bibliothèque dans un environnement séparé est compatible avec l'AGPL. S'il l'accepte,
-  seul `SCRIPT_NVIDIA_ENTRAINER` change.
+- **Sur carte NVIDIA, QLoRA 4 bits par Unsloth**, transformers + peft en repli
+  (Apache 2.0, bitsandbytes MIT). Écrit d'après la documentation, **jamais essayé sur
+  une vraie machine**, et l'écran le dit.
+- **Unsloth, décidé par Medhi le 25/09/2026.** Le cœur est Apache 2.0 et dépend
+  d'`unsloth_zoo`, LGPL-3.0-or-later : utilisée comme bibliothèque, non modifiée, dans
+  l'environnement Python séparé du moteur, elle est compatible avec l'AGPL du projet.
+  C'est une **exception** à la règle « Apache 2.0 ou MIT », limitée à ces deux paquets ;
+  Unsloth Studio (AGPL-3.0, application à part) n'est pas utilisé. Sur NVIDIA, Unsloth
+  annonce environ deux fois plus de vitesse avec la même méthode. Les deux roues
+  (unsloth 2026.9.11, unsloth_zoo 2026.9.7) sont téléchargées par Helix et vérifiées
+  par empreinte (relevées sur PyPI et recalculées le 25/09/2026) ; leurs dépendances
+  viennent de PyPI sans empreinte, comme le reste de la pile NVIDIA. Compatibles avec
+  les versions figées (torch < 2.13, transformers 4.57.6, peft ≥ 0.18). Si Unsloth ne
+  s'installe pas ou ne se charge pas, `SCRIPT_NVIDIA_ENTRAINER` repasse par
+  transformers et peft, et le journal dit lequel a servi (`unsloth: true/false`). Les
+  scripts de réponse et de fusion n'ont pas changé : l'adaptateur a le format de peft.
 - **Exemples d'ancrage** : 30 questions ordinaires répondues par le modèle de départ
   lui-même, mêlées aux exemples. Mesuré sur Qwen3 1.7B : sans eux, 12 faits sur 15 et
   « la capitale de l'Italie est Verona » ; avec eux et une échelle LoRA de 10, 15 sur 15.
@@ -2186,10 +2193,9 @@ ne restent ici que les points ouverts.*
    mail personnelle du client de `src/lib/store/identity.ts` et
    `src/data/mock/user.ts`.
 
-6. **Licence d'Unsloth** (§ 3.12) : `unsloth_zoo` est LGPL-3.0-or-later et Unsloth
-   Studio AGPL-3.0, hors de la règle Apache 2.0 ou MIT. Non utilisé : l'entraînement
-   passe par MLX-LM (Mac) et QLoRA avec transformers et peft (NVIDIA). **Décision à
-   prendre par Medhi** ; s'il l'accepte, seul `SCRIPT_NVIDIA_ENTRAINER` change.
+6. **Unsloth sur NVIDIA** (§ 3.12) : accepté et branché le 25/09/2026, jamais essayé
+   (pas de carte NVIDIA ici). À vérifier sur une vraie machine : que pip résout la pile
+   avec les deux roues, que `@@MOTEUR@@unsloth` sort bien, et le gain de vitesse réel.
 
 **Ce qui attend une machine qu'on n'a pas**
 
@@ -2234,17 +2240,21 @@ ne restent ici que les points ouverts.*
     chaque mise à jour d'OpenCode, puis de bout en bout (appel, carte d'accord chez la
     bonne personne, journal). D'ici là, les connecteurs passent par
     `helix chat --outils`.
-17. **Livrer la ligne de commande avec l'application** : elle n'est pas dans le paquet,
-    ni dans le `PATH` (par exemple un lien depuis Réglages) ; l'essayer sur le poste du
-    client. Traductions anglaise et chinoise de ses textes (`cli/textes.mjs`), si le
+17. **Ligne de commande** : livrée avec l'application le 25/09/2026 (paquet
+    `Resources/cli`, Paramètres > Installer les apps > CLI, qui pose `~/.local/bin/helix`
+    et, si besoin, une ligne marquée dans `~/.zprofile` ; `electron/ligneDeCommande.cjs`).
+    Windows pas fait. Traductions anglaise et chinoise de ses textes (`cli/textes.mjs`), si le
     client le demande. Documenter `NODE_EXTRA_CA_CERTS` pour une instance à certificat
     auto-signé.
 18. **Employés OpenClaw et bases de connaissances** : les employés ne consultent pas
     encore les bases de leur agent ; seuls le Chat et Cowork le font. Il faudrait un
     outil `connaissances__chercher` limité à ce qui est ouvert à toute l'équipe, comme
     la Bibliothèque.
-19. **Bases de connaissances hors de l'export RGPD** : `/helix/export` ne contient pas
-    les bases (métadonnées). Et un document supprimé de Fichiers reste listé dans la
+19. **Export RGPD** : fait le 25/09/2026, `/helix/export` contient désormais les bases
+    de connaissances (sans vecteurs), les images créées (liste et demandes) et les
+    projets d'entraînement (exemples) ; l'effacement d'un compte retire aussi ses
+    projets d'entraînement et le modèle rangé dans LM Studio, qu'il oubliait
+    (7 contrôles de plus, section 7 ter de `npm run securite`). Reste : un document supprimé de Fichiers reste listé dans la
     base (« supprimés depuis ») jusqu'à ce que le propriétaire l'y retire ; son index
     reste sur le disque jusque-là, sans plus jamais être servi.
 20. **À essayer dans l'application de bureau** : le fichier des Chats illisible (copie

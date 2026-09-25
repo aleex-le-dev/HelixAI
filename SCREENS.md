@@ -516,7 +516,13 @@ renvoie au délégué : l'écran affirmait qu'on supprimait son compte depuis le
 profil, ce qui n'existe pas. L'adresse du DPO vient de `branding.ts`.
 
 **Installer les apps** (capture 45). ⚠ Les boutons « Télécharger pour … » sont
-grisés et le disent (« bientôt disponible »), les onglets CLI et Mobile aussi. Le
+grisés et le disent (« bientôt disponible »), l'onglet Mobile aussi. L'onglet
+**CLI** (25/09/2026, `LigneDeCommande.tsx`) est actif dans l'application de bureau :
+« Mettre en place » pose `~/.local/bin/helix` (et une ligne marquée dans
+`~/.zprofile` si ce dossier manque au PATH), « Mettre à jour » quand le lanceur vise
+une autre copie de l'application, « Retirer » enlève les deux ; suivent les
+commandes pour commencer. Dans un navigateur, l'onglet le dit au lieu d'offrir un
+bouton. Le
 lien « Voir toutes les versions » mène à l'URL de `branding.ts`. Seule
 l'application macOS est construite et éprouvée ; Windows et Linux figurent dans la
 configuration d'empaquetage sans avoir jamais été construits, et l'écran le dit.

@@ -166,8 +166,8 @@ Toutes exigent le jeton d'instance, sauf `GET /` et `GET /health`. Celles marqu�
 | Route | Rôle | Séance |
 |---|---|---|
 | `GET /`, `GET /health` | Contrôle de présence. Sans jeton, ne renvoie que la présence du service | non |
-| `GET /v1/models`, `GET /helix/models` | Catalogue des modèles, avec leurs rôles | non |
-| `POST /v1/chat/completions` | OpenAI-compatible. Accepte en plus `role`, `effort` et `tools` | si `tools: true` |
+| `GET /v1/models`, `GET /helix/models` | Catalogue des modèles, avec leurs rôles. `/v1/models` accepte aussi une clé d'API seule | non |
+| `POST /v1/chat/completions` | OpenAI-compatible. Accepte en plus `role`, `effort`, `tools` et `connaissances` ; accepte aussi une clé d'API seule (voir « Clés d'API ») | si `tools: true` |
 | `POST /helix/models/load` | Charge un modèle en mémoire | oui |
 | `GET /helix/provision`, `GET /helix/provision/stream` | État et progression de la mise en route | non |
 | `POST /helix/provision/moteur` | Installe LM Studio (macOS) | oui |
@@ -197,6 +197,45 @@ Toutes exigent le jeton d'instance, sauf `GET /` et `GET /health`. Celles marqu�
 | `GET`/`POST /helix/connaissances`, `GET …/documents`, `POST …/chercher`, `GET`/`POST …/<id>`, `POST …/<id>/{documents,retirer,reindexer,supprimer}` | Bases de connaissances (SECURITE.md § 22.2) ; champ `connaissances` du corps de `POST /v1/chat/completions` | oui |
 | `GET /helix/entrainement`, `GET …/projet?id=`, `POST …/{installer,desinstaller,projets,renommer,exemples,importer,generer,lancer,arreter,comparer,publier,retirer,supprimer}` | Entraîner un modèle (SECURITE.md § 22.3) | oui |
 | `/helix/code/outils` | Connecteurs servis par MCP à l'agent de code de l'instance (jeton et clé `X-Helix-Cle`, SECURITE.md § 22.4) | non, clé |
+| `GET`/`POST /helix/cles-api`, `POST …/<id>` (renommer), `POST …/<id>/revoquer` | Clés d'API personnelles : liste (avec les adresses de l'API réellement servies), création, renommage, révocation (SECURITE.md § 23) | oui |
+
+#### Clés d'API
+
+Depuis le 26/09/2026, une clé créée dans Paramètres → API développeur remplace le
+jeton d'instance **et** la séance, sur `GET /v1/models` et `POST /v1/chat/completions`
+seulement, au nom de sa titulaire (ses modèles, ses bases, sa consommation, son
+journal). Elle se présente dans `Authorization: Bearer hlx_…`, jamais dans l'adresse.
+Toute autre route répond 403 à une clé ; `tools: true` aussi ; 60 requêtes par minute
+et par clé (`HELIX_CLE_API_PAR_MINUTE`). Sans `stream: true`, la réponse est un objet
+`chat.completion` ; avec, le flux du moteur tel quel. `POST /v1/embeddings` n'est pas
+servi.
+
+```sh
+export HELIX_API_KEY=hlx_…
+curl http://localhost:8787/v1/chat/completions \
+  -H "Authorization: Bearer $HELIX_API_KEY" -H "Content-Type: application/json" \
+  -d '{"model": "lmstudio/qwen3-8b", "messages": [{"role": "user", "content": "Bonjour"}], "connaissances": ["kb_…"]}'
+```
+
+```python
+import os
+from openai import OpenAI
+
+client = OpenAI(base_url="http://localhost:8787/v1", api_key=os.environ["HELIX_API_KEY"])
+r = client.chat.completions.create(
+    model="lmstudio/qwen3-8b",
+    messages=[{"role": "user", "content": "Bonjour"}],
+    extra_body={"connaissances": ["kb_…"]},  # facultatif : bases de connaissances
+)
+print(r.choices[0].message.content)
+```
+
+Les passages cités reviennent, sans flux, dans `helix.sources`. L'identifiant du modèle
+est le champ `id` de `GET /v1/models`. Depuis une autre machine, l'API n'est joignable
+que si l'instance est ouverte aux collègues ; elle chiffre alors avec un certificat
+auto-signé (`<données>/tls/instance-cert.pem`, à donner à `curl --cacert`). Vérifié le
+26/09/2026 avec `curl` et Python `urllib` ; le paquet `openai` lui-même n'a pas été
+essayé.
 
 #### Variables d'environnement
 
@@ -873,7 +912,6 @@ l'agent d'orchestration par défaut. Aucun tiret cadratin dans les textes affich
 
 **Encore annoncé sans fonctionner, et marqué comme tel à l'écran :**
 
-- **Paramètres → API développeur** (clés d'API) ;
 - le téléchargement direct des applications ;
 - **Composio** : écarté par défaut (voir `PROJET.md` § 3.5). Aucun code ne s'y
   connecte.

@@ -395,7 +395,7 @@ le 25/09/2026.
 | `/parametres/importer` | Importer depuis d'autres IA | ✅ **fonctionne** (24/09/2026, par morceaux depuis le 25/09) |
 | `/parametres/ecran` | Contrôle de l'écran | ✅ **fonctionne** |
 | `/parametres/integrations` | (redirige vers Connecteurs) | ↪ **supprimé** |
-| `/parametres/api` | API développeur | ❌ **écran d'attente assumé** |
+| `/parametres/api` | API développeur | ✅ **fonctionne** (26/09/2026) : clés d'API personnelles et documentation |
 | `/parametres/usage` | Mon usage | ✅ **fonctionne** |
 | `/parametres/confidentialite` | Confidentialité | ✅ **fonctionne** |
 | `/parametres/apps` | Installer les apps | ❌ **maquette** |
@@ -543,9 +543,24 @@ sociétés ont demandé le retrait de leur logo des bibliothèques d'icônes. Le
 couleurs de marque sont en hexadécimal, entorse assumée à la règle des tokens :
 ce sont des données imposées par ces sociétés, pas des couleurs d'interface.
 
-**API développeur**. ❌ Écran d'attente assumé : « Accès API bientôt
-disponible ». C'est honnête, et c'est la bonne façon de traiter un écran sans
-moteur.
+**API développeur** (`src/components/settings/ClesApi.tsx`, 26/09/2026). ✅ Données
+réelles de l'instance (`/helix/cles-api`). En haut : ce qu'une clé permet, et
+« Créer une clé » (nom, expiration 30 jours, 90 jours, 1 an ou sans expiration). La
+clé créée s'affiche **une fois**, dans un encart d'avertissement, avec un bouton
+Copier (si le navigateur refuse la copie, la valeur est sélectionnée et l'écran le
+dit) et « J'ai copié la clé » qui la fait disparaître. Liste : nom, `hlx_•••• fin`,
+créée le, dernière utilisation, expiration (pastille « Expirée »), Renommer, Révoquer
+avec confirmation (« les programmes qui s'en servent seront refusés dès
+maintenant »). En dessous, « Utiliser l'API » : l'adresse de base telle que la
+passerelle la sert (`http://localhost:<port>/v1`, `https` si elle chiffre, et les
+adresses réseau si l'instance est ouverte aux collègues, sinon la phrase qui dit
+qu'elle n'est pas joignable d'ailleurs), exemples `curl` et Python (`openai`, sans et
+avec flux) remplis avec un vrai modèle de l'instance et une variable d'environnement
+nommée d'après la marque, l'usage du champ `connaissances` avec la liste des bases de
+la personne et leurs identifiants, la liste des modèles, ce qu'une clé ne permet pas,
+et les limites (60 requêtes par minute, 20 clés). Vu dans le navigateur le
+26/09/2026 sur une instance jetable, en français et en chinois ; l'exemple `curl` a
+été recopié de l'écran et exécuté tel quel. Pas vu dans l'application de bureau.
 
 **Mon usage** (captures 41 et 42). ✅ Données réelles : requêtes, jetons
 d'entrée et de sortie (dont ceux de raisonnement), courbe par jour, table par
@@ -1022,7 +1037,7 @@ Reprises ici avec ce qui a été tranché.
 | Couleur d'accent : émeraude ou coral | ✅ **émeraude** (`--accent`). Le token `--coral` n'existe plus nulle part dans le code |
 | Barre de fenêtre macOS ou Windows | ✅ barre native, calage macOS |
 | Noms de marques tierces (modèles, fournisseurs) | ✅ remplacés par le catalogue réel de la passerelle, et les connecteurs par des services réellement branchables |
-| API développeur : page ou hors périmètre | ✅ page d'attente assumée |
+| API développeur : page ou hors périmètre | ✅ page d'attente assumée, puis écran réel le 26/09/2026 (clés d'API) |
 | Menu contextuel clic droit de la Bibliothèque | ↪ remplacé par le menu « ... » de chaque ligne (mêmes actions) |
 | Graphique de coût : librairie ou SVG maison | ✅ SVG maison, sans dépendance. Les données restent fictives |
 | Section « Organisation » des paramètres | ❌ non construite, aucune capture ne la montrait |
@@ -1035,10 +1050,11 @@ Reprises ici avec ce qui a été tranché.
 Bibliothèque, Réunions, Groupes, Tâches, et dans les paramètres : Profil (photo
 comprise), Préférences, Sécurité (postes, journal, double authentification),
 Personnalisation de l'IA, Bot Recorder, Connecteurs, Modèles cloud, Contrôle de
-l'écran, Mon usage, Confidentialité (export RGPD).
+l'écran, API développeur (clés d'API, depuis le 26/09/2026), Mon usage,
+Confidentialité (export RGPD).
 
-**Ce qui est annoncé « bientôt » et le dit à l'écran** : API développeur, le
-téléchargement direct dans Installer les apps, « Créer une compétence ».
+**Ce qui est annoncé « bientôt » et le dit à l'écran** : le téléchargement direct
+dans Installer les apps, « Créer une compétence ».
 
 **À éprouver avant de le promettre** : le bot de réunion dans une vraie réunion
 Google Meet (il l'a été face à une réunion simulée).

@@ -9,7 +9,8 @@ sont au § 17 ; ce qui a été fermé depuis, au § 18 ; la surface ajoutée par
 `helix://` de la 0.24.0, au § 19 ; et le jeton d'instance retiré du dossier de
 travail, au § 20. Les surfaces ajoutées le 24/09/2026 sont au § 21, celles du
 25/09/2026 (images des Chats partagés, bases de connaissances, entraînement,
-ligne de commande et outils de Code) au § 22.
+ligne de commande et outils de Code) au § 22. Les clés d'API personnelles du
+26/09/2026 sont au § 23.
 
 ---
 
@@ -136,6 +137,7 @@ Trente-deux routes, recopiées du code et revérifiées le 14/09/2026. S'y ajout
 | `/helix/groupes` | `routeGroupe` (§ 16.1) | 0.16.0 |
 | `/helix/bibliotheque` | `routeBibliotheque` (§ 16.2) | 0.16.0 |
 | `/helix/reunions` | `routeReunion` (§ 16.3) | 0.16.0 |
+| `/helix/cles-api` | `routeClesApi` : lister, créer, renommer, révoquer ses clés d'API (§ 23) | 26/09/2026 |
 
 Seule exception, le serveur d'outils `/helix/employes/<id>/outils`, appelé par
 l'instance OpenClaw sans séance et protégé par sa propre clé (§ 14). Les deux flux d'évènements y figurent
@@ -194,6 +196,7 @@ la même chose.
 |---|---|---|
 | Conversation simple | **non** | C'est le point d'entrée compatible OpenAI. OpenCode et tout client tiers l'utilisent, et ils exécutent leurs propres outils chez eux. L'instance ne fait que relayer du texte vers le moteur d'inférence |
 | `tools: true` | **oui** | L'appelant demande à *l'instance* d'agir : lire et écrire des fichiers, piloter l'écran. Cela engage une personne, et le journal doit pouvoir la nommer |
+| Clé d'API (`Authorization: Bearer hlx_…`) | remplacée par la clé | Au nom de la titulaire, sans jeton d'instance ; `tools: true` refusé (403) : une clé ne fait jamais agir l'instance (§ 23) |
 
 Le refus est explicite : « Faire agir l'agent sur vos fichiers ou votre écran
 demande une séance ouverte. »
@@ -244,7 +247,7 @@ qu'on lui demande **refuse**. Il n'accepte jamais par défaut.
 
 **La batterie de sécurité** (`npm run securite`, 0.27.0). Elle démarre une
 instance jetable et l'attaque de l'extérieur : 66 vérifications à sa création,
-125 le 25/09/2026 (toutes réussies ce jour-là), chacune
+125 le 25/09/2026, 221 le 26/09/2026 avec les clés d'API (toutes réussies ces jours-là), chacune
 disant ce qu'elle attend et ce qu'elle a obtenu — routes sans jeton et sans
 séance, compte ouvert sans invitation, mot de passe trop court, énumération des
 comptes, force brute freinée, mots de passe et jetons absents du disque et du
@@ -2599,4 +2602,81 @@ par 3 vérifications de la batterie.
 - **Import par morceaux** (`importLocal.ts`) : le contenu n'est rendu que pour des clés
   de la liste relevée par la passerelle ; aucun chemin venu de la requête n'est lu.
   Vérifié avec `claude-code:../../etc/passwd` : ignorée.
+
+## 23. Clés d'API personnelles (26 septembre 2026)
+
+`gateway/src/clesApi.ts`, `gateway/src/index.ts` (`ROUTES_CLE`, `traiterParCle`),
+`gateway/src/debit.ts` (`verifierCleApi`). Décision : PROJET.md § 3.13.
+
+### 23.1 Ce qu'une clé est, et ce que l'instance en garde
+
+- `hlx_` puis 32 octets aléatoires en base64url (47 caractères). Rendue **une seule
+  fois**, dans la réponse à `POST /helix/cles-api` ; l'écran l'affiche jusqu'à ce que
+  la personne ferme l'encart, puis l'oublie.
+- Sur le disque : sel de 16 octets propre à la clé, **SHA-256(sel + clé)**, nom, quatre
+  derniers caractères, dates de création, de dernière utilisation (écrite au plus une
+  fois par minute) et d'expiration, portée (`modeles`). Collection interne `clesApi`,
+  chiffrée comme le reste du magasin, jamais distribuée aux postes.
+- Vérification : l'empreinte est recalculée pour chaque clé enregistrée et comparée à
+  durée constante (`timingSafeEqual`). Le registre est gardé en mémoire avec la
+  révision du magasin ; il est relu dès qu'elle change, si bien qu'une révocation
+  écrite par un autre processus sur le même magasin vaut à l'appel suivant.
+- Un registre illisible **lève** au lieu d'être pris pour une liste vide : la création
+  suivante ne peut donc pas écraser des clés qu'on n'a pas pu lire.
+- 20 clés au plus par personne ; expiration à 30, 90, 365 jours ou jamais.
+
+### 23.2 Où une clé est acceptée
+
+| Requête | Réponse |
+|---|---|
+| `Authorization: Bearer hlx_…` sur `GET /v1/models` ou `POST /v1/chat/completions` | la clé remplace le jeton d'instance **et** la séance ; la titulaire est l'identité de la requête |
+| La même clé sur toute autre route (`/helix/*` compris, séance jointe ou non) | **403**, sans vérifier la clé |
+| Clé inconnue, révoquée, expirée, ou compte supprimé ou qui n'a plus le droit d'entrer (second facteur imposé depuis) | **401** |
+| Clé (forme exacte `hlx_` + 43 caractères) dans un paramètre d'adresse, quel qu'il soit, ou dans `X-Helix-Session` | **401**, même valide, même avec le jeton d'instance |
+| Plus de 60 requêtes dans la minute avec une même clé (`HELIX_CLE_API_PAR_MINUTE`) | **429** avec `Retry-After` ; les autres clés ne sont pas freinées |
+| `tools: true` | **403** : l'instance n'exécute rien pour une clé (ni fichiers, ni écran, ni connecteurs) ; `tools: [...]` fournis par l'appelant passent, il les exécute lui-même |
+
+Créer, lister, renommer, révoquer une clé passe par `/helix/cles-api`, qui exige une
+séance (préfixe `routeClesApi`, § 1.3) : une clé ne crée pas de clé. Chacun ne voit que
+les siennes ; viser celle d'un collègue répond 404, comme une clé inconnue.
+
+L'écoute réseau ne change pas : tant que l'instance n'est pas ouverte aux collègues,
+elle n'écoute que sur la boucle locale, et l'API n'est joignable que depuis sa machine.
+Ouverte, elle chiffre (§ 1.5, `tls.ts`) : l'adresse de base annoncée à l'écran passe en
+`https`, et un client doit recevoir le certificat auto-signé comme autorité de
+confiance.
+
+### 23.3 Au nom de qui
+
+Les modèles, bases de connaissances (`connaissances: ["kb_…"]`, jugées par
+`connaissances.contextePourChat` avec les droits de la titulaire), la consommation
+(`usage.ts`) et le journal sont ceux de la titulaire. Chaque appel ajoute une ligne
+`api.appel` : identifiant de la clé, route, modèle demandé, flux ou non, nombre de
+bases, statut. Jamais les messages, jamais la réponse, jamais la clé. Création,
+renommage et révocation sont consignés (`cleapi.creee`, `cleapi.renommee`,
+`cleapi.revoquee`) avec le nom et les quatre derniers caractères. Effacement d'un
+compte : ses clés sont retirées juste après ses séances, avant le reste
+(`effacement.ts`). Export RGPD : la liste, sans sel ni empreinte (`export.ts`).
+
+### 23.4 Vérifié
+
+Batterie (`npm run securite`, section 7 ter bis, et sections 1, 2, 7 quater et 9) :
+sans clé ou clé inventée → 401 ; clé valide → `/v1/models` 200, `/v1/chat/completions`
+atteint le faux moteur en flux et sans flux (objet `chat.completion`) ; `tools: true`
+→ 403 ; la même clé sur `/helix/data/sessions`, `/helix/export`, `/helix/cles-api`
+(liste et création), `/helix/models`, `/helix/code/session`, `/helix/connaissances`
+→ 403, y compris jointe à une séance ; clé dans `?api_key=`, `?token=`, `?key=`,
+`?session=` ou dans l'en-tête de séance → 401 ; la clé de A lit sa base et ne voit pas
+celle de B ; liste visible de sa seule titulaire, collègue qui révoque ou renomme →
+404 ; 429 atteint, sans freiner une autre clé ; clé expirée → 401 (date avancée dans le
+registre) ; révoquée → 401 aussitôt ; 21e clé → 409 ; export sans empreinte ; effacement
+du compte → 401 ; aucune clé en clair dans les fichiers du dossier de données (journal
+d'audit compris) ni dans la sortie du serveur. 221 contrôles réussis le 26/09/2026.
+À la main, le même jour : écran, `curl`, Python (`urllib`), instance chiffrée sur la
+boucle locale avec `curl --cacert` (PROJET.md § 3.13).
+
+**Ce qui n'est pas couvert.** Une clé fuitée reste utilisable jusqu'à sa révocation ou
+son expiration, dans la limite de 60 requêtes par minute ; rien ne détecte un usage
+anormal. La limite est en mémoire : elle repart à zéro au redémarrage de la passerelle
+(comme `debit.ts`). Une clé sans expiration ne meurt qu'à la révocation.
 

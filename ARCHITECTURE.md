@@ -1773,7 +1773,7 @@ nous écrivons et doivent être contrôlées une par une :
 | Paramètres → Connecteurs | Courrier IMAP (lecture, brouillons) et envoi SMTP (accord à chaque mail), agenda CalDAV, Drive, Slack, catalogue MCP | ✅ branché |
 | Paramètres → Modèles cloud, Mon usage | Clés de fournisseurs ; compteurs mesurés de la passerelle | ✅ branché |
 | Paramètres → Contrôle de l'écran | Diagnostic, activation, essai de capture | ✅ branché |
-| Paramètres → API développeur | aucun | ❌ annoncé « bientôt » à l'écran |
+| Paramètres → API développeur | `/helix/cles-api` ; clés reçues sur `/v1/models` et `/v1/chat/completions` (ADR-055) | ✅ branché |
 | Paramètres → Installer les apps | Liens de version | ⚠ téléchargement direct annoncé « bientôt » |
 | Barre latérale → Notifications, Aide | aucun | ❌ grisés, annoncés « bientôt » |
 
@@ -1880,6 +1880,14 @@ Pour Code, la passerelle sert elle-même ses connecteurs à OpenCode, par MCP, s
 **Import par morceaux.** `importLocal.ts` lisait chaque fichier d'un bloc et rendait tout en une réponse. Désormais en deux temps : `GET /helix/import/logiciel/<id>?depuis=N` rend une page de 50 conversations ou 64 Mo de fichiers, résumés seulement, avec `total` et `suivant` ; fichiers lus ligne à ligne par blocs de 1 Mo (`lignesDe`), ligne de plus de 16 Mo sautée, liste relevée à la page 0, triée des plus récentes aux plus anciennes, 5 000 au plus, gardée 30 min. Puis `POST /helix/import/logiciel/<id>` avec `{ cles }` (500 au plus) rend le contenu des seuls Chats choisis, par lots de 6 M caractères côté écran (`ImporterChats.tsx`, `importChats.ts`), 16 M au plus côté passerelle ; une clé inconnue de la liste relevée est ignorée, aucun chemin venu de la requête n'est lu. Le contenu est chargé avant la création des projets et des agents. Cursor : `sqlite3` par `execFile` sans attente bloquante, `logicielsTrouves` asynchrone.
 
 **Conséquences.** Mesuré le 25/09/2026 sur 2 000 conversations factices (4,7 Go) : boucle bloquée 9 à 14 ms au pire au lieu de 1 372 à 1 588 ms, mémoire au pic 109 à 173 Mo au lieu de 295 Mo, plus grosse réponse 20 Ko par page et 5,9 Mo par lot au lieu de 18 Mo. Vu à l'écran : 5 lots pour Claude Code, 19 Chats listés. Pas essayé : Cursor sur une vraie base, Codex.
+
+### ADR-055 : Clés d'API personnelles, pour l'API compatible OpenAI seulement ✅ implémenté (26/09/2026)
+
+**Contexte.** Paramètres → API développeur annonçait des clés « bientôt ». Un programme qui parle l'API compatible OpenAI devait porter le jeton d'instance (commun au parc, il ne nomme personne) et une séance (douze heures, faite pour un écran). Demandé par Medhi le 26/09/2026.
+
+**Décision.** `gateway/src/clesApi.ts` : clé `hlx_` + 32 octets, montrée une fois, gardée en SHA-256 salé (sel par clé) dans la collection interne `clesApi` avec nom, fin, dates, expiration (30, 90, 365 jours ou jamais), portée `modeles` ; 20 par personne. Routes de gestion `/helix/cles-api` (liste avec les adresses réellement servies, création, `/<id>` renommage, `/<id>/revoquer`), sous séance (`routeClesApi` dans `exigeSeance`). Dans `traiter` (index.ts), **avant** le jeton d'instance : une clé mal placée (paramètre d'adresse, en-tête de séance) → 401 ; `Authorization: Bearer hlx_…` hors de `ROUTES_CLE` (`GET /v1/models`, `POST /v1/chat/completions`, liste fermée) → 403 ; sinon `traiterParCle` vérifie la clé (401), le débit (`debit.verifierCleApi`, 60 par minute, 429), le compte (`profilDe`, 401), puis pose l'identité dans `identites` et la clé dans `parCleApi` : `demandeur()` rend la titulaire sans autre lecture. `handleChat` refuse `tools: true` (403), retire un `tools` booléen, et passe `{ parCleApi, nonFlux }` à `handleChatRequest` : bases de connaissances consultées aussi pour un client ordinaire, réponse recomposée en `chat.completion` (`ReponseEntiere`, chat.ts) quand `stream` n'est pas `true`. Une ligne `api.appel` au journal par appel.
+
+**Conséquences.** Une clé fuitée n'ouvre ni les données, ni les fichiers, ni les réglages, ni l'exécution d'outils, et se freine seule. Le registre est relu à chaque changement de révision du magasin (une lecture de révision par appel, pas un déchiffrement). Le relais `/v1/chat/completions` ne change pas pour les autres clients : il rend toujours du flux, même sans `stream: true` (dette connue, laissée pour ne pas toucher OpenCode ni les employés). `/v1/embeddings` n'est pas servi. Vérifié : batterie à 221 contrôles, essai de bout en bout avec qwen3-8b (PROJET.md § 3.13). Pas essayé : le paquet `openai` lui-même, un appel depuis une autre machine.
 
 ## 7. Roadmap
 

@@ -11,7 +11,7 @@ refaite à l'envers.
 | | |
 |---|---|
 | Version | 0.27.0 (`package.json`) |
-| Dernière mise à jour | 25 septembre 2026 |
+| Dernière mise à jour | 26 septembre 2026 |
 | Documents liés | [ARCHITECTURE.md](ARCHITECTURE.md), [SECURITE.md](SECURITE.md), [SCREENS.md](SCREENS.md), [SIGNATURE.md](SIGNATURE.md), [README.md](README.md), [docs/GUIDE.md](docs/GUIDE.md) |
 
 ---
@@ -917,6 +917,65 @@ LM Studio), et `gateway/src/entrainement.ts`.
 - Un nouvel entraînement s'écrit à côté de l'ancien : arrêté ou raté, il ne fait pas
   perdre le modèle qui marchait.
 
+### 3.13 API développeur : des clés personnelles, pour l'API compatible OpenAI seulement
+
+Demandé par Medhi le 26/09/2026 : l'écran Paramètres → API développeur, « bientôt »
+depuis le début, doit fonctionner. Cela défait la décision du 20/09/2026 qui
+rattachait les clés d'API aux abonnements hébergés : les clés servent d'abord à
+l'instance elle-même, et n'attendent donc pas de relais ni de paiement.
+
+**Ce qui a été décidé.** Une personne connectée crée une clé nommée (`hlx_` puis
+32 octets aléatoires), montrée **une seule fois** ; l'instance n'en garde qu'une
+empreinte SHA-256 salée, le nom, les quatre derniers caractères, les dates et une
+portée (`gateway/src/clesApi.ts`, collection interne `clesApi`). Expiration à 30, 90
+ou 365 jours, ou jamais ; 20 clés par personne ; renommage ; révocation immédiate.
+Une clé **remplace le jeton d'instance et la séance**, et seulement sur
+`GET /v1/models` et `POST /v1/chat/completions` (`ROUTES_CLE`, index.ts, liste fermée
+posée avant le jeton comme `EXECUTION` avant le routage). Elle agit au nom de sa
+titulaire : ses modèles (clés personnelles de modèles cloud comprises), ses bases de
+connaissances par le champ `connaissances`, sa consommation dans Mon usage, une ligne
+`api.appel` à son journal (route, modèle, issue, jamais le contenu).
+
+**Ce qu'elle ne fait pas, et pourquoi.** Aucune route `/helix/*` (403 sans même
+vérifier la clé) : une clé vit dans un script, sur une machine qu'on ne surveille
+pas, et une fuite ne doit ouvrir ni les Chats, ni les fichiers, ni les réglages.
+`tools: true` est refusé : l'instance n'exécute rien pour une clé, ni outils de
+fichiers, ni écran, ni connecteurs de la personne ; les outils que le programme
+fournit (`tools: [...]`) passent, c'est lui qui les exécute. Une clé ne crée pas de
+clé. Elle ne se présente que dans `Authorization: Bearer` : dans l'adresse ou dans
+l'en-tête de séance, elle est refusée même valide (401), pour qu'un script le
+découvre avant la fuite. **60 requêtes par minute et par clé** (`debit.ts`,
+`HELIX_CLE_API_PAR_MINUTE`), pour qu'une clé fuitée ne puisse pas occuper la machine.
+L'écoute réseau n'a pas changé : sans ouverture aux collègues, l'API n'est joignable
+que depuis la machine de l'instance, et l'écran le dit.
+
+**Trouvé en le faisant.** Le relais de `/v1/chat/completions` ne rendait que du flux,
+même sans `stream: true` : le paquet `openai`, qui ne demande pas de flux par défaut,
+aurait échoué à lire la réponse. Pour un appel par clé, la passerelle recompose
+désormais l'objet `chat.completion` (texte, raisonnement, appels d'outils, fin,
+consommation), le moteur restant interrogé en flux. Pour les autres clients (jeton
+d'instance, OpenCode, employés), rien n'a changé. Le champ `connaissances` partait
+aussi jusqu'au moteur : il est retiré avant l'envoi (un fournisseur cloud refuse un
+champ inconnu). `POST /v1/embeddings` n'est pas servi par la passerelle : une clé ne
+l'ouvre donc pas.
+
+**Vérifié le 26/09/2026** sur une instance jetable (port 8913, `HELIX_DATA_DIR`
+temporaire, LM Studio partagé en lecture, qwen3-8b déjà chargé) : clé créée à l'écran
+(30 jours), montrée une fois, copie refusée par le navigateur d'essai et valeur
+sélectionnée à la place ; `curl` en flux et sans flux (l'exemple de l'écran recopié tel
+quel : `chat.completion`, 1 016 caractères de raisonnement puis la réponse) ; appel
+Python par `urllib` (le paquet `openai` n'est pas installé sur ce poste) : sans base,
+le modèle invente un code (« 123456 ») ; avec `connaissances: ["kb_…"]`, en flux et
+sans flux, il rend TAMARIN-5821 et la source `Reglement-atelier.txt` ; révocation à
+l'écran avec confirmation, puis 401 aussitôt ; Mon usage : 6 requêtes à son nom ;
+journal : « Clé d'API créée », « Appel à l'API par une clé », « Clé d'API révoquée »,
+aucune clé en clair dans les données ni dans la sortie du serveur. Instance chiffrée
+sur la boucle locale (`tls: true`, port 8914) : l'adresse de base annoncée passe en
+`https://localhost:8914/v1`, `curl` sans le certificat échoue, avec
+`--cacert instance-cert.pem` il répond. Batterie : 221 contrôles, tous réussis.
+**Pas essayé** : le paquet `openai` lui-même, un appel depuis une autre machine d'une
+instance ouverte aux collègues, un client tiers (tableur, éditeur).
+
 ---
 
 ## 4. Sécurité
@@ -1271,8 +1330,9 @@ lancé par le binaire de l'application, sans Node installé) ; depuis les source
 
 Plus aucun écran en maquette depuis 0.16.0. Les notifications et l'aide ont cessé
 d'être grisées en 0.22.0, « Créer une compétence » a été faite en 0.24.0.
-Restent, marqués « bientôt » à l'écran : les **clés d'API développeur** et le
-**téléchargement direct des applications** (Paramètres, Installer les apps).
+Reste, marqué « bientôt » à l'écran : le **téléchargement direct des applications**
+(Paramètres, Installer les apps). Les clés d'API développeur fonctionnent depuis le
+26/09/2026 (§ 3.13).
 
 ### Affichages faux : ce qui a été réglé
 
@@ -2404,8 +2464,8 @@ ne restent ici que les points ouverts.*
    Abonnement), rien n'encaisse. Dans l'ordre : devis réel d'hébergement chez un
    fournisseur européen, relais chez l'agence qui garde la clé (jamais la clé
    dans le profil du client), jeton et compte de consommation par client,
-   paiement. Les **clés d'API** (Paramètres → API développeur, « bientôt »)
-   viendront avec (décision du 20/09/2026).
+   paiement. (Les clés d'API de l'instance, qui devaient venir avec selon la
+   décision du 20/09/2026, sont faites depuis le 26/09/2026, § 3.13.)
 3. **Relecture native** des traductions anglaise et chinoise.
 4. **Essais avec de vrais comptes** : bot dans une vraie réunion Google Meet
    (puis Teams, Zoom si demandés) ; courrier Workspace / M365 par OAuth et mode
@@ -2529,6 +2589,10 @@ ne restent ici que les points ouverts.*
     instance à un seul compte, on pourrait les lui attribuer ; pas fait) ; renommer une
     session (pas fait, le titre est la première demande) ; l'effacement d'un compte avec
     des sessions de Code, pas essayé.
+24. **Clés d'API** (§ 3.13, 26/09/2026) : essayer le paquet `openai` lui-même (pas
+    installé sur ce poste, l'essai Python est passé par `urllib`), un appel depuis une
+    autre machine sur une instance ouverte aux collègues, et un client tiers (tableur,
+    éditeur de code). L'écran API développeur dans l'application de bureau, pas vu.
 
 **Titulaire des droits** : tranché le 24/09/2026, « Medhi Clabaut » (entreprise
 individuelle, SIREN 994 907 145), partout ; mentions légales et section

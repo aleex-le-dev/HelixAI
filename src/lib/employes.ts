@@ -55,7 +55,7 @@ export interface Employe {
   agentId?: string;
   visibilite?: "personnel" | "organisation";
   toutesLesFamilles?: boolean;
-  /** Bases de connaissances de l'agent : il n'y lit que ce qui est ouvert à toute l'équipe. */
+  /** Bases de connaissances de l'agent : ce qu'il y lit, `lectureDesBases` le dit. */
   connaissances?: string[];
   ownerId: string;
   createdAt: string;
@@ -201,6 +201,29 @@ const poster = (chemin: string, corps: unknown) =>
 
 export async function chargerEmployes(): Promise<EtatEmployes> {
   return lire<EtatEmployes>(await apiFetch("/helix/employes"));
+}
+
+/** Pourquoi un agent toujours actif ne lit que ce qui est ouvert à toute l'équipe (gateway/src/employes.ts, `lectureDesBases`). */
+export type RaisonEquipeSeulement = "organisation" | "messagerie" | "mission-mail" | "liberte" | "outils";
+
+/** Ce qu'il lira réellement dans ses bases de connaissances, calculé par l'instance comme son outil le fait. */
+export interface LectureDesBases {
+  groupes: boolean;
+  raisons: RaisonEquipeSeulement[];
+  outilsQuiSortent: Famille[];
+  bases: {
+    id: string;
+    nom?: string;
+    visibilite?: "prive" | "groupes" | "organisation";
+    lue: boolean;
+    documents: number;
+    documentsLus: number;
+    raison?: "prive" | "groupes-equipe" | "groupes-autres" | "inconnue" | "documents";
+  }[];
+}
+
+export async function lectureDesBases(id: string, bases: string[]): Promise<LectureDesBases> {
+  return lire<LectureDesBases>(await poster(`/helix/employes/${encodeURIComponent(id)}/connaissances`, { bases }));
 }
 
 export interface NouvelEmploye {

@@ -2,7 +2,8 @@ import type http from "node:http";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
-import { employe, cleValide, famillesEffectives, nomOpenClaw, prefixerNoms, traiteUnMailRecu, type Employe } from "./employes.ts";
+import { employe, cleValide, famillesEffectives, lectureDesBases, nomOpenClaw, prefixerNoms, traiteUnMailRecu, type Employe } from "./employes.ts";
+import { groupesDe } from "./groupes.ts";
 import { outilsDeFamille, executerOutil, cibleDe, type DefinitionOutil } from "./outils.ts";
 import { demandeToujours, modifie, verifierOutil } from "./approbation.ts";
 import { journaliser } from "./audit.ts";
@@ -107,11 +108,17 @@ export async function servirOutils(
 
     /*
      * Ses bases de connaissances : celles de son agent, relues à chaque appel,
-     * et seulement ce qui y est ouvert à toute l'équipe (connaissances.ts,
-     * `chercherPourEmploye`, où la règle est justifiée). Traité avant
+     * et ce qui y est ouvert à toute l'équipe (connaissances.ts,
+     * `chercherPourEmploye`, où la règle est justifiée). Plus ce qui est
+     * partagé aux groupes de son propriétaire, si rien de ce qui sort de lui ne
+     * va à quelqu'un d'autre (employes.ts, `lectureDesBases`) : établi ici,
+     * depuis l'employé relu plus haut et les groupes du propriétaire à cet
+     * instant, jamais gardé d'un appel à l'autre. Traité avant
      * `executerOutil`, qui rangerait ce nom parmi les outils MCP des fichiers.
      */
-    const bases = nom === OUTIL_EMPLOYE ? await chercherPourEmploye(courant.connaissances ?? [], args, qui) : null;
+    const lecture = nom === OUTIL_EMPLOYE ? lectureDesBases(courant) : null;
+    const groupes = lecture?.groupes ? await groupesDe(courant.ownerId) : null;
+    const bases = nom === OUTIL_EMPLOYE ? await chercherPourEmploye(courant.connaissances ?? [], args, qui, groupes) : null;
     // Plusieurs personnes lui parlent : dans la bibliothèque, il ne voit que ce qui est ouvert à toute l'équipe.
     const r = bases ?? (await executerOutil(nom, args, { userId: qui, groupes: [] }));
     // Le journal dit combien de passages sont sortis, jamais lesquels ni la question.
@@ -119,7 +126,9 @@ export async function servirOutils(
       outil: nom,
       cible: cibleDe(args),
       ok: r.ok,
-      ...(bases ? { bases: courant.connaissances?.length ?? 0, passages: bases.passages } : {}),
+      ...(bases
+        ? { bases: courant.connaissances?.length ?? 0, passages: bases.passages, regle: groupes ? "groupes" : "equipe", horsEquipe: bases.horsEquipe }
+        : {}),
       ...(sansAccord ? { sansAccord: true } : {}),
     });
     // Le résultat part tel quel : il porte des données (un mail, un fichier) qu'on ne réécrit pas.

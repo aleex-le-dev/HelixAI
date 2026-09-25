@@ -2316,7 +2316,7 @@ curl -s -H "Authorization: Basic $(printf 'opencode:<mot de passe>' | base64)" \
 
 ## 22. Les surfaces ajoutées le 25 septembre 2026
 
-`npm run securite` compte désormais **152 contrôles, tous réussis le 25/09/2026** (125 à midi, plus 15 sur les employés et les bases de connaissances, § 22.2, 5 sur le flux de Helix Code, § 22.4, et 7 sur l'export RGPD et l'effacement, § 7.1).
+`npm run securite` compte désormais **167 contrôles, tous réussis le 25/09/2026** (125 à midi, plus 15 sur les employés et les bases de connaissances, § 22.2, 5 sur le flux de Helix Code, § 22.4, 7 sur l'export RGPD et l'effacement, § 7.1, puis, l'après-midi, 14 sur les employés et les bases partagées à un groupe et 1 route de plus sans séance, § 22.2).
 Ajoutés ce jour-là, par branche : 14 sur les images d'un Chat partagé (13, plus la
 connexion d'une collègue), 6 sur les bases de connaissances et 9 de leurs routes
 ajoutées aux listes « sans jeton » et « sans séance », 16 sur l'entraînement, 3 sur
@@ -2381,7 +2381,7 @@ désormais exportée), `gateway/src/index.ts`.
 - Journal : `connaissances.base_creee`, `base_modifiee`, `base_supprimee`,
   `documents_ajoutes`, `document_retire`, avec identifiants et nombres, jamais de
   texte.
-- **Employés OpenClaw** (ajouté le 25/09/2026) : l'outil `connaissances__chercher` de
+- **Employés OpenClaw** (ajouté le 25/09/2026) : par défaut, l'outil `connaissances__chercher` de
   leur serveur d'outils ne compte que les bases **et** les documents ouverts à toute
   l'équipe (`chercherPourEmploye`, `equipeSeulement`), avec l'identité `employe:<id>`,
   qui ne possède rien : ni les droits du propriétaire de l'agent, ni ceux de qui lui
@@ -2401,6 +2401,48 @@ désormais exportée), `gateway/src/index.ts`.
   aucun passage ; sans la clé, clé devinée, séance d'une collègue sans clé : 403 ;
   `SOUL.md` sans nom de base. De bout en bout avec un vrai OpenClaw et qwen3-8b le même
   jour : aucun secret dans les réponses (PROJET.md).
+- **Bases partagées à un groupe** (ajouté le 25/09/2026, l'après-midi, `employes.ts`,
+  `lectureDesBases`). La règle : un document ne sort d'un employé que vers des gens qui
+  ont le droit de le voir. Elle n'est établie sûrement que dans un cas, celui où tout
+  ce qui sort de lui ne va qu'à son **propriétaire**. L'employé lit alors, en plus de ce
+  qui est ouvert à l'équipe, les bases et documents partagés aux groupes dont ce
+  propriétaire est membre **à l'instant de l'appel** ; son seul destinataire les voit
+  donc lui-même. Conditions, toutes vérifiées dans l'employé enregistré, relu à chaque
+  appel (rien n'est mis en cache) :
+  - agent **personnel** : `visiblePar` le cache à tout autre (404), ses échanges sont
+    ceux de son propriétaire, ses comptes rendus de missions lui sont réservés
+    (`sienOuRefus`) ;
+  - **aucune messagerie** : ceux qui y écrivent n'ont pas de compte, et le modèle leur
+    répondrait avec sa mémoire ;
+  - aucune mission **à chaque mail** : un texte venu de n'importe qui le fait travailler ;
+  - palier **encadré** : au-delà, une page web lue peut emporter un passage dans son
+    adresse, et il envoie des messages ;
+  - aucune famille **qui écrit ou envoie** là où d'autres lisent : fichiers de l'équipe
+    (et les connecteurs qui s'y rattachent), documents Office, mails (brouillons compris) ;
+    « Autoriser les outils » les donne toutes.
+  Jamais ses documents privés : l'identité reste `employe:<id>`, qui ne possède rien.
+  Dès qu'une condition tombe (ouvert à l'organisation, messagerie branchée, outil
+  ajouté, palier élargi, propriétaire sorti du groupe), l'appel suivant revient à la
+  règle de l'équipe. **Pas traité** : un agent partagé à des groupes précis (la
+  visibilité d'un agent est personnelle ou d'organisation dans le code actuel ; ce cas
+  garde la règle de l'équipe) ; la famille « bibliothèque » de ses outils reste à ce
+  qui est ouvert à l'équipe. Route de l'écran : `POST /helix/employes/<id>/connaissances`,
+  propriétaire seul (une collègue : 404), qui ne nomme pas une base que le propriétaire
+  ne voit pas. Journal : `outil.appele` porte `regle` et `horsEquipe` (nombres, jamais
+  de texte).
+- Contrôlé par `npm run securite` (section 7 ter, 14 contrôles ajoutés le 25/09/2026) :
+  l'employé personnel lit la base du groupe de sa propriétaire, avec la source ; ni la
+  base d'un groupe dont elle n'est pas membre, ni son document privé rangé dans la base
+  du groupe, ni celui d'une collègue ; l'écran compte 2 documents lus sur 3 et ne nomme
+  pas la base étrangère ; une collègue n'obtient pas cet écran ; ouvert à l'organisation,
+  il ne la lit plus dès l'appel suivant, et la relit redevenu personnel ; avec les
+  fichiers de l'équipe, avec « Autoriser les outils », en liberté étendue, joint sur
+  Telegram : il ne la lit plus (et l'écran dit « messagerie ») ; messagerie retirée, il
+  la relit ; l'employé d'organisation ne lit que ce qui est ouvert à l'équipe ; la
+  propriétaire sortie du groupe, il ne la lit plus. De bout en bout le même jour avec
+  un vrai OpenClaw 2026.9.4 d'essai et qwen3-8b : réponse juste et citée pour la
+  propriétaire, rien du document privé, rien pour un collègue une fois l'agent ouvert à
+  l'organisation.
 - Vérifié avec un second compte le 25/09/2026 : base privée ni listée, ni lisible
   (404), ni modifiable (404), ni cherchable (0 passage, « 1 ignorée ») ; base ouverte
   à toute l'équipe mais documents privés : 0 document nommé, 0 passage.
@@ -2415,6 +2457,12 @@ Ce qui n'est pas protégé :
 - Si le profil impose un modèle `embed` distant (`models.embed`), le texte des
   documents part chez ce fournisseur ; l'écran de la base affiche le modèle qui a
   indexé chaque document.
+- Employé qui a lu les bases des groupes de son propriétaire, puis dont l'audience
+  s'élargit : il cesse aussitôt de les lire, mais ce qu'il en a déjà noté dans sa
+  mémoire OpenClaw (fichiers `memory/`, conversations indexées) y reste, et Helix ne
+  l'efface pas. Une personne de la nouvelle audience pourrait l'obtenir en le lui
+  demandant. L'écran de l'agent le dit au propriétaire. Pas observé dans l'essai du
+  25/09/2026 (l'employé n'avait rien noté), mais possible.
 - Les bases sont dans l'export RGPD depuis le 25/09/2026 (§ 7.1). Un document supprimé de la
   Bibliothèque garde son index sur le disque jusqu'à ce que le propriétaire de la base
   l'en retire ; il n'est plus jamais servi.
@@ -2540,7 +2588,14 @@ par 3 vérifications de la batterie.
   illisible tant que l'instance ne l'a pas rendue. Sans cela, un trousseau refusé au
   démarrage menait à l'envoi d'une liste d'un seul Chat, que l'instance aurait prise
   pour la suppression voulue de tous les autres. Vérifié par simulation, pas dans
-  l'application de bureau.
+  l'application de bureau. Complété l'après-midi : la copie est faite dès la lecture ;
+  un fichier qu'on n'a pas pu copier n'est jamais remplacé ; le blocage de la poussée
+  survit à un rechargement de la fenêtre jusqu'à la relecture de l'instance ; quand le
+  fichier et le stockage du navigateur refusent tous deux une écriture, la lecture
+  reste celle de la mémoire (sans quoi la poussée suivante envoyait l'ancienne liste,
+  ou aucune) ; un bandeau dit à la personne ce qui s'est passé. Vérifié dans
+  l'application de bureau, profil d'essai (ARCHITECTURE.md, ADR-050). Pas provoqué :
+  le trousseau refusé.
 - **Import par morceaux** (`importLocal.ts`) : le contenu n'est rendu que pour des clés
   de la liste relevée par la passerelle ; aucun chemin venu de la requête n'est lu.
   Vérifié avec `claude-code:../../etc/passwd` : ignorée.

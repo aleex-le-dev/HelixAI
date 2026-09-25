@@ -420,12 +420,20 @@ ipcMain.on("helix:grand-initial", (event) => {
     valeurs,
     // Présentes sur le disque mais illisibles : l'interface ne pousse pas une liste vide à l'instance (sync.ts).
     illisibles: grandStockage.clesIllisibles(),
+    // Pour le bandeau qui le dit : pourquoi, et où la copie a été gardée.
+    incidents: grandStockage.incidents(),
   };
 });
 
 ipcMain.handle("helix:grand-poser", (event, cle, valeur) => {
   if (!depuisLaFenetre(event)) throw new Error("Refusé.");
   return grandStockage.poser(cle, valeur);
+});
+
+ipcMain.handle("helix:grand-relu", (event, cle) => {
+  if (!depuisLaFenetre(event)) throw new Error("Refusé.");
+  grandStockage.relu(String(cle));
+  return true;
 });
 
 ipcMain.handle("helix:coffre-vider", (event) => {

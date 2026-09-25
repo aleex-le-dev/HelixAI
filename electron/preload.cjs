@@ -84,7 +84,11 @@ contextBridge.exposeInMainWorld("helix", {
     cles: grandInitial.cles ?? [],
     valeurs: grandInitial.valeurs ?? {},
     illisibles: Array.isArray(grandInitial.illisibles) ? grandInitial.illisibles : [],
+    /** Fichiers trouvés illisibles pendant cette séance : pourquoi, et où la copie a été gardée (bandeau de l'interface). */
+    incidents: grandInitial.incidents && typeof grandInitial.incidents === "object" ? grandInitial.incidents : {},
     poser: (cle, valeur) => ipcRenderer.invoke("helix:grand-poser", cle, valeur),
+    /** L'instance a rendu cette collection : le processus principal cesse de la tenir pour illisible. */
+    relu: (cle) => ipcRenderer.invoke("helix:grand-relu", cle),
   },
   miseAJour: {
     etat: () => ipcRenderer.invoke("helix:maj-etat"),

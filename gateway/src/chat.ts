@@ -326,7 +326,11 @@ function basePayload(
   model: ModelInfo,
   messages: unknown[],
 ): Record<string, unknown> {
-  const { role: _role, effort, messages: _m, tools: _t, ...rest } = body as Record<string, unknown> & {
+  /*
+   * `connaissances` est une extension Helix, déjà traduite en consigne : un
+   * fournisseur cloud refuse volontiers un champ qu'il ne connaît pas.
+   */
+  const { role: _role, effort, messages: _m, tools: _t, connaissances: _k, ...rest } = body as Record<string, unknown> & {
     effort?: string;
   };
   const payload: Record<string, unknown> = { ...rest, model: model.id, messages, stream: true };
@@ -633,6 +637,93 @@ function lireArguments(brut: string): Record<string, unknown> | null {
   return essayer(t + "}".repeat(ouvertes));
 }
 
+/**
+ * Réponse sans flux, pour un appel par clé d'API qui ne demande pas
+ * `stream: true` (le défaut du paquet `openai`).
+ *
+ * Le moteur est toujours interrogé en flux (`basePayload`), ce qui garde la
+ * mesure de consommation et l'arrêt quand le client s'en va. On recompose ici,
+ * à partir des fragments, l'objet `chat.completion` qu'attend un client
+ * OpenAI : texte, raisonnement, appels d'outils demandés par le modèle (que
+ * le client exécutera lui-même), raison de fin, consommation.
+ */
+class ReponseEntiere {
+  private id = "";
+  private cree = 0;
+  private modele = "";
+  private texte = "";
+  private raisonnement = "";
+  private fin: string | null = null;
+  private consommation: unknown = undefined;
+  private erreur: unknown = undefined;
+  private readonly appels: { id: string; name: string; args: string }[] = [];
+
+  observer(json: unknown): void {
+    const j = json as {
+      id?: string;
+      created?: number;
+      model?: string;
+      usage?: unknown;
+      error?: unknown;
+      choices?: {
+        delta?: {
+          content?: string;
+          reasoning_content?: string;
+          tool_calls?: { index?: number; id?: string; function?: { name?: string; arguments?: string } }[];
+        };
+        finish_reason?: string | null;
+      }[];
+    };
+    if (j.error) this.erreur = j.error;
+    if (j.id && !this.id) this.id = j.id;
+    if (j.created && !this.cree) this.cree = j.created;
+    if (j.model && !this.modele) this.modele = j.model;
+    if (j.usage) this.consommation = j.usage;
+    const choix = j.choices?.[0];
+    if (!choix) return;
+    const d = choix.delta ?? {};
+    if (typeof d.content === "string") this.texte += d.content;
+    if (typeof d.reasoning_content === "string") this.raisonnement += d.reasoning_content;
+    for (const appel of d.tool_calls ?? []) {
+      const i = appel.index ?? 0;
+      while (this.appels.length <= i) this.appels.push({ id: "", name: "", args: "" });
+      const case_ = this.appels[i]!;
+      if (appel.id) case_.id = appel.id;
+      if (appel.function?.name) case_.name += appel.function.name;
+      if (appel.function?.arguments) case_.args += appel.function.arguments;
+    }
+    if (choix.finish_reason) this.fin = choix.finish_reason;
+  }
+
+  objet(modeleDemande: string, sources: unknown[] | undefined): Record<string, unknown> {
+    if (this.erreur) return { error: this.erreur };
+    const appels = this.appels.filter((a) => a.name);
+    return {
+      id: this.id || `chatcmpl-${Date.now().toString(36)}`,
+      object: "chat.completion",
+      created: this.cree || Math.floor(Date.now() / 1000),
+      model: this.modele || modeleDemande,
+      choices: [
+        {
+          index: 0,
+          message: {
+            role: "assistant",
+            content: appels.length > 0 && !this.texte ? null : this.texte,
+            ...(this.raisonnement ? { reasoning_content: this.raisonnement } : {}),
+            ...(appels.length > 0
+              ? { tool_calls: appels.map((a) => ({ id: a.id, type: "function", function: { name: a.name, arguments: a.args } })) }
+              : {}),
+          },
+          finish_reason: this.fin ?? "stop",
+        },
+      ],
+      ...(this.consommation ? { usage: this.consommation } : {}),
+      // Extension : les passages des bases de connaissances qui ont servi (champ `connaissances`).
+      ...(sources ? { helix: { sources } } : {}),
+    };
+  }
+}
+
 /** Traite une requête de conversation, avec ou sans outils. */
 /** La requête vient-elle de la machine qui héberge l'instance ? */
 function surLaMemeMachine(req: http.IncomingMessage): boolean {
@@ -655,7 +746,16 @@ export async function handleChatRequest(
    * Le même que `qui`, sauf pour un employé : c'est alors son propriétaire.
    */
   titulaire: string | undefined = qui,
+  /**
+   * Appel fait avec une clé d'API personnelle (clesApi.ts). Deux différences
+   * avec un client ordinaire : les bases de connaissances du champ
+   * `connaissances` sont consultées, au nom de la titulaire, comme pour
+   * l'écran ; et sans `stream: true`, la réponse est un objet JSON unique,
+   * comme le veut l'API d'OpenAI (le relais ne rendait que du flux).
+   */
+  options: { parCleApi?: boolean; nonFlux?: boolean } = {},
 ): Promise<void> {
+  const nonFlux = options.parCleApi === true && options.nonFlux === true;
   /*
    * Sans personne identifiée **et** depuis une autre machine : aucun modèle
    * payé par clé.
@@ -702,9 +802,20 @@ export async function handleChatRequest(
   const signaler = (evenement: Record<string, unknown>) => {
     if (interfaceHelix) emitHelix(res, evenement);
   };
+  /** Réponse unique en JSON (clé d'API sans `stream: true`), avec les mêmes en-têtes de sécurité que le flux. */
+  const repondreJson = (statut: number, corps: unknown) => {
+    const texte = JSON.stringify(corps);
+    res.writeHead(statut, {
+      ...entetesFlux(req),
+      "Content-Type": "application/json; charset=utf-8",
+      "Content-Length": Buffer.byteLength(texte),
+    });
+    res.end(texte);
+  };
   /** Une erreur, dans la langue que le client comprend. */
   const signalerErreur = (message: string) => {
     if (interfaceHelix) emitHelix(res, { type: "error", message });
+    else if (nonFlux) repondreJson(502, { error: { message } });
     else sse(res, { error: { message } });
   };
 
@@ -793,12 +904,15 @@ export async function handleChatRequest(
    * ce qui laissait n'importe quelle page ouverte dans le navigateur lire les
    * réponses dès lors qu'elle disposait du jeton.
    */
-  res.writeHead(200, {
-    ...entetesFlux(req),
-    "X-Accel-Buffering": "no",
-    "X-Helix-Model": model.uid,
-    "X-Helix-Backend": backend.id,
-  });
+  // Sans flux, les en-têtes partent avec la réponse entière (`repondreJson`).
+  if (!nonFlux) {
+    res.writeHead(200, {
+      ...entetesFlux(req),
+      "X-Accel-Buffering": "no",
+      "X-Helix-Model": model.uid,
+      "X-Helix-Backend": backend.id,
+    });
+  }
 
   /*
    * La personne a fermé le flux (bouton Arrêter, changement de Chat, fenêtre
@@ -847,6 +961,7 @@ export async function handleChatRequest(
     invalidate();
     if (!charge.ok) {
       attente?.fin();
+      if (nonFlux) return repondreJson(503, { error: { message: charge.message } });
       signalerErreur(charge.message);
       res.write("data: [DONE]\n\n");
       res.end();
@@ -915,10 +1030,13 @@ export async function handleChatRequest(
    * Les droits se jugent ici, pas dans l'écran : une base ou un document que
    * la personne ne voit pas n'en sort pas (connaissances.ts).
    */
-  if (interfaceHelix && qui && Array.isArray(body.connaissances) && body.connaissances.length > 0) {
+  /** Passages cités, rendus dans la réponse JSON d'un appel par clé d'API (`helix.sources`). */
+  let sourcesCitees: unknown[] | undefined;
+  if ((interfaceHelix || options.parCleApi) && qui && Array.isArray(body.connaissances) && body.connaissances.length > 0) {
     signaler({ type: "statut", message: t("Recherche dans les bases de connaissances...") });
     const r = await connaissances.contextePourChat(body.connaissances, messages, qui);
     messages = avecConsigne(messages, r.consigne);
+    sourcesCitees = r.citations;
     signaler({
       type: "sources",
       sources: r.citations,
@@ -1011,14 +1129,22 @@ export async function handleChatRequest(
         signalerErreur(erreurDuMoteur(upstream.status, detail, model.id));
       } else {
         releve = new usage.Releve(qui, model, payload);
-        const lire = usage.lecteurSSE((json) => releve?.observer(json));
+        const reponse = nonFlux ? new ReponseEntiere() : null;
+        const lire = usage.lecteurSSE((json) => {
+          releve?.observer(json);
+          reponse?.observer(json);
+        });
         const reader = upstream.body.getReader();
         for (;;) {
           const { done, value } = await reader.read();
           if (done) break;
           attente?.premierMorceau();
-          res.write(value);
+          if (!reponse) res.write(value);
           lire(value);
+        }
+        if (reponse) {
+          const objet = reponse.objet(model.id, sourcesCitees);
+          repondreJson("error" in objet ? 502 : 200, objet);
         }
       }
     } catch (err) {

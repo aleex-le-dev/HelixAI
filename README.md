@@ -71,6 +71,9 @@ for you on macOS.
 - **Train a model**: teach a small open model your company's facts from examples,
   compare it with the original, then install it in LM Studio (MLX on Apple Silicon;
   Unsloth on NVIDIA cards, not yet tried on real hardware).
+- **Developer API**: personal API keys for the instance's OpenAI-compatible API
+  (`/v1/models`, `/v1/chat/completions`, knowledge bases included), in your name and
+  nothing more: no other route, no tool run by the instance, revocable at once.
 - **Meetings**: record or import, transcription and minutes on the machine, meeting bot.
 - **Import** your history from ChatGPT, Claude, Claude Code, Codex and Cursor.
 - **Teams**: accounts, groups, sharing, two-factor authentication, audit log, GDPR export,

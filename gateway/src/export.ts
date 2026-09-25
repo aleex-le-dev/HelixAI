@@ -10,6 +10,7 @@ import { reunionsDe } from "./reunions.ts";
 import { connaissancesPourExport } from "./connaissances.ts";
 import { imagesDe } from "./images.ts";
 import { projetsPourExport } from "./entrainement.ts";
+import { clesDe as clesApiDe } from "./clesApi.ts";
 
 /**
  * Export des données d'une personne (RGPD, articles 15 et 20).
@@ -59,6 +60,8 @@ export interface ExportDonnees {
   employes: unknown[];
   echangesAvecLesEmployes: unknown;
   clesModeles: unknown[];
+  /** Ses clés d'API personnelles : nom, fin, dates, portée. Jamais la clé ni son empreinte. */
+  clesApi: unknown[];
   /** Groupes dont elle est membre, et si elle en est responsable. */
   groupes: { nom: string; description: string; responsable: boolean; membres: number }[];
   /** Ses dossiers et documents de la bibliothèque (le contenu se télécharge depuis l'écran). */
@@ -143,6 +146,7 @@ export async function exporterDonnees(qui: Demandeur): Promise<ExportDonnees> {
     employes,
     echangesAvecLesEmployes,
     clesModeles,
+    clesApi: await clesApiDe(qui.userId),
     groupes,
     bibliotheque,
     reunions: (await reunionsDe(qui.userId)).map(({ reunion, segments }) => ({ ...reunion, transcription: segments })),
@@ -155,6 +159,7 @@ export async function exporterDonnees(qui: Demandeur): Promise<ExportDonnees> {
     nonInclus: [
       "Mot de passe, secret du second facteur et codes de secours : l'instance n'en garde que des empreintes, qui ne se relisent pas.",
       "Jetons de séance : ce sont des clés d'accès, un export ne doit pas en transporter.",
+      "Clés d'API : leur liste figure ici ; la clé elle-même n'a été montrée qu'à sa création, l'instance n'en garde qu'une empreinte.",
       "Réglages de l'instance (connecteurs, boîte de courrier, agenda, tarifs des modèles) : ils appartiennent à l'instance, pas à une personne.",
       "Fichiers de votre dossier de travail : ils sont restés sur le disque, là où vous les avez rangés.",
       "Contenu des documents de votre bibliothèque : leur liste figure ici ; chacun se télécharge depuis la Bibliothèque, tel que vous l'avez déposé.",

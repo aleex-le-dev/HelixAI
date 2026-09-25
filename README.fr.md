@@ -70,6 +70,10 @@ installation peut installer pour vous sur macOS.
 - **Entraîner un modèle** : apprenez à un petit modèle ouvert les faits de votre société à
   partir d'exemples, comparez-le à l'original, puis installez-le dans LM Studio (MLX sur
   puce Apple ; Unsloth sur carte NVIDIA, pas encore essayé sur une vraie machine).
+- **API développeur** : des clés d'API personnelles pour l'API compatible OpenAI de
+  l'instance (`/v1/models`, `/v1/chat/completions`, bases de connaissances comprises), en
+  votre nom et rien de plus : aucune autre route, aucun outil exécuté par l'instance,
+  révocables aussitôt.
 - **Réunions** : enregistrement ou import, transcription et compte rendu sur la machine, bot de réunion.
 - **Import** de votre historique depuis ChatGPT, Claude, Claude Code, Codex et Cursor.
 - **Équipes** : comptes, groupes, partage, double authentification, journal d'audit,

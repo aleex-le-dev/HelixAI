@@ -146,7 +146,7 @@ export async function exporterDonnees(qui: Demandeur): Promise<ExportDonnees> {
     groupes,
     bibliotheque,
     reunions: (await reunionsDe(qui.userId)).map(({ reunion, segments }) => ({ ...reunion, transcription: segments })),
-    basesDeConnaissances: await connaissancesPourExport(qui.userId),
+    basesDeConnaissances: await connaissancesPourExport({ userId: qui.userId, groupes: qui.groupes ?? [] }),
     imagesCreees: images.images,
     modelesEntraines: projetsPourExport(qui.userId),
     consommation: await consommationDe(qui.userId),

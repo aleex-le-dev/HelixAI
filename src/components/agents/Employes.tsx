@@ -51,9 +51,19 @@ import {
   installerOpenClaw,
   libelleModele,
   PALIERS,
+  estRefusMemoire,
+  lireCopiesMemoire,
+  restaurerMemoire,
+  supprimerCopieMemoire,
+  type CopieMemoire,
+  type RaisonElargissement,
 } from "@/lib/employes";
 import { lireEtat as lireEtatDeuxFacteurs } from "@/lib/deuxFacteurs";
+import { useGroupes } from "@/lib/groupes";
+import type { Visibilite } from "@/lib/bibliotheque";
+import { ChoixVisibilite } from "@/pages/BibliothequePage";
 import { CanauxEmploye } from "@/components/agents/CanauxEmploye";
+import { ConfirmationMemoire } from "@/components/agents/ConfirmationMemoire";
 import { ChoixDepuisEspace } from "@/components/agents/ChoixDepuisEspace";
 import { updateAgent } from "@/lib/store/agents";
 import { langue, t, tf, taille } from "@/lib/i18n";
@@ -917,6 +927,89 @@ function Activite({ employe }: { employe: Employe }) {
   );
 }
 
+/**
+ * Ses mémoires mises de côté avant un élargissement de son audience
+ * (gateway/src/employes.ts, `viderMemoire`) : les remettre dans son espace,
+ * tant qu'il n'est pas plus ouvert qu'au moment de la copie, ou les supprimer.
+ * Rien n'est affiché quand il n'y en a pas.
+ */
+function MemoireMiseDeCote({ employe }: { employe: Employe }) {
+  const [copies, setCopies] = useState<CopieMemoire[] | null>(null);
+  const [occupe, setOccupe] = useState<string | null>(null);
+  const [info, setInfo] = useState<string | null>(null);
+  const recharger = useCallback(async () => {
+    try {
+      setCopies((await lireCopiesMemoire(employe.id)).copies);
+    } catch (err) {
+      setInfo(message(err));
+    }
+  }, [employe.id]);
+  useEffect(() => {
+    void recharger();
+  }, [recharger, employe.updatedAt]);
+
+  if (!copies || copies.length === 0) return info ? <InfoBox tone="muted">{info}</InfoBox> : null;
+  const agir = async (id: string, action: () => Promise<string>) => {
+    setOccupe(id);
+    setInfo(null);
+    try {
+      setInfo(await action());
+      await recharger();
+    } catch (err) {
+      setInfo(message(err));
+    } finally {
+      setOccupe(null);
+    }
+  };
+  return (
+    <div className="space-y-2 rounded-xl border border-border p-3">
+      <p className="text-sm font-medium text-foreground">{t("Mémoire mise de côté")}</p>
+      <p className="text-xs text-muted-foreground">
+        {t("Copies chiffrées de ses notes, faites avant que son audience s'élargisse. Les restaurer n'est possible que s'il est redevenu aussi fermé qu'au moment de la copie. Les conversations, elles, ne reviennent pas.")}
+      </p>
+      <ul className="space-y-1.5">
+        {copies.map((c) => (
+          <li key={c.id} className="flex flex-wrap items-center gap-2 text-sm">
+            <span className="min-w-0 flex-1 text-foreground">
+              {formaterDateHeure(c.quand)}
+              <span className="text-muted-foreground">
+                {" · "}
+                {tf("{0} note(s), {1} conversation(s) effacée(s)", c.fichiers, c.conversations)}
+              </span>
+            </span>
+            <Button
+              size="sm"
+              variant="secondary"
+              disabled={occupe !== null || !c.restaurable}
+              title={c.restaurable ? undefined : t("Il est aujourd'hui plus ouvert qu'au moment de la copie : refermez-le d'abord.")}
+              onClick={() =>
+                void agir(c.id, async () => tf("{0} note(s) remise(s) dans sa mémoire.", (await restaurerMemoire(employe.id, c.id)).fichiers))
+              }
+            >
+              {t("Restaurer")}
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              icon={Trash2}
+              disabled={occupe !== null}
+              onClick={() =>
+                void agir(c.id, async () => {
+                  await supprimerCopieMemoire(employe.id, c.id);
+                  return t("Copie supprimée.");
+                })
+              }
+            >
+              {t("Supprimer")}
+            </Button>
+          </li>
+        ))}
+      </ul>
+      {info && <p className="text-xs text-muted-foreground">{info}</p>}
+    </div>
+  );
+}
+
 function Reglages({
   employe,
   etat,
@@ -940,6 +1033,19 @@ function Reglages({
   const [occupe, setOccupe] = useState(false);
   const [info, setInfo] = useState<string | null>(null);
   const [confirmer, setConfirmer] = useState(false);
+  // Qui le voit et lui parle : le choix de la Bibliothèque, « Vous seul » valant « Personnel ».
+  const { etat: groupes } = useGroupes();
+  const mesGroupes = (groupes?.groupes ?? []).filter((g) => g.estMembre || (employe.groupes ?? []).includes(g.id));
+  const [vis, setVis] = useState<{ v: Visibilite; g: string[] }>({
+    v: employe.visibilite === "personnel" ? "prive" : (employe.visibilite ?? "organisation"),
+    g: employe.groupes ?? [],
+  });
+  const visibilite: NonNullable<Employe["visibilite"]> = vis.v === "prive" ? "personnel" : vis.v;
+  const visibiliteChangee =
+    visibilite !== (employe.visibilite ?? "organisation") ||
+    (visibilite === "groupes" && [...vis.g].sort().join(",") !== [...(employe.groupes ?? [])].sort().join(","));
+  /** L'instance attend la confirmation de vider sa mémoire (élargissement de son audience). */
+  const [memoire, setMemoire] = useState<RaisonElargissement[] | null>(null);
 
   /*
    * Deux réglages retirent une barrière, et l'instance redemande le mot de
@@ -955,14 +1061,57 @@ function Reglages({
     setInfo(null);
     try {
       const r = await action();
+      setMemoire(null);
       setInfo(r && r.avertissement ? r.avertissement : succes);
       await onChange();
     } catch (err) {
-      setInfo(message(err));
+      // Son audience s'élargirait sur une mémoire pleine : rien n'est fait, on demande d'abord.
+      if (estRefusMemoire(err)) setMemoire((err.details?.raisons as RaisonElargissement[] | undefined) ?? []);
+      else setInfo(message(err));
     } finally {
       setOccupe(false);
     }
   };
+
+  const enregistrer = (viderMemoire: boolean) =>
+    agir(
+      async () => {
+        const r = await modifierEmploye(employe.id, {
+          poste,
+          outils,
+          toutesLesFamilles: toutes,
+          missions,
+          autonome,
+          modele,
+          liberte,
+          ...(visibiliteChangee ? { visibilite, ...(visibilite === "groupes" ? { groupes: vis.g } : {}) } : {}),
+          ...(aConfirmer ? { motDePasse, code: code.trim() || undefined } : {}),
+          ...(viderMemoire ? { viderMemoire: true } : {}),
+        });
+        /*
+         * L'agent et son employé ne font qu'un : ses instructions (celles
+         * que le Chat lui donne) suivent le poste, et sa visibilité celle
+         * de l'employé. Seulement une fois l'instance d'accord : recopiés
+         * avant, un enregistrement refusé (mission « à chaque mail » sans
+         * accès au courrier, instance injoignable, mémoire à vider) laissait
+         * le Chat et l'agent 24/7 obéir à deux réglages différents.
+         */
+        if (employe.agentId && (poste !== employe.poste || visibiliteChangee)) {
+          updateAgent(employe.agentId, {
+            ...(poste !== employe.poste ? { instructions: r.employe.poste } : {}),
+            ...(visibiliteChangee
+              ? {
+                  visibility: r.employe.visibilite ?? "organisation",
+                  groupIds: r.employe.visibilite === "groupes" ? (r.employe.groupes ?? []) : undefined,
+                }
+              : {}),
+          });
+          window.dispatchEvent(new Event("helix:agents-changed"));
+        }
+        return r;
+      },
+      t("Modifications enregistrées."),
+    );
 
   return (
     <div className="space-y-4">
@@ -984,6 +1133,25 @@ function Reglages({
       <Field label={t("Son poste")}>
         <Textarea rows={4} value={poste} maxLength={50000} onChange={(e) => setPoste(e.target.value)} />
       </Field>
+      <div className="space-y-1.5">
+        <p className="text-sm font-medium text-foreground">{t("Qui le voit et lui parle")}</p>
+        <ChoixVisibilite
+          visibilite={vis.v}
+          groupes={vis.g}
+          mesGroupes={mesGroupes}
+          onChange={(v, g) => {
+            setVis({ v, g });
+            setMemoire(null);
+          }}
+        />
+        <p className="text-xs text-muted-foreground">
+          {vis.v === "groupes"
+            ? t("Seuls les membres de ces groupes le voient, lui parlent et l'utilisent dans le Chat. Qui quitte un groupe ne le voit plus.")
+            : vis.v === "prive"
+              ? t("Personne d'autre ne le voit ni ne lui parle.")
+              : t("Chaque compte de l'instance le voit et lui parle, chacun dans sa conversation.")}
+        </p>
+      </div>
       <div className="flex items-start justify-between gap-4 rounded-xl border border-border px-3 py-2.5">
         <div>
           <p className="text-sm font-medium text-foreground">{t("Tous les services branchés")}</p>
@@ -1021,6 +1189,16 @@ function Reglages({
           onCode={setCode}
         />
       )}
+      <MemoireMiseDeCote employe={employe} />
+      {memoire && (
+        <ConfirmationMemoire
+          nom={employe.nom}
+          raisons={memoire}
+          occupe={occupe}
+          onConfirmer={() => void enregistrer(true)}
+          onAnnuler={() => setMemoire(null)}
+        />
+      )}
       {info && <InfoBox tone="muted">{info}</InfoBox>}
       <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border pt-4">
         {confirmer ? (
@@ -1051,37 +1229,8 @@ function Reglages({
           </Button>
         )}
         <Button
-          disabled={occupe || !poste.trim()}
-          onClick={() =>
-            void agir(
-              async () => {
-                const r = await modifierEmploye(employe.id, {
-                  poste,
-                  outils,
-                  toutesLesFamilles: toutes,
-                  missions,
-                  autonome,
-                  modele,
-                  liberte,
-                  ...(aConfirmer ? { motDePasse, code: code.trim() || undefined } : {}),
-                });
-                /*
-                 * L'agent et son employé ne font qu'un : ses instructions (celles
-                 * que le Chat lui donne) suivent le poste. Seulement une fois
-                 * l'instance d'accord : recopiés avant, un enregistrement refusé
-                 * (mission « à chaque mail » sans accès au courrier, instance
-                 * injoignable) laissait le Chat et l'agent 24/7 obéir à deux
-                 * fiches de poste différentes (vu à l'essai).
-                 */
-                if (employe.agentId && poste !== employe.poste) {
-                  updateAgent(employe.agentId, { instructions: r.employe.poste });
-                  window.dispatchEvent(new Event("helix:agents-changed"));
-                }
-                return r;
-              },
-              t("Modifications enregistrées."),
-            )
-          }
+          disabled={occupe || !poste.trim() || memoire !== null || (vis.v === "groupes" && vis.g.length === 0)}
+          onClick={() => void enregistrer(false)}
         >
           {occupe ? t("Enregistrement…") : t("Enregistrer")}
         </Button>

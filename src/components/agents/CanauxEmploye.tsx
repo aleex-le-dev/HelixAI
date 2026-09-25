@@ -4,12 +4,15 @@ import { Button } from "@/components/ui/Button";
 import { Field, Input, Textarea } from "@/components/ui/Field";
 import { InfoBox } from "@/components/ui/InfoBox";
 import { Switch } from "@/components/ui/Switch";
+import { ConfirmationMemoire } from "@/components/agents/ConfirmationMemoire";
 import { cn } from "@/lib/cn";
 import { branding } from "@/config/branding";
 import {
   accepterDemande,
   brancherCanal,
+  estRefusMemoire,
   etatCanaux,
+  type RaisonElargissement,
   liaisonWhatsApp,
   lireDemandes,
   retirerCanal,
@@ -305,6 +308,7 @@ function AjoutCanal({
   const [outilsEntreprise, setOutilsEntreprise] = useState(false);
   const [occupe, setOccupe] = useState(false);
   const [erreur, setErreur] = useState<string | null>(null);
+  const [memoire, setMemoire] = useState<RaisonElargissement[] | null>(null);
   const types = (Object.keys(etat.catalogueCanaux) as TypeCanal[]).filter((t) => !dejaLa.includes(t));
   const def = type ? etat.catalogueCanaux[type] : null;
 
@@ -333,7 +337,7 @@ function AjoutCanal({
     );
   }
 
-  const brancher = async () => {
+  const brancher = async (viderMemoire = false) => {
     setOccupe(true);
     setErreur(null);
     try {
@@ -343,10 +347,14 @@ function AjoutCanal({
         acces,
         autorises: autorises.split(/[\n,;]+/).map((x) => x.trim()).filter(Boolean),
         outilsEntreprise,
+        ...(viderMemoire ? { viderMemoire: true } : {}),
       });
+      setMemoire(null);
       await onFini(true);
     } catch (err) {
-      setErreur(message(err));
+      // Des gens sans compte lui écriraient : sa mémoire d'abord, sur confirmation (ConfirmationMemoire).
+      if (estRefusMemoire(err)) setMemoire((err.details?.raisons as RaisonElargissement[] | undefined) ?? ["messagerie"]);
+      else setErreur(message(err));
       setOccupe(false);
     }
   };
@@ -415,11 +423,20 @@ function AjoutCanal({
           {erreur}
         </InfoBox>
       )}
+      {memoire && (
+        <ConfirmationMemoire
+          nom={employe.nom}
+          raisons={memoire}
+          occupe={occupe}
+          onConfirmer={() => void brancher(true)}
+          onAnnuler={() => setMemoire(null)}
+        />
+      )}
       <div className="flex justify-end gap-2">
         <Button variant="ghost" disabled={occupe} onClick={() => setType(null)}>
           {t("Retour")}
         </Button>
-        <Button disabled={occupe || def.champs.some((ch) => !(champs[ch.cle] ?? "").trim())} onClick={() => void brancher()}>
+        <Button disabled={occupe || memoire !== null || def.champs.some((ch) => !(champs[ch.cle] ?? "").trim())} onClick={() => void brancher()}>
           {occupe ? (
             <span className="inline-flex items-center gap-2">
               <Loader2 size={15} className="animate-spin" />{" "}{t("Branchement…")}

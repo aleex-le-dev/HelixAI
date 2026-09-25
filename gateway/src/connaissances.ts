@@ -175,6 +175,20 @@ function peutVoir(b: Base, qui: Qui): boolean {
   return b.visibilite === "groupes" && b.groupes.some((g) => qui.groupes.includes(g));
 }
 
+/**
+ * Documents de la Bibliothèque que chacun de ces lecteurs voit (l'intersection),
+ * et, avec `equipe`, seulement ceux ouverts à toute l'équipe. Relu à chaque
+ * appel : un partage retiré ne compte plus à la question suivante.
+ */
+async function documentsVusParTous(lecteurs: Qui[], equipe: boolean): Promise<Set<string>> {
+  const vus: Set<string>[] = [];
+  for (const l of lecteurs) {
+    vus.push(new Set((await bibliotheque.documentsVisibles(l)).filter((e) => !equipe || e.visibilite === "organisation").map((e) => e.id)));
+  }
+  const [premier, ...autres] = vus;
+  return new Set([...(premier ?? [])].filter((id) => autres.every((v) => v.has(id))));
+}
+
 function texteSur(v: unknown, max: number): string {
   if (typeof v !== "string") return "";
   return v.replace(/[\u0000-\u001f\u007f]/g, " ").replace(/\s+/g, " ").trim().slice(0, max);
@@ -851,13 +865,18 @@ export interface Recherche {
  * `equipeSeulement` : ne compte que les bases **et** les documents ouverts à
  * toute l'équipe, quels que soient les droits de `qui`. C'est la règle des
  * employés OpenClaw (voir `chercherPourEmploye`).
+ *
+ * `lecteurs` (ajouté le 25/09/2026) : ne compte que les bases et les
+ * documents que **chacun** d'eux voit, au lieu de ceux que voit `qui` (qui
+ * ne sert plus alors qu'à choisir le modèle d'embeddings). C'est ainsi qu'un
+ * employé ne lit que ce que tous ses destinataires ont le droit de voir.
  */
 export async function chercher(
   idsBrut: unknown,
   question: string,
   qui: Qui,
   nombre = PASSAGES_PAR_DEFAUT,
-  options: { equipeSeulement?: boolean } = {},
+  options: { equipeSeulement?: boolean; lecteurs?: Qui[] } = {},
 ): Promise<Recherche> {
   relancerSiBesoin();
   const debut = Date.now();
@@ -877,11 +896,12 @@ export async function chercher(
 
   const toutes = await charger();
   const equipe = options.equipeSeulement === true;
-  const bases = toutes.filter((b) => ids.includes(b.id) && peutVoir(b, qui) && (!equipe || b.visibilite === "organisation"));
-  const ignorees = ids.length - bases.length;
-  const visibles = new Set(
-    (await bibliotheque.documentsVisibles(qui)).filter((e) => !equipe || e.visibilite === "organisation").map((e) => e.id),
+  const lecteurs = options.lecteurs && options.lecteurs.length > 0 ? options.lecteurs : [qui];
+  const bases = toutes.filter(
+    (b) => ids.includes(b.id) && lecteurs.every((l) => peutVoir(b, l)) && (!equipe || b.visibilite === "organisation"),
   );
+  const ignorees = ids.length - bases.length;
+  const visibles = await documentsVusParTous(lecteurs, equipe);
   const candidats = bases.flatMap((b) => b.documents.filter((d) => d.etat === "pret" && visibles.has(d.id)).map((d) => ({ b, d })));
   if (candidats.length === 0) return vide({ ignorees });
 
@@ -1159,30 +1179,32 @@ export function outilEmploye(): {
  * et celle de SECURITE.md § 22.2 : voir une base ne donne pas accès à ses
  * documents, et le calcul se refait à chaque question.
  *
- * `groupes` (ajouté le 25/09/2026) : quand tout ce qui sort de l'employé ne
- * va qu'à son propriétaire (employes.ts, `lectureDesBases`), les groupes de
- * ce propriétaire à cet instant. Comptent alors aussi les bases et les
- * documents partagés à l'un de ces groupes, que le propriétaire voit donc
- * lui-même ; jamais ses documents privés, puisque l'identité reste celle de
- * l'employé, qui ne possède rien. `null` : la règle de l'équipe.
+ * `lecteurs` (ajouté le 25/09/2026) : quand rien de ce qui sort de
+ * l'employé ne quitte son audience (employes.ts, `lectureDesBases` et
+ * `lecteursDe`), les personnes dont il ne lit que ce qu'elles voient toutes,
+ * relues à cet instant : son propriétaire seul (agent personnel : ses
+ * documents privés compris), ou son propriétaire et un lecteur sans rien à
+ * lui par groupe de l'agent (agent de groupes : ce qui est partagé à chacun
+ * de ces groupes, jamais un document privé). `null` : la règle de l'équipe.
  *
  * `ids` : les bases de son agent, et seulement elles ; `auteur` : l'identité
- * de l'employé (`employe:<id>`), qui ne possède aucune base ni aucun document.
+ * de l'employé (`employe:<id>`), qui ne possède aucune base ni aucun document
+ * et sert au choix du modèle d'embeddings.
  */
 export async function chercherPourEmploye(
   ids: string[],
   args: Record<string, unknown>,
   auteur: string,
-  groupes: string[] | null = null,
+  lecteurs: Qui[] | null = null,
 ): Promise<{ ok: boolean; content: string; passages: number; horsEquipe: number }> {
   const question = typeof args.question === "string" ? args.question.trim().slice(0, 2_000) : "";
   if (!question) return { ok: false, content: "Donne la question à chercher (paramètre « question »).", passages: 0, horsEquipe: 0 };
   const nombre = Math.min(PASSAGES_EMPLOYE_MAX, Math.max(1, Math.trunc(Number(args.nombre)) || PASSAGES_PAR_DEFAUT));
-  const r = await chercher(ids, question, { userId: auteur, groupes: groupes ?? [] }, nombre, { equipeSeulement: groupes === null });
+  const r = await chercher(ids, question, { userId: auteur, groupes: [] }, nombre, lecteurs ? { lecteurs } : { equipeSeulement: true });
   const regle =
-    groupes === null
+    lecteurs === null
       ? "seules comptent celles ouvertes à toute l'équipe"
-      : "seules comptent celles ouvertes à toute l'équipe ou aux groupes de la personne pour qui tu travailles";
+      : "seules comptent celles que peuvent voir toutes les personnes pour qui tu travailles";
 
   if (r.erreur) {
     return { ok: false, content: `Les bases de connaissances n'ont pas pu être consultées : ${r.erreur} Ne prétends pas t'appuyer sur elles.`, passages: 0, horsEquipe: 0 };
@@ -1228,8 +1250,8 @@ export interface LectureBaseEmploye {
   documentsLus: number;
   /**
    * Pourquoi il n'y lit rien : base privée ; partagée à des groupes alors
-   * qu'il suit la règle de l'équipe ; partagée à des groupes dont le
-   * propriétaire n'est plus membre ; inconnue (supprimée, ou que le
+   * qu'il suit la règle de l'équipe ; partagée à des groupes qui ne sont pas
+   * chacun des siens (agent de groupes) ; inconnue (supprimée, ou que le
    * propriétaire ne voit pas) ; ou aucun de ses documents ne lui est ouvert.
    */
   raison?: "prive" | "groupes-equipe" | "groupes-autres" | "inconnue" | "documents";
@@ -1238,29 +1260,27 @@ export interface LectureBaseEmploye {
 /**
  * Pour l'écran de l'agent (AgentsPage) : ce que son employé lira réellement
  * dans chacune de ces bases, calculé comme `chercherPourEmploye` le fait à
- * l'instant. `proprietaire` : la personne qui regarde, seule admise par la
- * route ; une base qu'elle ne voit pas n'est pas nommée. Les documents comptés
- * comme lus sont ouverts à toute l'équipe ou à l'un de ses groupes : elle les
- * voit elle-même, les compter ne lui apprend rien.
+ * l'instant (mêmes `lecteurs`). `proprietaire` : la personne qui regarde,
+ * seule admise par la route ; une base qu'elle ne voit pas n'est pas nommée.
+ * Les documents comptés comme lus, elle les voit elle-même (elle est l'un des
+ * lecteurs, ou ils sont ouverts à l'équipe) : les compter ne lui apprend rien.
  */
 export async function lecturePourEmploye(
   idsBrut: unknown,
   auteur: string,
-  groupes: string[] | null,
+  lecteursEmploye: Qui[] | null,
   proprietaire: Qui,
 ): Promise<LectureBaseEmploye[]> {
   const ids = Array.isArray(idsBrut) ? [...new Set(idsBrut.filter((x): x is string => typeof x === "string"))].slice(0, BASES_PAR_QUESTION_MAX) : [];
   const toutes = await charger();
-  const employe: Qui = { userId: auteur, groupes: groupes ?? [] };
-  const equipe = groupes === null;
-  const lisibles = new Set(
-    (await bibliotheque.documentsVisibles(employe)).filter((e) => !equipe || e.visibilite === "organisation").map((e) => e.id),
-  );
+  const equipe = lecteursEmploye === null;
+  const lecteurs: Qui[] = lecteursEmploye && lecteursEmploye.length > 0 ? lecteursEmploye : [{ userId: auteur, groupes: [] }];
+  const lisibles = await documentsVusParTous(lecteurs, equipe);
   return ids.map((id): LectureBaseEmploye => {
     const b = toutes.find((x) => x.id === id);
     if (!b || !peutVoir(b, proprietaire)) return { id, lue: false, documents: 0, documentsLus: 0, raison: "inconnue" };
     const prets = b.documents.filter((d) => d.etat === "pret");
-    const ouverte = peutVoir(b, employe) && (!equipe || b.visibilite === "organisation");
+    const ouverte = lecteurs.every((l) => peutVoir(b, l)) && (!equipe || b.visibilite === "organisation");
     const documentsLus = ouverte ? prets.filter((d) => lisibles.has(d.id)).length : 0;
     const raison: LectureBaseEmploye["raison"] = ouverte
       ? documentsLus > 0 || prets.length === 0
@@ -1278,27 +1298,61 @@ export async function lecturePourEmploye(
 /* ---- Effacement d'un compte ---------------------------------------- */
 
 /**
- * Ses bases partent, index compris. Les documents qu'il avait ajoutés aux
- * bases de collègues en sont retirés : leur texte vient de la Bibliothèque,
- * où ses documents disparaissent aussi (bibliotheque.ts).
+ * Ses bases partent, index compris. Ses **documents** partent aussi de toutes
+ * les bases où ils étaient rangés, index compris : leur texte venait de la
+ * Bibliothèque, où ils disparaissent (bibliotheque.ts). `sesDocuments` : les
+ * identifiants de ses documents, relevés par l'appelant **avant** que la
+ * Bibliothèque ne les oublie (effacement.ts). Corrigé le 25/09/2026 : seul le
+ * filtre « ajouté par lui » existait, et seul le propriétaire d'une base y
+ * ajoute ; l'index de son document rangé dans la base d'une collègue restait
+ * sur le disque.
  */
-export function oublierPersonneConnaissances(userId: string): Promise<number> {
+export function oublierPersonneConnaissances(userId: string, sesDocuments: string[] = []): Promise<number> {
   return enFile(async () => {
     const liste = await charger();
     const siennes = liste.filter((b) => b.ownerId === userId);
     for (const b of siennes) effacerIndex(b.id);
+    const docs = new Set(sesDocuments);
+    const part = (d: DocumentBase) => d.ajoutePar === userId || docs.has(d.id);
     let change = siennes.length > 0;
     const reste = liste
       .filter((b) => b.ownerId !== userId)
       .map((b) => {
-        const partent = b.documents.filter((d) => d.ajoutePar === userId);
+        const partent = b.documents.filter(part);
         if (partent.length === 0) return b;
         change = true;
         for (const d of partent) effacerIndex(b.id, d.id);
-        return { ...b, documents: b.documents.filter((d) => d.ajoutePar !== userId) };
+        return { ...b, documents: b.documents.filter((d) => !part(d)) };
       });
     if (change) await enregistrer(reste);
     return siennes.length;
+  });
+}
+
+/**
+ * Un document supprimé de la Bibliothèque quitte toutes les bases, et son
+ * index le disque (ajouté le 25/09/2026). Avant, il restait listé (« supprimé
+ * depuis ») et indexé jusqu'à ce que le propriétaire de chaque base l'en
+ * retire, sans plus jamais être servi.
+ */
+export function retirerDocumentsPartout(ids: string[]): Promise<number> {
+  if (ids.length === 0) return Promise.resolve(0);
+  return enFile(async () => {
+    const docs = new Set(ids);
+    const liste = await charger();
+    let retires = 0;
+    const reste = liste.map((b) => {
+      const partent = b.documents.filter((d) => docs.has(d.id));
+      if (partent.length === 0) return b;
+      retires += partent.length;
+      for (const d of partent) effacerIndex(b.id, d.id);
+      return { ...b, documents: b.documents.filter((d) => !docs.has(d.id)) };
+    });
+    if (retires > 0) {
+      await enregistrer(reste);
+      journaliser("connaissances.document_retire", "instance", { documents: retires, raison: "supprime-de-fichiers" });
+    }
+    return retires;
   });
 }
 
@@ -1310,14 +1364,21 @@ export function oublierPersonneConnaissances(userId: string): Promise<number> {
  *
  * Absentes de l'export jusqu'au 25/09/2026 alors que l'effacement du compte
  * les retirait déjà (`oublierPersonneConnaissances`).
+ *
+ * Seuls sont nommés les documents que la personne voit **aujourd'hui** dans
+ * la Bibliothèque ; des autres (partage retiré depuis qu'elle les a rangés),
+ * l'export ne donne que le nombre, comme l'écran de la base (corrigé le
+ * 25/09/2026 : leurs noms sortaient).
  */
-export async function connaissancesPourExport(userId: string) {
+export async function connaissancesPourExport(qui: Qui) {
   const liste = await charger();
+  const visibles = new Set((await bibliotheque.documentsVisibles(qui)).map((e) => e.id));
   const documents = (docs: DocumentBase[]) =>
-    docs.map((d) => ({ nom: d.nom, ajouteLe: d.ajouteLe, etat: d.etat, passages: d.morceaux, indexePar: d.modele ?? null }));
+    docs.filter((d) => visibles.has(d.id)).map((d) => ({ nom: d.nom, ajouteLe: d.ajouteLe, etat: d.etat, passages: d.morceaux, indexePar: d.modele ?? null }));
+  const ajoutesAilleurs = liste.filter((b) => b.ownerId !== qui.userId).flatMap((b) => b.documents.filter((d) => d.ajoutePar === qui.userId).map((d) => ({ b, d })));
   return {
     bases: liste
-      .filter((b) => b.ownerId === userId)
+      .filter((b) => b.ownerId === qui.userId)
       .map((b) => ({
         nom: b.nom,
         description: b.description,
@@ -1326,10 +1387,12 @@ export async function connaissancesPourExport(userId: string) {
         creeeLe: b.createdAt,
         modifieeLe: b.updatedAt,
         documents: documents(b.documents),
+        documentsQueVousNeVoyezPlus: b.documents.filter((d) => !visibles.has(d.id)).length,
       })),
-    documentsAjoutesAuxBasesDesAutres: liste
-      .filter((b) => b.ownerId !== userId)
-      .flatMap((b) => b.documents.filter((d) => d.ajoutePar === userId).map((d) => ({ base: b.nom, document: d.nom, ajouteLe: d.ajouteLe }))),
+    documentsAjoutesAuxBasesDesAutres: ajoutesAilleurs
+      .filter(({ d }) => visibles.has(d.id))
+      .map(({ b, d }) => ({ base: peutVoir(b, qui) ? b.nom : null, document: d.nom, ajouteLe: d.ajouteLe })),
+    documentsAjoutesQueVousNeVoyezPlus: ajoutesAilleurs.filter(({ d }) => !visibles.has(d.id)).length,
   };
 }
 

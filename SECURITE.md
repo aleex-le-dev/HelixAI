@@ -2316,7 +2316,7 @@ curl -s -H "Authorization: Basic $(printf 'opencode:<mot de passe>' | base64)" \
 
 ## 22. Les surfaces ajoutées le 25 septembre 2026
 
-`npm run securite` compte désormais **167 contrôles, tous réussis le 25/09/2026** (125 à midi, plus 15 sur les employés et les bases de connaissances, § 22.2, 5 sur le flux de Helix Code, § 22.4, 7 sur l'export RGPD et l'effacement, § 7.1, puis, l'après-midi, 14 sur les employés et les bases partagées à un groupe et 1 route de plus sans séance, § 22.2).
+`npm run securite` compte désormais **206 contrôles, tous réussis le 26/09/2026** (125 à midi le 25, plus 15 sur les employés et les bases de connaissances, § 22.2, 5 sur le flux de Helix Code, § 22.4, 7 sur l'export RGPD et l'effacement, § 7.1, puis, l'après-midi, 14 sur les employés et les bases partagées à un groupe et 1 route de plus sans séance, § 22.2 ; le soir, 34 sur les agents de groupes, la mémoire des employés, la clé par employé, l'effacement et l'export des bases, § 22.2, dont 3 routes sans séance ; le reste venu de la fusion du 26/09).
 Ajoutés ce jour-là, par branche : 14 sur les images d'un Chat partagé (13, plus la
 connexion d'une collègue), 6 sur les bases de connaissances et 9 de leurs routes
 ajoutées aux listes « sans jeton » et « sans séance », 16 sur l'entraînement, 3 sur
@@ -2376,8 +2376,10 @@ désormais exportée), `gateway/src/index.ts`.
   chiffré par `chiffrerOctets` lié à `connaissances:<base>:<document>`. Vérifié : les
   fichiers commencent par l'en-tête chiffré `HLXF1`, ni un mot du document ni le nom
   de la base n'y apparaissent en clair.
-- Effacement d'un compte : ses bases et leurs index partent ; ses documents ajoutés
-  aux bases de collègues en sont retirés (`effacement.ts`).
+- Effacement d'un compte : ses bases et leurs index partent ; ses documents rangés
+  dans les bases de collègues en sont retirés, index compris (`effacement.ts`). Jusqu'au
+  25/09/2026 au soir, cette phrase était fausse : seul le filtre « ajouté par lui »
+  existait, et seul le propriétaire d'une base y ajoute (voir plus bas).
 - Journal : `connaissances.base_creee`, `base_modifiee`, `base_supprimee`,
   `documents_ajoutes`, `document_retire`, avec identifiants et nombres, jamais de
   texte.
@@ -2387,8 +2389,8 @@ désormais exportée), `gateway/src/index.ts`.
   qui ne possède rien : ni les droits du propriétaire de l'agent, ni ceux de qui lui
   parle, car l'appel ne dit pas pour qui l'employé travaille et ce qu'il lit ressort
   vers d'autres (collègues, messageries, mémoire). Seulement les bases de **son** agent,
-  relues à chaque appel. Aucun droit ajouté au canal d'OpenClaw : même route, même clé
-  `X-Helix-Cle`, et ce qu'on y lit (ouvert à l'équipe) l'était déjà par la famille
+  relues à chaque appel. Aucun droit ajouté au canal d'OpenClaw : même route, même en-tête
+  `X-Helix-Cle` (une clé par employé depuis le 25/09 au soir), et ce qu'on y lit (ouvert à l'équipe) l'était déjà par la famille
   « bibliothèque ». Refusé aux personnes qui écrivent sur une messagerie, sauf
   `outilsEntreprise`. Sa fiche de poste (`SOUL.md`, relue par le modèle) nomme l'outil,
   jamais les bases. Journal : `outil.appele` avec le nombre de bases et de passages,
@@ -2420,13 +2422,11 @@ désormais exportée), `gateway/src/index.ts`.
   - aucune famille **qui écrit ou envoie** là où d'autres lisent : fichiers de l'équipe
     (et les connecteurs qui s'y rattachent), documents Office, mails (brouillons compris) ;
     « Autoriser les outils » les donne toutes.
-  Jamais ses documents privés : l'identité reste `employe:<id>`, qui ne possède rien.
   Dès qu'une condition tombe (ouvert à l'organisation, messagerie branchée, outil
   ajouté, palier élargi, propriétaire sorti du groupe), l'appel suivant revient à la
-  règle de l'équipe. **Pas traité** : un agent partagé à des groupes précis (la
-  visibilité d'un agent est personnelle ou d'organisation dans le code actuel ; ce cas
-  garde la règle de l'équipe) ; la famille « bibliothèque » de ses outils reste à ce
-  qui est ouvert à l'équipe. Route de l'écran : `POST /helix/employes/<id>/connaissances`,
+  règle de l'équipe. La famille « bibliothèque » de ses outils reste à ce qui est
+  ouvert à l'équipe. (Le soir même : ses documents privés aussi, et les agents de
+  groupes, voir plus bas.) Route de l'écran : `POST /helix/employes/<id>/connaissances`,
   propriétaire seul (une collègue : 404), qui ne nomme pas une base que le propriétaire
   ne voit pas. Journal : `outil.appele` porte `regle` et `horsEquipe` (nombres, jamais
   de texte).
@@ -2443,6 +2443,67 @@ désormais exportée), `gateway/src/index.ts`.
   un vrai OpenClaw 2026.9.4 d'essai et qwen3-8b : réponse juste et citée pour la
   propriétaire, rien du document privé, rien pour un collègue une fois l'agent ouvert à
   l'organisation.
+- **Agents de groupes, privé du propriétaire, mémoire** (ajouté le 25/09/2026, le soir ;
+  `employes.ts` : `lectureDesBases`, `lecteursDe`, `elargissement`, `viderMemoire` ;
+  `connaissances.ts` : option `lecteurs` de `chercher`). La recherche ne compte que ce
+  que **chacun** des lecteurs voit, relus à chaque appel :
+  - agent **personnel** aux cinq conditions : le lecteur est son propriétaire, droits
+    entiers : ses documents et bases privés comptent, jamais ceux d'une autre personne ;
+  - agent **de groupes** (visibilité « groupes », `Employe.groupes`, `Agent.groupIds`)
+    aux mêmes conditions de sortie : son propriétaire, plus un lecteur par groupe qui ne
+    possède rien et n'est membre que de ce groupe. Ne passe que ce qui est ouvert à
+    l'équipe ou partagé à chacun des groupes, et que le propriétaire voit : aucun
+    document privé, et rien qu'un membre d'un seul des groupes ne pourrait voir ;
+  - visibilité : `visiblePar(e, qui, groupes)` (404 pour un non-membre sur toutes les
+    routes de l'employé), `voitAgent` pour la synchronisation, qui retire aussi d'un
+    agent un groupe dont son auteur n'est pas membre ; modification par le seul auteur
+    (`estProprietaire`, et 403 sur les routes de l'employé). Les postes relisent les
+    groupes chaque minute et re-tirent Chats et agents s'ils ont changé (`sync.ts`) ;
+  - **mémoire** : un changement qui élargit son audience (rang propriétaire < groupes <
+    ouverte, ou groupe ajouté) alors qu'il a pu lire hors de l'équipe (trace
+    `memoires-employes/<id>/lectures.json`, écrite à chaque passage hors équipe, ou
+    réglages qui le permettaient avec des bases) répond **409** `memoire-a-vider` sans
+    rien faire. Avec `viderMemoire: true` : copie de ses notes chiffrée
+    (`chiffrerOctets`, liée à `memoire-employe:<id>:<copie>`, relue avant tout
+    effacement, 0600, hors du dossier d'OpenClaw), puis `sessions delete` et `memory
+    forget` pour chaque conversation, `effacerArchives`, retrait des notes (tout
+    l'espace sauf les fiches écrites par Helix, `documents/` et `.openclaw/`), `memory
+    reset` de l'index, vérification (plus une conversation, plus une note) ; une étape
+    ratée (instance muette, copie impossible, employé au travail) : le changement n'est
+    pas fait. Restaurer n'est permis qu'au propriétaire et tant que l'audience n'est pas
+    plus large qu'au moment de la copie. Journal : `employe.memoire_videe` (notes,
+    octets, conversations, raisons), `memoire_non_videe` (l'étape), `memoire_restauree`,
+    `memoire_copie_supprimee` ; jamais de contenu.
+  - **Clé par employé** (revue du 25/09) : HMAC-SHA256 de la clé de l'instance et de
+    `employe:<id>`, écrite dans la configuration d'OpenClaw pour son seul fournisseur et
+    son seul serveur d'outils, comparée en temps constant à l'identifiant de l'adresse
+    (ou de `X-Helix-Employe`). Avant, une clé commune ouvrait le serveur d'outils de
+    tout employé : avec `openclaw.json`, on lisait les bases de groupe d'un employé
+    personnel. La configuration est réécrite au démarrage suivant ; vérifié avec un vrai
+    OpenClaw 2026.9.4 : l'employé répond toujours.
+  - **Effacement et suppression** (revue du 25/09) : ses documents, relevés avant que
+    la Bibliothèque ne les oublie, quittent toutes les bases, celles des collègues
+    comprises, index compris ; un document supprimé de Fichiers aussi
+    (`retirerDocumentsPartout`). **Export** : un document d'une base qu'on ne voit plus
+    n'est pas nommé, il est compté (`documentsQueVousNeVoyezPlus`).
+- Contrôlé par `npm run securite` (section 7 ter et 7 quater, 34 contrôles ajoutés le
+  25/09/2026 au soir, avec le faux OpenClaw qui note ses commandes et tient des
+  conversations par agent) : la clé commune et celle d'un autre employé → 403, la
+  configuration porte la clé propre à chacun ; l'agent personnel lit le privé de sa
+  propriétaire, jamais celui d'une collègue, et plus le document d'une collègue partagé
+  au groupe quand elle en sort ; élargir sans confirmer → 409, rien de vidé ; instance
+  muette → refus, il reste personnel ; confirmé → note et conversation effacées, `memory
+  reset` et `memory forget` appelés, copie `HLXF1` sans le mot de contrôle, fiches
+  intactes, journal en nombres ; copie non restaurable tant qu'il est ouvert, invisible
+  à une collègue, restaurable redevenu personnel ; outil qui écrit et messagerie sans
+  confirmer → 409 ; agent de groupes : partage refusé à un groupe dont on n'est pas
+  membre, non-membre 404 partout, membre sans modification ni activité (403), lit la
+  base du groupe et l'équipe, rien de privé ; synchronisation : membre oui, non-membre
+  non, groupe étranger retiré, ni l'un ni l'autre ne le modifient ; groupe ajouté → 409,
+  puis un document du seul premier groupe n'est plus lu ; retrait sans rien demander ;
+  outil qui envoie → ne lit plus ; sortie du groupe → 404 et plus dans la
+  synchronisation ; index du document d'un compte effacé et d'un document supprimé
+  retirés du disque ; export sans le nom d'un document devenu invisible.
 - Vérifié avec un second compte le 25/09/2026 : base privée ni listée, ni lisible
   (404), ni modifiable (404), ni cherchable (0 passage, « 1 ignorée ») ; base ouverte
   à toute l'équipe mais documents privés : 0 document nommé, 0 passage.
@@ -2457,15 +2518,19 @@ Ce qui n'est pas protégé :
 - Si le profil impose un modèle `embed` distant (`models.embed`), le texte des
   documents part chez ce fournisseur ; l'écran de la base affiche le modèle qui a
   indexé chaque document.
-- Employé qui a lu les bases des groupes de son propriétaire, puis dont l'audience
-  s'élargit : il cesse aussitôt de les lire, mais ce qu'il en a déjà noté dans sa
-  mémoire OpenClaw (fichiers `memory/`, conversations indexées) y reste, et Helix ne
-  l'efface pas. Une personne de la nouvelle audience pourrait l'obtenir en le lui
-  demandant. L'écran de l'agent le dit au propriétaire. Pas observé dans l'essai du
-  25/09/2026 (l'employé n'avait rien noté), mais possible.
-- Les bases sont dans l'export RGPD depuis le 25/09/2026 (§ 7.1). Un document supprimé de la
-  Bibliothèque garde son index sur le disque jusqu'à ce que le propriétaire de la base
-  l'en retire ; il n'est plus jamais servi.
+- Mémoire vidée avant un élargissement : restent hors de portée les pages libérées de
+  la base SQLite de l'agent (aucune ligne ne porte plus le mot de contrôle, le fichier
+  brut si), le registre des tâches d'OpenClaw (`state/openclaw.sqlite`, les questions
+  posées, 7 jours) et ses journaux (les réponses). Aucun outil d'un employé encadré ou
+  étendu ne les lit ; au palier Libre (toute la machine, sous mot de passe), si.
+  Constaté le 25/09/2026 sur l'OpenClaw d'essai.
+- Une mission planifiée qui tournerait pendant le vidage n'est pas détectée (les
+  messages et les mails en cours le sont) : elle pourrait réécrire une note juste après.
+- Un agent de groupes dont le propriétaire a quitté un groupe : il garde l'agent (il
+  en est l'auteur) ; ce qu'il a lu avant reste dans sa mémoire.
+- Les bases sont dans l'export RGPD depuis le 25/09/2026 (§ 7.1). Les mémoires mises
+  de côté d'un employé n'y sont pas ; elles partent avec l'employé et avec le compte de
+  son propriétaire.
 
 ### 22.3 Entraînement d'un modèle
 

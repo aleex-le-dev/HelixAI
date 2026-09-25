@@ -2,8 +2,19 @@ import type http from "node:http";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
-import { employe, cleValide, famillesEffectives, lectureDesBases, nomOpenClaw, prefixerNoms, traiteUnMailRecu, type Employe } from "./employes.ts";
-import { groupesDe } from "./groupes.ts";
+import {
+  employe,
+  cleValide,
+  famillesEffectives,
+  identiteEmploye,
+  lecteursDe,
+  lectureDesBases,
+  noterLectureHorsEquipe,
+  nomOpenClaw,
+  prefixerNoms,
+  traiteUnMailRecu,
+  type Employe,
+} from "./employes.ts";
 import { outilsDeFamille, executerOutil, cibleDe, type DefinitionOutil } from "./outils.ts";
 import { demandeToujours, modifie, verifierOutil } from "./approbation.ts";
 import { journaliser } from "./audit.ts";
@@ -37,7 +48,7 @@ function outilsDe(e: Employe): DefinitionOutil[] {
 }
 
 /** L'auteur tel que le journal le retient : l'employé, pas une personne. */
-export const auteurEmploye = (id: string) => `employe:${id}`;
+export const auteurEmploye = identiteEmploye;
 
 export async function servirOutils(
   req: http.IncomingMessage,
@@ -46,7 +57,8 @@ export async function servirOutils(
   corps: unknown,
 ): Promise<boolean> {
   const cle = req.headers["x-helix-cle"];
-  if (!cleValide(typeof cle === "string" ? cle : undefined)) return false;
+  // La clé de **cet** employé (celui de l'adresse) : celle d'un autre ne l'ouvre pas.
+  if (!cleValide(typeof cle === "string" ? cle : undefined, id)) return false;
   const e = await employe(id);
   if (!e) return false;
 
@@ -109,16 +121,19 @@ export async function servirOutils(
     /*
      * Ses bases de connaissances : celles de son agent, relues à chaque appel,
      * et ce qui y est ouvert à toute l'équipe (connaissances.ts,
-     * `chercherPourEmploye`, où la règle est justifiée). Plus ce qui est
-     * partagé aux groupes de son propriétaire, si rien de ce qui sort de lui ne
-     * va à quelqu'un d'autre (employes.ts, `lectureDesBases`) : établi ici,
-     * depuis l'employé relu plus haut et les groupes du propriétaire à cet
-     * instant, jamais gardé d'un appel à l'autre. Traité avant
+     * `chercherPourEmploye`, où la règle est justifiée). Plus, si rien de ce
+     * qui sort de lui ne quitte son audience (employes.ts, `lectureDesBases`),
+     * ce que tous ses destinataires voient : son propriétaire (agent
+     * personnel), ou chacun de ses groupes (agent de groupes). Établi ici,
+     * depuis l'employé relu plus haut et les groupes à cet instant
+     * (`lecteursDe`), jamais gardé d'un appel à l'autre. Traité avant
      * `executerOutil`, qui rangerait ce nom parmi les outils MCP des fichiers.
      */
     const lecture = nom === OUTIL_EMPLOYE ? lectureDesBases(courant) : null;
-    const groupes = lecture?.groupes ? await groupesDe(courant.ownerId) : null;
-    const bases = nom === OUTIL_EMPLOYE ? await chercherPourEmploye(courant.connaissances ?? [], args, qui, groupes) : null;
+    const lecteurs = lecture ? await lecteursDe(courant, lecture) : null;
+    const bases = nom === OUTIL_EMPLOYE ? await chercherPourEmploye(courant.connaissances ?? [], args, qui, lecteurs) : null;
+    // Ce qu'il a lu hors de l'équipe reste dans sa mémoire : noté (un nombre), pour qu'un élargissement la vide d'abord.
+    if (bases && bases.horsEquipe > 0) noterLectureHorsEquipe(courant.id, bases.horsEquipe);
     // Plusieurs personnes lui parlent : dans la bibliothèque, il ne voit que ce qui est ouvert à toute l'équipe.
     const r = bases ?? (await executerOutil(nom, args, { userId: qui, groupes: [] }));
     // Le journal dit combien de passages sont sortis, jamais lesquels ni la question.
@@ -127,7 +142,7 @@ export async function servirOutils(
       cible: cibleDe(args),
       ok: r.ok,
       ...(bases
-        ? { bases: courant.connaissances?.length ?? 0, passages: bases.passages, regle: groupes ? "groupes" : "equipe", horsEquipe: bases.horsEquipe }
+        ? { bases: courant.connaissances?.length ?? 0, passages: bases.passages, regle: lecture?.regle ?? "equipe", horsEquipe: bases.horsEquipe }
         : {}),
       ...(sansAccord ? { sansAccord: true } : {}),
     });

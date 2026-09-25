@@ -1,7 +1,7 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import http from "node:http";
 import { createServer } from "node:net";
-import { randomBytes } from "node:crypto";
+import { randomBytes, timingSafeEqual } from "node:crypto";
 import {
   writeFileSync,
   readFileSync,
@@ -70,10 +70,42 @@ const enteteServeur = (): string =>
  * Clé que présente OpenCode au serveur d'outils de la passerelle
  * (`/helix/code/outils`, outilsCode.ts). Le jeton d'instance ne suffit pas :
  * il est sur chaque poste du parc, et cette route fait agir les connecteurs
- * sans séance. Tirée à chaque démarrage, gardée en mémoire, écrite seulement
- * dans la configuration d'OpenCode (fichier 0600, qui porte déjà le jeton).
+ * sans séance. Tirée à chaque démarrage, gardée en mémoire, remise à OpenCode
+ * par son environnement (voir `environnementOpenCode`) : depuis le 26/09/2026,
+ * plus aucun secret n'est écrit en clair dans sa configuration.
  */
 export const cleOutils = randomBytes(24).toString("base64url");
+
+/**
+ * Clé que joint OpenCode à chaque appel au modèle (en-tête `X-Helix-Relais`
+ * du fournisseur « helix »). Revue du 25/09/2026 : le relais (chat.ts) croyait
+ * l'en-tête `X-Session-Id` de n'importe quel porteur du jeton d'instance, qui
+ * pouvait ainsi faire afficher des statuts dans la session de Code d'un
+ * collègue. Seuls les appels qui présentent cette clé sont suivis
+ * (attenteModele.ts).
+ */
+const cleRelais = randomBytes(24).toString("base64url");
+
+/** La clé présentée est-elle celle remise à OpenCode ? Comparaison en temps constant. */
+function memeCle(valeur: unknown, attendue: string): boolean {
+  if (typeof valeur !== "string" || !valeur) return false;
+  const a = Buffer.from(valeur);
+  const b = Buffer.from(attendue);
+  return a.length === b.length && timingSafeEqual(a, b);
+}
+export const cleOutilsValide = (valeur: unknown): boolean => memeCle(valeur, cleOutils);
+export const cleRelaisValide = (valeur: unknown): boolean => memeCle(valeur, cleRelais);
+
+/*
+ * Noms des variables par lesquelles OpenCode reçoit les secrets que sa
+ * configuration désigne (`{env:…}`, substitué par OpenCode à la lecture :
+ * lu dans son code 1.18.32, `text.replace(/\{env:([^}]+)\}/g, …)`).
+ */
+const VAR_JETON = "HELIX_OPENCODE_JETON";
+const VAR_CLE_OUTILS = "HELIX_OPENCODE_CLE_OUTILS";
+const VAR_CLE_RELAIS = "HELIX_OPENCODE_CLE_RELAIS";
+/** Ce qu'aucune commande lancée par OpenCode ne doit trouver dans son environnement. */
+export const VARIABLES_SECRETES = ["OPENCODE_SERVER_PASSWORD", VAR_JETON, VAR_CLE_OUTILS, VAR_CLE_RELAIS];
 
 let child: ChildProcess | null = null;
 let port: number | null = null;
@@ -82,22 +114,43 @@ let lastError: string | undefined;
 /** Les modèles écrits dans la configuration que le serveur en cours a lue. */
 let modelesEcrits = new Set<string>();
 
+/**
+ * État rendu par `GET /helix/code`. Plus de port d'OpenCode depuis le
+ * 26/09/2026 (revue du 25/09) : aucun client ne s'en servait, et la route ne
+ * demande que le jeton d'instance.
+ */
 export interface CodeStatus {
   available: boolean;
   running: boolean;
-  port: number | null;
   projectDir: string;
   error?: string;
 }
 
-/** Dossier de travail de l'écran Code. */
-export function projectDir(): string {
-  return (
-    dossierChoisi ??
-    process.env.HELIX_CODE_DIR ??
-    deployment().workspace ??
-    join(homedir(), "Helix")
-  );
+/**
+ * Dossier de l'instance par défaut : celui où démarre OpenCode, et celui d'une
+ * personne qui n'en a encore choisi aucun. Validé comme un dossier choisi : un
+ * profil qui désignerait le dossier personnel entier ne le fait pas devenir
+ * dossier de projet (retour à ~/Helix).
+ */
+export function dossierParDefaut(): string {
+  const voulu = process.env.HELIX_CODE_DIR ?? deployment().workspace;
+  const repli = join(homedir(), "Helix");
+  if (!voulu) return repli;
+  if (!existsSync(voulu)) return voulu; // créé au démarrage d'OpenCode (writeConfig)
+  const verdict = validerDossier(voulu);
+  return verdict.ok ? verdict.chemin : repli;
+}
+
+/**
+ * Dossier de projet d'une personne : le dernier qu'elle a choisi, sinon celui
+ * de l'instance. Revue du 25/09/2026 : il était commun à toute l'instance
+ * (`setProjectDir`), si bien que le choix d'une collègue devenait le dossier
+ * de repli des sessions d'une autre. Une session existante, elle, garde
+ * toujours le sien (registre, sessionsCode.ts) : ce dossier ne sert qu'à en
+ * ouvrir une nouvelle.
+ */
+export function projectDir(userId?: string): string {
+  return (userId ? dossiersChoisis.get(userId) : undefined) ?? dossierParDefaut();
 }
 
 async function chercherBinaire(): Promise<string | null> {
@@ -308,10 +361,17 @@ async function writeConfig(dir: string): Promise<void> {
              * La clé est le jeton d'instance : depuis que la passerelle exige
              * une authentification, un fournisseur sans clé se heurte à un 401
              * au premier prompt — et l'échec est silencieux côté interface.
+             *
+             * Depuis le 26/09/2026, le fichier ne le porte plus : `{env:…}`
+             * le fait lire par OpenCode dans son environnement (voir
+             * `environnementOpenCode`). Revue du 25/09 : une commande lancée
+             * par l'agent n'a qu'à lire ce fichier pour tenir la clé de toute
+             * la passerelle. `X-Helix-Relais` : voir `cleRelais`.
              */
             options: {
               baseURL: `http://localhost:${PORT}/v1`,
-              apiKey: instanceToken(),
+              apiKey: `{env:${VAR_JETON}}`,
+              headers: { "X-Helix-Relais": `{env:${VAR_CLE_RELAIS}}` },
             },
             models: modelEntries,
           },
@@ -358,7 +418,48 @@ async function writeConfig(dir: string): Promise<void> {
          * 165 jetons de moins à chaque lecture (mesuré), plus sa présentation
          * dans les consignes.
          */
-        permission: { external_directory: "deny", doom_loop: "deny", question: "deny", skill: "deny" },
+        /*
+         * **Tout le reste demande**, et la réponse vient de la barrière de
+         * Helix (fluxCode.ts, permissionsCode.ts, approbation.ts). Revue de
+         * sécurité du 25/09/2026 : les défauts d'OpenCode 1.18.32 sont
+         * `"*": "allow"`, si bien que `bash`, `edit`, `write`, `apply_patch` et
+         * `webfetch` agissaient sans jamais passer par la barrière
+         * d'approbation, alors que les connecteurs, eux, y passaient. Une
+         * commande a les droits du compte qui fait tourner l'instance.
+         *
+         * OpenCode garde la dernière règle qui correspond (ordre des clés) :
+         * `"*"` d'abord, les exceptions ensuite. Les lectures demandent aussi :
+         * c'est le niveau de l'instance qui décide, à chaque demande, de les
+         * laisser passer (« Demander avant de modifier ») ou non (« Demander
+         * pour tout ») ; la configuration, elle, n'est lue qu'au démarrage.
+         * Laissés libres : la liste de tâches, les sous-agents (leurs outils
+         * redemandent), et les connecteurs de l'instance (`helix_*`), que la
+         * passerelle soumet déjà elle-même à la barrière (outilsCode.ts) : les
+         * faire demander aussi ici donnerait deux cartes pour un seul appel.
+         */
+        permission: {
+          "*": "ask",
+          read: "ask",
+          glob: "ask",
+          grep: "ask",
+          list: "ask",
+          lsp: "ask",
+          edit: "ask",
+          write: "ask",
+          apply_patch: "ask",
+          bash: "ask",
+          webfetch: "ask",
+          websearch: "ask",
+          codesearch: "ask",
+          todowrite: "allow",
+          todoread: "allow",
+          task: "allow",
+          "helix_*": "allow",
+          external_directory: "deny",
+          doom_loop: "deny",
+          question: "deny",
+          skill: "deny",
+        },
         /*
          * Des consignes courtes à la place de celles d'OpenCode, écrites pour
          * son terminal (allegementCode.ts) : 2 098 jetons relus à chaque appel
@@ -384,7 +485,7 @@ async function writeConfig(dir: string): Promise<void> {
           helix: {
             type: "remote",
             url: `http://localhost:${PORT}/helix/code/outils`,
-            headers: { Authorization: `Bearer ${instanceToken()}`, "X-Helix-Cle": cleOutils },
+            headers: { Authorization: `Bearer {env:${VAR_JETON}}`, "X-Helix-Cle": `{env:${VAR_CLE_OUTILS}}` },
             enabled: true,
             oauth: false,
             timeout: 130_000,
@@ -400,21 +501,120 @@ async function writeConfig(dir: string): Promise<void> {
   );
 
   /*
-   * Ce fichier porte le jeton d'instance en clair, et il est déposé dans le
-   * dossier de travail choisi par l'utilisateur — pas dans le dossier de
-   * données de Helix. Écrit avec les permissions par défaut, il était lisible
-   * par tout autre compte de la machine : le jeton donne accès à l'ensemble de
-   * la passerelle. On le resserre au seul propriétaire.
-   *
-   * Ce qui reste à la charge de l'intégrateur : ce dossier est souvent un dépôt
-   * Git ou un partage réseau. `opencode.json` n'a rien à y faire — à écarter
-   * par un `.gitignore` ou une exclusion de synchronisation.
+   * Le fichier ne porte plus de secret (`{env:…}`), mais il dit comment
+   * OpenCode joint la passerelle : il reste au seul propriétaire.
    */
   try {
     chmodSync(fichierConfig, 0o600);
   } catch {
     /* système de fichiers sans permissions (partage réseau) : on continue */
   }
+  ecrireGreffonEnvironnement();
+}
+
+/**
+ * Le greffon qui retire les secrets de l'environnement des commandes.
+ *
+ * OpenCode lance ses commandes (outil `bash`, terminal, commandes « ! ») avec
+ * **tout son propre environnement** : lu dans son code 1.18.32,
+ * `{ ...process.env, ...env }`, où `env` vient du crochet `shell.env` des
+ * greffons. Son mot de passe de serveur ne peut lui être donné que par
+ * l'environnement (`OPENCODE_SERVER_PASSWORD`, aucune option ni réglage), et
+ * c'est aussi par l'environnement qu'il reçoit désormais le jeton d'instance
+ * et les clés de la passerelle. Sans ce greffon, `env` dans une commande les
+ * affichait (constat de la revue du 25/09/2026 pour le mot de passe).
+ *
+ * Le crochet ne peut pas retirer une variable, seulement la remplacer : elle
+ * reste présente, vide. OpenCode charge les greffons `plugin/*.js` de son
+ * dossier de configuration (`OPENCODE_CONFIG_DIR`).
+ *
+ * **Ce que cela ne ferme pas**, mesuré le 26/09/2026 sur ce Mac : un processus
+ * du même compte lit l'environnement **de départ** d'un autre (`ps eww <pid>`,
+ * `KERN_PROCARGS2`). Une commande approuvée peut donc retrouver ces valeurs
+ * en lisant celui d'OpenCode, comme elle peut lire tout fichier du compte,
+ * `instance-token` compris. Le greffon ferme la fuite ordinaire (une commande
+ * qui affiche son environnement, et sa sortie qui part au modèle) ; la
+ * barrière d'approbation reste ce qui décide qu'une commande s'exécute
+ * (SECURITE.md § 11).
+ */
+function ecrireGreffonEnvironnement(): void {
+  const dossier = join(dossierConfig(), "plugin");
+  if (!existsSync(dossier)) mkdirSync(dossier, { recursive: true });
+  const vides = Object.fromEntries(VARIABLES_SECRETES.map((v) => [v, ""]));
+  const fichier = join(dossier, "helix-environnement.js");
+  writeFileSync(
+    fichier,
+    [
+      "// Écrit par la passerelle Helix (gateway/src/opencode.ts) : ne pas modifier.",
+      "// Les commandes lancées par l'agent ne reçoivent ni le mot de passe du serveur ni les clés de la passerelle.",
+      `const VIDES = ${JSON.stringify(vides)};`,
+      "export const HelixEnvironnement = async () => ({",
+      '  "shell.env": async (_entree, sortie) => {',
+      "    sortie.env = { ...(sortie.env ?? {}), ...VIDES };",
+      "  },",
+      "});",
+      "",
+    ].join("\n"),
+    "utf8",
+  );
+  try {
+    chmodSync(fichier, 0o600);
+  } catch {
+    /* sans permissions : on continue */
+  }
+}
+
+/**
+ * Variables de l'hôte transmises à OpenCode, et rien d'autre.
+ *
+ * Revue du 25/09/2026 : OpenCode recevait tout `process.env` de la passerelle,
+ * c'est-à-dire, selon le poste, `HELIX_TOKEN`, des clés de fournisseurs, des
+ * mots de passe de base de données, et le transmettait à chaque commande.
+ * Une liste blanche : ce qu'un shell et les outils de développement habituels
+ * attendent (chemins, langue, dossier temporaire, compte), plus, sous Windows,
+ * ce sans quoi un processus ne démarre pas. Vérifié le 26/09/2026 : OpenCode
+ * 1.18.32 démarre et répond avec ce seul environnement.
+ */
+const TRANSMISES = ["PATH", "HOME", "LANG", "TMPDIR", "USER", "LOGNAME", "SHELL", "TZ", "TERM",
+  "SystemRoot", "SYSTEMROOT", "APPDATA", "LOCALAPPDATA", "USERPROFILE", "TEMP", "TMP", "ComSpec", "PATHEXT", "windir"];
+
+export function environnementOpenCode(): Record<string, string> {
+  const env: Record<string, string> = {};
+  for (const [nom, valeur] of Object.entries(process.env)) {
+    if (valeur === undefined) continue;
+    if (TRANSMISES.includes(nom) || nom.startsWith("LC_")) env[nom] = valeur;
+  }
+  return {
+    ...env,
+    // Le mot de passe ferme le serveur d'agent aux autres processus du poste.
+    OPENCODE_SERVER_PASSWORD: motDePasseServeur,
+    // Lus par la configuration (`{env:…}`), jamais écrits sur le disque.
+    [VAR_JETON]: instanceToken(),
+    [VAR_CLE_OUTILS]: cleOutils,
+    [VAR_CLE_RELAIS]: cleRelais,
+    // La configuration ne dépend plus du dossier de travail (voir dossierConfig).
+    OPENCODE_CONFIG_DIR: dossierConfig(),
+    /*
+     * Rien vers l'extérieur, et rien d'autre que la configuration de Helix.
+     *
+     * OpenCode télécharge à chaque démarrage la liste des modèles de
+     * models.dev — vérifié : il a appelé un faux serveur mis à sa place.
+     * C'est un service tiers contacté sans que personne l'ait décidé, sur
+     * un produit qui promet le contraire. Il sait aussi se mettre à jour
+     * seul, publier une conversation en lien public, télécharger des
+     * serveurs de langage, et lire la configuration personnelle de Claude
+     * Code et d'autres outils présents sur le poste : autant de choses
+     * qu'un agent de code d'entreprise n'a pas à faire dans le dos de la
+     * personne. Vérifié : avec ces réglages, il répond normalement et
+     * n'appelle plus rien.
+     */
+    OPENCODE_DISABLE_MODELS_FETCH: "true",
+    OPENCODE_DISABLE_AUTOUPDATE: "true",
+    OPENCODE_DISABLE_SHARE: "true",
+    OPENCODE_DISABLE_LSP_DOWNLOAD: "true",
+    OPENCODE_DISABLE_CLAUDE_CODE: "true",
+    OPENCODE_DISABLE_EXTERNAL_SKILLS: "true",
+  };
 }
 
 /**
@@ -491,7 +691,8 @@ export async function ensureServer(): Promise<number | null> {
       return null;
     }
 
-    const dir = projectDir();
+    // OpenCode démarre dans le dossier de l'instance ; chaque session porte le sien (`?directory=`).
+    const dir = dossierParDefaut();
     await writeConfig(dir);
 
     /*
@@ -506,33 +707,8 @@ export async function ensureServer(): Promise<number | null> {
     const proc = spawn(binary, ["serve", "--port", String(chosen), "--hostname", "127.0.0.1"], {
       cwd: dir,
       stdio: ["ignore", "pipe", "pipe"],
-      env: {
-        ...process.env,
-        // Le mot de passe ferme le serveur d'agent aux autres processus du poste.
-        OPENCODE_SERVER_PASSWORD: motDePasseServeur,
-        // La configuration ne dépend plus du dossier de travail (voir dossierConfig).
-        OPENCODE_CONFIG_DIR: dossierConfig(),
-        /*
-         * Rien vers l'extérieur, et rien d'autre que la configuration de Helix.
-         *
-         * OpenCode télécharge à chaque démarrage la liste des modèles de
-         * models.dev — vérifié : il a appelé un faux serveur mis à sa place.
-         * C'est un service tiers contacté sans que personne l'ait décidé, sur
-         * un produit qui promet le contraire. Il sait aussi se mettre à jour
-         * seul, publier une conversation en lien public, télécharger des
-         * serveurs de langage, et lire la configuration personnelle de Claude
-         * Code et d'autres outils présents sur le poste : autant de choses
-         * qu'un agent de code d'entreprise n'a pas à faire dans le dos de la
-         * personne. Vérifié : avec ces réglages, il répond normalement et
-         * n'appelle plus rien.
-         */
-        OPENCODE_DISABLE_MODELS_FETCH: "true",
-        OPENCODE_DISABLE_AUTOUPDATE: "true",
-        OPENCODE_DISABLE_SHARE: "true",
-        OPENCODE_DISABLE_LSP_DOWNLOAD: "true",
-        OPENCODE_DISABLE_CLAUDE_CODE: "true",
-        OPENCODE_DISABLE_EXTERNAL_SKILLS: "true",
-      },
+      // Une liste blanche, plus jamais tout `process.env` (voir `environnementOpenCode`).
+      env: environnementOpenCode(),
     });
 
     proc.stdout?.on("data", (b: Buffer) => console.log("[opencode]", b.toString().trim()));
@@ -603,13 +779,13 @@ export function enMarche(): boolean {
 /** Port du serveur en cours, ou `null` : distingue un OpenCode redémarré du précédent. */
 export const portEnCours = (): number | null => (enMarche() ? port : null);
 
-export async function status(): Promise<CodeStatus> {
+/** `userId` : le dossier rendu est celui de cette personne (séance présentée), sinon celui de l'instance. */
+export async function status(userId?: string): Promise<CodeStatus> {
   const binary = await locate();
   return {
     available: Boolean(binary),
     running: Boolean(port && child && !child.killed),
-    port,
-    projectDir: projectDir(),
+    projectDir: projectDir(userId),
     error: lastError,
   };
 }
@@ -768,10 +944,11 @@ export async function api(
 /* ------------------------- choix du dossier de travail ------------------------ */
 
 /**
- * Dossier de travail retenu pour l'écran Code, quand l'utilisateur en a choisi
- * un. Il remplace le dossier par défaut le temps de la session.
+ * Dernier dossier choisi par chaque personne pour une nouvelle session de
+ * Code (voir `projectDir`). En mémoire : après un redémarrage, la dernière
+ * session de la personne le redonne (index.ts, `dossierCodeDe`).
  */
-let dossierChoisi: string | null = null;
+const dossiersChoisis = new Map<string, string>();
 
 /**
  * Emplacements qu'un dossier de travail ne peut jamais désigner.
@@ -857,7 +1034,41 @@ const replier = (chemin: string) => chemin.normalize("NFC").toLowerCase();
  * l'agent, lui, ne sort plus de ce dossier : c'est le serveur de fichiers qui
  * l'y tient.
  */
-export function validerDossier(chemin: string): { ok: true; chemin: string } | { ok: false; raison: string } {
+/**
+ * Dossiers qui gardent les secrets de l'instance : ses données (jeton
+ * d'instance, clé de chiffrement, comptes, configuration d'OpenCode) et
+ * `~/.helix` (séance de la ligne de commande). Résolus comme le chemin
+ * comparé, pour qu'un lien symbolique ne les contourne pas.
+ */
+function dossiersDeLInstance(): string[] {
+  const lieux = [process.env.HELIX_DATA_DIR, join(homedir(), ".helix", "data"), join(homedir(), ".helix")];
+  const resolus = new Set<string>();
+  for (const lieu of lieux) {
+    if (!lieu) continue;
+    try {
+      resolus.add(replier(realpathSync(lieu)));
+    } catch {
+      resolus.add(replier(lieu));
+    }
+  }
+  return [...resolus];
+}
+
+/**
+ * Pour quoi le dossier est demandé.
+ *  - `code` (défaut) : dossier de projet de Helix Code, dont l'agent lance des
+ *    commandes avec les droits du compte. Revue du 25/09/2026 : le dossier
+ *    personnel lui-même était accepté, et il contient `~/.helix/data`. Refusés
+ *    désormais : le dossier personnel, et tout dossier qui contient les
+ *    données de l'instance ou `~/.helix`, ou qui s'y trouve.
+ *  - `cowork` : espace de travail de Cowork (serveur de fichiers, tenu par la
+ *    barrière d'approbation) : le dossier personnel reste permis (« Tout mon
+ *    poste » l'ouvre de toute façon), l'intérieur des données de l'instance non.
+ *  - `parcours` : seulement parcourir, pour choisir (sélecteur de dossier).
+ */
+export type UsageDossier = "code" | "cowork" | "parcours";
+
+export function validerDossier(chemin: string, usage: UsageDossier = "code"): { ok: true; chemin: string } | { ok: false; raison: string } {
   let resolu: string;
   try {
     resolu = realpathSync(chemin);
@@ -912,12 +1123,38 @@ export function validerDossier(chemin: string): { ok: true; chemin: string } | {
     }
   }
 
+  if (usage !== "parcours") {
+    for (const secret of dossiersDeLInstance()) {
+      if (cible === secret || cible.startsWith(secret + "/")) {
+        return { ok: false, raison: t("Ce dossier contient les données de l'instance. Choisissez un dossier de documents, de projets ou de travail.") };
+      }
+      if (usage === "code" && secret.startsWith(cible + "/")) {
+        return {
+          ok: false,
+          raison: t("Ce dossier est trop large : il contient les données de l'instance, que l'agent de code pourrait lire. Choisissez le dossier d'un projet."),
+        };
+      }
+    }
+    if (usage === "code") {
+      let maison = homedir();
+      try {
+        maison = realpathSync(maison);
+      } catch {
+        /* dossier personnel introuvable : comparé tel quel */
+      }
+      if (cible === replier(maison)) {
+        return { ok: false, raison: t("Choisissez le dossier d'un projet plutôt que votre dossier personnel entier.") };
+      }
+    }
+  }
+
   return { ok: true, chemin: resolu };
 }
 
-/** Fixe le dossier de travail. `null` revient au dossier par défaut. */
-export function setProjectDir(chemin: string | null): void {
-  dossierChoisi = chemin;
+/** Retient le dossier choisi par cette personne. `null` revient au dossier de l'instance. */
+export function setProjectDir(userId: string, chemin: string | null): void {
+  if (chemin) dossiersChoisis.set(userId, chemin);
+  else dossiersChoisis.delete(userId);
 }
 
 /**
@@ -955,7 +1192,7 @@ export function listerDossiers(chemin: string): {
   dossiers: string[];
   raccourcis: Raccourci[];
 } {
-  const verdict = validerDossier(chemin);
+  const verdict = validerDossier(chemin, "parcours");
   const base = verdict.ok ? verdict.chemin : realpathSync(homedir());
 
   let dossiers: string[] = [];

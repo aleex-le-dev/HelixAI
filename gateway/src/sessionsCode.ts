@@ -21,6 +21,24 @@ import { db } from "./db.ts";
  *
  * Les sessions ouvertes avant ce registre ne sont pas listées : on ne sait pas
  * à qui elles sont. Elles restent intactes chez OpenCode.
+ *
+ * ── Le registre fait foi pour l'accès (26/09/2026) ─────────────────────────
+ *
+ * Revue de sécurité du 25/09/2026 : le contrôle d'accès aux sessions
+ * échouait ouvert. Une session absente du registre (ouverte avant lui, retirée
+ * de la liste, sortie par la borne de 300, sous-agent jamais inscrit) ou un
+ * registre illisible laissait toute séance y envoyer des demandes et lire son
+ * flux. Désormais une session ne s'utilise que si le registre la connaît et la
+ * donne à la personne (index.ts, `refusSessionCode`) ; les sessions d'avant le
+ * 25/09/2026, qui n'ont pas de propriétaire, ne s'ouvrent plus par Helix
+ * (voulu : on ne sait pas à qui elles sont). Pour que cela tienne :
+ *  - « Retirer de la liste » **masque** la session, sans l'oublier : elle
+ *    garde sa propriétaire ;
+ *  - la borne de la liste masque les plus anciennes ; seule une borne bien
+ *    plus haute (`INSCRITES_MAX`) en efface du registre, et une session effacée
+ *    ne s'ouvre plus pour personne ;
+ *  - les sous-sessions (sous-agents de l'outil `task`) sont inscrites sous la
+ *    propriétaire de leur session parente, masquées (fluxCode.ts).
  */
 
 export interface SessionCode {
@@ -32,11 +50,21 @@ export interface SessionCode {
   variante?: string;
   creee: string;
   maj: string;
+  /** Retirée de la liste (ou sortie par la borne) : toujours à sa propriétaire, mais plus affichée. */
+  masquee?: boolean;
+  /** Session d'un sous-agent : celle qui l'a lancée. Jamais listée. */
+  parent?: string;
 }
 
 const COLLECTION = "sessionsCode";
-/** Au-delà, les plus anciennes sortent de la liste (elles restent chez OpenCode). */
+/** Au-delà, les plus anciennes sont masquées de la liste (elles restent chez OpenCode, et à leur propriétaire). */
 const PAR_PERSONNE_MAX = 300;
+/**
+ * Au-delà, les plus anciennes inscriptions d'une personne (sous-sessions
+ * comprises) sortent du registre : la collection reste bornée. Une session
+ * sortie ne s'ouvre plus pour personne, pas même pour sa propriétaire.
+ */
+const INSCRITES_MAX = 3000;
 const TITRE_MAX = 80;
 
 /**
@@ -71,10 +99,51 @@ export function noterSession(s: Omit<SessionCode, "creee" | "maj" | "titre"> & {
     if (liste.some((x) => x.id === s.id)) return;
     const maintenant = new Date().toISOString();
     liste.push({ ...s, titre: s.titre ?? "", creee: maintenant, maj: maintenant });
-    // Borne par personne : les plus anciennes s'effacent du registre, pas de chez OpenCode.
-    const siennes = liste.filter((x) => x.userId === s.userId).sort((a, b) => a.maj.localeCompare(b.maj));
-    const trop = new Set(siennes.slice(0, Math.max(0, siennes.length - PAR_PERSONNE_MAX)).map((x) => x.id));
-    await db().write(COLLECTION, liste.filter((x) => !trop.has(x.id)));
+    await db().write(COLLECTION, borner(liste, s.userId));
+  });
+}
+
+/**
+ * Bornes par personne (voir `PAR_PERSONNE_MAX`, `INSCRITES_MAX`) : les plus
+ * anciennes sont d'abord masquées, et seulement au-delà de la seconde borne
+ * effacées du registre. Jamais de chez OpenCode.
+ */
+function borner(liste: SessionCode[], userId: string): SessionCode[] {
+  const parAnciennete = (a: SessionCode, b: SessionCode) => a.maj.localeCompare(b.maj);
+  const visibles = liste.filter((x) => x.userId === userId && !x.masquee && !x.parent).sort(parAnciennete);
+  for (const x of visibles.slice(0, Math.max(0, visibles.length - PAR_PERSONNE_MAX))) x.masquee = true;
+  const siennes = liste.filter((x) => x.userId === userId).sort(parAnciennete);
+  const trop = new Set(siennes.slice(0, Math.max(0, siennes.length - INSCRITES_MAX)).map((x) => x.id));
+  return trop.size ? liste.filter((x) => !trop.has(x.id)) : liste;
+}
+
+/**
+ * Une sous-session (sous-agent) naît dans une session du registre : elle est
+ * inscrite sous la même propriétaire, masquée. Sans elle, ses appels d'outils
+ * et ses demandes d'autorisation n'avaient personne à qui revenir, et l'accès
+ * à son flux n'était borné par rien. Une sous-session d'une sous-session
+ * hérite de la même façon. Parent inconnu du registre : rien n'est inscrit.
+ */
+export function noterSousSession(id: string, parent: string): Promise<void> {
+  return enFile(async () => {
+    const liste = await charger();
+    if (liste.some((x) => x.id === id)) return;
+    const mere = liste.find((x) => x.id === parent);
+    if (!mere) return;
+    const maintenant = new Date().toISOString();
+    liste.push({
+      id,
+      userId: mere.userId,
+      dossier: mere.dossier,
+      titre: "",
+      modele: mere.modele,
+      ...(mere.variante ? { variante: mere.variante } : {}),
+      creee: maintenant,
+      maj: maintenant,
+      masquee: true,
+      parent,
+    });
+    await db().write(COLLECTION, borner(liste, mere.userId));
   });
 }
 
@@ -100,18 +169,24 @@ export async function sessionCode(id: string): Promise<SessionCode | undefined> 
 
 /** Les sessions de cette personne, la plus récente d'abord. */
 export async function sessionsDe(userId: string): Promise<SessionCode[]> {
-  return (await charger()).filter((x) => x.userId === userId).sort((a, b) => b.maj.localeCompare(a.maj));
+  return (await charger())
+    .filter((x) => x.userId === userId && !x.masquee && !x.parent)
+    .sort((a, b) => b.maj.localeCompare(a.maj));
 }
 
-/** Retire une session de la liste de sa propriétaire. Sa conversation reste chez OpenCode. */
+/**
+ * Retire une session de la liste de sa propriétaire : elle est **masquée**,
+ * pas oubliée (voir l'en-tête), et sa conversation reste chez OpenCode.
+ */
 export function retirerSession(id: string, userId: string): Promise<boolean> {
   return enFile(async () => {
     const liste = await charger();
-    if (!liste.some((x) => x.id === id && x.userId === userId)) return false;
-    await db().write(
-      COLLECTION,
-      liste.filter((x) => x.id !== id),
-    );
+    const s = liste.find((x) => x.id === id && x.userId === userId && !x.parent);
+    if (!s) return false;
+    if (!s.masquee) {
+      s.masquee = true;
+      await db().write(COLLECTION, liste);
+    }
     return true;
   });
 }

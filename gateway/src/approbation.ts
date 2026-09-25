@@ -182,7 +182,17 @@ const TOUJOURS_DEMANDER = new Set(["courrier__envoyer"]);
 
 export const demandeToujours = (outil: string) => TOUJOURS_DEMANDER.has(outil) && !envoiSansAccord();
 
+/**
+ * Outils livrés d'OpenCode qui ne font que lire le dossier du projet
+ * (permissionsCode.ts : `code__<permission>`). Tout le reste modifie ou sort :
+ * `bash` (une commande peut tout faire), `edit` (écriture, correctif),
+ * `webfetch` et `websearch` (le réseau), et toute permission qu'une version
+ * future ajouterait.
+ */
+const CODE_LECTURE = new Set(["code__read", "code__glob", "code__grep", "code__list", "code__lsp"]);
+
 export function modifie(outil: string): boolean {
+  if (outil.startsWith("code__")) return !CODE_LECTURE.has(outil);
   if (outil.startsWith("courrier__")) return !COURRIER_LECTURE.has(outil);
   // Le connecteur d'agenda est en lecture seule : il n'émet que des PROPFIND et
   // des REPORT, jamais une écriture CalDAV. Voir agenda.ts.
@@ -241,6 +251,33 @@ const texteOu = (valeur: unknown, defaut: string) =>
 export function resumerOutil(outil: string, args: Record<string, unknown>): string {
   const cible = chemin(args);
   const ou = cible ? abreger(cible) : "un emplacement non précisé";
+
+  // Outils livrés de l'agent de code (permissionsCode.ts) : la carte dit la commande, le fichier ou l'adresse.
+  if (outil.startsWith("code__")) {
+    const nom = outil.slice("code__".length);
+    const commande = typeof args.commande === "string" ? args.commande : "";
+    switch (nom) {
+      case "bash":
+        return `lancer la commande « ${commande.split("\n")[0]!.slice(0, 200)}${commande.includes("\n") || commande.length > 200 ? " …" : ""} » dans ${texteOu(args.dossier, "le dossier du projet")}`;
+      case "edit":
+      case "write":
+      case "apply_patch":
+        return `modifier ${ou}`;
+      case "webfetch":
+        return `ouvrir l'adresse ${typeof args.url === "string" ? args.url.slice(0, 200) : "demandée"}`;
+      case "websearch":
+      case "codesearch":
+        return `chercher sur internet « ${typeof args.requete === "string" ? args.requete.slice(0, 120) : ""} »`;
+      case "read":
+        return `lire ${ou}`;
+      case "glob":
+      case "grep":
+      case "list":
+        return `chercher dans ${ou}`;
+      default:
+        return `utiliser son outil « ${nom} »${cible ? ` sur ${ou}` : ""}`;
+    }
+  }
 
   if (outil.startsWith("bureau__")) {
     const nom = outil.slice("bureau__".length);
@@ -479,10 +516,47 @@ export function repondre(id: string, accord: boolean, nature: Nature, par: strin
   return true;
 }
 
-/** Pose une demande et attend la réponse d'un humain. */
-export function demander(demande: Omit<Demande, "id" | "createdAt">): Promise<Reponse> {
+/**
+ * Retire d'un texte ce qui peut tromper sur ce qu'on approuve : ESC et les
+ * autres caractères de contrôle C0 et C1 (sauf retour à la ligne et
+ * tabulation), et les caractères qui renversent l'ordre d'affichage
+ * (U+202A–U+202E, U+2066–U+2069).
+ *
+ * Revue du 25/09/2026 : le résumé d'une carte, l'objet ou le corps d'un mail,
+ * une commande, tous écrits par le modèle, arrivaient tels quels dans un
+ * terminal (`helix`). Une séquence `\x1b[2K\r` y efface la ligne affichée et
+ * en écrit une autre : on aurait approuvé autre chose que ce qu'on lisait.
+ * Même règle dans la ligne de commande (`nettoyer`, cli/helix.mjs).
+ */
+export function nettoyer(texte: string): string {
+  return texte.replace(/[\u0000-\u0008\u000B-\u001F\u007F-\u009F\u202A-\u202E\u2066-\u2069]/g, "");
+}
+
+/** `nettoyer`, appliqué à chaque texte d'un détail de carte, à toute profondeur. */
+function nettoyerTout<T>(valeur: T, profondeur = 0): T {
+  if (typeof valeur === "string") return nettoyer(valeur) as T;
+  if (profondeur > 6 || valeur === null || typeof valeur !== "object") return valeur;
+  if (Array.isArray(valeur)) return valeur.map((v) => nettoyerTout(v, profondeur + 1)) as T;
+  return Object.fromEntries(Object.entries(valeur).map(([k, v]) => [k, nettoyerTout(v, profondeur + 1)])) as T;
+}
+
+/**
+ * OpenCode a tranché lui-même (session arrêtée) : la carte disparaît, et la
+ * demande se clôt comme une expiration (l'action n'est pas faite).
+ */
+export function annuler(id: string): void {
+  const attente = attentes.get(id);
+  if (!attente) return;
+  attentes.delete(id);
+  emettre({ type: "approbation_expiree", id, nature: attente.demande.nature });
+  attente.resoudre({ issue: "expiration" });
+}
+
+/** Pose une demande et attend la réponse d'un humain. `surCarte` reçoit l'identifiant de la carte. */
+export function demander(demande: Omit<Demande, "id" | "createdAt">, surCarte?: (id: string) => void): Promise<Reponse> {
   const id = `apr_${randomBytes(8).toString("base64url")}`;
-  const complete: Demande = { ...demande, id, createdAt: Date.now() };
+  const complete: Demande = { ...nettoyerTout(demande), id, createdAt: Date.now() };
+  surCarte?.(id);
 
   return new Promise<Reponse>((resoudre) => {
     attentes.set(id, { demande: complete, resoudre });
@@ -546,6 +620,14 @@ function portee(outil: string, args: Record<string, unknown>, courant: Niveau): 
    * doit pas couvrir l'outil d'un connecteur qui, lui non plus, n'a pas de
    * chemin. Pour un brouillon, le destinataire en fait partie.
    */
+  /*
+   * Une commande, une adresse, une recherche de l'agent de code : la portée
+   * est la chose elle-même, mot pour mot. Approuver `npm test` ne doit pas
+   * approuver `rm -rf .` au même endroit.
+   */
+  if (outil === "code__bash" || outil === "code__webfetch" || outil === "code__websearch" || outil === "code__codesearch") {
+    return `${outil}|${String(args.commande ?? args.url ?? args.requete ?? "")}`;
+  }
   if (!cible) {
     const pour = outil === "courrier__brouillon" ? `|${String(args.a ?? args.en_reponse_a ?? "")}` : "";
     return `${outil}${pour}|*`;
@@ -648,7 +730,12 @@ export async function verifierOutil(
   employe?: string,
   /** Demander quoi qu'il arrive (un agent qui traite un mail reçu, voir serveurOutils.ts). */
   forcer = false,
+  /** D'où vient l'action, dit par la carte (la ligne de commande l'affiche) : l'employé se déduit de `employe`. */
+  surface: "chat" | "code" = "chat",
+  /** Reçoit l'identifiant de la carte, si une carte est posée (permissionsCode.ts, pour la retirer). */
+  surCarte?: (id: string) => void,
 ): Promise<Verdict> {
+  const origine = employe ? "employe" : surface;
   /*
    * Les actions d'écran gardent leur propre barrière, dans computer.ts : elle
    * connaît la différence entre une capture et un clic, et sait convertir les
@@ -663,7 +750,7 @@ export async function verifierOutil(
   const courant = niveau();
   if (TOUJOURS_DEMANDER.has(outil)) {
     if (!forcer && !demandeToujours(outil) && courant === "tout") return { autorise: true };
-    return verifierEnvoi(contexte, outil, args, qui, courant, employe);
+    return verifierEnvoi(contexte, outil, args, qui, courant, employe, origine);
   }
   /*
    * « Tout approuver » vaut pour ce que l'entreprise demande elle-même, pas
@@ -692,12 +779,25 @@ export async function verifierOutil(
   // Le journal dit ce que l'agent a voulu toucher, jamais ce qu'il y a dedans.
   journaliser("outil.demande", qui, { outil, cible: chemin(args), niveau: courant });
 
-  const { issue, par } = await demander({
-    nature: "outil",
-    resume,
-    pour: qui,
-    detail: { outil, cible: chemin(args), niveau: courant, portee: cle, ...(employe ? { employe } : {}) },
-  });
+  const { issue, par } = await demander(
+    {
+      nature: "outil",
+      resume,
+      pour: qui,
+      detail: {
+        outil,
+        cible: chemin(args),
+        niveau: courant,
+        portee: cle,
+        surface: origine,
+        // Une commande se juge entière : la carte la montre telle qu'elle partira.
+        ...(typeof args.commande === "string" ? { commande: args.commande } : {}),
+        ...(typeof args.url === "string" ? { url: args.url } : {}),
+        ...(employe ? { employe } : {}),
+      },
+    },
+    surCarte,
+  );
 
   const accord = issue === "accord";
   memoire?.set(cle, { accord, issue });
@@ -731,6 +831,7 @@ async function verifierEnvoi(
   qui: string,
   courant: Niveau,
   employe?: string,
+  origine: string = "chat",
 ): Promise<Verdict> {
   const prepare = await apercuEnvoi(args);
   // Un mail qu'on ne sait pas composer n'est pas soumis : le modèle lit pourquoi et corrige.
@@ -749,7 +850,7 @@ async function verifierEnvoi(
     nature: "outil",
     resume,
     pour: qui,
-    detail: { outil, niveau: courant, envoi: apercu, ...(employe ? { employe } : {}) },
+    detail: { outil, niveau: courant, envoi: apercu, surface: origine, ...(employe ? { employe } : {}) },
   });
   const accord = issue === "accord";
   if (!accord) memoire?.set(cle, { accord, issue });

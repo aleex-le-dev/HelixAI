@@ -11,7 +11,7 @@ import { libelleOutil } from "@/lib/libellesOutils";
 export interface CodeStatus {
   available: boolean;
   running: boolean;
-  port: number | null;
+  /** Dossier proposé pour une nouvelle session : celui de la personne connectée. */
   projectDir: string;
   error?: string;
 }

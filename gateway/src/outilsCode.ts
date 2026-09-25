@@ -1,5 +1,4 @@
 import type http from "node:http";
-import { timingSafeEqual } from "node:crypto";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
@@ -14,7 +13,9 @@ import { groupesDe } from "./groupes.ts";
 import { executerOutil, cibleDe, type DefinitionOutil } from "./outils.ts";
 import { verifierOutil } from "./approbation.ts";
 import { journaliser } from "./audit.ts";
-import { api, cleOutils, portEnCours } from "./opencode.ts";
+import { api, cleOutilsValide, portEnCours } from "./opencode.ts";
+import { destinataireDe } from "./fluxCode.ts";
+import { sessionCode } from "./sessionsCode.ts";
 
 /**
  * Les connecteurs de l'instance, servis par MCP à l'agent de code (OpenCode).
@@ -126,9 +127,18 @@ async function titulaire(): Promise<string | null> {
   }
   const personnes = new Set<string>();
   for (const id of auTravail) {
-    const d = demandes.get(id);
+    /*
+     * La session elle-même, sinon celle qui a lancé ce sous-agent, sinon le
+     * registre (les sous-sessions y sont inscrites sous la propriétaire du
+     * parent). Revue du 25/09/2026 : pendant une sous-tâche, la session du
+     * sous-agent travaillait sans être dans `demandes`, et tout connecteur
+     * était refusé.
+     */
+    const racine = destinataireDe(id)?.session;
+    let qui = demandes.get(id)?.userId ?? (racine ? demandes.get(racine)?.userId : undefined);
+    if (!qui) qui = (await sessionCode(id).catch(() => undefined))?.userId;
     // Une session au travail que Helix n'a pas lancée (ouverte hors de la passerelle) : inconnue, donc ambiguë.
-    personnes.add(d ? d.userId : "?");
+    personnes.add(qui ?? "?");
   }
   if (personnes.size !== 1) return null;
   const [seule] = [...personnes];
@@ -217,14 +227,6 @@ export async function rafraichirOutilsCode(dossier: string, userId?: string): Pr
   }
 }
 
-/** La clé présentée est-elle celle que la passerelle a écrite pour OpenCode ? */
-function cleValide(valeur: string | undefined): boolean {
-  if (!valeur) return false;
-  const a = Buffer.from(valeur);
-  const b = Buffer.from(cleOutils);
-  return a.length === b.length && timingSafeEqual(a, b);
-}
-
 /**
  * Sert une requête MCP d'OpenCode. Rend `false` si la clé manque ou ne va pas :
  * l'appelant répond alors 403. Sans état, comme `serveurOutils.ts` : un
@@ -236,7 +238,7 @@ export async function servirOutilsCode(
   corps: unknown,
 ): Promise<boolean> {
   const cle = req.headers["x-helix-cle"];
-  if (!cleValide(typeof cle === "string" ? cle : undefined)) return false;
+  if (!cleOutilsValide(cle)) return false;
 
   const serveur = new Server({ name: "helix-code-outils", version: "1.0.0" }, { capabilities: { tools: {} } });
 
@@ -278,7 +280,7 @@ export async function servirOutilsCode(
       );
     }
 
-    const verdict = await verifierOutil(null, nom, args, qui);
+    const verdict = await verifierOutil(null, nom, args, qui, undefined, false, "code");
     if (!verdict.autorise) return texte(verdict.message, true);
     if (ferme) {
       journaliser("outil.refuse", qui, { outil: nom, surface: "code", cause: "appel-abandonne" });

@@ -45,6 +45,17 @@ const LIBELLES_OUTILS: Record<string, string> = {
   reunions__chercher: t("Recherche dans les réunions"),
   reunions__lire: t("Lecture d'une réunion"),
   controle__site_web: t("Contrôle du code web"),
+  // Outils livrés de l'agent de code, quand ils demandent un accord (gateway/src/permissionsCode.ts).
+  code__bash: t("Commande de l'agent de code"),
+  code__edit: t("Modification d'un fichier du projet"),
+  code__write: t("Modification d'un fichier du projet"),
+  code__apply_patch: t("Modification d'un fichier du projet"),
+  code__webfetch: t("Ouverture d'une adresse internet"),
+  code__websearch: t("Recherche sur internet"),
+  code__read: t("Lecture d'un fichier du projet"),
+  code__glob: t("Recherche dans le projet"),
+  code__grep: t("Recherche dans le projet"),
+  code__list: t("Contenu d'un dossier du projet"),
   // Contrôle de l'écran (computer.ts) : sans eux, la trace montrait « cliquer », « ouvrir app ».
   ecran__capture: t("Capture de l'écran"),
   ecran__cliquer: t("Clic sur l'écran"),

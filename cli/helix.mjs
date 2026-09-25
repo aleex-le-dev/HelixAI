@@ -83,6 +83,33 @@ const avertir = (texte) => {
   enDebutDeLigne = true;
 };
 
+/**
+ * Ce qui vient de l'instance s'affiche sans ce qui pourrait piloter le
+ * terminal : ESC et les autres contrôles C0 et C1 (sauf retour à la ligne et
+ * tabulation), et les caractères qui renversent l'ordre d'affichage
+ * (U+202A–U+202E, U+2066–U+2069).
+ *
+ * Revue de sécurité du 25/09/2026 : le résumé d'une carte d'accord, le
+ * destinataire, l'objet et le corps d'un mail, une commande, le texte d'une
+ * réponse, les libellés d'outils viennent du modèle, et s'écrivaient tels
+ * quels. Une séquence `\x1b[2K\r` efface la ligne affichée et en écrit une
+ * autre : on aurait répondu « o » à autre chose que ce qu'on lisait. Le
+ * nettoyage est fait à la lecture de chaque réponse et de chaque évènement,
+ * avant tout affichage ; les couleurs de la ligne de commande sont ajoutées
+ * après. Même règle côté instance (`nettoyer`, gateway/src/approbation.ts).
+ */
+export function nettoyer(texte) {
+  return String(texte).replace(/[\u0000-\u0008\u000B-\u001F\u007F-\u009F\u202A-\u202E\u2066-\u2069]/g, "");
+}
+function nettoyerTout(valeur, profondeur = 0) {
+  if (typeof valeur === "string") return nettoyer(valeur);
+  if (profondeur > 8 || valeur === null || typeof valeur !== "object") return valeur;
+  if (Array.isArray(valeur)) return valeur.map((v) => nettoyerTout(v, profondeur + 1));
+  return Object.fromEntries(Object.entries(valeur).map(([k, v]) => [k, nettoyerTout(v, profondeur + 1)]));
+}
+const lireJson = (texte) => nettoyerTout(JSON.parse(texte));
+const jsonPropre = async (r) => nettoyerTout(await r.json());
+
 /** Erreur à montrer telle quelle, sans pile : c'est un message pour la personne. */
 class ErreurCli extends Error {}
 
@@ -91,7 +118,7 @@ class ErreurCli extends Error {}
 /* ------------------------------------------------------------------ */
 
 const COMMANDES = new Set(["chat", "code", "connexion", "deconnexion", "modeles", "outils", "aide"]);
-const AVEC_VALEUR = new Set(["--adresse", "--jeton", "--modele", "--effort", "--compte"]);
+const AVEC_VALEUR = new Set(["--adresse", "--jeton", "--modele", "--effort", "--compte", "--dossier"]);
 
 function analyser(argv) {
   const options = {};
@@ -173,7 +200,7 @@ function contexte(options) {
       /* pas d'application sur ce poste : il faudra --jeton */
     }
   }
-  return { adresse, jeton, seance: lireSeance(adresse)?.seance ?? "" };
+  return { adresse, locale, jeton, seance: lireSeance(adresse)?.seance ?? "" };
 }
 
 /**
@@ -256,7 +283,7 @@ async function appel(ctx, chemin, { methode = "GET", corps, seance = true, signa
  * deviner, pour dire à la personne la bonne chose à faire.
  */
 async function echec(ctx, r) {
-  const corps = await r.json().catch(() => ({}));
+  const corps = await jsonPropre(r).catch(() => ({}));
   if (r.status === 401) {
     const sonde = await appel(ctx, "/helix/models", { seance: false }).catch(() => null);
     if (sonde && sonde.status === 401) return new ErreurCli(T.jetonRefuse);
@@ -269,7 +296,7 @@ async function echec(ctx, r) {
 async function json(ctx, chemin, options) {
   const r = await appel(ctx, chemin, options);
   if (!r.ok) throw await echec(ctx, r);
-  return r.json();
+  return jsonPropre(r);
 }
 
 /**
@@ -456,7 +483,7 @@ class Approbations {
         for await (const donnee of evenements(r)) {
           let ev;
           try {
-            ev = JSON.parse(donnee);
+            ev = lireJson(donnee);
           } catch {
             continue;
           }
@@ -493,9 +520,12 @@ class Approbations {
     this.enCours = courant;
     try {
       ligne();
-      ligne(jaune(gras(`${T.approbationTitre} :`)) + " " + T.approbationVeut(demande.resume ?? "agir"));
       const detail = demande.detail ?? {};
+      // D'où vient la demande (Chat, Code, employé) : une carte de Code pendant un Chat se reconnaît.
+      const surface = detail.employe ? "employe" : detail.surface === "code" ? "code" : "chat";
+      ligne(jaune(gras(`${T.approbationTitre} (${T.approbationSurface[surface]}) :`)) + " " + T.approbationVeut(demande.resume ?? "agir"));
       if (detail.employe) ligne(discret(T.approbationEmploye(detail.employe)));
+      if (typeof detail.commande === "string") ligne(`  ${T.approbationCommande} :\n${detail.commande.replace(/^/gm, "    ")}`);
       const envoi = detail.envoi;
       if (envoi && typeof envoi === "object") {
         const m = T.approbationMail;
@@ -520,7 +550,7 @@ class Approbations {
       }).catch((err) => ({ ok: false, status: 0, json: async () => ({ error: { message: err.message } }) }));
       if (r.ok) ligne(accord ? vert(T.approbationAccordee) : rouge(T.approbationRefusee));
       else if (r.status === 404) ligne(discret(T.approbationExpiree));
-      else ligne(rouge(T.approbationEchec((await r.json().catch(() => ({})))?.error?.message ?? String(r.status))));
+      else ligne(rouge(T.approbationEchec((await jsonPropre(r).catch(() => ({})))?.error?.message ?? String(r.status))));
     } finally {
       this.enCours = null;
     }
@@ -609,7 +639,7 @@ async function questionChat(ctx, etat, signal) {
     if (donnee === "[DONE]") break;
     let ev;
     try {
-      ev = JSON.parse(donnee);
+      ev = lireJson(donnee);
     } catch {
       continue;
     }
@@ -822,7 +852,7 @@ async function ouvrirSessionCode(ctx, etat) {
     corps: { dossier: etat.dossier, ...(etat.modele ? { model: etat.modele } : {}), ...(etat.effort ? { effort: etat.effort } : {}) },
   });
   if (!r.ok) throw await echec(ctx, r);
-  const corps = await r.json().catch(() => ({}));
+  const corps = await jsonPropre(r).catch(() => ({}));
   const id = corps?.data?.id ?? corps?.id;
   if (!id) throw new ErreurCli(T.refus(r.status));
   etat.session = id;
@@ -949,7 +979,7 @@ async function demandeCode(ctx, etat, texte, signal) {
       for await (const donnee of evenements(r)) {
         let brut;
         try {
-          brut = JSON.parse(donnee);
+          brut = lireJson(donnee);
         } catch {
           continue;
         }
@@ -986,7 +1016,7 @@ async function demandeCode(ctx, etat, texte, signal) {
         ...(etat.effort ? { effort: etat.effort } : {}),
       },
     });
-    const corps = await r.json().catch(() => ({}));
+    const corps = await jsonPropre(r).catch(() => ({}));
     if (!r.ok) {
       if (r.status === 401) throw await echec(ctx, { status: 401, json: async () => corps });
       throw new ErreurCli(corps?.error?.message || T.refus(r.status));
@@ -1028,8 +1058,16 @@ async function interrompreCode(ctx, etat) {
 
 async function commandeCode(ctx, options, texteInitial) {
   if (!ctx.seance) throw new ErreurCli(T.codeSansSeance);
+  /*
+   * Le dossier du projet est un chemin **de la machine de l'instance** : c'est
+   * elle qui y fait travailler l'agent. Le dossier courant de ce poste n'a de
+   * sens que pour une instance locale (revue du 25/09/2026 : il partait tel
+   * quel vers une instance d'entreprise). Ailleurs, `--dossier` le donne.
+   */
+  const dossierDistant = typeof options.dossier === "string" ? options.dossier.trim() : "";
+  if (!ctx.locale && !dossierDistant) throw new ErreurCli(T.codeDossierDistant(ctx.adresse));
   const etat = {
-    dossier: process.cwd(),
+    dossier: dossierDistant || process.cwd(),
     modele: options.modele || "",
     effort: options.effort || "",
     session: null,
@@ -1127,7 +1165,7 @@ async function commandeConnexion(ctx, options) {
     seance: false,
     corps: { accountId: compte.id, password: motDePasse, poste, rester: true },
   });
-  let corps = await r.json().catch(() => ({}));
+  let corps = await jsonPropre(r).catch(() => ({}));
   if (!r.ok && corps?.error?.code === "deux-facteurs-requis" && corps.defi) {
     const code = await demander(T.codeDeuxFacteurs);
     if (!code) throw new ErreurCli(T.saisieInterrompue);
@@ -1136,7 +1174,7 @@ async function commandeConnexion(ctx, options) {
       seance: false,
       corps: { defi: corps.defi, code: code.trim(), poste, rester: true },
     });
-    corps = await r.json().catch(() => ({}));
+    corps = await jsonPropre(r).catch(() => ({}));
   }
   if (!r.ok && corps?.error?.code === "deux-facteurs-a-activer") throw new ErreurCli(T.deuxFacteursAActiver);
   if (!r.ok && corps?.error?.code === "mot-de-passe-a-definir") throw new ErreurCli(T.premierMotDePasse);
@@ -1159,7 +1197,7 @@ async function commandeDeconnexion(ctx) {
   try {
     const r = await appel(ctx, "/helix/auth/sessions");
     if (r.ok) {
-      const { sessions = [] } = await r.json();
+      const { sessions = [] } = await jsonPropre(r);
       const courante = sessions.find((s) => s.courante);
       if (courante) {
         const f = await appel(ctx, "/helix/auth/revoke", { methode: "POST", corps: { id: courante.id } });
@@ -1209,7 +1247,7 @@ async function listerOutils(ctx) {
   }
   if (ctx.seance) {
     const r = await appel(ctx, "/helix/approbation");
-    if (r.ok) ligne(T.outilsNiveau((await r.json()).niveau));
+    if (r.ok) ligne(T.outilsNiveau((await jsonPropre(r)).niveau));
     else ligne(discret(T.outilsNiveauInconnu));
   } else ligne(discret(T.outilsNiveauInconnu));
 }

@@ -219,6 +219,20 @@ async function demanderAuCode(contexte, etat, texte, surEvenement, signal) {
   if (!s) throw new Error("Helix Code modifie vos fichiers : connectez-vous d'abord (commande « Helix : se connecter »).");
   const dossier = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
   if (!dossier) throw new Error("Ouvrez d'abord un dossier dans VS Code : c'est là que Helix Code travaille.");
+  /*
+   * Le dossier ouvert est un chemin de CE poste ; l'agent de code travaille
+   * sur la machine de l'instance. Pour une instance distante, il désignerait un
+   * autre dossier, ou aucun (revue du 25/09/2026).
+   */
+  let hote = "";
+  try {
+    hote = new URL(reglages().adresse).hostname;
+  } catch {
+    /* adresse illisible : l'appel échouera plus loin, avec son message */
+  }
+  if (hote && !["127.0.0.1", "localhost", "::1", "[::1]"].includes(hote)) {
+    throw new Error("Helix Code travaille sur la machine de l'instance : depuis VS Code, seulement avec l'instance de cet ordinateur. Pour une instance d'entreprise, utilisez l'application ou « helix code --dossier ».");
+  }
   if (!etat.session) {
     const r = await appel("/helix/code/session", { method: "POST", seance: s, body: JSON.stringify({ dossier }) });
     const corps = await r.json().catch(() => ({}));
@@ -279,6 +293,15 @@ async function demanderAuCode(contexte, etat, texte, surEvenement, signal) {
   };
   const flux = ecouter(etat.session, arretPremier.signal);
   flux.catch(() => undefined);
+  /*
+   * Depuis le 26/09/2026, chaque commande de l'agent de code, et chaque
+   * modification au niveau « Demander avant de modifier », attend un accord
+   * (gateway/src/permissionsCode.ts). La carte va à la personne connectée : on
+   * l'écoute le temps du tour, et on la pose dans une fenêtre de VS Code. Sans
+   * réponse ici ni dans l'application, l'action n'est pas faite (deux minutes).
+   */
+  const arretCartes = new AbortController();
+  void ecouterCartes(s, arretCartes.signal).catch(() => undefined);
   try {
     const r = await appel("/helix/code/prompt", { method: "POST", seance: s, body: JSON.stringify({ sessionID: etat.session, text: texte }) });
     const corps = await r.json().catch(() => ({}));
@@ -294,6 +317,53 @@ async function demanderAuCode(contexte, etat, texte, surEvenement, signal) {
   } finally {
     signal.removeEventListener("abort", suivreArret);
     arretPremier.abort();
+    arretCartes.abort();
+  }
+}
+
+/**
+ * Ce qui vient de l'instance, sans caractère de contrôle ni renversement de
+ * l'ordre d'affichage (même règle que la ligne de commande, cli/helix.mjs).
+ * @param {unknown} v
+ */
+const propre = (v) => String(v ?? "").replace(/[\u0000-\u0008\u000B-\u001F\u007F-\u009F‪-‮⁦-⁩]/g, "");
+
+/**
+ * Les demandes d'accord de Helix Code pour la personne connectée, posées dans
+ * une fenêtre modale. Seul « Autoriser » accorde ; fermer la fenêtre refuse.
+ * @param {string} s séance
+ * @param {AbortSignal} signal
+ */
+async function ecouterCartes(s, signal) {
+  const r = await appel("/helix/approbation/evenements", { seance: s, signal });
+  if (!r.ok || !r.body) return;
+  const lecteur = r.body.getReader();
+  const decodeur = new TextDecoder();
+  let reste = "";
+  const vues = new Set();
+  for (;;) {
+    const { done, value } = await lecteur.read();
+    if (done) return;
+    reste += decodeur.decode(value, { stream: true });
+    const blocs = reste.split("\n\n");
+    reste = blocs.pop() ?? "";
+    for (const bloc of blocs) {
+      const donnee = bloc.split("\n").filter((l) => l.startsWith("data:")).map((l) => l.slice(5).trim()).join("");
+      let ev;
+      try {
+        ev = JSON.parse(donnee);
+      } catch {
+        continue;
+      }
+      if (ev.type !== "approbation_demandee" || ev.nature !== "outil" || ev.detail?.surface !== "code" || vues.has(ev.id)) continue;
+      vues.add(ev.id);
+      const commande = typeof ev.detail?.commande === "string" ? `\n\n${propre(ev.detail.commande).slice(0, 2000)}` : "";
+      void vscode.window
+        .showWarningMessage(`Helix Code veut ${propre(ev.resume)}.`, { modal: true, detail: `Accord demandé.${commande}` }, "Autoriser", "Refuser")
+        .then((choix) =>
+          appel("/helix/approbation/repondre", { method: "POST", seance: s, body: JSON.stringify({ id: ev.id, accord: choix === "Autoriser" }) }).catch(() => undefined),
+        );
+    }
   }
 }
 

@@ -151,6 +151,7 @@ import {
   api as codeApi,
   enMarche as codeEnMarche,
   projectDir,
+  dossierParDefaut as dossierCodeParDefaut,
   validerDossier,
   setProjectDir,
   listerDossiers,
@@ -174,9 +175,12 @@ import {
   toucherSession as toucherSessionCode,
   sessionCode,
   sessionsDe,
+  sessionsDe as sessionsCodeDe,
   retirerSession as retirerSessionCode,
   historiqueDe as historiqueCode,
+  type SessionCode as SessionCodeInscrite,
 } from "./sessionsCode.ts";
+import { nouveauTourCode } from "./permissionsCode.ts";
 import type { ChatRequest } from "./types.ts";
 
 /* --------------------------------- utilitaires --------------------------------- */
@@ -1992,8 +1996,33 @@ async function handleDataRevisions(res: http.ServerResponse): Promise<void> {
 
 /* ------------------------------- routes Code ---------------------------------- */
 
-async function handleCodeStatus(res: http.ServerResponse): Promise<void> {
-  send(res, 200, await codeStatus());
+/**
+ * `GET /helix/code` : le moteur est-il là, tourne-t-il, et quel dossier
+ * proposer. Au jeton seul ; le dossier est celui de la personne si une séance
+ * est présentée. Le port d'OpenCode n'est plus rendu (revue du 25/09/2026) :
+ * aucun client ne s'en servait.
+ */
+async function handleCodeStatus(req: http.IncomingMessage, res: http.ServerResponse, url: URL): Promise<void> {
+  const qui = await demandeur(req, url);
+  if (qui) await dossierCodeDe(qui.userId);
+  send(res, 200, await codeStatus(qui?.userId));
+}
+
+/**
+ * Le dossier de projet proposé à une personne pour une nouvelle session : son
+ * dernier choix (mémoire), sinon le dossier de sa dernière session (registre,
+ * utile après un redémarrage), sinon celui de l'instance. Jamais celui d'une
+ * autre personne.
+ */
+async function dossierCodeDe(userId: string): Promise<string> {
+  const choisi = projectDir(userId);
+  if (choisi !== dossierCodeParDefaut()) return choisi;
+  const derniere = (await sessionsCodeDe(userId).catch(() => []))[0]?.dossier;
+  if (derniere && validerDossier(derniere).ok) {
+    setProjectDir(userId, derniere);
+    return derniere;
+  }
+  return choisi;
 }
 
 /** Ouvre une session OpenCode dans le dossier de projet. */
@@ -2005,9 +2034,10 @@ async function handleDossiers(
 ): Promise<void> {
   const qui = await demandeur(req, url);
   if (!qui) return send(res, 401, sansSeance());
+  const courant = await dossierCodeDe(qui.userId);
   send(res, 200, {
-    ...listerDossiers(url.searchParams.get("chemin") ?? projectDir()),
-    courant: projectDir(),
+    ...listerDossiers(url.searchParams.get("chemin") ?? courant),
+    courant,
   });
 }
 
@@ -2027,11 +2057,15 @@ async function handleCodeSession(
    * Sans cela, un chemin fabriqué donnerait à l'agent de code accès à
    * n'importe quel endroit du disque.
    */
+  // La séance est exigée par le tableau `EXECUTION` ; la session s'inscrit à son nom.
+  const qui = await demandeur(req, new URL(req.url ?? "/", "http://localhost"));
+  if (!qui) return send(res, 401, sansSeance());
   if (body.dossier) {
     const verdict = validerDossier(body.dossier);
     if (!verdict.ok) return send(res, 400, { error: { message: verdict.raison } });
-    setProjectDir(verdict.chemin);
-    journaliser("donnees.ecrites", "systeme", {
+    // Le choix de cette personne, et d'elle seule (revue du 25/09/2026 : il était commun à l'instance).
+    setProjectDir(qui.userId, verdict.chemin);
+    journaliser("donnees.ecrites", qui.userId, {
       collection: "code.dossier",
       dossier: verdict.chemin,
     });
@@ -2081,30 +2115,49 @@ async function handleCodeSession(
    * La passerelle traduit son flux dans celui qu'attendent les clients
    * (fluxCode.ts). Le modèle part avec chaque demande (`refModele`).
    */
-  const dossier = projectDir();
+  const dossier = body.dossier ? projectDir(qui.userId) : await dossierCodeDe(qui.userId);
   const creation = await creerSessionCode(dossier, modele, reglage.variante);
   if ("erreur" in creation) return send(res, creation.statut, { error: { message: creation.erreur } });
-  // La session entre dans la liste de sa propriétaire (sessionsCode.ts), séparée des Chats.
-  const qui = await demandeur(req, new URL(req.url ?? "/", "http://localhost"));
-  if (qui) {
-    await noterSessionCode({ id: creation.id, userId: qui.userId, dossier, modele, variante: reglage.variante }).catch((err) =>
-      console.error("[code] session non notée au registre :", err instanceof Error ? err.message : err),
-    );
+  /*
+   * La session entre dans la liste de sa propriétaire (sessionsCode.ts),
+   * séparée des Chats. Le registre fait foi pour l'accès : une session qu'il
+   * n'a pas notée ne s'ouvrirait pour personne, on le dit tout de suite.
+   */
+  try {
+    await noterSessionCode({ id: creation.id, userId: qui.userId, dossier, modele, variante: reglage.variante });
+  } catch (err) {
+    console.error("[code] session non notée au registre :", err instanceof Error ? err.message : err);
+    return send(res, 503, { error: { message: t("Le registre des sessions de code est illisible : la session n'a pas pu être ouverte.") } });
   }
   // Même forme de réponse qu'avant (`data.id`) : l'écran, la ligne de commande et l'extension la lisent.
   send(res, 200, { data: { id: creation.id } });
 }
 
 /**
- * La session appartient-elle à une autre personne ? Une session du registre
- * (sessionsCode.ts) ne s'utilise que par sa propriétaire : sans cela, qui
- * connaissait son identifiant pouvait y envoyer des demandes ou lire son flux.
- * Une session absente du registre (ouverte avant lui) reste ouverte à toute
- * séance, comme avant.
+ * Cette personne peut-elle utiliser cette session (demande, arrêt, flux) ?
+ * Rend la session du registre, ou le refus à renvoyer.
+ *
+ * Le registre (sessionsCode.ts) **fait foi**, et le contrôle échoue fermé.
+ * Revue de sécurité du 25/09/2026 : une session absente du registre (ouverte
+ * avant lui, retirée de la liste, sortie par la borne, sous-agent) ou un
+ * registre illisible donnaient l'accès à toute séance. Désormais : registre
+ * illisible, 503 ; session inconnue du registre ou d'une autre personne, 403.
+ * Les sessions ouvertes avant le 25/09/2026 n'ont pas de propriétaire et ne
+ * s'ouvrent plus par ces routes (voulu, SECURITE.md § 22.4).
  */
-async function sessionCodeDAutrui(sessionID: string, userId: string | undefined): Promise<boolean> {
-  const s = await sessionCode(sessionID).catch(() => undefined);
-  return Boolean(s && s.userId !== userId);
+async function refusSessionCode(
+  sessionID: string,
+  userId: string | undefined,
+): Promise<{ session: SessionCodeInscrite } | { statut: number; message: string }> {
+  let s: SessionCodeInscrite | undefined;
+  try {
+    s = await sessionCode(sessionID);
+  } catch {
+    return { statut: 503, message: t("Le registre des sessions de code est illisible : l'accès aux sessions est refusé tant qu'il ne se relit pas.") };
+  }
+  if (!s) return { statut: 403, message: t("Cette session de code n'est inscrite au nom de personne sur cette instance.") };
+  if (!userId || s.userId !== userId) return { statut: 403, message: t("Cette session de code appartient à une autre personne.") };
+  return { session: s };
 }
 
 /** `GET /helix/code/sessions` : les sessions de Code de la personne, la plus récente d'abord. */
@@ -2260,17 +2313,17 @@ async function handleCodePrompt(
    * le retenir.
    */
   const envoyeur = await demandeur(req, new URL(req.url ?? "/", "http://localhost"));
-  if (await sessionCodeDAutrui(body.sessionID, envoyeur?.userId)) {
-    return send(res, 403, { error: { message: t("Cette session de code appartient à une autre personne.") } });
-  }
+  const acces = await refusSessionCode(body.sessionID, envoyeur?.userId);
+  if ("statut" in acces) return send(res, acces.statut, { error: { message: acces.message } });
+  const notee = acces.session;
   /*
    * Session inconnue de la mémoire (ouverte avant un redémarrage de la
-   * passerelle) : son dossier et son modèle viennent du registre s'il la
-   * connaît (sessionsCode.ts), sinon réglage de l'instance et dossier courant.
+   * passerelle) : son dossier et son modèle viennent du registre. Le dossier
+   * d'une session est toujours le sien, jamais celui qu'une personne a choisi
+   * depuis pour une nouvelle.
    */
   if (!modeleDeSession.has(body.sessionID)) {
-    const notee = await sessionCode(body.sessionID).catch(() => undefined);
-    if (notee) modeleDeSession.set(body.sessionID, { modele: notee.modele, variante: notee.variante, dossier: notee.dossier });
+    modeleDeSession.set(body.sessionID, { modele: notee.modele, variante: notee.variante, dossier: notee.dossier });
   }
   let connue = modeleDeSession.get(body.sessionID);
   if (!connue || body.model !== undefined || body.effort !== undefined) {
@@ -2287,7 +2340,7 @@ async function handleCodePrompt(
           },
         });
       }
-      connue = { dossier: connue?.dossier ?? projectDir(), modele: voulu.modele, variante: voulu.variante };
+      connue = { dossier: connue?.dossier ?? notee.dossier, modele: voulu.modele, variante: voulu.variante };
       modeleDeSession.set(body.sessionID, connue);
     }
   }
@@ -2320,7 +2373,7 @@ async function handleCodePrompt(
   if (estDemandeDeSite(body.text)) {
     try {
       const qui = await demandeur(req, new URL(req.url ?? "/", "http://localhost"));
-      const prepare = await preparerDesign(modeleDeSession.get(body.sessionID)?.dossier ?? projectDir(), body.text, qui?.userId ?? "code");
+      const prepare = await preparerDesign(reglageEnvoi.dossier, body.text, qui?.userId ?? "code");
       texteEnvoye = body.text + prepare.consigne;
       if (prepare.design) console.log(`[code] design préparé : ${prepare.design.produit}, ${prepare.design.style}, ${prepare.design.polices.nom}.`);
     } catch (err) {
@@ -2337,6 +2390,8 @@ async function handleCodePrompt(
   const auteur = await demandeur(req, new URL(req.url ?? "/", "http://localhost"));
   const dossierDemande = reglageEnvoi.dossier;
   if (auteur) noterDemandeCode(body.sessionID, auteur.userId, dossierDemande);
+  // Les accords donnés aux outils d'OpenCode valent pour un tour (permissionsCode.ts).
+  nouveauTourCode(body.sessionID);
 
   /*
    * `prompt_async` rend la main tout de suite (204), comme le faisait la
@@ -2392,20 +2447,29 @@ async function handleCodePrompt(
       const choix = await resolve({ role: "code" });
       if (!("error" in choix)) modele = choix.model.id;
     }
-    // Même dossier que la session perdue : le dossier courant a pu changer depuis.
-    const dossier = perdue?.dossier ?? projectDir();
+    // Même dossier que la session perdue : le dossier choisi a pu changer depuis.
+    const dossier = perdue?.dossier ?? notee.dossier;
     console.log(`[code] demande jamais arrivée au modèle : nouvelle session (${modele ?? "aucun modèle"}).`);
     if (modele) {
       const creation = await creerSessionCode(dossier, modele, perdue?.variante);
       if ("id" in creation) {
         const nouvelle = creation.id;
         if (auteur) noterDemandeCode(nouvelle, auteur.userId, dossier);
-        // La session relancée remplace la perdue dans la liste de Code, avec la même demande pour titre.
-        if (auteur) {
-          await noterSessionCode({ id: nouvelle, userId: auteur.userId, dossier, modele, variante: perdue?.variante, titre: "" }).catch(() => {});
-          void toucherSessionCode(nouvelle, body.text).catch(() => {});
-          void retirerSessionCode(body.sessionID, auteur.userId).catch(() => {});
+        nouveauTourCode(nouvelle);
+        /*
+         * La session relancée remplace la perdue dans la liste de Code, avec
+         * la même demande pour titre, et à la même propriétaire. La perdue est
+         * masquée, pas oubliée : elle reste à sa propriétaire.
+         */
+        const inscrite = await noterSessionCode({ id: nouvelle, userId: notee.userId, dossier, modele, variante: perdue?.variante, titre: "" }).then(
+          () => true,
+          () => false,
+        );
+        if (!inscrite) {
+          return send(res, 503, { error: { message: t("Le registre des sessions de code est illisible : la session n'a pas pu être ouverte.") } });
         }
+        void toucherSessionCode(nouvelle, body.text).catch(() => {});
+        void retirerSessionCode(body.sessionID, notee.userId).catch(() => {});
         envoi = Date.now();
         const second = await envoyer(nouvelle, { modele, variante: perdue?.variante, dossier });
         if (second.ok && (await attendreAppel(body.text, envoi))) {
@@ -2440,10 +2504,9 @@ async function handleCodeInterrupt(
     return send(res, 400, { error: { message: t("`sessionID` invalide.") } });
   }
   const qui = await demandeur(req, new URL(req.url ?? "/", "http://localhost"));
-  if (await sessionCodeDAutrui(body.sessionID, qui?.userId)) {
-    return send(res, 403, { error: { message: t("Cette session de code appartient à une autre personne.") } });
-  }
-  const dossier = modeleDeSession.get(body.sessionID)?.dossier ?? (await sessionCode(body.sessionID).catch(() => undefined))?.dossier ?? projectDir();
+  const acces = await refusSessionCode(body.sessionID, qui?.userId);
+  if ("statut" in acces) return send(res, acces.statut, { error: { message: acces.message } });
+  const dossier = acces.session.dossier;
   const upstream = await codeApi(`/session/${body.sessionID}/abort?directory=${encodeURIComponent(dossier)}`, {
     method: "POST",
   });
@@ -2496,10 +2559,9 @@ async function handleCodeEvents(
    * inventé n'occupe rien.
    */
   const qui = await demandeur(req, url);
-  if (await sessionCodeDAutrui(sessionID, qui?.userId)) {
-    return send(res, 403, { error: { message: t("Cette session de code appartient à une autre personne.") } });
-  }
-  const dossier = modeleDeSession.get(sessionID)?.dossier ?? (await sessionCode(sessionID).catch(() => undefined))?.dossier ?? projectDir();
+  const acces = await refusSessionCode(sessionID, qui?.userId);
+  if ("statut" in acces) return send(res, acces.statut, { error: { message: acces.message } });
+  const dossier = acces.session.dossier;
   try {
     if (!sessionCodeSuivie(sessionID)) {
       const existe = await codeApi(`/session/${sessionID}?directory=${encodeURIComponent(dossier)}`);
@@ -2527,7 +2589,7 @@ async function handleCodeEvents(
   const desabonner = abonnerCode(sessionID, apres, (evenement: EvenementCode) => {
     res.write(`data: ${JSON.stringify(evenement)}\n\n`);
     if (enDirect && evenement.type === "session.next.step.ended" && evenement.data.finish === "stop") {
-      const dossierTour = modeleDeSession.get(sessionID)?.dossier ?? projectDir();
+      const dossierTour = dossier;
       setTimeout(() => {
         const n = corrigerPages(dossierTour);
         if (n > 0) console.log(`[code] design : ${n} page(s) remise(s) sur la feuille du projet.`);
@@ -2637,7 +2699,7 @@ async function handleWorkspace(
   if (toutLeposte) {
     chemins = toutLePoste();
   } else {
-    const verdict = validerDossier(body.dossier as string);
+    const verdict = validerDossier(body.dossier as string, "cowork");
     if (!verdict.ok) return send(res, 400, { error: { message: verdict.raison } });
     chemins = [verdict.chemin];
   }
@@ -4263,7 +4325,7 @@ const traiter = (
       if (req.method === "GET") return handleDataRead(req, res, url, name);
       if (req.method === "PUT") return handleDataWrite(req, res, url, name);
     }
-    if (req.method === "GET" && path === "/helix/code") return handleCodeStatus(res);
+    if (req.method === "GET" && path === "/helix/code") return handleCodeStatus(req, res, url);
     if (req.method === "GET" && path === "/helix/dossiers")
       return handleDossiers(req, res, url);
     if (req.method === "POST" && path === "/helix/code/session")

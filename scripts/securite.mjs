@@ -335,6 +335,22 @@ for (const chemin of ["../../../../etc/passwd", "/etc/passwd", "..%2F..%2Fetc%2F
   const corps = await r.text();
   verifier("lire une collection par un chemin détourné est refusé", !corps.includes("passwordHash") && !corps.includes("hash"), `${r.status} ${corps.slice(0, 60)}`);
 }
+/*
+ * Import depuis les logiciels du poste (revue du 25/09/2026) : sur cette
+ * instance locale ordinaire, il reste ouvert à qui l'a mise en route ; pas
+ * aux jetons passés dans l'adresse, ni à une collègue. L'instance partagée est
+ * essayée en section 10.
+ */
+{
+  const r = await appel("/helix/import/logiciels", { headers: avecSeance });
+  verifier("instance locale : l'import depuis les logiciels du poste répond au titulaire (200)", r.status === 200, r.status);
+  const url = await appel(`/helix/import/logiciels?token=${encodeURIComponent(JETON)}&session=${encodeURIComponent(SEANCE)}`);
+  verifier("import depuis les logiciels : jetons dans l'adresse refusés", url.status === 400, url.status);
+  const page = await appel(`/helix/import/logiciel/claude-code?token=${encodeURIComponent(JETON)}&session=${encodeURIComponent(SEANCE)}`);
+  verifier("import d'un logiciel : jetons dans l'adresse refusés", page.status === 400, page.status);
+  const collegue = await appel("/helix/import/logiciels", { headers: avecSeanceB });
+  verifier("import depuis les logiciels : une collègue qui n'administre pas le poste → 403", collegue.status === 403, collegue.status);
+}
 
 /*
  * Serveur d'outils de l'agent de code (outilsCode.ts, ajouté le 25/09/2026) :
@@ -798,6 +814,163 @@ verifier("le mot de passe n'apparaît pas dans le journal", !journal.includes("M
     }
     verifier(`injoignable depuis le réseau (${ip})`, !joignable, "la passerelle répond sur l'interface réseau");
   }
+}
+
+/* ------------------------------------------------------------------------- */
+/*
+ * Revue du 25/09/2026. Une seconde instance, **partagée** (`share: true`, mais
+ * écoutant sur la boucle locale et en clair : rien ne s'ouvre au réseau le
+ * temps de l'essai), dont le dossier de l'équipe contient le dossier des
+ * données, comme « Tout mon poste » avec `~/.helix/data`. Le dossier des
+ * données porte ici un nom sans point, pour éprouver la règle du chemin réel
+ * et pas seulement celle des segments en point.
+ */
+console.log("\n10. Dossier de l'équipe contenant les données de l'instance, instance partagée");
+{
+  const { mkdirSync, writeFileSync, symlinkSync } = await import("node:fs");
+  const ESPACE = mkdtempSync(join(tmpdir(), "helix-securite-espace-"));
+  const DONNEES2 = join(ESPACE, "donnees");
+  const MEMOIRE = join(DONNEES2, "openclaw", "employes", "e1", "memory");
+  mkdirSync(MEMOIRE, { recursive: true });
+  writeFileSync(join(MEMOIRE, "note.md"), "SECRET-MEMOIRE-EMPLOYE-4412");
+  mkdirSync(join(ESPACE, ".helix"), { recursive: true });
+  writeFileSync(join(ESPACE, ".helix", "cache.txt"), "SECRET-DOSSIER-POINT-8820");
+  writeFileSync(join(ESPACE, "notes.txt"), "document ordinaire de l'équipe");
+  mkdirSync(join(ESPACE, "Docs"), { recursive: true });
+  // Deux liens sans point dans le nom : l'un vers le dossier des données, l'autre vers un fichier qu'il contient.
+  symlinkSync(DONNEES2, join(ESPACE, "raccourci"));
+  symlinkSync(join(MEMOIRE, "note.md"), join(ESPACE, "Docs", "lien-memoire.md"));
+  const PROFIL2 = join(ESPACE, "..", `${ESPACE.split("/").pop()}-profil.json`);
+  writeFileSync(PROFIL2, JSON.stringify({ share: true, tls: false, backends: [{ id: "lmstudio", enabled: false }, { id: "exo", enabled: false }] }));
+  const PORT2 = await portLibre();
+  const G2 = `http://127.0.0.1:${PORT2}`;
+  const seconde = spawn(process.execPath, [join(RACINE, "gateway", "src", "index.ts")], {
+    env: {
+      ...process.env,
+      HELIX_CONFIG: PROFIL2,
+      HELIX_GATEWAY_PORT: String(PORT2),
+      HELIX_GATEWAY_HOST: "127.0.0.1",
+      HELIX_DATA_DIR: DONNEES2,
+      HELIX_WORKSPACE: ESPACE,
+      HELIX_LMSTUDIO_URL: "http://127.0.0.1:9/v1",
+      HELIX_EXO_URL: "http://127.0.0.1:9/v1",
+    },
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  let journal2 = "";
+  seconde.stdout.on("data", (b) => (journal2 += b));
+  seconde.stderr.on("data", (b) => (journal2 += b));
+  for (let i = 0; i < 60; i++) {
+    try {
+      await fetch(`${G2}/health`);
+      break;
+    } catch {
+      await attendre(250);
+    }
+  }
+  const JETON2 = readFileSync(join(DONNEES2, "instance-token"), "utf8").trim();
+  const appel2 = (chemin, options = {}) => fetch(`${G2}${chemin}`, { redirect: "manual", ...options });
+  const MDP2 = "Troisieme2Passe!93";
+  const cree = await (await appel2("/helix/auth/create", {
+    method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${JETON2}` },
+    body: JSON.stringify({ fullName: "Titulaire", email: "titulaire@example.test", password: MDP2 }),
+  })).json();
+  const avec2 = { "Content-Type": "application/json", Authorization: `Bearer ${JETON2}`, "X-Helix-Session": cree.session?.token ?? "" };
+  verifier("seconde instance (partagée) : le premier compte s'ouvre", Boolean(cree.session?.token), JSON.stringify(cree).slice(0, 80) + journal2.slice(-200));
+
+  const lire = async (chemin) => {
+    const r = await appel2(`/helix/espace/fichier?chemin=${encodeURIComponent(chemin)}`, { headers: avec2 });
+    return { statut: r.status, corps: await r.text() };
+  };
+  const secrets = [JETON2, "SECRET-MEMOIRE-EMPLOYE-4412", "SECRET-DOSSIER-POINT-8820"];
+  for (const chemin of [
+    "donnees/instance-token",
+    "donnees/openclaw/employes/e1/memory/note.md",
+    ".helix/cache.txt",
+    "raccourci/instance-token",
+    "Docs/lien-memoire.md",
+  ]) {
+    const r = await lire(chemin);
+    verifier(`espace : lire « ${chemin} » → 403 ou 404`, (r.statut === 403 || r.statut === 404) && !secrets.some((s) => r.corps.includes(s)), `${r.statut} ${r.corps.slice(0, 60)}`);
+  }
+  {
+    const r = await lire("notes.txt");
+    verifier("espace : un fichier ordinaire du dossier de l'équipe reste lisible", r.statut === 200 && r.corps.includes("document ordinaire"), `${r.statut} ${r.corps.slice(0, 60)}`);
+  }
+  {
+    const racine = await (await appel2("/helix/espace?chemin=", { headers: avec2 })).json();
+    const noms = (racine.entrees ?? []).map((e) => e.nom);
+    verifier("espace : la liste montre les documents mais ni les données ni le lien vers elles", noms.includes("notes.txt") && !noms.includes("donnees") && !noms.includes("raccourci"), JSON.stringify(noms));
+    const dans = await appel2("/helix/espace?chemin=raccourci", { headers: avec2 });
+    verifier("espace : lister le dossier des données par un lien → refusé", dans.status === 403 || dans.status === 404, dans.status);
+  }
+  {
+    const r = await appel2("/helix/mcp/workspace", { method: "POST", headers: avec2, body: JSON.stringify({ dossier: DONNEES2, motDePasse: MDP2 }) });
+    verifier("le dossier des données ne peut pas devenir le dossier de l'équipe", r.status === 400, r.status);
+  }
+  for (const chemin of ["/helix/import/logiciels", "/helix/import/logiciel/claude-code"]) {
+    const r = await appel2(chemin, { headers: avec2 });
+    verifier(`instance partagée : ${chemin} → 403, même depuis la boucle locale`, r.status === 403, r.status);
+  }
+  {
+    const r = await appel2(`/helix/import/logiciel/codex?depuis=0`, { method: "POST", headers: avec2, body: JSON.stringify({ cles: ["x"] }) });
+    verifier("instance partagée : reprendre le contenu d'un logiciel → 403", r.status === 403, r.status);
+  }
+
+  /*
+   * Le serveur de fichiers MCP de Cowork, pour de vrai : le même processus
+   * `@modelcontextprotocol/server-filesystem` que lance la passerelle, avec le
+   * même dossier, appelé par `callTool` comme le fait la boucle d'un agent.
+   * Il faut `npx` et le paquet (téléchargé une première fois) : sans eux,
+   * l'essai est sauté et le dit.
+   */
+  const avant = { ws: process.env.HELIX_WORKSPACE, dd: process.env.HELIX_DATA_DIR, cfg: process.env.HELIX_CONFIG };
+  process.env.HELIX_WORKSPACE = ESPACE;
+  process.env.HELIX_DATA_DIR = DONNEES2;
+  process.env.HELIX_CONFIG = PROFIL2;
+  const mcp = await import(join(RACINE, "gateway", "src", "mcp.ts"));
+  const demarre = await mcp.startServer("fichiers");
+  if (!demarre.ok) {
+    console.log(`  · serveur de fichiers MCP indisponible (${String(demarre.error).slice(0, 80)}) : essai de l'agent sauté`);
+  } else {
+    const noms = mcp.toolsForModel().map((o) => o.function.name);
+    const lireOutil = noms.includes("fichiers__read_text_file") ? "fichiers__read_text_file" : "fichiers__read_file";
+    for (const chemin of [join(DONNEES2, "instance-token"), join(ESPACE, "raccourci", "instance-token"), join(ESPACE, "Docs", "lien-memoire.md"), "donnees/openclaw/employes/e1/memory/note.md"]) {
+      const r = await mcp.callTool(lireOutil, { path: chemin });
+      verifier(`agent : lire « ${chemin.replace(ESPACE, "<espace>")} » est refusé`, !r.ok && !secrets.some((s) => r.content.includes(s)), r.content.slice(0, 80));
+    }
+    {
+      const r = await mcp.callTool("fichiers__read_multiple_files", { paths: [join(ESPACE, "notes.txt"), join(DONNEES2, "instance-token")] });
+      verifier("agent : lire plusieurs fichiers dont un protégé est refusé", !secrets.some((s) => r.content.includes(s)), r.content.slice(0, 80));
+    }
+    {
+      const r = await mcp.callTool("fichiers__move_file", { source: join(DONNEES2, "instance-token"), destination: join(ESPACE, "jeton.txt") });
+      verifier("agent : sortir un fichier des données par un déplacement est refusé", !r.ok && !existsSync(join(ESPACE, "jeton.txt")), r.content.slice(0, 80));
+    }
+    {
+      // Motif en glob : c'est ce qu'attend la version actuelle du serveur (« note » seul ne trouve rien).
+      const r = await mcp.callTool("fichiers__search_files", { path: ESPACE, pattern: "**/note*" });
+      verifier("agent : une recherche rend les documents mais pas les noms des fichiers protégés", r.content.includes("notes.txt") && !r.content.includes("memory"), r.content.slice(0, 120));
+    }
+    {
+      const r = await mcp.callTool("fichiers__directory_tree", { path: ESPACE });
+      verifier("agent : l'arbre du dossier ne descend pas dans les données", r.content.includes("notes.txt") && !r.content.includes("instance-token") && !r.content.includes("memory"), r.content.slice(0, 120));
+    }
+    {
+      const r = await mcp.callTool(lireOutil, { path: join(ESPACE, "notes.txt") });
+      verifier("agent : un fichier ordinaire du dossier de l'équipe reste lisible", r.ok && r.content.includes("document ordinaire"), r.content.slice(0, 80));
+    }
+    await mcp.stopServer("fichiers");
+  }
+  for (const [cle, valeur] of [["HELIX_WORKSPACE", avant.ws], ["HELIX_DATA_DIR", avant.dd], ["HELIX_CONFIG", avant.cfg]]) {
+    if (valeur === undefined) delete process.env[cle];
+    else process.env[cle] = valeur;
+  }
+
+  seconde.kill();
+  await attendre(300);
+  rmSync(ESPACE, { recursive: true, force: true });
+  rmSync(PROFIL2, { force: true });
 }
 
 passerelle.kill();

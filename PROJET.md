@@ -1046,7 +1046,9 @@ Détail dans [SECURITE.md](SECURITE.md) § 22. `npm run securite` compte désorm
 **167 contrôles, tous réussis le 25/09/2026** (77 la veille ; dont 5 pour le flux de
 Helix Code fabriqué par la passerelle, § 3.11, 15 pour les employés et les bases de
 connaissances, § 3.10, 7 pour l'export RGPD et l'effacement, et, l'après-midi, 14 pour
-les employés et les bases partagées à un groupe, plus une route sans séance).
+les employés et les bases partagées à un groupe, plus une route sans séance). Le
+26/09/2026 : **198 contrôles, tous réussis**, dont 26 pour les deux défauts de la revue
+du 25/09 (dossier de l'équipe, import local ; SECURITE.md § 22.6).
 
 | Surface | Règle |
 |---|---|
@@ -1056,6 +1058,8 @@ les employés et les bases partagées à un groupe, plus une route sans séance)
 | Entraînement | Préfixe `/helix/entrainement` entier sous séance ; projet rendu à son seul auteur, identifiant de 24 caractères hexadécimaux tiré au sort ; projet chiffré au repos, jamais réécrit s'il est illisible ; aucun exemple en argument de commande |
 | Outils de Code | `/helix/code/outils` réservée à l'agent de code de l'instance : jeton **et** clé tirée à chaque démarrage (`X-Helix-Cle`), comparée en temps constant ; chaque appel passe par la barrière et le journal |
 | Ligne de commande | Jeton du poste lu **seulement pour une adresse locale** ; http vers une autre machine refusé avant tout envoi ; mot de passe tapé sans écho et jamais écrit ; séance rangée par adresse d'instance |
+| Dossier de l'équipe (revue du 25/09) | Avec « Tout mon poste », `GET /helix/espace/fichier?chemin=.helix/data/…` rendait le jeton d'instance et la mémoire des employés à toute personne connectée, et l'agent de Cowork lisait `~/.ssh`, `~/.claude`. Désormais : segments en point refusés, **zones protégées** (`zonesProtegees.ts` : données de l'instance, `~/.helix`, clés, `.config`, historiques des autres assistants, trousseaux) refusées sur leur chemin réel, dans l'espace, le serveur de fichiers MCP, la bureautique et le contrôle web ; la fenêtre « Tout mon poste » le dit |
+| Import depuis les logiciels (revue du 25/09) | La boucle locale ne suffisait pas sur une instance partagée (un outil du serveur appelait `127.0.0.1` avec `?token=`). Désormais : 403 si l'instance est partagée, jetons en en-têtes seulement, compte administrateur exigé |
 
 ### Principes à tenir
 
@@ -2529,6 +2533,16 @@ ne restent ici que les points ouverts.*
     instance à un seul compte, on pourrait les lui attribuer ; pas fait) ; renommer une
     session (pas fait, le titre est la première demande) ; l'effacement d'un compte avec
     des sessions de Code, pas essayé.
+24. **Zones protégées et import local** (revue du 25/09/2026, SECURITE.md § 22.6) :
+    corrigés et vérifiés par `npm run securite` et dans le navigateur (instance
+    jetable). Restent : les voir dans l'application de bureau avec le vrai « Tout mon
+    poste » (dossier personnel réel, `~/.helix/data` réel) ; le bash de Helix Code
+    n'est pas borné par ces zones (OpenCode a ses propres outils, fichiers de Helix Code
+    non touchés par cette correction) : à décider avec le client ; la liste des zones
+    est celle des emplacements connus, pas une garantie sur tout secret du poste ;
+    Windows et Linux (trousseaux, `%APPDATA%`) pas couverts ; le choix « Depuis Helix »
+    de l'écran d'un employé n'a été vérifié que par l'API (pas d'employé sur l'instance
+    jetable).
 
 **Titulaire des droits** : tranché le 24/09/2026, « Medhi Clabaut » (entreprise
 individuelle, SIREN 994 907 145), partout ; mentions légales et section

@@ -1,0 +1,200 @@
+import { realpathSync } from "node:fs";
+import { homedir } from "node:os";
+import { basename, dirname, isAbsolute, join, resolve, sep } from "node:path";
+
+/**
+ * Ce que ni le dossier de l'équipe ni les agents ne doivent jamais ouvrir.
+ *
+ * ── Pourquoi (revue de sécurité du 25/09/2026) ──────────────────────────────
+ *
+ * « Tout mon poste » prend le dossier personnel comme dossier de l'équipe, et
+ * les données de l'instance sont par défaut dans `~/.helix/data`. Mesuré sur
+ * une instance jetable : `GET /helix/espace/fichier?chemin=.helix/data/…`
+ * rendait 200 à n'importe quelle personne connectée, avec le jeton d'instance,
+ * la configuration d'OpenClaw (son propre jeton) et la mémoire des employés.
+ * La liste cachait les fichiers en point ; la lecture, elle, ne les refusait
+ * pas. Le serveur de fichiers MCP de Cowork, lancé sur le même dossier
+ * personnel, y lisait de même, et aussi `~/.ssh`, `~/.claude`, `~/.codex`.
+ *
+ * La règle tient en une fonction, `estProtege`, appelée partout où un chemin
+ * du dossier de l'équipe est résolu : la liste et la lecture (`espace.ts`), les
+ * outils bureautiques (`bureau.ts`), le contrôle du code web
+ * (`controleWeb.ts`), le serveur de fichiers MCP (`mcp.ts`). Elle compare le
+ * chemin **réel**, liens symboliques résolus : un lien posé dans l'espace et
+ * pointant vers les données de l'instance est refusé comme la cible elle-même.
+ *
+ * Ce n'est pas une liste de tout ce qui est secret sur un poste : ce sont les
+ * endroits où l'on sait que dorment des clés, des jetons ou les données de
+ * l'instance. Un secret rangé ailleurs par la personne reste à sa portée et à
+ * celle de l'agent, comme n'importe quel document.
+ */
+
+/** Dossier des données de l'instance, tel que la passerelle le calcule partout. */
+const dossierDonnees = (): string => process.env.HELIX_DATA_DIR ?? join(homedir(), ".helix", "data");
+
+/**
+ * Les zones, en chemins absolus. Relues à chaque appel : `HELIX_DATA_DIR` et
+ * le dossier personnel ne changent pas en cours de route, mais une zone créée
+ * après le démarrage (OpenClaw installé plus tard) doit valoir aussitôt.
+ */
+let memoire: { zones: string[]; jusqua: number } | null = null;
+
+export function zonesProtegees(): string[] {
+  // Deux secondes de mémoire : le contrôle du code web l'appelle pour chaque
+  // dossier parcouru, et chaque calcul fait une vingtaine de `realpath`.
+  if (memoire && memoire.jusqua > Date.now()) return memoire.zones;
+  const zones = calculerZones();
+  memoire = { zones, jusqua: Date.now() + 2000 };
+  return zones;
+}
+
+function calculerZones(): string[] {
+  const maison = homedir();
+  const donnees = dossierDonnees();
+  const zones = [
+    // L'instance elle-même : base, jeton d'instance, OpenClaw de Helix
+    // (`<données>/openclaw`, employes.ts) et son moteur (`openclaw-moteur`).
+    donnees,
+    join(maison, ".helix"),
+    // Le dossier de travail d'OpenClaw installé par la personne : ce n'est pas
+    // celui de Helix, mais il porte ses jetons de canaux et de modèles.
+    join(maison, ".openclaw"),
+    // Clés et identifiants.
+    join(maison, ".ssh"),
+    join(maison, ".gnupg"),
+    join(maison, ".aws"),
+    join(maison, ".azure"),
+    join(maison, ".kube"),
+    join(maison, ".docker"),
+    join(maison, ".password-store"),
+    join(maison, ".netrc"),
+    join(maison, ".npmrc"),
+    join(maison, ".git-credentials"),
+    // Réglages des autres logiciels (dont les jetons de gcloud, gh, Cursor…).
+    join(maison, ".config"),
+    // Autres assistants : conversations et jetons d'accès.
+    join(maison, ".claude"),
+    join(maison, ".claude.json"),
+    join(maison, ".codex"),
+    join(maison, ".cursor"),
+    // Trousseaux du système.
+    join(maison, "Library", "Keychains"),
+    // Profil de l'application de bureau (séance ouverte dans son stockage local).
+    join(maison, "Library", "Application Support", "Helix"),
+    join(maison, "Library", "Application Support", "helix-plateforme"),
+  ];
+  if (process.env.HELIX_PROFIL_ESSAI) zones.push(process.env.HELIX_PROFIL_ESSAI);
+  // Chacune sous sa forme réelle aussi : `/var` et `/private/var` sur macOS,
+  // un dossier de données qui serait lui-même un lien.
+  const toutes = new Set<string>();
+  for (const z of zones) {
+    toutes.add(resolve(z));
+    try {
+      toutes.add(realpathSync(z));
+    } catch {
+      /* absente sur ce poste */
+    }
+  }
+  return [...toutes];
+}
+
+/** Forme repliée : le système de fichiers de macOS ignore la casse (voir `replier`, opencode.ts). */
+const replier = (chemin: string) => chemin.normalize("NFC").toLowerCase();
+
+/** Ce chemin (absolu, déjà réel de préférence) est-il dans une zone protégée ? */
+export function estProtege(chemin: string): boolean {
+  const cible = replier(resolve(chemin));
+  return zonesProtegees().some((z) => {
+    const zone = replier(z);
+    return cible === zone || cible.startsWith(zone + sep);
+  });
+}
+
+/** Ce dossier contient-il une zone protégée ? Sert à savoir s'il faut filtrer une liste. */
+export function contientUneZone(dossier: string): boolean {
+  const d = replier(resolve(dossier));
+  return zonesProtegees().some((z) => replier(z).startsWith(d + sep));
+}
+
+/**
+ * Chemin réel, même pour un fichier qui n'existe pas encore : le parent
+ * existant le plus proche est résolu, le reste lui est rattaché. C'est ce qui
+ * démasque une écriture « dans » un lien symbolique qui pointe vers une zone.
+ */
+export function cheminReel(chemin: string): string {
+  const absolu = resolve(chemin);
+  try {
+    return realpathSync(absolu);
+  } catch {
+    const parent = dirname(absolu);
+    if (parent === absolu) return absolu;
+    return join(cheminReel(parent), basename(absolu));
+  }
+}
+
+/** `~` et `~/…` comme les développe le serveur de fichiers MCP. */
+const developper = (chemin: string) =>
+  chemin === "~" ? homedir() : chemin.startsWith("~/") ? join(homedir(), chemin.slice(2)) : chemin;
+
+/**
+ * Un appel au serveur de fichiers MCP touche-t-il une zone protégée ?
+ *
+ * Le serveur (`@modelcontextprotocol/server-filesystem`) ne sait borner que
+ * par ses dossiers de lancement : il ne sait pas exclure un sous-dossier. On
+ * lit donc ses arguments avant de lui transmettre l'appel. Un chemin relatif
+ * est compté depuis le dossier de l'équipe **et** depuis le dossier courant du
+ * serveur (celui de la passerelle) : il suffit que l'un des deux tombe dans
+ * une zone pour refuser.
+ *
+ * Rend le chemin fautif, ou null.
+ */
+export function cheminProtegeDans(args: Record<string, unknown>, espace: string): string | null {
+  const valeurs: string[] = [];
+  for (const cle of ["path", "source", "destination"]) {
+    if (typeof args[cle] === "string") valeurs.push(args[cle] as string);
+  }
+  if (Array.isArray(args.paths)) for (const p of args.paths) if (typeof p === "string") valeurs.push(p);
+  for (const brut of valeurs) {
+    const d = developper(brut.trim());
+    const candidats = isAbsolute(d) ? [d] : [resolve(espace, d), resolve(process.cwd(), d)];
+    for (const c of candidats) if (estProtege(cheminReel(c))) return brut;
+  }
+  return null;
+}
+
+/**
+ * Retire d'un résultat du serveur de fichiers ce qui est dans une zone.
+ *
+ * Refuser la lecture ne suffit pas pour deux outils qui parcourent : une
+ * recherche (`search_files`) et un arbre (`directory_tree`) lancés sur le
+ * dossier personnel rendaient les noms des fichiers de l'instance, des clés
+ * SSH, des conversations des autres assistants. Les noms seuls disent déjà
+ * beaucoup. `list_directory` n'est pas filtré : il ne montre que le premier
+ * niveau, et un nom de dossier comme « .ssh » n'apprend rien que l'on ne sache.
+ */
+export function filtrerResultat(outil: string, args: Record<string, unknown>, texte: string, espace: string): string {
+  if (outil === "search_files") {
+    return texte
+      .split("\n")
+      .filter((ligne) => !(isAbsolute(ligne.trim()) && estProtege(cheminReel(ligne.trim()))))
+      .join("\n");
+  }
+  if (outil === "directory_tree" && typeof args.path === "string") {
+    const d = developper(args.path.trim());
+    const racine = cheminReel(isAbsolute(d) ? d : resolve(espace, d));
+    if (!contientUneZone(racine)) return texte;
+    try {
+      type Noeud = { name: string; type: string; children?: Noeud[] };
+      const elaguer = (noeuds: Noeud[], dossier: string): Noeud[] =>
+        noeuds
+          // Chemin réel : un lien de l'arbre qui pointe vers une zone est élagué comme elle.
+          .filter((n) => !estProtege(cheminReel(join(dossier, n.name))))
+          .map((n) => (n.children ? { ...n, children: elaguer(n.children, join(dossier, n.name)) } : n));
+      return JSON.stringify(elaguer(JSON.parse(texte) as Noeud[], racine), null, 2);
+    } catch {
+      // Format inattendu : mieux vaut ne rien rendre que rendre ce qu'on n'a pas pu trier.
+      return "Arbre non rendu : il passe par des dossiers protégés (données de l'instance, clés, réglages).";
+    }
+  }
+  return texte;
+}

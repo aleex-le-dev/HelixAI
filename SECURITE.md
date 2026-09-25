@@ -821,6 +821,25 @@ fichiers qui y tient l'agent : cela n'a pas changé.
 L'opération est tracée (`donnees.ecrites`, collection `cowork.espace`). Le même
 contrôle s'applique au dossier de projet de l'écran Code.
 
+**Zones protégées (25/09/2026, § 22.6).** Le serveur de fichiers ne sait borner que
+par ses dossiers de lancement : avec « Tout mon poste », c'est le dossier personnel
+entier, et l'agent y lisait `~/.helix/data` (jeton d'instance, OpenClaw de Helix,
+mémoire des employés), `~/.ssh`, `~/.claude`, `~/.codex`. La passerelle lit donc les
+arguments de chaque appel au serveur de fichiers avant de le transmettre
+(`callTool`, `mcp.ts`) : un chemin (`path`, `paths`, `source`, `destination`) dont le
+chemin **réel**, liens résolus, tombe dans une zone protégée est refusé sans que le
+serveur soit appelé ; les résultats de `search_files` et `directory_tree` sont élagués
+des noms qui y sont. La liste (`gateway/src/zonesProtegees.ts`) : `HELIX_DATA_DIR`
+(dont `openclaw/` et `openclaw-moteur/`), `~/.helix`, `~/.openclaw`, `~/.ssh`,
+`~/.gnupg`, `~/.aws`, `~/.azure`, `~/.kube`, `~/.docker`, `~/.password-store`,
+`~/.netrc`, `~/.npmrc`, `~/.git-credentials`, `~/.config`, `~/.claude`,
+`~/.claude.json`, `~/.codex`, `~/.cursor`, `~/Library/Keychains`, et le profil de
+l'application de bureau (`~/Library/Application Support/Helix`). Ces dossiers ne
+peuvent pas non plus être choisis comme dossier de l'équipe (400). Ce n'est pas une
+liste de tout ce qui est secret : un fichier sensible rangé ailleurs par la personne
+reste lisible par l'agent, comme n'importe quel document. `list_directory` n'est pas
+filtré : le premier niveau montre qu'un `.ssh` existe, sans rien en ouvrir.
+
 Les serveurs MCP tournent en local et dialoguent en JSON-RPC sur l'entrée et la
 sortie standard : aucune donnée de l'entreprise ne transite par un service
 tiers. Le code du serveur, lui, est récupéré une première fois sur le registre
@@ -1725,6 +1744,11 @@ refusés (400, 403) ; un tel lien n'est même pas listé (sa taille trahirait la
 cible). Fichiers cachés omis. Mesuré : `../helix.config.json` 400, lien vers
 `/etc/hosts` 403 et absent de la liste.
 
+**Complété le 25/09/2026 (§ 22.6)** : « omis » ne valait que pour la liste, la lecture
+rendait `.helix/data/instance-token` quand le dossier de l'équipe était le dossier
+personnel. Tout segment en point est désormais refusé (403), et tout chemin réel situé
+dans une zone protégée (`zonesProtegees.ts`) aussi, lien symbolique compris.
+
 
 ---
 
@@ -2308,7 +2332,7 @@ curl -s -H "Authorization: Basic $(printf 'opencode:<mot de passe>' | base64)" \
 
 - **Téléchargements de modèles et de moteurs** (images, Lume, LibreOffice de la machine macOS) : jamais « la dernière version ». Chaque fichier est pris à une révision précise et vérifié par sha256 avant usage ; une empreinte fausse efface le fichier. L'application Lume est en plus vérifiée par sa signature (équipe Cua AI).
 - **Images créées** : rangées dans les données de l'instance, servies (`/helix/images/fichier/<id>`) à la seule personne qui les a créées (depuis le 25/09/2026, aussi à qui voit le Chat où elles ont été créées : § 22.1) ; identifiant de 128 bits vérifié par expression régulière avant tout accès disque.
-- **Import depuis les logiciels du poste** (`/helix/import/...`) : séance exigée **et** demande venue de la boucle locale ; sinon refus. La base de Cursor est ouverte en lecture seule, par un programme lancé sans shell, avec un identifiant de conversation filtré avant d'entrer dans la requête SQL.
+- **Import depuis les logiciels du poste** (`/helix/import/...`) : séance exigée **et** demande venue de la boucle locale ; sinon refus. *Insuffisant sur une instance partagée, fermé le 25/09/2026 (§ 22.6) : refus si l'instance est partagée, jetons en en-têtes seulement, compte administrateur exigé.* La base de Cursor est ouverte en lecture seule, par un programme lancé sans shell, avec un identifiant de conversation filtré avant d'entrer dans la requête SQL.
 - **Extension VS Code** : le jeton d'instance et la séance restent dans le processus de l'extension (la page du Chat n'appelle rien elle-même, CSP à nonce) ; la séance est dans le SecretStorage de VS Code ; le mot de passe n'est jamais gardé.
 - **Machine de l'agent** : Docker publié sur 127.0.0.1 seulement ; la machine macOS n'est joignable que depuis le Mac (réseau NAT de la virtualisation d'Apple) ; effacement réservé à une machine non choisie.
 - **Chats du poste** : fichier chiffré par safeStorage, 0600, écrit par renommage.
@@ -2599,4 +2623,75 @@ par 3 vérifications de la batterie.
 - **Import par morceaux** (`importLocal.ts`) : le contenu n'est rendu que pour des clés
   de la liste relevée par la passerelle ; aucun chemin venu de la requête n'est lu.
   Vérifié avec `claude-code:../../etc/passwd` : ignorée.
+
+### 22.6 Revue du 25/09/2026 : dossier de l'équipe et import local
+
+Deux défauts confirmés par une revue de sécurité, essayés sur une instance jetable,
+corrigés le même jour. `npm run securite` : **198 contrôles, tous réussis le
+26/09/2026**, dont 26 ajoutés pour ces deux défauts (section 6 : 4 ; section 10 : 22).
+
+**1. Fichiers internes lisibles par le dossier de l'équipe (élevée).**
+`resoudre` (`espace.ts`) refusait `..` et l'absolu, pas les segments en point : la
+liste cachait les fichiers en point, la lecture les rendait. Avec « Tout mon poste »,
+le dossier de l'équipe est le dossier personnel, et les données de l'instance sont par
+défaut dans `~/.helix/data`. Mesuré par la revue, avant correction :
+`GET /helix/espace/fichier?chemin=.helix/data/openclaw/employes/<id>/memory/….md`
+rendait 200 à toute personne connectée, de même `openclaw.json` (jeton d'OpenClaw),
+`instance-token`, `~/.claude`, `~/.codex`. Le serveur de fichiers MCP de Cowork, lancé
+sur le même dossier, y lisait aussi.
+
+Corrections :
+- `resoudre` refuse tout segment qui commence par un point (403), puis tout chemin
+  réel, liens résolus, situé dans une zone protégée (403). La liste ne montre plus ni
+  les zones ni un lien qui y mène ;
+- la même règle (`estProtege`, `gateway/src/zonesProtegees.ts`) vaut pour le serveur
+  de fichiers MCP (arguments lus avant l'appel, résultats de recherche et d'arbre
+  élagués, § 6), les outils bureautiques (`bureau.ts`, lecture et écriture), le
+  contrôle du code web (`controleWeb.ts`) et la relecture des fichiers modifiés
+  (`chat.ts`) ;
+- une zone protégée ne peut pas devenir le dossier de l'équipe
+  (`POST /helix/mcp/workspace`, 400) ;
+- la fenêtre « Ouvrir tout votre poste à l'agent » dit ce qui reste exclu (données de
+  l'instance, clés et identifiants, `.config`, historiques des autres assistants,
+  trousseaux). Vu à l'écran le 26/09/2026, instance jetable.
+
+Contrôles (section 10) : une seconde instance, avec `HELIX_WORKSPACE` qui contient
+`HELIX_DATA_DIR` (nommé sans point, pour éprouver la règle du chemin réel) : lire
+`donnees/instance-token`, une note de mémoire d'employé, `.helix/cache.txt`, le même
+jeton par un lien `raccourci` → dossier des données, une note par un lien
+`Docs/lien-memoire.md` : 403 ou 404, aucun secret dans la réponse ; `notes.txt` : 200 ;
+la liste montre `notes.txt` sans `donnees` ni `raccourci`. Puis le vrai serveur
+`@modelcontextprotocol/server-filesystem` (14 outils), appelé par `callTool` comme
+la boucle d'un agent : lecture directe, par lien, relative, multiple, déplacement hors
+des données, tous refusés ; recherche et arbre sans les noms protégés ; un fichier
+ordinaire lisible. Sans `npx` ou sans le paquet, cette partie est sautée et le dit.
+
+**2. Import depuis les logiciels du poste contournable sur une instance partagée
+(moyenne).** La seule barrière était la boucle locale (`depuisCePoste`). Sur une
+instance partagée, un outil qui tourne sur le serveur (le bash de Helix Code) appelle
+`http://127.0.0.1:<port>/helix/import/logiciel/claude-code?token=…&session=…` et
+reçoit les conversations Claude Code, Codex et Cursor du compte qui fait tourner le
+serveur. Corrections (`handleImportLogiciels`, `index.ts`) :
+- `?token=`, `?session=` ou `?flux=` dans l'adresse : 400. L'écran pose les jetons en
+  en-têtes ;
+- instance partagée (`instancePartagee()` : `share: true` ou écoute sur le réseau) :
+  403, avant même de lire la séance ;
+- le compte doit administrer l'instance (`estAdministrateur`, `roles.ts` : sur un poste
+  autonome, le premier compte créé) : une collègue inscrite sur le même poste reçoit
+  403.
+
+Contrôles : instance locale ordinaire, titulaire → 200 ; jetons dans l'adresse → 400 ;
+collègue → 403 (section 6). Instance lancée avec `share: true` (sur la boucle locale,
+`tls: false`) : `/helix/import/logiciels`, `/helix/import/logiciel/claude-code` et le
+POST du contenu → 403 depuis la boucle locale (section 10). À l'écran, instance
+locale jetable, le 26/09/2026 : Paramètres > Importer depuis d'autres IA liste Claude
+Code (20 conversations), Codex (6), Cursor (0), et « Reprendre » sur Codex charge la
+liste de ses 6 Chats.
+
+Ce qui n'est pas couvert, et reste vrai : sur un poste autonome, un outil qui tourne
+sous le même compte (le bash de Helix Code, un script) lit `~/.claude` directement,
+sans passer par la passerelle ; la barrière protège les autres personnes d'une
+instance partagée, pas le titulaire de ses propres agents. Le bash de Helix Code
+n'est pas borné par les zones protégées (OpenCode a ses propres outils, pas le serveur
+de fichiers de Cowork).
 

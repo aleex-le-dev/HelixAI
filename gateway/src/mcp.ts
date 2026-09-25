@@ -9,6 +9,7 @@ import {
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { deployment } from "./deployment.ts";
 import { t, tf } from "./langue.ts";
+import { cheminProtegeDans, filtrerResultat } from "./zonesProtegees.ts";
 
 /**
  * Gestionnaire de serveurs MCP auto-hébergés (ARCHITECTURE.md, ADR-004).
@@ -427,13 +428,36 @@ export async function callTool(
   const entry = servers.get(tool.serverId);
   if (!entry?.client) return { ok: false, content: `Serveur ${tool.serverId} arrêté.` };
 
+  /*
+   * Serveur de fichiers : les zones protégées d'abord (zonesProtegees.ts). Le
+   * serveur ne sait borner que par ses dossiers de lancement ; avec « Tout mon
+   * poste », c'est le dossier personnel entier, données de l'instance, clés
+   * SSH et conversations des autres assistants comprises. Mesuré le
+   * 25/09/2026 avant cette barrière : `read_text_file` rendait
+   * `~/.helix/data/instance-token`.
+   */
+  const fichiers = tool.serverId === "fichiers";
+  if (fichiers) {
+    const fautif = cheminProtegeDans(args, espaceCourant);
+    if (fautif) {
+      return {
+        ok: false,
+        content:
+          `Accès refusé : « ${fautif} » est dans un emplacement protégé (données de l'instance, clés, ` +
+          `réglages et historiques d'autres logiciels). Ni l'agent ni l'équipe n'y ont accès, quel que ` +
+          `soit le dossier ouvert. Ne réessaie pas par un autre chemin.`,
+      };
+    }
+  }
+
   try {
     const result = await entry.client.callTool({ name: tool.toolName, arguments: args });
     const parts = (result.content ?? []) as { type: string; text?: string }[];
-    const text = parts
+    const brut = parts
       .map((p) => (p.type === "text" ? (p.text ?? "") : `[${p.type}]`))
       .join("\n")
       .trim();
+    const text = fichiers ? filtrerResultat(tool.toolName, args, brut, espaceCourant) : brut;
     return { ok: !result.isError, content: expliquer(text) || "(résultat vide)" };
   } catch (err) {
     return {

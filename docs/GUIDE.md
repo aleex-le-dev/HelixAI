@@ -856,7 +856,12 @@ l'agent d'orchestration par défaut. Aucun tiret cadratin dans les textes affich
   et les disques montés d'un coup, au lieu d'un dossier à choisir avant chaque
   demande. Les dossiers du système restent fermés, l'ouverture large redemande
   le mot de passe, et la barrière d'approbation continue de demander avant
-  chaque modification (0.24.0) ;
+  chaque modification (0.24.0). Depuis le 25/09/2026, même le poste entier
+  exclut les données de l'instance, les clés et identifiants (`.ssh`, `.aws`,
+  `.gnupg`…), les réglages des logiciels (`.config`), les historiques d'autres
+  assistants (`.claude`, `.codex`, `.cursor`) et les trousseaux : ni l'agent ni
+  l'équipe ne les lisent, et la fenêtre de confirmation le dit. « Fichiers de
+  l'équipe » ne montre et ne rend plus aucun dossier caché ;
 - **« Se connecter avec Google / Microsoft »** pour le courrier : une boîte
   Workspace ou M365 se branche sans mot de passe d'application ni serveur à
   saisir. Demande une préparation unique par l'administrateur de

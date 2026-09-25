@@ -18,7 +18,8 @@ import {
   propositions,
   reglerReseau,
 } from "./reseau.ts";
-import { origineDuRole } from "./roles.ts";
+import { estAdministrateur, origineDuRole } from "./roles.ts";
+import { estProtege } from "./zonesProtegees.ts";
 import { PORT, HOST, surLeReseau } from "./config.ts";
 import {
   discover,
@@ -2639,6 +2640,15 @@ async function handleWorkspace(
   } else {
     const verdict = validerDossier(body.dossier as string);
     if (!verdict.ok) return send(res, 400, { error: { message: verdict.raison } });
+    /*
+     * Choisir une zone protégée comme dossier de l'équipe reviendrait à l'ouvrir
+     * à tous (zonesProtegees.ts, revue du 25/09/2026) : `~/.helix/data`, `~/.ssh`
+     * et leurs voisins ne se désignent pas. Un dossier qui en contient un reste
+     * possible (le dossier personnel) : la zone y est alors filtrée partout.
+     */
+    if (estProtege(verdict.chemin)) {
+      return send(res, 400, { error: { message: t("Ce dossier est protégé (données de l'instance, clés, réglages d'autres logiciels) : il ne peut pas devenir le dossier de l'équipe.") } });
+    }
     chemins = [verdict.chemin];
   }
 
@@ -3376,10 +3386,33 @@ async function handleImagesFichier(req: http.IncomingMessage, res: http.ServerRe
 const depuisCePoste = (req: http.IncomingMessage) => /^(::1|127\.|::ffff:127\.)/.test(req.socket.remoteAddress ?? "");
 
 async function handleImportLogiciels(req: http.IncomingMessage, res: http.ServerResponse, url: URL, id?: string): Promise<void> {
+  /*
+   * Revue du 25/09/2026 : la boucle locale ne prouvait rien sur une instance
+   * partagée. Un outil qui tourne sur le serveur (le bash de Helix Code, un
+   * script d'employé) appelle `http://127.0.0.1:<port>/…` et passe pour « le
+   * poste », jetons en `?token=` et `?session=`. Il recevait les
+   * conversations Claude Code, Codex et Cursor du compte qui fait tourner le
+   * serveur. Trois barrières désormais, en plus de la boucle locale :
+   *  1. jetons en en-têtes seulement, jamais dans l'adresse (ni billet de
+   *     flux) : l'écran les pose ainsi, un lien ou un script bricolé non ;
+   *  2. instance partagée (`share`, ou écoute sur le réseau) : refus, toujours.
+   *     Ces fichiers sont ceux du serveur, pas ceux de la personne ;
+   *  3. le compte doit être celui qui administre l'instance (roles.ts : sur un
+   *     poste autonome, le premier compte, celui qui l'a mise en route).
+   */
+  if (["token", "session", "flux"].some((p) => url.searchParams.has(p))) {
+    return send(res, 400, { error: { message: t("Jetons en en-têtes seulement pour cette route, jamais dans l'adresse.") } });
+  }
+  if (instancePartagee()) {
+    return send(res, 403, { error: { message: t("L'import depuis les logiciels du poste est fermé sur une instance partagée : ces fichiers seraient ceux du serveur, pas les vôtres. Utilisez l'export du logiciel (Paramètres, Importer).") } });
+  }
   const qui = await demandeur(req, url);
   if (!qui) return send(res, 401, sansSeance());
   if (!depuisCePoste(req)) {
     return send(res, 403, { error: { message: t("L'import depuis les logiciels se fait sur le poste où ils sont installés, pas depuis une instance distante.") } });
+  }
+  if (!(await estAdministrateur(qui.userId))) {
+    return send(res, 403, { error: { message: t("Seul le titulaire de ce poste peut reprendre les historiques de ses logiciels.") } });
   }
   if (!id) return send(res, 200, { logiciels: await logicielsTrouves() });
   /*

@@ -1074,10 +1074,13 @@ données.
 ### Ce qui a été ajouté le 25/09/2026
 
 Détail dans [SECURITE.md](SECURITE.md) § 22. `npm run securite` compte désormais
-**167 contrôles, tous réussis le 25/09/2026** (77 la veille ; dont 5 pour le flux de
+**206 contrôles, tous réussis le 26/09/2026** (77 le 24/09 ; dont 5 pour le flux de
 Helix Code fabriqué par la passerelle, § 3.11, 15 pour les employés et les bases de
-connaissances, § 3.10, 7 pour l'export RGPD et l'effacement, et, l'après-midi, 14 pour
-les employés et les bases partagées à un groupe, plus une route sans séance).
+connaissances, § 3.10, 7 pour l'export RGPD et l'effacement, et, l'après-midi du 25, 14 pour
+les employés et les bases partagées à un groupe, plus une route sans séance ; le soir, 34
+pour les agents de groupes, le privé du propriétaire, la mémoire vidée avant
+élargissement, la clé par employé, les index effacés avec le compte et l'export filtré,
+§ 3.10 et SECURITE § 22.2).
 
 | Surface | Règle |
 |---|---|
@@ -2527,7 +2530,7 @@ ou l'application fermée coupe la réponse (rien n'est gardé avant sa fin).
     l'écran de l'agent dit ce qu'il lira. Le soir, les trois questions tranchées (§ 3.10) :
     agents partagés à des groupes, documents privés lus par l'agent personnel de leur
     propriétaire, mémoire mise de côté et vidée avant tout élargissement de l'audience.
-    Vérifié le 25/09/2026 : `npm run securite` (201 contrôles), et avec l'OpenClaw
+    Vérifié le 25/09/2026 : `npm run securite` (206 contrôles après la fusion du 26/09), et avec l'OpenClaw
     2026.9.4 d'essai et qwen3-8b (instance jetable 8899, OpenClaw 18877) : l'agent
     personnel d'Alice rend son code privé ZEBRE-7731 et l'écrit dans
     `memory/2026-09-25.md` ; ouvert à l'organisation après confirmation (7,4 s pour

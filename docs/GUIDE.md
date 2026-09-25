@@ -67,6 +67,14 @@ machine :
 | Écran Code | `opencode` installé (`~/.opencode/bin/opencode` ou dans le `PATH`) | L'écran Code signale que le moteur est absent |
 | Modèles locaux | LM Studio | L'écran de mise en route propose de l'installer, sans intervention, sur macOS uniquement |
 
+Avec un modèle local, l'écran Code peut attendre une ou deux minutes avant le premier
+mot : le modèle lit d'abord toute la demande, et la relit s'il l'a perdue parce qu'un
+autre programme s'en est servi entre-temps (LM Studio ne sert souvent qu'une demande à
+la fois). L'écran le dit (« Le modèle lit la demande », avec le temps écoulé et, pour
+LM Studio sur le poste, le pourcentage lu) et son panneau de suivi montre ce que fait
+l'agent. Le journal de LM Studio lu pour ce pourcentage est
+`~/.lmstudio/server-logs/` ; sans lui, il n'y a simplement pas de chiffre.
+
 ⚠ Le paquet de `npm run package` n'est **pas signé** : macOS affiche un avertissement
 au premier lancement et `spctl` le refuse. Tout est prêt pour la signature et la
 notarisation (`npm run package:signe`) ; il manque le certificat Apple, voir

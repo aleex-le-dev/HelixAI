@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { streamChat, type ChatTurn } from "@/lib/gateway";
 import { notifySessionsChanged } from "./useSessions";
 import { contexteTexte, images, type Attachment } from "@/lib/attachments";
@@ -23,6 +23,13 @@ export interface ToolTrace {
   running: boolean;
   ok?: boolean;
   preview?: string;
+  /**
+   * Libellé et cible déjà mis en mots par qui connaît l'outil (l'écran Code,
+   * `actionOutil`) : « Sous-tâche : explorer le dossier src » plutôt que
+   * « task ». Absents, l'affichage les tire du nom et des arguments.
+   */
+  libelle?: string;
+  cible?: string;
 }
 
 /** Une étape du plan suivi par l'agent, et où il en est. */
@@ -81,6 +88,38 @@ export interface Message {
 
 const newId = () => Math.random().toString(36).slice(2);
 
+/*
+ * Réponses en cours, par Chat, hors de l'écran.
+ *
+ * Signalé par Medhi le 26/09/2026 : « si dans le Chat je pars de la
+ * discussion, tout s'arrête au lieu de continuer ». La réponse vivait dans
+ * l'écran : ouvrir un autre Chat ou en commencer un nouveau appelait
+ * « Arrêter ». Elle vit maintenant ici, rattachée à son Chat : l'écran s'y
+ * abonne quand il affiche ce Chat, s'en détache quand il en affiche un autre,
+ * et la réponse continue, puis s'enregistre dans son Chat. Seul le bouton
+ * « Arrêter » l'arrête. Une page rechargée ou l'application fermée, elle, la
+ * coupe : ce qui était écrit n'est gardé qu'à la fin de la réponse.
+ */
+interface ReponseEnCours {
+  history: Message[];
+  controller: AbortController;
+  abonnes: Set<(history: Message[]) => void>;
+}
+const reponsesEnCours = new Map<string, ReponseEnCours>();
+export const CHATS_EN_COURS = "helix:chats-en-cours";
+
+/** Un Chat a-t-il une réponse en train de s'écrire (pour la barre latérale) ? */
+export const chatEnCours = (sessionId: string) => reponsesEnCours.has(sessionId);
+
+function signalerEnCours() {
+  if (typeof window !== "undefined") window.dispatchEvent(new Event(CHATS_EN_COURS));
+}
+
+/** Arrête la réponse en cours d'un Chat, par exemple quand il est supprimé. */
+export function arreterReponse(sessionId: string) {
+  reponsesEnCours.get(sessionId)?.controller.abort();
+}
+
 /**
  * Ce que la personne lit quand l'envoi échoue.
  *
@@ -123,10 +162,9 @@ export function useChat(options: Options) {
    */
   const historyRef = useRef<Message[]>([]);
 
-  const persist = useCallback(() => {
-    const session = sessionRef.current;
-    if (!session) return;
-    const stored: StoredMessage[] = historyRef.current
+  /** Enregistre l'historique d'un Chat : celui de l'écran, ou celui d'une réponse qui a continué sans lui. */
+  const persisterDans = useCallback((session: Session, history: Message[]) => {
+    const stored: StoredMessage[] = history
       .filter((m) => !m.error && m.content.trim().length > 0)
       .map((m) => ({
         id: m.id,
@@ -142,28 +180,51 @@ export function useChat(options: Options) {
     notifySessionsChanged();
   }, [options.model]);
 
+  /** L'abonnement de l'écran à la réponse en cours du Chat affiché. */
+  const detacherRef = useRef<(() => void) | null>(null);
+  const detacher = useCallback(() => {
+    detacherRef.current?.();
+    detacherRef.current = null;
+  }, []);
+  const attacher = useCallback((sessionId: string) => {
+    detacher();
+    const r = reponsesEnCours.get(sessionId);
+    if (!r) return false;
+    const suivre = (history: Message[]) => {
+      historyRef.current = history;
+      setMessages(history);
+    };
+    r.abonnes.add(suivre);
+    detacherRef.current = () => r.abonnes.delete(suivre);
+    suivre(r.history);
+    setBusy(true);
+    return true;
+  }, [detacher]);
+  // L'écran qui disparaît se détache ; la réponse, elle, continue.
+  useEffect(() => detacher, [detacher]);
+
+  /**
+   * Une réponse terminée pendant que l'écran montrait ce même Chat : il reprend
+   * la main. Terminée ailleurs : rien à faire ici, elle est déjà enregistrée.
+   */
+  const finirReponse = useCallback((sessionId: string, r: ReponseEnCours) => {
+    if (reponsesEnCours.get(sessionId) === r) reponsesEnCours.delete(sessionId);
+    signalerEnCours();
+    if (sessionRef.current?.id === sessionId) {
+      detacher();
+      setBusy(false);
+    }
+  }, [detacher]);
+
   const commit = useCallback((next: Message[]) => {
     historyRef.current = next;
     setMessages(next);
   }, []);
 
-  /**
-   * Modifie un message. Accepte aussi une fonction, pour décider d'après son
-   * état du moment — la fin de réponse a besoin de savoir si quelque chose a
-   * été écrit, et la variable locale peut avoir un tour de retard.
-   */
-  const patch = useCallback(
-    (id: string, changes: Partial<Message> | ((actuel: Message) => Partial<Message>)) => {
-      commit(
-        historyRef.current.map((m) =>
-          m.id === id ? { ...m, ...(typeof changes === "function" ? changes(m) : changes) } : m,
-        ),
-      );
-    },
-    [commit],
-  );
-
+  /** « Arrêter » : la réponse du Chat affiché, et elle seule. */
   const stop = useCallback(() => {
+    const id = sessionRef.current?.id;
+    if (id) reponsesEnCours.get(id)?.controller.abort();
     abortRef.current?.abort();
     abortRef.current = null;
     setBusy(false);
@@ -242,14 +303,21 @@ export function useChat(options: Options) {
         ? [{ role: "system", content: options.systemPrompt }, ...turns]
         : turns;
 
-      commit([
-        ...historyRef.current,
-        userMsg,
-        { id: replyId, role: "assistant", content: "", streaming: true },
-      ]);
-
-      setBusy(true);
+      const session = sessionRef.current!;
       const controller = new AbortController();
+      const enCours: ReponseEnCours = { history: historyRef.current, controller, abonnes: new Set() };
+      reponsesEnCours.set(session.id, enCours);
+      signalerEnCours();
+      // Tout passe par la réponse en cours ; l'écran la suit tant qu'il montre ce Chat.
+      const ecrire = (next: Message[]) => {
+        enCours.history = next;
+        for (const f of enCours.abonnes) f(next);
+      };
+      const patch = (id: string, changes: Partial<Message> | ((actuel: Message) => Partial<Message>)) =>
+        ecrire(enCours.history.map((m) => (m.id === id ? { ...m, ...(typeof changes === "function" ? changes(m) : changes) } : m)));
+      const persist = () => persisterDans(session, enCours.history);
+      attacher(session.id);
+      ecrire([...enCours.history, userMsg, { id: replyId, role: "assistant", content: "", streaming: true }]);
       abortRef.current = controller;
 
       let content = "";
@@ -415,10 +483,8 @@ export function useChat(options: Options) {
          * effaçait le contrôleur de la nouvelle, qui ne pouvait plus être
          * arrêtée, et rendait la main alors qu'elle tournait encore.
          */
-        if (abortRef.current === controller) {
-          abortRef.current = null;
-          setBusy(false);
-        }
+        if (abortRef.current === controller) abortRef.current = null;
+        finirReponse(session.id, enCours);
       }
     },
     [
@@ -429,24 +495,31 @@ export function useChat(options: Options) {
       options.origin,
       options.tools,
       options.connaissances,
-      patch,
-      commit,
-      persist,
+      attacher,
+      finirReponse,
+      persisterDans,
     ],
   );
 
   /** Nouvelle conversation : la session courante est close, pas supprimée. */
   const reset = useCallback(() => {
-    stop();
+    // Nouvelle conversation : la réponse en cours de l'autre Chat continue.
+    detacher();
+    abortRef.current = null;
+    setBusy(false);
     sessionRef.current = null;
     commit([]);
-  }, [stop, commit]);
+  }, [detacher, commit]);
 
   /** Reprend une session existante (partagée ou personnelle). */
   const open = useCallback(
     (session: Session) => {
-      stop();
+      detacher();
+      abortRef.current = null;
+      setBusy(false);
       sessionRef.current = session;
+      // Une réponse s'écrit encore dans ce Chat : on la suit en direct.
+      if (attacher(session.id)) return;
       commit(
         session.messages.map((m) => ({
           id: m.id,
@@ -458,7 +531,7 @@ export function useChat(options: Options) {
         })),
       );
     },
-    [stop, commit],
+    [detacher, attacher, commit],
   );
 
   /**
@@ -482,13 +555,24 @@ export function useChat(options: Options) {
         });
         notifySessionsChanged();
       }
-      commit([
-        ...historyRef.current,
+      const session = sessionRef.current!;
+      const controller = new AbortController();
+      const enCours: ReponseEnCours = { history: historyRef.current, controller, abonnes: new Set() };
+      reponsesEnCours.set(session.id, enCours);
+      signalerEnCours();
+      const ecrire = (next: Message[]) => {
+        enCours.history = next;
+        for (const f of enCours.abonnes) f(next);
+      };
+      const patch = (id: string, changes: Partial<Message>) =>
+        ecrire(enCours.history.map((m) => (m.id === id ? { ...m, ...changes } : m)));
+      const persist = () => persisterDans(session, enCours.history);
+      attacher(session.id);
+      ecrire([
+        ...enCours.history,
         userMsg,
         { id: replyId, role: "assistant", content: "", streaming: true, statut: t("Préparation de la description...") },
       ]);
-      setBusy(true);
-      const controller = new AbortController();
       abortRef.current = controller;
       try {
         const image = await creerSurLaMachine(texte, format, (tr) => patch(replyId, { statut: tr.message }), controller.signal, sessionRef.current?.id);
@@ -502,10 +586,10 @@ export function useChat(options: Options) {
         }
       } finally {
         if (abortRef.current === controller) abortRef.current = null;
-        setBusy(false);
+        finirReponse(session.id, enCours);
       }
     },
-    [busy, options.origin, options.model, patch, commit, persist],
+    [busy, options.origin, options.model, attacher, finirReponse, persisterDans],
   );
 
   return {

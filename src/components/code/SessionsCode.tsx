@@ -1,0 +1,143 @@
+import { useState } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import { FolderOpen, Terminal, X } from "lucide-react";
+import { cn } from "@/lib/cn";
+import { parDossier, useSessionsCode } from "@/hooks/useSessionsCode";
+import { dateCourte, nomDossier, type SessionCodeResume } from "@/lib/code";
+import { t, tf } from "@/lib/i18n";
+
+/**
+ * Les sessions de Helix Code, séparées des Chats (demandé par Medhi le
+ * 25/09/2026, « comme dans Claude Code »). Dans la barre latérale en mode
+ * Code, à la place de la liste des Chats, rangées par dossier de projet ; et
+ * sur l'accueil de Code, les plus récentes. Chaque ligne rouvre sa session
+ * (`/code?s=<id>`), avec son historique relu chez l'agent de code.
+ */
+
+function LigneSessionCode({
+  session,
+  actif,
+  onRetirer,
+}: {
+  session: SessionCodeResume;
+  actif: boolean;
+  onRetirer: () => void;
+}) {
+  const navigate = useNavigate();
+  const titre = session.titre || t("Session sans demande");
+  return (
+    <li className="group relative">
+      <button
+        type="button"
+        onClick={() => navigate(`/code?s=${encodeURIComponent(session.id)}`)}
+        title={titre}
+        aria-current={actif ? "page" : undefined}
+        className={cn(
+          "flex w-full items-center gap-2 rounded-lg px-2 py-1.5 pr-7 text-left text-sm transition-colors",
+          actif ? "bg-muted font-medium text-foreground" : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+        )}
+      >
+        <span className="min-w-0 flex-1 truncate">{titre}</span>
+        <span className="shrink-0 text-[11px] tabular-nums text-muted-foreground">{dateCourte(session.maj)}</span>
+      </button>
+      <button
+        type="button"
+        onClick={onRetirer}
+        aria-label={tf("Retirer « {0} » de la liste", titre)}
+        title={t("Retirer de la liste (la session reste chez l'agent de code)")}
+        className="absolute right-1 top-1/2 hidden h-6 w-6 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground group-hover:flex focus-visible:flex"
+      >
+        <X size={13} strokeWidth={1.75} />
+      </button>
+    </li>
+  );
+}
+
+/** Liste de la barre latérale en mode Code : groupées par dossier, la plus récente d'abord. */
+export function SessionsCodeListe({ recherche = "" }: { recherche?: string }) {
+  const { sessions, charge, erreur, retirer } = useSessionsCode();
+  const [params] = useSearchParams();
+  const navigate = useNavigate();
+  const active = params.get("s");
+  const terme = recherche.trim().toLowerCase();
+  const visibles = terme
+    ? sessions.filter((s) => s.titre.toLowerCase().includes(terme) || s.dossier.toLowerCase().includes(terme))
+    : sessions;
+  const [retraitEchoue, setRetraitEchoue] = useState(false);
+
+  const retirerSession = async (s: SessionCodeResume) => {
+    const ok = await retirer(s.id).catch(() => false);
+    setRetraitEchoue(!ok);
+    if (ok && s.id === active) navigate("/code");
+  };
+
+  if (charge && sessions.length === 0) {
+    return (
+      <div className="flex min-h-[140px] flex-1 flex-col items-center justify-center gap-3 px-8 py-6 text-center">
+        <span className="flex h-12 w-12 items-center justify-center rounded-full bg-muted">
+          <Terminal size={20} strokeWidth={1.75} className="text-muted-foreground" />
+        </span>
+        <p className="text-xs leading-relaxed text-muted-foreground">
+          {erreur ?? t("Vos sessions de Code apparaîtront ici, rangées par dossier de projet.")}
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex-1 overflow-y-auto px-3 pt-3">
+      <p className="px-1 pb-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+        {t("Sessions de Code")}
+      </p>
+      {erreur && <p className="px-1 pb-2 text-xs text-warning">{erreur}</p>}
+      {retraitEchoue && <p className="px-1 pb-2 text-xs text-warning">{t("La session n'a pas pu être retirée de la liste.")}</p>}
+      {terme && visibles.length === 0 && (
+        <p className="px-1 pb-2 text-xs text-muted-foreground">{t("Aucune session ne correspond à votre recherche.")}</p>
+      )}
+      {parDossier(visibles).map((groupe) => (
+        <div key={groupe.dossier} className="pb-2">
+          <p className="flex items-center gap-1.5 px-1 pb-0.5 pt-1 text-xs font-medium text-foreground" title={groupe.dossier}>
+            <FolderOpen size={13} strokeWidth={1.75} className="shrink-0 text-muted-foreground" />
+            <span className="truncate">{nomDossier(groupe.dossier)}</span>
+          </p>
+          <ul className="space-y-0.5">
+            {groupe.sessions.map((s) => (
+              <LigneSessionCode key={s.id} session={s} actif={s.id === active} onRetirer={() => void retirerSession(s)} />
+            ))}
+          </ul>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** Les sessions les plus récentes, sur l'accueil de Code. */
+export function SessionsRecentes({ max = 6 }: { max?: number }) {
+  const { sessions } = useSessionsCode();
+  const navigate = useNavigate();
+  if (sessions.length === 0) return null;
+  return (
+    <section className="mt-8" aria-label={t("Sessions récentes")}>
+      <h2 className="mb-2 px-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{t("Sessions récentes")}</h2>
+      <ul className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-card">
+        {sessions.slice(0, max).map((s) => (
+          <li key={s.id}>
+            <button
+              type="button"
+              onClick={() => navigate(`/code?s=${encodeURIComponent(s.id)}`)}
+              className="flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-muted/60"
+            >
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm text-foreground">{s.titre || t("Session sans demande")}</span>
+                <span className="block truncate text-xs text-muted-foreground" title={s.dossier}>
+                  {nomDossier(s.dossier)}
+                </span>
+              </span>
+              <span className="shrink-0 text-xs tabular-nums text-muted-foreground">{dateCourte(s.maj)}</span>
+            </button>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}

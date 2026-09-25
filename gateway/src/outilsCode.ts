@@ -135,6 +135,17 @@ async function titulaire(): Promise<string | null> {
   return seule === "?" ? null : seule;
 }
 
+/**
+ * La bibliothèque de l'équipe et les réunions ont-elles quelque chose pour la
+ * personne qui a envoyé la dernière demande ? Leurs outils existent toujours
+ * (ce ne sont pas des connecteurs qu'on branche), mais servis à vide ils
+ * coûtaient 718 jetons à chaque lecture de la demande par le modèle, mesuré le
+ * 25/09/2026 sur une instance sans document ni réunion. Relevé avant chaque
+ * demande (`rafraichirOutilsCode`), gardé ici parce que la liste d'outils se
+ * lit sans savoir pour qui.
+ */
+const contenus = { bibliotheque: false, reunions: false };
+
 /** Outils offerts à l'agent de code : les connecteurs, sans ce qui agit hors du projet. */
 export function outilsPourCode(): DefinitionOutil[] {
   return [
@@ -143,9 +154,31 @@ export function outilsPourCode(): DefinitionOutil[] {
     ...agenda.toolsForModel(),
     ...drive.toolsForModel(),
     ...slack.toolsForModel(),
-    ...bibliotheque.toolsForModel(),
-    ...reunions.toolsForModel(),
+    ...(contenus.bibliotheque ? bibliotheque.toolsForModel() : []),
+    ...(contenus.reunions ? reunions.toolsForModel() : []),
   ];
+}
+
+/** Relève ce que la bibliothèque et les réunions montrent à cette personne (voir `contenus`). */
+async function releverContenus(userId: string | undefined): Promise<void> {
+  if (!userId) {
+    contenus.bibliotheque = false;
+    contenus.reunions = false;
+    return;
+  }
+  try {
+    const qui = { userId, groupes: await groupesDe(userId) };
+    const [documents, seances] = await Promise.all([
+      bibliotheque.documentsVisibles(qui).catch(() => null),
+      reunions.lister(qui).catch(() => null),
+    ]);
+    // Illisible : on garde les outils, mieux vaut quelques jetons de trop qu'un outil qui manque.
+    contenus.bibliotheque = documents === null || documents.length > 0;
+    contenus.reunions = seances === null || seances.length > 0;
+  } catch {
+    contenus.bibliotheque = true;
+    contenus.reunions = true;
+  }
 }
 
 /**
@@ -162,7 +195,8 @@ export function outilsPourCode(): DefinitionOutil[] {
  */
 const listesVues = new Map<string, string>();
 
-export async function rafraichirOutilsCode(dossier: string): Promise<void> {
+export async function rafraichirOutilsCode(dossier: string, userId?: string): Promise<void> {
+  await releverContenus(userId);
   const serveur = portEnCours();
   if (!serveur) return;
   const cle = `${serveur}|${dossier}`;

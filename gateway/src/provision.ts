@@ -213,16 +213,29 @@ function classement(hw: Hardware, catalogue: CatalogEntry[], verifiesSeulement: 
 
 /**
  * Le modèle installé d'office : le mieux noté parmi ceux qui tiennent sur la
- * machine ET qui ont été vérifiés avec Helix. À défaut, le plus léger vérifié.
+ * machine. À défaut, le plus léger vérifié.
+ *
+ * Pour converser, la note seule décide depuis le 25/09/2026, essayé avec
+ * Helix ou non. Demandé par Medhi : « le but du logiciel est d'installer, en
+ * fonction du PC, le meilleur modèle », même quand on n'a pas la machine pour
+ * l'essayer. Avant, seuls les modèles essayés ici comptaient : sur un Mac de
+ * 32 Go ou plus, Helix installait Qwen3.5 9B alors que Qwen3.8 27B, mieux
+ * noté, tenait. Un modèle pas encore essayé le reste dit à l'écran
+ * (`verifie`), et s'il ne se charge pas, les suivants du classement prennent
+ * le relais (`replis`), jusqu'au plus léger vérifié.
+ *
+ * Pour piloter l'écran, on garde les modèles essayés à ce geste
+ * (`verifiesSeulement`) : un modèle qui lit les images sans savoir désigner un
+ * point à l'écran ne répond pas moins bien, il clique à côté.
  */
-function best(hw: Hardware, catalogue: CatalogEntry[]): CatalogEntry {
+function best(hw: Hardware, catalogue: CatalogEntry[], verifiesSeulement = false): CatalogEntry {
   const verifies = catalogue.filter((e) => e.verifie).sort((a, b) => a.downloadGb - b.downloadGb);
-  return classement(hw, catalogue, true)[0] ?? verifies[0] ?? catalogue[catalogue.length - 1]!;
+  return classement(hw, catalogue, verifiesSeulement)[0] ?? verifies[0] ?? catalogue[catalogue.length - 1]!;
 }
 
-/** Modèles de repli si le conseillé ne se charge pas : les suivants du classement, puis le plus léger. */
+/** Modèles de repli si le conseillé ne se charge pas : les suivants du classement, puis le plus léger vérifié. */
 export function replis(hw: Hardware, catalogue: CatalogEntry[], depart: CatalogEntry): CatalogEntry[] {
-  const suite = classement(hw, catalogue, true).filter((e) => e.key !== depart.key);
+  const suite = classement(hw, catalogue, catalogue === VISION_CATALOG).filter((e) => e.key !== depart.key);
   const leger = [...catalogue].filter((e) => e.verifie).sort((a, b) => a.downloadGb - b.downloadGb)[0];
   return [depart, ...suite, ...(leger && leger.key !== depart.key && !suite.includes(leger) ? [leger] : [])];
 }
@@ -238,7 +251,7 @@ export function replis(hw: Hardware, catalogue: CatalogEntry[], depart: CatalogE
  */
 export function adaptesALaMachine(hw: Hardware): (CatalogEntry & { role: "chat" | "gui"; recommande: boolean })[] {
   const conseilChat = best(hw, CATALOG).key;
-  const conseilEcran = best(hw, VISION_CATALOG).key;
+  const conseilEcran = best(hw, VISION_CATALOG, true).key;
   /*
    * Du choix, pas six variantes du même éditeur. Classés à la note seule, les
    * six premiers étaient presque tous des Qwen (le client : « ils proposent pas
@@ -270,7 +283,7 @@ export function recommend(hw: Hardware): CatalogEntry {
  * conversation : les deux tournent en même temps quand Cowork pilote l'écran.
  */
 export function recommendVision(hw: Hardware): CatalogEntry {
-  return best(hw, VISION_CATALOG);
+  return best(hw, VISION_CATALOG, true);
 }
 
 /** Délai d'inactivité au bout duquel un modèle libère la mémoire. */

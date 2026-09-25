@@ -166,8 +166,17 @@ import {
   sessionSuivie as sessionCodeSuivie,
   ecouterDossier as ecouterDossierCode,
   abonner as abonnerCode,
+  dernierNumero as dernierNumeroCode,
   type EvenementCode,
 } from "./fluxCode.ts";
+import {
+  noterSession as noterSessionCode,
+  toucherSession as toucherSessionCode,
+  sessionCode,
+  sessionsDe,
+  retirerSession as retirerSessionCode,
+  historiqueDe as historiqueCode,
+} from "./sessionsCode.ts";
 import type { ChatRequest } from "./types.ts";
 
 /* --------------------------------- utilitaires --------------------------------- */
@@ -2075,8 +2084,75 @@ async function handleCodeSession(
   const dossier = projectDir();
   const creation = await creerSessionCode(dossier, modele, reglage.variante);
   if ("erreur" in creation) return send(res, creation.statut, { error: { message: creation.erreur } });
+  // La session entre dans la liste de sa propriétaire (sessionsCode.ts), séparée des Chats.
+  const qui = await demandeur(req, new URL(req.url ?? "/", "http://localhost"));
+  if (qui) {
+    await noterSessionCode({ id: creation.id, userId: qui.userId, dossier, modele, variante: reglage.variante }).catch((err) =>
+      console.error("[code] session non notée au registre :", err instanceof Error ? err.message : err),
+    );
+  }
   // Même forme de réponse qu'avant (`data.id`) : l'écran, la ligne de commande et l'extension la lisent.
   send(res, 200, { data: { id: creation.id } });
+}
+
+/**
+ * La session appartient-elle à une autre personne ? Une session du registre
+ * (sessionsCode.ts) ne s'utilise que par sa propriétaire : sans cela, qui
+ * connaissait son identifiant pouvait y envoyer des demandes ou lire son flux.
+ * Une session absente du registre (ouverte avant lui) reste ouverte à toute
+ * séance, comme avant.
+ */
+async function sessionCodeDAutrui(sessionID: string, userId: string | undefined): Promise<boolean> {
+  const s = await sessionCode(sessionID).catch(() => undefined);
+  return Boolean(s && s.userId !== userId);
+}
+
+/** `GET /helix/code/sessions` : les sessions de Code de la personne, la plus récente d'abord. */
+async function handleCodeSessions(res: http.ServerResponse, userId: string): Promise<void> {
+  try {
+    const liste = await sessionsDe(userId);
+    send(res, 200, {
+      sessions: liste.map((s) => ({ id: s.id, titre: s.titre, dossier: s.dossier, creee: s.creee, maj: s.maj })),
+    });
+  } catch (err) {
+    send(res, 500, { error: { message: err instanceof Error ? err.message : String(err) } });
+  }
+}
+
+/**
+ * `GET /helix/code/sessions/<id>` : l'historique d'une session, relu chez
+ * OpenCode, pour la rouvrir. `enCours` : l'agent y travaille encore ;
+ * `dernier` : le dernier numéro d'évènement vu par la passerelle, pour suivre
+ * la suite sans rien rejouer.
+ */
+async function handleCodeSessionHistorique(res: http.ServerResponse, userId: string, id: string): Promise<void> {
+  const s = await sessionCode(id).catch(() => undefined);
+  if (!s || s.userId !== userId) return send(res, 404, { error: { message: t("Session de code inconnue.") } });
+  try {
+    const d = encodeURIComponent(s.dossier);
+    const [messages, etat] = await Promise.all([
+      codeApi(`/session/${id}/message?directory=${d}`),
+      codeApi(`/session/status?directory=${d}`).catch(() => undefined),
+    ]);
+    if (!messages.ok) {
+      await messages.text().catch(() => "");
+      return send(res, messages.status === 404 ? 404 : 502, { error: { message: t("L'agent de code n'a pas rendu cette session.") } });
+    }
+    const brut = (await messages.json().catch(() => [])) as unknown;
+    const statuts = etat?.ok ? ((await etat.json().catch(() => ({}))) as Record<string, { type?: string } | undefined>) : {};
+    // La passerelle retrouve le dossier et le modèle de la session après un redémarrage.
+    if (!modeleDeSession.has(id)) modeleDeSession.set(id, { modele: s.modele, variante: s.variante, dossier: s.dossier });
+    if (!sessionCodeSuivie(id)) suivreSessionCode(id, s.dossier);
+    await ecouterDossierCode(s.dossier).catch(() => {});
+    send(res, 200, {
+      session: { id: s.id, titre: s.titre, dossier: s.dossier, creee: s.creee, maj: s.maj },
+      messages: historiqueCode(Array.isArray(brut) ? brut : []),
+      enCours: Boolean(statuts[id] && statuts[id]!.type !== "idle"),
+      dernier: dernierNumeroCode(id),
+    });
+  } catch (err) {
+    send(res, 502, { error: { message: err instanceof Error ? err.message : String(err) } });
+  }
 }
 
 /**
@@ -2183,7 +2259,19 @@ async function handleCodePrompt(
    * L'ancienne API d'OpenCode prend le modèle à chaque demande : il suffit de
    * le retenir.
    */
-  // Session inconnue (ouverte avant un redémarrage de la passerelle) : réglage de l'instance, dossier courant.
+  const envoyeur = await demandeur(req, new URL(req.url ?? "/", "http://localhost"));
+  if (await sessionCodeDAutrui(body.sessionID, envoyeur?.userId)) {
+    return send(res, 403, { error: { message: t("Cette session de code appartient à une autre personne.") } });
+  }
+  /*
+   * Session inconnue de la mémoire (ouverte avant un redémarrage de la
+   * passerelle) : son dossier et son modèle viennent du registre s'il la
+   * connaît (sessionsCode.ts), sinon réglage de l'instance et dossier courant.
+   */
+  if (!modeleDeSession.has(body.sessionID)) {
+    const notee = await sessionCode(body.sessionID).catch(() => undefined);
+    if (notee) modeleDeSession.set(body.sessionID, { modele: notee.modele, variante: notee.variante, dossier: notee.dossier });
+  }
   let connue = modeleDeSession.get(body.sessionID);
   if (!connue || body.model !== undefined || body.effort !== undefined) {
     const voulu = await reglageCode(body.model, body.effort);
@@ -2214,8 +2302,14 @@ async function handleCodePrompt(
   } catch {
     return send(res, 502, { error: { message: t("Flux d'événements indisponible.") } });
   }
-  // Un connecteur branché ou retiré depuis : OpenCode relit la liste des outils (outilsCode.ts).
-  await rafraichirOutilsCode(reglageEnvoi.dossier);
+  /*
+   * Un connecteur branché ou retiré depuis, ou une bibliothèque qui a reçu
+   * son premier document : OpenCode relit la liste des outils (outilsCode.ts),
+   * établie pour la personne qui envoie.
+   */
+  await rafraichirOutilsCode(reglageEnvoi.dossier, envoyeur?.userId);
+  // Titre (première demande) et date de la session dans la liste de Code.
+  void toucherSessionCode(body.sessionID, body.text, { modele: reglageEnvoi.modele, variante: reglageEnvoi.variante }).catch(() => {});
 
   /*
    * Une demande de site : Helix pose d'abord un design professionnel dans le
@@ -2306,6 +2400,12 @@ async function handleCodePrompt(
       if ("id" in creation) {
         const nouvelle = creation.id;
         if (auteur) noterDemandeCode(nouvelle, auteur.userId, dossier);
+        // La session relancée remplace la perdue dans la liste de Code, avec la même demande pour titre.
+        if (auteur) {
+          await noterSessionCode({ id: nouvelle, userId: auteur.userId, dossier, modele, variante: perdue?.variante, titre: "" }).catch(() => {});
+          void toucherSessionCode(nouvelle, body.text).catch(() => {});
+          void retirerSessionCode(body.sessionID, auteur.userId).catch(() => {});
+        }
         envoi = Date.now();
         const second = await envoyer(nouvelle, { modele, variante: perdue?.variante, dossier });
         if (second.ok && (await attendreAppel(body.text, envoi))) {
@@ -2339,7 +2439,11 @@ async function handleCodeInterrupt(
   if (!SESSION_CODE.test(body.sessionID)) {
     return send(res, 400, { error: { message: t("`sessionID` invalide.") } });
   }
-  const dossier = modeleDeSession.get(body.sessionID)?.dossier ?? projectDir();
+  const qui = await demandeur(req, new URL(req.url ?? "/", "http://localhost"));
+  if (await sessionCodeDAutrui(body.sessionID, qui?.userId)) {
+    return send(res, 403, { error: { message: t("Cette session de code appartient à une autre personne.") } });
+  }
+  const dossier = modeleDeSession.get(body.sessionID)?.dossier ?? (await sessionCode(body.sessionID).catch(() => undefined))?.dossier ?? projectDir();
   const upstream = await codeApi(`/session/${body.sessionID}/abort?directory=${encodeURIComponent(dossier)}`, {
     method: "POST",
   });
@@ -2391,7 +2495,11 @@ async function handleCodeEvents(
    * redémarrage) n'est suivie que si OpenCode la connaît : un identifiant
    * inventé n'occupe rien.
    */
-  const dossier = modeleDeSession.get(sessionID)?.dossier ?? projectDir();
+  const qui = await demandeur(req, url);
+  if (await sessionCodeDAutrui(sessionID, qui?.userId)) {
+    return send(res, 403, { error: { message: t("Cette session de code appartient à une autre personne.") } });
+  }
+  const dossier = modeleDeSession.get(sessionID)?.dossier ?? (await sessionCode(sessionID).catch(() => undefined))?.dossier ?? projectDir();
   try {
     if (!sessionCodeSuivie(sessionID)) {
       const existe = await codeApi(`/session/${sessionID}?directory=${encodeURIComponent(dossier)}`);
@@ -4180,6 +4288,24 @@ const traiter = (
       return handleCodePrompt(req, res);
     if (req.method === "POST" && path === "/helix/code/interrupt")
       return handleCodeInterrupt(req, res);
+    /*
+     * Sessions de Code de la personne (sessionsCode.ts) : la liste, l'historique
+     * d'une session pour la rouvrir, et « retirer de la liste » (la conversation
+     * reste chez OpenCode). Séance requise : on ne liste que les siennes.
+     */
+    if (req.method === "GET" && path === "/helix/code/sessions")
+      return avecSeance(req, res, url, (qui) => handleCodeSessions(res, qui.userId));
+    if (path.startsWith("/helix/code/sessions/")) {
+      const id = path.slice("/helix/code/sessions/".length);
+      if (!SESSION_CODE.test(id)) return send(res, 400, { error: { message: t("`sessionID` invalide.") } });
+      if (req.method === "GET") return avecSeance(req, res, url, (qui) => handleCodeSessionHistorique(res, qui.userId, id));
+      if (req.method === "DELETE") {
+        return avecSeance(req, res, url, async (qui) => {
+          const ok = await retirerSessionCode(id, qui.userId).catch(() => false);
+          send(res, ok ? 200 : 404, ok ? { ok: true } : { error: { message: t("Session de code inconnue.") } });
+        });
+      }
+    }
     /*
      * Serveur d'outils de l'agent de code : appelé par OpenCode, sans séance,
      * sur preuve de la clé écrite dans sa configuration (outilsCode.ts). La

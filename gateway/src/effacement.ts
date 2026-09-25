@@ -9,6 +9,8 @@ import { reunionsDe, oublierPersonneReunions } from "./reunions.ts";
 import { oublierChatsDesImages, oublierImagesDe } from "./images.ts";
 import { oublierPersonneConnaissances } from "./connaissances.ts";
 import { oublierPersonneEntrainement } from "./entrainement.ts";
+import { oublierSessionsCode } from "./sessionsCode.ts";
+import { api, enMarche } from "./opencode.ts";
 
 /**
  * Suppression d'un compte (RGPD, article 17).
@@ -217,6 +219,19 @@ export async function effacerCompte(
   // Ses projets d'entraînement, et le modèle qu'il a pu ranger dans LM Studio (entrainement.ts).
   const entrainement = await oublierPersonneEntrainement(userId);
   const reunionsEffacees = await oublierPersonneReunions(userId);
+  /*
+   * Ses sessions de Helix Code : hors de la liste, et leur conversation
+   * effacée chez OpenCode si son serveur tourne (sinon elle y reste, et le
+   * journal le dit par le nombre).
+   */
+  const sessionsCode = await oublierSessionsCode(userId).catch(() => []);
+  let sessionsCodeEffacees = 0;
+  if (enMarche()) {
+    for (const s of sessionsCode) {
+      const r = await api(`/session/${encodeURIComponent(s.id)}?directory=${encodeURIComponent(s.dossier)}`, { method: "DELETE" }).catch(() => undefined);
+      if (r?.ok) sessionsCodeEffacees++;
+    }
+  }
   const lignesDeConsommation = await oublierCompte(userId);
   // Ses images créées : fichiers et registre (images.ts).
   const imagesEffacees = oublierImagesDe(userId);
@@ -239,6 +254,8 @@ export async function effacerCompte(
     projetsEntrainement: entrainement.projets,
     modelesEntrainesRestes: entrainement.modelesRestes,
     reunionsEffacees,
+    sessionsCode: sessionsCode.length,
+    sessionsCodeEffacees,
     lignesDeConsommation,
     imagesEffacees,
   });

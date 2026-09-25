@@ -45,7 +45,7 @@ HelixAI 将 Chat、智能体、编程、知识库和模型微调整合到一个*
 
 ## 功能
 
-- **Chat**：使用本地模型（默认 Qwen3），或用您自己的 API 密钥使用云端模型。支持附件、语音输入（Whisper，本机运行）和图像生成（Z-Image Turbo、FLUX.2 klein）。
+- **Chat**：使用**按每台机器挑选**的本地模型：Helix 会安装能装入该机器内存、评分最高的开源模型（Apache 2.0 或 MIT），从小型笔记本到工作站都适用，并推荐该机器能运行的其他模型。模型目录涵盖 Qwen、Mistral（Magistral、Ministral）、OpenAI gpt-oss、Z.ai GLM、IBM Granite、Ai2 OLMo、Meta 和 DeepSeek。云端模型可用您自己的 API 密钥。支持附件、语音输入（Whisper，本机运行）和图像生成（Z-Image Turbo、FLUX.2 klein）。
 - **知识库（RAG）**：汇集文档，实例在本机为其建立索引，回答会引用所用的段落。每个人只能找到自己有权查看的文档。
 - **Cowork**：在您的文件上工作的智能体，经您同意后还可在虚拟桌面（LibreOffice、浏览器）上操作，生成 Word、Excel、PowerPoint 和 PDF 文档。
 - **Helix Code**：作用于项目文件夹的代码智能体（基于 OpenCode），也可在 **VS Code**（附带扩展）和终端中通过 **`helix` 命令行**使用。
@@ -82,7 +82,7 @@ HelixAI 将 Chat、智能体、编程、知识库和模型微调整合到一个*
 
 - Apple 芯片的 macOS 14 或更高版本，建议 16 GB 内存
 - Node.js 20 或更高版本，以及 npm
-- 装有对话模型的 [LM Studio](https://lmstudio.ai)（Qwen3 8B 效果不错）
+- [LM Studio](https://lmstudio.ai)：首次启动时，Helix 会安装适合该机器的模型
 - 可选：用于 Helix Code 的 [OpenCode](https://opencode.ai)，用于 Cowork 文档的 Python 3
 
 ### 运行

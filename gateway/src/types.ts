@@ -73,6 +73,10 @@ export interface ModelInfo {
   voit?: boolean;
   /** Déclaré par LM Studio : sait appeler des outils. */
   outils?: boolean;
+  /** LM Studio : taille de conversation la plus grande que le modèle accepte (`maxContextLength`). */
+  contexteMax?: number;
+  /** LM Studio : taille de conversation avec laquelle il est chargé en ce moment (`contextLength`), s'il l'est. */
+  contexteCharge?: number;
   /**
    * Entraîné sur cette machine (entrainement.ts). Choisissable dans le
    * sélecteur, jamais choisi d'office : c'est un petit modèle spécialisé.

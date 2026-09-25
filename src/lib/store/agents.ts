@@ -8,7 +8,12 @@ import { t } from "@/lib/i18n";
  * système, un périmètre d'outils et un modèle préféré.
  */
 
-export type AgentVisibility = "personnel" | "organisation";
+/**
+ * Qui voit et utilise l'agent : son auteur seul, les membres de certains
+ * groupes (ajouté le 25/09/2026, comme dans la Bibliothèque), ou toute
+ * l'organisation. L'instance applique la même règle (gateway/src/authz.ts).
+ */
+export type AgentVisibility = "personnel" | "groupes" | "organisation";
 
 export interface Agent {
   id: string;
@@ -17,6 +22,8 @@ export interface Agent {
   /** Prompt système : la personnalité et l'expertise de l'agent. */
   instructions: string;
   visibility: AgentVisibility;
+  /** Pour la visibilité « groupes » : les groupes (de son auteur) à qui il est partagé. */
+  groupIds?: string[];
   /** Masquer le prompt aux non-administrateurs (agents d'organisation). */
   hidePrompt: boolean;
   ownerId: string;
@@ -44,13 +51,20 @@ function persist(agents: Agent[]): void {
   storage.set(KEY, agents);
 }
 
-/** Agents visibles : les siens, plus ceux publiés dans l'organisation. */
+/**
+ * Agents visibles : les siens, ceux publiés dans l'organisation, et ceux
+ * partagés à l'un de ses groupes. Une copie gardée sur ce poste après une
+ * sortie de groupe n'apparaît plus : les groupes sont relus avec l'instance
+ * (sync.ts), qui ne l'envoie plus non plus.
+ */
 export function visibleTo(user: User): Agent[] {
+  const groupes = user.groupIds ?? [];
   return all()
     .filter(
       (a) =>
         a.ownerId === user.id ||
-        (a.visibility === "organisation" && a.organisationId === user.organisationId),
+        (a.visibility === "organisation" && a.organisationId === user.organisationId) ||
+        (a.visibility === "groupes" && (a.groupIds ?? []).some((g) => groupes.includes(g))),
     )
     .sort((a, b) => a.name.localeCompare(b.name));
 }
@@ -62,7 +76,7 @@ export function getAgent(id: string): Agent | undefined {
 export function createAgent(
   owner: User,
   data: Pick<Agent, "name" | "description" | "instructions" | "visibility" | "hidePrompt"> &
-    Partial<Pick<Agent, "toolsEnabled" | "modelUid" | "connaissances">>,
+    Partial<Pick<Agent, "toolsEnabled" | "modelUid" | "connaissances" | "groupIds">>,
 ): Agent {
   const now = new Date().toISOString();
   const agent: Agent = {
@@ -71,6 +85,7 @@ export function createAgent(
     description: data.description.trim(),
     instructions: data.instructions.trim(),
     visibility: data.visibility,
+    ...(data.visibility === "groupes" ? { groupIds: [...new Set(data.groupIds ?? [])] } : {}),
     hidePrompt: data.hidePrompt,
     ownerId: owner.id,
     organisationId: owner.organisationId,

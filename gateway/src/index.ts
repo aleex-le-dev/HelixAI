@@ -392,7 +392,7 @@ async function handleChat(
   const employe = req.headers["x-helix-employe"];
   const cle = req.headers["x-helix-cle"];
   const parEmploye =
-    !qui && typeof employe === "string" && employes.cleValide(typeof cle === "string" ? cle : undefined)
+    !qui && typeof employe === "string" && employes.cleValide(typeof cle === "string" ? cle : undefined, employe)
       ? auteurEmploye(employe)
       : undefined;
 
@@ -3784,7 +3784,10 @@ async function handleBibliotheque(req: http.IncomingMessage, res: http.ServerRes
     return repondre(await bibliotheque.marquerFavori(id, b.favori === true, moi), () => ({ ok: true }));
   }
   if (id && action === "supprimer" && req.method === "POST") {
-    return repondre(await bibliotheque.supprimerElement(id, moi), (v) => v);
+    const r = await bibliotheque.supprimerElement(id, moi);
+    // Un document supprimé quitte aussi les bases de connaissances, index compris (connaissances.ts).
+    if (r.ok) await connaissances.retirerDocumentsPartout(r.valeur.documents).catch(() => 0);
+    return repondre(r, (v) => ({ supprimes: v.supprimes }));
   }
   if (id && !action && req.method === "POST") {
     return repondre(await bibliotheque.modifierElement(id, await corps(), moi), (element) => ({ element }));
@@ -3910,7 +3913,7 @@ async function handleEmployes(
   // Un agent personnel n'existe que pour son propriétaire : pour les autres, il est introuvable.
   if (id) {
     const cible = await employes.employe(id);
-    if (cible && !employes.visiblePar(cible, qui.userId)) {
+    if (cible && !employes.visiblePar(cible, qui.userId, qui.groupes ?? [])) {
       return send(res, 404, { error: { message: t("Agent introuvable.") } });
     }
   }
@@ -3921,12 +3924,12 @@ async function handleEmployes(
   const repondre = <T,>(r: employes.Resultat<T>, succes: (v: T) => unknown) =>
     r.ok
       ? send(res, 200, { ...(succes(r.valeur) as object), ...(r.avertissement ? { avertissement: r.avertissement } : {}) })
-      : send(res, r.statut, { error: { message: r.message } });
+      : send(res, r.statut, { error: { message: r.message, ...(r.code ? { code: r.code } : {}), ...(r.details ? { details: r.details } : {}) } });
 
   // GET /helix/employes : l'équipe, ce qu'on peut leur donner, et l'état du moteur.
   if (!id && req.method === "GET") {
     const comptes = await publicAccounts();
-    const liste = (await employes.listerEmployes()).filter((e) => employes.visiblePar(e, qui.userId));
+    const liste = (await employes.listerEmployes()).filter((e) => employes.visiblePar(e, qui.userId, qui.groupes ?? []));
     // Les modèles que cette personne peut donner à un employé : les siens, ceux de l'équipe et de la machine.
     const modeles = (await models(true)).filter(
       (m) => m.roles.includes("chat") && (!m.proprietaire || m.proprietaire === qui.userId),
@@ -4113,14 +4116,27 @@ async function handleEmployes(
     if (!e) return send(res, 404, { error: { message: t("Agent introuvable.") } });
     const b = await corps();
     const lecture = employes.lectureDesBases(e);
-    const groupesLus = lecture.groupes ? await groupes.groupesDe(e.ownerId) : null;
     const bases = await connaissances.lecturePourEmploye(
       Array.isArray(b.bases) ? b.bases : (e.connaissances ?? []),
       auteurEmploye(e.id),
-      groupesLus,
+      await employes.lecteursDe(e, lecture),
       { userId: qui.userId, groupes: qui.groupes ?? [] },
     );
     return send(res, 200, { ...lecture, bases });
+  }
+  /*
+   * Sa mémoire mise de côté (employes.ts, `viderMemoire`) : la liste des
+   * copies (des nombres et des dates), les restaurer, les supprimer. Réservé
+   * à son propriétaire.
+   */
+  if (action === "memoire" && !sous && req.method === "GET") {
+    return repondre(await employes.copiesMemoire(id, qui.userId), (v) => v);
+  }
+  if (action === "memoire" && sous && sousAction === "restaurer" && req.method === "POST") {
+    return repondre(await employes.restaurerMemoire(id, sous, qui.userId), (v) => v);
+  }
+  if (action === "memoire" && sous && sousAction === "supprimer" && req.method === "POST") {
+    return repondre(await employes.supprimerCopieMemoire(id, sous, qui.userId), () => ({ ok: true }));
   }
   // Canaux : les brancher, les retirer, lier WhatsApp, accepter les personnes qui écrivent.
   if (action === "canaux" && !sous && req.method === "GET") {

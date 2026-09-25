@@ -53,12 +53,15 @@ export interface Employe {
   canaux?: CanalEmploye[];
   /** Agent de l'interface dont il est la mise en service. */
   agentId?: string;
-  visibilite?: "personnel" | "organisation";
+  visibilite?: "personnel" | "groupes" | "organisation";
+  /** Pour la visibilité « groupes » : les groupes à qui il est partagé. */
+  groupes?: string[];
   toutesLesFamilles?: boolean;
   /** Bases de connaissances de l'agent : ce qu'il y lit, `lectureDesBases` le dit. */
   connaissances?: string[];
   ownerId: string;
   createdAt: string;
+  updatedAt?: string;
   modele: string;
   proprietaire: string;
   estProprietaire: boolean;
@@ -186,9 +189,31 @@ export function decrireRythme(m: Pick<Mission, "rythme" | "heure" | "filtre">): 
   return tf("{0} à {1} h{2}", LIBELLE_RYTHME[m.rythme], Number(h), min && min !== "00" ? ` ${min}` : "");
 }
 
+/**
+ * Refus de l'instance, avec son code quand l'écran sait le traiter : ici,
+ * `memoire-a-vider` (gateway/src/employes.ts, `CODE_MEMOIRE`), qui demande la
+ * confirmation de vider la mémoire de l'agent avant d'élargir son audience.
+ */
+export class RefusInstance extends Error {
+  constructor(
+    message: string,
+    readonly code?: string,
+    readonly details?: Record<string, unknown>,
+  ) {
+    super(message);
+  }
+}
+
+export const CODE_MEMOIRE = "memoire-a-vider";
+
+/** Ce qui élargit l'audience de l'agent, tel que l'instance le dit. */
+export type RaisonElargissement = "visibilite" | "groupes" | "messagerie" | "mission-mail" | "liberte" | "outils";
+
+export const estRefusMemoire = (err: unknown): err is RefusInstance => err instanceof RefusInstance && err.code === CODE_MEMOIRE;
+
 async function lire<T>(res: Response): Promise<T> {
-  const corps = (await res.json().catch(() => ({}))) as T & { error?: { message?: string } };
-  if (!res.ok) throw new Error(corps.error?.message ?? t("L'instance n'a pas répondu."));
+  const corps = (await res.json().catch(() => ({}))) as T & { error?: { message?: string; code?: string; details?: Record<string, unknown> } };
+  if (!res.ok) throw new RefusInstance(corps.error?.message ?? t("L'instance n'a pas répondu."), corps.error?.code, corps.error?.details);
   return corps;
 }
 
@@ -204,11 +229,12 @@ export async function chargerEmployes(): Promise<EtatEmployes> {
 }
 
 /** Pourquoi un agent toujours actif ne lit que ce qui est ouvert à toute l'équipe (gateway/src/employes.ts, `lectureDesBases`). */
-export type RaisonEquipeSeulement = "organisation" | "messagerie" | "mission-mail" | "liberte" | "outils";
+export type RaisonEquipeSeulement = "organisation" | "sans-groupe" | "messagerie" | "mission-mail" | "liberte" | "outils";
 
 /** Ce qu'il lira réellement dans ses bases de connaissances, calculé par l'instance comme son outil le fait. */
 export interface LectureDesBases {
-  groupes: boolean;
+  /** `equipe` : ouvert à toute l'équipe ; `groupes` : aussi partagé à chacun de ses groupes ; `proprietaire` : tout ce que vous voyez. */
+  regle: "equipe" | "groupes" | "proprietaire";
   raisons: RaisonEquipeSeulement[];
   outilsQuiSortent: Famille[];
   bases: {
@@ -234,7 +260,8 @@ export interface NouvelEmploye {
   autonome: boolean;
   liberte: Liberte;
   agentId?: string;
-  visibilite?: "personnel" | "organisation";
+  visibilite?: "personnel" | "groupes" | "organisation";
+  groupes?: string[];
   description?: string;
   /** Toutes les familles d'outils branchées, y compris celles branchées plus tard. */
   toutesLesFamilles?: boolean;
@@ -255,10 +282,12 @@ export async function deployerEmploye(
 export async function modifierEmploye(
   id: string,
   changements: Partial<
-    Pick<Employe, "poste" | "outils" | "missions" | "enPause" | "autonome" | "modele" | "liberte" | "description" | "toutesLesFamilles" | "connaissances">
+    Pick<Employe, "poste" | "outils" | "missions" | "enPause" | "autonome" | "modele" | "liberte" | "description" | "toutesLesFamilles" | "connaissances" | "visibilite" | "groupes">
   > & {
     motDePasse?: string;
     code?: string;
+    /** Confirmé à l'écran : sa mémoire est mise de côté puis vidée avant que son audience s'élargisse. */
+    viderMemoire?: boolean;
   },
 ): Promise<{ employe: Employe; avertissement?: string }> {
   return lire(await poster(`/helix/employes/${encodeURIComponent(id)}`, changements));
@@ -342,9 +371,34 @@ export const PALIERS: Record<Liberte, { titre: string; detail: string }> = {
 
 export async function brancherCanal(
   id: string,
-  donnees: { type: TypeCanal; champs: Record<string, string>; acces: "appairage" | "liste"; autorises: string[]; outilsEntreprise: boolean },
-): Promise<void> {
-  await lire(await poster(`/helix/employes/${encodeURIComponent(id)}/canaux`, donnees));
+  donnees: { type: TypeCanal; champs: Record<string, string>; acces: "appairage" | "liste"; autorises: string[]; outilsEntreprise: boolean; viderMemoire?: boolean },
+): Promise<{ avertissement?: string }> {
+  return lire(await poster(`/helix/employes/${encodeURIComponent(id)}/canaux`, donnees));
+}
+
+/* ---- Mémoire mise de côté --------------------------------------------- */
+
+export interface CopieMemoire {
+  id: string;
+  quand: string;
+  fichiers: number;
+  octets: number;
+  conversations: number;
+  raisons: RaisonElargissement[];
+  /** Faux quand son audience est aujourd'hui plus large qu'au moment de la copie. */
+  restaurable: boolean;
+}
+
+export async function lireCopiesMemoire(id: string): Promise<{ copies: CopieMemoire[]; aLuHorsEquipe: boolean }> {
+  return lire(await apiFetch(`/helix/employes/${encodeURIComponent(id)}/memoire`));
+}
+
+export async function restaurerMemoire(id: string, copie: string): Promise<{ fichiers: number }> {
+  return lire(await poster(`/helix/employes/${encodeURIComponent(id)}/memoire/${encodeURIComponent(copie)}/restaurer`, {}));
+}
+
+export async function supprimerCopieMemoire(id: string, copie: string): Promise<void> {
+  await lire(await poster(`/helix/employes/${encodeURIComponent(id)}/memoire/${encodeURIComponent(copie)}/supprimer`, {}));
 }
 
 export async function retirerCanal(id: string, type: TypeCanal): Promise<void> {

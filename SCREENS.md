@@ -244,6 +244,29 @@ second document étant privé), agent d'organisation avec outils (deux raisons, 
 lue : partagée à des groupes »). La carte d'un employé sans agent dit désormais
 « Personnel » quand il l'est (elle disait « Organisation » pour tous).
 
+**Agents partagés à des groupes, mémoire vidée avant d'élargir** (25/09/2026, le soir) :
+la visibilité se choisit comme dans la Bibliothèque (`ChoixVisibilite` : « Vous seul »,
+« Des groupes » avec les pastilles de ses groupes, « Toute l'équipe »), à la création
+et dans les **Réglages** de l'agent en service (« Qui le voit et lui parle »). Onglet
+« Groupes (n) » à côté d'Organisation et Personnels ; la carte dit « Groupes : Compta ».
+« Ce qu'il lit hors du Chat » dit désormais trois règles : personnel, « il lit dans ces
+bases tout ce que vous voyez, vos documents privés compris » ; de groupes, « ce qui est
+partagé à chacun de ses groupes, jamais un document privé » (« non lue : pas partagée à
+chacun de ses groupes ») ; sinon la règle de l'équipe et ses raisons. Un enregistrement
+ou un branchement de messagerie qui élargirait l'audience d'un agent ayant pu lire hors
+de l'équipe n'est pas fait : un encadré « Vider sa mémoire d'abord »
+(`ConfirmationMemoire.tsx`) dit pourquoi et ce qui sera fait, avec « Vider sa mémoire et
+continuer » ou « Annuler ». Réussi, la ligne d'information dit « Sa mémoire a été mise
+de côté (copie chiffrée…) puis vidée : n note(s), n conversation(s) » ; échoué, le
+changement n'est pas fait et la raison s'affiche. Dans les Réglages, « Mémoire mise de
+côté » liste les copies (date, notes, conversations effacées) avec **Restaurer** (grisé,
+avec la raison, tant que l'agent est plus ouvert qu'au moment de la copie) et
+**Supprimer**. **Vu le 25/09/2026** dans le navigateur (instance jetable, OpenClaw
+d'essai) : passage de Personnel à « Des groupes » refusé puis confirmé, deux copies
+listées ensuite, non restaurables ; création d'un agent « Des groupes » depuis la
+modale, carte « Groupes : Compta ». Pas vu : l'encadré dans l'onglet Canaux (même
+composant, essayé par l'API seulement), l'application de bureau.
+
 **Fiche d'un agent en service** (0.11.0, `src/components/agents/Employes.tsx`) : des agents
 OpenClaw qui travaillent pour toute l'équipe. « Déployer un employé » ouvre un
 formulaire court : nom, poste, outils (ceux qui sont branchés sur l'instance ; les

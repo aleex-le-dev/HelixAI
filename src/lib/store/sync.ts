@@ -152,8 +152,8 @@ async function pull(collection: Collection): Promise<Tirage> {
     noterReleve(collection, "absente");
     return "absente";
   }
-  // Les conversations partagées à un groupe se lisent selon les groupes de la personne : on les relit avec.
-  if (collection === "sessions") await relireMesGroupes();
+  // Les conversations et les agents partagés à un groupe se lisent selon les groupes de la personne : on les relit avec.
+  if (collection === "sessions" || collection === "agents") await relireMesGroupes();
   if (!writeLocal(collection, payload.value)) {
     /*
      * Rendue par l'instance, mais ce poste n'a pas pu la garder : il n'en a
@@ -168,16 +168,35 @@ async function pull(collection: Collection): Promise<Tirage> {
   return "tiree";
 }
 
-async function relireMesGroupes(): Promise<void> {
+/** Groupes de la personne tels que la dernière relecture les a rendus, triés et joints. */
+let groupesConnus: string | null = null;
+
+/** Relit les groupes de la personne ; vrai s'ils ont changé depuis la dernière relecture. */
+async function relireMesGroupes(): Promise<boolean> {
   try {
     const res = await apiFetch("/helix/groupes");
-    if (!res.ok) return;
+    if (!res.ok) return false;
     const { groupes } = (await res.json()) as { groupes: { id: string; estMembre: boolean }[] };
-    retenirGroupes(groupes.filter((g) => g.estMembre).map((g) => g.id));
+    const siens = groupes.filter((g) => g.estMembre).map((g) => g.id);
+    retenirGroupes(siens);
+    const signature = [...siens].sort().join(",");
+    const change = groupesConnus !== null && groupesConnus !== signature;
+    groupesConnus = signature;
+    return change;
   } catch {
     /* hors ligne : les groupes connus restent */
+    return false;
   }
 }
+
+/**
+ * Une personne entrée dans un groupe, ou sortie, ne voit plus les mêmes
+ * Chats ni les mêmes agents, sans que leur révision bouge sur l'instance :
+ * les groupes sont relus toutes les quinze relèves (une minute), et ces deux
+ * collections re-tirées s'ils ont changé.
+ */
+const RELEVES_PAR_GROUPES = 15;
+let releves = 0;
 
 /**
  * Collections que ce poste ne pousse jamais.
@@ -251,10 +270,12 @@ async function refresh(): Promise<void> {
     };
 
     const touched: Collection[] = [];
+    const groupesChanges = ++releves % RELEVES_PAR_GROUPES === 0 && (await relireMesGroupes());
     for (const collection of COLLECTIONS) {
       if (pushing.has(collection)) continue;
       const known = revisions.get(collection) ?? 0;
-      if ((remote[collection] ?? 0) > known) {
+      const parGroupe = groupesChanges && (collection === "sessions" || collection === "agents");
+      if ((remote[collection] ?? 0) > known || parGroupe) {
         if ((await pull(collection)) === "tiree") touched.push(collection);
       }
     }

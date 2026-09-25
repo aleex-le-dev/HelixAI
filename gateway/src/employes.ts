@@ -1,9 +1,9 @@
 import { spawn, execFile, type ChildProcess } from "node:child_process";
-import { chmodSync, cpSync, existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, writeFileSync, renameSync } from "node:fs";
+import { chmodSync, cpSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, writeFileSync, renameSync } from "node:fs";
 import { open as ouvrirFichier, rename as renommer, rm as effacer } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
-import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
+import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { db } from "./db.ts";
 import { deployment } from "./deployment.ts";
 import { journaliser } from "./audit.ts";
@@ -16,6 +16,8 @@ import * as courrier from "./courrier.ts";
 import { DOCUMENT_MAX, LIBELLE_DOCUMENT_MAX, MESSAGE_DISQUE_PLEIN, placeSuffisante } from "./televersement.ts";
 import { t, tf } from "./langue.ts";
 import { OUTIL_EMPLOYE } from "./connaissances.ts";
+import { groupesDe, listerGroupes } from "./groupes.ts";
+import { chiffrerOctets, dechiffrerOctets } from "./secret.ts";
 
 /**
  * Employés : des agents OpenClaw déployés et pilotés par Helix.
@@ -196,16 +198,24 @@ export interface Employe {
    * versant « toujours actif » (missions, messageries, mémoire).
    */
   agentId?: string;
-  /** Visibilité reprise de l'agent : un agent personnel n'est vu et joint que par son propriétaire. */
-  visibilite?: "personnel" | "organisation";
+  /**
+   * Visibilité reprise de l'agent : un agent personnel n'est vu et joint que
+   * par son propriétaire ; un agent de groupes, par son propriétaire et les
+   * membres de `groupes` à l'instant où ils le demandent (ajouté le
+   * 25/09/2026) ; un agent d'organisation, par tous. Absente : organisation.
+   */
+  visibilite?: "personnel" | "groupes" | "organisation";
+  /** Pour la visibilité « groupes » : les groupes à qui l'agent est partagé. */
+  groupes?: string[];
   /** « Autoriser les outils » de l'agent : toutes les familles branchées, y compris celles branchées plus tard. */
   toutesLesFamilles?: boolean;
   /**
    * Bases de connaissances de l'agent (`Agent.connaissances`), recopiées par
    * l'écran de son propriétaire. L'employé y cherche par l'outil
    * `connaissances__chercher`, et n'y lit que ce qui est ouvert à toute
-   * l'équipe, plus ce qui est partagé aux groupes de son propriétaire quand
-   * rien de ce qui sort de lui ne va à quelqu'un d'autre (`lectureDesBases`).
+   * l'équipe, plus, quand rien de ce qui sort de lui ne quitte son audience,
+   * ce que son propriétaire voit (agent personnel) ou ce qui est partagé à
+   * chacun de ses groupes (agent de groupes) : voir `lectureDesBases`.
    */
   connaissances?: string[];
   ownerId: string;
@@ -247,10 +257,20 @@ export function famillesEffectives(e: Employe): Famille[] {
   return e.toutesLesFamilles ? [...FAMILLES] : e.outils;
 }
 
-/** Un employé qu'une personne a le droit de voir et de joindre. */
-export function visiblePar(e: Employe, qui: string): boolean {
-  return e.visibilite !== "personnel" || e.ownerId === qui;
+/**
+ * Un employé qu'une personne a le droit de voir et de joindre. `groupesDeQui` :
+ * les groupes dont elle est membre **à cet instant** (index.ts les relit à
+ * chaque requête) ; sortie d'un groupe, elle ne voit plus l'agent de ce groupe.
+ */
+export function visiblePar(e: Employe, qui: string, groupesDeQui: readonly string[] = []): boolean {
+  if (e.ownerId === qui) return true;
+  if (e.visibilite === "personnel") return false;
+  if (e.visibilite === "groupes") return (e.groupes ?? []).some((g) => groupesDeQui.includes(g));
+  return true;
 }
+
+/** L'identité d'un employé, telle que le journal et les bases la connaissent : elle ne possède rien. */
+export const identiteEmploye = (id: string) => `employe:${id}`;
 
 /* ---- Ce qu'il lit dans les bases de connaissances ------------------ */
 
@@ -264,12 +284,21 @@ export function visiblePar(e: Employe, qui: string): boolean {
 const FAMILLES_QUI_SORTENT: Famille[] = ["fichiers", "bureau", "courrier"];
 
 /** Pourquoi un employé ne lit que ce qui est ouvert à toute l'équipe. */
-export type RaisonEquipeSeulement = "organisation" | "messagerie" | "mission-mail" | "liberte" | "outils";
+export type RaisonEquipeSeulement = "organisation" | "sans-groupe" | "messagerie" | "mission-mail" | "liberte" | "outils";
+
+/**
+ * Ce qu'il lit dans les bases de son agent :
+ *  - `equipe` : ce qui est ouvert à toute l'équipe, et rien d'autre ;
+ *  - `groupes` : en plus, ce qui est partagé à **chacun** des groupes de son
+ *    agent (agent de groupes), jamais un document privé ;
+ *  - `proprietaire` : tout ce que son propriétaire voit, ses documents privés
+ *    compris (agent personnel), jamais ceux d'une autre personne.
+ */
+export type RegleLecture = "equipe" | "groupes" | "proprietaire";
 
 export interface LectureDesBases {
-  /** Il lit aussi les bases et documents partagés aux groupes de son propriétaire. */
-  groupes: boolean;
-  /** Vide si `groupes` ; sinon, tout ce qui ouvre son audience au-delà de son propriétaire. */
+  regle: RegleLecture;
+  /** Vide sauf pour `equipe` : tout ce qui ouvre son audience au-delà de son propriétaire ou de ses groupes. */
   raisons: RaisonEquipeSeulement[];
   /** Pour la raison « outils » : les familles qui écrivent ou envoient. */
   outilsQuiSortent: Famille[];
@@ -281,16 +310,10 @@ export interface LectureDesBases {
  *
  * La règle de départ, « seulement ce qui est ouvert à toute l'équipe », tient
  * à ce que ce qu'il lit sort de lui vers des gens qu'on ne connaît pas à
- * l'avance. Elle s'élargit dans un seul cas, celui où l'on sait sûrement
- * **qui** recevra ce qu'il lit : quand tout ce qui sort de lui ne va qu'à son
- * propriétaire. Il lit alors, en plus, ce qui est partagé aux groupes dont ce
- * propriétaire est membre (jamais ses documents privés : c'est l'autre
- * question du point 18, laissée au client). Chaque personne de son audience
- * (une seule) voit donc tout ce qu'il lit. Les conditions, toutes vérifiables
- * dans ce qui est enregistré ici :
- *  - agent **personnel** : `visiblePar` ne laisse que son propriétaire le voir,
- *    lui parler, lire ses échanges ; ses comptes rendus de missions sont
- *    réservés au propriétaire (`sienOuRefus`, index.ts) ;
+ * l'avance. Elle s'élargit quand l'on sait sûrement **qui** recevra ce qu'il
+ * lit, c'est-à-dire quand rien de ce qui sort de lui ne va hors de son
+ * audience (son propriétaire, ou les membres des groupes de son agent). Les
+ * conditions de sortie, toutes vérifiables dans ce qui est enregistré ici :
  *  - **aucune messagerie** : sur un canal, écrivent des gens qui n'ont pas de
  *    compte Helix, et sa mémoire leur répond ;
  *  - aucune mission **à chaque mail** : c'est un texte venu de n'importe qui
@@ -300,26 +323,110 @@ export interface LectureDesBases {
  *  - aucune famille **qui écrit ou envoie** (`FAMILLES_QUI_SORTENT`) : un
  *    fichier du dossier de l'équipe, un document Office, un brouillon de mail
  *    sont lus par d'autres. « Autoriser les outils » les donne toutes.
- * Un agent partagé à des groupes précis n'existe pas (un agent est personnel
- * ou ouvert à l'organisation) : ce cas n'est pas traité, et garde la règle
- * de l'équipe.
+ * Et selon sa visibilité :
+ *  - agent **personnel** (`proprietaire`) : `visiblePar` ne laisse que son
+ *    propriétaire le voir, lui parler, lire ses échanges ; ses comptes rendus
+ *    lui sont réservés (`sienOuRefus`, index.ts). Il lit tout ce que ce
+ *    propriétaire voit, ses documents privés compris (décidé le 25/09/2026,
+ *    point 18) : son seul destinataire les voit lui-même. Jamais le privé
+ *    d'une autre personne ;
+ *  - agent **de groupes** (`groupes`) : il lit aussi ce qui est partagé à
+ *    **chacun** de ses groupes (et que son propriétaire voit). Un document
+ *    partagé au seul groupe A n'est pas lu par l'agent des groupes A et B :
+ *    un membre de B le recevrait. La règle tient quand un groupe change de
+ *    membres : qui y entre voit aussi ce qui lui est partagé. Jamais un
+ *    document privé, de personne ;
+ *  - agent **d'organisation** : la règle de l'équipe.
  *
  * Relu à **chaque appel** d'outil depuis l'employé tel qu'il est enregistré
- * (serveurOutils.ts), avec les groupes du propriétaire à cet instant : rien
- * n'est gardé en mémoire. Dès qu'une condition tombe (ouvert à l'équipe,
- * messagerie branchée, outil ajouté), l'appel suivant ne lit plus que ce qui
- * est ouvert à l'équipe. Ce qu'il a déjà noté dans sa mémoire OpenClaw y
- * reste : Helix ne l'efface pas, et l'écran le dit au propriétaire.
+ * (serveurOutils.ts, `lecteursDe`), avec les groupes à cet instant : rien
+ * n'est gardé en mémoire. Dès qu'une condition tombe, l'appel suivant ne lit
+ * plus que ce qui est ouvert à l'équipe. Ce qu'il a déjà noté dans sa mémoire
+ * OpenClaw, lui, y resterait : un changement qui élargit son audience ne
+ * prend donc effet qu'une fois cette mémoire mise de côté et vidée
+ * (`viderMemoire`), après confirmation de son propriétaire.
  */
 export function lectureDesBases(e: Employe): LectureDesBases {
   const raisons: RaisonEquipeSeulement[] = [];
-  if (e.visibilite !== "personnel") raisons.push("organisation");
+  const visibilite = e.visibilite ?? "organisation";
+  if (visibilite === "organisation") raisons.push("organisation");
+  if (visibilite === "groupes" && (e.groupes ?? []).length === 0) raisons.push("sans-groupe");
   if ((e.canaux ?? []).length > 0) raisons.push("messagerie");
   if (e.missions.some((m) => m.rythme === "a-chaque-mail")) raisons.push("mission-mail");
   if ((e.liberte ?? "encadre") !== "encadre") raisons.push("liberte");
   const outilsQuiSortent = famillesEffectives(e).filter((f) => FAMILLES_QUI_SORTENT.includes(f));
   if (outilsQuiSortent.length > 0) raisons.push("outils");
-  return { groupes: raisons.length === 0, raisons, outilsQuiSortent };
+  const regle: RegleLecture = raisons.length > 0 ? "equipe" : visibilite === "personnel" ? "proprietaire" : "groupes";
+  return { regle, raisons, outilsQuiSortent };
+}
+
+/** Une personne telle que les droits de la Bibliothèque la voient. */
+export interface Lecteur {
+  userId: string;
+  groupes: string[];
+}
+
+/**
+ * Les lecteurs dont l'employé ne lit que ce qu'ils voient **tous**, relus à
+ * l'instant (connaissances.ts, `chercher`, option `lecteurs`). `null` : la
+ * règle de l'équipe.
+ *  - `proprietaire` : son propriétaire, avec ses droits entiers ;
+ *  - `groupes` : son propriétaire, plus, pour chaque groupe de l'agent, un
+ *    lecteur qui ne possède rien et n'est membre que de ce groupe. Ce que
+ *    tous voient est ouvert à l'équipe, ou partagé à chacun des groupes :
+ *    jamais un document privé, puisque ces lecteurs-là ne possèdent rien.
+ */
+export async function lecteursDe(e: Employe, lecture = lectureDesBases(e)): Promise<Lecteur[] | null> {
+  if (lecture.regle === "equipe") return null;
+  const proprietaire: Lecteur = { userId: e.ownerId, groupes: await groupesDe(e.ownerId) };
+  if (lecture.regle === "proprietaire") return [proprietaire];
+  return [proprietaire, ...[...new Set(e.groupes ?? [])].map((g) => ({ userId: identiteEmploye(e.id), groupes: [g] }))];
+}
+
+/* ---- Son audience, et quand elle s'élargit ------------------------- */
+
+/**
+ * Qui peut recevoir ce qu'il lit : son propriétaire seul, les membres de ses
+ * groupes, ou n'importe qui (organisation, messagerie, outil qui écrit…).
+ */
+type Audience = { portee: "proprietaire" } | { portee: "groupes"; groupes: string[] } | { portee: "ouverte" };
+
+function audienceDe(e: Employe): Audience {
+  const l = lectureDesBases(e);
+  if (l.regle === "proprietaire") return { portee: "proprietaire" };
+  if (l.regle === "groupes") return { portee: "groupes", groupes: [...new Set(e.groupes ?? [])].sort() };
+  return { portee: "ouverte" };
+}
+
+const RANG: Record<Audience["portee"], number> = { proprietaire: 0, groupes: 1, ouverte: 2 };
+
+/** `apres` touche-t-elle quelqu'un que `avant` ne touchait pas ? */
+function audiencePlusLarge(avant: Audience, apres: Audience): boolean {
+  if (RANG[apres.portee] !== RANG[avant.portee]) return RANG[apres.portee] > RANG[avant.portee];
+  return apres.portee === "groupes" && avant.portee === "groupes" && apres.groupes.some((g) => !avant.groupes.includes(g));
+}
+
+/** Ce qui élargit son audience, pour l'écran et le journal (des noms de réglages, jamais de contenu). */
+export type RaisonElargissement = "visibilite" | "groupes" | "messagerie" | "mission-mail" | "liberte" | "outils";
+
+/**
+ * Les changements qui élargissent l'audience d'un employé, de `avant` à
+ * `apres` ; vide si elle ne s'élargit pas (ou si elle était déjà ouverte :
+ * il ne lisait alors que ce qui est ouvert à l'équipe).
+ */
+export function elargissement(avant: Employe, apres: Employe): RaisonElargissement[] {
+  const a = audienceDe(avant);
+  const b = audienceDe(apres);
+  if (!audiencePlusLarge(a, b)) return [];
+  const la = lectureDesBases(avant);
+  const lb = lectureDesBases(apres);
+  const raisons: RaisonElargissement[] = [];
+  if ((avant.visibilite ?? "organisation") !== (apres.visibilite ?? "organisation")) raisons.push("visibilite");
+  else if (a.portee === "groupes" && b.portee === "groupes") raisons.push("groupes");
+  for (const r of ["messagerie", "mission-mail", "liberte", "outils"] as const) {
+    if (lb.raisons.includes(r) && !la.raisons.includes(r)) raisons.push(r);
+  }
+  return raisons.length > 0 ? raisons : ["visibilite"];
 }
 
 export async function listerEmployes(): Promise<Employe[]> {
@@ -468,9 +575,21 @@ const jetonOpenClaw = () => secretFichier(".jeton");
  */
 const cleEmployes = () => secretFichier(".cle");
 
-export function cleValide(fournie: string | undefined): boolean {
-  if (!fournie) return false;
-  const attendue = Buffer.from(cleEmployes());
+/**
+ * Clé d'un employé : HMAC de la clé de l'instance et de son identifiant,
+ * donnée à lui seul dans la configuration d'OpenClaw (son fournisseur de
+ * modèle et son serveur d'outils). Corrigé le 25/09/2026 : une seule clé
+ * valait pour tous, et les droits se lisaient sur l'employé nommé dans
+ * l'adresse, pas sur celui qui appelait ; avec `openclaw.json` en main, on
+ * appelait le serveur d'outils d'un employé personnel et on lisait les bases
+ * de son propriétaire.
+ */
+const cleDe = (id: string) => createHmac("sha256", cleEmployes()).update(`employe:${id}`).digest("hex");
+
+/** La clé fournie est-elle celle de **cet** employé ? Comparée en temps constant. */
+export function cleValide(fournie: string | undefined, id: string): boolean {
+  if (!fournie || !id) return false;
+  const attendue = Buffer.from(cleDe(id));
   const donnee = Buffer.from(fournie);
   return donnee.length === attendue.length && timingSafeEqual(donnee, attendue);
 }
@@ -665,7 +784,7 @@ function appliquerConfiguration(employes: Employe[]): void {
       baseUrl: `${passerelle.url}/v1`,
       api: "openai-completions",
       apiKey: passerelle.jeton,
-      headers: { "X-Helix-Employe": e.id, "X-Helix-Cle": cleEmployes() },
+      headers: { "X-Helix-Employe": e.id, "X-Helix-Cle": cleDe(e.id) },
       models: [{ id: e.modele, name: e.modele }],
     };
   }
@@ -705,7 +824,7 @@ function appliquerConfiguration(employes: Employe[]): void {
     serveurs[nomOpenClaw(e.id)] = {
       url: `${passerelle.url}/helix/employes/${e.id}/outils`,
       transport: "streamable-http",
-      headers: { Authorization: `Bearer ${passerelle.jeton}`, "X-Helix-Cle": cleEmployes() },
+      headers: { Authorization: `Bearer ${passerelle.jeton}`, "X-Helix-Cle": cleDe(e.id) },
       /*
        * Un appel peut attendre l'accord d'une personne (deux minutes au plus,
        * approbation.ts). Au délai par défaut d'OpenClaw, l'appel était coupé
@@ -1162,6 +1281,10 @@ async function balayer(employes: Employe[]): Promise<void> {
   for (const d of existsSync(etats) ? readdirSync(etats) : []) {
     if (d.startsWith("helix-") && !connus.has(d)) rmSync(join(etats, d), { recursive: true, force: true });
   }
+  const memoires = join(racineDonnees(), "memoires-employes");
+  for (const d of existsSync(memoires) ? readdirSync(memoires) : []) {
+    if (!connus.has(nomOpenClaw(d))) rmSync(join(memoires, d), { recursive: true, force: true });
+  }
   const comptes = await publicAccounts();
   const tout = await tousLesEchanges();
   for (const qui of Object.keys(tout)) if (!comptes.some((c) => c.id === qui)) await oublierPersonne(qui);
@@ -1269,6 +1392,345 @@ async function effacerArchives(agent: string, cles: string[] = [], personnes?: s
   for (const f of existsSync(sessions) ? readdirSync(sessions) : []) {
     if (f.includes(".deleted.") || noms.has(f)) rmSync(join(sessions, f), { force: true });
   }
+}
+
+/* ---- Sa mémoire, quand son audience s'élargit ---------------------- */
+
+/*
+ * Décidé le 25/09/2026 (PROJET.md § 3.10, point 18) : un employé qui a pu
+ * lire dans ses bases ce qui n'est pas ouvert à toute l'équipe en garde la
+ * trace chez OpenClaw, et aucune règle de lecture ne la reprend :
+ *  - les notes de son espace (`MEMORY.md`, `memory/*.md`, tout fichier qu'il
+ *    y a écrit), relues à chaque conversation ou par `memory_search` ;
+ *  - ses conversations (transcriptions dans la base SQLite de l'agent,
+ *    résultats d'outils compris), et leurs archives ;
+ *  - l'index de sa mémoire et son cache d'embeddings, dans la même base.
+ * Avant qu'un changement élargisse son audience, Helix met ses notes de côté
+ * (copie chiffrée, que son propriétaire peut restaurer tant que l'audience
+ * n'est pas plus large qu'au moment de la copie), puis vide les trois, et
+ * vérifie. Si l'une des étapes échoue, le changement est refusé : il ne prend
+ * jamais effet sur une mémoire pleine.
+ */
+
+const racineDonnees = () => process.env.HELIX_DATA_DIR ?? join(homedir(), ".helix", "data");
+/**
+ * Hors du dossier d'OpenClaw : au palier « libre », l'employé lit et écrit
+ * partout sur la machine, et ne doit ni effacer la trace de ses lectures ni
+ * atteindre la copie (chiffrée de toute façon).
+ */
+const dossierMemoire = (id: string) => join(racineDonnees(), "memoires-employes", id);
+const fichierLectures = (id: string) => join(dossierMemoire(id), "lectures.json");
+const indexCopies = (id: string) => join(dossierMemoire(id), "copies.json");
+const fichierCopie = (id: string, copie: string) => join(dossierMemoire(id), `${copie}.hlx`);
+const placeCopie = (id: string, copie: string) => `memoire-employe:${id}:${copie}`;
+
+/** Fichiers de son espace qu'Helix réécrit à chaque changement : ce n'est pas sa mémoire. */
+const FICHIERS_HELIX = new Set(["SOUL.md", "AGENTS.md", "IDENTITY.md", "USER.md"]);
+/** Au-delà, la copie n'est pas faite (et le changement refusé) : rien n'est vidé sans copie. */
+const COPIE_MAX_OCTETS = 64 * 1024 * 1024;
+const COPIE_MAX_FICHIERS = 5_000;
+
+/**
+ * Note qu'il vient de lire ce qui n'est pas ouvert à toute l'équipe (des
+ * nombres, jamais ce qu'il a lu). Un fichier par employé, écrit d'un bloc :
+ * pas de liste commune qu'une écriture ratée viderait.
+ */
+export function noterLectureHorsEquipe(id: string, passages: number): void {
+  if (passages <= 0) return;
+  try {
+    const f = fichierLectures(id);
+    let avant: { passages?: number; premiere?: string } = {};
+    try {
+      avant = JSON.parse(readFileSync(f, "utf8")) as typeof avant;
+    } catch {
+      /* première lecture, ou fichier abîmé : on repart du nombre de cet appel */
+    }
+    const maintenant = new Date().toISOString();
+    mkdirSync(dirname(f), { recursive: true, mode: 0o700 });
+    writeFileSync(`${f}.tmp`, JSON.stringify({ passages: (avant.passages ?? 0) + passages, premiere: avant.premiere ?? maintenant, derniere: maintenant }), { mode: 0o600 });
+    renameSync(`${f}.tmp`, f);
+  } catch {
+    /* disque plein, droits : `aPuLireHorsEquipe` retombe sur ses réglages, qui suffisent à le dire */
+  }
+}
+
+/**
+ * A-t-il pu lire ce qui n'est pas ouvert à toute l'équipe ? Oui s'il l'a fait
+ * (trace ci-dessus), ou si ses réglages le lui permettaient et qu'il a des
+ * bases : on ne suppose pas qu'il ne s'en est pas servi.
+ */
+function aPuLireHorsEquipe(e: Employe): boolean {
+  if (existsSync(fichierLectures(e.id))) return true;
+  return (e.connaissances?.length ?? 0) > 0 && lectureDesBases(e).regle !== "equipe";
+}
+
+/** Ses notes : tout son espace, sauf les fiches qu'Helix réécrit et les documents confiés par son propriétaire. */
+function fichiersDeMemoire(id: string): { chemin: string; taille: number; lien: boolean }[] {
+  const espace = espaceDe(id);
+  const liste: { chemin: string; taille: number; lien: boolean }[] = [];
+  const parcourir = (rel: string, profondeur: number) => {
+    if (profondeur > 16 || liste.length > COPIE_MAX_FICHIERS) return;
+    let noms: string[];
+    try {
+      noms = readdirSync(rel ? join(espace, rel) : espace);
+    } catch {
+      return;
+    }
+    for (const n of noms) {
+      if (!rel && (FICHIERS_HELIX.has(n) || n === "documents" || n === DOSSIER_ETAT_OPENCLAW)) continue;
+      const r = rel ? `${rel}/${n}` : n;
+      let st;
+      try {
+        st = lstatSync(join(espace, r));
+      } catch {
+        continue;
+      }
+      // Un lien n'est pas suivi : il est retiré, pas ce vers quoi il pointe.
+      if (st.isSymbolicLink()) liste.push({ chemin: r, taille: 0, lien: true });
+      else if (st.isDirectory()) parcourir(r, profondeur + 1);
+      else if (st.isFile()) liste.push({ chemin: r, taille: st.size, lien: false });
+    }
+  };
+  parcourir("", 0);
+  return liste;
+}
+
+/** État propre à OpenClaw dans l'espace (amorçage fait ou non) : le retirer relancerait son rituel de premier démarrage. */
+const DOSSIER_ETAT_OPENCLAW = ".openclaw";
+
+interface CopieMemoire {
+  id: string;
+  quand: string;
+  fichiers: number;
+  octets: number;
+  conversations: number;
+  /** Son audience quand la copie a été faite : la restaurer n'est permis que si l'actuelle n'est pas plus large. */
+  audience: Audience;
+  raisons: RaisonElargissement[];
+}
+
+function lireCopies(id: string): CopieMemoire[] | null {
+  const f = indexCopies(id);
+  if (!existsSync(f)) return [];
+  try {
+    const v = JSON.parse(readFileSync(f, "utf8")) as unknown;
+    return Array.isArray(v) ? (v as CopieMemoire[]) : null;
+  } catch {
+    return null;
+  }
+}
+
+function ecrireCopies(id: string, liste: CopieMemoire[]): void {
+  const f = indexCopies(id);
+  mkdirSync(dirname(f), { recursive: true, mode: 0o700 });
+  writeFileSync(`${f}.tmp`, JSON.stringify(liste), { mode: 0o600 });
+  renameSync(`${f}.tmp`, f);
+}
+
+/** Travaille-t-il en ce moment ? Vider sa mémoire au milieu d'une réponse la verrait réécrite juste après. */
+function occupe(id: string): boolean {
+  if (traiteUnMailRecu(id)) return true;
+  for (const t of travaux.values()) if (t.employe === id && t.etat === "en-cours") return true;
+  return false;
+}
+
+/** Clés des conversations d'un agent chez OpenClaw ; `null` si l'instance n'a pas pu les dire. */
+async function conversationsDe(agent: string): Promise<string[] | null> {
+  const r = await oc(["sessions", "--agent", agent, "--json", "--limit", "all"]);
+  if (!r.ok) return null;
+  return [...new Set(r.sortie.match(new RegExp(`agent:${echapper(agent)}:[^"\\s,\\]}]+`, "g")) ?? [])];
+}
+
+/** Ce qui l'empêche d'élargir son audience sans confirmation : le code que l'écran reconnaît. */
+export const CODE_MEMOIRE = "memoire-a-vider";
+
+function refusMemoire(e: Employe, raisons: RaisonElargissement[]): Resultat<never> {
+  return {
+    ok: false,
+    statut: 409,
+    code: CODE_MEMOIRE,
+    details: { raisons },
+    message: tf(
+      "{0} a pu lire des documents qui ne sont pas ouverts à toute l'équipe. Avant que ce changement prenne effet, sa mémoire doit être mise de côté puis vidée : confirmez-le.",
+      e.nom,
+    ),
+  };
+}
+
+/**
+ * Met de côté puis vide la mémoire OpenClaw d'un employé, et vérifie qu'elle
+ * l'est. `avant` : l'employé tel qu'il est enregistré, avant le changement
+ * qui élargit son audience (c'est cette audience-là que la copie retient).
+ */
+async function viderMemoire(
+  avant: Employe,
+  qui: string,
+  raisons: RaisonElargissement[],
+): Promise<Resultat<{ fichiers: number; conversations: number; copie: string }>> {
+  const id = avant.id;
+  const agent = nomOpenClaw(id);
+  const echec = (etape: string, message: string): Resultat<never> => {
+    journaliser("employe.memoire_non_videe", qui, { employe: id, etape });
+    return { ok: false, statut: 409, message: tf("{0} Le changement n'a pas été fait : sa mémoire n'est pas vidée.", message) };
+  };
+  if (enMaintenance) return echec("maintenance", t("OpenClaw est en cours de mise à jour : réessayez dans une minute ou deux."));
+  if (occupe(id)) return echec("occupe", tf("{0} travaille en ce moment : réessayez quand il aura fini.", avant.nom));
+  const { moteur, raison } = await detecterMoteur();
+  if (!moteur) return echec("moteur", raison ?? t("OpenClaw introuvable."));
+  const cles = await conversationsDe(agent);
+  if (!cles) return echec("conversations", (await instanceMuette()) ?? t("L'instance de vos agents n'a pas pu dire ses conversations."));
+
+  // 1. La copie, d'abord, et relue : rien n'est vidé tant qu'elle n'est pas sûre.
+  const fichiers = fichiersDeMemoire(id);
+  const octets = fichiers.reduce((n, f) => n + f.taille, 0);
+  if (fichiers.length > COPIE_MAX_FICHIERS || octets > COPIE_MAX_OCTETS) {
+    return echec("taille", tf("Sa mémoire est trop lourde pour être mise de côté ({0} fichiers).", fichiers.length));
+  }
+  const copie = `${new Date().toISOString().replace(/[:.]/g, "-")}-${randomBytes(3).toString("hex")}`;
+  const copies = lireCopies(id);
+  if (!copies) return echec("index", t("La liste de ses mémoires mises de côté est illisible."));
+  try {
+    const contenu = fichiers
+      .filter((f) => !f.lien)
+      .map((f) => ({ chemin: f.chemin, contenu: readFileSync(join(espaceDe(id), f.chemin)).toString("base64") }));
+    const clair = Buffer.from(JSON.stringify({ version: 1, employe: id, quand: new Date().toISOString(), fichiers: contenu }));
+    const chemin = fichierCopie(id, copie);
+    mkdirSync(dirname(chemin), { recursive: true, mode: 0o700 });
+    writeFileSync(`${chemin}.tmp`, chiffrerOctets(clair, placeCopie(id, copie)), { mode: 0o600 });
+    renameSync(`${chemin}.tmp`, chemin);
+    if (!dechiffrerOctets(readFileSync(chemin), placeCopie(id, copie)).equals(clair)) throw new Error("copie relue différente");
+    ecrireCopies(id, [
+      ...copies,
+      { id: copie, quand: new Date().toISOString(), fichiers: contenu.length, octets, conversations: cles.length, audience: audienceDe(avant), raisons },
+    ]);
+  } catch (err) {
+    rmSync(fichierCopie(id, copie), { force: true });
+    return echec("copie", tf("Sa mémoire n'a pas pu être mise de côté : {0}", messageErreur(err)));
+  }
+
+  // 2. Ses conversations, les traces que sa mémoire en a tirées, et leurs archives.
+  for (const cle of cles) {
+    await oc(["sessions", "delete", cle, "--agent", agent, "--yes", "--json"]);
+    await oc(["memory", "forget", "--agent", agent, "--session", cle, "--yes"]);
+  }
+  await effacerArchives(agent, cles);
+  // 3. Ses notes.
+  for (const f of fichiers) rmSync(join(espaceDe(id), f.chemin), { force: true, recursive: true });
+  for (const d of [...new Set(fichiers.map((f) => dirname(f.chemin)).filter((d) => d !== "."))].sort((a, b) => b.length - a.length)) {
+    try {
+      if (readdirSync(join(espaceDe(id), d)).length === 0) rmSync(join(espaceDe(id), d), { recursive: true, force: true });
+    } catch {
+      /* déjà parti */
+    }
+  }
+  // Ses fiches, réécrites : `USER.md` est aussi une mémoire pour OpenClaw, qu'il aurait pu compléter.
+  ecrireEspace(avant);
+  // 4. L'index de sa mémoire et son cache d'embeddings (des morceaux de ses notes).
+  let index = await oc(["memory", "reset", "--agent", agent, "--yes"]);
+  if (!index.ok) index = await oc(["memory", "index", "--force", "--agent", agent]);
+
+  // 5. Vérifié : plus une conversation, plus une note, un index refait.
+  const restantes = await conversationsDe(agent);
+  const notes = fichiersDeMemoire(id).length;
+  if (!index.ok) return echec("index-memoire", t("L'index de sa mémoire n'a pas pu être vidé. Réessayez."));
+  if (!restantes || restantes.length > 0 || notes > 0) {
+    return echec("verification", tf("Vérification : {0} conversation(s) et {1} note(s) restent. Réessayez.", restantes?.length ?? "?", notes));
+  }
+  rmSync(fichierLectures(id), { force: true });
+  journaliser("employe.memoire_videe", qui, { employe: id, copie, fichiers: fichiers.length, octets, conversations: cles.length, raisons });
+  return { ok: true, valeur: { fichiers: fichiers.length, conversations: cles.length, copie } };
+}
+
+/** Ce que son propriétaire voit de ses mémoires mises de côté : des nombres et des dates. */
+export interface VueCopieMemoire {
+  id: string;
+  quand: string;
+  fichiers: number;
+  octets: number;
+  conversations: number;
+  raisons: RaisonElargissement[];
+  /** Faux si son audience est aujourd'hui plus large qu'au moment de la copie. */
+  restaurable: boolean;
+}
+
+export async function copiesMemoire(id: string, qui: string): Promise<Resultat<{ copies: VueCopieMemoire[]; aLuHorsEquipe: boolean }>> {
+  const e = await employe(id);
+  if (!e) return { ok: false, statut: 404, message: t("Agent introuvable.") };
+  if (e.ownerId !== qui) return { ok: false, statut: 403, message: t("Cet agent ne vous appartient pas.") };
+  const copies = lireCopies(id);
+  if (!copies) return { ok: false, statut: 500, message: t("La liste de ses mémoires mises de côté est illisible.") };
+  const actuelle = audienceDe(e);
+  return {
+    ok: true,
+    valeur: {
+      aLuHorsEquipe: existsSync(fichierLectures(id)),
+      copies: copies
+        .filter((c) => existsSync(fichierCopie(id, c.id)))
+        .map((c) => ({ id: c.id, quand: c.quand, fichiers: c.fichiers, octets: c.octets, conversations: c.conversations, raisons: c.raisons, restaurable: !audiencePlusLarge(c.audience, actuelle) }))
+        .reverse(),
+    },
+  };
+}
+
+/**
+ * Remet ses notes mises de côté dans son espace. Seulement si son audience
+ * n'est pas plus large qu'au moment de la copie : sinon, restaurer ferait
+ * exactement ce que le vidage a empêché. Un fichier du même nom déjà là
+ * n'est pas écrasé : la note restaurée arrive à côté. Les conversations ne
+ * reviennent pas (elles ont été effacées chez OpenClaw) ; les échanges que
+ * Helix garde pour chacun restent, eux, à l'écran.
+ */
+export async function restaurerMemoire(id: string, copie: string, qui: string): Promise<Resultat<{ fichiers: number }>> {
+  const e = await employe(id);
+  if (!e) return { ok: false, statut: 404, message: t("Agent introuvable.") };
+  if (e.ownerId !== qui) return { ok: false, statut: 403, message: t("Cet agent ne vous appartient pas.") };
+  const c = (lireCopies(id) ?? []).find((x) => x.id === copie);
+  if (!c || !/^[\w-]+$/.test(copie) || !existsSync(fichierCopie(id, copie))) return { ok: false, statut: 404, message: t("Copie introuvable.") };
+  if (audiencePlusLarge(c.audience, audienceDe(e))) {
+    return {
+      ok: false,
+      statut: 409,
+      message: t("Son audience est aujourd'hui plus large qu'au moment de la copie : la restaurer ferait sortir ce qu'il avait lu. Refermez-le d'abord (même visibilité, sans messagerie, sans outil qui écrit, en liberté « Encadré »)."),
+    };
+  }
+  if (occupe(id)) return { ok: false, statut: 409, message: tf("{0} travaille en ce moment : réessayez quand il aura fini.", e.nom) };
+  let fichiers: { chemin: string; contenu: string }[];
+  try {
+    const v = JSON.parse(dechiffrerOctets(readFileSync(fichierCopie(id, copie)), placeCopie(id, copie)).toString("utf8")) as { fichiers?: unknown };
+    fichiers = Array.isArray(v.fichiers) ? (v.fichiers as { chemin: string; contenu: string }[]) : [];
+  } catch (err) {
+    return { ok: false, statut: 500, message: tf("La copie n'a pas pu être relue : {0}", messageErreur(err)) };
+  }
+  const espace = espaceDe(id);
+  let remis = 0;
+  for (const f of fichiers) {
+    if (typeof f.chemin !== "string" || typeof f.contenu !== "string") continue;
+    const parts = f.chemin.split("/");
+    // Rien hors de son espace, rien dans les fiches qu'Helix écrit.
+    if (parts.some((p) => !p || p === "." || p === "..") || (parts.length === 1 && FICHIERS_HELIX.has(parts[0]!)) || parts[0] === "documents") continue;
+    let cible = join(espace, ...parts);
+    if (existsSync(cible)) cible = cible.replace(/(\.[^./]+)?$/, (ext) => `.restaure${ext}`);
+    mkdirSync(dirname(cible), { recursive: true, mode: 0o700 });
+    writeFileSync(cible, Buffer.from(f.contenu, "base64"), { mode: 0o600 });
+    remis++;
+  }
+  // Sa mémoire contient de nouveau ce qu'il avait lu : un élargissement suivant la videra.
+  noterLectureHorsEquipe(id, 1);
+  journaliser("employe.memoire_restauree", qui, { employe: id, copie, fichiers: remis });
+  return { ok: true, valeur: { fichiers: remis } };
+}
+
+export async function supprimerCopieMemoire(id: string, copie: string, qui: string): Promise<Resultat<null>> {
+  const e = await employe(id);
+  if (!e) return { ok: false, statut: 404, message: t("Agent introuvable.") };
+  if (e.ownerId !== qui) return { ok: false, statut: 403, message: t("Cet agent ne vous appartient pas.") };
+  const copies = lireCopies(id);
+  if (!copies) return { ok: false, statut: 500, message: t("La liste de ses mémoires mises de côté est illisible.") };
+  if (!copies.some((c) => c.id === copie)) return { ok: false, statut: 404, message: t("Copie introuvable.") };
+  rmSync(fichierCopie(id, copie), { force: true });
+  ecrireCopies(id, copies.filter((c) => c.id !== copie));
+  journaliser("employe.memoire_copie_supprimee", qui, { employe: id, copie });
+  return { ok: true, valeur: null };
 }
 
 function lireJson<T>(texte: string): T | null {
@@ -1387,7 +1849,8 @@ function nettoyerMissions(v: unknown): Mission[] {
 
 export type Resultat<T> =
   | { ok: true; valeur: T; avertissement?: string }
-  | { ok: false; statut: number; message: string };
+  /** `code` : un refus que l'écran sait traiter (`CODE_MEMOIRE`), avec ses `details`. */
+  | { ok: false; statut: number; message: string; code?: string; details?: Record<string, unknown> };
 
 const messageErreur = (err: unknown) => (err instanceof Error ? err.message : String(err));
 
@@ -1413,6 +1876,9 @@ async function avertissementCourrier(e: Employe): Promise<string | null> {
 
 const joindre = (...avertissements: (string | null)[]) => avertissements.filter(Boolean).join(" ") || null;
 
+const messageMemoireVidee = (m: { fichiers: number; conversations: number }) =>
+  tf("Sa mémoire a été mise de côté (copie chiffrée, dans ses réglages) puis vidée : {0} note(s), {1} conversation(s).", m.fichiers, m.conversations);
+
 /**
  * Longueur maximale du poste (les instructions) d'un employé. Elle valait
  * 4 000 caractères et coupait sans rien dire des instructions que la fenêtre
@@ -1421,11 +1887,29 @@ const joindre = (...avertissements: (string | null)[]) => avertissements.filter(
  */
 export const POSTE_MAX = 50_000;
 
+/**
+ * Groupes à qui une personne peut partager un agent : des groupes qui
+ * existent, dont elle est membre (même règle que la Bibliothèque et les bases
+ * de connaissances), ou que l'agent avait déjà (sortie d'un groupe, elle ne
+ * le retire pas sans le vouloir en changeant autre chose).
+ */
+async function groupesAdmis(v: unknown, qui: string, deja: string[] = []): Promise<string[]> {
+  if (!Array.isArray(v)) return [];
+  const existants = new Set((await listerGroupes()).map((g) => g.id));
+  const siens = new Set(await groupesDe(qui));
+  return [...new Set(v.filter((x): x is string => typeof x === "string" && existants.has(x) && (siens.has(x) || deja.includes(x))))].slice(0, 50);
+}
+
+const VISIBILITES = ["personnel", "groupes", "organisation"] as const;
+
 export async function deployer(brut: Record<string, unknown>, qui: string, modele: string): Promise<Resultat<Employe>> {
   const nom = typeof brut.nom === "string" ? brut.nom.trim().slice(0, 60) : "";
   const poste = typeof brut.poste === "string" ? brut.poste.trim().slice(0, POSTE_MAX) : "";
   if (!nom) return { ok: false, statut: 400, message: t("Donnez un nom à l'agent.") };
   if (!poste) return { ok: false, statut: 400, message: t("Décrivez son poste en quelques phrases.") };
+  const visibilite = VISIBILITES.includes(brut.visibilite as (typeof VISIBILITES)[number]) ? (brut.visibilite as Employe["visibilite"]) : "organisation";
+  const groupes = visibilite === "groupes" ? await groupesAdmis(brut.groupes, qui) : [];
+  if (visibilite === "groupes" && groupes.length === 0) return { ok: false, statut: 400, message: t("Choisissez au moins un de vos groupes.") };
   const { moteur, raison } = await detecterMoteur(true);
   if (!moteur) return { ok: false, statut: 409, message: raison ?? t("OpenClaw introuvable.") };
 
@@ -1453,7 +1937,8 @@ export async function deployer(brut: Record<string, unknown>, qui: string, model
     ...(typeof brut.description === "string" && brut.description.trim() ? { description: brut.description.trim().slice(0, 500) } : {}),
     ...(typeof brut.agentId === "string" && brut.agentId ? { agentId: brut.agentId.slice(0, 80) } : {}),
     ...(nettoyerConnaissances(brut.connaissances).length > 0 ? { connaissances: nettoyerConnaissances(brut.connaissances) } : {}),
-    visibilite: brut.visibilite === "personnel" ? "personnel" : "organisation",
+    visibilite,
+    ...(visibilite === "groupes" ? { groupes } : {}),
     missions: nettoyerMissions(brut.missions),
     enPause: false,
     autonome: brut.autonome === true,
@@ -1506,6 +1991,8 @@ export async function deployer(brut: Record<string, unknown>, qui: string, model
     liberte: e.liberte,
     modele,
     connaissances: e.connaissances?.length ?? 0,
+    visibilite: e.visibilite,
+    groupes: e.groupes?.length ?? 0,
   });
   return { ok: true, valeur: e, ...(avertissement ? { avertissement } : {}) };
 }
@@ -1517,6 +2004,8 @@ export async function modifier(id: string, brut: Record<string, unknown>, qui: s
   if (e.ownerId !== qui) {
     return { ok: false, statut: 403, message: t("Seule la personne qui l'a créé peut le modifier.") };
   }
+  // Tel qu'il est enregistré : c'est l'audience d'avant le changement que l'on compare.
+  const avant = JSON.parse(JSON.stringify(e)) as Employe;
   if (typeof brut.enPause === "boolean") e.enPause = brut.enPause;
   if (typeof brut.autonome === "boolean") e.autonome = brut.autonome;
   // Le modèle a été vérifié par la route (existe, et accessible à cette personne).
@@ -1532,11 +2021,30 @@ export async function modifier(id: string, brut: Record<string, unknown>, qui: s
     e.connaissances = ids.length > 0 ? ids : undefined;
   }
   if (typeof brut.description === "string") e.description = brut.description.trim().slice(0, 500) || undefined;
-  if (brut.visibilite === "personnel" || brut.visibilite === "organisation") e.visibilite = brut.visibilite;
+  if (VISIBILITES.includes(brut.visibilite as (typeof VISIBILITES)[number])) e.visibilite = brut.visibilite as Employe["visibilite"];
+  if (e.visibilite === "groupes") {
+    if (brut.groupes !== undefined) e.groupes = await groupesAdmis(brut.groupes, qui, avant.groupes ?? []);
+    if ((e.groupes ?? []).length === 0) return { ok: false, statut: 400, message: t("Choisissez au moins un de vos groupes.") };
+  } else {
+    delete e.groupes;
+  }
   const missionsAvant = e.missions;
   if (brut.missions !== undefined) e.missions = nettoyerMissions(brut.missions);
   const refusCourrier = refusMissionsCourrier(e);
   if (refusCourrier) return { ok: false, statut: 400, message: refusCourrier };
+  /*
+   * Son audience s'élargit alors qu'il a pu lire ce qui n'est pas ouvert à
+   * toute l'équipe : sa mémoire est mise de côté et vidée **avant** que le
+   * changement prenne effet, et seulement si son propriétaire l'a confirmé.
+   */
+  const elargi = elargissement(avant, e);
+  let memoire: { fichiers: number; conversations: number } | null = null;
+  if (elargi.length > 0 && aPuLireHorsEquipe(avant)) {
+    if (brut.viderMemoire !== true) return refusMemoire(e, elargi);
+    const vide = await viderMemoire(avant, qui, elargi);
+    if (!vide.ok) return vide;
+    memoire = vide.valeur;
+  }
   e.updatedAt = new Date().toISOString();
   try {
     ecrireEspace(e);
@@ -1545,7 +2053,7 @@ export async function modifier(id: string, brut: Record<string, unknown>, qui: s
     return { ok: false, statut: 500, message: tf("Mise à jour impossible : {0}", messageErreur(err)) };
   }
   await retirerMissions(missionsAvant);
-  const avertissement = joindre(await planifier(e), await avertissementCourrier(e));
+  const avertissement = joindre(memoire ? messageMemoireVidee(memoire) : null, await planifier(e), await avertissementCourrier(e));
   await enregistrer(liste);
   if ((e.liberte ?? "encadre") !== liberteAvant) {
     journaliser("employe.liberte", qui, { employe: e.id, de: liberteAvant, a: e.liberte });
@@ -1558,6 +2066,8 @@ export async function modifier(id: string, brut: Record<string, unknown>, qui: s
     missions: e.missions.length,
     modele: e.modele,
     connaissances: e.connaissances?.length ?? 0,
+    visibilite: e.visibilite,
+    groupes: e.groupes?.length ?? 0,
   });
   return { ok: true, valeur: e, ...(avertissement ? { avertissement } : {}) };
 }
@@ -1579,6 +2089,8 @@ async function retirer(e: Employe, reste: Employe[]): Promise<void> {
   rmSync(espaceDe(e.id), { recursive: true, force: true });
   await oc(["agents", "delete", nomOpenClaw(e.id), "--force", "--json"]);
   rmSync(join(dossier(), "agents", nomOpenClaw(e.id)), { recursive: true, force: true });
+  // Ses mémoires mises de côté, et la trace de ce qu'il a lu : elles n'ont plus de propriétaire à qui revenir.
+  rmSync(dossierMemoire(e.id), { recursive: true, force: true });
   try {
     await reconfigurer(reste);
   } catch {
@@ -1988,7 +2500,17 @@ export async function brancherCanal(id: string, brut: Record<string, unknown>, q
     ...(Object.keys(reglages).length > 0 ? { reglages } : {}),
     ajouteLe: new Date().toISOString(),
   };
+  const avant = JSON.parse(JSON.stringify(e)) as Employe;
   e.canaux = [...(e.canaux ?? []).filter((c) => c.type !== type), canal];
+  // Joint sur une messagerie, il répond à des gens sans compte : sa mémoire d'abord (voir `modifier`).
+  const elargi = elargissement(avant, e);
+  let memoire: { fichiers: number; conversations: number } | null = null;
+  if (elargi.length > 0 && aPuLireHorsEquipe(avant)) {
+    if (brut.viderMemoire !== true) return refusMemoire(e, elargi);
+    const vide = await viderMemoire(avant, qui, elargi);
+    if (!vide.ok) return vide;
+    memoire = vide.valeur;
+  }
   if (Object.keys(secrets).length > 0) {
     (secretsCanaux[e.id] ??= {})[type] = secrets;
     await enregistrerSecretsCanaux();
@@ -2000,7 +2522,7 @@ export async function brancherCanal(id: string, brut: Record<string, unknown>, q
   }
   await enregistrer(liste);
   journaliser("employe.canal_branche", qui, { employe: e.id, canal: type, acces, outilsEntreprise: canal.outilsEntreprise });
-  return { ok: true, valeur: e };
+  return { ok: true, valeur: e, ...(memoire ? { avertissement: messageMemoireVidee(memoire) } : {}) };
 }
 
 export async function retirerCanal(id: string, type: string, qui: string): Promise<Resultat<Employe>> {

@@ -740,16 +740,47 @@ Pourquoi ainsi :
   « Encadré », sans outil qui écrit ou envoie là où d'autres lisent (fichiers de
   l'équipe, documents Office, mails, donc sans « Autoriser les outils »). Il lit alors
   aussi les bases et les documents partagés aux groupes dont son propriétaire est
-  membre à cet instant : son seul destinataire les voit lui-même. Jamais les documents
-  privés du propriétaire (la question du point 18 reste au client). Tout est relu à
+  membre à cet instant : son seul destinataire les voit lui-même. (Le soir même, ses
+  documents privés aussi : voir le point suivant.) Tout est relu à
   chaque appel (`employes.ts`, `lectureDesBases`) : ouvert à l'organisation, branché à
   une messagerie, doté d'un outil qui écrit, sorti du groupe, il revient aussitôt à la
-  règle de l'équipe. Pourquoi pas plus large : un agent partagé à des groupes précis
-  n'existe pas dans le code (un agent est personnel ou d'organisation), et un agent
-  d'organisation parle à tout le monde ; ces cas gardent la règle de l'équipe. Limite
-  dite à l'écran : ce qu'il a déjà noté dans sa mémoire OpenClaw y reste quand son
-  audience s'élargit. L'écran de l'agent dit, base par base, ce qu'il lira et pourquoi
+  règle de l'équipe. L'écran de l'agent dit, base par base, ce qu'il lira et pourquoi
   pas le reste.
+- **Les trois questions du point 18, tranchées** (25/09/2026, le soir ; Medhi : « fais
+  au mieux »). Toujours la même règle : ce qui sort de l'employé ne va qu'à des gens qui
+  ont le droit de le voir, relu à chaque appel, sans cache (`lecteursDe`).
+  - **Agents partagés à des groupes** : visibilité « Groupes » à côté de « Personnel » et
+    « Organisation », choisie comme dans la Bibliothèque (seulement ses groupes). Seuls
+    les membres de ces groupes à l'instant voient l'agent, le reçoivent par la
+    synchronisation (`authz.ts`), lui parlent ; qui quitte le groupe ne le voit plus
+    (404) ; seul son propriétaire le modifie. Son employé, s'il remplit les mêmes
+    conditions de sortie, lit en plus ce qui est partagé à **chacun** de ses groupes (et
+    que son propriétaire voit) : un document partagé au seul groupe A n'est pas lu par
+    l'agent des groupes A et B, un membre de B le recevrait. La règle tient quand un
+    groupe change de membres. Jamais un document privé, de personne.
+  - **Documents privés du propriétaire** : un agent personnel qui remplit les cinq
+    conditions lit tout ce que son propriétaire voit, ses documents et bases privés
+    compris : il ne produit que pour lui. Jamais le privé d'une autre personne.
+  - **La mémoire quand l'audience s'élargit** : un changement qui élargit l'audience
+    d'un employé qui a pu lire hors de l'équipe (visibilité, groupe ajouté, messagerie,
+    mission à chaque mail, liberté, outil qui écrit) est refusé tant que son
+    propriétaire n'a pas confirmé à l'écran ; confirmé, Helix met ses notes de côté
+    (copie chiffrée hors du dossier d'OpenClaw, restaurable par le propriétaire tant que
+    l'audience n'est pas plus large qu'au moment de la copie), efface ses conversations
+    chez OpenClaw (`sessions delete`, `memory forget`, archives), ses notes, l'index de
+    sa mémoire (`memory reset`), vérifie, et seulement alors applique le changement. Une
+    étape ratée : le changement n'est pas fait, l'écran le dit. « A pu lire » : une trace
+    notée à chaque passage lu hors de l'équipe, ou des réglages qui le permettaient avec
+    des bases (on ne suppose pas qu'il ne s'en est pas servi).
+  - Où OpenClaw 2026.9.4 garde la mémoire d'un agent, relevé sur l'OpenClaw d'essai le
+    25/09 : notes dans son espace (`MEMORY.md`, `memory/*.md`, tout fichier écrit),
+    conversations et index dans `agents/<agent>/agent/openclaw-agent.sqlite`, archives
+    dans `agents/<agent>/sessions/`. **Restent hors de portée du vidage** : les pages
+    libérées de cette base SQLite (plus aucune ligne ne porte le mot de contrôle, mais
+    le fichier brut le garde), le registre des tâches d'OpenClaw
+    (`state/openclaw.sqlite`, les questions posées, gardées 7 jours) et ses journaux
+    (`journaux/`, les réponses). Aucun outil d'un employé encadré ou étendu ne les
+    atteint ; au palier Libre, qui lit toute la machine (sous mot de passe), si.
 
 ### 3.11 Ligne de commande : un client de plus, qui ne décide rien
 
@@ -2401,21 +2432,34 @@ ne restent ici que les points ouverts.*
     `connaissances__chercher`, § 3.10) ; l'après-midi, un agent personnel dont rien ne
     sort vers d'autres (sans messagerie, sans mission « à chaque mail », encadré, sans
     outil qui écrit) lit aussi les bases partagées aux groupes de son propriétaire, et
-    l'écran de l'agent dit ce qu'il lira. Reste : le voir dans l'application de bureau
-    (vu dans le navigateur seulement) ; l'essayer sur une messagerie ; décider avec le
-    client (a) si un tel agent pourrait lire aussi les **documents privés** de son
-    propriétaire (non fait : sa mémoire OpenClaw les garderait si l'agent est ouvert
-    ensuite), (b) s'il faut une visibilité « partagé à des groupes » pour les agents,
-    qui ouvrirait le même droit à un agent de groupe (n'existe pas : un agent est
-    personnel ou d'organisation), (c) que faire de la mémoire d'un employé dont
-    l'audience s'élargit (aujourd'hui gardée, l'écran le dit).
+    l'écran de l'agent dit ce qu'il lira. Le soir, les trois questions tranchées (§ 3.10) :
+    agents partagés à des groupes, documents privés lus par l'agent personnel de leur
+    propriétaire, mémoire mise de côté et vidée avant tout élargissement de l'audience.
+    Vérifié le 25/09/2026 : `npm run securite` (201 contrôles), et avec l'OpenClaw
+    2026.9.4 d'essai et qwen3-8b (instance jetable 8899, OpenClaw 18877) : l'agent
+    personnel d'Alice rend son code privé ZEBRE-7731 et l'écrit dans
+    `memory/2026-09-25.md` ; ouvert à l'organisation après confirmation (7,4 s pour
+    vider : 1 note, 1 conversation), un collègue lui demande ce code, il répond que les
+    documents n'en parlent pas ; l'agent du groupe Compta répond à Bernard
+    « PAPAYE-3150 » sans le privé d'Alice ; sorti du groupe, Bernard reçoit 404 ; clé
+    par employé en place, l'employé répond toujours après la réécriture de la
+    configuration. Reste : le voir dans l'application de bureau ; l'essayer sur une
+    vraie messagerie ; au palier Libre, les restes hors mémoire (pages libérées de sa
+    base SQLite, registre des tâches, journaux d'OpenClaw) lui sont lisibles, le dire
+    au client ; une mission planifiée qui tournerait pendant le vidage n'est pas
+    détectée (seuls les messages et mails en cours le sont).
 19. **Export RGPD** : fait le 25/09/2026, `/helix/export` contient désormais les bases
     de connaissances (sans vecteurs), les images créées (liste et demandes) et les
     projets d'entraînement (exemples) ; l'effacement d'un compte retire aussi ses
     projets d'entraînement et le modèle rangé dans LM Studio, qu'il oubliait
-    (7 contrôles de plus, section 7 quater de `npm run securite`). Reste : un document supprimé de Fichiers reste listé dans la
-    base (« supprimés depuis ») jusqu'à ce que le propriétaire l'y retire ; son index
-    reste sur le disque jusque-là, sans plus jamais être servi.
+    (7 contrôles de plus, section 7 quater de `npm run securite`). Corrigé le soir
+    (revue du 25/09) : un document supprimé de Fichiers quitte toutes les bases, index
+    compris (`retirerDocumentsPartout`) ; l'effacement d'un compte retire ses documents
+    des bases des collègues (relevés avant que la Bibliothèque ne les oublie : le filtre
+    « ajouté par lui » n'attrapait rien) ; l'export ne nomme plus un document rangé dans
+    une base que la personne ne voit plus, il le compte ; et une clé par employé
+    (HMAC de la clé de l'instance et de son identifiant) remplace la clé commune, qui
+    ouvrait le serveur d'outils de n'importe quel employé. 4 contrôles de plus.
 20. **À essayer dans l'application de bureau** : le fichier des Chats illisible est vu
     le 25/09/2026 dans l'application de développement, profil d'essai (fichier abîmé,
     instance coupée, écriture refusée) ; reste le **trousseau refusé ou verrouillé**

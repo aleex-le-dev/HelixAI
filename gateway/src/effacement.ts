@@ -205,8 +205,15 @@ export async function effacerCompte(
 
   // Ses groupes : il en sort ; un groupe resté vide disparaît, un groupe sans responsable en reçoit un.
   const groupesQuittes = await oublierPersonneGroupes(userId);
+  /*
+   * Ses documents, relevés **avant** que la Bibliothèque ne les oublie : ils
+   * quittent ensuite toutes les bases de connaissances, celles des collègues
+   * comprises, index compris (connaissances.ts). Après, plus rien ne dit
+   * qu'ils étaient à lui.
+   */
+  const sesDocuments = (await elementsDe(userId)).filter((e) => e.type === "document").map((e) => e.id);
   const elementsBibliotheque = await oublierPersonneBibliotheque(userId);
-  const basesDeConnaissances = await oublierPersonneConnaissances(userId);
+  const basesDeConnaissances = await oublierPersonneConnaissances(userId, sesDocuments);
   // Ses projets d'entraînement, et le modèle qu'il a pu ranger dans LM Studio (entrainement.ts).
   const entrainement = await oublierPersonneEntrainement(userId);
   const reunionsEffacees = await oublierPersonneReunions(userId);

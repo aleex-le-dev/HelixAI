@@ -151,6 +151,15 @@ export type AuditAction =
   /** Canaux des employés : quel canal, jamais les jetons ni les messages. */
   | "employe.canal_branche"
   | "employe.canal_retire"
+  /**
+   * Sa mémoire OpenClaw mise de côté et vidée avant que son audience
+   * s'élargisse (ou l'étape qui a échoué), restaurée, ou une copie supprimée :
+   * des nombres et des noms de réglages, jamais une note ni une conversation.
+   */
+  | "employe.memoire_videe"
+  | "employe.memoire_non_videe"
+  | "employe.memoire_restauree"
+  | "employe.memoire_copie_supprimee"
   | "employe.whatsapp_lie"
   | "employe.acces_accepte"
   /** Outil propre à OpenClaw utilisé par un employé (recopié de son registre : l'outil et l'issue, pas le contenu). */

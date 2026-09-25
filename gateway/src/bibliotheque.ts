@@ -444,7 +444,7 @@ function effacerContenu(id: string): void {
  * contient des documents de collègues ne se supprime pas d'un bloc : ce
  * n'est pas à son propriétaire de faire disparaître le travail des autres.
  */
-export function supprimerElement(id: string, qui: Qui): Promise<Resultat<{ supprimes: number }>> {
+export function supprimerElement(id: string, qui: Qui): Promise<Resultat<{ supprimes: number; documents: string[] }>> {
   return enFile(async () => {
     const liste = await charger();
     const e = liste.find((x) => x.id === id);
@@ -463,7 +463,9 @@ export function supprimerElement(id: string, qui: Qui): Promise<Resultat<{ suppr
     for (const x of partent) effacerContenu(x);
     await enregistrer(liste.filter((x) => !partent.has(x.id)));
     journaliser("bibliotheque.supprime", qui.userId, { element: id, supprimes: partent.size });
-    return { ok: true, valeur: { supprimes: partent.size } };
+    // Les documents partis : l'appelant les retire des bases de connaissances (index.ts), qui les indexaient.
+    const documents = liste.filter((x) => partent.has(x.id) && x.type === "document").map((x) => x.id);
+    return { ok: true, valeur: { supprimes: partent.size, documents } };
   });
 }
 

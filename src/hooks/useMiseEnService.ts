@@ -66,6 +66,7 @@ export function useMiseEnService(
           liberte: "encadre",
           agentId: agent.id,
           visibilite: agent.visibility,
+          ...(agent.visibility === "groupes" ? { groupes: agent.groupIds ?? [] } : {}),
           connaissances: agent.connaissances ?? [],
           ...(agent.modelUid ? { modele: agent.modelUid } : {}),
         });
@@ -121,8 +122,10 @@ export function useMiseEnService(
   /*
    * Bases de connaissances de l'agent : son employé les suit. Le propriétaire
    * les change sur la carte de l'agent (AgentsPage) ; on les recopie ici,
-   * chaque fois qu'elles diffèrent. L'instance ne s'en sert que pour ce qui
-   * est ouvert à toute l'équipe (connaissances.ts, `chercherPourEmploye`).
+   * chaque fois qu'elles diffèrent. L'instance décide de ce qu'il y lit
+   * (employes.ts, `lectureDesBases`). La visibilité, elle, ne se recopie pas
+   * d'ici : elle change dans les réglages de l'employé, qui peut demander de
+   * vider sa mémoire avant qu'elle s'élargisse (Employes.tsx, `Reglages`).
    */
   const basesEnvoyees = useRef(new Map<string, string>());
   useEffect(() => {

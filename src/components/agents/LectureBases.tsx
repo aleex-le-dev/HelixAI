@@ -5,6 +5,7 @@ import { t, tf } from "@/lib/i18n";
 
 const RAISON: Record<Exclude<RaisonEquipeSeulement, "outils">, () => string> = {
   organisation: () => t("il est ouvert à toute l'organisation : plusieurs personnes lui parlent ;"),
+  "sans-groupe": () => t("il est partagé à des groupes, mais aucun n'est choisi ;"),
   messagerie: () => t("on peut lui écrire sur une messagerie ;"),
   "mission-mail": () => t("une de ses missions part à chaque mail reçu ;"),
   liberte: () => t("sa liberté va au-delà d'« Encadré » (web, messages, commandes) ;"),
@@ -18,7 +19,7 @@ function etatBase(b: LectureDesBases["bases"][number]): string {
     case "groupes-equipe":
       return t("non lue : partagée à des groupes");
     case "groupes-autres":
-      return t("non lue : partagée à des groupes dont vous n'êtes pas membre");
+      return t("non lue : pas partagée à chacun de ses groupes");
     case "documents":
       return t("non lue : aucun de ses documents ne lui est ouvert");
     case "inconnue":
@@ -81,9 +82,13 @@ export function LectureBases({ employe, bases }: { employe?: Employe; bases: str
   const autres = lecture.raisons.filter((r): r is Exclude<RaisonEquipeSeulement, "outils"> => r !== "outils");
   return (
     <div className="space-y-2 text-sm text-muted-foreground">
-      {lecture.groupes ? (
+      {lecture.regle === "proprietaire" ? (
         <p>
-          {t("Depuis sa fiche et ses missions, cet agent ne travaille que pour vous : il lit ce qui est ouvert à toute l'équipe et ce qui est partagé aux groupes dont vous êtes membre, jamais vos documents privés.")}
+          {t("Depuis sa fiche et ses missions, cet agent ne travaille que pour vous : il lit dans ces bases tout ce que vous voyez, vos documents privés compris, et jamais ceux d'une autre personne.")}
+        </p>
+      ) : lecture.regle === "groupes" ? (
+        <p>
+          {t("Cet agent travaille pour les membres de ses groupes, et rien de ce qu'il produit ne sort d'eux : il lit ce qui est ouvert à toute l'équipe et ce qui est partagé à chacun de ses groupes, jamais un document privé.")}
         </p>
       ) : (
         <>
@@ -99,7 +104,7 @@ export function LectureBases({ employe, bases }: { employe?: Employe; bases: str
             )}
           </ul>
           <p>
-            {t("Il lirait aussi les bases de vos groupes si tout ce qu'il produit ne revenait qu'à vous : un agent personnel, sans messagerie ni mission à chaque mail, en liberté « Encadré », sans ces outils.")}
+            {t("Il lirait plus si rien de ce qu'il produit ne sortait de son audience (sans messagerie ni mission à chaque mail, en liberté « Encadré », sans ces outils) : personnel, tout ce que vous voyez ; partagé à des groupes, ce qui est partagé à chacun d'eux.")}
           </p>
         </>
       )}
@@ -114,9 +119,9 @@ export function LectureBases({ employe, bases }: { employe?: Employe; bases: str
           ))}
         </ul>
       )}
-      {lecture.groupes && (
+      {lecture.regle !== "equipe" && (
         <p className="text-xs">
-          {t("S'il est ensuite ouvert à l'équipe, joint sur une messagerie ou doté d'outils qui écrivent, il cesse aussitôt de lire les bases de vos groupes. Ce qu'il en a déjà noté dans sa mémoire peut y rester.")}
+          {t("S'il est ensuite ouvert à plus de monde, joint sur une messagerie ou doté d'outils qui écrivent, il cesse aussitôt de lire ce qui n'est pas ouvert à l'équipe ; et sa mémoire, qui peut en garder la trace, est d'abord mise de côté puis vidée, après votre confirmation.")}
         </p>
       )}
     </div>

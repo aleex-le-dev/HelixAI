@@ -6,6 +6,7 @@ import { journaliser } from "./audit.ts";
 import { oublierPersonneGroupes } from "./groupes.ts";
 import { elementsDe, oublierPersonneBibliotheque } from "./bibliotheque.ts";
 import { reunionsDe, oublierPersonneReunions } from "./reunions.ts";
+import { oublierChatsDesImages, oublierImagesDe } from "./images.ts";
 
 /**
  * Suppression d'un compte (RGPD, article 17).
@@ -205,6 +206,9 @@ export async function effacerCompte(
   const elementsBibliotheque = await oublierPersonneBibliotheque(userId);
   const reunionsEffacees = await oublierPersonneReunions(userId);
   const lignesDeConsommation = await oublierCompte(userId);
+  // Ses images créées : fichiers et registre (images.ts).
+  const imagesEffacees = oublierImagesDe(userId);
+  oublierChatsDesImages();
   await retirerCompte(userId);
 
   // Des nombres, jamais de contenu, et pas l'adresse une fois de plus.
@@ -221,6 +225,7 @@ export async function effacerCompte(
     elementsBibliotheque,
     reunionsEffacees,
     lignesDeConsommation,
+    imagesEffacees,
   });
   return apercu;
 }

@@ -194,9 +194,19 @@ async function demanderAuCode(contexte, etat, texte, surEvenement, signal) {
     if (!r.ok) throw new Error(corps?.error?.message || `Session refusée (${r.status}).`);
     etat.session = corps?.data?.id || corps?.id;
   }
-  // Le flux d'abord, la demande ensuite : aucun évènement ne se perd entre les deux.
-  const ecouter = async (session) => {
-    const r = await appel(`/helix/code/events?sessionID=${encodeURIComponent(session)}`, { seance: s, signal });
+  /*
+   * Le flux d'abord, la demande ensuite : aucun évènement ne se perd entre les
+   * deux. Ce premier flux a son propre arrêt : si la demande est refusée, ou
+   * relancée dans une autre session, personne ne l'attend plus. Il restait
+   * ouvert (l'instance le garde en vie toutes les vingt secondes) jusqu'à la
+   * fermeture de VS Code, un de plus à chaque relance, et son échec tardif
+   * devenait un rejet que personne ne traitait.
+   */
+  const arretPremier = new AbortController();
+  const suivreArret = () => arretPremier.abort();
+  signal.addEventListener("abort", suivreArret, { once: true });
+  const ecouter = async (session, arretFlux = signal) => {
+    const r = await appel(`/helix/code/events?sessionID=${encodeURIComponent(session)}`, { seance: s, signal: arretFlux });
     if (!r.ok || !r.body) throw new Error(`Flux de l'agent indisponible (${r.status}).`);
     const lecteur = r.body.getReader();
     const decodeur = new TextDecoder();
@@ -228,17 +238,24 @@ async function demanderAuCode(contexte, etat, texte, surEvenement, signal) {
       }
     }
   };
-  const flux = ecouter(etat.session);
-  const r = await appel("/helix/code/prompt", { method: "POST", seance: s, body: JSON.stringify({ sessionID: etat.session, text: texte }) });
-  const corps = await r.json().catch(() => ({}));
-  if (!r.ok) throw new Error(corps?.error?.message || `Demande refusée (${r.status}).`);
-  if (corps?.helixRelance?.sessionID) {
-    // L'instance a dû relancer la demande dans une nouvelle session : on suit celle-là.
-    etat.session = corps.helixRelance.sessionID;
-    await ecouter(etat.session);
-    return;
+  const flux = ecouter(etat.session, arretPremier.signal);
+  flux.catch(() => undefined);
+  try {
+    const r = await appel("/helix/code/prompt", { method: "POST", seance: s, body: JSON.stringify({ sessionID: etat.session, text: texte }) });
+    const corps = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(corps?.error?.message || `Demande refusée (${r.status}).`);
+    if (corps?.helixRelance?.sessionID) {
+      // L'instance a dû relancer la demande dans une nouvelle session : on suit celle-là, et on lâche l'autre.
+      arretPremier.abort();
+      etat.session = corps.helixRelance.sessionID;
+      await ecouter(etat.session);
+      return;
+    }
+    await flux;
+  } finally {
+    signal.removeEventListener("abort", suivreArret);
+    arretPremier.abort();
   }
-  await flux;
 }
 
 /** Le fichier ouvert, pour le joindre à une question. */
@@ -326,7 +343,13 @@ class VueChat {
     this.vue?.webview.postMessage({ type: "question", texte });
     this.arret = new AbortController();
     try {
-      await demanderAuCode(this.contexte, this.code, texte, (e) => this.vue?.webview.postMessage({ type: "code", ...e }), this.arret.signal);
+      /*
+       * `type` en dernier : placé avant, il était remplacé par celui de
+       * l'évènement (« texte », « outil », « outil-fin »), et la page, qui
+       * n'attend que « code », n'affichait ni les actions ni la réponse de
+       * Helix Code, seulement la fin du tour.
+       */
+      await demanderAuCode(this.contexte, this.code, texte, (e) => this.vue?.webview.postMessage({ ...e, type: "code" }), this.arret.signal);
       this.vue?.webview.postMessage({ type: "fin" });
     } catch (err) {
       const arrete = this.arret?.signal.aborted;

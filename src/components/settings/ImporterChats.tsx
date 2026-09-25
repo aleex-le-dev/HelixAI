@@ -4,7 +4,7 @@ import { Upload, Loader2, TriangleAlert, CircleCheck, FolderKanban, MessageSquar
 import { Button } from "@/components/ui/Button";
 import { InfoBox } from "@/components/ui/InfoBox";
 import { Card } from "@/components/settings/SettingsShell";
-import { NOM_SOURCE, lireExport, lireLogiciel, logicielsDuPoste, type Import, type LogicielTrouve } from "@/lib/importChats";
+import { NOM_SOURCE, completerChats, lireExport, lireLogiciel, logicielsDuPoste, type Import, type LogicielTrouve } from "@/lib/importChats";
 import { instance } from "@/lib/instance";
 import { ajouterSessionsImportees, placeOccupeeParLesChats, type Session } from "@/lib/store/sessions";
 import { createProject } from "@/lib/store/projects";
@@ -37,6 +37,8 @@ interface Bilan {
   agents: number;
   documents: number;
   documentsEchoues: number;
+  /** Chats choisis que l'instance n'a pas pu relire (logiciel du poste : fichier déplacé ou effacé depuis la liste). */
+  illisibles: number;
 }
 
 /**
@@ -60,6 +62,8 @@ export function ImporterChats() {
   /** Logiciels d'IA trouvés sur ce poste (seulement sur un poste autonome : ailleurs, ce seraient ceux du serveur). */
   const [logiciels, setLogiciels] = useState<LogicielTrouve[] | null>(null);
   const [avecInstructions, setAvecInstructions] = useState(true);
+  /** Avancement d'une lecture ou d'un import par morceaux (logiciels du poste), affiché sous les boutons. */
+  const [avancement, setAvancement] = useState<string | null>(null);
 
   useEffect(() => {
     if (instance().remote) return;
@@ -99,6 +103,7 @@ export function ImporterChats() {
       setErreur(err instanceof Error ? err.message : String(err));
     } finally {
       setLecture(false);
+      setAvancement(null);
     }
   };
 
@@ -107,9 +112,24 @@ export function ImporterChats() {
     setEnCours(true);
     setErreur(null);
     const moi = currentUser();
-    const bilanEnCours: Bilan = { chats: 0, chatsDemandes: 0, projets: 0, agents: 0, documents: 0, documentsEchoues: 0 };
+    const bilanEnCours: Bilan = { chats: 0, chatsDemandes: 0, projets: 0, agents: 0, documents: 0, documentsEchoues: 0, illisibles: 0 };
     try {
-      // Projets d'abord : les Chats s'y rangent.
+      /*
+       * Un logiciel du poste n'a donné que la liste : les messages des seuls
+       * Chats choisis sont demandés maintenant, par lots. Un Chat que
+       * l'instance n'a pas pu relire manque, et le bilan le compte. D'abord, avant
+       * les projets et les agents : une instance qui ne répond plus ne laisse
+       * pas un import à moitié fait.
+       */
+      let choisisComplets = donnees.chats.filter((c) => choisis.has(c.cle));
+      if (donnees.aCompleter) {
+        const demandes = choisisComplets.length;
+        choisisComplets = await completerChats(donnees.aCompleter, choisisComplets, (faits, total) =>
+          setAvancement(tf("Chargement des Chats : {0} sur {1}...", faits, total)),
+        );
+        bilanEnCours.illisibles = demandes - choisisComplets.length;
+      }
+      // Projets ensuite : les Chats s'y rangent.
       const projetsHelix = new Map<string, string>();
       for (const p of donnees.projets.filter((x) => projetsChoisis.has(x.cle))) {
         const description = [p.description, p.instructions ? `${t("Instructions du projet d'origine :")}\n${p.instructions}` : ""]
@@ -161,8 +181,9 @@ export function ImporterChats() {
         bilanEnCours.agents++;
       }
 
-      const sessions: Session[] = donnees.chats
-        .filter((c) => choisis.has(c.cle))
+      const parCle = new Map(donnees.chats.map((c) => [c.cle, c]));
+      const sessions: Session[] = choisisComplets
+        .map((c) => ({ ...c, projet: parCle.get(c.cle)?.projet ?? c.projet }))
         .map((c) => ({
           id: newId(),
           title: c.titre,
@@ -177,7 +198,7 @@ export function ImporterChats() {
           createdAt: c.creeLe,
           updatedAt: c.modifieLe,
         }));
-      bilanEnCours.chatsDemandes = sessions.length;
+      bilanEnCours.chatsDemandes = sessions.length + bilanEnCours.illisibles;
       bilanEnCours.chats = ajouterSessionsImportees(sessions);
       notifySessionsChanged();
       setBilan(bilanEnCours);
@@ -186,6 +207,7 @@ export function ImporterChats() {
       setErreur(err instanceof Error ? err.message : String(err));
     } finally {
       setEnCours(false);
+      setAvancement(null);
     }
   };
 
@@ -221,12 +243,21 @@ export function ImporterChats() {
                 variant="secondary"
                 icon={lecture ? Loader2 : Download}
                 disabled={lecture || enCours || (l.conversations === 0 && !l.instructions)}
-                onClick={() => void charger(() => lireLogiciel(l.id))}
+                onClick={() =>
+                  void charger(() =>
+                    lireLogiciel(l.id, (lues, total) => setAvancement(tf("Lecture des conversations : {0} sur {1}...", lues, total))),
+                  )
+                }
               >
                 {t("Reprendre")}
               </Button>
             </div>
           ))}
+          {avancement && lecture && (
+            <p className="flex items-center gap-2 text-xs text-muted-foreground">
+              <Loader2 size={13} className="animate-spin" /> {avancement}
+            </p>
+          )}
           {autres.map((l) => (
             <p key={l.id} className="text-xs text-muted-foreground">
               <span className="font-medium text-foreground">{l.nom}</span> : {l.note}
@@ -272,7 +303,12 @@ export function ImporterChats() {
               {bilan.agents > 0 && ` ${tf("{0} agent(s) avec les instructions des projets.", bilan.agents)}`}
               {bilan.documents > 0 && ` ${tf("{0} document(s) rangé(s) dans Fichiers.", bilan.documents)}`}
             </p>
-            {bilan.chats < bilan.chatsDemandes && (
+            {bilan.illisibles > 0 && (
+              <p className="mt-1">
+                {tf("{0} Chat(s) n'ont pas pu être relus sur cet ordinateur : leur fichier a été déplacé ou effacé depuis la lecture.", bilan.illisibles)}
+              </p>
+            )}
+            {bilan.chats < bilan.chatsDemandes - bilan.illisibles && (
               <p className="mt-1">
                 {t("Les autres n'ont pas pu être gardés : la place de cet ordinateur est pleine. Archivez ou supprimez d'anciens Chats, puis importez le reste.")}
               </p>
@@ -363,7 +399,7 @@ export function ImporterChats() {
                     <MessageSquare size={14} strokeWidth={1.75} className="shrink-0 text-muted-foreground" />
                     <span className="min-w-0 flex-1 truncate text-foreground">{c.titre}</span>
                     <span className="shrink-0 text-xs text-muted-foreground">
-                      {date(c.modifieLe)} · {tf("{0} messages", c.messages.length)}
+                      {date(c.modifieLe)} · {tf("{0} messages", c.nbMessages ?? c.messages.length)}
                     </span>
                   </label>
                 </li>
@@ -380,6 +416,11 @@ export function ImporterChats() {
           <Button icon={enCours ? Loader2 : Upload} disabled={enCours || trop || (choisis.size === 0 && projetsChoisis.size === 0)} onClick={() => void importer()}>
             {enCours ? t("Import en cours...") : tf("Importer {0} Chat(s)", choisis.size)}
           </Button>
+          {avancement && enCours && (
+            <p className="flex items-center gap-2 text-xs text-muted-foreground">
+              <Loader2 size={13} className="animate-spin" /> {avancement}
+            </p>
+          )}
         </Card>
       )}
     </div>

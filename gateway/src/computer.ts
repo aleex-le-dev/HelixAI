@@ -586,7 +586,9 @@ const RELECTURE = Buffer.from(
     "    si = z.read('xl/sharedStrings.xml').decode() if 'xl/sharedStrings.xml' in n else ''",
     "    partages = [''.join(re.findall(r'<t[^>]*>([^<]*)</t>', b)) for b in re.findall(r'<si>(.*?)</si>', si, re.S)]",
     "    cases = []",
-    "    for ref, attrs, corps in re.findall(r'<c r=\"([A-Z]+[0-9]+)\"([^>]*)>(.*?)</c>', z.read('xl/worksheets/sheet1.xml').decode(), re.S):",
+    // Cellule vide fermée sur elle-même (« <c r="A1" s="1"/> ») : sautée, sans avaler la suivante (voir relecture.ts).
+    "    for ref, attrs, fin, corps in re.findall(r'<c r=\"([A-Z]+[0-9]+)\"([^>]*?)(/>|>(.*?)</c>)', z.read('xl/worksheets/sheet1.xml').decode(), re.S):",
+    "        if fin == '/>': continue",
     "        f = re.search(r'<f[^>]*>([^<]*)</f>', corps); v = re.search(r'<v>([^<]*)</v>', corps); v = v.group(1) if v else ''",
     "        if 't=\"s\"' in attrs and v: v = partages[int(v)]",
     "        cases.append(ref + '=' + (('=' + f.group(1) + ' -> ') if f else '') + v)",

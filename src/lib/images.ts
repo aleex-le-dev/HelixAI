@@ -85,11 +85,13 @@ export async function creerImage(
   format: Format,
   suivre: (tr: Travail) => void,
   signal?: AbortSignal,
+  /** Le Chat de la demande : qui le voit verra l'image (gateway/src/images.ts, `imageVisible`). */
+  chat?: string,
 ): Promise<ImageCreee> {
   const res = await apiFetch("/helix/images/creer", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ description, format }),
+    body: JSON.stringify({ description, format, chat }),
   });
   if (!res.ok) throw new Error(await lireErreur(res));
   let tr = (await res.json()) as Travail;

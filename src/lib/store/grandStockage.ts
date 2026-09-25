@@ -31,6 +31,33 @@ function pont(): PontGrand | undefined {
 const PREFIX = "helix:";
 const valeurs: Record<string, string> = { ...(pont()?.valeurs ?? {}) };
 
+/*
+ * Collections dont le fichier existe sur ce poste mais n'a pas pu être lu au
+ * démarrage (trousseau refusé, par exemple). Lu même sans chiffrement
+ * disponible : c'est justement le cas où le fichier est là et illisible.
+ * Tant que l'instance n'a pas rendu la collection, ce poste n'a qu'une liste
+ * vide, qu'il ne doit pas pousser (sync.ts) : pour l'instance, une liste vide
+ * venue du propriétaire est une suppression de tous ses Chats.
+ */
+const illisibles = new Set<string>(
+  (() => {
+    try {
+      const l = (window as unknown as { helix?: { grand?: { illisibles?: unknown } } }).helix?.grand?.illisibles;
+      return Array.isArray(l) ? l.filter((c): c is string => typeof c === "string") : [];
+    } catch {
+      return [];
+    }
+  })(),
+);
+
+/** Le fichier de cette collection était-il illisible au démarrage, sans relève de l'instance depuis ? */
+export const grandIllisible = (cle: string): boolean => illisibles.has(cle);
+
+/** L'instance a rendu la collection : ce poste en a de nouveau une copie sûre. */
+export function grandRelu(cle: string): void {
+  illisibles.delete(cle);
+}
+
 /** Cette clé (sans préfixe) passe-t-elle par le grand stockage sur ce poste ? */
 export function auGrand(cle: string): boolean {
   return Boolean(pont()?.cles.includes(cle));

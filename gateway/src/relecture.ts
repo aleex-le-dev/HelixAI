@@ -60,8 +60,16 @@ export function relireDocument(buf: Buffer): string {
       entites([...m[1]!.matchAll(/<t[^>]*>([^<]*)<\/t>/g)].map((x) => x[1]).join("")),
     );
     const cases: string[] = [];
-    for (const m of feuille.matchAll(/<c r="([A-Z]+[0-9]+)"([^>]*)>([\s\S]*?)<\/c>/g)) {
+    /*
+     * Une cellule vide mais mise en forme s'écrit fermée sur elle-même
+     * (« <c r="A1" s="1"/> »). L'ancienne expression la prenait pour une
+     * ouverture et avalait la cellule suivante : « A1=valeur de B1 », et B1
+     * disparaissait de la relecture. Les cellules fermées sur elles-mêmes sont
+     * reconnues, et sautées (elles n'ont pas de valeur).
+     */
+    for (const m of feuille.matchAll(/<c r="([A-Z]+[0-9]+)"([^>]*?)(?:\/>|>([\s\S]*?)<\/c>)/g)) {
       const [, ref, attrs, corps] = m;
+      if (corps === undefined) continue;
       const f = /<f[^>]*>([^<]*)<\/f>/.exec(corps!);
       let v = /<v>([^<]*)<\/v>/.exec(corps!)?.[1] ?? "";
       if (attrs!.includes('t="s"') && v) v = partages[Number(v)] ?? v;

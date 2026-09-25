@@ -26,7 +26,7 @@ import {
   type Recherche,
 } from "@/lib/connaissances";
 import { ChoixVisibilite } from "@/pages/BibliothequePage";
-import { t, tf } from "@/lib/i18n";
+import { locale, t, tf } from "@/lib/i18n";
 
 /**
  * Bases de connaissances, dans la Bibliothèque : on y rassemble des documents
@@ -109,7 +109,7 @@ export function BasesConnaissances({ mesGroupes, groupes }: { mesGroupes: Groupe
       <div className="flex flex-wrap items-start justify-between gap-3">
         <p className="max-w-2xl text-sm text-muted-foreground">
           {t(
-            "Une base rassemble des documents de la Bibliothèque. L'instance les découpe en passages et les indexe avec le modèle d'embeddings de la machine. Le Chat, Cowork et les agents à qui vous attachez une base y cherchent avant de répondre, et citent les passages utilisés. Chacun n'y retrouve que les documents qu'il a le droit de voir dans la Bibliothèque.",
+            "Une base rassemble des documents de Fichiers. L'instance les découpe en passages et les indexe avec le modèle d'embeddings de la machine. Le Chat, Cowork et les agents à qui vous attachez une base y cherchent avant de répondre, et citent les passages utilisés. Chacun n'y retrouve que les documents qu'il a le droit de voir dans Fichiers.",
           )}
         </p>
         <Button icon={Plus} onClick={() => setCreation(true)}>
@@ -234,7 +234,7 @@ function BaseModal({
         <Field label={t("Description")} hint={t("Ce qu'on y trouve, pour que vos collègues sachent quand la choisir.")}>
           <Textarea rows={2} maxLength={1000} value={description} onChange={(e) => setDescription(e.target.value)} />
         </Field>
-        <Field label={t("Qui peut s'en servir")} hint={t("Voir une base ne donne pas accès à ses documents : chacun n'y retrouve que ceux qu'il voit dans la Bibliothèque.")}>
+        <Field label={t("Qui peut s'en servir")} hint={t("Voir une base ne donne pas accès à ses documents : chacun n'y retrouve que ceux qu'il voit dans Fichiers.")}>
           <ChoixVisibilite visibilite={vis.v} groupes={vis.g} mesGroupes={mesGroupes} onChange={(v, g) => setVis({ v, g })} />
         </Field>
         {erreur && <InfoBox tone="warning">{erreur}</InfoBox>}
@@ -316,7 +316,7 @@ function DetailBase({
       {base.estProprietaire && (
         <div className="mt-4 flex flex-wrap gap-2">
           <Button size="sm" icon={Plus} onClick={() => setAjout(true)}>
-            {t("Ajouter depuis la Bibliothèque")}
+            {t("Ajouter depuis Fichiers")}
           </Button>
           <Button size="sm" variant="secondary" icon={Upload} disabled={Boolean(envoi)} onClick={() => choix.current?.click()}>
             {t("Importer un fichier")}
@@ -365,7 +365,7 @@ function DetailBase({
       )}
       {confirmer && (
         <p className="mt-2 text-xs text-muted-foreground">
-          {t("Les documents restent dans la Bibliothèque : seuls la base et ses index sont supprimés.")}
+          {t("Les documents restent dans Fichiers : seuls la base et ses index sont supprimés.")}
         </p>
       )}
       {envoi && (
@@ -383,7 +383,7 @@ function DetailBase({
         {base.documents.length === 0 ? (
           <p className="py-6 text-center text-sm text-muted-foreground">
             {base.masques > 0
-              ? t("Vous ne voyez aucun des documents de cette base dans la Bibliothèque.")
+              ? t("Vous ne voyez aucun des documents de cette base dans Fichiers.")
               : t("Aucun document pour l'instant.")}
           </p>
         ) : (
@@ -407,7 +407,7 @@ function DetailBase({
                     {d.erreur && <span className="mt-0.5 block text-xs text-muted-foreground">{d.erreur}</span>}
                     {d.etat === "pret" && d.modele && (
                       <span className="mt-0.5 block text-xs text-muted-foreground">
-                        {tf("Indexé par {0} en {1} s", d.modele, ((d.dureeMs ?? 0) / 1000).toFixed(1))}
+                        {tf("Indexé par {0} en {1} s", d.modele, ((d.dureeMs ?? 0) / 1000).toLocaleString(locale(), { minimumFractionDigits: 1, maximumFractionDigits: 1 }))}
                       </span>
                     )}
                   </td>
@@ -453,7 +453,7 @@ function DetailBase({
         )}
         {base.disparus.length > 0 && (
           <div className="mt-3 text-xs text-muted-foreground">
-            <p>{t("Supprimés de la Bibliothèque depuis leur ajout (ils ne servent plus) :")}</p>
+            <p>{t("Supprimés de Fichiers depuis leur ajout (ils ne servent plus) :")}</p>
             <ul className="mt-1 space-y-1">
               {base.disparus.map((d) => (
                 <li key={d.id} className="flex items-center gap-2">
@@ -552,7 +552,7 @@ function EssaiQuestion({ base }: { base: Base }) {
             <div key={p.n} className="rounded-xl border border-border bg-muted/40 px-3 py-2">
               <p className="flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
                 <span className="font-medium text-foreground">[{p.n}] {p.document}</span>
-                <span>{tf("similarité {0}", p.similarite.toFixed(2))}</span>
+                <span>{tf("similarité {0}", p.similarite.toLocaleString(locale(), { minimumFractionDigits: 2, maximumFractionDigits: 2 }))}</span>
                 {p.rangMots !== null && <span>{t("mots trouvés")}</span>}
               </p>
               <p className="mt-1 line-clamp-4 whitespace-pre-wrap text-xs leading-relaxed text-foreground">{p.texte}</p>
@@ -593,7 +593,7 @@ function ChoixDocuments({
   return (
     <Modal open onClose={onFermer} size="lg">
       <h2 className="text-lg font-semibold text-foreground">{t("Ajouter des documents")}</h2>
-      <p className="mt-1 text-sm text-muted-foreground">{t("Les documents de la Bibliothèque que vous voyez. Un document sans texte lisible (image, PDF scanné) ne peut pas être indexé.")}</p>
+      <p className="mt-1 text-sm text-muted-foreground">{t("Les documents de Fichiers que vous voyez. Un document sans texte lisible (image, PDF scanné) ne peut pas être indexé.")}</p>
       <SearchInput
         containerClassName="mt-4"
         placeholder={t("Rechercher un document")}

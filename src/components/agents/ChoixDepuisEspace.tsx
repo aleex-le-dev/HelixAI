@@ -83,7 +83,7 @@ export function ChoixDepuisEspace({ onChoisis, onFermer }: { onChoisis: (f: File
         className="mt-3"
         size="sm"
         options={[
-          { id: "bibliotheque", label: t("Bibliothèque") },
+          { id: "bibliotheque", label: t("Fichiers") },
           { id: "espace", label: t("Dossier de l'équipe") },
         ]}
         value={source}
@@ -103,7 +103,7 @@ export function ChoixDepuisEspace({ onChoisis, onFermer }: { onChoisis: (f: File
           </button>
         )}
         <span className="truncate">
-          {source === "bibliotheque" ? t("Bibliothèque") : t("Dossier de l'équipe")}
+          {source === "bibliotheque" ? t("Fichiers") : t("Dossier de l'équipe")}
           {pile.map((p) => ` / ${p.nom}`).join("")}
         </span>
       </div>

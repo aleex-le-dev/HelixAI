@@ -15,7 +15,7 @@ export function ChoixBases({ valeur, onChange, aide }: { valeur: string[]; onCha
   if (erreur) return <p className="text-xs text-muted-foreground">{erreur}</p>;
   if (!bases) return <Loader2 size={15} className="animate-spin text-muted-foreground" />;
   if (bases.length === 0) {
-    return <p className="text-xs text-muted-foreground">{t("Aucune base de connaissances : créez-en une dans la Bibliothèque, onglet Bases de connaissances.")}</p>;
+    return <p className="text-xs text-muted-foreground">{t("Aucune base de connaissances : créez-en une dans Fichiers, onglet Bases de connaissances.")}</p>;
   }
   return (
     <div className="space-y-1">

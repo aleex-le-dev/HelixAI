@@ -218,7 +218,7 @@ export function Composer({
                   {piece.type === "texte" && piece.tronque && (
                     <span
                       className="shrink-0 text-muted-foreground"
-                      title={t("Trop long pour être lu en entier : seul son début (environ 200 000 caractères) part avec la question. Pour un long document, déposez-le dans la Bibliothèque : l'assistant y cherche et le lit par passages.")}
+                      title={t("Trop long pour être lu en entier : seul son début (environ 200 000 caractères) part avec la question. Pour un long document, déposez-le dans Fichiers : l'assistant y cherche et le lit par passages.")}
                     >
                       {t("(début)")}
                     </span>

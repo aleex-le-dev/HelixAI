@@ -352,7 +352,7 @@ export function ajouterDocuments(id: string, brut: Record<string, unknown>, qui:
     let ajoutes = 0;
     for (const docId of new Set(demandes)) {
       const e = visibles.get(docId);
-      if (!e) return { ok: false, statut: 404, message: t("Document introuvable dans la Bibliothèque.") };
+      if (!e) return { ok: false, statut: 404, message: t("Document introuvable dans Fichiers.") };
       if (b.documents.some((d) => d.id === docId)) continue;
       if (b.documents.length >= DOCUMENTS_PAR_BASE_MAX) return { ok: false, statut: 409, message: t("Cette base contient déjà le nombre maximal de documents.") };
       b.documents.push({
@@ -739,7 +739,7 @@ async function indexer(baseId: string, docId: string): Promise<void> {
   const lecteur = { userId: doc.ajoutePar, groupes: await groupesDe(doc.ajoutePar) };
   const lu = await bibliotheque.lireTexte(docId, lecteur);
   if (!lu) {
-    await echec("Ce document n'est plus dans la Bibliothèque, ou n'est plus accessible à la personne qui l'a ajouté.");
+    await echec("Ce document n'est plus dans Fichiers, ou n'est plus accessible à la personne qui l'a ajouté.");
     return;
   }
   if (!lu.texte.trim()) {
@@ -1122,3 +1122,16 @@ export function oublierPersonneConnaissances(userId: string): Promise<number> {
 export function demarrer(): void {
   relancerSiBesoin();
 }
+
+/**
+ * Relevé seulement, appelé par personne. Ces messages sont gardés en français
+ * avec le document (d.erreur) et traduits au moment de les servir, par
+ * `t(d.erreur)` : un appel sur une valeur, que `scripts/i18n-passerelle.mjs`
+ * ne lit pas. Les écrire ici les met au catalogue ; la phrase doit rester
+ * exactement celle qui est gardée plus haut.
+ */
+export const PHRASES_GARDEES = () => [
+  t("Ce document n'a pas de texte lisible (image, PDF scanné) : il ne peut pas être indexé."),
+  t("Ce document n'est plus dans Fichiers, ou n'est plus accessible à la personne qui l'a ajouté."),
+  t("Le modèle d'embeddings n'a pas répondu comme attendu. Vérifiez qu'il est chargé dans LM Studio, puis relancez l'indexation."),
+];

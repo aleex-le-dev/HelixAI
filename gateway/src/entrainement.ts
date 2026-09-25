@@ -1208,9 +1208,15 @@ function lirePaires(texte: string): Exemple[] {
   }
 }
 
+/*
+ * « Couvre chacun des faits » : essayé le 25/09/2026 avec Qwen3 8B sur un
+ * règlement de cinq faits, l'ancienne consigne (« de 3 à 8 paires ») n'en
+ * rendait que deux, tirées du premier paragraphe.
+ */
 const CONSIGNE_PAIRES =
   "Tu prépares des exemples pour apprendre à un assistant les faits d'un document d'entreprise. " +
-  "À partir de l'extrait fourni, écris de 3 à 8 paires question et réponse, en français, que poserait un salarié ou un client. " +
+  "À partir de l'extrait fourni, écris des paires question et réponse, en français, que poserait un salarié ou un client. " +
+  "Couvre chacun des faits de l'extrait (chiffres, dates, horaires, prix, règles), pas seulement le premier : au moins une paire par fait, 12 au plus. " +
   "Chaque réponse est une ou deux phrases complètes, tirées uniquement de l'extrait : n'invente rien, ne cite pas « le document ». " +
   "Si l'extrait ne contient aucun fait utile, rends une liste vide. " +
   'Rends seulement du JSON, sous la forme [{"question": "...", "reponse": "..."}].';

@@ -1793,7 +1793,7 @@ nous écrivons et doivent être contrôlées une par une :
 
 **Décision.** `gateway/src/design.ts` + tables du skill UI/UX Pro Max (nextlevelbuilder, MIT, `gateway/design/`). Une demande de site fait choisir un type d'activité (lexique français, mots-clés du modèle local, mots génériques écartés), une palette, des polices, un plan de page, une famille de style ; Helix écrit `design/helix.css` et `design/DESIGN.md` dans le projet et joint à la demande les lignes du `<head>` et la structure. Deux filets, parce que le modèle ne lit pas toujours le guide : la feuille habille aussi le HTML sans classes et les noms courants (hero, card, btn) ; en fin de tour (évènement `step.ended`/`stop` du flux relayé par index.ts), `corrigerPages` remet liens relatifs et polices, feuille en dernier.
 
-**Conséquences.** Vérifié avec Qwen3 8B sur un site de boulangerie : page propre, palette et polices appliquées. Le contexte des modèles chargés par Helix passe à 32 768 jetons au moins (les consignes d'OpenCode en font environ 18 000).
+**Conséquences.** Vérifié avec Qwen3 8B sur un site de boulangerie : page propre, palette et polices appliquées. Le contexte des modèles chargés par Helix passe à 32 768 jetons au moins (les consignes d'OpenCode en font environ 18 000). **Révisé le 25/09/2026** : la détection (`estDemandeDeSite`) ne se contente plus d'un mot. Mots sûrs (site, landing, vitrine…) seuls ; mots ambigus (page, interface, formulaire, html, css) avec un verbe de création ; un mot de programmation (TypeScript, type, API, classe, test…) écarte la demande sauf création d'un site. `npm run essai:design`, 26 phrases sur 26.
 
 ### ADR-048 — Reprendre les données des autres IA du poste ✅ implémenté (24/09/2026)
 

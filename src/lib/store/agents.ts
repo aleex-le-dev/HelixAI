@@ -25,6 +25,11 @@ export interface Agent {
   toolsEnabled: boolean;
   /** Modèle imposé (uid passerelle) ; sinon celui de l'utilisateur. */
   modelUid?: string;
+  /**
+   * Bases de connaissances où l'agent cherche avant de répondre, dans le Chat.
+   * Chacun n'y lit que ce qu'il voit : l'instance le vérifie à chaque question.
+   */
+  connaissances?: string[];
   createdAt: string;
   updatedAt: string;
 }
@@ -57,7 +62,7 @@ export function getAgent(id: string): Agent | undefined {
 export function createAgent(
   owner: User,
   data: Pick<Agent, "name" | "description" | "instructions" | "visibility" | "hidePrompt"> &
-    Partial<Pick<Agent, "toolsEnabled" | "modelUid">>,
+    Partial<Pick<Agent, "toolsEnabled" | "modelUid" | "connaissances">>,
 ): Agent {
   const now = new Date().toISOString();
   const agent: Agent = {
@@ -71,6 +76,7 @@ export function createAgent(
     organisationId: owner.organisationId,
     toolsEnabled: data.toolsEnabled ?? true,
     modelUid: data.modelUid,
+    ...(data.connaissances && data.connaissances.length > 0 ? { connaissances: data.connaissances } : {}),
     createdAt: now,
     updatedAt: now,
   };

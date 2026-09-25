@@ -161,6 +161,12 @@ export type AuditAction =
   | "bibliotheque.modifie"
   | "bibliotheque.supprime"
   | "bibliotheque.consulte"
+  /** Bases de connaissances : ce qui est créé, rattaché, retiré ; des identifiants et des nombres, jamais de texte. */
+  | "connaissances.base_creee"
+  | "connaissances.base_modifiee"
+  | "connaissances.base_supprimee"
+  | "connaissances.documents_ajoutes"
+  | "connaissances.document_retire"
   /** Réunions : ce qui est enregistré, transcrit, partagé, supprimé ; jamais ce qui s'y dit. */
   | "reunion.creee"
   | "reunion.bot_envoye"

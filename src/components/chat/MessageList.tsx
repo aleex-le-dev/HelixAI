@@ -9,7 +9,10 @@ import {
   Circle,
   ListTree,
   Download,
+  FileText,
+  BookOpenText,
 } from "lucide-react";
+import type { Citation } from "@/lib/connaissances";
 import { LogoMark } from "@/components/ui/Logo";
 import { Avatar } from "@/components/ui/Avatar";
 import { cn } from "@/lib/cn";
@@ -252,6 +255,92 @@ function ImageGeneree({ image }: { image: ImageCreee }) {
   );
 }
 
+/**
+ * Citations des bases de connaissances, sous la réponse.
+ *
+ * Mis en avant : les passages que la réponse cite ([1], [2]...). Les autres
+ * ont été donnés au modèle sans qu'il s'en serve : mesuré le 25/09/2026, la
+ * recherche remonte toujours cinq passages, même pour une question à laquelle
+ * aucun document ne répond (les scores de similarité se tassent entre 0,63 et
+ * 0,80). Les afficher comme des sources ferait dire à l'écran que la réponse
+ * vient de documents qui n'en parlent pas. Ils restent consultables, repliés,
+ * et dits pour ce qu'ils sont.
+ */
+function Sources({ message }: { message: Message }) {
+  const [ouverte, setOuverte] = useState<number | null>(null);
+  const [autres, setAutres] = useState(false);
+  const s = message.sources;
+  if (!s) return null;
+  const citesDansLeTexte = new Set([...message.content.matchAll(/\[(\d{1,2})\]/g)].map((m) => Number(m[1])));
+  const citees = s.citations.filter((c) => citesDansLeTexte.has(c.n));
+  const nonCitees = s.citations.filter((c) => !citesDansLeTexte.has(c.n));
+  const ligne = (c: Citation) => (
+    <div key={c.n} className="text-xs">
+      <button
+        type="button"
+        aria-expanded={ouverte === c.n}
+        onClick={() => setOuverte(ouverte === c.n ? null : c.n)}
+        className="inline-flex max-w-full items-center gap-1.5 rounded-full bg-muted/70 px-2.5 py-1 text-muted-foreground transition-colors hover:text-foreground"
+      >
+        <FileText size={12} strokeWidth={1.75} className="shrink-0" />
+        <span className="truncate">
+          [{c.n}] {c.document}
+          <span className="opacity-70"> · {c.base}</span>
+        </span>
+      </button>
+      {ouverte === c.n && (
+        <p className="mt-1 whitespace-pre-wrap border-l-2 border-border pl-3 text-[11px] leading-relaxed text-muted-foreground">
+          {c.extrait}
+          {c.extrait.length >= 600 ? "..." : ""}
+        </p>
+      )}
+    </div>
+  );
+  return (
+    <div className="mt-3 space-y-1.5">
+      {citees.length > 0 && (
+        <>
+          <p className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+            <BookOpenText size={13} strokeWidth={1.75} />
+            {t("Sources")}
+          </p>
+          {citees.map(ligne)}
+        </>
+      )}
+      {!message.streaming && nonCitees.length > 0 && (
+        <div>
+          <button
+            type="button"
+            aria-expanded={autres}
+            onClick={() => setAutres((a) => !a)}
+            className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+          >
+            {citees.length > 0
+              ? tf("{0} autre(s) passage(s) consulté(s), non cité(s)", nonCitees.length)
+              : tf("{0} passage(s) des bases de connaissances consulté(s), aucun cité par la réponse", nonCitees.length)}
+            <ChevronDown size={12} strokeWidth={2} className={cn("transition-transform", autres && "rotate-180")} />
+          </button>
+          {autres && <div className="mt-1.5 space-y-1.5">{nonCitees.map(ligne)}</div>}
+        </div>
+      )}
+      {s.citations.length === 0 && !s.erreur && (
+        <p className="text-xs text-muted-foreground">{t("Bases de connaissances consultées : aucun passage ne s'approchait de la question.")}</p>
+      )}
+      {s.erreur && <p className="text-xs text-muted-foreground">{s.erreur}</p>}
+      {(s.ignorees ?? 0) > 0 && (
+        <p className="text-xs text-muted-foreground">
+          {tf("{0} base(s) de connaissances ignorée(s) : vous n'y avez pas accès.", s.ignorees)}
+        </p>
+      )}
+      {(s.aReindexer ?? 0) > 0 && (
+        <p className="text-xs text-muted-foreground">
+          {tf("{0} document(s) indexé(s) par un autre modèle que celui de la machine : ils n'ont pas été consultés. Réindexez la base.", s.aReindexer)}
+        </p>
+      )}
+    </div>
+  );
+}
+
 function Bubble({ message }: { message: Message }) {
   const isUser = message.role === "user";
 
@@ -299,6 +388,7 @@ function Bubble({ message }: { message: Message }) {
             {message.image && <ImageGeneree image={message.image} />}
           </div>
         )}
+        <Sources message={message} />
         {message.error && (
           <p
             className={cn(

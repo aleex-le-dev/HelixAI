@@ -66,6 +66,7 @@ import * as employes from "./employes.ts";
 import * as fournisseurs from "./fournisseurs.ts";
 import * as groupes from "./groupes.ts";
 import * as bibliotheque from "./bibliotheque.ts";
+import * as connaissances from "./connaissances.ts";
 import * as reunions from "./reunions.ts";
 import { etat as etatAgenda } from "./agenda.ts";
 import { installerOpenClaw, etatInstallation } from "./installationOpenClaw.ts";
@@ -1306,6 +1307,9 @@ const routeGroupe = (chemin: string) => chemin === "/helix/groupes" || chemin.st
 // Bibliothèque : chaque lecture est filtrée pour qui la demande, chaque écriture a un auteur.
 const routeBibliotheque = (chemin: string) => chemin === "/helix/bibliotheque" || chemin.startsWith("/helix/bibliotheque/");
 
+// Bases de connaissances : comme la Bibliothèque dont elles lisent les documents.
+const routeConnaissances = (chemin: string) => chemin === "/helix/connaissances" || chemin.startsWith("/helix/connaissances/");
+
 // Réunions : enregistrer, transcrire, envoyer le bot engagent quelqu'un ; lire est filtré pour lui.
 const routeReunion = (chemin: string) => chemin === "/helix/reunions" || chemin.startsWith("/helix/reunions/");
 
@@ -1316,6 +1320,7 @@ const exigeSeance = (methode: string, chemin: string) =>
   routeEspace(chemin) ||
   routeGroupe(chemin) ||
   routeBibliotheque(chemin) ||
+  routeConnaissances(chemin) ||
   routeReunion(chemin);
 
 /*
@@ -3490,6 +3495,42 @@ async function handleBibliotheque(req: http.IncomingMessage, res: http.ServerRes
   send(res, 404, { error: { message: tf("Route inconnue : {0} {1}", req.method, path) } });
 }
 
+/* ---------------------------- bases de connaissances --------------------------- */
+
+async function handleConnaissances(req: http.IncomingMessage, res: http.ServerResponse, url: URL, path: string): Promise<void> {
+  const qui = await demandeur(req, url);
+  if (!qui) return send(res, 401, sansSeance());
+  const moi = { userId: qui.userId, groupes: qui.groupes ?? [] };
+  const [id, action] = path.split("/").slice(3);
+  const corps = async () => {
+    const b = await readJson(req).catch(() => ({}));
+    return b && typeof b === "object" && !Array.isArray(b) ? (b as Record<string, unknown>) : {};
+  };
+  const repondre = <T,>(r: { ok: true; valeur: T } | { ok: false; statut: number; message: string }, succes: (v: T) => unknown) =>
+    r.ok ? send(res, 200, succes(r.valeur)) : send(res, r.statut, { error: { message: r.message } });
+
+  if (!id && req.method === "GET") return send(res, 200, { bases: await connaissances.listerBases(moi) });
+  if (!id && req.method === "POST") return repondre(await connaissances.creerBase(await corps(), moi), (base) => ({ base }));
+  if (id === "documents" && !action && req.method === "GET") {
+    return send(res, 200, { documents: await connaissances.documentsDisponibles(moi) });
+  }
+  // Essayer une question sans passer par le Chat : l'écran de la base, et les vérifications.
+  if (id === "chercher" && !action && req.method === "POST") {
+    const b = await corps();
+    const r = await connaissances.chercher(b.bases, typeof b.question === "string" ? b.question : "", moi, Number(b.nombre) || undefined);
+    return send(res, 200, r);
+  }
+  if (id && !action && req.method === "GET") return repondre(await connaissances.lireBase(id, moi), (base) => ({ base }));
+  if (id && !action && req.method === "POST") return repondre(await connaissances.modifierBase(id, await corps(), moi), (base) => ({ base }));
+  if (id && action === "supprimer" && req.method === "POST") return repondre(await connaissances.supprimerBase(id, moi), (v) => v);
+  if (id && action === "documents" && req.method === "POST") {
+    return repondre(await connaissances.ajouterDocuments(id, await corps(), moi), (base) => ({ base }));
+  }
+  if (id && action === "retirer" && req.method === "POST") return repondre(await connaissances.retirerDocument(id, await corps(), moi), (base) => ({ base }));
+  if (id && action === "reindexer" && req.method === "POST") return repondre(await connaissances.reindexer(id, await corps(), moi), (base) => ({ base }));
+  send(res, 404, { error: { message: tf("Route inconnue : {0} {1}", req.method, path) } });
+}
+
 /* ----------------------------------- réunions ---------------------------------- */
 
 async function handleReunions(req: http.IncomingMessage, res: http.ServerResponse, url: URL, path: string): Promise<void> {
@@ -4112,6 +4153,7 @@ const traiter = (
     if (routeFournisseur(path)) return handleFournisseurs(req, res, url, path);
     if (routeGroupe(path)) return handleGroupes(req, res, url, path);
     if (routeBibliotheque(path)) return handleBibliotheque(req, res, url, path);
+    if (routeConnaissances(path)) return handleConnaissances(req, res, url, path);
     if (routeReunion(path)) return handleReunions(req, res, url, path);
     if (req.method === "GET" && path === "/helix/espace") {
       const r = listerEspace(url.searchParams.get("chemin") ?? "");
@@ -4298,6 +4340,8 @@ void preparerMagasin().then(() => server.listen(PORT, HOST, () => {
    * Le connecteur agenda a exactement la même contrainte, pour la même raison.
    */
   void chargerCourrier().catch(() => {});
+  // Indexation des bases de connaissances interrompue par un arrêt : elle reprend.
+  connaissances.demarrer();
   void chargerAgenda().catch(() => {});
   // Google Drive et Slack : même contrainte, même raison (drive.ts, slack.ts).
   void drive.charger().catch(() => {});

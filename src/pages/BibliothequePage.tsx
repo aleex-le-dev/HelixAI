@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type DragEvent } from "react";
+import { useSearchParams } from "react-router-dom";
 import {
+  BookOpenText,
   ChevronLeft,
   ChevronRight,
   Download,
@@ -49,6 +51,7 @@ import {
   type Listage,
   type Visibilite,
 } from "@/lib/bibliotheque";
+import { BasesConnaissances } from "@/components/bibliotheque/BasesConnaissances";
 import { t, tf } from "@/lib/i18n";
 
 /**
@@ -58,13 +61,15 @@ import { t, tf } from "@/lib/i18n";
  * « Depuis Helix » y puise pour leur confier un document.
  */
 
-type Vue = "tous" | "favoris" | "prives" | "groupes";
+type Vue = "tous" | "favoris" | "prives" | "groupes" | "connaissances";
 
 const FILTRES: { id: Vue; label: string; icon: typeof Folder }[] = [
   { id: "tous", label: t("Tous les fichiers"), icon: Folder },
   { id: "favoris", label: t("Favoris"), icon: Star },
   { id: "prives", label: t("Privés"), icon: Lock },
   { id: "groupes", label: t("Groupes"), icon: Users },
+  // Les bases de connaissances rassemblent des documents d'ici : elles vivent à côté d'eux.
+  { id: "connaissances", label: t("Bases de connaissances"), icon: BookOpenText },
 ];
 
 const EMOJIS = ["📁", "🎯", "💼", "📊", "🧪", "🔬", "📚", "💰"];
@@ -81,7 +86,9 @@ const classeCouleur = (c?: Couleur) => COULEURS.find((x) => x.valeur === (c ?? "
 const message = (err: unknown) => (err instanceof Error ? err.message : String(err));
 
 export function BibliothequePage() {
-  const [vue, setVue] = useState<Vue>("tous");
+  // « ?vue=connaissances » : le lien « Gérer les bases » de la zone de saisie ouvre directement les bases.
+  const [params] = useSearchParams();
+  const [vue, setVue] = useState<Vue>(params.get("vue") === "connaissances" ? "connaissances" : "tous");
   const [dossier, setDossier] = useState<string | null>(null);
   const [recherche, setRecherche] = useState("");
   const [terme, setTerme] = useState("");
@@ -104,6 +111,8 @@ export function BibliothequePage() {
   }, [recherche]);
 
   const charger = useCallback(async () => {
+    // Les bases ont leur propre liste (BasesConnaissances) : rien à lire ici.
+    if (vue === "connaissances" && !terme) return;
     try {
       setListage(await listerBibliotheque({ vue, dossier: vue === "tous" ? dossier : null, q: terme }));
       setErreur(null);
@@ -257,7 +266,9 @@ export function BibliothequePage() {
         </InfoBox>
       )}
 
-      {!listage && !erreur ? (
+      {vue === "connaissances" && !terme ? (
+        <BasesConnaissances mesGroupes={mesGroupes} groupes={groupes?.groupes ?? []} />
+      ) : !listage && !erreur ? (
         <div className="flex flex-1 items-center justify-center text-muted-foreground">
           <Loader2 size={20} className="animate-spin" />
         </div>
@@ -518,7 +529,7 @@ function Ligne({
 /* ------------------------------------------------------------------ */
 
 /** Qui voit l'élément : vous seul, des groupes (les vôtres), ou toute l'équipe. */
-function ChoixVisibilite({
+export function ChoixVisibilite({
   visibilite,
   groupes,
   onChange,

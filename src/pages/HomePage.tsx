@@ -4,6 +4,8 @@ import { TriangleAlert } from "lucide-react";
 import { LogoMark } from "@/components/ui/Logo";
 import { Composer } from "@/components/chat/Composer";
 import { OutilsChip } from "@/components/chat/OutilsChip";
+import { ConnaissancesChip } from "@/components/chat/ConnaissancesChip";
+import { useProjects } from "@/hooks/useProjects";
 import { ImageChip } from "@/components/chat/ImageChip";
 import type { Format } from "@/lib/images";
 import { InfoBox } from "@/components/ui/InfoBox";
@@ -16,7 +18,7 @@ import { useProfile } from "@/hooks/useProfile";
 import { useAttachments } from "@/hooks/useAttachments";
 import { useModels } from "@/hooks/useModels";
 import { buildSystemPrompt, type NiveauRaisonnement } from "@/lib/store/profile";
-import { getSession, memoriserAgent, rattacherProjet } from "@/lib/store/sessions";
+import { getSession, memoriserAgent, memoriserConnaissances, rattacherProjet } from "@/lib/store/sessions";
 import { currentUser } from "@/lib/store/identity";
 import { useSessions, notifySessionsChanged } from "@/hooks/useSessions";
 import { useAgents } from "@/hooks/useAgents";
@@ -60,16 +62,39 @@ export function HomePage() {
     return model && model.backendId !== "lmstudio" ? "cloud" : "local";
   }, [models, modelUid]);
 
+  /*
+   * Bases de connaissances consultées à chaque question : celles que la
+   * personne coche dans la zone de saisie (retenues avec le Chat), celles de
+   * l'agent choisi, celles du projet où le Chat est rangé. L'instance ne
+   * garde que celles que la personne a le droit de lire.
+   */
+  const [basesChoisies, setBasesChoisies] = useState<string[]>([]);
+  const { projects } = useProjects();
+
   // L'agent peut interdire les outils : son réglage prime sur l'interrupteur.
   const toolsOn = profile.outilsChat ?? false;
   const setToolsOn = (actif: boolean) => update({ outilsChat: actif });
   const toolsAllowed = agent.toolsEnabled;
+  const [projetDuChat, setProjetDuChat] = useState<string | null>(null);
+  const projet = projects.find((p) => p.id === projetDuChat) ?? null;
+  const basesHeritees = useMemo(
+    () => [
+      ...(agent.connaissances ?? []).map((id) => ({ id, raison: tf("Par l'agent « {0} »", agent.name) })),
+      ...(projet?.connaissances ?? []).map((id) => ({ id, raison: tf("Par le projet « {0} »", projet!.name) })),
+    ],
+    [agent.connaissances, agent.name, projet],
+  );
+  const connaissances = useMemo(
+    () => [...new Set([...basesChoisies, ...basesHeritees.map((h) => h.id)])],
+    [basesChoisies, basesHeritees],
+  );
   const chat = useChat({
     model: modelUid,
     effort,
     systemPrompt,
     origin,
     tools: toolsOn && toolsAllowed,
+    connaissances,
   });
 
   // La conversation affichée suit l'URL : « /?c=<id> » rouvre une session,
@@ -99,6 +124,8 @@ export function HomePage() {
     setProjetNeuf(sessionId ? null : projetDemande);
     if (!sessionId) {
       reset();
+      // Un Chat neuf repart sans les bases cochées du précédent (celles de l'agent et du projet suivent d'elles-mêmes).
+      setBasesChoisies([]);
       return;
     }
     const session = getSession(sessionId);
@@ -112,6 +139,7 @@ export function HomePage() {
        * précédent dans le Chat qu'on vient d'ouvrir).
        */
       setAgentId(session.agentId ?? DEFAULT_AGENT.id);
+      setBasesChoisies(session.connaissances ?? []);
     }
   }, [sessionId, projetDemande, location.key, open, reset]);
 
@@ -148,6 +176,20 @@ export function HomePage() {
     enCours?.agentId && enCours.agentId !== DEFAULT_AGENT.id && !selectable.some((a) => a.id === enCours.agentId)
       ? (enCours.agentNom ?? "")
       : null;
+
+  // Le projet dont le Chat tient ses bases : celui où il est rangé, ou celui qui l'attend.
+  useEffect(() => {
+    setProjetDuChat(enCours ? (enCours.projectId ?? null) : projetNeuf);
+  }, [enCours, projetNeuf]);
+
+  // Les bases cochées sont retenues avec le Chat, comme l'agent.
+  useEffect(() => {
+    if (!idEnCours) return;
+    const session = getSession(idEnCours);
+    if (!session || session.ownerId !== currentUser().id) return;
+    if (!session.connaissances && basesChoisies.length === 0) return;
+    memoriserConnaissances(idEnCours, basesChoisies);
+  }, [idEnCours, basesChoisies]);
 
   useEffect(() => {
     if (!idEnCours || !projetNeuf) return;
@@ -286,6 +328,12 @@ export function HomePage() {
             onChange={setToolsOn}
             autorise={toolsAllowed}
             nomAgent={agent.name}
+          />
+          <ConnaissancesChip
+            choisies={basesChoisies}
+            onChange={setBasesChoisies}
+            heritees={basesHeritees}
+            side={chat.messages.length > 0 ? "top" : "bottom"}
           />
         </>
       }

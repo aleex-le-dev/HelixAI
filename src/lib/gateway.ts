@@ -7,6 +7,7 @@
 import { apiFetch } from "@/lib/endpoint";
 import type { NiveauRaisonnement } from "@/lib/store/profile";
 import { ouvrirFlux } from "@/lib/flux";
+import type { Citation } from "@/lib/connaissances";
 import { t, tf } from "@/lib/i18n";
 
 export type Role = "chat" | "code" | "vision" | "gui" | "embed";
@@ -101,6 +102,8 @@ export type HelixEvent =
   | { type: "capture"; largeur: number; hauteur: number }
   /* Ce que la passerelle fait avant la réponse (chargement d'un modèle…). Vide : c'est fini. */
   | { type: "statut"; message: string }
+  /* Passages des bases de connaissances donnés au modèle, pour les citer sous la réponse. */
+  | { type: "sources"; sources: Citation[]; ignorees?: number; aReindexer?: number; erreur?: string }
   | { type: "error"; message: string };
 
 export interface StreamHandlers {
@@ -244,6 +247,8 @@ export async function streamChat(
     effort?: NiveauRaisonnement;
     /** Autoriser l'agent à utiliser les outils MCP. */
     tools?: boolean;
+    /** Bases de connaissances à consulter avant de répondre (l'instance vérifie les droits). */
+    connaissances?: string[];
     signal?: AbortSignal;
   },
   handlers: StreamHandlers,
@@ -258,6 +263,7 @@ export async function streamChat(
       role: opts.model ? undefined : (opts.role ?? "chat"),
       effort: opts.effort ?? "moyen",
       tools: opts.tools ?? false,
+      ...(opts.connaissances && opts.connaissances.length > 0 ? { connaissances: opts.connaissances } : {}),
       stream: true,
     }),
   });

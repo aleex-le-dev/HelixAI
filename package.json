@@ -64,6 +64,10 @@
       {
         "from": "dist-gateway",
         "to": "dist-gateway"
+      },
+      {
+        "from": "cli",
+        "to": "cli"
       }
     ],
     "mac": {

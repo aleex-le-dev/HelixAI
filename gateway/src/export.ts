@@ -7,6 +7,9 @@ import { jours as joursDuJournal, lire as lireJournal, journaliser } from "./aud
 import { listerGroupes } from "./groupes.ts";
 import { elementsDe } from "./bibliotheque.ts";
 import { reunionsDe } from "./reunions.ts";
+import { connaissancesPourExport } from "./connaissances.ts";
+import { imagesDe } from "./images.ts";
+import { projetsPourExport } from "./entrainement.ts";
 
 /**
  * Export des données d'une personne (RGPD, articles 15 et 20).
@@ -62,6 +65,12 @@ export interface ExportDonnees {
   bibliotheque: unknown[];
   /** Ses réunions : compte rendu et transcription (le son, s'il est gardé, s'écoute depuis l'écran). */
   reunions: unknown[];
+  /** Ses bases de connaissances, et ses documents ajoutés aux bases des autres (sans vecteurs). */
+  basesDeConnaissances: unknown;
+  /** Les images qu'elle a créées, avec leur demande (le fichier se télécharge depuis le Chat). */
+  imagesCreees: unknown[];
+  /** Ses projets d'entraînement : les exemples, et le modèle installé s'il l'a été. */
+  modelesEntraines: unknown[];
   consommation: unknown;
   seances: unknown[];
   journal: unknown[];
@@ -119,6 +128,8 @@ export async function exporterDonnees(qui: Demandeur): Promise<ExportDonnees> {
     }
   }
 
+  const images = imagesDe(qui.userId);
+
   const resultat: ExportDonnees = {
     format: FORMAT,
     version: VERSION,
@@ -135,6 +146,9 @@ export async function exporterDonnees(qui: Demandeur): Promise<ExportDonnees> {
     groupes,
     bibliotheque,
     reunions: (await reunionsDe(qui.userId)).map(({ reunion, segments }) => ({ ...reunion, transcription: segments })),
+    basesDeConnaissances: await connaissancesPourExport(qui.userId),
+    imagesCreees: images.images,
+    modelesEntraines: projetsPourExport(qui.userId),
     consommation: await consommationDe(qui.userId),
     seances: await listSessions(qui.userId),
     journal,
@@ -145,6 +159,9 @@ export async function exporterDonnees(qui: Demandeur): Promise<ExportDonnees> {
       "Fichiers de votre dossier de travail : ils sont restés sur le disque, là où vous les avez rangés.",
       "Contenu des documents de votre bibliothèque : leur liste figure ici ; chacun se télécharge depuis la Bibliothèque, tel que vous l'avez déposé.",
       "Conversations d'autres personnes ouvertes à toute l'organisation : lisibles par vous, mais ce ne sont pas des données vous concernant.",
+      "Index des bases de connaissances (passages et vecteurs) : des calculs tirés de vos documents, qui figurent déjà ici.",
+      "Fichiers des images créées et poids des modèles entraînés : les images se téléchargent depuis leur Chat, les modèles se retrouvent dans LM Studio.",
+      ...(images.lisible ? [] : ["Images créées : leur registre est illisible sur l'instance, leur liste n'a pas pu être lue."]),
     ],
   };
 

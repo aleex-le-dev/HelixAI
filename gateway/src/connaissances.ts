@@ -1118,6 +1118,37 @@ export function oublierPersonneConnaissances(userId: string): Promise<number> {
   });
 }
 
+/**
+ * Pour l'export RGPD (export.ts) : les bases de la personne, et les documents
+ * qu'elle a ajoutés aux bases des autres. Ni vecteurs ni passages : ce sont
+ * des calculs tirés de documents de Fichiers, qui figurent déjà dans l'export
+ * et se téléchargent tels quels depuis l'écran.
+ *
+ * Absentes de l'export jusqu'au 25/09/2026 alors que l'effacement du compte
+ * les retirait déjà (`oublierPersonneConnaissances`).
+ */
+export async function connaissancesPourExport(userId: string) {
+  const liste = await charger();
+  const documents = (docs: DocumentBase[]) =>
+    docs.map((d) => ({ nom: d.nom, ajouteLe: d.ajouteLe, etat: d.etat, passages: d.morceaux, indexePar: d.modele ?? null }));
+  return {
+    bases: liste
+      .filter((b) => b.ownerId === userId)
+      .map((b) => ({
+        nom: b.nom,
+        description: b.description,
+        visibilite: b.visibilite,
+        groupes: b.groupes.length,
+        creeeLe: b.createdAt,
+        modifieeLe: b.updatedAt,
+        documents: documents(b.documents),
+      })),
+    documentsAjoutesAuxBasesDesAutres: liste
+      .filter((b) => b.ownerId !== userId)
+      .flatMap((b) => b.documents.filter((d) => d.ajoutePar === userId).map((d) => ({ base: b.nom, document: d.nom, ajouteLe: d.ajouteLe }))),
+  };
+}
+
 /** Au démarrage, pour que la file reprenne sans attendre qu'on ouvre l'écran. */
 export function demarrer(): void {
   relancerSiBesoin();

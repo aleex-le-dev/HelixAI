@@ -8,6 +8,7 @@ import { elementsDe, oublierPersonneBibliotheque } from "./bibliotheque.ts";
 import { reunionsDe, oublierPersonneReunions } from "./reunions.ts";
 import { oublierChatsDesImages, oublierImagesDe } from "./images.ts";
 import { oublierPersonneConnaissances } from "./connaissances.ts";
+import { oublierPersonneEntrainement } from "./entrainement.ts";
 
 /**
  * Suppression d'un compte (RGPD, article 17).
@@ -206,6 +207,8 @@ export async function effacerCompte(
   const groupesQuittes = await oublierPersonneGroupes(userId);
   const elementsBibliotheque = await oublierPersonneBibliotheque(userId);
   const basesDeConnaissances = await oublierPersonneConnaissances(userId);
+  // Ses projets d'entraînement, et le modèle qu'il a pu ranger dans LM Studio (entrainement.ts).
+  const entrainement = await oublierPersonneEntrainement(userId);
   const reunionsEffacees = await oublierPersonneReunions(userId);
   const lignesDeConsommation = await oublierCompte(userId);
   // Ses images créées : fichiers et registre (images.ts).
@@ -226,6 +229,8 @@ export async function effacerCompte(
     groupesQuittes,
     elementsBibliotheque,
     basesDeConnaissances,
+    projetsEntrainement: entrainement.projets,
+    modelesEntrainesRestes: entrainement.modelesRestes,
     reunionsEffacees,
     lignesDeConsommation,
     imagesEffacees,

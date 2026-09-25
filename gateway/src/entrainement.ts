@@ -1912,6 +1912,55 @@ export async function supprimer(qui: string, id: unknown): Promise<void> {
   journaliser("entrainement.projet_supprime", qui, { projet: p.id });
 }
 
+/**
+ * Pour l'export RGPD (export.ts) : les projets de la personne, avec les
+ * exemples qu'elle a écrits ou acceptés. Ni poids ni adaptateur : ce sont des
+ * calculs, et le modèle installé se retrouve dans LM Studio sous son nom.
+ */
+export function projetsPourExport(qui: string) {
+  return listerProjets(qui).map((p) => ({
+    nom: p.nom,
+    creeLe: p.cree,
+    modifieLe: p.modifie,
+    exemples: p.exemples,
+    propositionsARelire: p.propositions,
+    entrainement: p.entrainement
+      ? { etat: p.entrainement.etat, date: p.entrainement.date, modeleDeDepart: p.entrainement.base, exemplesAppris: p.entrainement.exemplesAppris }
+      : null,
+    comparaison: p.comparaison,
+    installeDansLMStudio: p.publie ? { nom: p.publie.nom, date: p.publie.date } : null,
+  }));
+}
+
+/**
+ * À l'effacement d'un compte (effacement.ts) : ses projets, leurs exemples,
+ * l'adaptateur et le modèle rangé dans LM Studio. Oubliés jusqu'au 25/09/2026 :
+ * un compte supprimé laissait ses exemples chiffrés sur le disque et son modèle
+ * entraîné dans le sélecteur de toute l'équipe.
+ *
+ * Un calcul de la personne en cours est arrêté d'abord. Si le modèle installé
+ * ne peut pas être retiré (il répond à quelqu'un), les exemples partent quand
+ * même : ce sont eux, les données de la personne ; le reste est noté au
+ * journal, par un nombre.
+ */
+export async function oublierPersonneEntrainement(qui: string): Promise<{ projets: number; modelesRestes: number }> {
+  if (arreter(qui)) {
+    for (let i = 0; i < 20 && travail?.pour === qui; i++) await new Promise((r) => setTimeout(r, 500));
+  }
+  let projets = 0;
+  let modelesRestes = 0;
+  for (const p of listerProjets(qui)) {
+    try {
+      await supprimer(qui, p.id);
+    } catch {
+      if (p.publie) modelesRestes++;
+      if (sous(dossierProjets(), dossierProjet(p.id))) rmSync(dossierProjet(p.id), { recursive: true, force: true });
+    }
+    projets++;
+  }
+  return { projets, modelesRestes };
+}
+
 /** L'estimation de temps et de place pour un projet, avec les réglages. */
 export function detailProjet(qui: string, id: unknown): Projet & { estimation: ReturnType<typeof estimer> } {
   const p = projetDe(id, qui);

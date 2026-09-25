@@ -864,6 +864,22 @@ export async function imageVisible(id: string, qui: Demandeur): Promise<{ chemin
  * Effacement d'un compte (effacement.ts) : ses images partent avec lui. Elles
  * restaient sur le disque, servies à personne mais gardées.
  */
+/**
+ * Pour l'export RGPD (export.ts) : les images créées par la personne, avec la
+ * demande qui les a produites. Le fichier se télécharge depuis son Chat. Un
+ * registre illisible rend une liste vide, que l'export signale.
+ */
+export function imagesDe(userId: string): { lisible: boolean; images: { id: string; description: string; invite: string; date: string; largeur: number; hauteur: number }[] } {
+  const registre = lireIndex();
+  if (!registre) return { lisible: false, images: [] };
+  return {
+    lisible: true,
+    images: Object.entries(registre)
+      .filter(([, e]) => e.pour === userId)
+      .map(([id, e]) => ({ id, description: e.description, invite: e.invite, date: e.date, largeur: e.largeur, hauteur: e.hauteur })),
+  };
+}
+
 export function oublierImagesDe(userId: string): number {
   const registre = lireIndex();
   // Registre illisible : on ne réécrit rien par-dessus (voir `lireIndex`).

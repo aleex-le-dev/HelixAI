@@ -17,7 +17,7 @@
  * chaque porte ne les rate pas, et se rejoue à chaque version.
  */
 import { spawn } from "node:child_process";
-import { mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -380,6 +380,31 @@ console.log("\n7 bis. Entraînement : un projet ne se désigne que par son ident
   verifier("le projet est chiffré sur le disque", brut.length > 0 && brut.every((b) => b === "HLXF1"), brut.join(","));
   const suppr = await appel("/helix/entrainement/supprimer", { method: "POST", headers: avecSeance, body: JSON.stringify({ projet: projet.id }) });
   verifier("son auteur peut le supprimer", suppr.status === 200, suppr.status);
+}
+
+/* ------------------------------------------------------------------------- */
+console.log("\n7 ter. Export RGPD et effacement : bases, images, entraînement");
+{
+  /*
+   * Ajouté le 25/09/2026 : les bases de connaissances, les images créées et
+   * les projets d'entraînement manquaient à l'export, et l'effacement d'un
+   * compte laissait ses projets d'entraînement sur le disque.
+   */
+  const nomBase = "Base-De-B-Export-5120";
+  await appel("/helix/connaissances", { method: "POST", headers: avecSeanceB, body: JSON.stringify({ nom: nomBase, visibilite: "prive" }) });
+  const projet = await (await appel("/helix/entrainement/projets", { method: "POST", headers: avecSeanceB, body: JSON.stringify({ nom: "Projet-De-B-7731" }) })).json();
+  const exportB = await (await appel("/helix/export", { headers: avecSeanceB })).json();
+  verifier("l'export contient ses bases de connaissances", exportB.basesDeConnaissances?.bases?.some((b) => b.nom === nomBase), JSON.stringify(exportB.basesDeConnaissances).slice(0, 80));
+  verifier("l'export contient ses projets d'entraînement", exportB.modelesEntraines?.some((p) => p.nom === "Projet-De-B-7731"), JSON.stringify(exportB.modelesEntraines).slice(0, 80));
+  verifier("l'export contient la liste de ses images", Array.isArray(exportB.imagesCreees), typeof exportB.imagesCreees);
+  const exportA = JSON.stringify(await (await appel("/helix/export", { headers: avecSeance })).json());
+  verifier("l'export d'une collègue ne contient ni sa base ni son projet", !exportA.includes(nomBase) && !exportA.includes("Projet-De-B-7731"), "trouvé");
+  const efface = await appel("/helix/compte/effacer", { method: "POST", headers: avecSeanceB, body: JSON.stringify({ password: MDP_B }) });
+  verifier("effacer son compte réussit", efface.status === 200, efface.status);
+  const restes = existsSync(join(DONNEES, "entrainement", projet.id ?? "absent"));
+  verifier("l'effacement retire ses projets d'entraînement du disque", projet.id && !restes, restes ? "dossier resté" : projet.id);
+  const bases = JSON.stringify(await (await appel("/helix/connaissances", { headers: avecSeance })).json());
+  verifier("l'effacement retire ses bases de connaissances", !bases.includes(nomBase), "trouvée");
 }
 
 /* ------------------------------------------------------------------------- */

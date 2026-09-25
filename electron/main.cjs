@@ -2,6 +2,7 @@ const { app, BrowserWindow, dialog, ipcMain, nativeTheme, net, protocol, shell }
 const { demarrerMiseAJour } = require("./miseAJour.cjs");
 const coffre = require("./coffre.cjs");
 const grandStockage = require("./grandStockage.cjs");
+const ligneDeCommande = require("./ligneDeCommande.cjs");
 const { installerBotReunion, arreterTousLesBots, botsActifs } = require("./botReunion.cjs");
 
 /*
@@ -448,6 +449,20 @@ ipcMain.handle("helix:passerelle-redemarrer", async (event) => {
   arretDemande = false;
   const vivante = await startGateway();
   return { ok: vivante !== false };
+});
+
+/** La ligne de commande `helix` dans le PATH (electron/ligneDeCommande.cjs). */
+ipcMain.handle("helix:cli-etat", (event) => {
+  if (!depuisLaFenetre(event)) throw new Error("Refusé.");
+  return ligneDeCommande.etat();
+});
+ipcMain.handle("helix:cli-installer", (event) => {
+  if (!depuisLaFenetre(event)) throw new Error("Refusé.");
+  return ligneDeCommande.installer();
+});
+ipcMain.handle("helix:cli-retirer", (event) => {
+  if (!depuisLaFenetre(event)) throw new Error("Refusé.");
+  return ligneDeCommande.retirer();
 });
 
 ipcMain.handle("helix:choisir-dossier", async (event) => {

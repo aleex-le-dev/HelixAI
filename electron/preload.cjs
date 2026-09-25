@@ -59,6 +59,12 @@ contextBridge.exposeInMainWorld("helix", {
    * ouverte aux collègues : l'adresse d'écoute se choisit au démarrage.
    */
   redemarrerPasserelle: () => ipcRenderer.invoke("helix:passerelle-redemarrer"),
+  /** La ligne de commande `helix` : état, pose du lanceur dans ~/.local/bin, retrait. */
+  ligneDeCommande: {
+    etat: () => ipcRenderer.invoke("helix:cli-etat"),
+    installer: () => ipcRenderer.invoke("helix:cli-installer"),
+    retirer: () => ipcRenderer.invoke("helix:cli-retirer"),
+  },
   coffre: {
     /** Le système sait-il chiffrer ? Sinon l'interface garde son repli. */
     disponible: coffreInitial.disponible === true,

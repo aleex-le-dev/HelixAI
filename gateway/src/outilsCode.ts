@@ -14,7 +14,7 @@ import { groupesDe } from "./groupes.ts";
 import { executerOutil, cibleDe, type DefinitionOutil } from "./outils.ts";
 import { verifierOutil } from "./approbation.ts";
 import { journaliser } from "./audit.ts";
-import { api, cleOutils } from "./opencode.ts";
+import { api, cleOutils, portEnCours } from "./opencode.ts";
 
 /**
  * Les connecteurs de l'instance, servis par MCP à l'agent de code (OpenCode).
@@ -30,8 +30,8 @@ import { api, cleOutils } from "./opencode.ts";
  * OpenCode sait parler à un serveur MCP distant (`mcp` de sa configuration,
  * type « remote », en-têtes fixes). Vérifié le 25/09/2026 sur OpenCode
  * 1.18.32 : il s'y connecte en HTTP « streamable », avec les en-têtes écrits
- * dans sa configuration (mais voir « État mesuré » plus bas). On ne lui donne pas les serveurs
- * eux-mêmes, on lui donne **cette route**, et c'est ce qui rend la chose sûre :
+ * dans sa configuration. On ne lui donne pas les serveurs eux-mêmes, on lui
+ * donne **cette route**, et c'est ce qui rend la chose sûre :
  *
  *  - chaque appel passe par la barrière d'approbation (`verifierOutil`), au
  *    niveau choisi pour l'instance, comme dans le Chat. Donner à OpenCode la
@@ -48,21 +48,20 @@ import { api, cleOutils } from "./opencode.ts";
  * (`external_directory: deny`, opencode.ts). Pour les fichiers du projet, il a
  * déjà les siens.
  *
- * **État mesuré le 25/09/2026, OpenCode 1.18.32 : la route est prête, mais
- * Helix Code ne s'en sert pas encore.** OpenCode se connecte bien à cette
- * route, liste ses outils et les appelle, mais seulement pour les sessions de
- * son **ancienne** API (`/session/<id>/message`) : un appel à
- * `helix_bibliotheque__chercher` y est arrivé ici, et a été refusé comme prévu
- * (session inconnue de la passerelle). Les sessions de la **nouvelle** API
- * (`/api/session`), celles qu'ouvre Helix Code, ne proposent au modèle que les
- * outils d'OpenCode (apply_patch, bash, edit, glob, grep, question, read,
- * skill, todowrite, webfetch, websearch, write), même serveur MCP connecté :
- * le modèle a répondu deux fois que l'outil n'existait pas. Repasser Helix
- * Code sur l'ancienne API changerait tout son flux d'évènements (l'écran et la
- * ligne de commande lisent `session.next.*`) : ce n'est pas fait. Le jour où
- * la nouvelle API d'OpenCode offrira les outils MCP, ils arriveront ici, avec
- * la barrière et le journal. En attendant, les connecteurs s'utilisent depuis
- * le terminal par `helix chat --outils`, qui passe par la boucle de `chat.ts`.
+ * **Pourquoi Helix Code passe par l'ancienne API d'OpenCode.** Les sessions de
+ * sa nouvelle API (`/api/session`) ne proposent au modèle que les outils
+ * livrés avec OpenCode : son registre d'outils « v2 » n'a aucune place pour
+ * ceux des serveurs MCP (lu dans le code d'OpenCode 1.18.32, voir
+ * fluxCode.ts), et le modèle répondait que l'outil n'existait pas. Les
+ * sessions de l'ancienne API (`/session`), elles, reçoivent les outils MCP.
+ * Depuis le 25/09/2026, Helix Code ouvre donc ses sessions par l'ancienne API,
+ * et la passerelle traduit son flux pour les clients (fluxCode.ts). Vérifié le
+ * même jour avec Qwen3 8B, un serveur MCP d'essai (scripts/mcp-essai.mjs) et
+ * `helix code` comme la route de l'écran : l'outil est proposé et appelé, la
+ * carte d'accord arrive chez la personne qui a envoyé la demande, le refus
+ * empêche l'appel, l'accord le laisse partir, le journal le note
+ * (`surface: "code"`), et deux personnes au travail en même temps font
+ * refuser sans carte.
  *
  * **Pour qui l'agent travaille.** OpenCode ne dit pas, dans un appel d'outil,
  * de quelle session il vient : un seul client MCP sert toutes ses sessions
@@ -98,13 +97,13 @@ async function titulaire(): Promise<string | null> {
   const auTravail = new Set<string>();
   /*
    * Deux listes, parce qu'OpenCode tient deux familles de sessions : celles de
-   * sa nouvelle API (`/api/session`, celles de Helix Code), actives dans
-   * `/api/session/active` (mesuré le 25/09/2026 : `{"data":{"ses_…":{"type":
-   * "running"}}}` pendant un tour, `{"data":{}}` après), et celles de
-   * l'ancienne, dans `/session/status`, qui ne voit pas les premières (mesuré :
-   * `{}` en plein tour d'une session de la nouvelle API). Une session active
-   * de l'ancienne API n'a pas été ouverte par Helix : elle compte comme
-   * inconnue, donc fait refuser.
+   * l'ancienne API (`/session`, celles de Helix Code depuis le 25/09/2026),
+   * actives dans `/session/status` (mesuré : `{"ses_…":{"type":"busy"}}`
+   * pendant un tour), et celles de la nouvelle, dans `/api/session/active`
+   * (`{"data":{"ses_…":{"type":"running"}}}`), que la première ne voit pas.
+   * Helix n'ouvre plus de session de la nouvelle API : une session active qui
+   * n'est pas dans `demandes`, de l'une ou l'autre famille, n'a pas été
+   * ouverte par Helix, compte comme inconnue, donc fait refuser.
    */
   for (const dossier of dossiers) {
     const d = encodeURIComponent(dossier);
@@ -147,6 +146,41 @@ export function outilsPourCode(): DefinitionOutil[] {
     ...bibliotheque.toolsForModel(),
     ...reunions.toolsForModel(),
   ];
+}
+
+/**
+ * Liste d'outils vue par OpenCode, par serveur OpenCode et par dossier.
+ *
+ * OpenCode lit la liste des outils d'un serveur MCP **une fois**, quand il s'y
+ * connecte, et la garde (lu dans son code, 1.18.32 : `defs`, remplis à la
+ * connexion). Cette route est sans état : elle ne peut pas lui annoncer un
+ * changement. Mesuré le 25/09/2026 : un connecteur ajouté pendant qu'OpenCode
+ * tournait n'existait pas pour l'agent de code (« Aucun outil disponible pour
+ * ajouter des notes »), jusqu'au redémarrage d'OpenCode. Avant chaque demande,
+ * si la liste a changé depuis la dernière connexion, on demande à OpenCode de
+ * se reconnecter (`POST /mcp/helix/connect`), ce qui la lui fait relire.
+ */
+const listesVues = new Map<string, string>();
+
+export async function rafraichirOutilsCode(dossier: string): Promise<void> {
+  const serveur = portEnCours();
+  if (!serveur) return;
+  const cle = `${serveur}|${dossier}`;
+  const signature = outilsPourCode()
+    .map((o) => o.function.name)
+    .sort()
+    .join(",");
+  if (listesVues.get(cle) === signature) return;
+  try {
+    const r = await api(`/mcp/helix/connect?directory=${encodeURIComponent(dossier)}`, {
+      method: "POST",
+      signal: AbortSignal.timeout(10_000),
+    });
+    await r.text().catch(() => "");
+    if (r.ok) listesVues.set(cle, signature);
+  } catch {
+    /* OpenCode n'a pas répondu : on réessaiera à la demande suivante */
+  }
 }
 
 /** La clé présentée est-elle celle que la passerelle a écrite pour OpenCode ? */

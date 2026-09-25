@@ -2316,12 +2316,12 @@ curl -s -H "Authorization: Basic $(printf 'opencode:<mot de passe>' | base64)" \
 
 ## 22. Les surfaces ajoutées le 25 septembre 2026
 
-`npm run securite` compte désormais **140 contrôles, tous réussis le 25/09/2026** (125,
-plus 15 sur les employés et les bases de connaissances, ajoutés le même jour, § 22.2).
+`npm run securite` compte désormais **152 contrôles, tous réussis le 25/09/2026** (125 à midi, plus 15 sur les employés et les bases de connaissances, § 22.2, 5 sur le flux de Helix Code, § 22.4, et 7 sur l'export RGPD et l'effacement, § 7.1).
 Ajoutés ce jour-là, par branche : 14 sur les images d'un Chat partagé (13, plus la
 connexion d'une collègue), 6 sur les bases de connaissances et 9 de leurs routes
 ajoutées aux listes « sans jeton » et « sans séance », 16 sur l'entraînement, 3 sur
-la route d'outils de Code.
+la route d'outils de Code, 5 sur le flux de Helix Code fabriqué par la passerelle
+(§ 22.4).
 
 ### 22.1 Images d'un Chat partagé
 
@@ -2473,8 +2473,32 @@ par 3 vérifications de la batterie.
   sinon (deux personnes, session inconnue), **refus sans carte**. Seul le refus
   « session inconnue » a été observé ; le cas « deux personnes » n'a pas été essayé.
 - Un appel abandonné par OpenCode avant l'accord n'est pas exécuté après coup.
-- À ce jour, OpenCode 1.18.32 ne propose pas ces outils aux sessions de sa nouvelle
-  API : la route est en place, sans être utilisée par Helix Code.
+- Depuis le 25/09/2026, Helix Code ouvre ses sessions par l'**ancienne** API
+  d'OpenCode, la seule dont les sessions reçoivent les outils MCP (OpenCode 1.18.32),
+  et la passerelle fabrique le flux des clients (`gateway/src/fluxCode.ts`). Vérifié le
+  même jour avec un serveur MCP d'essai : carte chez la personne qui a envoyé la
+  demande, refus respecté (outil non exécuté), accord respecté, `outil.appele` au
+  journal avec `surface: "code"`, et **le cas « deux personnes » essayé** : refus sans
+  carte, `titulaire-inconnu` au journal, outil non exécuté.
+
+**Le flux de Helix Code, fabriqué par la passerelle.**
+
+- Toujours derrière une séance (tableau `EXECUTION`) ; l'identifiant de session est
+  contrôlé (`SESSION_CODE`) avant d'être interpolé dans un chemin de l'API d'OpenCode,
+  sur les trois routes (`/events`, `/prompt`, `/interrupt`), et la route du flux
+  n'allume pas OpenCode (503 s'il est éteint). Contrôlé par 5 vérifications de la
+  batterie (130 au total le 25/09/2026, toutes réussies).
+- La passerelle n'écoute que les sessions qu'elle a ouvertes ; pour une autre, le flux
+  n'est ouvert que si OpenCode la connaît (sinon 404) : un identifiant inventé
+  n'occupe rien. Mémoire bornée (2 000 évènements ou 2 Mo par session, 200 sessions).
+- Comme avant, qui a une séance peut lire le flux d'une session dont il connaît
+  l'identifiant, y compris celle d'un collègue : l'identifiant, tiré au hasard par
+  OpenCode, n'est rendu qu'à qui l'a ouverte. Ce n'est pas une barrière par personne,
+  et ce n'en était pas une avec la nouvelle API.
+- Une question ou demande d'autorisation d'OpenCode (sortie du dossier, boucle) qui
+  passerait malgré la configuration est refusée aussitôt par la passerelle, et notée
+  au journal (`outil.refuse`, cause `permission.asked-refuse`) : une session ne reste
+  jamais bloquée sur une question que personne ne voit.
 
 **La ligne de commande `helix`.**
 

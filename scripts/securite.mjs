@@ -351,6 +351,32 @@ for (const chemin of ["../../../../etc/passwd", "/etc/passwd", "..%2F..%2Fetc%2F
   verifier("outils de l'agent de code avec une clé devinée → 403", fausseCle.status === 403, fausseCle.status);
 }
 
+/*
+ * Helix Code passe par l'ancienne API d'OpenCode depuis le 25/09/2026, et son
+ * flux est fabriqué par la passerelle (fluxCode.ts). Ce qui doit rester vrai :
+ * le flux exige une séance, un identifiant de session détourné ne sort jamais
+ * de sa route (il est interpolé dans un chemin de l'API d'OpenCode, qui sait
+ * lire des fichiers), et une route de lecture n'allume pas le moteur.
+ */
+{
+  const sansSeance = await appel("/helix/code/events?sessionID=ses_essai", { headers: avecJeton });
+  verifier("flux de Helix Code au jeton seul → 401", sansSeance.status === 401, sansSeance.status);
+  const detourne = encodeURIComponent("ses_x/../../file/content?path=/etc/passwd&");
+  const flux = await appel(`/helix/code/events?sessionID=${detourne}`, { headers: avecSeance });
+  verifier("flux de Helix Code, identifiant de session détourné → 400", flux.status === 400, flux.status);
+  for (const route of ["/helix/code/prompt", "/helix/code/interrupt"]) {
+    const r = await appel(route, {
+      method: "POST",
+      headers: avecSeance,
+      body: JSON.stringify({ sessionID: "ses_x/../../file/content?path=/etc/passwd&", text: "x" }),
+    });
+    verifier(`${route}, identifiant de session détourné → 400`, r.status === 400, r.status);
+  }
+  const eteint = await appel("/helix/code/events?sessionID=ses_essai", { headers: avecSeance });
+  const etat = await (await appel("/helix/code", { headers: avecJeton })).json().catch(() => ({}));
+  verifier("le flux de Helix Code n'allume pas le moteur (503, OpenCode éteint)", eteint.status === 503 && etat.running === false, `${eteint.status} ${JSON.stringify(etat).slice(0, 80)}`);
+}
+
 /* ------------------------------------------------------------------------- */
 console.log("\n6 bis. Bases de connaissances");
 {

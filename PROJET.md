@@ -751,11 +751,36 @@ quelle session vient un appel : si les sessions qui travaillent appartiennent to
 à la même personne, la carte d'accord va chez elle ; sinon, **refus sans carte**, parce
 qu'une carte envoyée à la mauvaise personne lui ferait approuver l'action d'un autre.
 
-Ce que cela donne aujourd'hui (mesuré le 25/09/2026, OpenCode 1.18.32) : les sessions
-de la nouvelle API d'OpenCode, celles qu'ouvre Helix Code, ne proposent pas les outils
-MCP au modèle. **Les connecteurs ne sont donc pas utilisables dans Helix Code**, ni à
-l'écran ni au terminal ; ils le sont par `helix chat --outils`. Repasser Code sur
-l'ancienne API aurait changé tout le flux d'évènements : pas fait.
+**Les sessions de Helix Code passent par l'ancienne API d'OpenCode** (décidé le
+25/09/2026). Cause trouvée dans le code d'OpenCode 1.18.32, la dernière version
+publiée : les sessions de sa nouvelle API (`/api/session`) tirent leurs outils d'un
+registre « v2 » où seuls les outils livrés sont inscrits ; rien n'y inscrit ceux des
+serveurs MCP, et l'équipe d'OpenCode l'écrit elle-même sur sa branche de
+développement (« MCP [...] still need an explicit canonical registration design »).
+Aucun réglage, agent ou champ `tools` n'y change rien, et aucune version plus récente
+n'existe. L'ancienne API (`/session`, `prompt_async`) ajoute les outils MCP à ceux de
+l'agent. Les trois clients (écran, extension VS Code, `helix code`) lisent le flux de
+la nouvelle API (`session.next.*`) : plutôt que de les réécrire, la passerelle écoute
+`/event` et fabrique pour chaque session les évènements qu'ils lisent déjà, numérotés,
+avec la reprise par `after` (`gateway/src/fluxCode.ts`). OpenCode n'a pas changé de
+version. Trouvé en essayant : OpenCode ne relit la liste des outils d'un serveur MCP
+qu'en s'y reconnectant, si bien qu'un connecteur branché pendant qu'il tournait
+n'existait pas pour l'agent (« Aucun outil disponible ») ; la passerelle lui fait
+rouvrir la connexion avant une demande quand la liste a changé.
+
+Vérifié le 25/09/2026 sur une instance jetable, Qwen3 8B, avec un serveur MCP d'essai
+sans compte (`scripts/mcp-essai.mjs`, rejoué par `npm run essai:cli -- --modele` :
+48 sur 48) : par `helix code`, la carte d'accord arrive chez
+la personne, le refus empêche l'appel (trace du serveur vide), « o » au terminal le
+laisse partir (note écrite, `outil.appele` au journal avec `surface: "code"`) ; par la
+route de l'écran, lecture accordée par l'API d'approbation, flux traduit complet
+(`prompted`, `tool.called` `helix_carnet__lire_carnet`, `tool.success`, fin « stop »),
+reprise par `after` ; deux personnes au travail en même temps : refus sans carte
+(`titulaire-inconnu` au journal), outil non exécuté. **Pas vu dans le navigateur** :
+l'écran Code demande une connexion, et un assistant ne tape pas de mot de passe ; son
+parcours HTTP est celui qui a été essayé, et seul l'affichage du nom de l'outil a
+changé (`nomOutil`). Pas essayé non plus : un vrai connecteur avec compte (Drive,
+Slack, courrier) dans Code, l'extension VS Code avec un connecteur.
 
 La séance du terminal est un fichier en clair (`~/.helix/cli-seance`, 0600, dossier
 0700), comme les outils de ligne de commande habituels : un trousseau demanderait une
@@ -926,7 +951,9 @@ données.
 ### Ce qui a été ajouté le 25/09/2026
 
 Détail dans [SECURITE.md](SECURITE.md) § 22. `npm run securite` compte désormais
-**125 contrôles, tous réussis le 25/09/2026** (77 la veille).
+**152 contrôles, tous réussis le 25/09/2026** (77 la veille ; dont 5 pour le flux de
+Helix Code fabriqué par la passerelle, § 3.11, 15 pour les employés et les bases de
+connaissances, § 3.10, et 7 pour l'export RGPD et l'effacement).
 
 | Surface | Règle |
 |---|---|
@@ -2283,12 +2310,17 @@ ne restent ici que les points ouverts.*
     Qwen3 8B dans la minute : deux lancements sur huit se sont arrêtés ainsi le
     25/09/2026. Le message le dit et il suffit de relancer ; une vraie parade demande
     d'harmoniser avec ce garde, si le client le demande. Helix n'y touche pas.
-16. **Serveurs MCP dans HelixAI Code** (§ 3.11) : bloqués par la nouvelle API
-    d'OpenCode, qui ne propose pas les outils MCP au modèle (mesuré avec OpenCode
-    1.18.32). La route `/helix/code/outils` et sa barrière sont prêtes ; à revérifier à
-    chaque mise à jour d'OpenCode, puis de bout en bout (appel, carte d'accord chez la
-    bonne personne, journal). D'ici là, les connecteurs passent par
-    `helix chat --outils`.
+16. **Serveurs MCP dans HelixAI Code** (§ 3.11) : ils marchent depuis le 25/09/2026,
+    par l'ancienne API d'OpenCode et un flux traduit par la passerelle
+    (`fluxCode.ts`), vérifiés de bout en bout avec un serveur d'essai sans compte
+    (`npm run essai:cli -- --modele`). Reste : les voir dans l'écran Code du
+    navigateur (non regardé, connexion requise) et dans l'extension VS Code (nom de
+    l'outil sans le préfixe `helix_`, changé mais pas essayé, `.vsix` pas refait) ;
+    essayer un vrai
+    connecteur à compte ; à chaque mise à jour d'OpenCode, relire si la nouvelle API
+    reçoit enfin les outils MCP (alors on pourra y revenir) et si l'ancienne existe
+    toujours. L'historique rejoué par le flux n'est plus que celui que la passerelle
+    a vu depuis son démarrage.
 17. **Ligne de commande** : livrée avec l'application le 25/09/2026 (paquet
     `Resources/cli`, Paramètres > Installer les apps > CLI, qui pose `~/.local/bin/helix`
     et, si besoin, une ligne marquée dans `~/.zprofile` ; `electron/ligneDeCommande.cjs`).

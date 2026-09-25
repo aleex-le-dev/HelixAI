@@ -412,10 +412,13 @@ ipcMain.on("helix:grand-initial", (event) => {
     event.returnValue = { disponible: false, cles: [], valeurs: {} };
     return;
   }
+  const valeurs = grandStockage.lire();
   event.returnValue = {
     disponible: grandStockage.disponible(),
     cles: [...grandStockage.CLES],
-    valeurs: grandStockage.lire(),
+    valeurs,
+    // Présentes sur le disque mais illisibles : l'interface ne pousse pas une liste vide à l'instance (sync.ts).
+    illisibles: grandStockage.clesIllisibles(),
   };
 });
 

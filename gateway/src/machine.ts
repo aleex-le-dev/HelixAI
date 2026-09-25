@@ -275,6 +275,9 @@ export function progressionMachine() {
   return progression;
 }
 
+/** Une préparation (téléchargement, construction, démarrage) est-elle en cours ? */
+export const preparationMachineEnCours = (): boolean => preparation !== null;
+
 /**
  * Ce qui empêche la machine macOS sur ce poste (vide : elle est possible).
  * Mac Apple Silicon, 32 Go (8 pour la machine, le modèle et le système à

@@ -1,6 +1,6 @@
 import { apiFetch } from "@/lib/endpoint";
 import { retenirGroupes } from "@/lib/store/identity";
-import { auGrand, ecrireGrand, lireGrand } from "@/lib/store/grandStockage";
+import { auGrand, ecrireGrand, grandIllisible, grandRelu, lireGrand } from "@/lib/store/grandStockage";
 
 /**
  * Synchronisation multi-postes.
@@ -139,6 +139,7 @@ async function pull(collection: Collection): Promise<Tirage> {
   // Les conversations partagées à un groupe se lisent selon les groupes de la personne : on les relit avec.
   if (collection === "sessions") await relireMesGroupes();
   writeLocal(collection, payload.value);
+  grandRelu(collection);
   return "tiree";
 }
 
@@ -168,6 +169,13 @@ const JAMAIS_POUSSEES: Collection[] = ["accounts"];
 export async function push(collection: Collection): Promise<void> {
   if (!online) return;
   if (JAMAIS_POUSSEES.includes(collection)) return;
+  /*
+   * Fichier des Chats illisible au démarrage (grandStockage.ts) : la copie
+   * locale part d'une liste vide. La pousser effacerait tous les Chats de la
+   * personne sur l'instance, qui n'y verrait qu'une suppression voulue. On
+   * attend que l'instance ait rendu la collection (`pull`).
+   */
+  if (grandIllisible(collection)) return;
   const value = readLocal(collection);
   if (value === null) return;
   pushing.add(collection);

@@ -57,9 +57,9 @@ import { exporterDonnees } from "./export.ts";
 import { chargerReglagesEcran, configEcran, definirModeEcran, modeModifiable } from "./reglagesEcran.ts";
 import { readFileSync } from "node:fs";
 import * as images from "./images.ts";
-import { lireLogiciel, logicielsTrouves } from "./importLocal.ts";
+import { contenuLogiciel, logicielsTrouves, pageLogiciel } from "./importLocal.ts";
 import { corrigerPages, estDemandeDeSite, preparerDesign } from "./design.ts";
-import { arreterMachine, arreterMachineEnPartant, choisirSysteme, demarrerMachine, diagnosticMachine, effacerMachine, progressionMachine, systemeMachine } from "./machine.ts";
+import { arreterMachine, arreterMachineEnPartant, choisirSysteme, demarrerMachine, diagnosticMachine, effacerMachine, preparationMachineEnCours, progressionMachine, systemeMachine } from "./machine.ts";
 import { apercuEffacement, effacerCompte, sansComptesDisparus } from "./effacement.ts";
 import { authorise, cheminDuJeton, hasValidToken, instanceToken } from "./auth.ts";
 import * as employes from "./employes.ts";
@@ -1404,6 +1404,8 @@ async function handleDataWrite(
   const fusion = fusionner(name, await db().read(name), body.value ?? null, qui);
   // Un collègue peut renvoyer une copie où figure encore un compte supprimé.
   await db().write(name, await sansComptesDisparus(name, fusion.valeur));
+  // Deux écritures dans la même milliseconde ont la même révision : le relevé des images ne s'y fie pas seul.
+  if (name === "sessions") images.oublierChatsDesImages();
 
   journaliser("donnees.ecrites", qui.userId, {
     collection: name,
@@ -3023,6 +3025,15 @@ async function handleComputerMode(
    * changer quand la machine tourne : l'ancienne s'arrête d'abord.
    */
   if (body.mode === "sandbox" && (body.systeme === "linux" || body.systeme === "macos") && body.systeme !== systemeMachine()) {
+    /*
+     * Pas pendant une préparation : `demarrerMachine` rendait la préparation
+     * en cours, celle de l'ancien système. On choisissait macOS, le bureau
+     * Linux finissait de démarrer, et la machine macOS ne démarrait jamais,
+     * alors que le système retenu disait macOS.
+     */
+    if (preparationMachineEnCours()) {
+      return send(res, 409, { error: { message: t("La machine est en cours de préparation : attendez qu'elle ait fini.") } });
+    }
     if (body.systeme === "macos" && !(await diagnosticMachine()).macos.possible) {
       return send(res, 400, { error: { message: t("Cet ordinateur ne peut pas faire tourner la machine macOS.") } });
     }
@@ -3077,12 +3088,14 @@ async function handleImagesInstaller(req: http.IncomingMessage, res: http.Server
 async function handleImagesCreer(req: http.IncomingMessage, res: http.ServerResponse, url: URL): Promise<void> {
   const qui = await demandeur(req, url);
   if (!qui) return send(res, 401, sansSeance());
-  const body = (await readJson(req).catch(() => ({}))) as { description?: unknown; format?: unknown };
+  const body = (await readJson(req).catch(() => ({}))) as { description?: unknown; format?: unknown; chat?: unknown };
   const description = typeof body.description === "string" ? body.description.trim().slice(0, 2000) : "";
   if (!description) return send(res, 400, { error: { message: t("Décrivez l'image à créer.") } });
   const format = body.format === "portrait" || body.format === "paysage" ? body.format : "carre";
+  // Le Chat de la demande : ceux qui le voient verront l'image (images.ts, `imageVisible`).
+  const chat = typeof body.chat === "string" && /^[\w-]{1,100}$/.test(body.chat) ? body.chat : undefined;
   try {
-    const tr = await images.lancerCreation(description, format, qui.userId);
+    const tr = await images.lancerCreation(description, format, qui.userId, chat);
     send(res, 202, tr);
   } catch (err) {
     send(res, 409, { error: { message: err instanceof Error ? err.message : String(err) } });
@@ -3097,14 +3110,21 @@ async function handleImagesTravail(req: http.IncomingMessage, res: http.ServerRe
   send(res, 200, tr);
 }
 
-/** Une image créée, pour la personne qui l'a créée seulement. */
+/**
+ * Une image créée, pour son auteur et pour qui voit le Chat où elle a été
+ * créée (images.ts, `imageVisible`). Tout autre : 404, qu'elle existe ou non.
+ */
 async function handleImagesFichier(req: http.IncomingMessage, res: http.ServerResponse, url: URL, id: string): Promise<void> {
   const qui = await demandeur(req, url);
   if (!qui) return send(res, 401, sansSeance());
-  const chemin = images.cheminImage(id, qui.userId);
-  if (!chemin) return send(res, 404, { error: { message: t("Image introuvable.") } });
-  const octets = readFileSync(chemin);
-  res.writeHead(200, { "Content-Type": "image/png", "Content-Length": octets.length, ...entetesOrigine(req), ...ENTETES_SECURITE, "Cache-Control": "private, max-age=86400" });
+  const vue = await images.imageVisible(id, qui);
+  if (!vue) return send(res, 404, { error: { message: t("Image introuvable.") } });
+  const octets = readFileSync(vue.chemin);
+  /*
+   * Un collègue ne garde pas l'image en cache : le partage du Chat peut lui
+   * être retiré, et l'instance doit alors cesser de la lui servir.
+   */
+  res.writeHead(200, { "Content-Type": "image/png", "Content-Length": octets.length, ...entetesOrigine(req), ...ENTETES_SECURITE, "Cache-Control": vue.auteur ? "private, max-age=86400" : "no-store" });
   res.end(octets);
 }
 
@@ -3124,11 +3144,23 @@ async function handleImportLogiciels(req: http.IncomingMessage, res: http.Server
   if (!depuisCePoste(req)) {
     return send(res, 403, { error: { message: t("L'import depuis les logiciels se fait sur le poste où ils sont installés, pas depuis une instance distante.") } });
   }
-  if (!id) return send(res, 200, { logiciels: logicielsTrouves() });
-  const lu = lireLogiciel(id);
-  if (!lu) return send(res, 404, { error: { message: t("Rien à reprendre de ce logiciel.") } });
-  journaliser("import.logiciel", qui.userId, { logiciel: id, chats: lu.chats.length });
-  send(res, 200, lu);
+  if (!id) return send(res, 200, { logiciels: await logicielsTrouves() });
+  /*
+   * Par morceaux (importLocal.ts) : GET donne une page de la liste
+   * (`?depuis=`), POST le contenu des Chats choisis (`{ cles }`).
+   */
+  if (req.method === "POST") {
+    const body = (await readJson(req).catch(() => ({}))) as { cles?: unknown };
+    const cles = Array.isArray(body.cles) ? body.cles.filter((c): c is string => typeof c === "string").slice(0, 500) : [];
+    const contenu = await contenuLogiciel(id, cles);
+    if (!contenu) return send(res, 404, { error: { message: t("Rien à reprendre de ce logiciel.") } });
+    journaliser("import.logiciel", qui.userId, { logiciel: id, chats: contenu.chats.length });
+    return send(res, 200, contenu);
+  }
+  const depuis = Number(url.searchParams.get("depuis") ?? 0);
+  const page = await pageLogiciel(id, Number.isFinite(depuis) && depuis >= 0 ? depuis : 0);
+  if (!page) return send(res, 404, { error: { message: t("Rien à reprendre de ce logiciel.") } });
+  send(res, 200, page);
 }
 
 /* ------------------------- machine de l'agent ------------------------- */
@@ -3973,7 +4005,7 @@ const traiter = (
     if (req.method === "GET" && path === "/helix/machine/ecran") return handleMachineEcran(req, res, url);
     if (req.method === "GET" && path === "/helix/images") return handleImagesEtat(req, res, url);
     if (req.method === "GET" && path === "/helix/import/logiciels") return handleImportLogiciels(req, res, url);
-    if (req.method === "GET" && path.startsWith("/helix/import/logiciel/")) return handleImportLogiciels(req, res, url, path.slice("/helix/import/logiciel/".length));
+    if ((req.method === "GET" || req.method === "POST") && path.startsWith("/helix/import/logiciel/")) return handleImportLogiciels(req, res, url, path.slice("/helix/import/logiciel/".length));
     if (req.method === "POST" && path === "/helix/images/installer") return handleImagesInstaller(req, res, url, "installer");
     if (req.method === "POST" && path === "/helix/images/desinstaller") return handleImagesInstaller(req, res, url, "retirer");
     if (req.method === "POST" && path === "/helix/images/choisir") return handleImagesInstaller(req, res, url, "choisir");

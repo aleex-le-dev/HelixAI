@@ -534,7 +534,7 @@ function BoutonDictee({ onTexte }: { onTexte: (texte: string) => void }) {
             <div>
               <p className="font-medium text-foreground">{t("Dictée locale, à installer")}</p>
               <p className="mt-1 text-muted-foreground">
-                {t("Votre voix est transcrite")}{" "}{instance().remote ? "par votre instance" : "sur ce poste"}{" "}
+                {t("Votre voix est transcrite")}{" "}{instance().remote ? t("par votre instance") : t("sur ce poste")}{" "}
                 {t("par le modèle")}{" "}{diag.modele}{t(". Pendant la dictée, rien ne part vers un service extérieur.")}
               </p>
             </div>

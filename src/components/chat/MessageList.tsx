@@ -205,8 +205,8 @@ function ToolTraces({ traces }: { traces: ToolTrace[] }) {
 
 /**
  * Une image créée sur la machine. Lue par la séance de la personne (l'image
- * n'est servie qu'à qui l'a créée), gardée en adresse locale le temps de
- * l'affichage.
+ * est servie à son auteur et à qui voit le Chat où elle a été créée), gardée
+ * en adresse locale le temps de l'affichage.
  */
 function ImageGeneree({ image }: { image: ImageCreee }) {
   const [url, setUrl] = useState<string | null | undefined>(undefined);

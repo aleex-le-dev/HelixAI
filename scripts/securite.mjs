@@ -146,6 +146,24 @@ const compte = await premier.json();
 verifier("le premier compte s'ouvre (amorçage)", premier.status === 200 && compte.session?.token, premier.status);
 const SEANCE = compte.session?.token;
 const avecSeance = { ...avecJeton, "X-Helix-Session": SEANCE };
+/*
+ * Une collègue, inscrite par la première comme le fait l'écran « Équipe », et
+ * connectée avant les essais de force brute (qui freinent toute
+ * authentification depuis cette adresse). Elle sert aux images d'un Chat
+ * partagé (section 7).
+ */
+const MDP_B = "Autre2PasseSolide!57";
+const creeB = await appel("/helix/auth/create", {
+  method: "POST", headers: avecSeance,
+  body: JSON.stringify({ fullName: "Collègue", email: "collegue@example.test", password: MDP_B }),
+});
+const compteB = (await creeB.json()).account;
+const connexionB = await (await appel("/helix/auth/verify", {
+  method: "POST", headers: avecJeton, body: JSON.stringify({ accountId: compteB?.id, password: MDP_B }),
+})).json();
+const SEANCE_B = connexionB.session?.token;
+const avecSeanceB = { ...avecJeton, "X-Helix-Session": SEANCE_B };
+verifier("un collègue inscrit par un compte connecté peut se connecter", Boolean(compteB?.id && SEANCE_B), `${creeB.status} ${JSON.stringify(connexionB).slice(0, 80)}`);
 {
   const r = await appel("/helix/auth/create", {
     method: "POST", headers: avecJeton,
@@ -229,7 +247,76 @@ for (const chemin of ["../../../../etc/passwd", "/etc/passwd", "..%2F..%2Fetc%2F
 }
 
 /* ------------------------------------------------------------------------- */
-console.log("\n7. Fin de séance");
+console.log("\n7. Images d'un Chat partagé : qui voit le Chat, et personne d'autre");
+{
+  /*
+   * Créer une vraie image demande 6 Go de modèles : on pose à la main ce que
+   * la création laisse (images.ts) — le fichier et sa ligne au registre — puis
+   * les Chats, par la collection `sessions` comme le fait l'écran.
+   */
+  const { mkdirSync, writeFileSync } = await import("node:fs");
+  const { randomBytes } = await import("node:crypto");
+  const A = compte.account.id;
+  const B = compteB.id;
+  const idImage = randomBytes(16).toString("hex");
+  const idAncienne = randomBytes(16).toString("hex");
+  const idAutreChat = randomBytes(16).toString("hex");
+  const PNG = Buffer.from("89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d4944415478da63f8ffff3f0005fe02fea7d6a3d40000000049454e44ae426082", "hex");
+  mkdirSync(join(DONNEES, "images"), { recursive: true });
+  for (const id of [idImage, idAncienne, idAutreChat]) writeFileSync(join(DONNEES, "images", `${id}.png`), PNG);
+  const quand = new Date().toISOString();
+  writeFileSync(join(DONNEES, "images", "index.json"), JSON.stringify({
+    [idImage]: { pour: A, chat: "chat-partage", description: "essai", invite: "test", date: quand, largeur: 1, hauteur: 1 },
+    // Créée avant que le Chat soit retenu avec l'image : la règle de repli (Chat de l'auteur qui la contient).
+    [idAncienne]: { pour: A, description: "ancienne", invite: "test", date: quand, largeur: 1, hauteur: 1 },
+    // Créée dans un Chat privé de A, qu'elle ne partage pas.
+    [idAutreChat]: { pour: A, chat: "chat-prive", description: "privée", invite: "test", date: quand, largeur: 1, hauteur: 1 },
+  }));
+  const message = (id) => ({ id: `m-${id.slice(0, 6)}`, role: "assistant", content: "Image créée", image: { id, largeur: 1, hauteur: 1, description: "essai" }, createdAt: quand });
+  const chat = (id, messages, partage = []) => ({
+    id, title: id, ownerId: A, visibility: "prive", sharedGroupIds: [], sharedWith: partage, organisationId: "org",
+    origin: "local", messages, createdAt: quand, updatedAt: quand,
+  });
+  const ecrireChats = (entete, valeur) => appel("/helix/data/sessions", { method: "PUT", headers: entete, body: JSON.stringify({ value: valeur }) });
+  const voir = async (id, entete) => (await appel(`/helix/images/fichier/${id}`, { headers: entete })).status;
+
+  await ecrireChats(avecSeance, [chat("chat-partage", [message(idImage), message(idAncienne)]), chat("chat-prive", [message(idAutreChat)])]);
+  verifier("l'auteur voit son image", (await voir(idImage, avecSeance)) === 200, await voir(idImage, avecSeance));
+  verifier("une collègue ne voit pas l'image d'un Chat qui ne lui est pas partagé (404)", (await voir(idImage, avecSeanceB)) === 404, await voir(idImage, avecSeanceB));
+  verifier("ni l'ancienne image de ce Chat (404)", (await voir(idAncienne, avecSeanceB)) === 404, await voir(idAncienne, avecSeanceB));
+
+  const partage = [{ email: "collegue@example.test", userId: B, status: "actif", sharedAt: quand }];
+  await ecrireChats(avecSeance, [chat("chat-partage", [message(idImage), message(idAncienne)], partage), chat("chat-prive", [message(idAutreChat)])]);
+  const vueB = await appel(`/helix/images/fichier/${idImage}`, { headers: avecSeanceB });
+  verifier("Chat partagé : la collègue voit l'image", vueB.status === 200 && (await vueB.arrayBuffer()).byteLength === PNG.length, vueB.status);
+  verifier("sans la garder en cache (Cache-Control: no-store)", (vueB.headers.get("cache-control") ?? "").includes("no-store"), vueB.headers.get("cache-control"));
+  verifier("Chat partagé : l'ancienne image aussi (Chat de son auteur qui la contient)", (await voir(idAncienne, avecSeanceB)) === 200, await voir(idAncienne, avecSeanceB));
+  verifier("une image d'un autre Chat de l'auteur reste fermée (404)", (await voir(idAutreChat, avecSeanceB)) === 404, await voir(idAutreChat, avecSeanceB));
+
+  // L'identifiant recopié dans un Chat de la collègue : il n'ouvre rien.
+  const lusB = (await (await appel("/helix/data/sessions", { headers: avecSeanceB })).json()).value;
+  const chatDeB = { ...chat("chat-de-b", [message(idAutreChat)]), ownerId: B };
+  await ecrireChats(avecSeanceB, [...lusB, chatDeB]);
+  verifier("un identifiant recopié dans son propre Chat n'ouvre pas l'image (404)", (await voir(idAutreChat, avecSeanceB)) === 404, await voir(idAutreChat, avecSeanceB));
+  verifier("l'auteur voit toujours son image", (await voir(idAutreChat, avecSeance)) === 200, await voir(idAutreChat, avecSeance));
+
+  // Partage retiré : la porte se referme aussitôt.
+  const lusA = (await (await appel("/helix/data/sessions", { headers: avecSeance })).json()).value;
+  await ecrireChats(avecSeance, lusA.map((s) => (s.id === "chat-partage" ? { ...s, sharedWith: [] } : s)));
+  verifier("partage retiré : la collègue ne voit plus l'image (404)", (await voir(idImage, avecSeanceB)) === 404, await voir(idImage, avecSeanceB));
+
+  // Chat ouvert à l'organisation : tout le monde le voit, donc son image.
+  const lusA2 = (await (await appel("/helix/data/sessions", { headers: avecSeance })).json()).value;
+  await ecrireChats(avecSeance, lusA2.map((s) => (s.id === "chat-partage" ? { ...s, visibility: "organisation" } : s)));
+  verifier("Chat ouvert à l'organisation : la collègue voit l'image", (await voir(idImage, avecSeanceB)) === 200, await voir(idImage, avecSeanceB));
+
+  const inventee = randomBytes(16).toString("hex");
+  verifier("une image inventée répond 404", (await voir(inventee, avecSeance)) === 404, await voir(inventee, avecSeance));
+  verifier("un identifiant mal formé répond 404", (await voir("..%2Findex.json", avecSeance)) === 404, await voir("..%2Findex.json", avecSeance));
+}
+
+/* ------------------------------------------------------------------------- */
+console.log("\n8. Fin de séance");
 {
   const r1 = await appel("/helix/auth/revoke", { method: "POST", headers: avecSeance, body: JSON.stringify({ toutes: true }) });
   const r2 = await appel("/helix/export", { headers: avecSeance });
@@ -237,10 +324,10 @@ console.log("\n7. Fin de séance");
 }
 
 /* ------------------------------------------------------------------------- */
-console.log("\n8. Rien de secret dans le journal du serveur");
+console.log("\n9. Rien de secret dans le journal du serveur");
 verifier("le jeton d'instance n'apparaît pas dans le journal", !journal.includes(JETON), "trouvé");
 verifier("le jeton de séance n'apparaît pas dans le journal", !SEANCE || !journal.includes(SEANCE), "trouvé");
-verifier("le mot de passe n'apparaît pas dans le journal", !journal.includes("Mot2PasseSolide!42"), "trouvé");
+verifier("le mot de passe n'apparaît pas dans le journal", !journal.includes("Mot2PasseSolide!42") && !journal.includes(MDP_B), "trouvé");
 {
   /*
    * Joindre la passerelle par l'adresse réseau de la machine : elle ne doit

@@ -850,6 +850,17 @@ ${Object.keys(ICONES)
 export async function preparerDesign(dossier: string, demande: string, qui: string): Promise<{ consigne: string; cree: boolean; design?: Design }> {
   const dossierDesign = join(dossier, "design");
   const feuille = join(dossierDesign, "helix.css");
+  /*
+   * Seulement pour un site qui commence. Posé dans un projet qui a déjà son
+   * code, le design changeait ce que la personne n'avait pas demandé : pour
+   * « corrige le bouton de ma page contact » dans un site existant, la
+   * consigne interdisait ses <style>, et `corrigerPages` ajoutait helix.css
+   * en dernier à toutes ses pages, par-dessus sa propre feuille. Reste un cas :
+   * une demande de code ordinaire (« ajoute une interface User ») pose encore un
+   * dossier design/ dans le projet (celle-là n'est pas réglée ici : voir
+   * docs-a-integrer/corrections.md).
+   */
+  if (!existsSync(feuille) && projetDejaCommence(dossier)) return { consigne: "", cree: false };
   const design = existsSync(feuille) ? undefined : await choisirDesign(demande, qui);
   const police = design?.polices.url ?? policeDuProjet(dossierDesign);
   /*
@@ -877,6 +888,32 @@ export async function preparerDesign(dossier: string, demande: string, qui: stri
   writeFileSync(feuille, feuilleDeStyle(design));
   writeFileSync(join(dossierDesign, "DESIGN.md"), guide(design));
   return { consigne, cree: true, design };
+}
+
+/*
+ * Fichiers qui disent qu'un site existe déjà : pages et feuilles de style, ou
+ * composants d'un cadriciel. Un projet sans rien de tout cela (dossier neuf,
+ * ou scripts d'une autre nature) reçoit le design comme avant.
+ */
+const CODE = /\.(html?|css|scss|sass|less|jsx|tsx|vue|svelte|astro|php)$/i;
+
+/** Le dossier a-t-il déjà ses pages ou ses styles (hors design/, node_modules et fichiers cachés), sur trois niveaux ? */
+export function projetDejaCommence(dossier: string): boolean {
+  const parcourir = (d: string, profondeur: number): boolean => {
+    let entrees: import("node:fs").Dirent[] = [];
+    try {
+      entrees = readdirSync(d, { withFileTypes: true });
+    } catch {
+      return false;
+    }
+    for (const e of entrees) {
+      if (/^(node_modules|\.)/.test(e.name) || (d === dossier && e.name === "design")) continue;
+      if (e.isFile() && CODE.test(e.name)) return true;
+      if (e.isDirectory() && profondeur > 0 && parcourir(join(d, e.name), profondeur - 1)) return true;
+    }
+    return false;
+  };
+  return parcourir(dossier, 2);
 }
 
 /** L'adresse des polices d'un design déjà posé, lue dans son guide. */

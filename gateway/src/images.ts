@@ -1,7 +1,7 @@
 import { execFile, spawn, type ChildProcess } from "node:child_process";
 import { promisify } from "node:util";
 import { createHash, randomBytes } from "node:crypto";
-import { createReadStream, createWriteStream, existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync, renameSync, readdirSync } from "node:fs";
+import { copyFileSync, createReadStream, createWriteStream, existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync, renameSync, readdirSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { detectHardware, type Hardware } from "./provision.ts";
@@ -9,6 +9,8 @@ import { libererPourImage } from "./backends.ts";
 import { completer } from "./completion.ts";
 import { journaliser } from "./audit.ts";
 import { t, tf } from "./langue.ts";
+import { db } from "./db.ts";
+import { voitConversation, type Demandeur } from "./authz.ts";
 
 const exec = promisify(execFile);
 
@@ -475,6 +477,15 @@ export function installerImages(qui: string, id: string): Promise<void> {
   if (enCours) return enCours;
   const m = modele(id);
   if (!m) return Promise.reject(new Error(t("Modèle d'images inconnu.")));
+  /*
+   * Posée tout de suite, avant la première attente : la route répond 202 avec
+   * l'état du moment, et l'écran ne suit l'installation (relecture toutes les
+   * 1,5 s, ImageChip.tsx) que s'il la voit en cours. Posée après la lecture
+   * de la version de macOS, elle pouvait manquer à cette réponse : l'écran
+   * restait sur le bouton de téléchargement, sans progression, jusqu'à ce
+   * qu'on rouvre le menu.
+   */
+  installation = { modele: m.id, etape: "telechargement", message: t("Téléchargement du moteur d'images..."), fait: 0, total: 0 };
   enCours = (async () => {
     const hw = detectHardware();
     const moteur = moteurPour(hw, await versionMac());
@@ -530,7 +541,13 @@ export function installerImages(qui: string, id: string): Promise<void> {
  * revient, les images déjà créées restent.
  */
 export async function desinstallerImages(qui: string, id?: string): Promise<void> {
-  if (enCours || travailActif) throw new Error(t("Une installation ou une création est en cours : attendez qu'elle finisse."));
+  /*
+   * `travailActif` n'existe que pendant le calcul : pendant la préparation de
+   * la description (jusqu'à deux minutes), retirer le modèle passait, et la
+   * création échouait ensuite sur des fichiers disparus.
+   */
+  const creationEnCours = [...travaux.values()].some((x) => x.etat === "preparation" || x.etat === "encours");
+  if (enCours || travailActif || creationEnCours) throw new Error(t("Une installation ou une création est en cours : attendez qu'elle finisse."));
   const m = id ? modele(id) : undefined;
   if (m) {
     const gardes = new Set(MODELES.filter((x) => x.id !== m.id).flatMap((x) => x.variantes.flatMap(fichiersDe)).map(nomLocal));
@@ -607,7 +624,11 @@ async function preparerDescription(texte: string, qui: string): Promise<string> 
   return propre.length >= 8 && propre.length <= 1500 ? propre : texte;
 }
 
-export async function lancerCreation(description: string, format: Format, qui: string): Promise<Travail> {
+/**
+ * `chat` : le Chat où l'image est demandée. Retenu avec l'image, il décide qui
+ * d'autre que son auteur peut la voir (`imageVisible`).
+ */
+export async function lancerCreation(description: string, format: Format, qui: string, chat?: string): Promise<Travail> {
   if (travailActif || [...travaux.values()].some((x) => x.etat === "preparation" || x.etat === "encours")) {
     throw new Error(t("Une image est déjà en cours de création sur cette machine : attendez qu'elle soit finie."));
   }
@@ -690,8 +711,8 @@ export async function lancerCreation(description: string, format: Format, qui: s
       });
     });
     if (code === 0 && existsSync(sortie)) {
-      const registre = lireIndex();
-      registre[imageId] = { pour: qui, description, invite, date: new Date().toISOString(), largeur, hauteur };
+      const registre = lireIndex() ?? mettreDeCoteIndex();
+      registre[imageId] = { pour: qui, ...(chat ? { chat } : {}), description, invite, date: new Date().toISOString(), largeur, hauteur };
       ecrireIndex(registre);
       tr.image = { id: imageId, largeur, hauteur, description };
       tr.etat = "fait";
@@ -714,14 +735,38 @@ export async function lancerCreation(description: string, format: Format, qui: s
 /* Images créées                                                       */
 /* ------------------------------------------------------------------ */
 
-type Registre = Record<string, { pour: string; description: string; invite: string; date: string; largeur: number; hauteur: number }>;
+type Registre = Record<string, { pour: string; chat?: string; description: string; invite: string; date: string; largeur: number; hauteur: number }>;
 
-function lireIndex(): Registre {
+/**
+ * Le registre des images, `{}` s'il n'existe pas encore, `null` s'il existe
+ * mais ne se lit pas. Les deux étaient confondus : un registre abîmé (écriture
+ * coupée, disque plein) valait `{}`, et l'image suivante réécrivait le
+ * registre avec elle seule. Toutes les images d'avant devenaient
+ * introuvables, pour leur auteur même.
+ */
+function lireIndex(): Registre | null {
+  let brut: string;
   try {
-    return JSON.parse(readFileSync(index(), "utf8")) as Registre;
-  } catch {
-    return {};
+    brut = readFileSync(index(), "utf8");
+  } catch (err) {
+    return (err as NodeJS.ErrnoException).code === "ENOENT" ? {} : null;
   }
+  try {
+    const r = JSON.parse(brut) as unknown;
+    return r && typeof r === "object" && !Array.isArray(r) ? (r as Registre) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Un registre illisible est gardé à côté, jamais écrasé ; on repart d'un registre neuf. */
+function mettreDeCoteIndex(): Registre {
+  try {
+    copyFileSync(index(), join(dossierCreees(), `index.${new Date().toISOString().replace(/[:.]/g, "-")}.illisible.json`));
+  } catch {
+    /* rien à garder */
+  }
+  return {};
 }
 
 function ecrireIndex(r: Registre): void {
@@ -730,11 +775,105 @@ function ecrireIndex(r: Registre): void {
   renameSync(tmp, index());
 }
 
-/** Chemin d'une image créée, pour la personne qui l'a créée seulement. */
-export function cheminImage(id: string, qui: string): string | null {
+/* ------------------------------------------------------------------ */
+/* Qui voit une image                                                  */
+/* ------------------------------------------------------------------ */
+
+/*
+ * Une image se voit par son auteur, et par qui voit le Chat où elle a été
+ * créée : les mêmes personnes, selon la même règle que le Chat lui-même
+ * (`voitConversation`, authz.ts). Personne d'autre, même avec l'identifiant.
+ *
+ * Il faut donc savoir quels Chats contiennent une image. Relire et déchiffrer
+ * toute la collection à chaque image affichée coûterait cher (un Chat ouvert
+ * peut en montrer dix) : on tient un relevé « image → Chats », refait seulement
+ * quand la collection a changé (sa révision, ou une écriture de cette
+ * passerelle : `oublierChatsDesImages`). Le relevé ne garde des Chats que ce
+ * qui décide de leur visibilité, pas leurs messages.
+ */
+type VueChat = { id: unknown; ownerId: unknown; sharedWith: unknown; sharedGroupIds: unknown; visibility: unknown };
+let releve: { revision: number; parImage: Map<string, VueChat[]> } | null = null;
+
+export function oublierChatsDesImages(): void {
+  releve = null;
+}
+
+/*
+ * Lire la révision coûte presque autant que lire la collection avec le
+ * magasin de fichiers (il relit l'enveloppe entière). Mesuré le 25/09/2026 sur
+ * 2 000 Chats de 40 messages (164 Mo) : 930 ms pour refaire le relevé, 240 ms
+ * encore pour seulement vérifier la révision. Les écritures de cette
+ * passerelle effacent déjà le relevé (`oublierChatsDesImages`) ; la révision
+ * n'est donc relue qu'au-delà de cinq secondes, pour ce qu'un autre processus
+ * aurait écrit (plusieurs instances sur une même base PostgreSQL).
+ */
+const VERIFIER_REVISION_MS = 5_000;
+let verifieLe = 0;
+
+async function chatsContenant(id: string): Promise<VueChat[]> {
+  if (releve && Date.now() - verifieLe < VERIFIER_REVISION_MS) return releve.parImage.get(id) ?? [];
+  // La révision d'abord, le contenu ensuite : un relevé peut être plus récent que sa révision, jamais plus ancien.
+  const revision = await db().revision("sessions");
+  verifieLe = Date.now();
+  if (!releve || releve.revision !== revision) {
+    const parImage = new Map<string, VueChat[]>();
+    const sessions = await db().read("sessions");
+    for (const s of Array.isArray(sessions) ? sessions : []) {
+      if (!s || typeof s !== "object") continue;
+      const chat = s as Record<string, unknown>;
+      const vue: VueChat = { id: chat.id, ownerId: chat.ownerId, sharedWith: chat.sharedWith, sharedGroupIds: chat.sharedGroupIds, visibility: chat.visibility };
+      for (const m of Array.isArray(chat.messages) ? chat.messages : []) {
+        const im = (m as { image?: { id?: unknown } } | null)?.image?.id;
+        if (typeof im !== "string" || !/^[0-9a-f]{32}$/.test(im)) continue;
+        const liste = parImage.get(im) ?? [];
+        if (!liste.includes(vue)) liste.push(vue);
+        parImage.set(im, liste);
+      }
+    }
+    releve = { revision, parImage };
+  }
+  return releve.parImage.get(id) ?? [];
+}
+
+/**
+ * Chemin d'une image créée, pour qui a le droit de la voir ; sinon null
+ * (l'appelant répond 404, sans dire si l'image existe).
+ *
+ * - son auteur, toujours ;
+ * - qui voit le Chat où elle a été créée, tant que ce Chat la contient ;
+ * - image d'avant le 25/09/2026 (sans Chat retenu) : qui voit un Chat de son
+ *   auteur qui la contient. Un Chat d'une autre personne où l'identifiant
+ *   aurait été recopié ne l'ouvre pas.
+ */
+export async function imageVisible(id: string, qui: Demandeur): Promise<{ chemin: string; auteur: boolean } | null> {
   if (!/^[0-9a-f]{32}$/.test(id)) return null;
-  const e = lireIndex()[id];
-  if (!e || e.pour !== qui) return null;
+  const e = lireIndex()?.[id];
+  if (!e) return null;
   const p = join(dossierCreees(), `${id}.png`);
-  return existsSync(p) ? p : null;
+  if (!existsSync(p)) return null;
+  if (e.pour === qui.userId) return { chemin: p, auteur: true };
+  const chats = await chatsContenant(id);
+  const autorise = chats.some(
+    (c) => (e.chat ? c.id === e.chat : c.ownerId === e.pour) && voitConversation(c as unknown as Record<string, unknown>, qui),
+  );
+  return autorise ? { chemin: p, auteur: false } : null;
+}
+
+/**
+ * Effacement d'un compte (effacement.ts) : ses images partent avec lui. Elles
+ * restaient sur le disque, servies à personne mais gardées.
+ */
+export function oublierImagesDe(userId: string): number {
+  const registre = lireIndex();
+  // Registre illisible : on ne réécrit rien par-dessus (voir `lireIndex`).
+  if (!registre) return 0;
+  let n = 0;
+  for (const [id, e] of Object.entries(registre)) {
+    if (e.pour !== userId) continue;
+    rmSync(join(dossierCreees(), `${id}.png`), { force: true });
+    delete registre[id];
+    n++;
+  }
+  if (n > 0) ecrireIndex(registre);
+  return n;
 }

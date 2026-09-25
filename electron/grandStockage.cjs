@@ -32,24 +32,52 @@ function disponible() {
   }
 }
 
-/** Toutes les valeurs rangées, déchiffrées. Illisible : absente (l'instance la rendra). */
+/*
+ * Clés dont le fichier existe mais n'a pas pu être lu au démarrage (trousseau
+ * refusé ou verrouillé, clé du trousseau changée, fichier abîmé). Ce cas était
+ * confondu avec « pas encore écrite » : l'interface partait d'une liste vide,
+ * et la première écriture (un Chat neuf) remplaçait le fichier illisible, donc
+ * les Chats, sans copie, puis les effaçait de l'instance.
+ */
+const illisibles = new Set();
+/** Clés dont le fichier illisible a déjà été mis de côté pendant cette séance (voir `garderSiReduction`). */
+const copieIllisibleFaite = new Set();
+
+/** Toutes les valeurs rangées, déchiffrées. Illisible : absente (l'instance la rendra), et notée. */
 function lire() {
   const valeurs = {};
-  if (!disponible()) return valeurs;
+  const chiffrement = disponible();
   for (const cle of CLES) {
+    let brut;
     try {
-      valeurs[cle] = safeStorage.decryptString(fs.readFileSync(chemin(cle)));
+      brut = fs.readFileSync(chemin(cle));
+    } catch (err) {
+      if (err && err.code !== "ENOENT") illisibles.add(cle);
+      continue;
+    }
+    if (!chiffrement) {
+      illisibles.add(cle);
+      continue;
+    }
+    try {
+      valeurs[cle] = safeStorage.decryptString(brut);
+      illisibles.delete(cle);
     } catch {
-      /* pas encore écrite, ou illisible */
+      illisibles.add(cle);
     }
   }
   return valeurs;
 }
 
+/** Les clés présentes sur le disque mais illisibles à la dernière lecture. */
+const clesIllisibles = () => [...illisibles];
+
 function poser(cle, valeur) {
   if (!CLES.has(cle) || !disponible()) return false;
   fs.mkdirSync(dossier(), { recursive: true, mode: 0o700 });
   if (valeur === null) {
+    // Effacer une liste pleine, ou illisible, en garde d'abord une copie.
+    garderSiReduction(cle, "");
     fs.rmSync(chemin(cle), { force: true });
     return true;
   }
@@ -76,14 +104,25 @@ function garderSiReduction(cle, texte) {
   } catch {
     return;
   }
+  const date = new Date().toISOString().replace(/[:.]/g, "-");
   let avant;
   try {
     avant = safeStorage.decryptString(ancien);
   } catch {
+    /*
+     * Illisible aujourd'hui ne veut pas dire perdu : le trousseau peut
+     * revenir. On ne l'écrase jamais sans en garder une copie, hors de la
+     * rotation des trois copies (elle ne doit pas en chasser une lisible).
+     * Une fois par séance : ensuite, le fichier est celui que cette séance a
+     * écrit, et un déchiffrement durablement en panne ferait une copie à
+     * chaque message.
+     */
+    if (copieIllisibleFaite.has(cle)) return;
+    copieIllisibleFaite.add(cle);
+    fs.writeFileSync(path.join(dossier(), `${cle}.${date}.illisible.enc`), ancien, { mode: 0o600 });
     return;
   }
   if (avant.length < 200 || texte.length * 2 >= avant.length) return;
-  const date = new Date().toISOString().replace(/[:.]/g, "-");
   fs.writeFileSync(path.join(dossier(), `${cle}.${date}.copie.enc`), ancien, { mode: 0o600 });
   const copies = fs
     .readdirSync(dossier())
@@ -92,4 +131,4 @@ function garderSiReduction(cle, texte) {
   for (const f of copies.slice(0, Math.max(0, copies.length - COPIES_MAX))) fs.rmSync(path.join(dossier(), f), { force: true });
 }
 
-module.exports = { CLES, disponible, lire, poser };
+module.exports = { CLES, disponible, lire, poser, clesIllisibles };

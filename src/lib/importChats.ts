@@ -45,7 +45,7 @@ async function repertoire(f: Blob): Promise<EntreeZip[]> {
       break;
     }
   }
-  if (eocd < 0) throw new Error("archive illisible");
+  if (eocd < 0) throw new Error(t("Ce fichier n'est pas une archive ZIP lisible. Choisissez l'archive telle que ChatGPT ou Claude l'a envoyée."));
   let nombre = u16(fin, eocd + 10);
   let tailleRep = u32(fin, eocd + 12);
   let debutRep = u32(fin, eocd + 16);
@@ -102,7 +102,7 @@ async function lireEntree(f: Blob, e: EntreeZip): Promise<string> {
   const debut = e.debutEnTete + 30 + u16(entete, 26) + u16(entete, 28);
   const brut = f.slice(debut, debut + e.tailleCompressee);
   if (e.methode === 0) return brut.text();
-  if (e.methode !== 8) throw new Error(`compression ${e.methode} non prise en charge`);
+  if (e.methode !== 8) throw new Error(tf("Compression {0} non prise en charge dans cette archive.", e.methode));
   const flux = brut.stream().pipeThrough(new DecompressionStream("deflate-raw"));
   return new Response(flux).text();
 }
@@ -127,6 +127,12 @@ export interface ChatImporte {
   projet?: string;
   /** Taille estimée une fois rangée, en caractères. */
   taille: number;
+  /**
+   * Nombre de messages, quand `messages` n'est pas encore là : un logiciel du
+   * poste liste d'abord ses conversations, puis rend le contenu des seules
+   * choisies (`completerChats`).
+   */
+  nbMessages?: number;
 }
 
 export interface ProjetImporte {
@@ -139,11 +145,13 @@ export interface ProjetImporte {
 }
 
 export interface Import {
-  source: "chatgpt" | "claude" | "claude-code" | "codex";
+  source: "chatgpt" | "claude" | "claude-code" | "codex" | "cursor";
   chats: ChatImporte[];
   projets: ProjetImporte[];
   /** Instructions générales reprises d'un logiciel du poste (CLAUDE.md, AGENTS.md). */
   instructions?: string;
+  /** Logiciel du poste dont les messages restent à demander pour les Chats choisis (`completerChats`). */
+  aCompleter?: string;
 }
 
 /** Nom affiché d'une source d'import. */
@@ -152,6 +160,8 @@ export const NOM_SOURCE: Record<Import["source"], string> = {
   claude: "Claude",
   "claude-code": "Claude Code",
   codex: "Codex",
+  // Absent jusqu'ici : un import Cursor s'affichait « undefined : 3 Chat(s) » et créait l'agent « Comme dans undefined ».
+  cursor: "Cursor",
 };
 
 /** Logiciel d'IA trouvé sur ce poste (gateway/src/importLocal.ts). */
@@ -174,11 +184,82 @@ export async function logicielsDuPoste(): Promise<LogicielTrouve[]> {
   }
 }
 
-export async function lireLogiciel(id: string): Promise<Import> {
-  const res = await apiFetch(`/helix/import/logiciel/${id}`);
-  const corps = (await res.json().catch(() => ({}))) as Import & { error?: { message?: string } };
-  if (!res.ok) throw new Error(corps.error?.message ?? "L'instance n'a pas répondu.");
+interface PageLogiciel extends Import {
+  total: number;
+  suivant: number | null;
+}
+
+async function lireReponse<T>(res: Response): Promise<T> {
+  const corps = (await res.json().catch(() => ({}))) as T & { error?: { message?: string } };
+  if (!res.ok) throw new Error(corps.error?.message ?? t("L'instance n'a pas répondu."));
   return corps;
+}
+
+/**
+ * La liste des conversations d'un logiciel du poste, page par page
+ * (gateway/src/importLocal.ts) : titres, dates, tailles, sans les messages.
+ * `suivre` reçoit l'avancement après chaque page. Des milliers de
+ * conversations ne passent plus en une réponse, et l'écran ne se fige pas.
+ */
+export async function lireLogiciel(id: string, suivre?: (lues: number, total: number) => void): Promise<Import> {
+  const chats = new Map<string, ChatImporte>();
+  const projets = new Map<string, ProjetImporte>();
+  let instructions = "";
+  let source: Import["source"] = id as Import["source"];
+  let depuis: number | null = 0;
+  while (depuis !== null) {
+    const page: PageLogiciel = await lireReponse<PageLogiciel>(await apiFetch(`/helix/import/logiciel/${id}?depuis=${depuis}`));
+    source = page.source;
+    if (depuis === 0) instructions = page.instructions ?? "";
+    for (const c of page.chats) chats.set(c.cle, c);
+    for (const p of page.projets) if (!projets.has(p.cle)) projets.set(p.cle, p);
+    // Une page qui n'avance pas arrêterait la boucle pour toujours : on s'arrête là.
+    depuis = page.suivant !== null && page.suivant > depuis ? page.suivant : null;
+    suivre?.(depuis ?? page.total, page.total);
+  }
+  return { source, chats: [...chats.values()], projets: [...projets.values()], instructions, aCompleter: id };
+}
+
+/** Lot demandé à la fois : l'instance rend au plus 16 Mo par réponse, on reste en dessous. */
+const LOT_CARACTERES = 6_000_000;
+
+/**
+ * Le contenu des Chats choisis d'un logiciel du poste, par lots. Rend les
+ * Chats complets ; un Chat que l'instance n'a pas pu relire (fichier effacé
+ * entre-temps) manque au résultat, et le bilan le dit.
+ */
+export async function completerChats(id: string, choisis: ChatImporte[], suivre?: (faits: number, total: number) => void): Promise<ChatImporte[]> {
+  const complets: ChatImporte[] = [];
+  let reste = [...choisis];
+  let faits = 0;
+  while (reste.length > 0) {
+    const lot: string[] = [];
+    let taille = 0;
+    for (const c of reste) {
+      if (lot.length > 0 && (taille + c.taille > LOT_CARACTERES || lot.length >= 200)) break;
+      lot.push(c.cle);
+      taille += c.taille;
+    }
+    const r = await lireReponse<{ chats: ChatImporte[]; restantes: string[] }>(
+      await apiFetch(`/helix/import/logiciel/${id}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ cles: lot }),
+      }),
+    );
+    complets.push(...r.chats);
+    const aRedemander = new Set(r.restantes ?? []);
+    // Rien de rendu ni de reporté : le lot est perdu, pas la peine de le redemander sans fin.
+    if (r.chats.length === 0 && aRedemander.size === 0) {
+      reste = reste.filter((c) => !lot.includes(c.cle));
+    } else {
+      reste = reste.filter((c) => !lot.includes(c.cle) || aRedemander.has(c.cle));
+      if (r.chats.length === 0) break;
+    }
+    faits += lot.length - aRedemander.size;
+    suivre?.(faits, choisis.length);
+  }
+  return complets;
 }
 
 const iso = (v: unknown): string => {

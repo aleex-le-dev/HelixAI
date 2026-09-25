@@ -473,7 +473,7 @@ export function useChat(options: Options) {
       const controller = new AbortController();
       abortRef.current = controller;
       try {
-        const image = await creerSurLaMachine(texte, format, (tr) => patch(replyId, { statut: tr.message }), controller.signal);
+        const image = await creerSurLaMachine(texte, format, (tr) => patch(replyId, { statut: tr.message }), controller.signal, sessionRef.current?.id);
         patch(replyId, { content: tf("Image créée : « {0} »", texte), image, streaming: false, statut: undefined });
         persist();
       } catch (err) {

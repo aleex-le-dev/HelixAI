@@ -77,6 +77,7 @@ contextBridge.exposeInMainWorld("helix", {
     disponible: grandInitial.disponible === true,
     cles: grandInitial.cles ?? [],
     valeurs: grandInitial.valeurs ?? {},
+    illisibles: Array.isArray(grandInitial.illisibles) ? grandInitial.illisibles : [],
     poser: (cle, valeur) => ipcRenderer.invoke("helix:grand-poser", cle, valeur),
   },
   miseAJour: {

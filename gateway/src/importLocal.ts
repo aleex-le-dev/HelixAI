@@ -1,8 +1,12 @@
-import { execFileSync } from "node:child_process";
-import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { execFile } from "node:child_process";
+import { createReadStream, existsSync, readFileSync, readdirSync } from "node:fs";
+import { stat } from "node:fs/promises";
 import { homedir, platform } from "node:os";
 import { basename, join } from "node:path";
+import { promisify } from "node:util";
 import { t } from "./langue.ts";
+
+const exec = promisify(execFile);
 
 /**
  * Import sans export : ce que les autres logiciels d'IA laissent sur ce poste.
@@ -30,6 +34,25 @@ import { t } from "./langue.ts";
  * range (même chemin que l'import d'une archive). Seulement sur un poste
  * autonome : sur une instance d'entreprise, ces fichiers seraient ceux du
  * serveur, pas ceux de la personne (index.ts le refuse).
+ *
+ * ── Par morceaux (25/09/2026) ─────────────────────────────────────────────
+ *
+ * La première version lisait tout d'un coup, fichiers entiers en mémoire, et
+ * rendait tous les messages en une réponse. Mesuré sur un jeu factice de
+ * 2 000 conversations Claude Code (4,7 Go de fichiers) : 1,6 s pendant
+ * lesquelles la passerelle ne répondait à rien, 695 Mo de mémoire, 18 Mo de
+ * réponse, et seulement 500 conversations, prises dans l'ordre du disque et
+ * non les plus récentes. Désormais, en deux temps :
+ *
+ *  1. **la liste** (`pageLogiciel`), page par page : titres, dates, taille et
+ *     nombre de messages, sans les messages. Chaque fichier est lu ligne à
+ *     ligne (`lignesDe`), la boucle d'évènements rendue entre deux fichiers ;
+ *     l'écran affiche l'avancement entre deux pages ;
+ *  2. **le contenu** (`contenuLogiciel`) des seuls Chats choisis, par lots
+ *     bornés, au moment d'importer.
+ *
+ * La mémoire ne dépend plus du nombre de conversations : une ligne à la fois,
+ * une page de résumés, un lot de Chats choisis.
  */
 
 export interface MessageLu {
@@ -45,6 +68,8 @@ export interface ChatLu {
   messages: MessageLu[];
   projet?: string;
   taille: number;
+  /** Nombre de messages : seul renseigné dans la liste, où `messages` reste vide. */
+  nbMessages: number;
 }
 export interface ProjetLu {
   cle: string;
@@ -53,12 +78,24 @@ export interface ProjetLu {
   instructions: string;
   documents: { nom: string; contenu: string }[];
 }
-export interface ImportLocal {
-  source: "claude-code" | "codex" | "cursor";
+type Source = "claude-code" | "codex" | "cursor";
+
+/** Une page de la liste : des résumés (`messages` vide), et où reprendre. */
+export interface PageImport {
+  source: Source;
   chats: ChatLu[];
   projets: ProjetLu[];
-  /** Instructions générales de la personne pour ce logiciel (CLAUDE.md, AGENTS.md). */
+  /** Instructions générales de la personne pour ce logiciel (CLAUDE.md, AGENTS.md), sur la première page. */
   instructions: string;
+  /** Conversations à parcourir en tout, et la position de la page suivante (null : c'était la dernière). */
+  total: number;
+  suivant: number | null;
+}
+
+/** Le contenu de Chats choisis ; `restantes` : ce qui n'a pas tenu dans ce lot, à redemander. */
+export interface ContenuImport {
+  chats: ChatLu[];
+  restantes: string[];
 }
 
 export interface Logiciel {
@@ -75,7 +112,23 @@ export interface Logiciel {
 
 const MAISON = homedir();
 const TEXTE_MAX = 20_000;
-const CHATS_MAX = 500;
+/** Conversations proposées au plus, les plus récentes (la première version en prenait 500, au hasard du disque). */
+const LISTE_MAX = 5_000;
+/*
+ * Une page de la liste : 50 conversations ou 64 Mo de fichiers, le premier
+ * atteint. Mesuré le 25/09/2026 sur le jeu factice : une page de 64 Mo se lit
+ * en environ 0,3 s ; l'écran avance donc plusieurs fois par seconde.
+ */
+const PAGE_FICHIERS = 50;
+const PAGE_OCTETS = 64_000_000;
+/** Contenu rendu par lot au plus, en caractères : l'écran redemande le reste. */
+const CONTENU_MAX = 16_000_000;
+/*
+ * Une ligne plus longue est sautée : chez Claude Code, ce sont des résultats
+ * d'outils (fichiers lus, images en base64), jamais le texte de la
+ * conversation, que `TEXTE_MAX` couperait de toute façon.
+ */
+const LIGNE_MAX = 16 * 1024 * 1024;
 
 function lireTexte(f: string, max = 50_000): string {
   try {
@@ -104,15 +157,99 @@ function fichiers(dossier: string, extension: string, profondeur: number): strin
   return sortie;
 }
 
+/**
+ * Les lignes d'un fichier, lues par blocs d'1 Mo : jamais le fichier entier en
+ * mémoire (la première version le chargeait d'un bloc, 60 Mo et plus).
+ */
+async function* lignesDe(chemin: string): AsyncGenerator<string> {
+  const flux = createReadStream(chemin, { highWaterMark: 1 << 20 });
+  let morceaux: Buffer[] = [];
+  let longueur = 0;
+  let tropLongue = false;
+  try {
+    for await (const bloc of flux as AsyncIterable<Buffer>) {
+      let debut = 0;
+      for (;;) {
+        const fin = bloc.indexOf(10, debut);
+        if (fin < 0) break;
+        if (!tropLongue) {
+          morceaux.push(bloc.subarray(debut, fin));
+          yield Buffer.concat(morceaux).toString("utf8");
+        }
+        morceaux = [];
+        longueur = 0;
+        tropLongue = false;
+        debut = fin + 1;
+      }
+      if (debut < bloc.length && !tropLongue) {
+        longueur += bloc.length - debut;
+        if (longueur > LIGNE_MAX) {
+          tropLongue = true;
+          morceaux = [];
+        } else {
+          morceaux.push(bloc.subarray(debut));
+        }
+      }
+    }
+    if (!tropLongue && morceaux.length > 0) yield Buffer.concat(morceaux).toString("utf8");
+  } finally {
+    flux.destroy();
+  }
+}
+
 const iso = (v: unknown) => (typeof v === "string" && !Number.isNaN(Date.parse(v)) ? new Date(v).toISOString() : new Date().toISOString());
-const taille = (c: Omit<ChatLu, "taille">) => c.titre.length + c.messages.reduce((s, m) => s + m.content.length + 80, 200);
 const couper = (s: string) => (s.length > TEXTE_MAX ? `${s.slice(0, TEXTE_MAX)}\n[…]` : s);
-const titreDe = (premier: string) => premier.replace(/\s+/g, " ").trim().slice(0, 70) || "Conversation importée";
+// Appelée pendant une requête : le titre de repli est dans la langue de la personne (langue.ts).
+const titreDe = (premier: string) => premier.replace(/\s+/g, " ").trim().slice(0, 70) || t("Conversation importée");
+const rendreLaMain = () => new Promise<void>((r) => setImmediate(r));
+
+/**
+ * Ce qu'on retient des messages d'une conversation pendant sa lecture. Pour la
+ * liste, seulement des comptes (le nombre, la taille, les dates, la première
+ * demande pour le titre) ; pour le contenu, les messages eux-mêmes.
+ */
+class Collecte {
+  readonly messages: MessageLu[] | null;
+  n = 0;
+  /** Taille une fois rangée, hors titre, comme la calculait la première version. */
+  taille = 200;
+  premiereDemande: string | null = null;
+  premier: string | null = null;
+  dernier: string | null = null;
+  constructor(garder: boolean) {
+    this.messages = garder ? [] : null;
+  }
+  ajouter(m: MessageLu): void {
+    this.n += 1;
+    this.taille += m.content.length + 80;
+    if (this.premiereDemande === null && m.role === "user") this.premiereDemande = m.content;
+    this.premier ??= m.createdAt;
+    this.dernier = m.createdAt;
+    this.messages?.push(m);
+  }
+}
+
+/** Ce qu'une lecture apprend en plus des messages. */
+interface Entete {
+  titre: string;
+  dossier?: string;
+  creeLe?: string;
+  modifieLe?: string;
+}
+
+/** Une conversation à lire : un fichier (Claude Code, Codex), ou une entrée de la base de Cursor. */
+interface Entree {
+  cle: string;
+  /** Chemin du fichier, ou identifiant de la conversation Cursor. */
+  ou: string;
+  octets: number;
+  date: number;
+}
 
 /** Les dossiers de travail deviennent des projets Helix, avec leurs instructions (CLAUDE.md, AGENTS.md). */
-function projetDe(dossier: string | undefined, projets: Map<string, ProjetLu>): string | undefined {
+function projetDe(dossier: string | undefined, projets: Map<string, ProjetLu> | null): string | undefined {
   if (!dossier) return undefined;
-  if (!projets.has(dossier)) {
+  if (projets && !projets.has(dossier)) {
     const instructions = ["CLAUDE.md", "AGENTS.md"].map((f) => lireTexte(join(dossier, f), 20_000)).filter(Boolean).join("\n\n");
     projets.set(dossier, { cle: dossier, nom: basename(dossier) || dossier, description: dossier, instructions, documents: [] });
   }
@@ -133,92 +270,61 @@ function texteClaude(contenu: unknown): string {
     .join("\n");
 }
 
-function lireClaudeCode(): ImportLocal {
-  const projets = new Map<string, ProjetLu>();
-  const chats: ChatLu[] = [];
-  for (const f of fichiers(join(MAISON, ".claude", "projects"), ".jsonl", 1).slice(-CHATS_MAX)) {
-    const messages: MessageLu[] = [];
-    let titre = "";
-    let dossier: string | undefined;
-    for (const ligne of lireTexte(f, 60_000_000).split("\n")) {
-      if (!ligne.trim()) continue;
-      let d: Record<string, unknown>;
-      try {
-        d = JSON.parse(ligne) as Record<string, unknown>;
-      } catch {
-        continue;
-      }
-      if (d.type === "custom-title" || d.type === "ai-title") {
-        titre = String(d.customTitle ?? d.title ?? d.aiTitle ?? titre);
-        continue;
-      }
-      if ((d.type !== "user" && d.type !== "assistant") || d.isSidechain || d.isCompactSummary || d.isMeta) continue;
-      dossier ??= typeof d.cwd === "string" ? d.cwd : undefined;
-      const texte = texteClaude((d.message as { content?: unknown } | undefined)?.content).trim();
-      // Les messages système de Claude Code (commandes, rappels) ne sont pas la conversation.
-      if (!texte || /^<(command|local-command|system-reminder)/.test(texte)) continue;
-      messages.push({ role: d.type as "user" | "assistant", content: couper(texte), createdAt: iso(d.timestamp) });
+async function lireClaudeCode(chemin: string, c: Collecte): Promise<Entete> {
+  let titre = "";
+  let dossier: string | undefined;
+  for await (const ligne of lignesDe(chemin)) {
+    if (!ligne.trim()) continue;
+    let d: Record<string, unknown>;
+    try {
+      d = JSON.parse(ligne) as Record<string, unknown>;
+    } catch {
+      continue;
     }
-    if (messages.length === 0) continue;
-    const c = {
-      cle: `claude-code:${basename(f, ".jsonl")}`,
-      titre: titre || titreDe(messages.find((m) => m.role === "user")?.content ?? ""),
-      creeLe: messages[0]!.createdAt,
-      modifieLe: messages[messages.length - 1]!.createdAt,
-      messages,
-      projet: projetDe(dossier, projets),
-    };
-    chats.push({ ...c, taille: taille(c) });
+    if (d.type === "custom-title" || d.type === "ai-title") {
+      titre = String(d.customTitle ?? d.title ?? d.aiTitle ?? titre);
+      continue;
+    }
+    if ((d.type !== "user" && d.type !== "assistant") || d.isSidechain || d.isCompactSummary || d.isMeta) continue;
+    dossier ??= typeof d.cwd === "string" ? d.cwd : undefined;
+    const texte = texteClaude((d.message as { content?: unknown } | undefined)?.content).trim();
+    // Les messages système de Claude Code (commandes, rappels) ne sont pas la conversation.
+    if (!texte || /^<(command|local-command|system-reminder)/.test(texte)) continue;
+    c.ajouter({ role: d.type as "user" | "assistant", content: couper(texte), createdAt: iso(d.timestamp) });
   }
-  return { source: "claude-code", chats, projets: [...projets.values()], instructions: lireTexte(join(MAISON, ".claude", "CLAUDE.md")) };
+  return { titre, dossier };
 }
 
 /* ------------------------------------------------------------------ */
 /* Codex                                                               */
 /* ------------------------------------------------------------------ */
 
-function lireCodex(): ImportLocal {
-  const projets = new Map<string, ProjetLu>();
-  const chats: ChatLu[] = [];
-  const tous = [...fichiers(join(MAISON, ".codex", "sessions"), ".jsonl", 4), ...fichiers(join(MAISON, ".codex", "archived_sessions"), ".jsonl", 4)];
-  for (const f of tous.slice(-CHATS_MAX)) {
-    const messages: MessageLu[] = [];
-    let dossier: string | undefined;
-    for (const ligne of lireTexte(f, 60_000_000).split("\n")) {
-      if (!ligne.trim()) continue;
-      let d: { type?: string; timestamp?: string; payload?: Record<string, unknown> };
-      try {
-        d = JSON.parse(ligne);
-      } catch {
-        continue;
-      }
-      const p = d.payload ?? {};
-      if (d.type === "session_meta") dossier ??= typeof p.cwd === "string" ? p.cwd : undefined;
-      if (d.type !== "event_msg") continue;
-      const role = p.type === "user_message" ? "user" : p.type === "agent_message" ? "assistant" : null;
-      let texte = typeof p.message === "string" ? p.message.trim() : "";
-      /*
-       * Codex place devant la demande la liste des fichiers ouverts et le
-       * contexte de l'éditeur, puis « ## My request for Codex: ». On ne garde
-       * que la demande.
-       */
-      const demande = /##\s*My request for Codex:?\s*([\s\S]*)$/i.exec(texte);
-      if (demande) texte = demande[1]!.trim();
-      else if (/^(# Files mentioned by the user|<environment_context>)/.test(texte)) texte = "";
-      if (role && texte) messages.push({ role, content: couper(texte), createdAt: iso(d.timestamp) });
+async function lireCodex(chemin: string, c: Collecte): Promise<Entete> {
+  let dossier: string | undefined;
+  for await (const ligne of lignesDe(chemin)) {
+    if (!ligne.trim()) continue;
+    let d: { type?: string; timestamp?: string; payload?: Record<string, unknown> };
+    try {
+      d = JSON.parse(ligne);
+    } catch {
+      continue;
     }
-    if (messages.length === 0) continue;
-    const c = {
-      cle: `codex:${basename(f, ".jsonl")}`,
-      titre: titreDe(messages.find((m) => m.role === "user")?.content ?? ""),
-      creeLe: messages[0]!.createdAt,
-      modifieLe: messages[messages.length - 1]!.createdAt,
-      messages,
-      projet: projetDe(dossier, projets),
-    };
-    chats.push({ ...c, taille: taille(c) });
+    const p = d.payload ?? {};
+    if (d.type === "session_meta") dossier ??= typeof p.cwd === "string" ? p.cwd : undefined;
+    if (d.type !== "event_msg") continue;
+    const role = p.type === "user_message" ? "user" : p.type === "agent_message" ? "assistant" : null;
+    let texte = typeof p.message === "string" ? p.message.trim() : "";
+    /*
+     * Codex place devant la demande la liste des fichiers ouverts et le
+     * contexte de l'éditeur, puis « ## My request for Codex: ». On ne garde
+     * que la demande.
+     */
+    const demande = /##\s*My request for Codex:?\s*([\s\S]*)$/i.exec(texte);
+    if (demande) texte = demande[1]!.trim();
+    else if (/^(# Files mentioned by the user|<environment_context>)/.test(texte)) texte = "";
+    if (role && texte) c.ajouter({ role, content: couper(texte), createdAt: iso(d.timestamp) });
   }
-  return { source: "codex", chats, projets: [...projets.values()], instructions: lireTexte(join(MAISON, ".codex", "AGENTS.md")) };
+  return { titre: "", dossier };
 }
 
 /* ------------------------------------------------------------------ */
@@ -229,27 +335,28 @@ function lireCodex(): ImportLocal {
  * La base de Cursor, lue en lecture seule par l'outil `sqlite3` du système
  * (livré avec macOS et la plupart des Linux) : la passerelle tourne sur un
  * Node sans module SQLite. Sans l'outil (Windows), Cursor n'est pas lisible,
- * et on le dit.
+ * et on le dit. Appelé sans attendre la fin (la première version bloquait la
+ * passerelle jusqu'à 60 s par requête).
  */
 const baseCursor = () => join(appSupport("Cursor"), "User", "globalStorage", "state.vscdb");
 
-function sqlite(base: string, requete: string): Record<string, unknown>[] {
+async function sqlite(base: string, requete: string): Promise<Record<string, unknown>[]> {
   try {
-    const sortie = execFileSync("sqlite3", ["-readonly", "-json", base, requete], { encoding: "utf8", maxBuffer: 512 * 1024 * 1024, timeout: 60_000 });
-    return sortie.trim() ? (JSON.parse(sortie) as Record<string, unknown>[]) : [];
+    const { stdout } = await exec("sqlite3", ["-readonly", "-json", base, requete], { encoding: "utf8", maxBuffer: 512 * 1024 * 1024, timeout: 60_000 });
+    return stdout.trim() ? (JSON.parse(stdout) as Record<string, unknown>[]) : [];
   } catch {
     return [];
   }
 }
 
-const sqliteDisponible = () => {
+async function sqliteDisponible(): Promise<boolean> {
   try {
-    execFileSync("sqlite3", ["-version"], { timeout: 5000 });
+    await exec("sqlite3", ["-version"], { timeout: 5000 });
     return true;
   } catch {
     return false;
   }
-};
+}
 
 /** Texte d'une bulle Cursor : `text`, sinon le texte brut de `richText` (éditeur Lexical). */
 function texteBulle(b: Record<string, unknown>): string {
@@ -273,11 +380,14 @@ function texteBulle(b: Record<string, unknown>): string {
   return "";
 }
 
-function lireCursor(): ImportLocal {
-  const base = baseCursor();
-  const chats: ChatLu[] = [];
-  const lignes = sqlite(base, "select key, value from cursorDiskKV where key like 'composerData:%'");
-  for (const l of lignes.slice(-CHATS_MAX)) {
+const dateCursor = (v: unknown) => (typeof v === "number" ? new Date(v).toISOString() : iso(v));
+/** Un identifiant de conversation Cursor sûr à placer dans une requête (lettres, chiffres, tirets). */
+const idCursorSur = (id: string) => /^[\w-]+$/.test(id);
+
+/** Les conversations Cursor qui ont des messages, les plus récentes d'abord. */
+async function entreesCursor(): Promise<Entree[]> {
+  const entrees: Entree[] = [];
+  for (const l of await sqlite(baseCursor(), "select key, value from cursorDiskKV where key like 'composerData:%'")) {
     let d: Record<string, unknown>;
     try {
       d = JSON.parse(String(l.value)) as Record<string, unknown>;
@@ -285,59 +395,201 @@ function lireCursor(): ImportLocal {
       continue;
     }
     const id = String(d.composerId ?? String(l.key).split(":")[1] ?? "");
-    const date = (v: unknown) => (typeof v === "number" ? new Date(v).toISOString() : iso(v));
-    let bulles: Record<string, unknown>[] = [];
-    if (Array.isArray(d.conversation) && d.conversation.length > 0) {
-      bulles = d.conversation as Record<string, unknown>[];
-    } else if (Array.isArray(d.fullConversationHeadersOnly) && d.fullConversationHeadersOnly.length > 0 && /^[\w-]+$/.test(id)) {
-      // Format récent : chaque bulle est rangée à part, sous « bubbleId:<conversation>:<bulle> ».
-      const parId = new Map(
-        sqlite(base, `select key, value from cursorDiskKV where key like 'bubbleId:${id}:%'`).map((b) => [String(b.key).split(":")[2], b.value]),
-      );
-      for (const h of d.fullConversationHeadersOnly as { bubbleId?: string }[]) {
-        const brut = h.bubbleId ? parId.get(h.bubbleId) : undefined;
-        if (typeof brut !== "string") continue;
-        try {
-          bulles.push(JSON.parse(brut) as Record<string, unknown>);
-        } catch {
-          /* bulle illisible */
-        }
-      }
-    }
-    const messages: MessageLu[] = [];
-    for (const b of bulles) {
-      // 1 : la personne, 2 : l'agent.
-      const role = b.type === 1 ? "user" : b.type === 2 ? "assistant" : null;
-      const texte = texteBulle(b).trim();
-      if (role && texte) messages.push({ role, content: couper(texte), createdAt: date(b.createdAt ?? d.createdAt) });
-    }
-    if (messages.length === 0) continue;
-    const c = {
-      cle: `cursor:${id}`,
-      titre: (typeof d.name === "string" && d.name.trim()) || titreDe(messages.find((m) => m.role === "user")?.content ?? ""),
-      creeLe: date(d.createdAt),
-      modifieLe: date(d.lastUpdatedAt ?? d.createdAt),
-      messages,
-    };
-    chats.push({ ...c, taille: taille(c) });
+    const aDesMessages =
+      (Array.isArray(d.conversation) && d.conversation.length > 0) ||
+      (Array.isArray(d.fullConversationHeadersOnly) && d.fullConversationHeadersOnly.length > 0);
+    if (!aDesMessages || !idCursorSur(id)) continue;
+    const date = Date.parse(dateCursor(d.lastUpdatedAt ?? d.createdAt));
+    entrees.push({ cle: `cursor:${id}`, ou: id, octets: String(l.value).length, date: Number.isNaN(date) ? 0 : date });
   }
-  const regles = lireTexte(join(MAISON, ".cursorrules"));
-  return { source: "cursor", chats, projets: [], instructions: regles };
+  return entrees.sort((a, b) => b.date - a.date).slice(0, LISTE_MAX);
 }
 
-/** Nombre de conversations Cursor qui ont vraiment des messages. */
-function compterCursor(): number {
-  const lignes = sqlite(baseCursor(), "select value from cursorDiskKV where key like 'composerData:%'");
-  let n = 0;
-  for (const l of lignes) {
-    try {
-      const d = JSON.parse(String(l.value)) as { conversation?: unknown[]; fullConversationHeadersOnly?: unknown[] };
-      if ((d.conversation?.length ?? 0) > 0 || (d.fullConversationHeadersOnly?.length ?? 0) > 0) n++;
-    } catch {
-      /* ligne illisible */
+async function lireCursor(id: string, c: Collecte): Promise<Entete | null> {
+  if (!idCursorSur(id)) return null;
+  const base = baseCursor();
+  const [l] = await sqlite(base, `select value from cursorDiskKV where key = 'composerData:${id}'`);
+  if (!l) return null;
+  let d: Record<string, unknown>;
+  try {
+    d = JSON.parse(String(l.value)) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+  let bulles: Record<string, unknown>[] = [];
+  if (Array.isArray(d.conversation) && d.conversation.length > 0) {
+    bulles = d.conversation as Record<string, unknown>[];
+  } else if (Array.isArray(d.fullConversationHeadersOnly) && d.fullConversationHeadersOnly.length > 0) {
+    // Format récent : chaque bulle est rangée à part, sous « bubbleId:<conversation>:<bulle> ».
+    const parId = new Map(
+      (await sqlite(base, `select key, value from cursorDiskKV where key like 'bubbleId:${id}:%'`)).map((b) => [String(b.key).split(":")[2], b.value]),
+    );
+    for (const h of d.fullConversationHeadersOnly as { bubbleId?: string }[]) {
+      const brut = h.bubbleId ? parId.get(h.bubbleId) : undefined;
+      if (typeof brut !== "string") continue;
+      try {
+        bulles.push(JSON.parse(brut) as Record<string, unknown>);
+      } catch {
+        /* bulle illisible */
+      }
     }
   }
-  return n;
+  for (const b of bulles) {
+    // 1 : la personne, 2 : l'agent.
+    const role = b.type === 1 ? "user" : b.type === 2 ? "assistant" : null;
+    const texte = texteBulle(b).trim();
+    if (role && texte) c.ajouter({ role, content: couper(texte), createdAt: dateCursor(b.createdAt ?? d.createdAt) });
+  }
+  return {
+    titre: typeof d.name === "string" ? d.name.trim() : "",
+    creeLe: dateCursor(d.createdAt),
+    modifieLe: dateCursor(d.lastUpdatedAt ?? d.createdAt),
+  };
+}
+
+/* ------------------------------------------------------------------ */
+/* Liste et contenu                                                    */
+/* ------------------------------------------------------------------ */
+
+const DOSSIERS: Record<Exclude<Source, "cursor">, { dossiers: string[]; profondeur: number }> = {
+  "claude-code": { dossiers: [join(MAISON, ".claude", "projects")], profondeur: 1 },
+  codex: { dossiers: [join(MAISON, ".codex", "sessions"), join(MAISON, ".codex", "archived_sessions")], profondeur: 4 },
+};
+
+/** Les fichiers de conversation d'une source, les plus récents d'abord (date de modification). */
+async function entreesFichiers(source: Exclude<Source, "cursor">): Promise<Entree[]> {
+  const { dossiers, profondeur } = DOSSIERS[source];
+  const chemins = dossiers.flatMap((d) => fichiers(d, ".jsonl", profondeur));
+  const entrees: Entree[] = [];
+  // Par lots : quelques milliers de `stat` d'un coup ouvriraient autant de fichiers à la fois.
+  for (let i = 0; i < chemins.length; i += 64) {
+    const lot = await Promise.all(
+      chemins.slice(i, i + 64).map(async (ou) => {
+        try {
+          const s = await stat(ou);
+          return { cle: `${source}:${basename(ou, ".jsonl")}`, ou, octets: s.size, date: s.mtimeMs };
+        } catch {
+          return null;
+        }
+      }),
+    );
+    for (const e of lot) if (e) entrees.push(e);
+  }
+  return entrees.sort((a, b) => b.date - a.date).slice(0, LISTE_MAX);
+}
+
+/*
+ * La liste d'une source est relevée au début de chaque parcours (page 0) et
+ * gardée pour les pages suivantes et le contenu : sans cela, une conversation
+ * qui s'allonge pendant l'import changerait de rang, et une page en sauterait
+ * une autre.
+ */
+const releves = new Map<Source, { quand: number; entrees: Entree[] }>();
+const RELEVE_MS = 30 * 60_000;
+
+async function entreesDe(source: Source, neuf: boolean): Promise<Entree[]> {
+  const deja = releves.get(source);
+  if (!neuf && deja && Date.now() - deja.quand < RELEVE_MS) return deja.entrees;
+  const entrees = source === "cursor" ? await entreesCursor() : await entreesFichiers(source);
+  releves.set(source, { quand: Date.now(), entrees });
+  return entrees;
+}
+
+async function lire(source: Source, e: Entree, c: Collecte): Promise<Entete | null> {
+  try {
+    if (source === "claude-code") return await lireClaudeCode(e.ou, c);
+    if (source === "codex") return await lireCodex(e.ou, c);
+    return await lireCursor(e.ou, c);
+  } catch {
+    // Fichier disparu ou illisible entre le relevé et la lecture : on passe au suivant.
+    return null;
+  }
+}
+
+function chatDe(e: Entree, entete: Entete, c: Collecte, projets: Map<string, ProjetLu> | null): ChatLu | null {
+  if (c.n === 0) return null;
+  const titre = entete.titre || titreDe(c.premiereDemande ?? "");
+  return {
+    cle: e.cle,
+    titre,
+    creeLe: entete.creeLe ?? c.premier ?? new Date().toISOString(),
+    modifieLe: entete.modifieLe ?? c.dernier ?? new Date().toISOString(),
+    messages: c.messages ?? [],
+    projet: projetDe(entete.dossier, projets),
+    taille: titre.length + c.taille,
+    nbMessages: c.n,
+  };
+}
+
+const estSource = (id: string): id is Source => id === "claude-code" || id === "codex" || id === "cursor";
+
+function instructionsDe(source: Source): string {
+  if (source === "claude-code") return lireTexte(join(MAISON, ".claude", "CLAUDE.md"));
+  if (source === "codex") return lireTexte(join(MAISON, ".codex", "AGENTS.md"));
+  return lireTexte(join(MAISON, ".cursorrules"));
+}
+
+/**
+ * Une page de la liste, à partir de la conversation `depuis` (0 : relève la
+ * liste à neuf). Des résumés seulement : `messages` vide, `nbMessages` et
+ * `taille` renseignés.
+ */
+export async function pageLogiciel(id: string, depuis: number): Promise<PageImport | null> {
+  if (!estSource(id)) return null;
+  const entrees = await entreesDe(id, depuis === 0);
+  const projets = new Map<string, ProjetLu>();
+  const chats: ChatLu[] = [];
+  let i = Math.max(0, Math.floor(depuis));
+  const debut = i;
+  let octets = 0;
+  while (i < entrees.length && i - debut < PAGE_FICHIERS && octets < PAGE_OCTETS) {
+    const e = entrees[i++]!;
+    octets += e.octets;
+    const c = new Collecte(false);
+    const entete = await lire(id, e, c);
+    const chat = entete ? chatDe(e, entete, c, projets) : null;
+    if (chat) chats.push(chat);
+    // Entre deux conversations, la passerelle répond aux autres demandes.
+    await rendreLaMain();
+  }
+  return {
+    source: id,
+    chats,
+    projets: [...projets.values()],
+    instructions: debut === 0 ? instructionsDe(id) : "",
+    total: entrees.length,
+    suivant: i < entrees.length ? i : null,
+  };
+}
+
+/**
+ * Le contenu des Chats choisis, désignés par leur clé. Une clé inconnue de la
+ * liste relevée est ignorée : on ne lit que ce que la liste a montré, jamais
+ * un chemin venu de la requête.
+ */
+export async function contenuLogiciel(id: string, cles: string[]): Promise<ContenuImport | null> {
+  if (!estSource(id)) return null;
+  const parCle = new Map((await entreesDe(id, false)).map((e) => [e.cle, e]));
+  const chats: ChatLu[] = [];
+  const restantes: string[] = [];
+  let taille = 0;
+  for (const [k, cle] of cles.entries()) {
+    if (taille >= CONTENU_MAX) {
+      restantes.push(...cles.slice(k));
+      break;
+    }
+    const e = parCle.get(cle);
+    if (!e) continue;
+    const c = new Collecte(true);
+    const entete = await lire(id, e, c);
+    const chat = entete ? chatDe(e, entete, c, null) : null;
+    if (chat) {
+      chats.push(chat);
+      taille += chat.taille;
+    }
+    await rendreLaMain();
+  }
+  return { chats, restantes };
 }
 
 /* ------------------------------------------------------------------ */
@@ -353,11 +605,11 @@ const appSupport = (nom: string) =>
 
 const compter = (dossier: string, profondeur: number) => fichiers(dossier, ".jsonl", profondeur).length;
 
-export function logicielsTrouves(): Logiciel[] {
+export async function logicielsTrouves(): Promise<Logiciel[]> {
   const claudeCode = existsSync(join(MAISON, ".claude"));
   const codex = existsSync(join(MAISON, ".codex"));
   const cursor = existsSync(join(MAISON, ".cursor")) || existsSync(baseCursor());
-  const cursorLisible = cursor && existsSync(baseCursor()) && sqliteDisponible();
+  const cursorLisible = cursor && existsSync(baseCursor()) && (await sqliteDisponible());
   const chatgpt = existsSync(appSupport("com.openai.chat")) || existsSync(appSupport("ChatGPT"));
   const claude = existsSync(appSupport("Claude"));
   return [
@@ -384,7 +636,7 @@ export function logicielsTrouves(): Logiciel[] {
       nom: "Cursor",
       present: cursor,
       lisible: cursorLisible,
-      conversations: cursorLisible ? compterCursor() : 0,
+      conversations: cursorLisible ? (await entreesDe("cursor", true)).length : 0,
       instructions: existsSync(join(MAISON, ".cursorrules")),
       note: cursorLisible
         ? t("Conversations de l'agent et du Chat.")
@@ -409,11 +661,4 @@ export function logicielsTrouves(): Logiciel[] {
       note: t("Les conversations sont sur les serveurs d'Anthropic : passez par l'export de Claude, ci-dessous."),
     },
   ].filter((l) => l.present) as Logiciel[];
-}
-
-export function lireLogiciel(id: string): ImportLocal | null {
-  if (id === "claude-code") return lireClaudeCode();
-  if (id === "codex") return lireCodex();
-  if (id === "cursor") return lireCursor();
-  return null;
 }

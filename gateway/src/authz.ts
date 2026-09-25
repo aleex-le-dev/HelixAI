@@ -63,7 +63,11 @@ function voitProjet(projet: Record<string, unknown>, qui: Demandeur): boolean {
   );
 }
 
-function voitConversation(session: Record<string, unknown>, qui: Demandeur): boolean {
+/**
+ * Exportée pour les images créées dans un Chat (images.ts) : elles se
+ * montrent à qui voit le Chat, selon cette même règle et aucune autre.
+ */
+export function voitConversation(session: Record<string, unknown>, qui: Demandeur): boolean {
   if (session.ownerId === qui.userId) return true;
   const partages = Array.isArray(session.sharedWith) ? session.sharedWith : [];
   if (

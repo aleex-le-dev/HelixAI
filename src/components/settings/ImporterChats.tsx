@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { grandStockageDisponible } from "@/lib/store/grandStockage";
+import { auGrand, grandEnRepli, grandStockageDisponible, issueDerniereEcriture, type IssueEcriture } from "@/lib/store/grandStockage";
+import { dernierEnvoi } from "@/lib/store/sync";
 import { Upload, Loader2, TriangleAlert, CircleCheck, FolderKanban, MessageSquare, Download } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { InfoBox } from "@/components/ui/InfoBox";
@@ -39,6 +40,15 @@ interface Bilan {
   documentsEchoues: number;
   /** Chats choisis que l'instance n'a pas pu relire (logiciel du poste : fichier déplacé ou effacé depuis la liste). */
   illisibles: number;
+  /**
+   * Où l'écriture des Chats a abouti (grandStockage.ts), dans l'application
+   * de bureau : relire la liste, comme le fait `ajouterSessionsImportees`, ne
+   * dit que ce qui est en mémoire. Null : stockage du navigateur seul, que la
+   * relecture suffit à vérifier.
+   */
+  ecriture?: IssueEcriture | null;
+  /** Quand le fichier a refusé : l'instance en a-t-elle reçu la copie ? */
+  envoye?: boolean;
 }
 
 /**
@@ -199,7 +209,19 @@ export function ImporterChats() {
           updatedAt: c.modifieLe,
         }));
       bilanEnCours.chatsDemandes = sessions.length + bilanEnCours.illisibles;
+      const parLeFichier = auGrand("sessions");
       bilanEnCours.chats = ajouterSessionsImportees(sessions);
+      /*
+       * Le fichier chiffré s'écrit après coup : on attend de savoir où les
+       * Chats ont vraiment été gardés. S'il refusait déjà avant l'import, ils
+       * sont allés au stockage du navigateur, que la relecture ci-dessus a
+       * vérifié. Un Chat gardé a été poussé vers l'instance (storage.ts) : on
+       * attend aussi sa réponse.
+       */
+      bilanEnCours.ecriture = parLeFichier ? await issueDerniereEcriture("sessions") : grandEnRepli() ? "navigateur" : null;
+      if (bilanEnCours.chats > 0 && (bilanEnCours.ecriture === "memoire" || bilanEnCours.ecriture === "navigateur")) {
+        bilanEnCours.envoye = await dernierEnvoi("sessions");
+      }
       notifySessionsChanged();
       setBilan(bilanEnCours);
       setDonnees(null);
@@ -296,7 +318,16 @@ export function ImporterChats() {
           </InfoBox>
         )}
         {bilan && (
-          <InfoBox tone="muted" leading={<CircleCheck size={15} strokeWidth={1.75} />}>
+          <InfoBox
+            tone={bilan.ecriture === "memoire" || bilan.ecriture === "navigateur" ? "warning" : "muted"}
+            leading={
+              bilan.ecriture === "memoire" || bilan.ecriture === "navigateur" ? (
+                <TriangleAlert size={15} strokeWidth={1.75} />
+              ) : (
+                <CircleCheck size={15} strokeWidth={1.75} />
+              )
+            }
+          >
             <p>
               {tf("{0} Chat(s) repris sur {1}.", bilan.chats, bilan.chatsDemandes)}
               {bilan.projets > 0 && ` ${tf("{0} projet(s) créé(s).", bilan.projets)}`}
@@ -311,6 +342,16 @@ export function ImporterChats() {
             {bilan.chats < bilan.chatsDemandes - bilan.illisibles && (
               <p className="mt-1">
                 {t("Les autres n'ont pas pu être gardés : la place de cet ordinateur est pleine. Archivez ou supprimez d'anciens Chats, puis importez le reste.")}
+              </p>
+            )}
+            {bilan.chats > 0 && (bilan.ecriture === "navigateur" || bilan.ecriture === "memoire") && (
+              <p className="mt-1">
+                {bilan.ecriture === "navigateur"
+                  ? t("Le fichier chiffré de cet ordinateur a refusé l'écriture : ces Chats sont gardés pour l'instant dans le stockage du navigateur, limité à quelques Mo.")
+                  : t("Ni le fichier chiffré de cet ordinateur ni le stockage du navigateur n'ont pu les garder : ils ne sont qu'en mémoire, et cet ordinateur les perdra à la fermeture de l'application.")}{" "}
+                {bilan.envoye
+                  ? t("L'instance en a reçu la copie : ils y restent.")
+                  : t("L'instance n'en a pas reçu de copie : libérez de la place sur le disque, redémarrez l'application, puis importez-les de nouveau.")}
               </p>
             )}
             {bilan.documentsEchoues > 0 && (

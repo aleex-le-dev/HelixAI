@@ -42,6 +42,38 @@ function disponible() {
 const illisibles = new Set();
 /** Clés dont le fichier illisible a déjà été mis de côté pendant cette séance (voir `garderSiReduction`). */
 const copieIllisibleFaite = new Set();
+/**
+ * Pour le bandeau de l'interface (AvisChatsIllisibles) : pourquoi le fichier
+ * n'a pas été lu, et où sa copie a été gardée. `chiffrement` : le système ne
+ * sait pas déchiffrer en ce moment (trousseau refusé ou verrouillé) ;
+ * `dechiffrement` : il sait, mais pas ce fichier (clé du trousseau changée,
+ * fichier abîmé) ; `lecture` : le fichier lui-même ne s'ouvre pas (droits).
+ */
+const details = new Map();
+
+/**
+ * Met le fichier illisible de côté dès sa lecture, sans attendre la première
+ * écriture : le bandeau peut ainsi dire où il est, et rien ne dépend plus de
+ * ce que fera la suite. Une fois par séance, hors de la rotation des copies.
+ */
+function mettreDeCote(cle, brut) {
+  if (copieIllisibleFaite.has(cle)) return details.get(cle)?.copie ?? null;
+  const date = new Date().toISOString().replace(/[:.]/g, "-");
+  const cible = path.join(dossier(), `${cle}.${date}.illisible.enc`);
+  try {
+    fs.writeFileSync(cible, brut, { mode: 0o600 });
+    copieIllisibleFaite.add(cle);
+    return cible;
+  } catch {
+    return null;
+  }
+}
+
+function noterIllisible(cle, raison, brut) {
+  illisibles.add(cle);
+  const copie = brut ? mettreDeCote(cle, brut) : null;
+  details.set(cle, { raison, fichier: chemin(cle), copie, relue: false });
+}
 
 /** Toutes les valeurs rangées, déchiffrées. Illisible : absente (l'instance la rendra), et notée. */
 function lire() {
@@ -52,18 +84,26 @@ function lire() {
     try {
       brut = fs.readFileSync(chemin(cle));
     } catch (err) {
-      if (err && err.code !== "ENOENT") illisibles.add(cle);
+      if (err && err.code !== "ENOENT") noterIllisible(cle, "lecture", null);
       continue;
     }
     if (!chiffrement) {
-      illisibles.add(cle);
+      noterIllisible(cle, "chiffrement", brut);
       continue;
     }
     try {
       valeurs[cle] = safeStorage.decryptString(brut);
-      illisibles.delete(cle);
+      /*
+       * Lisible, mais peut-être parce que cette séance l'a réécrit après
+       * l'avoir trouvé illisible (fenêtre rechargée) : il ne contient alors que
+       * ce que ce poste a fait depuis. Tant que l'instance n'a pas rendu la
+       * collection (`relu`), elle reste tenue pour illisible, et l'interface
+       * ne la pousse pas.
+       */
+      const incident = details.get(cle);
+      if (!incident || incident.relue) illisibles.delete(cle);
     } catch {
-      illisibles.add(cle);
+      noterIllisible(cle, "dechiffrement", brut);
     }
   }
   return valeurs;
@@ -72,9 +112,49 @@ function lire() {
 /** Les clés présentes sur le disque mais illisibles à la dernière lecture. */
 const clesIllisibles = () => [...illisibles];
 
+/**
+ * Les fichiers trouvés illisibles pendant cette séance de l'application : pourquoi, le
+ * fichier, sa copie gardée (null si elle n'a pas pu être faite), et si
+ * l'instance a rendu la collection depuis.
+ */
+const incidents = () =>
+  Object.fromEntries(
+    [...new Set([...illisibles, ...details.keys()])].map((cle) => [
+      cle,
+      { raison: "lecture", fichier: chemin(cle), copie: null, relue: false, ...(details.get(cle) ?? {}) },
+    ]),
+  );
+
+/** L'interface a relu la collection depuis l'instance (sync.ts) : ce poste en a de nouveau une copie sûre. */
+function relu(cle) {
+  if (!CLES.has(cle)) return;
+  illisibles.delete(cle);
+  const incident = details.get(cle);
+  if (incident) incident.relue = true;
+}
+
 function poser(cle, valeur) {
   if (!CLES.has(cle) || !disponible()) return false;
   fs.mkdirSync(dossier(), { recursive: true, mode: 0o700 });
+  /*
+   * Fichier illisible dont aucune copie n'a pu être faite (il ne s'ouvrait
+   * même pas, ou le disque a refusé la copie) : on ne le remplace pas.
+   * L'interface repasse au stockage du navigateur (grandStockage.ts) ; le
+   * fichier reste tel quel, pour l'administrateur.
+   */
+  if ((illisibles.has(cle) || details.has(cle)) && !copieIllisibleFaite.has(cle)) {
+    let brut;
+    try {
+      brut = fs.readFileSync(chemin(cle));
+    } catch (err) {
+      if (!err || err.code !== "ENOENT") return false;
+    }
+    if (brut) {
+      const copie = mettreDeCote(cle, brut);
+      if (!copie) return false;
+      details.set(cle, { ...(details.get(cle) ?? { raison: "lecture", fichier: chemin(cle), relue: false }), copie });
+    }
+  }
   if (valeur === null) {
     // Effacer une liste pleine, ou illisible, en garde d'abord une copie.
     garderSiReduction(cle, "");
@@ -131,4 +211,4 @@ function garderSiReduction(cle, texte) {
   for (const f of copies.slice(0, Math.max(0, copies.length - COPIES_MAX))) fs.rmSync(path.join(dossier(), f), { force: true });
 }
 
-module.exports = { CLES, disponible, lire, poser, clesIllisibles };
+module.exports = { CLES, disponible, lire, poser, clesIllisibles, incidents, relu };

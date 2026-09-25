@@ -19,6 +19,7 @@ import { ACCEPT_DOCUMENTS, retenirFichiers, supprimerEmploye, type Employe, type
 import { optimiserInstructions } from "@/lib/gateway";
 import { ChoixDepuisEspace } from "@/components/agents/ChoixDepuisEspace";
 import { ChoixBases } from "@/components/bibliotheque/ChoixBases";
+import { LectureBases } from "@/components/agents/LectureBases";
 import { features } from "@/config/branding";
 import { t, tf } from "@/lib/i18n";
 
@@ -269,8 +270,10 @@ function AgentCard({
       {/*
         * Bases de connaissances de l'agent : son propriétaire les change ici.
         * Dans le Chat, chacun y lit ce qu'il a le droit de voir ; l'employé
-        * toujours actif (OpenClaw) les consulte par un outil, avec seulement
-        * ce qui est ouvert à toute l'équipe (useMiseEnService les lui recopie).
+        * toujours actif (OpenClaw) les consulte par un outil, avec ce qui est
+        * ouvert à toute l'équipe, et aussi aux groupes de son propriétaire
+        * quand rien de ce qui sort de lui ne va à quelqu'un d'autre
+        * (useMiseEnService les lui recopie ; LectureBases dit ce qu'il lira).
         */}
       {features.bibliotheque && (canDelete || nombreBases > 0) && (
         <button
@@ -289,11 +292,12 @@ function AgentCard({
           <p className="mt-1 text-sm text-muted-foreground">
             {t("Dans le Chat, avec cet agent, les passages utiles de ces bases sont donnés au modèle avant chaque réponse, et cités sous la réponse. Chaque personne n'y lit que ce qu'elle a le droit de voir.")}
           </p>
-          <p className="mt-2 text-sm text-muted-foreground">
-            {t("Depuis sa fiche, ses missions et ses messageries, l'agent cherche aussi dans ces bases et cite ses sources, mais seulement dans les bases et les documents ouverts à toute l'équipe : plusieurs personnes lui parlent, rien de privé ne doit en sortir.")}
-          </p>
           <div className="mt-4">
             <ChoixBases valeur={bases} onChange={setBases} />
+          </div>
+          <p className="mt-4 text-sm font-medium text-foreground">{t("Ce qu'il lit hors du Chat")}</p>
+          <div className="mt-1">
+            <LectureBases employe={employe} bases={bases} />
           </div>
           <div className="mt-5 flex justify-end gap-2">
             <Button variant="secondary" onClick={() => setBases(null)}>
@@ -596,7 +600,7 @@ function AgentModal({
               <ChoixBases
                 valeur={connaissances}
                 onChange={setConnaissances}
-                aide={t("L'agent y cherche avant de répondre et cite ses sources. Hors du Chat (sa fiche, ses missions, ses messageries), seulement dans ce qui est ouvert à toute l'équipe.")}
+                aide={t("L'agent y cherche avant de répondre et cite ses sources. Hors du Chat (sa fiche, ses missions, ses messageries), seulement dans ce qui est ouvert à toute l'équipe ; aussi dans ce qui est partagé à vos groupes pour un agent personnel sans outils ni messagerie. Sa carte le détaille une fois en service.")}
               />
             </div>
           )}

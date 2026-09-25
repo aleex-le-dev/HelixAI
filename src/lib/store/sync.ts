@@ -1,6 +1,6 @@
 import { apiFetch } from "@/lib/endpoint";
 import { retenirGroupes } from "@/lib/store/identity";
-import { auGrand, ecrireGrand, grandIllisible, grandRelu, lireGrand } from "@/lib/store/grandStockage";
+import { auGrand, ecrireGrand, grandIllisible, grandRelu, lireGrand, noterReleve } from "@/lib/store/grandStockage";
 
 /**
  * Synchronisation multi-postes.
@@ -76,20 +76,26 @@ function readLocal(collection: Collection): unknown {
   }
 }
 
-function writeLocal(collection: Collection, value: unknown): void {
-  if (collection === "profiles") {
-    const bag = (value ?? {}) as Record<string, unknown>;
-    for (const [suffix, profile] of Object.entries(bag)) {
-      localStorage.setItem(`${PREFIX}${suffix}`, JSON.stringify(profile));
+/** Faux si le stockage du navigateur a refusé (quota) : la copie locale n'a pas été remplacée. */
+function writeLocal(collection: Collection, value: unknown): boolean {
+  try {
+    if (collection === "profiles") {
+      const bag = (value ?? {}) as Record<string, unknown>;
+      for (const [suffix, profile] of Object.entries(bag)) {
+        localStorage.setItem(`${PREFIX}${suffix}`, JSON.stringify(profile));
+      }
+      return true;
     }
-    return;
+    if (value === null || value === undefined) return true;
+    if (auGrand(collection)) {
+      ecrireGrand(collection, JSON.stringify(value));
+      return true;
+    }
+    localStorage.setItem(localKey(collection), JSON.stringify(value));
+    return true;
+  } catch {
+    return false;
   }
-  if (value === null || value === undefined) return;
-  if (auGrand(collection)) {
-    ecrireGrand(collection, JSON.stringify(value));
-    return;
-  }
-  localStorage.setItem(localKey(collection), JSON.stringify(value));
 }
 
 /**
@@ -131,15 +137,34 @@ type Tirage =
 
 /** Tire une collection depuis l'instance vers le cache local. */
 async function pull(collection: Collection): Promise<Tirage> {
-  const res = await apiFetch(`/helix/data/${collection}`);
-  if (!res.ok) return "echec";
-  const payload = (await res.json()) as { value: unknown; revision: number };
-  revisions.set(collection, payload.revision);
-  if (payload.value === null) return "absente";
+  let payload: { value: unknown; revision: number };
+  try {
+    const res = await apiFetch(`/helix/data/${collection}`);
+    if (!res.ok) throw new Error(String(res.status));
+    payload = (await res.json()) as { value: unknown; revision: number };
+  } catch {
+    // Fichier des Chats illisible : le bandeau (AvisChatsIllisibles) dit que l'instance n'a pas pu être relue.
+    noterReleve(collection, "echec");
+    return "echec";
+  }
+  if (payload.value === null) {
+    revisions.set(collection, payload.revision);
+    noterReleve(collection, "absente");
+    return "absente";
+  }
   // Les conversations partagées à un groupe se lisent selon les groupes de la personne : on les relit avec.
   if (collection === "sessions") await relireMesGroupes();
-  writeLocal(collection, payload.value);
-  grandRelu(collection);
+  if (!writeLocal(collection, payload.value)) {
+    /*
+     * Rendue par l'instance, mais ce poste n'a pas pu la garder : il n'en a
+     * toujours pas de copie sûre. La révision n'est pas retenue, pour que
+     * `refresh` réessaie.
+     */
+    noterReleve(collection, "place");
+    return "echec";
+  }
+  revisions.set(collection, payload.revision);
+  grandRelu(collection, Array.isArray(payload.value) ? payload.value.length : undefined);
   return "tiree";
 }
 
@@ -165,19 +190,37 @@ async function relireMesGroupes(): Promise<void> {
  */
 const JAMAIS_POUSSEES: Collection[] = ["accounts"];
 
+/** Dernière poussée demandée pour chaque collection : l'instance l'a-t-elle prise ? */
+const envois = new Map<Collection, Promise<boolean>>();
+
+/**
+ * L'instance a-t-elle pris la dernière poussée de cette collection ? Pour le
+ * bilan d'un import (ImporterChats), quand ce poste n'a pas pu les garder.
+ * Faux aussi quand rien n'est parti (hors ligne, fichier illisible).
+ */
+export function dernierEnvoi(collection: Collection): Promise<boolean> {
+  return envois.get(collection) ?? Promise.resolve(false);
+}
+
 /** Pousse le cache local vers l'instance. */
-export async function push(collection: Collection): Promise<void> {
-  if (!online) return;
-  if (JAMAIS_POUSSEES.includes(collection)) return;
+export function push(collection: Collection): Promise<boolean> {
+  const envoi = pousser(collection);
+  envois.set(collection, envoi);
+  return envoi;
+}
+
+async function pousser(collection: Collection): Promise<boolean> {
+  if (!online) return false;
+  if (JAMAIS_POUSSEES.includes(collection)) return false;
   /*
    * Fichier des Chats illisible au démarrage (grandStockage.ts) : la copie
    * locale part d'une liste vide. La pousser effacerait tous les Chats de la
    * personne sur l'instance, qui n'y verrait qu'une suppression voulue. On
    * attend que l'instance ait rendu la collection (`pull`).
    */
-  if (grandIllisible(collection)) return;
+  if (grandIllisible(collection)) return false;
   const value = readLocal(collection);
-  if (value === null) return;
+  if (value === null) return false;
   pushing.add(collection);
   try {
     const res = await apiFetch(`/helix/data/${collection}`, {
@@ -189,8 +232,10 @@ export async function push(collection: Collection): Promise<void> {
       const payload = (await res.json()) as { revision: number };
       revisions.set(collection, payload.revision);
     }
+    return res.ok;
   } catch {
     online = false;
+    return false;
   } finally {
     pushing.delete(collection);
   }
@@ -231,6 +276,8 @@ export async function startSync(): Promise<void> {
     online = true;
   } catch {
     online = false;
+    // Fichier des Chats illisible : sans instance, rien ne les rendra pendant cette séance, et le bandeau le dit.
+    for (const collection of COLLECTIONS) noterReleve(collection, "hors-ligne");
     return;
   }
 

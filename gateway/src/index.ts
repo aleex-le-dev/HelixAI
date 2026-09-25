@@ -3959,6 +3959,28 @@ async function handleEmployes(
     if (!(await sienOuRefus())) return;
     return send(res, 200, await employes.activite(id));
   }
+  /*
+   * POST /helix/employes/<id>/connaissances : ce que l'employé lira
+   * réellement dans ces bases (celles qu'on est en train de choisir, à défaut
+   * les siennes), et pourquoi pas dans les autres. Même calcul que son outil
+   * `connaissances__chercher` (serveurOutils.ts), rien n'est lu ni cherché.
+   * Réservé à son propriétaire, comme le reste de sa fiche.
+   */
+  if (action === "connaissances" && !sous && req.method === "POST") {
+    if (!(await sienOuRefus())) return;
+    const e = await employes.employe(id);
+    if (!e) return send(res, 404, { error: { message: t("Agent introuvable.") } });
+    const b = await corps();
+    const lecture = employes.lectureDesBases(e);
+    const groupesLus = lecture.groupes ? await groupes.groupesDe(e.ownerId) : null;
+    const bases = await connaissances.lecturePourEmploye(
+      Array.isArray(b.bases) ? b.bases : (e.connaissances ?? []),
+      auteurEmploye(e.id),
+      groupesLus,
+      { userId: qui.userId, groupes: qui.groupes ?? [] },
+    );
+    return send(res, 200, { ...lecture, bases });
+  }
   // Canaux : les brancher, les retirer, lier WhatsApp, accepter les personnes qui écrivent.
   if (action === "canaux" && !sous && req.method === "GET") {
     return send(res, 200, { etat: await employes.etatCanaux(id) });

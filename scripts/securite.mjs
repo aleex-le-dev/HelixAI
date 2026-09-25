@@ -200,6 +200,8 @@ const SEANCE_REQUISE = [
   ["GET", "/helix/connaissances"], ["POST", "/helix/connaissances"], ["GET", "/helix/connaissances/documents"],
   ["POST", "/helix/connaissances/chercher"], ["GET", "/helix/connaissances/kb_inexistante"],
   ["POST", "/helix/connaissances/kb_inexistante/documents"], ["POST", "/helix/connaissances/kb_inexistante/supprimer"],
+  // Ajouté le 25/09/2026 : ce qu'un employé lira dans ses bases (écran de l'agent).
+  ["POST", "/helix/employes/inexistant/connaissances"],
   // Ajoutés le 25/09/2026 : entraîner un modèle (installer, projets, calculs, LM Studio).
   ["GET", "/helix/entrainement"], ["POST", "/helix/entrainement/installer"], ["POST", "/helix/entrainement/desinstaller"],
   ["POST", "/helix/entrainement/projets"], ["GET", "/helix/entrainement/projet?id=0123456789abcdef01234567"],
@@ -487,7 +489,7 @@ console.log("\n7 bis. Entraînement : un projet ne se désigne que par son ident
 }
 
 /* ------------------------------------------------------------------------- */
-console.log("\n7 ter. Employés OpenClaw et bases de connaissances : seulement ce qui est ouvert à toute l'équipe");
+console.log("\n7 ter. Employés OpenClaw et bases de connaissances : ce qui est ouvert à l'équipe, et aux groupes pour qui ne sert que son propriétaire");
 {
   /*
    * Un employé cherche dans les bases de son agent par l'outil
@@ -597,6 +599,122 @@ console.log("\n7 ter. Employés OpenClaw et bases de connaissances : seulement c
     const { readFileSync: lire } = await import("node:fs");
     const fiche = lire(join(DONNEES, "openclaw", "employes", employe?.id ?? "x", "SOUL.md"), "utf8");
     verifier("sa fiche de poste nomme l'outil, pas les bases", fiche.includes("connaissances__chercher") && !fiche.includes("Base-Privee"), fiche.slice(0, 80));
+
+    /*
+     * Ajouté le 25/09/2026 : un employé dont tout ce qui sort ne va qu'à son
+     * propriétaire (agent personnel, sans messagerie, encadré, sans outil qui
+     * écrit ou envoie) lit aussi ce qui est partagé aux groupes de ce
+     * propriétaire (employes.ts, `lectureDesBases`). Mots de contrôle :
+     * PAPAYE-3150 (document partagé au groupe Compta, dont A et B sont
+     * membres : doit sortir pour l'employé personnel de A, et lui seul),
+     * CERISE-4096 (document partagé au groupe RH de B, dont A n'est pas
+     * membre : ne sort jamais), ZEBRE-7731 (privé de A, rangé dans la base du
+     * groupe : ne sort jamais).
+     */
+    const documentGroupe = async (entete, nom, texte, groupes) => {
+      const r = await appel("/helix/bibliotheque/documents", {
+        method: "POST", headers: entete,
+        body: JSON.stringify({ nom, contenu: Buffer.from(texte).toString("base64"), texte, visibilite: "groupes", groupes }),
+      });
+      return (await r.json()).element?.id;
+    };
+    const baseGroupe = async (entete, nom, groupes, documents) => {
+      const b = (await (await appel("/helix/connaissances", { method: "POST", headers: entete, body: JSON.stringify({ nom, visibilite: "groupes", groupes }) })).json()).base;
+      await appel(`/helix/connaissances/${b?.id}/documents`, { method: "POST", headers: entete, body: JSON.stringify({ documents }) });
+      return b?.id;
+    };
+    const groupeCompta = (await (await appel("/helix/groupes", { method: "POST", headers: avecSeance, body: JSON.stringify({ nom: "Compta-Essai", membres: [compteB?.id] }) })).json()).groupe;
+    const groupeRh = (await (await appel("/helix/groupes", { method: "POST", headers: avecSeanceB, body: JSON.stringify({ nom: "RH-Essai" }) })).json()).groupe;
+    const tarifs = await documentGroupe(avecSeance, "Tarifs-Compta.txt", "Tarifs du groupe compta. Le code tarifaire du groupe est PAPAYE-3150.", [groupeCompta?.id]);
+    const primes = await documentGroupe(avecSeanceB, "Primes-RH.txt", "Ressources humaines. La prime secrète du trimestre est CERISE-4096.", [groupeRh?.id]);
+    const kbCompta = await baseGroupe(avecSeance, "Base-Compta-Essai", [groupeCompta?.id], [tarifs, priveA, equipe]);
+    const kbRh = await baseGroupe(avecSeanceB, "Base-RH-Essai-6620", [groupeRh?.id], [primes]);
+    const pretesGroupes = async () => {
+      for (const [id, entete] of [[kbCompta, avecSeance], [kbRh, avecSeanceB]]) {
+        const b = (await (await appel(`/helix/connaissances/${id}`, { headers: entete })).json()).base;
+        if (!b || b.documents.length === 0 || b.documents.some((d) => d.etat !== "pret")) return false;
+      }
+      return true;
+    };
+    let groupesIndexes = false;
+    for (let i = 0; i < 60 && !(groupesIndexes = await pretesGroupes()); i++) await attendre(500);
+    verifier("bases partagées aux groupes indexées", Boolean(groupeCompta?.id && groupeRh?.id && groupesIndexes), `${groupeCompta?.id} ${groupeRh?.id} ${groupesIndexes}`);
+
+    const perso = (await (await appel("/helix/employes", {
+      method: "POST", headers: avecSeance,
+      body: JSON.stringify({
+        nom: "Essai perso", poste: "Tu aides ta propriétaire.", outils: [], missions: [], liberte: "encadre",
+        visibilite: "personnel", connaissances: [kbCompta, kbRh, kbEquipe],
+      }),
+    })).json()).employe;
+    const modifierPerso = (b) => appel(`/helix/employes/${perso?.id}`, { method: "POST", headers: avecSeance, body: JSON.stringify(b) });
+    const QUESTION_GROUPE = "Quel est le code tarifaire du groupe compta ?";
+
+    const lu = await chercher(QUESTION_GROUPE, perso?.id);
+    verifier("un employé personnel, sans messagerie ni outil qui écrit, lit la base partagée au groupe de sa propriétaire", lu.status === 200 && lu.texte.includes("PAPAYE-3150") && lu.texte.includes("Tarifs-Compta.txt"), lu.texte.slice(0, 160));
+    const nonLu = await chercher("prime secrète du trimestre ressources humaines coffre personnel salaire confidentiel", perso?.id);
+    verifier(
+      "il ne lit ni la base d'un groupe dont elle n'est pas membre, ni ses documents privés, ni ceux d'une collègue",
+      nonLu.status === 200 && !nonLu.texte.includes("CERISE") && !nonLu.texte.includes("ZEBRE") && !nonLu.texte.includes("MANGUE") && !nonLu.texte.includes("Base-RH-Essai"),
+      nonLu.texte.slice(0, 160),
+    );
+    const ecran = await (await appel(`/helix/employes/${perso?.id}/connaissances`, { method: "POST", headers: avecSeance, body: JSON.stringify({ bases: [kbCompta, kbRh, kbEquipe] }) })).json();
+    const vueCompta = ecran.bases?.find((b) => b.id === kbCompta);
+    const vueRh = ecran.bases?.find((b) => b.id === kbRh);
+    verifier(
+      "l'écran de l'agent dit ce qu'il lira : la base du groupe (2 documents sur 3), pas celle d'un groupe étranger, sans la nommer",
+      ecran.groupes === true && vueCompta?.lue === true && vueCompta?.documentsLus === 2 && vueRh?.lue === false && vueRh?.raison === "inconnue" && !JSON.stringify(ecran).includes("Base-RH-Essai"),
+      JSON.stringify(ecran).slice(0, 200),
+    );
+    const ecranB = await appel(`/helix/employes/${perso?.id}/connaissances`, { method: "POST", headers: avecSeanceB, body: JSON.stringify({ bases: [kbCompta] }) });
+    verifier("cet écran n'est rendu qu'à sa propriétaire (collègue : 404)", ecranB.status === 404 || ecranB.status === 403, ecranB.status);
+
+    // L'audience s'élargit : l'appel suivant ne lit plus que ce qui est ouvert à l'équipe.
+    await modifierPerso({ visibilite: "organisation" });
+    const ouvert = await chercher(QUESTION_GROUPE, perso?.id);
+    const equipeToujours = await chercher("Quel est le code de la salle de réunion ?", perso?.id);
+    verifier("ouvert à toute l'organisation, il ne lit plus la base du groupe dès l'appel suivant", !ouvert.texte.includes("PAPAYE") && equipeToujours.texte.includes("LOTUS-2468"), `${ouvert.texte.slice(0, 80)} | ${equipeToujours.texte.slice(0, 60)}`);
+    await modifierPerso({ visibilite: "personnel" });
+    verifier("redevenu personnel, il la relit (rien n'est gardé d'un appel à l'autre)", (await chercher(QUESTION_GROUPE, perso?.id)).texte.includes("PAPAYE-3150"), "non relue");
+
+    await modifierPerso({ outils: ["fichiers"] });
+    verifier("avec un outil qui écrit (fichiers de l'équipe), il ne la lit plus", !(await chercher(QUESTION_GROUPE, perso?.id)).texte.includes("PAPAYE"), "PAPAYE sorti");
+    await modifierPerso({ outils: [], toutesLesFamilles: true });
+    verifier("avec « Autoriser les outils » (toutes les familles), non plus", !(await chercher(QUESTION_GROUPE, perso?.id)).texte.includes("PAPAYE"), "PAPAYE sorti");
+    await modifierPerso({ toutesLesFamilles: false, liberte: "etendu" });
+    verifier("en liberté étendue (web, messages), non plus", !(await chercher(QUESTION_GROUPE, perso?.id)).texte.includes("PAPAYE"), "PAPAYE sorti");
+    await modifierPerso({ liberte: "encadre" });
+
+    const canal = await appel(`/helix/employes/${perso?.id}/canaux`, {
+      method: "POST", headers: avecSeance,
+      body: JSON.stringify({ type: "telegram", champs: { botToken: "123456:jeton-essai" }, acces: "liste", autorises: ["4242"] }),
+    });
+    const surMessagerie = await chercher(QUESTION_GROUPE, perso?.id);
+    const ecranCanal = await (await appel(`/helix/employes/${perso?.id}/connaissances`, { method: "POST", headers: avecSeance, body: JSON.stringify({}) })).json();
+    verifier(
+      "joint sur une messagerie, il ne la lit plus, et l'écran dit pourquoi",
+      canal.status === 200 && !surMessagerie.texte.includes("PAPAYE") && ecranCanal.groupes === false && ecranCanal.raisons?.includes("messagerie"),
+      `${canal.status} ${surMessagerie.texte.slice(0, 60)} ${JSON.stringify(ecranCanal.raisons)}`,
+    );
+    await appel(`/helix/employes/${perso?.id}/canaux/telegram/retirer`, { method: "POST", headers: avecSeance, body: "{}" });
+    verifier("messagerie retirée, il la relit", (await chercher(QUESTION_GROUPE, perso?.id)).texte.includes("PAPAYE-3150"), "non relue");
+
+    // L'employé d'organisation du début, avec la même base : toujours la règle de l'équipe.
+    await appel(`/helix/employes/${employe?.id}`, { method: "POST", headers: avecSeance, body: JSON.stringify({ connaissances: [kbCompta, kbEquipe] }) });
+    const orga = await chercher(QUESTION_GROUPE, employe?.id);
+    const orgaEquipe = await chercher("Quel est le code de la salle de réunion ?", employe?.id);
+    const ecranOrga = await (await appel(`/helix/employes/${employe?.id}/connaissances`, { method: "POST", headers: avecSeance, body: "{}" })).json();
+    verifier(
+      "un employé ouvert à toute l'organisation ne lit toujours que ce qui est ouvert à l'équipe",
+      !orga.texte.includes("PAPAYE") && orgaEquipe.texte.includes("LOTUS-2468") && ecranOrga.raisons?.includes("organisation") && ecranOrga.bases?.find((b) => b.id === kbCompta)?.raison === "groupes-equipe",
+      `${orga.texte.slice(0, 80)} | ${orgaEquipe.texte.slice(0, 60)} ${JSON.stringify(ecranOrga.raisons)}`,
+    );
+
+    // La propriétaire quitte le groupe : lu depuis les groupes à cet instant, l'accès se referme aussitôt.
+    const sortie = await appel(`/helix/groupes/${groupeCompta?.id}`, {
+      method: "POST", headers: avecSeance, body: JSON.stringify({ membres: [compteB?.id], responsables: [compteB?.id] }),
+    });
+    verifier("sortie du groupe, son employé personnel ne lit plus la base de ce groupe", sortie.status === 200 && !(await chercher(QUESTION_GROUPE, perso?.id)).texte.includes("PAPAYE"), sortie.status);
   }
 }
 

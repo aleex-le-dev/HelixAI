@@ -204,7 +204,8 @@ export interface Employe {
    * Bases de connaissances de l'agent (`Agent.connaissances`), recopiées par
    * l'écran de son propriétaire. L'employé y cherche par l'outil
    * `connaissances__chercher`, et n'y lit que ce qui est ouvert à toute
-   * l'équipe (connaissances.ts, `chercherPourEmploye`).
+   * l'équipe, plus ce qui est partagé aux groupes de son propriétaire quand
+   * rien de ce qui sort de lui ne va à quelqu'un d'autre (`lectureDesBases`).
    */
   connaissances?: string[];
   ownerId: string;
@@ -249,6 +250,76 @@ export function famillesEffectives(e: Employe): Famille[] {
 /** Un employé qu'une personne a le droit de voir et de joindre. */
 export function visiblePar(e: Employe, qui: string): boolean {
   return e.visibilite !== "personnel" || e.ownerId === qui;
+}
+
+/* ---- Ce qu'il lit dans les bases de connaissances ------------------ */
+
+/**
+ * Familles dont un outil écrit ou envoie là où d'autres le liront : le
+ * dossier de travail de l'équipe (et les connecteurs du catalogue qui le
+ * rejoignent), les documents Office qui y sont créés, la boîte mail de
+ * l'entreprise (brouillons, envois). Les autres familles (bibliothèque,
+ * agenda, Drive, Slack) ne font que lire.
+ */
+const FAMILLES_QUI_SORTENT: Famille[] = ["fichiers", "bureau", "courrier"];
+
+/** Pourquoi un employé ne lit que ce qui est ouvert à toute l'équipe. */
+export type RaisonEquipeSeulement = "organisation" | "messagerie" | "mission-mail" | "liberte" | "outils";
+
+export interface LectureDesBases {
+  /** Il lit aussi les bases et documents partagés aux groupes de son propriétaire. */
+  groupes: boolean;
+  /** Vide si `groupes` ; sinon, tout ce qui ouvre son audience au-delà de son propriétaire. */
+  raisons: RaisonEquipeSeulement[];
+  /** Pour la raison « outils » : les familles qui écrivent ou envoient. */
+  outilsQuiSortent: Famille[];
+}
+
+/**
+ * Ce qu'un employé peut lire dans les bases de son agent (décidé le
+ * 25/09/2026, PROJET.md § 3.10).
+ *
+ * La règle de départ, « seulement ce qui est ouvert à toute l'équipe », tient
+ * à ce que ce qu'il lit sort de lui vers des gens qu'on ne connaît pas à
+ * l'avance. Elle s'élargit dans un seul cas, celui où l'on sait sûrement
+ * **qui** recevra ce qu'il lit : quand tout ce qui sort de lui ne va qu'à son
+ * propriétaire. Il lit alors, en plus, ce qui est partagé aux groupes dont ce
+ * propriétaire est membre (jamais ses documents privés : c'est l'autre
+ * question du point 18, laissée au client). Chaque personne de son audience
+ * (une seule) voit donc tout ce qu'il lit. Les conditions, toutes vérifiables
+ * dans ce qui est enregistré ici :
+ *  - agent **personnel** : `visiblePar` ne laisse que son propriétaire le voir,
+ *    lui parler, lire ses échanges ; ses comptes rendus de missions sont
+ *    réservés au propriétaire (`sienOuRefus`, index.ts) ;
+ *  - **aucune messagerie** : sur un canal, écrivent des gens qui n'ont pas de
+ *    compte Helix, et sa mémoire leur répond ;
+ *  - aucune mission **à chaque mail** : c'est un texte venu de n'importe qui
+ *    qui le fait travailler ;
+ *  - palier **encadré** : au-delà, il lit des pages web (une adresse peut
+ *    emporter un passage), envoie des messages, lance des commandes ;
+ *  - aucune famille **qui écrit ou envoie** (`FAMILLES_QUI_SORTENT`) : un
+ *    fichier du dossier de l'équipe, un document Office, un brouillon de mail
+ *    sont lus par d'autres. « Autoriser les outils » les donne toutes.
+ * Un agent partagé à des groupes précis n'existe pas (un agent est personnel
+ * ou ouvert à l'organisation) : ce cas n'est pas traité, et garde la règle
+ * de l'équipe.
+ *
+ * Relu à **chaque appel** d'outil depuis l'employé tel qu'il est enregistré
+ * (serveurOutils.ts), avec les groupes du propriétaire à cet instant : rien
+ * n'est gardé en mémoire. Dès qu'une condition tombe (ouvert à l'équipe,
+ * messagerie branchée, outil ajouté), l'appel suivant ne lit plus que ce qui
+ * est ouvert à l'équipe. Ce qu'il a déjà noté dans sa mémoire OpenClaw y
+ * reste : Helix ne l'efface pas, et l'écran le dit au propriétaire.
+ */
+export function lectureDesBases(e: Employe): LectureDesBases {
+  const raisons: RaisonEquipeSeulement[] = [];
+  if (e.visibilite !== "personnel") raisons.push("organisation");
+  if ((e.canaux ?? []).length > 0) raisons.push("messagerie");
+  if (e.missions.some((m) => m.rythme === "a-chaque-mail")) raisons.push("mission-mail");
+  if ((e.liberte ?? "encadre") !== "encadre") raisons.push("liberte");
+  const outilsQuiSortent = famillesEffectives(e).filter((f) => FAMILLES_QUI_SORTENT.includes(f));
+  if (outilsQuiSortent.length > 0) raisons.push("outils");
+  return { groupes: raisons.length === 0, raisons, outilsQuiSortent };
 }
 
 export async function listerEmployes(): Promise<Employe[]> {

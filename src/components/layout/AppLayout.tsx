@@ -3,6 +3,7 @@ import { Outlet, useLocation } from "react-router-dom";
 import { WindowChrome } from "./WindowChrome";
 import { Sidebar } from "./Sidebar";
 import { MainArea } from "./MainArea";
+import { AvisChatsIllisibles } from "./AvisChatsIllisibles";
 import { ScreenApproval } from "@/components/cowork/ScreenApproval";
 import { useBotAutomatique } from "@/hooks/useBotAutomatique";
 import { demarrerNotifications } from "@/lib/notifications";
@@ -51,6 +52,8 @@ export function AppLayout() {
       <Sidebar collapsed={collapsed} onToggle={() => setCollapsed((c) => !c)} />
       <MainArea>
         <Outlet />
+        {/* Par-dessus l'écran, où que l'on soit : la liste des Chats vide ou incomplète doit s'expliquer partout. */}
+        <AvisChatsIllisibles />
       </MainArea>
       {/*
         Hors de la zone principale : l'agent peut demander un accord pendant que

@@ -50,7 +50,10 @@ for you on macOS.
 
 ## Features
 
-- **Chat** with local models (Qwen3 by default), or cloud models with your own API key.
+- **Chat** with local models **picked for each machine**: Helix installs the best-rated open
+  model (Apache 2.0 or MIT) that fits its memory and has been tested with Helix, for example
+  Qwen3 4B on an 8 GB Mac or Qwen3.5 9B from 16 GB, and suggests the others the machine can
+  run (Mistral, gpt-oss, GLM, DeepSeek on larger ones). Cloud models work with your own API key.
   Attachments, dictation (Whisper, on the machine), image generation (Z-Image Turbo,
   FLUX.2 klein).
 - **Knowledge bases (RAG)**: gather documents, the instance indexes them on the machine,
@@ -98,7 +101,7 @@ for you on macOS.
 
 - macOS 14 or later on Apple Silicon, 16 GB of memory recommended
 - Node.js 20 or later and npm
-- [LM Studio](https://lmstudio.ai) with a chat model (Qwen3 8B works well)
+- [LM Studio](https://lmstudio.ai): on first launch, Helix installs the model that suits the machine
 - Optional: [OpenCode](https://opencode.ai) for Helix Code, Python 3 for Cowork documents
 
 ### Run

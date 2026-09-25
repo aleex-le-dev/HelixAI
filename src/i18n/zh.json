@@ -2004,6 +2004,7 @@
   "Réponse arrêtée à votre demande, avant d'avoir été écrite.": "应您的要求，回答在写出之前已停止。",
   "Réponse attendue": "预期答案",
   "Réponse bloquée par le filtre de contenu du modèle.": "回复被模型的内容过滤器拦截。",
+  "Réponse en cours": "正在回答",
   "Réponse envoyée depuis votre boîte, dans le fil du message d'origine.": "已从您的邮箱回复，位于原邮件的会话中。",
   "Réponse interrompue : la limite de longueur du modèle est atteinte.": "回答被中断：已达到模型的长度上限。",
   "Réponse sans flux.": "回答未以流式返回。",

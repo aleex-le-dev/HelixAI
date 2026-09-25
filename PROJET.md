@@ -2420,6 +2420,17 @@ ne restent ici que les points ouverts.*
    (pas de carte NVIDIA ici). À vérifier sur une vraie machine : que pip résout la pile
    avec les deux roues, que `@@MOTEUR@@unsloth` sort bien, et le gain de vitesse réel.
 
+**Fait le 26/09/2026 : une réponse du Chat continue quand on quitte son Chat.**
+Signalé par Medhi : ouvrir un autre Chat ou en commencer un nouveau arrêtait la
+réponse (`open` et `reset` de `useChat` appelaient « Arrêter »). La réponse vit
+maintenant hors de l'écran, rattachée à son Chat (`reponsesEnCours`), continue, et
+s'enregistre dans son Chat à la fin ; l'écran s'y rabonne en revenant, et la barre
+latérale montre une roue sur le Chat qui écrit encore. Seul « Arrêter » l'arrête ;
+un Chat supprimé arrête la sienne. Vérifié dans le navigateur : poème lancé, nouveau
+Chat ouvert, roue visible, Chat rouvert en direct (plan qui avance), réponse finie
+pendant qu'un autre Chat était affiché, et enregistrée. Limite : une page rechargée
+ou l'application fermée coupe la réponse (rien n'est gardé avant sa fin).
+
 **Ce qui attend une machine qu'on n'a pas**
 
 7. **Qwen-Image** (texte lisible dans l'image) : 48 Go ou carte de 24 Go.

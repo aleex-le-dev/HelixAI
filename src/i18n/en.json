@@ -2004,6 +2004,7 @@
   "Réponse arrêtée à votre demande, avant d'avoir été écrite.": "Answer stopped at your request, before it was written.",
   "Réponse attendue": "Expected answer",
   "Réponse bloquée par le filtre de contenu du modèle.": "Response blocked by the model's content filter.",
+  "Réponse en cours": "Answer in progress",
   "Réponse envoyée depuis votre boîte, dans le fil du message d'origine.": "Reply sent from your mailbox, in the original message's thread.",
   "Réponse interrompue : la limite de longueur du modèle est atteinte.": "Answer interrupted: the model's length limit has been reached.",
   "Réponse sans flux.": "Answer with no stream.",

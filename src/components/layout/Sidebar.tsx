@@ -17,7 +17,9 @@ import {
   ArchiveRestore,
   ChevronRight,
   Pencil,
+  Loader2,
 } from "lucide-react";
+import { CHATS_EN_COURS, chatEnCours } from "@/hooks/useChat";
 import { useSessions, notifySessionsChanged } from "@/hooks/useSessions";
 import type { Session } from "@/lib/store/sessions";
 import { LogoHome } from "@/components/ui/Logo";
@@ -59,6 +61,14 @@ function LigneSession({
   // Renommer se fait sur place : le nom devient un champ, Entrée valide,
   // Échap annule, cliquer ailleurs valide aussi (comme dans le Finder).
   const [edition, setEdition] = useState<string | null>(null);
+  // Une réponse qui s'écrit encore dans ce Chat, même quand on regarde ailleurs.
+  const [enCours, setEnCours] = useState(() => chatEnCours(session.id));
+  useEffect(() => {
+    const relire = () => setEnCours(chatEnCours(session.id));
+    relire();
+    window.addEventListener(CHATS_EN_COURS, relire);
+    return () => window.removeEventListener(CHATS_EN_COURS, relire);
+  }, [session.id]);
   const valider = () => {
     if (edition !== null && edition.trim() && edition.trim() !== session.title) onRenommer(edition);
     setEdition(null);
@@ -104,7 +114,9 @@ function LigneSession({
             : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
         )}
       >
-        {session.origin === "cloud" ? (
+        {enCours ? (
+          <Loader2 size={14} strokeWidth={1.75} className="shrink-0 animate-spin text-primary" aria-label={t("Réponse en cours")} />
+        ) : session.origin === "cloud" ? (
           <Cloud size={14} strokeWidth={1.75} className="shrink-0" />
         ) : (
           <HardDrive size={14} strokeWidth={1.75} className="shrink-0" />

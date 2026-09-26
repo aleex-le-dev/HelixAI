@@ -2628,6 +2628,19 @@ dépenses […] avec des tests » : plan de 3 étapes suivi une à une, une erre
 trouvée et corrigée ; mais les tests écrits étaient faux (un test sur deux échouait), ce
 qu'aucun contrôle de lecture ne voyait : d'où l'essai réel des tests, ajouté ensuite.
 
+**Fait le 26/09/2026 : Google Agenda par la connexion Google, et revue de tous les connecteurs.**
+Essayé avec Medhi sur son compte : Gmail se branche par mot de passe d'application (lu et
+résumé), mais Google refuse ce mot de passe pour ses agendas ; l'écran promettait l'inverse,
+il ne le promet plus. Google Agenda passe par la connexion Google avec **l'application
+Google de l'organisation** (décidé par Medhi : local et souverain, pas d'application commune
+de Helix Agence), saisie une fois à l'écran et partagée avec Drive (`clientGoogle.ts`,
+`agendaGoogle.ts`) ; lecture, et écriture si on la coche (créer, modifier, supprimer, chaque
+écriture par la carte d'accord, suppression toujours confirmée, aucun invité ni courriel).
+Vérifié en vrai : connexion du compte de Medhi, et lecture de sa semaine dans un Chat. Pas
+encore essayé : une écriture réelle. Revue des connecteurs (SECURITE.md § 27) : versions
+épinglées, scripts d'installation coupés, sept paquets abandonnés retirés ou remplacés,
+17 services en ligne et 13 serveurs locaux démarrés et vérifiés sans compte.
+
 **Fait le 26/09/2026 : mises à jour d'un clic, sans signature ni serveur.** Décidé par
 Medhi : pas de mise à jour automatique, mais une fenêtre « Nouvelle version » avec
 « Installer maintenant » (`src/components/layout/FenetreMiseAJour.tsx`). La source est

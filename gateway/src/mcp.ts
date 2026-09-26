@@ -179,7 +179,7 @@ export const DEFAULT_SERVERS: McpServerConfig[] = [
     label: "Fichiers",
     description: `Lecture et écriture dans ${espaceCourant}`,
     command: "npx",
-    args: ["-y", "@modelcontextprotocol/server-filesystem", ...espaceInitial],
+    args: ["-y", "@modelcontextprotocol/server-filesystem@2026.8.31", ...espaceInitial],
     autoStart: true,
   },
 ];
@@ -273,9 +273,17 @@ export async function startServer(id: string): Promise<{ ok: boolean; error?: st
        * ni Node ni son cache et le serveur ne démarre jamais. Les secrets du
        * connecteur viennent ensuite, et priment.
        */
-      env: entry.config.env
-        ? { ...getDefaultEnvironment(), ...entry.config.env }
-        : undefined,
+      env: {
+        ...getDefaultEnvironment(),
+        ...(entry.config.env ?? {}),
+        /*
+         * Aucun script d'installation : `npx` télécharge le paquet épinglé et ses
+         * dépendances, et un script `postinstall` d'une dépendance compromise
+         * s'exécuterait sans que personne l'ait voulu (ajouté le 26/09/2026,
+         * revue des connecteurs). Les serveurs du catalogue n'en ont pas besoin.
+         */
+        ...(entry.config.command === "npx" ? { npm_config_ignore_scripts: "true", npm_config_update_notifier: "false", npm_config_fund: "false", npm_config_audit: "false" } : {}),
+      },
       /*
        * Par défaut, le SDK laisse le serveur écrire sur la sortie d'erreur de
        * la passerelle. C'est une fuite mesurée, pas une hypothèse : un serveur
@@ -517,7 +525,7 @@ export async function setWorkspace(
       liste.length === 1
         ? `Lecture et écriture dans ${liste[0]}`
         : `Lecture et écriture dans ${liste.length} emplacements, à partir de ${liste[0]}`,
-    args: ["-y", "@modelcontextprotocol/server-filesystem", ...liste],
+    args: ["-y", "@modelcontextprotocol/server-filesystem@2026.8.31", ...liste],
   };
 
   await stopServer("fichiers");

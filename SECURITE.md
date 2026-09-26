@@ -2918,3 +2918,21 @@ identifiant n'est livré avec le produit, rien ne passe par Helix Agence.
 Vérifié par `npm run securite` (section 3 bis, 20 contrôles). Pas encore
 vérifié avec un vrai compte au moment d'écrire ces lignes : l'échange réel avec
 Google, qui demande l'application Google Cloud de l'organisation.
+
+## 27. Revue des connecteurs (26 septembre 2026)
+
+| Constat | Correction |
+|---|---|
+| Les 16 serveurs MCP locaux (et le serveur de fichiers livré) se lançaient par `npx -y paquet`, **sans version** : la dernière publiée, à chaque démarrage, sans rien vérifier. | Chaque paquet a sa version épinglée (les versions publiées sur npm sont immuables et npm vérifie leur empreinte au téléchargement). Un connecteur installé avant est réaligné au démarrage (`aligner`, connecteurs.ts). |
+| Les scripts d'installation des dépendances pouvaient s'exécuter au lancement. | `npm_config_ignore_scripts=true` pour tout serveur lancé par `npx` (mcp.ts). |
+| Sept paquets abandonnés par leurs auteurs (« Package no longer supported ») : GitHub, GitLab, Slack, PostgreSQL, Brave Search, Google Maps, Puppeteer. | Retirés, ou remplacés par l'officiel : GitLab par le serveur de GitLab (en ligne, un clic), Brave par `@brave/brave-search-mcp-server` (MIT), le navigateur par Playwright MCP de Microsoft (Apache 2.0, sans fenêtre, profil isolé). |
+| Licences | Toutes MIT ou Apache 2.0 (Exa : MIT dans son fichier LICENSE, absente de son package.json ; serveurs officiels MCP : Apache 2.0, avec une part encore MIT). |
+
+Mesuré le même jour : les 17 services en ligne répondent 401 et publient leurs
+réglages OAuth avec PKCE ; les 14 marqués « un clic » acceptent
+l'enregistrement automatique (Airtable passé en « un clic »). Les 5 serveurs
+sans compte démarrent et répondent (fichiers, mémoire, réflexion,
+documentation, navigateur) ; les 7 serveurs à clé démarrent avec une clé
+factice ; Kubernetes refuse un fichier de configuration factice et démarre
+sans. Non vérifié : un appel réel avec un compte de chacun de ces services.
+Vérifié par `npm run securite` (section 6 quinquies, 5 contrôles).

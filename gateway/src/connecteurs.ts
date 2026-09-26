@@ -332,8 +332,8 @@ export const CATALOGUE: EntreeCatalogue[] = [
     description: "Bases, tables et enregistrements Airtable, par le serveur d'Airtable.",
     categorie: "Documents et données",
     url: "https://mcp.airtable.com/mcp",
-    oauth: "appli",
-    console: "https://airtable.com/create/oauth",
+    // Vérifié le 26/09/2026 : Airtable accepte désormais l'enregistrement automatique (un clic).
+    oauth: "auto",
     documentation: "https://airtable.com/developers/web/guides/oauth-integrations",
     secrets: [],
   },
@@ -346,7 +346,7 @@ export const CATALOGUE: EntreeCatalogue[] = [
       "Même service que « Notion », mais par un jeton d'intégration interne, sans passer par le navigateur.",
     categorie: "Travail en équipe",
     command: "npx",
-    args: ["-y", "@notionhq/notion-mcp-server"],
+    args: ["-y", "@notionhq/notion-mcp-server@2.5.2"],
     documentation: "https://www.notion.so/profile/integrations",
     secrets: [
       {
@@ -361,71 +361,20 @@ export const CATALOGUE: EntreeCatalogue[] = [
     ],
   },
   {
-    id: "github-jeton",
-    label: "GitHub (par jeton)",
-    description: "Dépôts, issues et demandes de fusion, par un jeton personnel.",
-    categorie: "Développement",
-    command: "npx",
-    args: ["-y", "@modelcontextprotocol/server-github"],
-    documentation: "https://github.com/settings/tokens",
-    secrets: [
-      {
-        nom: "GITHUB_PERSONAL_ACCESS_TOKEN",
-        libelle: "Jeton d'accès personnel",
-        aide:
-          "Sur GitHub, ouvrez Settings, Developer settings, Personal access tokens, et " +
-          "créez un jeton « fine-grained ». Ne cochez que les dépôts et les droits dont " +
-          "l'agent a besoin : ce jeton vaut ce que vous lui donnez.",
-      },
-    ],
-  },
-  {
     id: "gitlab",
     label: "GitLab",
-    description: "Projets, issues et demandes de fusion GitLab.",
+    description: "Projets, issues et demandes de fusion GitLab.com, par le serveur de GitLab.",
     categorie: "Développement",
-    command: "npx",
-    args: ["-y", "@modelcontextprotocol/server-gitlab"],
-    documentation: "https://gitlab.com/-/user_settings/personal_access_tokens",
-    secrets: [
-      {
-        nom: "GITLAB_PERSONAL_ACCESS_TOKEN",
-        libelle: "Jeton d'accès personnel",
-        aide:
-          "Dans GitLab, Préférences puis Jetons d'accès personnels. La portée « api » " +
-          "suffit ; limitez-la aux projets concernés si votre instance le permet.",
-      },
-      {
-        nom: "GITLAB_API_URL",
-        libelle: "Adresse de l'API (instance auto-hébergée)",
-        aide:
-          "Pour GitLab.com, laissez https://gitlab.com/api/v4. Pour une instance à vous, " +
-          "mettez son adresse, terminée par /api/v4.",
-      },
-    ],
-  },
-  {
-    id: "slack-jeton",
-    label: "Slack (par jeton)",
-    description: "Canaux, messages et personnes, par un jeton de bot Slack.",
-    categorie: "Travail en équipe",
-    command: "npx",
-    args: ["-y", "@modelcontextprotocol/server-slack"],
-    documentation: "https://api.slack.com/apps",
-    secrets: [
-      {
-        nom: "SLACK_BOT_TOKEN",
-        libelle: "Jeton du bot (xoxb-…)",
-        aide:
-          "Créez une application Slack, ajoutez-lui les droits de lecture des canaux, " +
-          "installez-la dans votre espace, puis copiez le jeton « Bot User OAuth Token ».",
-      },
-      {
-        nom: "SLACK_TEAM_ID",
-        libelle: "Identifiant de l'espace (T…)",
-        aide: "Visible dans l'adresse de votre espace Slack, ou dans les réglages de l'application.",
-      },
-    ],
+    /*
+     * Le serveur officiel de GitLab, en un clic (vérifié le 26/09/2026 : il
+     * répond 401 et son serveur d'autorisation accepte l'enregistrement
+     * automatique, avec PKCE). Remplace @modelcontextprotocol/server-gitlab,
+     * abandonné (« Package no longer supported »).
+     */
+    url: "https://gitlab.com/api/v4/mcp",
+    oauth: "auto",
+    documentation: "https://docs.gitlab.com/user/gitlab_duo/model_context_protocol/",
+    secrets: [],
   },
   {
     id: "airtable-jeton",
@@ -433,7 +382,7 @@ export const CATALOGUE: EntreeCatalogue[] = [
     description: "Bases et enregistrements Airtable, par un jeton personnel.",
     categorie: "Documents et données",
     command: "npx",
-    args: ["-y", "airtable-mcp-server"],
+    args: ["-y", "airtable-mcp-server@1.14.0"],
     documentation: "https://airtable.com/create/tokens",
     secrets: [
       {
@@ -446,31 +395,12 @@ export const CATALOGUE: EntreeCatalogue[] = [
     ],
   },
   {
-    id: "postgres",
-    label: "PostgreSQL",
-    description: "Lecture d'une base PostgreSQL : schémas et requêtes, en lecture seule.",
-    categorie: "Documents et données",
-    command: "npx",
-    args: ["-y", "@modelcontextprotocol/server-postgres"],
-    documentation: "https://www.postgresql.org/docs/",
-    secrets: [
-      {
-        nom: "POSTGRES_CONNECTION_STRING",
-        libelle: "Chaîne de connexion",
-        aide:
-          "De la forme postgresql://utilisateur:motdepasse@serveur:5432/base. Créez de " +
-          "préférence un compte en lecture seule : l'agent n'a pas à pouvoir écrire dans " +
-          "votre base de production.",
-      },
-    ],
-  },
-  {
     id: "hubspot",
     label: "HubSpot",
     description: "Contacts, entreprises et affaires HubSpot.",
     categorie: "Vente et relation client",
     command: "npx",
-    args: ["-y", "@hubspot/mcp-server"],
+    args: ["-y", "@hubspot/mcp-server@0.4.0"],
     documentation: "https://developers.hubspot.com/docs/api/private-apps",
     secrets: [
       {
@@ -488,7 +418,7 @@ export const CATALOGUE: EntreeCatalogue[] = [
     description: "Lecture et extraction de pages web, y compris celles qui demandent un rendu.",
     categorie: "Web et recherche",
     command: "npx",
-    args: ["-y", "firecrawl-mcp"],
+    args: ["-y", "firecrawl-mcp@3.25.5"],
     documentation: "https://www.firecrawl.dev",
     secrets: [
       { nom: "FIRECRAWL_API_KEY", libelle: "Clé d'API", aide: "Elle se crée depuis votre compte Firecrawl." },
@@ -500,7 +430,7 @@ export const CATALOGUE: EntreeCatalogue[] = [
     description: "Recherche web pensée pour les agents, avec extraits sourcés.",
     categorie: "Web et recherche",
     command: "npx",
-    args: ["-y", "tavily-mcp"],
+    args: ["-y", "tavily-mcp@0.2.22"],
     documentation: "https://tavily.com",
     secrets: [
       { nom: "TAVILY_API_KEY", libelle: "Clé d'API", aide: "Elle se crée depuis votre tableau de bord Tavily." },
@@ -512,7 +442,7 @@ export const CATALOGUE: EntreeCatalogue[] = [
     description: "Recherche web sémantique, et lecture du contenu trouvé.",
     categorie: "Web et recherche",
     command: "npx",
-    args: ["-y", "exa-mcp-server"],
+    args: ["-y", "exa-mcp-server@3.4.1"],
     documentation: "https://exa.ai",
     secrets: [
       { nom: "EXA_API_KEY", libelle: "Clé d'API", aide: "Elle se crée depuis votre tableau de bord Exa." },
@@ -524,39 +454,27 @@ export const CATALOGUE: EntreeCatalogue[] = [
     description: "Recherche web et locale par l'API de Brave.",
     categorie: "Web et recherche",
     command: "npx",
-    args: ["-y", "@modelcontextprotocol/server-brave-search"],
+    // Le paquet officiel de Brave (MIT) : @modelcontextprotocol/server-brave-search est abandonné.
+    args: ["-y", "@brave/brave-search-mcp-server@2.1.4"],
     documentation: "https://brave.com/search/api/",
     secrets: [
       { nom: "BRAVE_API_KEY", libelle: "Clé d'API", aide: "Elle se crée sur le portail de l'API Brave Search." },
     ],
   },
   {
-    id: "cartes",
-    label: "Google Maps",
-    description: "Lieux, itinéraires et distances.",
-    categorie: "Web et recherche",
-    command: "npx",
-    args: ["-y", "@modelcontextprotocol/server-google-maps"],
-    documentation: "https://developers.google.com/maps/documentation",
-    secrets: [
-      {
-        nom: "GOOGLE_MAPS_API_KEY",
-        libelle: "Clé d'API",
-        aide:
-          "Dans la console Google Cloud, activez Places et Directions, puis créez une clé " +
-          "et restreignez-la à ces API.",
-      },
-    ],
-  },
-  {
     id: "navigateur",
-    label: "Navigateur (Puppeteer)",
+    label: "Navigateur (Playwright)",
     description:
       "Ouvre des pages dans un navigateur sans fenêtre, clique et lit. Rien ne sort de la machine.",
     categorie: "Web et recherche",
     command: "npx",
-    args: ["-y", "@modelcontextprotocol/server-puppeteer"],
-    documentation: "https://pptr.dev",
+    /*
+     * Playwright MCP, de Microsoft (Apache 2.0), sans fenêtre et en profil
+     * isolé (rien de la navigation de la personne) : remplace
+     * @modelcontextprotocol/server-puppeteer, abandonné.
+     */
+    args: ["-y", "@playwright/mcp@0.0.82", "--headless", "--isolated"],
+    documentation: "https://github.com/microsoft/playwright-mcp",
     secrets: [],
   },
   {
@@ -566,7 +484,7 @@ export const CATALOGUE: EntreeCatalogue[] = [
       "Documentation à jour des bibliothèques de code, pour que le modèle cesse d'inventer des fonctions.",
     categorie: "Développement",
     command: "npx",
-    args: ["-y", "@upstash/context7-mcp"],
+    args: ["-y", "@upstash/context7-mcp@4.1.1"],
     documentation: "https://context7.com",
     secrets: [],
   },
@@ -577,7 +495,7 @@ export const CATALOGUE: EntreeCatalogue[] = [
       "Un carnet de notes que l'agent relit d'une conversation à l'autre. Tout reste sur la machine.",
     categorie: "Livré avec le produit",
     command: "npx",
-    args: ["-y", "@modelcontextprotocol/server-memory"],
+    args: ["-y", "@modelcontextprotocol/server-memory@2026.8.31"],
     documentation: "https://modelcontextprotocol.io",
     secrets: [],
   },
@@ -588,7 +506,7 @@ export const CATALOGUE: EntreeCatalogue[] = [
       "Aide le modèle à poser un raisonnement en plusieurs temps avant de répondre. Rien ne sort de la machine.",
     categorie: "Livré avec le produit",
     command: "npx",
-    args: ["-y", "@modelcontextprotocol/server-sequential-thinking"],
+    args: ["-y", "@modelcontextprotocol/server-sequential-thinking@2026.8.31"],
     documentation: "https://modelcontextprotocol.io",
     secrets: [],
   },
@@ -598,7 +516,7 @@ export const CATALOGUE: EntreeCatalogue[] = [
     description: "État d'un cluster Kubernetes : pods, journaux, déploiements.",
     categorie: "Développement",
     command: "npx",
-    args: ["-y", "mcp-server-kubernetes"],
+    args: ["-y", "mcp-server-kubernetes@4.1.7"],
     documentation: "https://kubernetes.io/docs/",
     secrets: [
       {
@@ -708,8 +626,37 @@ function environnement(c: ConnecteurEnregistre): Record<string, string> {
   return env;
 }
 
-const versConfig = (c: ConnecteurEnregistre): McpServerConfig =>
-  c.url
+/*
+ * Revue des connecteurs du 26/09/2026 : les serveurs locaux se lançaient par
+ * `npx -y paquet`, sans version, donc avec la dernière publiée à chaque
+ * démarrage, et sept de ces paquets sont abandonnés par leurs auteurs. Le
+ * catalogue épingle maintenant chaque version. Un connecteur déjà installé
+ * garde la commande enregistrée à son installation : on la réaligne sur le
+ * catalogue, et un paquet sorti du catalogue est épinglé sur sa dernière
+ * version publiée, plutôt que de suivre ce qu'on y publierait demain.
+ */
+const DERNIERES_VERSIONS: Record<string, string> = {
+  "@modelcontextprotocol/server-github": "2025.4.8",
+  "@modelcontextprotocol/server-gitlab": "2025.4.25",
+  "@modelcontextprotocol/server-slack": "2025.4.25",
+  "@modelcontextprotocol/server-postgres": "0.6.2",
+  "@modelcontextprotocol/server-brave-search": "0.6.2",
+  "@modelcontextprotocol/server-google-maps": "0.6.2",
+  "@modelcontextprotocol/server-puppeteer": "2025.5.12",
+};
+/** Un nom de paquet npm sans version (« @portee/nom » ou « nom »). */
+const sansVersion = (a: string) => /^(@[a-z0-9._-]+\/)?[a-z0-9._-]+$/i.test(a);
+export function aligner(c: ConnecteurEnregistre): ConnecteurEnregistre {
+  if (c.url || c.command !== "npx") return c;
+  const e = CATALOGUE.find((x) => x.id === c.id);
+  if (e?.command === "npx" && e.args) return { ...c, args: [...e.args] };
+  const args = (c.args ?? []).map((a) => (sansVersion(a) && DERNIERES_VERSIONS[a] ? `${a}@${DERNIERES_VERSIONS[a]}` : a));
+  return { ...c, args };
+}
+
+const versConfig = (brut: ConnecteurEnregistre): McpServerConfig => {
+  const c = aligner(brut);
+  return c.url
     ? {
         id: c.id,
         label: c.label,
@@ -727,6 +674,7 @@ const versConfig = (c: ConnecteurEnregistre): McpServerConfig =>
         env: environnement(c),
         autoStart: true,
       };
+};
 
 /**
  * Adresse de retour de l'autorisation, telle qu'elle a été enregistrée.

@@ -1742,6 +1742,29 @@ console.log("\n10. Dossier de l'équipe contenant les données de l'instance, in
 }
 
 /* ------------------------------------------------------------------------- */
+console.log("\n6 quinquies. Connecteurs : chaque paquet lancé par npx a sa version épinglée");
+{
+  /*
+   * Revue du 26/09/2026 : les serveurs MCP locaux se lançaient par `npx -y
+   * paquet`, donc avec la dernière version publiée à chaque démarrage, sans
+   * rien vérifier, et sept paquets du catalogue étaient abandonnés.
+   */
+  const { pathToFileURL: versUrl } = await import("node:url");
+  const { CATALOGUE, aligner } = await import(versUrl(join(RACINE, "gateway", "src", "connecteurs.ts")).href);
+  const paquet = (args) => (args ?? []).find((a) => !a.startsWith("-"));
+  const epingle = (nom) => typeof nom === "string" && /^(@[^/]+\/)?[^@/]+@\d[\w.+-]*$/.test(nom);
+  const nonEpingles = CATALOGUE.filter((e) => e.command === "npx" && !epingle(paquet(e.args))).map((e) => e.id);
+  verifier("catalogue : aucun paquet npx sans version épinglée", nonEpingles.length === 0, nonEpingles.join(", "));
+  const abandonnes = CATALOGUE.filter((e) => /server-(github|gitlab|slack|postgres|brave-search|google-maps|puppeteer)$/.test(paquet(e.args) ?? "")).map((e) => e.id);
+  verifier("catalogue : aucun des paquets abandonnés n'y reste", abandonnes.length === 0, abandonnes.join(", "));
+  const ancien = aligner({ id: "postgres", label: "PostgreSQL", description: "", command: "npx", args: ["-y", "@modelcontextprotocol/server-postgres"], secrets: {}, depuis: "" });
+  verifier("un connecteur installé avant l'épinglage l'est au démarrage (dernière version connue)", ancien.args[1] === "@modelcontextprotocol/server-postgres@0.6.2", ancien.args.join(" "));
+  const source = readFileSync(join(RACINE, "gateway", "src", "mcp.ts"), "utf8");
+  verifier("le serveur de fichiers livré est épinglé", /server-filesystem@\d/.test(source) && !/"@modelcontextprotocol\/server-filesystem"/.test(source), "non épinglé");
+  verifier("npx est lancé sans scripts d'installation", /npm_config_ignore_scripts: "true"/.test(source), "scripts permis");
+}
+
+/* ------------------------------------------------------------------------- */
 console.log("\n6 quater. Helix Code : les tests lancés par Helix restent dans leur cage");
 if (process.platform === "darwin") {
   /*

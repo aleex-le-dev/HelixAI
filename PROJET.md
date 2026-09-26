@@ -2591,7 +2591,12 @@ il cherchait à modifier plan.js avec des lignes du résumé : d'où `champs` da
 au 3e, le contrôle a relevé des champs inventés (`montant_ht`) et la relance les a
 corrigés, mais l'agent a introduit `d.stat, "En cours"` (compteur toujours à zéro) en
 disant avoir corrigé le filtre : le contrôle lit maintenant aussi les champs des fiches
-parcourues (`donnees.dossiers.filter(d => d.…)`), pas encore essayé dans une vraie boucle.
+parcourues (`donnees.dossiers.filter(d => d.…)`). 4e essai (avec la méthode jointe à
+chaque demande, `METHODE_CODE`) : 11 min en tout, règles écrites du premier coup avec `write`,
+une relance pour deux champs inventés (`taux_tva`, `montant_ttc`), corrigés, et un bilan
+honnête ; les cinq parties acceptent un ajout sans erreur et les chiffres du tableau de bord
+sont justes. Restent des défauts du modèle : un total affiché « 6780.00 » au lieu d'euros, et
+un plan où le champ « Avocat » du temps passé renvoie aux clients faute d'une partie Avocats.
 L'interface elle-même est vérifiée (ajout, suppression, filtres, recherche, champs
 calculés, sans erreur) ; les libellés du moteur sont en français seulement.
 

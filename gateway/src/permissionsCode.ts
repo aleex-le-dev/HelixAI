@@ -2,6 +2,7 @@ import { annuler, fermerDemande, modifie, ouvrirDemande, verifierOutil } from ".
 import { journaliser } from "./audit.ts";
 import { sessionCode } from "./sessionsCode.ts";
 import { t } from "./langue.ts";
+import { cheminReel, estProtege } from "./zonesProtegees.ts";
 
 /**
  * Les demandes d'autorisation d'OpenCode, passées par la barrière de Helix.
@@ -136,6 +137,19 @@ export async function traiterPermissionCode(
   }
 
   const { outil, args } = outilDe(d, dossier);
+  /*
+   * Une zone protégée (zonesProtegees.ts : données de l'instance, `~/.helix`,
+   * clés, réglages d'autres logiciels) ne se lit ni ne s'écrit, même avec un
+   * accord : refus sans carte. Chemin réel, liens résolus : un lien posé dans
+   * le projet vers `~/.ssh` est refusé comme sa cible. Une commande (`bash`)
+   * ne se borne pas par des chemins : sa carte la montre entière.
+   */
+  if (typeof args.path === "string" && args.path) {
+    const sansMotif = args.path.split(/[*?[{]/)[0]!;
+    if (estProtege(cheminReel(sansMotif || args.path))) {
+      return refuser("zone-protegee", t("Refusé par l'instance : ce chemin est dans une zone protégée (données de l'instance, clés, réglages d'autres logiciels). Aucun accord ne l'ouvre."), proprietaire);
+    }
+  }
   const contexte = tours.get(racine) ?? null;
   const promesse = verifierOutil(contexte, outil, args, proprietaire, undefined, false, "code", (carte) => enCours.set(d.id, carte));
   let verdict;

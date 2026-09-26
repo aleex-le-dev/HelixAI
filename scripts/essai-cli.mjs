@@ -364,7 +364,21 @@ try {
       verifier("la ligne « ✓ Écriture … » s'affiche", /✓ Écriture/.test(t.sortie), t.sortie);
     }
     {
-      const r = cli(["code", "Crée le fichier bonjour.txt contenant exactement la ligne : Bonjour depuis le terminal"]);
+      /*
+       * Depuis le 26/09/2026, une écriture de l'agent de code attend un accord
+       * au niveau « Demander avant de modifier » (permissionsCode.ts) : sans
+       * terminal, la ligne de commande ne répond pas, on accorde par l'API.
+       */
+      const p = cliEnFond(["code", "Crée le fichier bonjour.txt contenant exactement la ligne : Bonjour depuis le terminal"]);
+      let demande = null;
+      for (let i = 0; i < 300 && !demande; i++) {
+        await attendre(1000);
+        const e = await api("/helix/approbation", { seance });
+        demande = e.ok ? ((await e.json()).enAttente ?? []).find((d) => d.detail?.surface === "code") : null;
+      }
+      verifier("Code : l'écriture de l'agent de code attend un accord (carte « code »)", /^code__(write|edit|apply_patch)$/.test(demande?.detail?.outil ?? ""), JSON.stringify(demande) + p.sortie());
+      if (demande) await api("/helix/approbation/repondre", { methode: "POST", seance, corps: { id: demande.id, accord: true } });
+      const r = await p.fin;
       const fichier = join(PROJET, "bonjour.txt");
       const contenu = existsSync(fichier) ? readFileSync(fichier, "utf8") : "";
       verifier(`Code : bonjour.txt écrit dans le dossier courant (${Math.round(r.ms / 1000)} s)`, /Bonjour depuis le terminal/.test(contenu), r.sortie + r.erreur);
@@ -388,7 +402,7 @@ try {
       for (let i = 0; i < 300 && !demande; i++) {
         await attendre(1000);
         const r = await api("/helix/approbation", { seance });
-        demande = r.ok ? (await r.json()).enAttente?.[0] : null;
+        demande = r.ok ? ((await r.json()).enAttente ?? []).find((d) => d.detail?.outil === "carnet__noter") : null;
       }
       verifier("Code : l'outil du connecteur demande un accord, à la personne qui a envoyé la demande", demande?.detail?.outil === "carnet__noter", JSON.stringify(demande) + p.sortie());
       if (demande) await api("/helix/approbation/repondre", { methode: "POST", seance, corps: { id: demande.id, accord: false } });

@@ -70,6 +70,18 @@ const fauxModele = serveurHttp((req, res) => {
   req.on("end", () => {
     res.setHeader("Content-Type", "application/json");
     if (req.url === "/v1/models") return res.end(JSON.stringify({ data: [{ id: "essai-embed-texte" }, { id: "essai-chat" }] }));
+    /*
+     * Une demande qui porte « attente-essai » ne reçoit rien pendant six
+     * secondes : le temps que la passerelle publie un statut de lecture
+     * (attenteModele.ts), ou pas (section 6 ter).
+     */
+    if (req.url === "/v1/chat/completions" && corps.includes("attente-essai")) {
+      setTimeout(() => {
+        res.statusCode = 404;
+        res.end("{}");
+      }, 6000);
+      return;
+    }
     if (req.url === "/v1/embeddings") {
       const entree = JSON.parse(corps || "{}").input ?? [];
       return res.end(JSON.stringify({ data: (Array.isArray(entree) ? entree : [entree]).map((t, index) => ({ index, embedding: vecteur(String(t)) })) }));
@@ -134,9 +146,27 @@ await new Promise((ok) => fauxModele.listen(PORT_EMBED, "127.0.0.1", ok));
   );
 }
 
+/*
+ * Un faux OpenCode (scripts/faux-opencode.mjs, section 6 ter) : la batterie ne
+ * lance jamais le vrai, qui est peut-être installé sur le poste, ni aucun
+ * modèle. Et un secret de l'hôte, pour vérifier qu'il n'arrive pas chez lui.
+ */
+const FAUX_OPENCODE = join(AUX, "opencode");
+{
+  const { writeFileSync, chmodSync } = await import("node:fs");
+  writeFileSync(FAUX_OPENCODE, `#!/bin/sh\nexec "${process.execPath}" "${join(RACINE, "scripts", "faux-opencode.mjs")}" "$@"\n`);
+  chmodSync(FAUX_OPENCODE, 0o755);
+}
+const CANARI = "canari-secret-de-l-hote-7731";
+const PROJET_A = mkdtempSync(join(tmpdir(), "helix-securite-projet-a-"));
+const PROJET_B = mkdtempSync(join(tmpdir(), "helix-securite-projet-b-"));
+
 const passerelle = spawn(process.execPath, [join(RACINE, "gateway", "src", "index.ts")], {
   env: {
     ...process.env,
+    HELIX_OPENCODE_BIN: FAUX_OPENCODE,
+    HELIX_CANARI_SECRET: CANARI,
+    HELIX_CODE_DIR: PROJET_A,
     HELIX_CONFIG: join(AUX, "profil.json"),
     HELIX_GATEWAY_PORT: String(PORT),
     HELIX_DATA_DIR: DONNEES,
@@ -425,9 +455,8 @@ for (const chemin of ["../../../../etc/passwd", "/etc/passwd", "..%2F..%2Fetc%2F
   /*
    * Liste des sessions de Code (sessionsCode.ts, 25/09/2026) : séance requise,
    * chacun ne voit que les siennes, un identifiant détourné ne sort pas de la
-   * route. Le refus d'une session d'autrui (403 sur prompt, interrupt et flux)
-   * a été vérifié à la main sur une instance jetable avec OpenCode : ici,
-   * OpenCode reste éteint.
+   * route. OpenCode reste éteint ici ; le refus d'une session d'autrui, avec
+   * un faux OpenCode, est en section 6 ter.
    */
   const listeSans = await appel("/helix/code/sessions", { headers: avecJeton });
   verifier("sessions de Code au jeton seul → 401", listeSans.status === 401, listeSans.status);
@@ -443,6 +472,162 @@ for (const chemin of ["../../../../etc/passwd", "/etc/passwd", "..%2F..%2Fetc%2F
   const eteint = await appel("/helix/code/events?sessionID=ses_essai", { headers: avecSeance });
   const etat = await (await appel("/helix/code", { headers: avecJeton })).json().catch(() => ({}));
   verifier("le flux de Helix Code n'allume pas le moteur (503, OpenCode éteint)", eteint.status === 503 && etat.running === false, `${eteint.status} ${JSON.stringify(etat).slice(0, 80)}`);
+}
+
+/* ------------------------------------------------------------------------- */
+console.log("\n6 ter. Helix Code : la session à sa propriétaire, les outils d'OpenCode derrière la barrière");
+/*
+ * Revue de sécurité du 25/09/2026 (SECURITE.md § 22.4, corrigé le 26/09).
+ * Avec le faux OpenCode : il répond comme l'ancienne API, et dit ce qu'il a
+ * reçu (environnement, réponses aux permissions). Aucun modèle n'est appelé.
+ */
+{
+  const { writeFileSync, realpathSync } = await import("node:fs");
+  const { homedir } = await import("node:os");
+  const ouvrir = async (entetes, dossier) => {
+    const r = await appel("/helix/code/session", { method: "POST", headers: entetes, body: JSON.stringify({ model: "essai-chat", dossier }) });
+    return { statut: r.status, corps: await r.json().catch(() => ({})) };
+  };
+  const a = await ouvrir(avecSeance, PROJET_A);
+  const SA = a.corps?.data?.id;
+  verifier("A ouvre une session de Code dans son dossier", a.statut === 200 && /^ses_/.test(SA ?? ""), `${a.statut} ${JSON.stringify(a.corps).slice(0, 100)}`);
+  const b = await ouvrir(avecSeanceB, PROJET_B);
+  verifier("B ouvre une session de Code dans un autre dossier", b.statut === 200, `${b.statut} ${JSON.stringify(b.corps).slice(0, 100)}`);
+
+  // Dossier de projet : jamais le dossier personnel, ni les données de l'instance, ni ce qui les contient.
+  for (const [nom, dossier] of [["le dossier personnel", homedir()], ["le dossier des données (HELIX_DATA_DIR)", DONNEES], ["un dossier qui contient les données", dirname(DONNEES)]]) {
+    const r = await ouvrir(avecSeance, dossier);
+    verifier(`dossier de projet refusé : ${nom} → 400`, r.statut === 400, `${r.statut} ${JSON.stringify(r.corps).slice(0, 100)}`);
+  }
+
+  // Le choix de B ne change ni la session de A, ni le dossier proposé à A.
+  const listeA = await (await appel("/helix/code/sessions", { headers: avecSeance })).json().catch(() => ({}));
+  const sessionA = (listeA.sessions ?? []).find((x) => x.id === SA);
+  verifier("le dossier choisi par B ne change pas celui de la session de A", sessionA?.dossier === realpathSync(PROJET_A), JSON.stringify(sessionA ?? listeA).slice(0, 120));
+  const etatA = await (await appel("/helix/code", { headers: avecSeance })).json().catch(() => ({}));
+  const etatB = await (await appel("/helix/code", { headers: avecSeanceB })).json().catch(() => ({}));
+  verifier("le dossier proposé à A reste le sien, celui de B le sien", etatA.projectDir === realpathSync(PROJET_A) && etatB.projectDir === realpathSync(PROJET_B), `${etatA.projectDir} / ${etatB.projectDir}`);
+  const auJetonSeul = await (await appel("/helix/code", { headers: avecJeton })).json().catch(() => ({}));
+  verifier("GET /helix/code ne rend pas le port d'OpenCode", !("port" in auJetonSeul) && !("port" in etatA), JSON.stringify(auJetonSeul).slice(0, 120));
+
+  // Une session d'autrui, inconnue, retirée de la liste : 403 partout.
+  const essayer = async (entetes, session) => {
+    const p = await appel("/helix/code/prompt", { method: "POST", headers: entetes, body: JSON.stringify({ sessionID: session, text: "x" }) });
+    const i = await appel("/helix/code/interrupt", { method: "POST", headers: entetes, body: JSON.stringify({ sessionID: session }) });
+    const e = await appel(`/helix/code/events?sessionID=${session}`, { headers: entetes });
+    await Promise.all([p.text(), i.text(), e.body?.cancel()]);
+    return [p.status, i.status, e.status];
+  };
+  const autrui = await essayer(avecSeanceB, SA);
+  verifier("session de A, par B → 403 (demande, arrêt, flux)", autrui.every((x) => x === 403), autrui.join(","));
+  const inconnue = await essayer(avecSeance, "ses_inconnueDuRegistre1");
+  verifier("session inconnue du registre → 403 (demande, arrêt, flux)", inconnue.every((x) => x === 403), inconnue.join(","));
+  const retrait = await appel(`/helix/code/sessions/${SA}`, { method: "DELETE", headers: avecSeance });
+  const apres = await (await appel("/helix/code/sessions", { headers: avecSeance })).json().catch(() => ({}));
+  verifier("A retire sa session de la liste", retrait.status === 200 && !(apres.sessions ?? []).some((x) => x.id === SA), `${retrait.status}`);
+  const retiree = await essayer(avecSeanceB, SA);
+  verifier("session retirée de la liste de A, par B → 403 (demande, arrêt, flux)", retiree.every((x) => x === 403), retiree.join(","));
+  const arretA = await appel("/helix/code/interrupt", { method: "POST", headers: avecSeance, body: JSON.stringify({ sessionID: SA }) });
+  verifier("session retirée : elle reste à A (arrêt accepté)", arretA.status === 200, arretA.status);
+
+  // Registre illisible : 503, et rien n'est réécrit par-dessus.
+  const fichierRegistre = join(DONNEES, "sessionsCode.json");
+  const original = readFileSync(fichierRegistre, "utf8");
+  writeFileSync(fichierRegistre, JSON.stringify({ value: "illisible", revision: 1 }));
+  const illisible = await essayer(avecSeance, SA);
+  const intact = readFileSync(fichierRegistre, "utf8").includes('"illisible"');
+  writeFileSync(fichierRegistre, original);
+  verifier("registre des sessions illisible → 503, et rien réécrit par-dessus", illisible.every((x) => x === 503) && intact, `${illisible.join(",")} intact=${intact}`);
+
+  // La configuration écrite par Helix : rien de permis d'office, aucun secret en clair.
+  const config = JSON.parse(readFileSync(join(DONNEES, "opencode", "opencode.json"), "utf8"));
+  const perm = config.permission ?? {};
+  const outilsQuiAgissent = ["bash", "edit", "write", "apply_patch", "webfetch"];
+  verifier("configuration d'OpenCode : bash, edit, write, apply_patch, webfetch ≠ allow, et « * » demande", perm["*"] === "ask" && outilsQuiAgissent.every((o) => perm[o] && perm[o] !== "allow"), JSON.stringify(perm).slice(0, 160));
+  const brutConfig = readFileSync(join(DONNEES, "opencode", "opencode.json"), "utf8");
+  verifier("configuration d'OpenCode : le jeton d'instance n'y est pas en clair", !brutConfig.includes(JETON), "jeton trouvé");
+
+  // L'environnement d'OpenCode, et celui des commandes qu'il lance.
+  const portFaux = await (async () => {
+    // Le faux OpenCode écoute sur un port choisi par la passerelle : on le retrouve dans son journal.
+    const m = journal.match(/prêt sur le port (\d+)/);
+    return m ? Number(m[1]) : 0;
+  })();
+  const vu = await (await fetch(`http://127.0.0.1:${portFaux}/essai/env`)).json().catch(() => ({ env: {}, enfant: {} }));
+  const env = vu.env ?? {};
+  verifier("environnement d'OpenCode : ni HELIX_TOKEN ni les secrets de l'hôte", !("HELIX_TOKEN" in env) && !Object.values(env).includes(CANARI) && !("HELIX_CANARI_SECRET" in env), Object.keys(env).join(",").slice(0, 160));
+  const enfant = vu.enfant ?? {};
+  const secrets = Object.entries(enfant).filter(([k, v]) => v && (k === "OPENCODE_SERVER_PASSWORD" || k.startsWith("HELIX_OPENCODE_") || v === JETON));
+  verifier("environnement d'une commande lancée par OpenCode : ni mot de passe du serveur, ni jeton, ni clés", Object.keys(env).includes("OPENCODE_SERVER_PASSWORD") && secrets.length === 0, secrets.map(([k]) => k).join(",") || "greffon absent");
+
+  // Statuts de lecture : seulement pour un appel qui vient vraiment d'OpenCode.
+  const S2 = (await ouvrir(avecSeance, PROJET_A)).corps?.data?.id;
+  const statutsDe = async (entetesAppel) => {
+    const arret = new AbortController();
+    const recus = [];
+    const flux = await appel(`/helix/code/events?sessionID=${S2}`, { headers: avecSeance, signal: arret.signal });
+    const lecture = (async () => {
+      const dec = new TextDecoder();
+      try {
+        for await (const m of flux.body) if (dec.decode(m).includes("helix.statut")) recus.push(1);
+      } catch {
+        /* arrêté */
+      }
+    })();
+    await appel("/v1/chat/completions", {
+      method: "POST",
+      headers: { ...avecJeton, "X-Session-Id": S2, ...entetesAppel },
+      body: JSON.stringify({ model: "essai-chat", stream: true, messages: [{ role: "user", content: "attente-essai" }], tools: [{ type: "function", function: { name: "x", parameters: { type: "object" } } }] }),
+    }).then((r) => r.text()).catch(() => "");
+    arret.abort();
+    await lecture;
+    return recus.length;
+  };
+  const sansCle = await statutsDe({});
+  verifier("X-Session-Id d'une session de A, au jeton seul → aucun statut chez A", sansCle === 0, sansCle);
+  const avecCle = await statutsDe({ "X-Helix-Relais": env.HELIX_OPENCODE_CLE_RELAIS ?? "" });
+  verifier("le même appel avec la clé remise à OpenCode → statut chez A (témoin)", avecCle > 0, avecCle);
+
+  // Une permission d'OpenCode devient une carte chez la propriétaire, et la réponse lui revient.
+  const permission = async (corps) => (await (await fetch(`http://127.0.0.1:${portFaux}/essai/permission`, { method: "POST", body: JSON.stringify({ sessionID: S2, ...corps }) })).json()).id;
+  const reponseDe = async (id, ms = 4000) => {
+    for (let t = 0; t < ms; t += 100) {
+      const r = (await (await fetch(`http://127.0.0.1:${portFaux}/essai/reponses`)).json()).find((x) => x.id === id);
+      if (r) return r;
+      await attendre(100);
+    }
+    return undefined;
+  };
+  const carteDe = async (entetes) => {
+    for (let t = 0; t < 3000; t += 100) {
+      const e = await (await appel("/helix/approbation", { headers: entetes })).json().catch(() => ({}));
+      const c = (e.enAttente ?? []).find((d) => d.detail?.surface === "code");
+      if (c) return c;
+      await attendre(100);
+    }
+    return undefined;
+  };
+  const p1 = await permission({ permission: "bash", patterns: ["echo ok"], metadata: { command: "echo \u001b[2K\rrien ‮ ok" } });
+  const carte = await carteDe(avecSeance);
+  const carteB = await (await appel("/helix/approbation", { headers: avecSeanceB })).json().catch(() => ({}));
+  verifier("une commande d'OpenCode devient une carte chez la propriétaire de la session, pas chez B", Boolean(carte) && !(carteB.enAttente ?? []).some((d) => d.detail?.surface === "code"), JSON.stringify(carte ?? {}).slice(0, 120));
+  const texteCarte = JSON.stringify(carte ?? {});
+  verifier("une carte dont la commande contient \\x1b[ est nettoyée (ni ESC ni renversement)", Boolean(carte) && !/\\u001b|\\u202e/i.test(texteCarte) && !texteCarte.includes("\u001b") && (carte.detail?.commande ?? "").includes("rien"), texteCarte.slice(0, 160));
+  await appel("/helix/approbation/repondre", { method: "POST", headers: avecSeance, body: JSON.stringify({ id: carte?.id, accord: true }) });
+  const r1 = await reponseDe(p1);
+  verifier("l'accord de A revient à OpenCode (« once »)", r1?.reply === "once", JSON.stringify(r1));
+  const p2 = await permission({ permission: "edit", patterns: ["a.txt"], metadata: { filepath: join(realpathSync(PROJET_A), "a.txt") } });
+  const carte2 = await carteDe(avecSeance);
+  await appel("/helix/approbation/repondre", { method: "POST", headers: avecSeance, body: JSON.stringify({ id: carte2?.id, accord: false }) });
+  const r2 = await reponseDe(p2);
+  verifier("le refus de A revient à OpenCode (« reject »)", Boolean(carte2) && r2?.reply === "reject", `${JSON.stringify(r2)} ${JSON.stringify(carte2).slice(0, 200)}`);
+  const p3 = await permission({ permission: "read", patterns: [join(DONNEES, "instance-token")], metadata: { filepath: join(DONNEES, "instance-token") } });
+  const r3 = await reponseDe(p3);
+  const carte3 = (await (await appel("/helix/approbation", { headers: avecSeance })).json().catch(() => ({}))).enAttente ?? [];
+  verifier("lire une zone protégée (jeton d'instance) : refus sans carte", r3?.reply === "reject" && carte3.length === 0, `${JSON.stringify(r3)} cartes=${carte3.length}`);
+  const p4 = await permission({ permission: "read", patterns: ["lisezmoi.txt"], metadata: { filepath: join(realpathSync(PROJET_A), "lisezmoi.txt") } });
+  const r4 = await reponseDe(p4);
+  verifier("lire dans le projet, au niveau « Demander avant de modifier » : accordé sans carte", r4?.reply === "once", JSON.stringify(r4));
 }
 
 /* ------------------------------------------------------------------------- */
@@ -1238,6 +1423,8 @@ fauxModele.close();
 await attendre(500);
 rmSync(DONNEES, { recursive: true, force: true });
 rmSync(AUX, { recursive: true, force: true });
+rmSync(PROJET_A, { recursive: true, force: true });
+rmSync(PROJET_B, { recursive: true, force: true });
 
 console.log(`\n${reussis} vérification(s) réussie(s), ${echecs.length} échec(s).`);
 if (echecs.length) {

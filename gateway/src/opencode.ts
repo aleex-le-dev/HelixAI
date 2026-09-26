@@ -22,6 +22,7 @@ import { deployment } from "./deployment.ts";
 import { t, tf } from "./langue.ts";
 import { CONSIGNES_CODE } from "./allegementCode.ts";
 import { optionsDeChargement } from "./backends.ts";
+import { contientUneZone, estProtege } from "./zonesProtegees.ts";
 import type { ModelInfo } from "./types.ts";
 
 /**
@@ -1035,32 +1036,13 @@ const replier = (chemin: string) => chemin.normalize("NFC").toLowerCase();
  * l'y tient.
  */
 /**
- * Dossiers qui gardent les secrets de l'instance : ses données (jeton
- * d'instance, clé de chiffrement, comptes, configuration d'OpenCode) et
- * `~/.helix` (séance de la ligne de commande). Résolus comme le chemin
- * comparé, pour qu'un lien symbolique ne les contourne pas.
- */
-function dossiersDeLInstance(): string[] {
-  const lieux = [process.env.HELIX_DATA_DIR, join(homedir(), ".helix", "data"), join(homedir(), ".helix")];
-  const resolus = new Set<string>();
-  for (const lieu of lieux) {
-    if (!lieu) continue;
-    try {
-      resolus.add(replier(realpathSync(lieu)));
-    } catch {
-      resolus.add(replier(lieu));
-    }
-  }
-  return [...resolus];
-}
-
-/**
  * Pour quoi le dossier est demandé.
  *  - `code` (défaut) : dossier de projet de Helix Code, dont l'agent lance des
  *    commandes avec les droits du compte. Revue du 25/09/2026 : le dossier
  *    personnel lui-même était accepté, et il contient `~/.helix/data`. Refusés
- *    désormais : le dossier personnel, et tout dossier qui contient les
- *    données de l'instance ou `~/.helix`, ou qui s'y trouve.
+ *    désormais : le dossier personnel, et tout dossier qui est une zone
+ *    protégée (zonesProtegees.ts : données de l'instance, `~/.helix`, clés,
+ *    réglages d'autres logiciels) ou qui en contient une.
  *  - `cowork` : espace de travail de Cowork (serveur de fichiers, tenu par la
  *    barrière d'approbation) : le dossier personnel reste permis (« Tout mon
  *    poste » l'ouvre de toute façon), l'intérieur des données de l'instance non.
@@ -1124,16 +1106,14 @@ export function validerDossier(chemin: string, usage: UsageDossier = "code"): { 
   }
 
   if (usage !== "parcours") {
-    for (const secret of dossiersDeLInstance()) {
-      if (cible === secret || cible.startsWith(secret + "/")) {
-        return { ok: false, raison: t("Ce dossier contient les données de l'instance. Choisissez un dossier de documents, de projets ou de travail.") };
-      }
-      if (usage === "code" && secret.startsWith(cible + "/")) {
-        return {
-          ok: false,
-          raison: t("Ce dossier est trop large : il contient les données de l'instance, que l'agent de code pourrait lire. Choisissez le dossier d'un projet."),
-        };
-      }
+    if (estProtege(resolu)) {
+      return { ok: false, raison: t("Ce dossier est protégé (données de l'instance, clés, réglages d'autres logiciels). Choisissez un dossier de documents, de projets ou de travail.") };
+    }
+    if (usage === "code" && contientUneZone(resolu)) {
+      return {
+        ok: false,
+        raison: t("Ce dossier est trop large : il contient des dossiers protégés (données de l'instance, clés) que l'agent de code pourrait lire. Choisissez le dossier d'un projet."),
+      };
     }
     if (usage === "code") {
       let maison = homedir();

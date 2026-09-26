@@ -139,6 +139,7 @@ Les actions qui demandent votre accord s'affichent ici et attendent votre répon
   approbationTitre: "Accord demandé",
   approbationSurface: { chat: "Chat", code: `${NOM} Code`, employe: "employé" },
   approbationCommande: "Commande",
+  approbationDroits: "Elle s'exécutera sur la machine de l'instance, avec les droits de son compte. Un accord ne vaut que pour cette commande.",
   approbationVeut: (resume) => `L'agent veut ${resume}.`,
   approbationEmploye: (nom) => `(demandé par ${nom})`,
   approbationMail: { a: "À", cc: "Cc", objet: "Objet", corps: "Texte" },

@@ -525,7 +525,10 @@ class Approbations {
       const surface = detail.employe ? "employe" : detail.surface === "code" ? "code" : "chat";
       ligne(jaune(gras(`${T.approbationTitre} (${T.approbationSurface[surface]}) :`)) + " " + T.approbationVeut(demande.resume ?? "agir"));
       if (detail.employe) ligne(discret(T.approbationEmploye(detail.employe)));
-      if (typeof detail.commande === "string") ligne(`  ${T.approbationCommande} :\n${detail.commande.replace(/^/gm, "    ")}`);
+      if (typeof detail.commande === "string") {
+        ligne(`  ${T.approbationCommande} :\n${detail.commande.replace(/^/gm, "    ")}`);
+        ligne(jaune(`  ${T.approbationDroits}`));
+      }
       const envoi = detail.envoi;
       if (envoi && typeof envoi === "object") {
         const m = T.approbationMail;

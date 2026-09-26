@@ -135,6 +135,76 @@ type Tirage =
   /** La demande a échoué : instance muette, séance expirée, réseau coupé. */
   | "echec";
 
+/*
+ * Deux garde-fous de plus, revue de sécurité du 26/09/2026.
+ *
+ * 1. **Aucune poussée avant une relecture de la séance.** Tant que l'instance
+ *    n'a pas rendu une collection (`tiree` ou `absente`) depuis le lancement,
+ *    ce poste ne la pousse pas : il ne sait pas ce qu'il y a en face. Le
+ *    blocage « fichier illisible » ne vivait qu'en mémoire du processus
+ *    principal ; au lancement suivant, le fichier se lisait (réécrit avec une
+ *    liste partielle), et la première modification poussait cette liste, que
+ *    l'instance prenait pour la suppression des autres Chats.
+ * 2. **Ce qui n'a pas pu partir est noté, et survit au redémarrage**
+ *    (`helix:sync:a-pousser`). Tant qu'une collection a des modifications en
+ *    attente, la relecture ne remplace plus la copie du poste par celle de
+ *    l'instance : elle les fusionne (par identifiant, le plus récent l'emporte,
+ *    ce que le poste a seul est gardé), puis repousse le tout. Avant, un Chat
+ *    créé hors ligne, ou dont la poussée avait échoué, était écrasé à la
+ *    relecture suivante. Contrepartie : un élément supprimé sur un autre poste
+ *    pendant que celui-ci avait des modifications en attente revient. On
+ *    préfère un Chat de trop à un Chat perdu.
+ */
+const relues = new Set<Collection>();
+const CLE_A_POUSSER = `${PREFIX}sync:a-pousser`;
+
+function enAttente(): Set<Collection> {
+  try {
+    const brut = localStorage.getItem(CLE_A_POUSSER);
+    const liste = brut ? (JSON.parse(brut) as unknown) : [];
+    return new Set(Array.isArray(liste) ? (liste.filter((c) => COLLECTIONS.includes(c as Collection)) as Collection[]) : []);
+  } catch {
+    return new Set();
+  }
+}
+
+function noterEnAttente(collection: Collection, attente: boolean): void {
+  if (JAMAIS_POUSSEES.includes(collection)) return;
+  const ensemble = enAttente();
+  if (attente === ensemble.has(collection)) return;
+  if (attente) ensemble.add(collection);
+  else ensemble.delete(collection);
+  try {
+    localStorage.setItem(CLE_A_POUSSER, JSON.stringify([...ensemble]));
+  } catch {
+    /* stockage refusé : la note ne survivra pas au redémarrage, la règle 1 protège encore */
+  }
+}
+
+type AvecId = { id: unknown; updatedAt?: unknown };
+const aUnId = (o: unknown): o is AvecId => typeof o === "object" && o !== null && "id" in o;
+const quand = (o: AvecId) => (typeof o.updatedAt === "string" ? Date.parse(o.updatedAt) || 0 : 0);
+
+/** Fusion d'une liste locale en attente avec celle de l'instance : rien du poste n'est perdu. */
+function fusionner(local: unknown, distant: unknown): unknown {
+  if (!Array.isArray(local) || !Array.isArray(distant)) return distant;
+  const resultat = [...distant];
+  const position = new Map<unknown, number>();
+  resultat.forEach((o, i) => {
+    if (aUnId(o)) position.set(o.id, i);
+  });
+  for (const l of local) {
+    if (!aUnId(l)) continue;
+    const i = position.get(l.id);
+    if (i === undefined) resultat.push(l);
+    else if (quand(l) > quand(resultat[i] as AvecId)) resultat[i] = l;
+  }
+  return resultat;
+}
+
+/** Collections fusionnées à la relecture : à repousser dès qu'elle est finie. */
+const aRepousser = new Set<Collection>();
+
 /** Tire une collection depuis l'instance vers le cache local. */
 async function pull(collection: Collection): Promise<Tirage> {
   let payload: { value: unknown; revision: number };
@@ -150,11 +220,14 @@ async function pull(collection: Collection): Promise<Tirage> {
   if (payload.value === null) {
     revisions.set(collection, payload.revision);
     noterReleve(collection, "absente");
+    relues.add(collection);
     return "absente";
   }
   // Les conversations et les agents partagés à un groupe se lisent selon les groupes de la personne : on les relit avec.
   if (collection === "sessions" || collection === "agents") await relireMesGroupes();
-  if (!writeLocal(collection, payload.value)) {
+  const enAttenteIci = enAttente().has(collection);
+  const valeur = enAttenteIci ? fusionner(readLocal(collection), payload.value) : payload.value;
+  if (!writeLocal(collection, valeur)) {
     /*
      * Rendue par l'instance, mais ce poste n'a pas pu la garder : il n'en a
      * toujours pas de copie sûre. La révision n'est pas retenue, pour que
@@ -164,7 +237,9 @@ async function pull(collection: Collection): Promise<Tirage> {
     return "echec";
   }
   revisions.set(collection, payload.revision);
-  grandRelu(collection, Array.isArray(payload.value) ? payload.value.length : undefined);
+  grandRelu(collection, Array.isArray(valeur) ? valeur.length : undefined);
+  relues.add(collection);
+  if (enAttenteIci) aRepousser.add(collection);
   return "tiree";
 }
 
@@ -237,7 +312,10 @@ async function pousser(collection: Collection): Promise<boolean> {
    * personne sur l'instance, qui n'y verrait qu'une suppression voulue. On
    * attend que l'instance ait rendu la collection (`pull`).
    */
-  if (grandIllisible(collection)) return false;
+  if (grandIllisible(collection) || !relues.has(collection)) {
+    noterEnAttente(collection, true);
+    return false;
+  }
   const value = readLocal(collection);
   if (value === null) return false;
   pushing.add(collection);
@@ -251,9 +329,11 @@ async function pousser(collection: Collection): Promise<boolean> {
       const payload = (await res.json()) as { revision: number };
       revisions.set(collection, payload.revision);
     }
+    noterEnAttente(collection, !res.ok);
     return res.ok;
   } catch {
     online = false;
+    noterEnAttente(collection, true);
     return false;
   } finally {
     pushing.delete(collection);
@@ -271,16 +351,20 @@ async function refresh(): Promise<void> {
 
     const touched: Collection[] = [];
     const groupesChanges = ++releves % RELEVES_PAR_GROUPES === 0 && (await relireMesGroupes());
+    online = true;
     for (const collection of COLLECTIONS) {
       if (pushing.has(collection)) continue;
       const known = revisions.get(collection) ?? 0;
       const parGroupe = groupesChanges && (collection === "sessions" || collection === "agents");
-      if ((remote[collection] ?? 0) > known || parGroupe) {
-        if ((await pull(collection)) === "tiree") touched.push(collection);
+      // Pas encore relue cette séance (instance injoignable au lancement) : on la relit, même sans changement en face.
+      if ((remote[collection] ?? 0) > known || parGroupe || !relues.has(collection)) {
+        const etat = await pull(collection);
+        if (etat === "tiree") touched.push(collection);
+        if (etat === "absente" && readLocal(collection) !== null) await push(collection);
       }
     }
-    online = true;
     if (touched.length > 0) announce(touched);
+    await repousserFusions();
   } catch {
     online = false;
   }
@@ -324,9 +408,18 @@ export async function startSync(): Promise<void> {
     if (etat === "absente" && readLocal(collection) !== null) await push(collection);
   }
   announce([...COLLECTIONS]);
+  await repousserFusions();
 
   if (timer) clearInterval(timer);
   timer = setInterval(() => void refresh(), POLL_MS);
+}
+
+/** Ce qui a été fusionné à la relecture repart vers l'instance, qui n'en avait qu'une partie. */
+async function repousserFusions(): Promise<void> {
+  for (const collection of [...aRepousser]) {
+    aRepousser.delete(collection);
+    await push(collection);
+  }
 }
 
 export function stopSync(): void {

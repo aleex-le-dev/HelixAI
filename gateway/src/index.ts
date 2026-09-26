@@ -66,6 +66,9 @@ import * as entrainement from "./entrainement.ts";
 import { choisirDesign, corrigerPages, estApplication, estDemandeDeSite, preparerDesign, projetDejaCommence } from "./design.ts";
 import { METHODE_CODE, apresTourCode, arretDemandeCode, demandeArretee, nouvelleDemandeCode } from "./controleCode.ts";
 import { applicationPreparee, consigneApplication, ecrireApplication, planifierApplication } from "./application.ts";
+import { blocCarte } from "./carteProjet.ts";
+import { estQuestionSimple, estReplique, strategie } from "./plan.ts";
+import { consignePremiereEtape, demarrerSequence, planifierCode } from "./sequenceCode.ts";
 import { arreterMachine, arreterMachineEnPartant, choisirSysteme, demarrerMachine, diagnosticMachine, effacerMachine, preparationMachineEnCours, progressionMachine, systemeMachine } from "./machine.ts";
 import { apercuEffacement, effacerCompte, sansComptesDisparus } from "./effacement.ts";
 import { authorise, cheminDuJeton, hasValidToken, instanceToken } from "./auth.ts";
@@ -2516,6 +2519,30 @@ async function handleCodePrompt(
     }
   }
 
+  /*
+   * Le séquençage (sequenceCode.ts) : une demande composée, avec un petit ou un
+   * moyen modèle, est faite étape par étape, et Helix tient le fil. Un grand
+   * modèle, une question ou une réplique partent tels quels (`strategie`,
+   * plan.ts). Une application de gestion a déjà ses étapes (application.ts).
+   */
+  if (!preparee && !estQuestionSimple(body.text) && !estReplique(body.text)) {
+    const choix = await resolve({ model: reglageEnvoi.modele });
+    const regime = "error" in choix ? null : strategie({ params: choix.model.params, sizeBytes: choix.model.sizeBytes, backendKind: choix.model.backendKind });
+    if (regime?.decoupe) {
+      const statut = (message: string) => publierStatutCode(body.sessionID!, { etat: "preparation", message });
+      const qui = await demandeur(req, new URL(req.url ?? "/", "http://localhost"));
+      const etapes = await planifierCode(body.text, reglageEnvoi.dossier, qui?.userId ?? "code", reglageEnvoi.modele, statut);
+      if (demandeArretee(body.sessionID)) return send(res, 200, { data: {} });
+      if (etapes) {
+        demarrerSequence(body.sessionID, body.text, reglageEnvoi.dossier, etapes);
+        texteEnvoye += consignePremiereEtape(body.sessionID);
+        statut(tf("Plan de Helix : {0} étapes. Étape 1 : {1}", etapes.length, etapes[0]!.titre));
+        console.log(`[code] plan : ${etapes.length} étapes (${regime.raison}).`);
+      }
+    }
+  }
+  // La carte du projet (carteProjet.ts) : ce qui existe déjà, pour n'appeler que ce qui existe.
+  if (!preparee) texteEnvoye += blocCarte(reglageEnvoi.dossier, 4000);
   // La méthode qui rend un petit modèle juste du premier coup (controleCode.ts), pour toute demande.
   texteEnvoye += METHODE_CODE;
 

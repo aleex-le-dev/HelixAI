@@ -47,9 +47,14 @@ export async function completer(
      * d'écrire oublie une accolade une fois sur quelques-unes.
      */
     schema?: { nom: string; schema: Record<string, unknown> };
+    /**
+     * Ce modèle-là plutôt que celui de conversation : le plan d'une demande de
+     * Helix Code se fait avec le modèle choisi pour le code (sequenceCode.ts).
+     */
+    modele?: string;
   },
 ): Promise<Completion> {
-  const choix = await choisir(options.qui);
+  const choix = options.modele ? await resolve({ model: options.modele }) : await choisir(options.qui);
   if ("error" in choix) return { ok: false, message: choix.error };
   const { model } = choix;
   const backend = backendById(model.backendId);

@@ -2600,6 +2600,34 @@ un plan où le champ « Avocat » du temps passé renvoie aux clients faute d'un
 L'interface elle-même est vérifiée (ajout, suppression, filtres, recherche, champs
 calculés, sans erreur) ; les libellés du moteur sont en français seulement.
 
+**Fait le 26/09/2026 : la couche qui porte Helix Code, pour tous les domaines de code.**
+Demandé par Medhi : « il faut que la couche logicielle soutienne Helix Code et qu'il soit
+bon partout », même avec un petit modèle et un petit contexte. Ce que Helix fait désormais
+autour du modèle, pour toute demande de code :
+- **méthode** jointe à chaque demande (`METHODE_CODE`, controleCode.ts) : lire avant de
+  modifier, réécrire en entier un fichier de moins de 300 lignes, un fichier à la fois,
+  n'utiliser que ce qui existe, écrire les tests d'un programme, ne rien annoncer de faux ;
+- **carte du projet** (`carteProjet.ts`) : les fichiers et ce qu'ils définissent, en
+  quelques milliers de caractères, jointe à la demande et à chaque étape ;
+- **séquençage** (`sequenceCode.ts`) : avec un petit ou moyen modèle (`strategie`,
+  plan.ts ; un grand modèle n'est pas découpé), le modèle de code fait un plan court en
+  JSON, Helix envoie une étape à la fois et ne passe à la suivante qu'après le contrôle ;
+  s'il reste des problèmes après cinq corrections, le plan s'arrête et l'écran le dit ;
+- **contrôles par langage**, sans rien exécuter : Python (`analysePython.ts` : syntaxe,
+  noms définis nulle part, `from x import y` absent du fichier du projet, module ni
+  installé ni déclaré quand le projet ne déclare rien), JSON, imports relatifs de
+  JavaScript et TypeScript (fichier absent, nom non exporté). Mesuré sur deux vrais
+  projets : 0 fausse alerte sur 293 fichiers de Helix ; sur un projet de 359 fichiers
+  Python, une seule alerte, une vraie erreur ; sur 2 075 fichiers JS/TS, 40 alertes,
+  vérifiées vraies sur échantillon (imports vers des fichiers déplacés) ;
+- **tests lancés pour de vrai, dans une cage** (`essaisCode.ts`, SECURITE.md § 25) :
+  copie du projet, `sandbox-exec` sans réseau ni lecture hors copie, 90 s au plus ;
+- historique : consignes, plan, carte et relances de Helix retirés de ce qu'on relit.
+Mesuré avec Qwen3 8B sur « un programme Python en ligne de commande qui lit un CSV de
+dépenses […] avec des tests » : plan de 3 étapes suivi une à une, une erreur de syntaxe
+trouvée et corrigée ; mais les tests écrits étaient faux (un test sur deux échouait), ce
+qu'aucun contrôle de lecture ne voyait : d'où l'essai réel des tests, ajouté ensuite.
+
 **Fait le 26/09/2026 : mises à jour d'un clic, sans signature ni serveur.** Décidé par
 Medhi : pas de mise à jour automatique, mais une fenêtre « Nouvelle version » avec
 « Installer maintenant » (`src/components/layout/FenetreMiseAJour.tsx`). La source est

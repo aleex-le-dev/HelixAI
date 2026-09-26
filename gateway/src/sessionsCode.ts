@@ -219,7 +219,13 @@ const ARRET = /^\[La demande précédente a été arrêtée par la personne[^\]]
  * écrit. Vu le 26/09/2026 : la consigne d'une application préparée
  * réapparaissait en entier dans la bulle de la personne à la réouverture.
  */
-const AJOUTS = ["\n\n---\nDesign : ce projet a un design", "\n\n---\nHelix a déjà construit", "\n\n---\nMéthode de travail (Helix)"];
+const AJOUTS = [
+  "\n\n---\nDesign : ce projet a un design",
+  "\n\n---\nHelix a déjà construit",
+  "\n\n---\nMéthode de travail (Helix)",
+  "\n\n---\nPlan de Helix",
+  "\n\n---\nCarte du projet (Helix)",
+];
 /*
  * Une relance du contrôle automatique (controleCode.ts) est envoyée comme un
  * message de la personne : à la réouverture, elle s'affichait dans sa bulle,
@@ -241,8 +247,17 @@ function demandeAffichee(texte: string): string {
 const estRelance = (texte: string) => {
   const debut = texte.trimStart();
   const entete = (x: string) => x.slice(0, x.indexOf("]") + 1);
-  return [entete(ENTETE_RELANCE), entete(t(ENTETE_RELANCE))].some((e) => e.length > 2 && debut.startsWith(e));
+  // Les étapes d'un plan de Helix (sequenceCode.ts) commencent toutes par « [Helix ».
+  return debut.startsWith("[Helix") || [entete(ENTETE_RELANCE), entete(t(ENTETE_RELANCE))].some((e) => e.length > 2 && debut.startsWith(e));
 };
+/** La ligne affichée à la place d'une relance : l'étape du plan, ou le contrôle automatique. */
+const noteDeRelance = (texte: string) => {
+  const premiere = texte.trimStart().split("\n")[0] ?? "";
+  const controle = [entete(ENTETE_RELANCE), entete(t(ENTETE_RELANCE))].some((e) => e.length > 2 && premiere.startsWith(e));
+  if (/^\[Helix\b/.test(premiere) && !controle) return premiere.replace(/^\[([^\]]+)\]\s*/, "$1 · ").slice(0, 200);
+  return t("Contrôle automatique : problèmes trouvés, l'agent reprend son travail.");
+};
+const entete = (x: string) => x.slice(0, x.indexOf("]") + 1);
 
 /** Ce qu'un outil a reçu, sans le contenu d'un fichier entier : de quoi le libeller. */
 function entreeCourte(entree: unknown): Record<string, unknown> {
@@ -305,7 +320,7 @@ export function historiqueDe(messages: MessageOpenCode[]): MessageHistorique[] {
       // Une relance de Helix : la réponse continue, avec une ligne qui le dit (comme à l'écran pendant le travail).
       if (estRelance(textes.join("\n\n"))) {
         const precedent = rendu[rendu.length - 1];
-        const note = `*${t("Contrôle automatique : problèmes trouvés, l'agent reprend son travail.")}*`;
+        const note = `*${noteDeRelance(textes.join("\n\n"))}*`;
         if (precedent?.role === "assistant") precedent.texte = [precedent.texte, note].filter(Boolean).join("\n\n");
         continue;
       }

@@ -2865,3 +2865,36 @@ lancer le binaire de l'application comme Node et hériter des autorisations macO
 un élément supprimé sur un autre poste pendant que celui-ci avait des modifications en
 attente revient. Pas encore essayé : l'extension dans un vrai VS Code avec un dépôt piégé,
 un trousseau refusé.
+
+## 25. Helix Code lance les tests de l'agent, dans une cage (26 septembre 2026)
+
+Pour qu'un petit modèle écrive du code juste, Helix contrôle chaque tour
+(`gateway/src/controleCode.ts`). Lire le texte ne suffit pas : un programme
+peut avoir une syntaxe et des imports justes et se tromper. Le contrôle lance
+donc les tests du projet (`gateway/src/essaisCode.ts`) : pytest ou unittest en
+Python, `npm test` ou `node --test` en JavaScript. **C'est du code écrit par le
+modèle, lancé sans accord de la personne.** Ce n'est acceptable que parce qu'il
+ne peut rien faire hors de l'essai :
+
+| Garde | Comment |
+|---|---|
+| Une copie, pas le projet | Le projet est copié dans un dossier temporaire (4 000 fichiers, 80 Mo au plus) ; `node_modules` et les environnements Python sont liés en lecture seule, pas copiés. La copie est effacée après l'essai. |
+| Bac à sable de macOS | `sandbox-exec`, profil « tout refusé par défaut » : lecture du système, des outils (Homebrew, Node, Xcode) et de la copie seulement ; écriture dans la copie seulement ; **aucun réseau**. |
+| Environnement vide | Seulement `PATH`, `HOME` (dans la copie), `TMPDIR` (dans la copie) et la langue : aucun jeton, aucune variable de la passerelle. |
+| Bornes | 90 secondes au plus (arrêt forcé), sortie tronquée à 6 000 caractères. |
+| Hors macOS | Pas de cage connue : les tests **ne sont pas lancés**, et rien n'est affirmé. |
+
+Vérifié par `npm run securite` (section 6 quater, 5 contrôles) : un test piégé
+essaie de lire un fichier secret hors du projet, d'écrire hors de la copie et
+de joindre la passerelle sur 127.0.0.1 ; les trois sont refusés, et la copie
+est effacée.
+
+Les autres contrôles de Code n'exécutent rien : Python est lu par `ast.parse`
+(`gateway/src/analysePython.ts`, lancé en `python3 -I` avec le Python du
+système, jamais un interpréteur du projet), JavaScript et TypeScript sont lus
+comme du texte.
+
+Limite connue : `sandbox-exec` est marqué obsolète par Apple, mais il est
+toujours fourni et appliqué par macOS 27 (mesuré le 26/09/2026). S'il
+disparaissait, `cageDisponible()` le verrait et les tests cesseraient d'être
+lancés.

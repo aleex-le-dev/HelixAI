@@ -1663,6 +1663,58 @@ console.log("\n10. Dossier de l'équipe contenant les données de l'instance, in
   rmSync(PROFIL2, { force: true });
 }
 
+/* ------------------------------------------------------------------------- */
+console.log("\n6 quater. Helix Code : les tests lancés par Helix restent dans leur cage");
+if (process.platform === "darwin") {
+  /*
+   * essaisCode.ts lance les tests écrits par l'agent sans demander d'accord :
+   * ce n'est acceptable que dans la cage. Un test piégé essaie de lire un
+   * secret, d'écrire hors de la copie et de joindre la passerelle.
+   */
+  const { pathToFileURL: versUrl } = await import("node:url");
+  const { essayerTests } = await import(versUrl(join(RACINE, "gateway", "src", "essaisCode.ts")).href);
+  const { mkdirSync: creer, writeFileSync: ecrireF, existsSync: existe, readdirSync: lister } = await import("node:fs");
+  const { tmpdir } = await import("node:os");
+  const piege = join(AUX, "projet-piege");
+  creer(piege, { recursive: true });
+  const secret = join(AUX, "secret-cage.txt");
+  ecrireF(secret, "SECRET-CAGE-4242");
+  const dehors = join(AUX, "ecrit-hors-cage.txt");
+  const port = new URL(G).port || "80";
+  ecrireF(
+    join(piege, "test_piege.py"),
+    [
+      "import socket, unittest",
+      "class T(unittest.TestCase):",
+      "    def test_piege(self):",
+      "        try:",
+      `            print("LU:" + open(${JSON.stringify(secret)}).read())`,
+      "        except Exception:",
+      '            print("LECTURE REFUSEE")',
+      "        try:",
+      `            open(${JSON.stringify(dehors)}, "w").write("x")`,
+      "        except Exception:",
+      '            print("ECRITURE REFUSEE")',
+      "        try:",
+      `            socket.create_connection(("127.0.0.1", ${port}), timeout=3)`,
+      '            print("RESEAU OUVERT")',
+      "        except Exception:",
+      '            print("RESEAU REFUSE")',
+      "",
+    ].join("\n"),
+  );
+  const avantCopies = lister(tmpdir()).filter((n) => n.startsWith("helix-essai-")).length;
+  const r = await essayerTests(piege);
+  const sortie = r && "sortie" in r ? r.sortie : JSON.stringify(r);
+  verifier("cage : le test piégé a bien été lancé", /LECTURE|ECRITURE|RESEAU/.test(sortie), sortie.slice(0, 200));
+  verifier("cage : un fichier hors du projet ne se lit pas", sortie.includes("LECTURE REFUSEE") && !sortie.includes("SECRET-CAGE-4242"), sortie.slice(0, 200));
+  verifier("cage : rien ne s'écrit hors de la copie", sortie.includes("ECRITURE REFUSEE") && !existe(dehors), sortie.slice(0, 200));
+  verifier("cage : pas de réseau, pas même la passerelle locale", sortie.includes("RESEAU REFUSE") && !sortie.includes("RESEAU OUVERT"), sortie.slice(0, 200));
+  verifier("cage : la copie d'essai est effacée", lister(tmpdir()).filter((n) => n.startsWith("helix-essai-")).length <= avantCopies, "copie restée");
+} else {
+  console.log("  (hors macOS : pas de cage, les tests ne sont pas lancés — rien à vérifier)");
+}
+
 passerelle.kill();
 fauxModele.close();
 await attendre(500);

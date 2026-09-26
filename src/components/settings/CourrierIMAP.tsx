@@ -452,7 +452,7 @@ export function CourrierIMAP({ onChange }: { onChange?: () => void } = {}) {
 
         {suggestion && (
           <InfoBox leading={<Info size={15} strokeWidth={1.75} />}>
-            <p className="font-medium">{suggestion.nom} reconnu.</p>
+            <p className="font-medium">{tf("{0} reconnu.", suggestion.nom)}</p>
             <p className="mt-0.5">{suggestion.conseil}</p>
           </InfoBox>
         )}

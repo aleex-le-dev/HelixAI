@@ -245,7 +245,8 @@ const FOURNISSEURS: ReglageFournisseur[] = [
 
 /** Table complète, pour un menu déroulant dans le formulaire. */
 export function fournisseursConnus(): ReglageFournisseur[] {
-  return FOURNISSEURS.map((f) => ({ ...f, domaines: [...f.domaines] }));
+  // Le conseil est affiché : traduit au moment de le servir (scripts/i18n-passerelle.mjs le relève).
+  return FOURNISSEURS.map((f) => ({ ...f, conseil: t(f.conseil), domaines: [...f.domaines] }));
 }
 
 /**

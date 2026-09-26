@@ -123,10 +123,16 @@ const SERVEURS: ServeurConnu[] = [
     // d'agenda>/user, et l'identifiant de l'agenda principal est l'adresse.
     gabarit: "https://apidata.googleusercontent.com/caldav/v2/{adresse}/user",
     domaines: ["gmail.com", "googlemail.com"],
+    /*
+     * Essayé le 26/09/2026 sur un vrai compte : un mot de passe d'application
+     * que Google accepte pour Gmail (IMAP) est refusé par son CalDAV. Google
+     * n'ouvre ses agendas qu'avec sa propre connexion (OAuth). Le conseil
+     * disait l'inverse ; il dit maintenant ce qui a été constaté.
+     */
     conseil:
-      "Google refuse votre mot de passe habituel. Créez un mot de passe d'application " +
-      "depuis la sécurité de votre compte Google, et collez-le ici. Un administrateur " +
-      "Workspace peut les avoir interdits sur son domaine.",
+      "Google n'accepte pas de mot de passe d'application pour ses agendas (essayé : refusé, alors " +
+      "qu'il l'accepte pour Gmail). Il n'ouvre Google Agenda qu'avec sa propre connexion, qui n'est " +
+      "pas encore disponible pour l'agenda dans ce logiciel.",
   },
   {
     nom: "iCloud",
@@ -172,7 +178,8 @@ const SERVEURS: ServeurConnu[] = [
 
 /** Table complète, pour un menu déroulant dans le formulaire. */
 export function serveursConnus(): ServeurConnu[] {
-  return SERVEURS.map((s) => ({ ...s, domaines: [...s.domaines] }));
+  // Le conseil est affiché : traduit au moment de le servir (scripts/i18n-passerelle.mjs le relève).
+  return SERVEURS.map((s) => ({ ...s, conseil: t(s.conseil), domaines: [...s.domaines] }));
 }
 
 /**

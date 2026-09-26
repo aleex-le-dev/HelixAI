@@ -64,6 +64,8 @@ for (const fichier of fichiers) {
 const DONNEES_AFFICHEES = {
   "connecteurs.ts": ["label", "description", "categorie", "libelle", "aide", "obstacle"],
   "mcp.ts": ["label"],
+  "agenda.ts": ["conseil"],
+  "courrier.ts": ["conseil"],
 };
 for (const [nomFichier, proprietes] of Object.entries(DONNEES_AFFICHEES)) {
   const fichier = join(RACINE, "gateway", "src", nomFichier);

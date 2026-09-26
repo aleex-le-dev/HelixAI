@@ -53,6 +53,10 @@ export const CONSIGNES_CODE = [
   "- Follow the project's conventions: look at neighbouring files, never assume a library is installed, add no code comments unless asked.",
   "- After a change, run the project's checks (tests, typecheck, lint) when there are any, and say plainly what you could not verify.",
   "- Never commit, push or delete data unless the user asks. Never guess URLs.",
+  // Remises le 26/09/2026 (revue du 25/09) : l'allègement avait retiré ces trois règles des consignes d'OpenCode.
+  "- Never expose, print or log secrets, keys, tokens or passwords, and never read them from files or the environment unless the user asks for that exact file.",
+  "- Never run destructive git commands (push --force, reset --hard, clean -f, branch -D, checkout -- .) unless the user explicitly asks. Never skip hooks (--no-verify) or bypass signing.",
+  "- Commands and file changes wait for the user's approval. A refusal is a decision: do not retry the same action another way; say what you could not do.",
   "- When you mention code, give file_path:line.",
 ].join("\n");
 

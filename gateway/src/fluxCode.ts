@@ -1,6 +1,8 @@
 import type http from "node:http";
 import { api, enMarche, ensureServer, fluxEvenements, portEnCours } from "./opencode.ts";
 import { journaliser } from "./audit.ts";
+import { noterSousSession } from "./sessionsCode.ts";
+import { permissionRepondueAilleurs, traiterPermissionCode, type DemandeOpenCode } from "./permissionsCode.ts";
 
 /**
  * Le flux d'évènements de Helix Code, fabriqué par la passerelle à partir de
@@ -289,12 +291,14 @@ export function traduire(brut: { type?: string; properties?: Record<string, unkn
         if (enfants.size >= ENFANTS_MAX) enfants.delete(enfants.keys().next().value!);
         enfants.set(info.id, { parent: racine });
       }
+      // Au registre, sous la propriétaire de la session parente (sessionsCode.ts) : ses droits suivent.
+      void noterSousSession(info.id, info.parentID).catch(() => {});
     }
     return;
   }
   const lienEnfant = sessionID ? enfants.get(sessionID) : undefined;
   // Une question d'un sous-agent se refuse comme celle de l'agent principal (plus bas) : elle le bloquerait aussi.
-  const question = brut.type === "permission.asked" || brut.type === "question.asked";
+  const question = brut.type === "permission.asked" || brut.type === "question.asked" || brut.type === "permission.replied";
   if (lienEnfant && !question) return traduireEnfant(sessionID, lienEnfant, brut.type, p);
 
   const suivi = sessionID ? (sessions.get(sessionID) ?? (lienEnfant ? sessions.get(lienEnfant.parent) : undefined)) : undefined;
@@ -354,6 +358,7 @@ export function traduire(brut: { type?: string; properties?: Record<string, unkn
             const lien = enfants.get(enfant);
             if (lien) lien.callID = appel;
             else enfants.set(enfant, { parent: sessionID, callID: appel });
+            if (!lien) void noterSousSession(enfant, sessionID).catch(() => {});
           }
           if (etat.status === "pending" || !etat.status) {
             /*
@@ -428,21 +433,47 @@ export function traduire(brut: { type?: string; properties?: Record<string, unkn
       publier(sessionID, suivi, "session.next.step.failed", { error: { message: messageDe(erreur) } });
       return;
     }
-    case "permission.asked":
-    case "question.asked": {
+    case "permission.asked": {
       /*
-       * Jamais de question en attente (même règle que `permission` dans
-       * opencode.ts) : aucune ne passe par les clients, la session resterait
-       * bloquée. La configuration les refuse déjà ; celles qui passeraient
-       * quand même sont refusées ici, et l'agent lit un refus.
+       * Une demande d'autorisation d'OpenCode (commande, écriture, adresse…,
+       * voir `permission` dans opencode.ts) : elle passe par la barrière de
+       * Helix, et la carte va à la propriétaire de la session
+       * (permissionsCode.ts). Depuis le 26/09/2026 ; avant, refusée d'office,
+       * et seulement si elle passait malgré une configuration qui laissait
+       * tout faire (revue du 25/09).
        */
       const demande = typeof p.id === "string" ? p.id : "";
       if (!demande || !/^[A-Za-z0-9_-]{1,80}$/.test(demande) || !repondre) return;
-      journaliser("outil.refuse", "systeme", { surface: "code", cause: `${brut.type}-refuse`, session: sessionID });
-      repondre(
-        brut.type === "permission.asked" ? `/permission/${demande}/reply` : `/question/${demande}/reject`,
-        brut.type === "permission.asked" ? { reply: "reject" } : {},
+      const racine = lienEnfant?.parent ?? sessionID;
+      const d: DemandeOpenCode = {
+        id: demande,
+        sessionID,
+        permission: typeof p.permission === "string" ? p.permission : "inconnue",
+        patterns: Array.isArray(p.patterns) ? p.patterns.filter((x): x is string => typeof x === "string") : [],
+        metadata: p.metadata && typeof p.metadata === "object" ? (p.metadata as Record<string, unknown>) : {},
+      };
+      const chemin = `/permission/${demande}/reply`;
+      void traiterPermissionCode(d, racine, suivi.dossier, (reponse) => repondre(chemin, reponse)).catch(() =>
+        repondre(chemin, { reply: "reject" }),
       );
+      return;
+    }
+    case "permission.replied": {
+      // Répondue sans nous (session arrêtée) : la carte encore ouverte n'a plus d'objet.
+      if (typeof p.requestID === "string") permissionRepondueAilleurs(p.requestID);
+      return;
+    }
+    case "question.asked": {
+      /*
+       * Jamais de question en attente (même règle que `question: "deny"`
+       * dans opencode.ts) : aucune ne passe par les clients, la session
+       * resterait bloquée. Celles qui passeraient quand même sont refusées
+       * ici, et l'agent lit un refus.
+       */
+      const demande = typeof p.id === "string" ? p.id : "";
+      if (!demande || !/^[A-Za-z0-9_-]{1,80}$/.test(demande) || !repondre) return;
+      journaliser("outil.refuse", "systeme", { surface: "code", cause: "question.asked-refuse", session: sessionID });
+      repondre(`/question/${demande}/reject`, {});
       return;
     }
   }

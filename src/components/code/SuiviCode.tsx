@@ -14,7 +14,7 @@ import { cn } from "@/lib/cn";
 import { PanelCard } from "@/components/ui/PanelCard";
 import { IconButton } from "@/components/ui/IconButton";
 import { dureeCourte } from "@/lib/code";
-import type { ActionCode, FichierCode, SuiviCode, TacheCode } from "@/lib/suiviCode";
+import { enArrierePlan, type ActionCode, type FichierCode, type SuiviCode, type TacheCode } from "@/lib/suiviCode";
 import { locale, t, tf } from "@/lib/i18n";
 
 /**
@@ -207,6 +207,118 @@ function Actions({ actions, maintenant }: { actions: ActionCode[]; maintenant: n
   );
 }
 
+/**
+ * Une sous-tâche ou une commande, avec sa durée, un bouton pour l'arrêter
+ * tant qu'elle tourne, et son détail à la demande (la commande entière ou la
+ * consigne du sous-agent, ses outils, le début de ce qu'elle a rendu).
+ */
+function TacheDeFond({
+  action,
+  maintenant,
+  onArreter,
+}: {
+  action: ActionCode;
+  maintenant: number;
+  onArreter?: (action: ActionCode) => void;
+}) {
+  const [ouvert, setOuvert] = useState(false);
+  const encours = action.etat === "encours";
+  // Une commande n'a pas de session à elle : l'arrêter arrête tout le tour (voir `arreterAction`, useCode.ts).
+  const titreArret =
+    action.tool === "task" && action.sousSession
+      ? t("Arrêter cette sous-tâche")
+      : t("Arrêter la demande en cours (l'agent de code ne sait pas arrêter une seule commande)");
+  return (
+    <li className="text-xs">
+      <div className="flex items-start gap-1.5">
+        <IconeEtat etat={action.etat} className="mt-0.5" />
+        <span className="min-w-0 flex-1">
+          <span className="block break-words text-foreground">{action.libelle}</span>
+          {action.cible && (
+            <span className="block truncate text-muted-foreground" title={action.cible}>
+              {action.cible}
+            </span>
+          )}
+          <button
+            type="button"
+            onClick={() => setOuvert((o) => !o)}
+            aria-expanded={ouvert}
+            className="mt-0.5 text-[11px] text-info underline-offset-2 hover:underline"
+          >
+            {ouvert ? t("Masquer le détail") : t("Voir le détail")}
+          </button>
+        </span>
+        <span className="shrink-0 tabular-nums text-[11px] text-muted-foreground">{dureeCourte((action.fin ?? maintenant) - action.debut)}</span>
+        {encours && onArreter && (
+          <IconButton icon={Square} label={titreArret} onClick={() => onArreter(action)} size={22} iconSize={11} />
+        )}
+      </div>
+      {ouvert && (
+        <div className="ml-[18px] mt-1 space-y-1.5 border-l border-border pl-2 text-muted-foreground">
+          {action.detail && (
+            <pre className="max-h-40 overflow-auto whitespace-pre-wrap break-words rounded-md bg-muted/50 px-2 py-1.5 font-mono text-[11px] text-foreground">
+              {action.detail}
+            </pre>
+          )}
+          {action.sous && action.sous.length > 0 && (
+            <ul className="space-y-0.5">
+              {action.sous.map((x) => (
+                <li key={x.callID} className="flex items-start gap-1.5">
+                  <IconeEtat etat={x.etat} className="mt-0.5" />
+                  <span className="min-w-0 flex-1 break-words">
+                    {x.libelle}
+                    {x.cible && <span className="opacity-80"> · {x.cible}</span>}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+          {action.sortie && (
+            <pre className="max-h-40 overflow-auto whitespace-pre-wrap break-words rounded-md bg-muted/50 px-2 py-1.5 font-mono text-[11px]">
+              {action.sortie}
+            </pre>
+          )}
+          {!action.detail && !action.sortie && !(action.sous && action.sous.length) && <p>{t("Rien d'autre à montrer pour l'instant.")}</p>}
+        </div>
+      )}
+    </li>
+  );
+}
+
+/** Sous-tâches et commandes, « En cours » puis « Terminé », comme la bande « Tâches en arrière-plan » de Claude Code. */
+function TachesDeFond({ actions, maintenant, onArreter }: { actions: ActionCode[]; maintenant: number; onArreter?: (action: ActionCode) => void }) {
+  const enCours = actions.filter((a) => a.etat === "encours");
+  const terminees = actions.filter((a) => a.etat !== "encours").slice(-20).reverse();
+  return (
+    <div className="space-y-3">
+      <div>
+        <h3 className="mb-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{tf("En cours ({0})", enCours.length)}</h3>
+        {enCours.length === 0 ? (
+          <p className="text-xs text-muted-foreground">{t("Aucune sous-tâche ni commande en cours.")}</p>
+        ) : (
+          <ul className="space-y-1.5">
+            {enCours.map((a) => (
+              <TacheDeFond key={a.callID} action={a} maintenant={maintenant} onArreter={onArreter} />
+            ))}
+          </ul>
+        )}
+      </div>
+      {terminees.length > 0 && (
+        <div>
+          <h3 className="mb-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+            {tf("Terminé ({0})", actions.length - enCours.length)}
+          </h3>
+          <ul className="max-h-72 space-y-1.5 overflow-y-auto">
+            {terminees.map((a) => (
+              <TacheDeFond key={a.callID} action={a} maintenant={maintenant} />
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function Fichiers({ fichiers, dossier }: { fichiers: FichierCode[]; dossier?: string }) {
   return (
     <ul className="space-y-1">
@@ -229,11 +341,14 @@ export function SuiviCodePanel({
   suivi,
   dossier,
   onFermer,
+  onArreter,
   className,
 }: {
   suivi: SuiviCode | null;
   dossier?: string;
   onFermer: () => void;
+  /** Arrête une sous-tâche (ou, pour une commande, la demande entière). */
+  onArreter?: (action: ActionCode) => void;
   className?: string;
 }) {
   const [maintenant, setMaintenant] = useState(() => Date.now());
@@ -247,6 +362,8 @@ export function SuiviCodePanel({
   }, [enCours]);
 
   const faites = suivi?.taches.filter((x) => x.etat === "completed").length ?? 0;
+  const deFond = suivi?.actions.filter(enArrierePlan) ?? [];
+  const autres = suivi?.actions.filter((a) => !enArrierePlan(a)) ?? [];
   const total = suivi ? dureeCourte((suivi.fin ?? maintenant) - suivi.debut) : undefined;
 
   return (
@@ -280,11 +397,15 @@ export function SuiviCodePanel({
             </PanelCard>
           )}
 
-          <PanelCard title={t("Actions")} headerRight={<span className="text-xs tabular-nums">{suivi.actions.length}</span>}>
-            {suivi.actions.length === 0 ? (
+          <PanelCard title={t("Sous-tâches et commandes")} headerRight={<span className="text-xs tabular-nums">{deFond.length}</span>}>
+            <TachesDeFond actions={deFond} maintenant={maintenant} onArreter={suivi.fin === undefined ? onArreter : undefined} />
+          </PanelCard>
+
+          <PanelCard title={t("Autres actions")} headerRight={<span className="text-xs tabular-nums">{autres.length}</span>}>
+            {autres.length === 0 ? (
               <p className="text-xs text-muted-foreground">{t("Aucune action pour l'instant.")}</p>
             ) : (
-              <Actions actions={suivi.actions} maintenant={maintenant} />
+              <Actions actions={autres} maintenant={maintenant} />
             )}
           </PanelCard>
 

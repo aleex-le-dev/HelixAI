@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { homedir } from "node:os";
 import { findLms } from "./backends.ts";
 import { destinataireDe, publierStatut } from "./fluxCode.ts";
+import { cleRelaisValide } from "./opencode.ts";
 
 const exec = promisify(execFile);
 
@@ -113,6 +114,15 @@ export function suivreAppelModele(
   moteur: { kind: string; baseUrl: string },
   caracteres: number,
 ): { premierMorceau: () => void; fin: () => void; chargement: (oui: boolean) => void; taille: (caracteres: number) => void } | null {
+  /*
+   * Seulement un appel d'OpenCode lui-même : il joint la clé que la
+   * passerelle lui a remise (`X-Helix-Relais`, opencode.ts). Revue du
+   * 25/09/2026 : sans ce contrôle, n'importe quel porteur du jeton d'instance
+   * nommait la session d'un collègue dans `X-Session-Id` et y faisait
+   * afficher ses propres statuts.
+   */
+  const relais = entetes["x-helix-relais"];
+  if (!cleRelaisValide(Array.isArray(relais) ? relais[0] : relais)) return null;
   const session = entete(entetes, "x-session-id") ?? entete(entetes, "x-session-affinity");
   const parent = entete(entetes, "x-parent-session-id");
   const cible = (session && destinataireDe(session)) || (parent && destinataireDe(parent)) || undefined;

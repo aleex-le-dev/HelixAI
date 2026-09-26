@@ -42,7 +42,20 @@ export interface ActionCode {
   fin?: number;
   /** Outils du sous-agent, pour une sous-tâche (`task`). */
   sous?: { callID: string; libelle: string; cible?: string; etat: "encours" | "fini" | "echec" }[];
+  /** Session du sous-agent d'une sous-tâche, pour l'arrêter seule. */
+  sousSession?: string;
+  /** Pour le détail : la commande entière (`bash`) ou la consigne donnée au sous-agent (`task`). */
+  detail?: string;
+  /** Début de ce que l'outil a rendu (résultat ou erreur), pour le détail. */
+  sortie?: string;
 }
+
+/**
+ * Les actions qui durent, montrées à part comme la bande « Tâches en
+ * arrière-plan » de Claude Code (demandé par Medhi le 26/09/2026) : les
+ * sous-tâches (sous-agents) et les commandes.
+ */
+export const enArrierePlan = (a: ActionCode): boolean => a.tool === "task" || a.tool === "bash";
 
 export interface TacheCode {
   texte: string;
@@ -144,7 +157,16 @@ export function appliquerSuivi(s: SuiviCode, e: CodeEvent, dossier?: string, mai
     }
     case "tool_start": {
       const { libelle, cible } = actionOutil(e.tool, e.input, dossier);
-      const action: ActionCode = { callID: e.callID, tool: e.tool, libelle, cible, etat: "encours", debut: maintenant };
+      const consigne = e.tool === "bash" ? e.input.command : e.tool === "task" ? e.input.prompt ?? e.input.description : undefined;
+      const action: ActionCode = {
+        callID: e.callID,
+        tool: e.tool,
+        libelle,
+        cible,
+        etat: "encours",
+        debut: maintenant,
+        ...(typeof consigne === "string" && consigne.trim() ? { detail: consigne.slice(0, 4000) } : {}),
+      };
       const fichier = typeof e.input.filePath === "string" ? e.input.filePath : undefined;
       const quoi = ACTIONS_FICHIER[e.tool];
       const taches = e.tool === "todowrite" ? tachesDe(e.input) : undefined;
@@ -159,7 +181,9 @@ export function appliquerSuivi(s: SuiviCode, e: CodeEvent, dossier?: string, mai
     case "tool_end": {
       const i = s.actions.findIndex((a) => a.callID === e.callID);
       if (i < 0) return s;
-      const actions = s.actions.map((a, j) => (j === i ? { ...a, etat: e.ok ? ("fini" as const) : ("echec" as const), fin: maintenant } : a));
+      const actions = s.actions.map((a, j) =>
+        j === i ? { ...a, etat: e.ok ? ("fini" as const) : ("echec" as const), fin: maintenant, ...(e.preview ? { sortie: e.preview.slice(0, 4000) } : {}) } : a,
+      );
       const encore = actions.find((a) => a.etat === "encours");
       return {
         ...s,
@@ -184,7 +208,7 @@ export function appliquerSuivi(s: SuiviCode, e: CodeEvent, dossier?: string, mai
       const quoi = ACTIONS_FICHIER[e.tool];
       return {
         ...s,
-        actions: s.actions.map((a) => (a === parent ? { ...a, sous: suivant } : a)),
+        actions: s.actions.map((a) => (a === parent ? { ...a, sous: suivant, sousSession: a.sousSession ?? e.sousSession } : a)),
         fichiers: fichier && quoi && e.etat !== "echec" ? toucher(s.fichiers, fichier, quoi) : s.fichiers,
         phase:
           e.etat === "encours"

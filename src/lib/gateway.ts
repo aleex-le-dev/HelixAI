@@ -179,6 +179,12 @@ export interface DemandeApprobation {
     cible?: string | null;
     niveau?: NiveauApprobation;
     employe?: string;
+    /** D'où vient la demande : le Chat ou Cowork, Helix Code, un employé. */
+    surface?: "chat" | "code" | "employe";
+    /** La commande entière que l'agent de code veut lancer (outil `code__bash`). */
+    commande?: string;
+    /** L'adresse que l'agent de code veut ouvrir (`code__webfetch`). */
+    url?: string;
     /** Le mail tel qu'il partira, pour un envoi : destinataires résolus, objet, texte entier. */
     envoi?: { a: string; cc: string; objet: string; corps: string; enReponse: boolean };
   };

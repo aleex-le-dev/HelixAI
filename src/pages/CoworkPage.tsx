@@ -340,12 +340,13 @@ export function CoworkPage() {
    * réponse à la carte d'accord restée à l'écran : cliquer « Autoriser » après
    * l'arrêt exécutait l'action (mesuré le 23/09/2026 : un clic parti après
    * l'arrêt). Arrêter vaut donc refus de ce qui attend encore. Les demandes d'un
-   * employé ne sont pas touchées : elles ne viennent pas de cette conversation.
+   * employé ne sont pas touchées : elles ne viennent pas de cette conversation,
+   * ni celles de Helix Code (une commande en attente dans une autre session).
    */
   const arreter = () => {
     chat.stop();
     for (const d of demandesEcran) void repondreEcran(d.id, false);
-    for (const d of demandesOutils) if (!d.detail?.employe) void repondreOutil(d.id, false);
+    for (const d of demandesOutils) if (!d.detail?.employe && d.detail?.surface !== "code") void repondreOutil(d.id, false);
   };
 
   const submit = () => {

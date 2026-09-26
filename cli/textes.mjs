@@ -34,6 +34,8 @@ Options :
                     de cet ordinateur, lu seulement pour une adresse locale
   --modele NOM      Modèle à utiliser (voir « helix modeles »)
   --effort NIVEAU   Code : aucun, faible, moyen, eleve ou max
+  --dossier CHEMIN  Code : dossier du projet sur la machine de l'instance. Défaut, pour
+                    une instance locale seulement : le dossier courant
   --outils          Chat : autoriser l'agent à utiliser les outils (séance requise)
 
 Dans une conversation :
@@ -99,6 +101,8 @@ Les actions qui demandent votre accord s'affichent ici et attendent votre répon
 
   // Code
   codeSession: (dossier) => `${NOM} Code sur ${dossier}`,
+  codeDossierDistant: (adresse) =>
+    `L'instance ${adresse} n'est pas sur cet ordinateur : l'agent de code y travaille dans un dossier de SA machine, pas dans le dossier courant de ce poste. Donnez-le avec --dossier CHEMIN (un chemin sur le serveur de l'instance).`,
   codeSansSeance: `${NOM} Code modifie vos fichiers : connectez-vous d'abord (helix connexion).`,
   codeNouvelleSession: "Nouvelle session de Code.",
   codeRelance: "L'agent n'avait pas démarré : la demande est repartie dans une nouvelle session.",
@@ -133,6 +137,9 @@ Les actions qui demandent votre accord s'affichent ici et attendent votre répon
 
   // Approbations
   approbationTitre: "Accord demandé",
+  approbationSurface: { chat: "Chat", code: `${NOM} Code`, employe: "employé" },
+  approbationCommande: "Commande",
+  approbationDroits: "Elle s'exécutera sur la machine de l'instance, avec les droits de son compte. Un accord ne vaut que pour cette commande.",
   approbationVeut: (resume) => `L'agent veut ${resume}.`,
   approbationEmploye: (nom) => `(demandé par ${nom})`,
   approbationMail: { a: "À", cc: "Cc", objet: "Objet", corps: "Texte" },

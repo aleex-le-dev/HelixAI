@@ -1,4 +1,4 @@
-import { FileCog, Mail, Send, ShieldCheck } from "lucide-react";
+import { FileCog, Mail, Send, ShieldCheck, Terminal } from "lucide-react";
 import { CarteApprobation } from "@/components/cowork/CarteApprobation";
 import { useApprobation } from "@/hooks/useApprobation";
 import { langue, t, tf } from "@/lib/i18n";
@@ -89,11 +89,44 @@ export function ToolApproval() {
     );
   }
 
+  /*
+   * Une commande de l'agent de code (depuis le 26/09/2026, chaque commande
+   * demande : gateway/src/permissionsCode.ts). Elle s'exécute avec les droits
+   * du compte qui fait tourner l'instance : la carte la montre entière, et un
+   * accord ne vaut que pour elle, mot pour mot.
+   */
+  const commande = demande.detail?.commande;
+  const deCode = demande.detail?.surface === "code";
+  if (commande !== undefined) {
+    return (
+      <CarteApprobation
+        icone={<Terminal size={16} strokeWidth={1.75} />}
+        titre={t("L'agent de code veut lancer une commande")}
+        phrase={t("Elle s'exécutera sur la machine de l'instance, avec les droits de son compte, dans le dossier du projet.")}
+        contenu={
+          <pre className="max-h-56 overflow-auto whitespace-pre-wrap break-words rounded-xl border border-border bg-muted/40 px-3 py-2.5 font-mono text-xs text-foreground">
+            {commande}
+          </pre>
+        }
+        note={t("Autoriser vaut pour cette commande seulement.")}
+        pied={
+          <>
+            <ShieldCheck size={12} strokeWidth={1.75} />
+            {t("Sans réponse, la commande ne sera pas lancée")}
+            {enAttente.length > 1 && tf(" · {0} autre(s) en attente", enAttente.length - 1)}
+          </>
+        }
+        onApprouver={() => void repondre(demande.id, true)}
+        onRefuser={() => void repondre(demande.id, false)}
+      />
+    );
+  }
+
   return (
     <CarteApprobation
       icone={<FileCog size={16} strokeWidth={1.75} />}
-      titre={employe ? tf("{0}, votre agent, demande votre accord", employe) : t("L'agent veut agir sur vos fichiers")}
-      phrase={phraseDemande(demande.resume, demande.detail?.outil, demande.detail?.cible, employe)}
+      titre={employe ? tf("{0}, votre agent, demande votre accord", employe) : deCode ? t("L'agent de code demande votre accord") : t("L'agent veut agir sur vos fichiers")}
+      phrase={phraseDemande(demande.resume, demande.detail?.outil, demande.detail?.url ?? demande.detail?.cible, employe)}
       // Un employé n'a pas de « demande » en cours : chaque accord ne vaut que pour une action.
       note={employe ? t("Autoriser vaut pour cette action seulement.") : etendue}
       pied={

@@ -33,6 +33,29 @@ import { t, tf } from "./langue.ts";
  * Un programme vérifie, pas le modèle : il ne se contente pas de « c'est fait ».
  */
 
+/*
+ * La langue et les usages de la demande, pour tout ce que le programme
+ * affiche. Mesuré le 26/09/2026 : pour une demande écrite en français, Qwen3 8B
+ * a écrit « Category: … $12.50 ». Deviné sur le texte de la demande (lettres
+ * chinoises, mots et accents français), anglais sinon ; aucune autre langue
+ * n'est affirmée : on dit alors seulement « la langue de la demande ».
+ */
+export function consigneLangue(demande: string): string {
+  const t = demande.toLowerCase();
+  const chinois = (demande.match(/[\u3400-\u9fff]/g) ?? []).length;
+  const francais = (t.match(/\b(le|la|les|un|une|des|du|de|et|pour|avec|qui|que|dans|sur|est|fais|fait|écris|ecris|peux|mon|mes)\b/g) ?? []).length + (t.match(/[éèêàçù]/g) ?? []).length;
+  const anglais = (t.match(/\b(the|a|an|and|for|with|that|which|in|on|is|make|write|build|create|my|please)\b/g) ?? []).length;
+  const regle =
+    chinois >= 4
+      ? "La demande est en chinois : tous les textes que le programme affiche sont en chinois, montants en yuans (¥) sauf demande contraire, dates AAAA-MM-JJ."
+      : francais > anglais
+        ? "La demande est en français : tous les textes que le programme affiche (titres, boutons, messages, sorties) sont en français, montants en euros au format français (1 234,50 €), dates JJ/MM/AAAA, sauf si la demande dit autre chose."
+        : anglais > 0
+          ? "The request is in English: every text the program shows is in English, with the usual conventions of the request (currency, dates), unless it says otherwise."
+          : "Tous les textes que le programme affiche sont dans la langue de la demande, avec ses usages (monnaie, dates, nombres).";
+  return `\n- ${regle} Les noms dans le code (fonctions, variables) peuvent rester en anglais.`;
+}
+
 /** Le début de chaque relance : sessionsCode.ts s'en sert pour ne pas l'afficher comme un message de la personne. */
 export const ENTETE_RELANCE = "[Contrôle automatique de Helix] Le travail n'est pas terminé : un programme a vérifié les fichiers (et, selon le projet, essayé les pages ou lancé les tests), et a trouvé ces problèmes :";
 
@@ -450,7 +473,7 @@ export async function apresTourCode(
     suivi!.enRelance = true;
     statut(tf("Étape {0} sur {1} : {2}", suite.numero, suite.total, suite.titre));
     console.log(`[code] plan : étape ${suite.numero}/${suite.total}.`);
-    if (!(await relancer(suite.texte + METHODE_CODE))) {
+    if (!(await relancer(suite.texte + METHODE_CODE + consigneLangue(suite.demande)))) {
       suivi!.enRelance = false;
       oublierSequence(sessionID);
       statut(t("Contrôle automatique : la demande de correction n'a pas pu partir."));

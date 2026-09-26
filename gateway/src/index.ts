@@ -64,7 +64,7 @@ import * as images from "./images.ts";
 import { contenuLogiciel, logicielsTrouves, pageLogiciel } from "./importLocal.ts";
 import * as entrainement from "./entrainement.ts";
 import { choisirDesign, corrigerPages, estApplication, estDemandeDeSite, preparerDesign, projetDejaCommence } from "./design.ts";
-import { METHODE_CODE, apresTourCode, arretDemandeCode, demandeArretee, nouvelleDemandeCode } from "./controleCode.ts";
+import { METHODE_CODE, apresTourCode, consigneLangue, arretDemandeCode, demandeArretee, nouvelleDemandeCode } from "./controleCode.ts";
 import { applicationPreparee, consigneApplication, ecrireApplication, planifierApplication } from "./application.ts";
 import { blocCarte } from "./carteProjet.ts";
 import { estQuestionSimple, estReplique, strategie } from "./plan.ts";
@@ -2544,7 +2544,7 @@ async function handleCodePrompt(
   // La carte du projet (carteProjet.ts) : ce qui existe déjà, pour n'appeler que ce qui existe.
   if (!preparee) texteEnvoye += blocCarte(reglageEnvoi.dossier, 4000);
   // La méthode qui rend un petit modèle juste du premier coup (controleCode.ts), pour toute demande.
-  texteEnvoye += METHODE_CODE;
+  texteEnvoye += METHODE_CODE + consigneLangue(body.text);
 
   /*
    * Qui envoie cette demande : les connecteurs que l'agent de code appellera

@@ -180,7 +180,7 @@ export function consignePremiereEtape(sessionID: string): string {
  * Passe à l'étape suivante et rend le texte à envoyer, avec la carte à jour ;
  * `null` quand le plan est fini (la séquence est alors oubliée).
  */
-export function etapeSuivante(sessionID: string): { texte: string; numero: number; total: number; titre: string } | null {
+export function etapeSuivante(sessionID: string): { texte: string; numero: number; total: number; titre: string; demande: string } | null {
   const s = sequences.get(sessionID);
   if (!s) return null;
   s.courante++;
@@ -201,5 +201,5 @@ export function etapeSuivante(sessionID: string): { texte: string; numero: numbe
     t("Reprends les noms exacts des fonctions et des fichiers des étapes précédentes (voir la carte). Termine par une phrase qui dit ce que tu as écrit."),
     blocCarte(s.dossier, 5000),
   ].join("\n");
-  return { texte, numero, total: s.etapes.length, titre: e.titre };
+  return { texte, numero, total: s.etapes.length, titre: e.titre, demande: s.demande };
 }

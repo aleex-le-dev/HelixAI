@@ -2738,6 +2738,17 @@ Seuls restent toujours confirmés : envoyer un mail, supprimer un événement, p
 tâche ; et un employé qui traite un mail reçu n'a jamais le web. L'écran dit ce risque au
 moment du choix (niveau d'approbation, palier « étendu »). Ne pas refaire à l'envers.
 
+**Fait le 27/09/2026 : relecture des correctifs et test d'intrusion.** Demandé par Medhi
+(« refait un tour sur les potentielles bugs … une fois le code sûr à 100 % … fais la version
+Windows et Linux »). Un agent a relu les correctifs du jour, un autre a attaqué l'instance de
+l'extérieur ; tout ce qu'ils ont trouvé est corrigé et rejoué par `npm run securite` (418
+contrôles, tous réussis). Le plus sérieux : un en-tête `Host` vide suffisait à arrêter la
+passerelle. Détail dans SECURITE.md § 29.1. **Changements visibles** : les listes de choix
+(`Select`) s'ouvrent par-dessus l'écran et défilent seules, sans faire défiler la page ;
+Helix Code demande l'accord une fois par dossier pour les fichiers, plus pour chacun ; les
+tests de l'agent de code marchent avec `sh`, git et le node de Homebrew ; seul
+l'administrateur branche un moteur installé sur la machine de l'instance.
+
 **Fait le 27/09/2026 : les deux suites de la revue de sécurité.** Décidé par Medhi (« fais
 au mieux », « qu'il soit efficace et évite l'injection de prompt ») :
 - **Comptes** : un collègue invite, seul l'administrateur crée un compte directement, et

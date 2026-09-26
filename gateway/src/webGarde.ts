@@ -74,11 +74,19 @@ export function fermerSurveillance(employe: string): void {
   if (v.ouvertures <= 0) vues.delete(employe);
 }
 
-/** Ce qu'un outil vient de rendre pendant le traitement d'un mail : ses adresses deviennent ouvrables. */
-export function noterVues(employe: string, texte: string): void {
+/**
+ * Ce qu'un outil vient de rendre pendant le traitement d'un mail : ses
+ * adresses deviennent ouvrables. Jamais celles que le modèle a lui-même mises
+ * dans sa demande (`demande`) : un message d'erreur qui les répète (« le
+ * dossier « https://… » est introuvable ») les aurait rendues ouvrables, et la
+ * fuite par une adresse composée revenait (revue du 27/09/2026, reproduit).
+ */
+export function noterVues(employe: string, texte: string, demande = ""): void {
   const v = vues.get(employe);
   if (!v) return;
+  const siennes = new Set(adressesDe(demande));
   for (const a of adressesDe(texte)) {
+    if (siennes.has(a)) continue;
     if (v.adresses.size >= MAX_ADRESSES) break;
     v.adresses.add(a);
   }
@@ -246,7 +254,8 @@ export async function callTool(nom: string, args: Record<string, unknown>, emplo
       }
       if (resultats.length === 0) return { ok: true, content: tf("Aucun résultat pour « {0} ».", requete) };
       const texte = resultats.map((x, i) => `${i + 1}. ${x.titre}\n   ${x.adresse}\n   ${x.extrait}`).join("\n");
-      noterVues(employe, texte);
+      // Pas les adresses de la recherche elle-même : un extrait qui la répéterait ne les rend pas ouvrables.
+      noterVues(employe, texte, requete);
       return { ok: true, content: texte };
     }
 

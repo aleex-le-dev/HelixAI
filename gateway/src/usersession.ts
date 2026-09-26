@@ -58,14 +58,30 @@ export interface PublicSession {
  * sont sur le chemin de chaque requête, elles ne doivent pas toucher le disque.
  */
 let cache: StoredSession[] | null = null;
+/** Le stockage des séances est illisible et n'a pas pu être rangé : on ne l'écrase pas. */
+let sansEcriture = false;
 let chargement: Promise<StoredSession[]> | null = null;
 
 async function charger(): Promise<StoredSession[]> {
   if (cache) return cache;
   if (!chargement) {
     chargement = (async () => {
-      const value = await db().read("authSessions");
-      cache = Array.isArray(value) ? (value as StoredSession[]) : [];
+      try {
+        const value = await db().read("authSessions");
+        cache = Array.isArray(value) ? (value as StoredSession[]) : [];
+      } catch (err) {
+        /*
+         * Relecture du 27/09/2026 : un fichier de séances abîmé fermait la
+         * porte à tout le monde, et pour de bon (l'échec restait en mémoire).
+         * Il est rangé à côté, gardé tel quel, et chacun se reconnecte. Si le
+         * stockage ne sait pas le ranger, les séances restent en mémoire
+         * seulement : rien n'est écrit par-dessus ce qu'on n'a pas pu lire.
+         */
+        const garde = await Promise.resolve(db().mettreDeCote?.("authSessions")).catch(() => null);
+        if (!garde) sansEcriture = true;
+        console.error(`[helix] séances de connexion illisibles (${(err as Error).message}) : ${garde ? `gardées dans ${garde}, ` : ""}chacun se reconnecte.`);
+        cache = [];
+      }
       return cache;
     })();
   }
@@ -96,6 +112,7 @@ function enFile<T>(operation: () => Promise<T>): Promise<T> {
 
 /** Enregistre l'état courant, sans bloquer l'appelant ni entrelacer les écritures. */
 function planifierEcriture(): void {
+  if (sansEcriture) return;
   ecritureEnCours = ecritureEnCours
     .then(() => db().write("authSessions", cache ?? []))
     .catch(() => {

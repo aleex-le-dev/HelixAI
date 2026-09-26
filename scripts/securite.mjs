@@ -2144,6 +2144,91 @@ console.log("\n11 bis. Mises à jour d'un clic : seulement ce que la clé de l'�
   verifier("mise à jour : une application sans signature est refusée", !(await sig.verifierApplication(recue, installee, id)).ok, "acceptée");
 }
 
+console.log("\n11 ter. Une requête mal formée n'arrête pas l'instance (test d'intrusion du 27/09/2026)");
+{
+  const { connect } = await import("node:net");
+  const brute = (texte) =>
+    new Promise((resolve) => {
+      const sock = connect(Number(new URL(G).port), "127.0.0.1", () => sock.end(texte));
+      let recu = "";
+      sock.on("data", (d) => (recu += d));
+      sock.on("close", () => resolve(recu));
+      sock.on("error", () => resolve(recu));
+      setTimeout(() => sock.destroy(), 3000);
+    });
+  for (const [nom, requete] of [
+    ["en-tête Host vide", "GET / HTTP/1.1\r\nHost:\r\nConnection: close\r\n\r\n"],
+    ["en-tête Host illisible", "GET /helix/data/sessions HTTP/1.1\r\nHost: [::zz\r\nConnection: close\r\n\r\n"],
+    ["chemin illisible", "GET //%zz%%/../ HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n"],
+  ]) {
+    await brute(requete);
+    const vie = await appel("/health").then((r) => r.status).catch(() => 0);
+    verifier(`${nom} : l'instance répond toujours`, vie === 200, vie);
+  }
+}
+
+console.log("\n11 quater. Relecture du 27/09/2026 : moteur local réservé, données abîmées, invitations, approbations");
+{
+  /*
+   * Test d'intrusion du 27/09/2026 : un membre branchait un moteur
+   * « compatible » à l'adresse de la machine de l'instance, et lisait dans la
+   * réponse quels ports y étaient ouverts.
+   */
+  // Séances neuves : celles du début sont fermées (section 8) et la collègue a effacé son compte (7 quater).
+  const connA = await (await appel("/helix/auth/verify", { method: "POST", headers: avecJeton, body: JSON.stringify({ accountId: compte.account?.id, password: "Mot2PasseSolide!42" }) })).json().catch(() => ({}));
+  const seanceAdmin = { ...avecJeton, "X-Helix-Session": connA.session?.token };
+  const creeC = await (await appel("/helix/auth/create", { method: "POST", headers: seanceAdmin, body: JSON.stringify({ fullName: "Témoin moteur", email: "temoin-moteur@example.test", password: "Provisoire2Passe!33" }) })).json().catch(() => ({}));
+  const connC = await (await appel("/helix/auth/mot-de-passe-provisoire", { method: "POST", headers: avecJeton, body: JSON.stringify({ accountId: creeC.account?.id, password: "Provisoire2Passe!33", nouveau: "Temoin2PasseSolide!77" }) })).json().catch(() => ({}));
+  const seanceMembre = { ...avecJeton, "X-Helix-Session": connC.session?.token };
+  verifier("séances neuves pour ces essais (administrateur et membre)", Boolean(connA.session?.token && connC.session?.token), `${Boolean(connA.session?.token)} ${Boolean(connC.session?.token)}`);
+  const json = { ...seanceMembre, "Content-Type": "application/json" };
+  for (const adresse of ["http://127.0.0.1:9/v1", "http://localhost:5432/v1", "http://[::1]:22/v1"]) {
+    const essai = await appel("/helix/fournisseurs/essayer", { method: "POST", headers: json, body: JSON.stringify({ fournisseur: "compatible", adresse, cle: "x" }) });
+    verifier(`un membre n'essaie pas un moteur de la machine de l'instance (${adresse})`, essai.status === 403, essai.status);
+  }
+  const ajout = await appel("/helix/fournisseurs", { method: "POST", headers: json, body: JSON.stringify({ fournisseur: "compatible", adresse: "http://127.0.0.1:9/v1", cle: "x", modeles: ["m"] }) });
+  verifier("un membre n'ajoute pas un moteur de la machine de l'instance", ajout.status === 403, ajout.status);
+  const parAdmin = await appel("/helix/fournisseurs/essayer", { method: "POST", headers: { ...seanceAdmin, "Content-Type": "application/json" }, body: JSON.stringify({ fournisseur: "compatible", adresse: "http://127.0.0.1:9/v1", cle: "x" }) });
+  verifier("l'administrateur, lui, peut essayer un moteur de sa machine", parAdmin.status !== 403 && parAdmin.status !== 401, parAdmin.status);
+
+  // Un fichier de groupes abîmé : la synchronisation et les droits continuent, rien n'est écrit par-dessus.
+  const { readFileSync: lireF, writeFileSync: ecrireF, existsSync: existe } = await import("node:fs");
+  const fichierGroupes = join(DONNEES, "groupes.json");
+  const avantGroupes = existe(fichierGroupes) ? lireF(fichierGroupes) : null;
+  ecrireF(fichierGroupes, "{ abîmé");
+  const revs = await appel("/helix/data", { headers: seanceMembre });
+  const corpsRevs = await revs.json().catch(() => ({}));
+  verifier("groupes abîmés : les révisions répondent encore, sans les groupes", revs.status === 200 && corpsRevs.revisions && !("groupes" in corpsRevs.revisions) && "sessions" in corpsRevs.revisions, `${revs.status} ${JSON.stringify(corpsRevs).slice(0, 120)}`);
+  const sessionsB = await appel("/helix/data/sessions", { headers: seanceMembre });
+  verifier("groupes abîmés : un membre lit encore ses Chats", sessionsB.status === 200, sessionsB.status);
+  verifier("groupes abîmés : le fichier n'est pas écrasé", lireF(fichierGroupes, "utf8") === "{ abîmé", "réécrit");
+  if (avantGroupes) ecrireF(fichierGroupes, avantGroupes);
+  else (await import("node:fs")).rmSync(fichierGroupes);
+
+  // Helix Code : un accord pour un fichier vaut pour son dossier, pas une commande pour une autre.
+  const { pathToFileURL: versUrl } = await import("node:url");
+  const source = readFileSync(join(RACINE, "gateway", "src", "approbation.ts"), "utf8");
+  verifier("Helix Code : les modifications de fichiers sont approuvées par dossier", /porteeParDossier = [^;]*outil\.startsWith\("code__"\)/s.test(source), "portée au fichier");
+  verifier("Helix Code : une commande reste approuvée mot pour mot", /outil === "code__bash"[^\n]*\n\s*return `\$\{outil\}\|/.test(source), "portée élargie");
+  const invitations = readFileSync(join(RACINE, "src", "lib", "invitations.ts"), "utf8");
+  verifier("une invitation partie par mail n'est pas prise pour un échec (pas de code rendu)", /!res\.ok \|\| !corps\.email/.test(invitations) && !/!corps\.code/.test(invitations), "code exigé");
+
+  // La cage : sh, git et les liens internes au projet marchent ; le reste du dehors, non (vérifié plus haut).
+  if (process.platform === "darwin") {
+    const { essayerTests } = await import(versUrl(join(RACINE, "gateway", "src", "essaisCode.ts")).href);
+    const { mkdirSync: creer, symlinkSync: lier } = await import("node:fs");
+    const p = join(AUX, "projet-outils");
+    creer(join(p, "src"), { recursive: true });
+    ecrireF(join(p, "src", "a.txt"), "BONJOUR-LIEN");
+    lier("src/a.txt", join(p, "lien.txt"));
+    ecrireF(join(p, "verif.js"), "require('node:crypto').createHash('sha256'); console.log('NODE-OK');\n");
+    ecrireF(join(p, "package.json"), JSON.stringify({ name: "x", scripts: { test: "sh -c 'cat lien.txt && git --version && node verif.js'" } }));
+    const r = await essayerTests(p);
+    const sortie = r && "sortie" in r ? r.sortie : JSON.stringify(r);
+    verifier("cage : npm test lance sh, git et node, et lit un lien interne au projet", r?.reussi === true && sortie.includes("BONJOUR-LIEN") && sortie.includes("git version") && sortie.includes("NODE-OK"), sortie.slice(0, 300));
+  }
+}
+
 console.log("\n12. Deviner un mot de passe");
 {
   let bloque = false;

@@ -79,10 +79,9 @@ export function TachesProgrammees() {
 
   const relire = useCallback(async () => {
     const r = await listerTaches();
-    if (r.ok) {
-      setTaches(r.valeur.taches);
-      setErreur(null);
-    } else setErreur(r.message);
+    // L'erreur d'une action reste affichée : la relecture qui suit ne l'efface plus (revue du 27/09/2026).
+    if (r.ok) setTaches(r.valeur.taches);
+    else setErreur(r.message);
   }, []);
 
   useEffect(() => {
@@ -97,6 +96,7 @@ export function TachesProgrammees() {
 
   const enregistrer = async () => {
     if (!formulaire) return;
+    setErreur(null);
     setEnCours("creation");
     const r = await creerTache({ titre: formulaire.titre, consigne: formulaire.consigne, rythme: rythmeDe(formulaire), heure: formulaire.heure, outils: formulaire.outils, ...(formulaire.agentId ? { agentId: formulaire.agentId } : {}) });
     setEnCours(null);
@@ -106,6 +106,7 @@ export function TachesProgrammees() {
   };
 
   const action = async (id: string, fn: () => Promise<{ ok: boolean; message?: string }>) => {
+    setErreur(null);
     setEnCours(id);
     const r = (await fn()) as { ok: boolean; message?: string };
     setEnCours(null);

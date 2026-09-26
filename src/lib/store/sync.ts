@@ -39,6 +39,14 @@ const POLL_MS = 4000;
 let online = false;
 let timer: ReturnType<typeof setInterval> | null = null;
 const revisions = new Map<Collection, number>();
+/**
+ * Ce que l'instance avait, tel que ce poste l'a relu ou envoyé en dernier :
+ * l'état de départ de la fusion à trois (27/09/2026). Sans lui, une
+ * suppression faite ici revenait à la première relecture (le Chat supprimé
+ * réapparaissait), et un profil changé ici était remplacé par la copie de
+ * l'instance.
+ */
+const derniersConnus = new Map<Collection, unknown>();
 /** Collections que ce poste vient d'écrire : on ignore l'écho du serveur. */
 const pushing = new Set<Collection>();
 
@@ -185,18 +193,52 @@ type AvecId = { id: unknown; updatedAt?: unknown };
 const aUnId = (o: unknown): o is AvecId => typeof o === "object" && o !== null && "id" in o;
 const quand = (o: AvecId) => (typeof o.updatedAt === "string" ? Date.parse(o.updatedAt) || 0 : 0);
 
-/** Fusion d'une liste locale en attente avec celle de l'instance : rien du poste n'est perdu. */
-function fusionner(local: unknown, distant: unknown): unknown {
+/**
+ * Fusion à trois : `depart` est ce que l'instance avait quand ce poste l'a lu
+ * ou écrit la dernière fois. Ce qui en a disparu ici est une suppression faite
+ * ici, et le reste ; ce qui y manquait et arrive de l'instance est un ajout
+ * d'ailleurs, et entre. Sans état de départ (redémarrage avec des
+ * modifications en attente), la fusion garde tout, comme avant.
+ */
+function fusionner(local: unknown, distant: unknown, depart?: unknown): unknown {
+  // Les profils : un objet, une entrée par personne. Ce qui a changé ici l'emporte, le reste vient de l'instance.
+  if (local && distant && typeof local === "object" && typeof distant === "object" && !Array.isArray(local) && !Array.isArray(distant)) {
+    const base = depart && typeof depart === "object" && !Array.isArray(depart) ? (depart as Record<string, unknown>) : null;
+    const resultat: Record<string, unknown> = { ...(distant as Record<string, unknown>) };
+    for (const [cle, valeur] of Object.entries(local as Record<string, unknown>)) {
+      if (!base || JSON.stringify(base[cle]) !== JSON.stringify(valeur)) resultat[cle] = valeur;
+    }
+    return resultat;
+  }
   if (!Array.isArray(local) || !Array.isArray(distant)) return distant;
-  const resultat = [...distant];
+  const idsDe = (l: unknown) => new Set(Array.isArray(l) ? l.filter(aUnId).map((o) => o.id) : []);
+  const avant = Array.isArray(depart) ? idsDe(depart) : null;
+  const ici = idsDe(local);
+  const resultat = distant.filter((o) => !(avant && aUnId(o) && avant.has(o.id) && !ici.has(o.id)));
   const position = new Map<unknown, number>();
   resultat.forEach((o, i) => {
     if (aUnId(o)) position.set(o.id, i);
   });
+  /*
+   * Un même élément des deux côtés : celui qui a changé depuis le départ
+   * l'emporte (relecture du 27/09/2026). Ranger un Chat dans un projet ou
+   * accepter une invitation ne touche pas `updatedAt` : à dates égales,
+   * l'instance gagnait, et la modification faite ici disparaissait. Changé
+   * des deux côtés, ou sans départ connu : le plus récent.
+   */
+  const departDe = new Map<unknown, string>();
+  if (Array.isArray(depart)) for (const o of depart) if (aUnId(o)) departDe.set(o.id, JSON.stringify(o));
   for (const l of local) {
     if (!aUnId(l)) continue;
     const i = position.get(l.id);
-    if (i === undefined) resultat.push(l);
+    if (i === undefined) {
+      resultat.push(l);
+      continue;
+    }
+    const avantLui = departDe.get(l.id);
+    const changeIci = avantLui !== undefined && JSON.stringify(l) !== avantLui;
+    const changeEnFace = avantLui !== undefined && JSON.stringify(resultat[i]) !== avantLui;
+    if (changeIci && !changeEnFace) resultat[i] = l;
     else if (quand(l) > quand(resultat[i] as AvecId)) resultat[i] = l;
   }
   return resultat;
@@ -226,7 +268,7 @@ async function pull(collection: Collection): Promise<Tirage> {
   // Les conversations et les agents partagés à un groupe se lisent selon les groupes de la personne : on les relit avec.
   if (collection === "sessions" || collection === "agents") await relireMesGroupes();
   const enAttenteIci = enAttente().has(collection);
-  const valeur = enAttenteIci ? fusionner(readLocal(collection), payload.value) : payload.value;
+  const valeur = enAttenteIci ? fusionner(readLocal(collection), payload.value, derniersConnus.get(collection)) : payload.value;
   if (!writeLocal(collection, valeur)) {
     /*
      * Rendue par l'instance, mais ce poste n'a pas pu la garder : il n'en a
@@ -237,6 +279,7 @@ async function pull(collection: Collection): Promise<Tirage> {
     return "echec";
   }
   revisions.set(collection, payload.revision);
+  derniersConnus.set(collection, payload.value);
   grandRelu(collection, Array.isArray(valeur) ? valeur.length : undefined);
   relues.add(collection);
   if (enAttenteIci) aRepousser.add(collection);
@@ -341,6 +384,8 @@ async function pousser(collection: Collection, reprise = false): Promise<boolean
     if (res.ok) {
       const payload = (await res.json()) as { revision: number };
       revisions.set(collection, payload.revision);
+      // L'instance a pris cet envoi (fusionné avec ce que ce poste n'a pas le droit de toucher) : c'est le nouveau départ.
+      derniersConnus.set(collection, value);
     }
     noterEnAttente(collection, !res.ok);
     return res.ok;

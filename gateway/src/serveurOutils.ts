@@ -153,7 +153,8 @@ export async function servirOutils(
       bases ??
       (nom.startsWith("web__") ? await webGarde.callTool(nom, args, courant.id) : await executerOutil(nom, args, { userId: qui, groupes: [] }));
     // Pendant un mail reçu : ce qu'un outil rend (un autre mail, un document) devient ouvrable par web__lire, et rien d'autre.
-    if (traiteUnMailRecu(courant.id)) webGarde.noterVues(courant.id, r.content);
+    // Seulement un résultat réussi, et sans les adresses que la demande contenait déjà.
+    if (traiteUnMailRecu(courant.id) && r.ok) webGarde.noterVues(courant.id, r.content, JSON.stringify(args));
     // Le journal dit combien de passages sont sortis, jamais lesquels ni la question.
     journaliser("outil.appele", qui, {
       outil: nom,

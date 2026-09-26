@@ -89,7 +89,8 @@ export function lireHeure(v: unknown): string | null {
 
 export function lireRythme(v: unknown): Rythme | null {
   const r = (v ?? {}) as { type?: unknown; jour?: unknown };
-  const jour = Math.trunc(Number(r.jour));
+  // Un nombre, ou son écriture : `null`, `""` ou `true` ne valent pas dimanche (Number(null) === 0).
+  const jour = typeof r.jour === "number" ? Math.trunc(r.jour) : typeof r.jour === "string" && /^-?\d+$/.test(r.jour.trim()) ? Number(r.jour) : Number.NaN;
   if (r.type === "jour") return { type: "jour" };
   if (r.type === "jours-ouvres") return { type: "jours-ouvres" };
   if (r.type === "semaine") return Number.isInteger(jour) && jour >= 0 && jour <= 6 ? { type: "semaine", jour } : null;
@@ -148,6 +149,8 @@ async function charger(): Promise<TacheProgrammee[]> {
   try {
     const v = await db().read(COLLECTION);
     taches = Array.isArray(v) ? (v as TacheProgrammee[]) : [];
+    // Relu au démarrage : rien ne tourne encore. Un « en cours » écrit avant un arrêt bloquait la tâche jusqu'à sa prochaine heure.
+    for (const x of taches) delete x.enCours;
     lectureEchouee = false;
   } catch {
     lectureEchouee = true;
@@ -254,33 +257,42 @@ export async function modifier(id: string, brut: Record<string, unknown>, ownerI
   const liste = await charger();
   const x = liste.find((y) => y.id === id && y.ownerId === ownerId);
   if (!x) return { ok: false, statut: 404, message: t("Tâche programmée introuvable.") };
+  /*
+   * Tout est vérifié avant de toucher à la tâche (revue du 27/09/2026) : une
+   * heure refusée après un titre accepté laissait le titre changé en mémoire,
+   * et la prochaine écriture l'enregistrait.
+   */
+  const suite: TacheProgrammee = { ...x };
   if (brut.titre !== undefined) {
     const v = texte(brut.titre, 120);
-    if (v) x.titre = v;
+    if (v) suite.titre = v;
   }
   if (brut.consigne !== undefined) {
     const v = texte(brut.consigne, 4000);
-    if (v) x.consigne = v;
+    if (v) suite.consigne = v;
   }
   if (brut.rythme !== undefined) {
     const r = lireRythme(brut.rythme);
     if (!r) return { ok: false, statut: 400, message: t("Le rythme n'est pas compris.") };
-    x.rythme = r;
+    suite.rythme = r;
   }
   if (brut.heure !== undefined) {
     const h = lireHeure(brut.heure);
     if (!h) return { ok: false, statut: 400, message: t("L'heure n'est pas comprise : écrivez-la HH:MM, par exemple 08:30.") };
-    x.heure = h;
+    suite.heure = h;
   }
-  if (typeof brut.outils === "boolean") x.outils = brut.outils;
+  if (typeof brut.outils === "boolean") suite.outils = brut.outils;
+  if (typeof brut.active === "boolean") suite.active = brut.active;
   if (brut.agentId !== undefined) {
     const agent = await lireAgent(brut.agentId, ownerId);
     if (!agent.ok) return { ok: false, statut: 400, message: AGENT_INCONNU() };
-    if (agent.id) x.agentId = agent.id;
-    else delete x.agentId;
+    if (agent.id) suite.agentId = agent.id;
+    else delete suite.agentId;
   }
-  if (typeof brut.active === "boolean") x.active = brut.active;
-  x.prochaine = prochaineOccurrence(x.rythme, x.heure, new Date()).toISOString();
+  suite.prochaine = prochaineOccurrence(suite.rythme, suite.heure, new Date()).toISOString();
+  // Appliquée d'un coup, sur l'objet en place : une exécution en cours garde la même tâche.
+  for (const k of Object.keys(x) as (keyof TacheProgrammee)[]) if (!(k in suite)) delete x[k];
+  Object.assign(x, suite);
   await ecrire();
   return { ok: true, valeur: x };
 }

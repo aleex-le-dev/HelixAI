@@ -80,8 +80,22 @@ function trouver(nom: string, preferes: string[] = []): string | null {
 const guillemets = (s: string) => `"${s.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
 
 /** Les dossiers d'outils de Homebrew : pas `var/` ni `etc/`, qui gardent les données des services (PostgreSQL…). */
-const OUTILS_HOMEBREW = ["/opt/homebrew", "/usr/local"].flatMap((p) => ["bin", "sbin", "lib", "libexec", "Cellar", "opt", "share", "Frameworks", "include"].map((d) => `${p}/${d}`));
-const SYSTEME = ["/usr", "/bin", "/sbin", "/System", "/Library", "/private/etc", "/private/var/db", "/dev", "/Applications/Xcode.app"];
+/*
+ * Plus, dans `etc/`, les seuls réglages dont les outils ont besoin pour
+ * démarrer (relecture du 27/09/2026) : le node de Homebrew lit `openssl.cnf`,
+ * git son `gitconfig`, et les certificats servent à tout ce qui vérifie une
+ * signature. Rien d'autre de `etc/`.
+ */
+const OUTILS_HOMEBREW = ["/opt/homebrew", "/usr/local"].flatMap((p) => [
+  ...["bin", "sbin", "lib", "libexec", "Cellar", "opt", "share", "Frameworks", "include"].map((d) => `${p}/${d}`),
+  ...["openssl@3", "openssl@1.1", "ca-certificates", "gitconfig"].map((d) => `${p}/etc/${d}`),
+]);
+/*
+ * `/private/var/select/sh` et `developer_dir` : les relais du système
+ * (`/bin/sh`, `/usr/bin/git`, `python3` de Xcode) passent par eux pour
+ * trouver le vrai programme ; sans eux, un `npm test` qui lance `sh` échouait.
+ */
+const SYSTEME = ["/usr", "/bin", "/sbin", "/System", "/Library", "/private/etc", "/private/var/db", "/private/var/select/sh", "/private/var/select/developer_dir", "/dev", "/Applications/Xcode.app"];
 /** Les seuls services du système joignables : l'annuaire des comptes (getpwuid), le journal, les notifications. */
 const SERVICES = [
   "com.apple.system.opendirectoryd.libinfo",
@@ -153,6 +167,18 @@ function copier(dossier: string, copie: string): { lectures: string[] } {
         }
         continue;
       }
+      /*
+       * Un lien qui reste dans le projet est refait dans la copie, vers la même
+       * chose copiée (relecture du 27/09/2026 : sans lui, un projet qui en a
+       * échouait à l'essai). Un lien qui sort du projet reste absent.
+       */
+      if (st.isSymbolicLink()) {
+        try {
+          const reel = realpathSync(s);
+          if (dansLeProjet(reel)) symlinkSync(join(copie, relative(racine, reel)), c);
+        } catch {}
+        continue;
+      }
       if (st.isDirectory()) {
         mkdirSync(c, { recursive: true });
         parcourir(s, c);
@@ -167,7 +193,7 @@ function copier(dossier: string, copie: string): { lectures: string[] } {
 }
 
 /** Ce qu'il y a à essayer dans ce projet, s'il y a des tests. */
-function commandeDEssai(dossier: string): { exe: string; args: string[]; affichee: string; lectures: string[] } | null {
+function commandeDEssai(dossier: string): { exe: string; args: string[]; affichee: string; lectures: string[]; chemins?: string[] } | null {
   const fichiers: string[] = [];
   const parcourir = (d: string, profondeur: number) => {
     let noms: string[] = [];
@@ -197,7 +223,7 @@ function commandeDEssai(dossier: string): { exe: string; args: string[]; affiche
   const scriptTest = paquet?.scripts?.test;
   if (node && scriptTest && !/no test specified/.test(scriptTest)) {
     const npm = trouver("npm");
-    if (npm) return { exe: npm, args: ["test", "--silent"], affichee: "npm test", lectures: [dirname(dirname(node)), dirname(dirname(npm))] };
+    if (npm) return { exe: npm, args: ["test", "--silent"], affichee: "npm test", lectures: [dirname(dirname(node)), dirname(dirname(npm))], chemins: [dirname(node)] };
   }
   const testsJs = fichiers.filter((f) => /(^|\/)(test|tests)\/.*\.(m|c)?js$|\.test\.(m|c)?js$|\.spec\.(m|c)?js$/.test(f));
   if (node && testsJs.length > 0) return { exe: node, args: ["--test", ...testsJs.slice(0, 50)], affichee: "node --test", lectures: [dirname(dirname(node))] };
@@ -238,7 +264,8 @@ export async function essayerTests(dossier: string): Promise<ResultatEssai | { s
     const fichierProfil = join(copie, ".tmp", "cage.sb");
     writeFileSync(fichierProfil, profil(copie, [...lectures, ...commande.lectures]));
     const env: Record<string, string> = {
-      PATH: [...new Set([dirname(commande.exe), "/opt/homebrew/bin", "/usr/local/bin", "/usr/bin", "/bin"])].join(":"),
+      // Le node trouvé en premier : `npm` le relance par `env node`, et ce doit être le même (nvm, Homebrew).
+      PATH: [...new Set([...(commande.chemins ?? []), dirname(commande.exe), "/opt/homebrew/bin", "/usr/local/bin", "/usr/bin", "/bin"])].join(":"),
       HOME: copie,
       TMPDIR: join(copie, ".tmp"),
       LANG: "fr_FR.UTF-8",

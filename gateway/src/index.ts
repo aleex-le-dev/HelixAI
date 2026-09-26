@@ -1680,7 +1680,13 @@ async function handleDataWrite(
    */
   const base = typeof (body as { base?: unknown }).base === "number" ? (body as { base: number }).base : undefined;
   const fusion = await enFileDeCollection(name, async () => {
-    if (base !== undefined && base !== (await db().revision(name))) return null;
+    /*
+     * La version que ce poste a lue : celle que rend la lecture (`revisionVue`),
+     * qui tient compte des groupes pour les Chats. Comparée à la version brute,
+     * elle ne tombait plus jamais juste dès qu'un groupe changeait, et aucun
+     * Chat ne s'enregistrait plus (revue du 27/09/2026).
+     */
+    if (base !== undefined && base !== (await revisionVue(name))) return null;
     const f = fusionner(name, await db().read(name), body.value ?? null, qui);
     // Un collègue peut renvoyer une copie où figure encore un compte supprimé.
     await db().write(name, await sansComptesDisparus(name, f.valeur));
@@ -1689,7 +1695,7 @@ async function handleDataWrite(
   if (!fusion) {
     return send(res, 409, {
       error: { message: t("Cette copie n'est plus à jour : un autre poste a écrit entre-temps. Relisez, puis renvoyez."), code: "revision-depassee" },
-      revision: await db().revision(name),
+      revision: await revisionVue(name),
     });
   }
   // Deux écritures dans la même milliseconde ont la même révision : le relevé des images ne s'y fie pas seul.
@@ -1702,7 +1708,7 @@ async function handleDataWrite(
 
   send(res, 200, {
     collection: name,
-    revision: await db().revision(name),
+    revision: await revisionVue(name),
     refuses: fusion.refuses,
   });
 }
@@ -2279,12 +2285,20 @@ async function handleSessionRevoke(
  */
 async function revisionVue(c: Collection): Promise<number> {
   const r = await db().revision(c);
-  return c === "sessions" ? Math.max(r, await db().revision("groupes")) : r;
+  if (c !== "sessions") return r;
+  // Des groupes illisibles ne bloquent pas les Chats : leur révision n'entre plus en compte, c'est tout.
+  return Math.max(r, await db().revision("groupes").catch(() => 0));
 }
 
+/*
+ * Une collection abîmée est laissée de côté, pas les autres (relecture du
+ * 27/09/2026) : un seul fichier illisible rendait 500 à toute la
+ * synchronisation. Absente de la réponse, elle n'est simplement pas relue, et
+ * rien n'est écrit par-dessus.
+ */
 async function handleDataRevisions(res: http.ServerResponse): Promise<void> {
-  const entries = await Promise.all(COLLECTIONS.map(async (c) => [c, await revisionVue(c)] as const));
-  send(res, 200, { revisions: Object.fromEntries(entries), shared: true });
+  const entries = await Promise.all(COLLECTIONS.map(async (c) => [c, await revisionVue(c).catch(() => null)] as const));
+  send(res, 200, { revisions: Object.fromEntries(entries.filter(([, r]) => r !== null)), shared: true });
 }
 
 /* ------------------------------- routes Code ---------------------------------- */
@@ -4172,12 +4186,31 @@ async function handleFournisseurs(
       cles: await fournisseurs.listerCles(qui.userId),
     });
   }
+  /*
+   * Un moteur de cette machine (boucle locale) : l'administrateur seul (test
+   * d'intrusion du 27/09/2026). Un membre s'en servait pour sonder les ports
+   * de la machine de l'instance et lire ce qu'un service local y répondait.
+   */
+  const boucleLocaleRefusee = async (adresse: unknown) => {
+    let hote = "";
+    try {
+      hote = new URL(String(adresse ?? "")).hostname.toLowerCase();
+    } catch {
+      return false;
+    }
+    if (!["localhost", "127.0.0.1", "::1", "[::1]"].includes(hote) && !hote.startsWith("127.")) return false;
+    return !(await estAdministrateur(qui.userId));
+  };
+  const refusBoucle = () => send(res, 403, { error: { message: t("Seul l'administrateur de l'instance peut brancher un moteur installé sur sa machine.") } });
   if (id === "essayer" && !action && req.method === "POST") {
     const b = await corps();
+    if (await boucleLocaleRefusee(b.adresse)) return refusBoucle();
     return repondre(await fournisseurs.essayerCle(String(b.fournisseur ?? ""), b.adresse, b.cle), (modeles) => ({ modeles }));
   }
   if (!id && req.method === "POST") {
-    const r = await fournisseurs.ajouterCle(await corps(), qui.userId);
+    const b = await corps();
+    if (await boucleLocaleRefusee(b.adresse)) return refusBoucle();
+    const r = await fournisseurs.ajouterCle(b, qui.userId);
     invalidate();
     return repondre(r, (cle) => ({ cle }));
   }
@@ -4809,7 +4842,20 @@ async function handleEmployes(
 const tls = tlsMaterial();
 
 const handler: http.RequestListener = (req, res) => {
-  const url = new URL(req.url ?? "/", `http://${req.headers.host ?? "localhost"}`);
+  /*
+   * Une adresse qu'on ne sait pas lire : 400, et rien d'autre (test d'intrusion
+   * du 27/09/2026). Un en-tête `Host` vide faisait lever `new URL` hors de tout
+   * `try`, et la passerelle entière s'arrêtait, sans jeton ni séance, pour
+   * tous les postes. On ne se sert plus de `Host` pour lire le chemin.
+   */
+  let url: URL;
+  try {
+    url = new URL(req.url ?? "/", "http://localhost");
+  } catch {
+    res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" });
+    res.end(JSON.stringify({ error: { message: "Requête illisible." } }));
+    return;
+  }
   const path = url.pathname.replace(/\/+$/, "") || "/";
 
   // La langue de l'auteur de la requête, lisible partout en dessous (langue.ts).
@@ -5320,6 +5366,19 @@ function arreterProprement(): void {
   if (configEcran().mode === "sandbox") arreterMachineEnPartant();
 }
 
+/*
+ * Une erreur que personne n'a rattrapée ne doit pas arrêter l'instance de
+ * toute une équipe (test d'intrusion du 27/09/2026 : une requête suffisait).
+ * Elle est notée, sans le contenu des requêtes, et le service continue ; le
+ * défaut qui l'a causée reste à corriger à la source.
+ */
+process.on("uncaughtException", (err) => {
+  console.error("[helix] erreur non rattrapée :", err instanceof Error ? `${err.name}: ${err.message}` : String(err));
+});
+process.on("unhandledRejection", (raison) => {
+  console.error("[helix] promesse rejetée sans suite :", raison instanceof Error ? `${raison.name}: ${raison.message}` : String(raison));
+});
+
 for (const signal of ["SIGINT", "SIGTERM"] as const) {
   process.on(signal, () => {
     arreterProprement();
@@ -5369,6 +5428,16 @@ async function preparerMagasin(): Promise<void> {
   await fournisseurs.chargerFournisseurs().catch(() => undefined);
 }
 
+/*
+ * Le port pris (un autre Helix, un serveur de développement) : la passerelle
+ * s'arrête, pour que l'application la relance plus tard. Sans cela, le filet
+ * ci-dessus l'aurait gardée en vie sans rien servir.
+ */
+server.on("error", (err: NodeJS.ErrnoException) => {
+  if (server.listening) return;
+  console.error(`[helix-gateway] écoute impossible sur ${HOST}:${PORT} : ${err.code ?? err.message}`);
+  process.exit(1);
+});
 void preparerMagasin().then(() => server.listen(PORT, HOST, () => {
   const schema = tls ? "https" : "http";
   console.log(`[helix-gateway] écoute sur ${schema}://${HOST}:${PORT}`);
@@ -5513,6 +5582,8 @@ function demarrerTachesProgrammees(url: string): void {
     const decodeur = new TextDecoder();
     let tampon = "";
     let texte = "";
+    // Une erreur du Chat arrive comme un évènement Helix : elle est la raison de l'échec, pas « rien répondu ».
+    let erreurDuChat: string | null = null;
     for (;;) {
       const { done, value } = await lecteur.read();
       if (done) break;
@@ -5525,15 +5596,18 @@ function demarrerTachesProgrammees(url: string): void {
           const charge = ligne.slice(5).trim();
           if (!charge || charge === "[DONE]") continue;
           try {
-            const j = JSON.parse(charge) as { helix?: unknown; choices?: { delta?: { content?: unknown } }[] };
+            const j = JSON.parse(charge) as { helix?: { type?: unknown; message?: unknown }; error?: { message?: unknown }; choices?: { delta?: { content?: unknown } }[] };
             const c = j.choices?.[0]?.delta?.content;
-            if (!j.helix && typeof c === "string") texte += c;
+            if (j.helix?.type === "error" && typeof j.helix.message === "string") erreurDuChat = j.helix.message;
+            else if (typeof j.error?.message === "string") erreurDuChat = j.error.message;
+            else if (!j.helix && typeof c === "string") texte += c;
           } catch {
             /* ligne illisible : ignorée */
           }
         }
       }
     }
+    if (erreurDuChat) throw new Error(erreurDuChat);
     return texte;
   });
 }

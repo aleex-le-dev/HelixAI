@@ -86,9 +86,7 @@ export async function adresseSortanteSure(
     return {
       ok: false,
       statut: 400,
-      message:
-        "Cette adresse désigne une machine du réseau interne. Donnez l'adresse publique du " +
-        "fournisseur, ou celle d'un moteur installé sur cette machine (localhost).",
+      message: t("Cette adresse désigne une machine du réseau interne. Donnez l'adresse publique du fournisseur, ou celle d'un moteur installé sur cette machine (localhost)."),
     };
   }
   return { ok: true, valeur: true };

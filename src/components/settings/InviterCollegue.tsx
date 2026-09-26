@@ -85,7 +85,7 @@ export function InviterCollegue() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === "Enter" && email.trim()) void envoyer();
+                if (e.key === "Enter" && !occupe && email.trim()) void envoyer();
               }}
             />
             <Button

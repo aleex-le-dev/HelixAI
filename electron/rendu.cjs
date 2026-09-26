@@ -189,6 +189,16 @@ async function rendre(fichier, racine) {
     if (!locale && /fonts\.(googleapis|gstatic)\.com/.test(d.url)) return;
     echecs.push(`${locale ? d.url.slice(service.origine.length + 1) : d.url} (${d.error})`);
   });
+  /*
+   * Une réponse en erreur n'est pas une erreur de réseau (relecture du
+   * 27/09/2026) : un `style.css` absent du projet recevait un 404 du service
+   * local, et le rapport n'en disait rien.
+   */
+  ses.webRequest.onCompleted((d) => {
+    if (d.statusCode < 400) return;
+    const locale = service && d.url.startsWith(service.origine + "/");
+    echecs.push(`${locale ? d.url.slice(service.origine.length + 1) : d.url} (${d.statusCode === 404 ? "introuvable" : `erreur ${d.statusCode}`})`);
+  });
   // Un bouton « Exporter » ne doit pas ouvrir de fenêtre d'enregistrement pendant l'essai.
   ses.on("will-download", (_e, item) => item.cancel());
   // Aucune fenêtre ni navigation hors de la page essayée.

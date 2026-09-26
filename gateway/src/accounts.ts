@@ -5,7 +5,7 @@ import { journaliser } from "./audit.ts";
 import { deployment } from "./deployment.ts";
 import { nouveauSecret, nouveauxCodesDeSecours, trouverSecours, verifierCode } from "./totp.ts";
 import { revokeAll } from "./usersession.ts";
-import { t } from "./langue.ts";
+import { t, tf } from "./langue.ts";
 
 /**
  * Comptes, côté instance.
@@ -212,6 +212,8 @@ export function toPublic(account: StoredAccount): PublicAccount {
     anciennesAdresses: _anciennes,
     deuxFacteurs,
     deuxFacteursEnAttente: _attente,
+    // Qui a encore un mot de passe provisoire ne regarde personne : la liste des comptes se lit avant toute connexion.
+    motDePasseProvisoire: _provisoire,
     ...rest
   } = account;
   return { ...rest, hasPassword: Boolean(passwordHash), deuxFacteursActive: Boolean(deuxFacteurs) };
@@ -402,21 +404,21 @@ export function remplacerMotDePasseProvisoire(
 ): Promise<{ ok: true } | { ok: false; reason: string; statut: number }> {
   return enFile(async () => {
     const attente = blocageRestant(accountId);
-    if (attente > 0) return { ok: false, reason: `Trop de tentatives. Réessayez dans ${Math.ceil(attente / 1000)} secondes.`, statut: 429 };
+    if (attente > 0) return { ok: false, reason: tf("Trop de tentatives. Réessayez dans {0} secondes.", String(Math.ceil(attente / 1000))), statut: 429 };
     const accounts = await load();
     const compte = accounts.find((a) => a.id === accountId);
-    if (!compte || !compte.passwordHash || !compte.salt) return { ok: false, reason: "Compte introuvable.", statut: 404 };
-    if (!compte.motDePasseProvisoire) return { ok: false, reason: "Ce compte a déjà son propre mot de passe.", statut: 409 };
+    if (!compte || !compte.passwordHash || !compte.salt) return { ok: false, reason: t("Compte introuvable."), statut: 404 };
+    if (!compte.motDePasseProvisoire) return { ok: false, reason: t("Ce compte a déjà son propre mot de passe."), statut: 409 };
     const attendu = Buffer.from(compte.passwordHash, "hex");
     const donne = Buffer.from(derive(String(provisoire ?? ""), compte.salt), "hex");
     if (typeof provisoire !== "string" || attendu.length !== donne.length || !timingSafeEqual(attendu, donne)) {
       noterEchec(accountId);
       journaliser("connexion.refusee", accountId, { motif: "mot de passe provisoire incorrect" });
-      return { ok: false, reason: "Mot de passe provisoire incorrect.", statut: 401 };
+      return { ok: false, reason: t("Mot de passe provisoire incorrect."), statut: 401 };
     }
     const refus = motDePasseRefuse(nouveau);
     if (refus) return { ok: false, reason: refus, statut: 400 };
-    if (nouveau === provisoire) return { ok: false, reason: "Choisissez un mot de passe différent de celui qu'on vous a donné.", statut: 400 };
+    if (nouveau === provisoire) return { ok: false, reason: t("Choisissez un mot de passe différent de celui qu'on vous a donné."), statut: 400 };
     const salt = randomBytes(16).toString("hex");
     compte.salt = salt;
     compte.passwordHash = derive(nouveau as string, salt);
@@ -498,7 +500,7 @@ export async function verifyAccount(
    */
   if (account.motDePasseProvisoire) {
     echecs.delete(accountId);
-    return { ok: false, reason: "Choisissez votre propre mot de passe : celui-ci a été choisi par la personne qui a créé votre compte.", aChanger: true };
+    return { ok: false, reason: t("Choisissez votre propre mot de passe : celui-ci a été choisi par la personne qui a créé votre compte."), aChanger: true };
   }
 
   /*

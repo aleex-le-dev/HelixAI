@@ -66,7 +66,17 @@ export async function listerGroupes(): Promise<Groupe[]> {
 
 /** Groupes dont une personne est membre : ce qu'on lui a partagé « par groupe », elle le voit. */
 export async function groupesDe(qui: string): Promise<string[]> {
-  return (await charger()).filter((g) => g.membres.includes(qui)).map((g) => g.id);
+  /*
+   * Groupes illisibles : la personne n'est d'aucun groupe le temps que ça dure
+   * (relecture du 27/09/2026). Elle voit moins, jamais plus ; avant, chaque
+   * requête échouait, pour tout le monde.
+   */
+  try {
+    return (await charger()).filter((g) => g.membres.includes(qui)).map((g) => g.id);
+  } catch (err) {
+    console.error(`[helix] groupes illisibles, ignorés pour les droits : ${(err as Error).message}`);
+    return [];
+  }
 }
 
 const texte = (v: unknown, max: number) => (typeof v === "string" ? v.replace(/\s+/g, " ").trim().slice(0, max) : "");

@@ -150,7 +150,7 @@ function CreationCle({ onAnnuler, onCreee }: { onAnnuler: () => void; onCreee: (
           value={motDePasse}
           autoComplete="current-password"
           onChange={(e) => setMotDePasse(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && nom.trim() && motDePasse && void creer()}
+          onKeyDown={(e) => e.key === "Enter" && !occupe && nom.trim() && motDePasse && void creer()}
         />
       </Field>
       <Field label={t("Code de vérification")} hint={t("Seulement si la double authentification est active.")}>

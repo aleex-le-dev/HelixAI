@@ -3085,3 +3085,23 @@ installera la première version signée sans la vérifier.
 | **Photo d'un agent** | Une image intégrée seulement (JPEG, PNG, WebP, moins de 200 Ko), vérifiée par l'instance à chaque envoi : une adresse est retirée (elle aurait pu faire charger une image du dehors par chaque poste qui voit l'agent). L'interface ne l'affiche qu'à la même condition. | 1 contrôle |
 | **Missions et tâches** | Le rythme et l'heure sont relus par l'instance (jour de la semaine 0 à 6, du mois 1 à 28 ou dernier ; heure HH:MM) avant d'écrire une planification. | typecheck |
 
+
+### 29.1 Relecture et test d'intrusion du 27 septembre 2026
+
+Une dernière passe avant les versions Windows et Linux : un agent a relu les
+correctifs du jour pour y chercher des régressions, un autre a attaqué
+l'instance de l'extérieur. Tout est rejoué par `npm run securite`
+(sections 11 ter et 11 quater, 418 contrôles au total, tous réussis le
+27/09/2026).
+
+| Trouvé | Correctif |
+|---|---|
+| **Critique** : un en-tête `Host` vide ou illisible faisait tomber la passerelle (l'adresse de la requête était construite à partir de lui). | L'adresse est lue sans lui (`new URL(req.url, "http://localhost")`), une requête illisible reçoit 400 ; une erreur imprévue est journalisée au lieu d'arrêter le processus. |
+| Un membre branchait un moteur « compatible » à `127.0.0.1:port` et lisait dans la réponse quels ports de la machine de l'instance étaient ouverts. | Essayer ou ajouter un moteur à l'adresse de la machine elle-même (`localhost`, `127.0.0.1`, `::1`) est réservé à l'administrateur (403 sinon). Le réseau interne restait déjà refusé à tous. **Limite dite** : une clé de ce genre ajoutée par un membre avant ce correctif reste utilisable. |
+| Web gardé des employés : l'adresse d'une page, écrite par l'agent lui-même dans sa recherche, revenait dans les résultats et devenait « déjà vue ». | Les adresses présentes dans la demande de l'agent ne comptent jamais comme vues. |
+| Un fichier de séances de connexion abîmé fermait la porte à tout le monde, pour de bon. | Il est rangé à côté (`authSessions.json.abimee-…`), gardé tel quel, et chacun se reconnecte. |
+| Un fichier de groupes abîmé faisait échouer chaque requête, et un seul fichier illisible rendait 500 à toute la synchronisation. | Les groupes illisibles comptent pour « aucun groupe » (on voit moins, jamais plus) ; une collection illisible est laissée hors des révisions, et rien n'est écrit par-dessus. |
+| La cage des essais de Helix Code empêchait `sh`, git et le node de Homebrew de démarrer, et perdait les liens symboliques internes au projet. | Lecture permise des seuls réglages qui le demandent (`openssl`, certificats, `gitconfig`, `/private/var/select`) ; un lien qui reste dans le projet est refait dans la copie, un lien qui en sort reste absent. |
+| Une invitation partie par mail était affichée comme un échec (le code n'est plus rendu dans ce cas). | Le succès se lit à l'adresse rendue. |
+| Helix Code redemandait l'accord pour chaque fichier d'un même dossier. | Les modifications de fichiers de l'agent de code sont approuvées par dossier, comme celles du serveur de fichiers ; ses commandes restent approuvées mot pour mot. |
+| Deux postes : un Chat rangé dans un projet, ou une invitation acceptée, pouvait revenir en arrière à la fusion (même `updatedAt` des deux côtés). | Fusion à trois au niveau de chaque élément : celui qui a changé depuis le départ l'emporte. |

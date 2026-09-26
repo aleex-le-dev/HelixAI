@@ -185,7 +185,7 @@ export function decrireRythme(m: Pick<Mission, "rythme" | "heure" | "filtre" | "
   if (m.rythme === "a-chaque-mail") {
     const conditions = [
       m.filtre?.de ? tf("de « {0} »", m.filtre.de) : "",
-      m.filtre?.objet ? `dont l'objet contient « ${m.filtre.objet} »` : "",
+      m.filtre?.objet ? tf("dont l'objet contient « {0} »", m.filtre.objet) : "",
     ].filter(Boolean);
     return conditions.length ? tf("À chaque mail reçu {0}", conditions.join(" et ")) : LIBELLE_RYTHME[m.rythme];
   }

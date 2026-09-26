@@ -157,6 +157,12 @@ export interface Store {
   /** Horodatage de dernière écriture, pour la détection de changement. */
   revision(collection: StoredCollection): Promise<number>;
   describe(): string;
+  /**
+   * Range une collection abîmée à côté (sans l'effacer) pour repartir d'une
+   * collection vide. Rend le nom de la copie gardée, ou null si ce stockage ne
+   * sait pas le faire.
+   */
+  mettreDeCote?(collection: StoredCollection): Promise<string | null>;
 }
 
 /* ------------------------------ fichier JSON ------------------------------- */
@@ -255,6 +261,14 @@ class JsonStore implements Store {
 
   describe(): string {
     return `fichiers JSON (${this.dir})${chiffrementActif() ? ", chiffrés" : ", EN CLAIR"}`;
+  }
+
+  async mettreDeCote(collection: StoredCollection): Promise<string | null> {
+    const file = this.path(collection);
+    if (!existsSync(file)) return null;
+    const garde = `${file}.abimee-${new Date().toISOString().replace(/[:.]/g, "-")}`;
+    renameSync(file, garde);
+    return garde;
   }
 }
 

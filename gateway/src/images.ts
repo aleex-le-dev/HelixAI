@@ -953,7 +953,9 @@ export async function etatVideos(): Promise<Omit<EtatImages, "actif" | "modeles"
   let raison: string;
   if (!moteur) raison = t("Aucun moteur vidéo n'est publié pour ce système (Mac à puce Apple sous macOS 15 ou plus, Windows ou Linux 64 bits).");
   else if (moteur.lent) raison = t("Sans carte graphique reconnue, la vidéo n'est pas proposée : le processeur y passerait des heures.");
-  else if (!possible) raison = tf("{0} Go de mémoire : il en faut 16 au moins pour créer des vidéos sur cette machine.", hw.totalMemoryGb);
+  // Sur un PC, c'est la mémoire de la carte graphique qui compte, pas la mémoire vive (revue du 27/09/2026).
+  else if (!possible && hw.appleSilicon) raison = tf("{0} Go de mémoire : il en faut 16 au moins pour créer des vidéos sur cette machine.", hw.totalMemoryGb);
+  else if (!possible) raison = tf("La carte graphique a {0} Go de mémoire : il en faut 8 au moins pour créer des vidéos.", hw.gpuVramGb ?? 0);
   else raison = t("Les vidéos sont créées sur cette machine, par un modèle ouvert : rien ne part sur internet. Comptez plusieurs minutes pour deux secondes de vidéo.");
   return { possible, raison, pret: moteurPret && Boolean(actif), actif: actif?.m.id ?? null, modeles, lent: false, installation: installationVideo };
 }

@@ -125,7 +125,8 @@ export async function inviter(
     const corps = (await res.json().catch(() => ({}))) as Partial<InvitationCreee> & {
       error?: { message?: string };
     };
-    if (!res.ok || !corps.code) {
+    // Le code n'est rendu que si le mail n'a pas pu partir : c'est l'adresse qui dit que l'invitation existe.
+    if (!res.ok || !corps.email) {
       return { ok: false, message: corps.error?.message ?? "Invitation impossible." };
     }
     return { ok: true, valeur: corps as InvitationCreee };

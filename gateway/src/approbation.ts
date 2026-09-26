@@ -672,7 +672,14 @@ export function fermerDemande(id: string): void {
  * créée sans carte après un fichier accordé) ; un appel d'un connecteur
  * approuvé couvrait aussi tous les suivants, quel que soit leur contenu.
  */
-const porteeParDossier = (outil: string) => !outil.includes("__") || outil.startsWith(`${SERVEUR_FICHIERS}__`) || outil.startsWith("bureau__");
+/*
+ * Les modifications de fichiers de Helix Code aussi (relecture du 27/09/2026) :
+ * sans elles, l'agent de code redemandait pour chaque fichier d'un même
+ * dossier. Ses commandes et ses adresses, elles, gardent leur portée mot pour
+ * mot (plus bas, avant ce test).
+ */
+const porteeParDossier = (outil: string) =>
+  !outil.includes("__") || outil.startsWith(`${SERVEUR_FICHIERS}__`) || outil.startsWith("bureau__") || outil.startsWith("code__");
 
 /** Tous les chemins désignés (un `read_multiple_files` en porte plusieurs). */
 function chemins(args: Record<string, unknown>): string[] {

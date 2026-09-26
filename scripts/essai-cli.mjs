@@ -220,7 +220,8 @@ try {
   }
   {
     const port = await portLibre();
-    const r = cli(["modeles"], { env: { HELIX_ADRESSE: `http://127.0.0.1:${port}` } });
+    // Un jeton donné : celui du poste n'est lu que pour le port que l'application a ouvert (instance-port).
+    const r = cli(["modeles"], { env: { HELIX_ADRESSE: `http://127.0.0.1:${port}`, HELIX_JETON: "jeton-d-essai" } });
     verifier("instance injoignable : le dit, et dit d'ouvrir l'application", r.code === 1 && /ne répond pas/.test(r.erreur) && /Ouvrez l'application/.test(r.erreur), r.erreur);
   }
   {

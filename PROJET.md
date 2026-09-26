@@ -2520,6 +2520,17 @@ ne restent ici que les points ouverts.*
 6. **Unsloth sur NVIDIA** (§ 3.12) : accepté et branché le 25/09/2026, jamais essayé
    (pas de carte NVIDIA ici). À vérifier sur une vraie machine : que pip résout la pile
    avec les deux roues, que `@@MOTEUR@@unsloth` sort bien, et le gain de vitesse réel.
+7. **Sauvegarder la clé d'éditeur** (27/09/2026, SIGNATURE.md § 4) :
+   `~/.helix-editeur/cle-privee-mises-a-jour.pem`, à copier hors du Mac (gestionnaire de
+   mots de passe, clé USB rangée). Jamais dans le dépôt.
+8. **Essais qui restent à faire sur de vraies machines** (ajoutés les 26 et 27/09/2026) :
+   une mise à jour d'un clic signée entre deux versions sur un poste rattaché ; un employé
+   OpenClaw qui traite un vrai mail (profil restreint, web gardé) et une mission du mois ;
+   une tâche programmée partie seule à l'heure dite ; la dictée au micro dans
+   l'application ; la vidéo Wan 2.2 sur une machine de 32 Go, et la vidéo sur Windows et
+   Linux.
+9. **Passer ce Mac sur Qwen3.5 9B**, le modèle qu'Helix y installerait aujourd'hui (il
+   tourne encore sur Qwen3 8B, installé avant la règle) : 6 Go, à télécharger sur accord.
 
 **Fait le 26/09/2026 : une réponse du Chat continue quand on quitte son Chat.**
 Signalé par Medhi : ouvrir un autre Chat ou en commencer un nouveau arrêtait la

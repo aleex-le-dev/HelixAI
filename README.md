@@ -56,7 +56,7 @@ for you on macOS.
   OpenAI gpt-oss, Z.ai GLM, IBM Granite, Ai2 OLMo, Meta and DeepSeek. Cloud models work with
   your own API key.
   Attachments, dictation (Whisper, on the machine), image generation (Z-Image Turbo,
-  FLUX.2 klein).
+  FLUX.2 klein) and short **videos** (Wan 2.1 and 2.2), also on the machine.
 - **Knowledge bases (RAG)**: gather documents, the instance indexes them on the machine,
   and answers cite the passages they use. Everyone only finds the documents they are
   allowed to see.
@@ -64,10 +64,15 @@ for you on macOS.
   desktop (LibreOffice, browser) to produce Word, Excel, PowerPoint and PDF documents.
 - **Helix Code**: a coding agent on your project folder (built on OpenCode), also in
   **VS Code** (extension included) and in the terminal with the **`helix` command line**.
-- **Connectors**: mail, calendar, Google Drive, Slack, Notion and MCP servers, behind an
-  **approval gate**: nothing that changes something happens without your go-ahead.
+- **Connectors**: mail, Google Calendar (read and write), Google Drive, Slack, Notion and MCP
+  servers, behind an **approval gate**: nothing that changes something happens without your
+  go-ahead.
+- **Scheduled tasks**: an instruction and a rhythm (every day, Monday to Friday, a day of the
+  week or of the month), run with your tools, even with the window closed, by the agent you
+  choose; created in Tasks or by asking in a Chat.
 - **Always-on agents**: scheduled missions, replies to incoming mail and messaging apps,
-  with their own knowledge bases.
+  with their own knowledge bases and photo. A received email is handled with reduced rights:
+  on the web, the agent only opens addresses it has already seen.
 - **Train a model**: teach a small open model your company's facts from examples,
   compare it with the original, then install it in LM Studio (MLX on Apple Silicon;
   Unsloth on NVIDIA cards, not yet tried on real hardware).
@@ -77,7 +82,8 @@ for you on macOS.
 - **Meetings**: record or import, transcription and minutes on the machine, meeting bot.
 - **Import** your history from ChatGPT, Claude, Claude Code, Codex and Cursor.
 - **Teams**: accounts, groups, sharing, two-factor authentication, audit log, GDPR export,
-  data encrypted at rest.
+  data encrypted at rest. One-click updates from the instance, installed only if they carry
+  the publisher's signature.
 - **White label**: the product name, logo and colours come from one configuration file.
 
 <table>

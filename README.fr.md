@@ -55,7 +55,7 @@ installation peut installer pour vous sur macOS.
   station de travail, et propose les autres qu'elle peut faire tourner. Le catalogue couvre
   Qwen, Mistral (Magistral, Ministral), OpenAI gpt-oss, Z.ai GLM, IBM Granite, Ai2 OLMo, Meta et
   DeepSeek. Les modèles cloud marchent avec votre propre clé. Pièces jointes, dictée (Whisper, sur la machine), création d'images
-  (Z-Image Turbo, FLUX.2 klein).
+  (Z-Image Turbo, FLUX.2 klein) et de courtes **vidéos** (Wan 2.1 et 2.2), elles aussi sur la machine.
 - **Bases de connaissances (RAG)** : rassemblez des documents, l'instance les indexe sur
   la machine, et les réponses citent les passages utilisés. Chacun n'y retrouve que les
   documents qu'il a le droit de voir.
@@ -63,10 +63,15 @@ installation peut installer pour vous sur macOS.
   virtuel (LibreOffice, navigateur) pour produire des documents Word, Excel, PowerPoint et PDF.
 - **Helix Code** : un agent de code sur le dossier de votre projet (bâti sur OpenCode),
   aussi dans **VS Code** (extension fournie) et dans le terminal avec la **commande `helix`**.
-- **Connecteurs** : courrier, agenda, Google Drive, Slack, Notion et serveurs MCP, derrière
-  une **barrière d'approbation** : rien qui modifie quelque chose ne se fait sans votre accord.
-- **Agents toujours actifs** : missions à heure fixe, réponses aux mails reçus et aux
-  messageries, avec leurs propres bases de connaissances.
+- **Connecteurs** : courrier, Google Agenda (lecture et écriture), Google Drive, Slack, Notion
+  et serveurs MCP, derrière une **barrière d'approbation** : rien qui modifie quelque chose ne
+  se fait sans votre accord.
+- **Tâches programmées** : une consigne et un rythme (chaque jour, du lundi au vendredi, un jour
+  de la semaine ou du mois), exécutée avec vos outils, même fenêtre fermée, par l'agent de votre
+  choix ; à créer dans Tâches ou en le demandant dans un Chat.
+- **Agents toujours actifs** : missions programmées, réponses aux mails reçus et aux
+  messageries, avec leurs propres bases de connaissances et leur photo. Un mail reçu est traité
+  avec des droits réduits : sur le web, l'agent n'ouvre que des adresses déjà vues.
 - **Entraîner un modèle** : apprenez à un petit modèle ouvert les faits de votre société à
   partir d'exemples, comparez-le à l'original, puis installez-le dans LM Studio (MLX sur
   puce Apple ; Unsloth sur carte NVIDIA, pas encore essayé sur une vraie machine).
@@ -77,7 +82,8 @@ installation peut installer pour vous sur macOS.
 - **Réunions** : enregistrement ou import, transcription et compte rendu sur la machine, bot de réunion.
 - **Import** de votre historique depuis ChatGPT, Claude, Claude Code, Codex et Cursor.
 - **Équipes** : comptes, groupes, partage, double authentification, journal d'audit,
-  export RGPD, données chiffrées sur le disque.
+  export RGPD, données chiffrées sur le disque. Mises à jour d'un clic depuis l'instance,
+  installées seulement si elles portent la signature de l'éditeur.
 - **Marque blanche** : nom du produit, logo et couleurs viennent d'un seul fichier de configuration.
 
 <table>

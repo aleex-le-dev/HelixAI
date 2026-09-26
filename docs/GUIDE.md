@@ -324,9 +324,25 @@ l'agent dispose aussi de la **bibliothèque** et des **réunions** transcrites
 
 ### Approbation des actions
 
-**Cowork → « Approuver pour moi ».** Trois niveaux : tout approuver, demander
-avant de modifier (**défaut**), demander pour tout. La barrière est appliquée
-par la passerelle. Détail dans [`SECURITE.md`](../SECURITE.md), § 6.2.
+**Barre du bas de la zone de saisie (Cowork et Code).** Trois niveaux : tout approuver,
+demander avant de modifier (**défaut**), demander pour tout. La barrière est appliquée
+par la passerelle, et le niveau vaut pour toute l'instance : seul son administrateur le
+change. Toujours confirmés, à tout niveau : envoyer un mail (sauf envoi sans confirmation
+activé par l'administrateur), supprimer un événement, programmer une tâche. Détail dans
+[`SECURITE.md`](../SECURITE.md), § 6.2 et § 28.
+
+**Tâches programmées** (`gateway/src/tachesProgrammees.ts`) : routes
+`/helix/taches-programmees` (séance exigée, chacun les siennes) ; exécution par la route
+du Chat sur la boucle locale, avec une clé tirée au sort à chaque démarrage.
+
+**Vidéos** (`gateway/src/images.ts`) : routes `/helix/videos` (état, `installer`,
+`choisir`, `desinstaller`, `creer`) ; suivi et fichier par `/helix/images/travail/<id>` et
+`/helix/images/fichier/<id>`, servi en `video/webm`.
+
+**Mises à jour signées** : `npm run cle:editeur` une fois (clé dans `~/.helix-editeur/`,
+hors du dépôt), puis chaque `npm run package` signe l'application ; sans la clé, la
+fabrication s'arrête, sauf `HELIX_SANS_CLE_EDITEUR=1`. Détail dans
+[`SIGNATURE.md`](../SIGNATURE.md), § 4.
 
 ### Atelier bureautique de Cowork
 

@@ -3073,7 +3073,15 @@ installera la première version signée sans la vérifier.
   des installations d'avant le chiffrement). Les connecteurs sont maintenant
   revérifiés au démarrage ; les autres collections, non.
 - **« DNS rebinding »** vers un modèle ajouté par clé : voir `sortieReseau.ts`.
-- **Même personne, deux postes** : un envoi du second, moins de quatre secondes
-  après une création sur le premier, peut encore l'effacer (suppression par
-  absence) ; il faudrait une révision attendue (`If-Match`).
+- ~~**Même personne, deux postes**~~ : fermé le 27/09/2026, § 29.
+
+## 29. Les ajouts du 27 septembre 2026
+
+| Surface | Garde | Vérifié |
+|---|---|---|
+| **Instructions masquées** d'un agent partagé | L'instance ne les envoie plus aux postes des autres (`filtrer`, authz.ts : `instructions` vide, `instructionsMasquees`) ; le poste d'un employé lié non plus. Leur Chat envoie une marque et l'identifiant de l'agent ; l'instance la remplace au moment d'appeler le modèle, seulement pour qui voit l'agent (`instructionsAgents.ts`), et seulement dans les messages système ; un agent inconnu ou invisible fait disparaître la marque sans rien mettre. **Limite** : le modèle les lit ; il a consigne de ne pas les répéter, rien de plus. | `npm run securite`, 3 contrôles |
+| **Deux postes** de la même personne | Chaque envoi porte `base`, la révision relue ; différente de celle de l'instance, 409 sans rien écrire, dans la file de la collection. Le poste relit, fusionne ce qu'il avait en attente, renvoie une fois. Sans `base` (poste plus ancien), l'ancien comportement. | 2 contrôles |
+| **Vidéos** | Mêmes droits que les images : séance exigée, une vidéo se voit par son auteur et par qui voit le Chat où elle a été créée ; servie en `video/webm`, pas de cache pour un collègue. Fichiers téléchargés à une révision fixe, empreinte SHA-256 vérifiée (le décodeur allégé TAEHV, pris sur GitHub : empreinte Git vérifiée égale à celle que publie GitHub, puis SHA-256 relevée). Une création lourde à la fois, 45 minutes au plus, jamais sur le processeur seul. Les modèles de LM Studio ne sont mis de côté que s'ils sont au repos et que la mémoire manque. | 5 routes sans séance → 401 ; création essayée sur un Mac de 16 Go |
+| **Photo d'un agent** | Une image intégrée seulement (JPEG, PNG, WebP, moins de 200 Ko), vérifiée par l'instance à chaque envoi : une adresse est retirée (elle aurait pu faire charger une image du dehors par chaque poste qui voit l'agent). L'interface ne l'affiche qu'à la même condition. | 1 contrôle |
+| **Missions et tâches** | Le rythme et l'heure sont relus par l'instance (jour de la semaine 0 à 6, du mois 1 à 28 ou dernier ; heure HH:MM) avant d'écrire une planification. | typecheck |
 

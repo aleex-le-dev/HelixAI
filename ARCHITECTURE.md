@@ -1132,6 +1132,13 @@ Ligne de commande (ADR-052) : `cli/helix.mjs` et ses textes `cli/textes.mjs`, es
 `src/components/chat/ConnaissancesChip.tsx` ; `src/lib/entrainement.ts`,
 `src/components/settings/EntrainerModele.tsx`.
 
+Ajouts des 26 et 27/09/2026 (ADR-056 à 061) : `gateway/src/tachesProgrammees.ts`,
+`webGarde.ts`, `sortieReseau.ts`, `instructionsAgents.ts`, `essaisCode.ts` (tests de Code
+dans une cage) ; `electron/signatureEditeur.cjs`, `electron/rendu.cjs` (banc d'essai des
+pages de Code, servi par un serveur éphémère) ; `scripts/signature/signer-mise-a-jour.cjs`
+et `cle-editeur.mjs` ; interface : `src/components/taches/TachesProgrammees.tsx`,
+`src/lib/tachesProgrammees.ts`, `src/components/ui/AvatarAgent.tsx`, `src/lib/photo.ts`.
+
 Plus `gateway/tools/motdepasse.ts`, l'outil local de récupération (mot de passe,
 second facteur), qui n'est appelé par aucune route. Compilé à côté de la
 passerelle (`dist-gateway/motdepasse.cjs`), il est livré dans l'application.
@@ -1890,6 +1897,42 @@ Pour Code, la passerelle sert elle-même ses connecteurs à OpenCode, par MCP, s
 **Décision.** `gateway/src/clesApi.ts` : clé `hlx_` + 32 octets, montrée une fois, gardée en SHA-256 salé (sel par clé) dans la collection interne `clesApi` avec nom, fin, dates, expiration (30, 90, 365 jours ou jamais), portée `modeles` ; 20 par personne. Routes de gestion `/helix/cles-api` (liste avec les adresses réellement servies, création, `/<id>` renommage, `/<id>/revoquer`), sous séance (`routeClesApi` dans `exigeSeance`). Dans `traiter` (index.ts), **avant** le jeton d'instance : une clé mal placée (paramètre d'adresse, en-tête de séance) → 401 ; `Authorization: Bearer hlx_…` hors de `ROUTES_CLE` (`GET /v1/models`, `POST /v1/chat/completions`, liste fermée) → 403 ; sinon `traiterParCle` vérifie la clé (401), le débit (`debit.verifierCleApi`, 60 par minute, 429), le compte (`profilDe`, 401), puis pose l'identité dans `identites` et la clé dans `parCleApi` : `demandeur()` rend la titulaire sans autre lecture. `handleChat` refuse `tools: true` (403), retire un `tools` booléen, et passe `{ parCleApi, nonFlux }` à `handleChatRequest` : bases de connaissances consultées aussi pour un client ordinaire, réponse recomposée en `chat.completion` (`ReponseEntiere`, chat.ts) quand `stream` n'est pas `true`. Une ligne `api.appel` au journal par appel.
 
 **Conséquences.** Une clé fuitée n'ouvre ni les données, ni les fichiers, ni les réglages, ni l'exécution d'outils, et se freine seule. Le registre est relu à chaque changement de révision du magasin (une lecture de révision par appel, pas un déchiffrement). Le relais `/v1/chat/completions` ne change pas pour les autres clients : il rend toujours du flux, même sans `stream: true` (dette connue, laissée pour ne pas toucher OpenCode ni les employés). `/v1/embeddings` n'est pas servi. Vérifié : batterie à 221 contrôles, essai de bout en bout avec qwen3-8b (PROJET.md § 3.13). Pas essayé : le paquet `openai` lui-même, un appel depuis une autre machine.
+
+### ADR-056 : Tâches programmées, par la route du Chat ✅ implémenté (26/09/2026)
+
+**Contexte.** Medhi : « programmer des tâches comme le fait Claude », chaque jour, semaine ou mois, avec ses outils. Les missions des employés OpenClaw le faisaient déjà, au prix d'un agent à déployer.
+
+**Décision.** `gateway/src/tachesProgrammees.ts` : une consigne, un rythme (jour, jours ouvrés, semaine et son jour, mois et son jour ou le dernier), une heure, un agent facultatif (ses instructions, son modèle, ses bases, relus à chaque exécution parmi ceux que la propriétaire voit). Une boucle de 30 s ; la prochaine fois calculée avant d'exécuter (une machine éteinte ne rattrape qu'une fois). L'exécution passe par `/v1/chat/completions`, appelée par la passerelle elle-même sur la boucle locale avec une clé tirée au sort à chaque démarrage (`CLE_TACHES`, `x-helix-tache`) : barrière, journal et outils sont ceux d'un Chat. Outil du Chat `taches__programmer`, toujours confirmé. Écran : Tâches, rubrique « Programmées ».
+
+**Conséquences.** Aucune seconde boucle d'agent à maintenir. Sans personne devant l'écran, une carte expire et l'action est refusée, sauf au niveau « Tout approuver ».
+
+### ADR-057 : Vidéos par le moteur des images ✅ implémenté (27/09/2026)
+
+**Décision.** `gateway/src/images.ts`, mode `vid_gen` de stable-diffusion.cpp (même version épinglée), qui écrit du WebM lu tel quel par l'interface. Modèles Wan (Apache 2.0) choisis selon la mémoire : Wan 2.1 1,3 milliard avec le décodeur allégé TAEHV (MIT) dès 16 Go, Wan 2.2 TI2V 5 milliards dès 32 Go ; jamais sur le processeur seul. Même registre, mêmes droits par Chat, même effacement et export que les images ; une seule création lourde à la fois ; plafond de 45 minutes.
+
+**Conséquences.** Mesuré sur un Mac M4 de 16 Go : 10 min 54 pour deux secondes en 624 × 352. Le décodeur complet ne finissait pas en 45 minutes sur cette machine.
+
+### ADR-058 : Mises à jour d'un clic signées par l'éditeur ✅ implémenté (27/09/2026)
+
+**Contexte.** L'instance donnait l'annonce, l'archive et son empreinte : une instance piratée pouvait faire installer n'importe quelle application.
+
+**Décision.** Ed25519 par `node:crypto` (`electron/signatureEditeur.cjs`). À la fabrication (étape `afterSign`, `scripts/signature/signer-mise-a-jour.cjs`), la clé privée de l'éditeur, hors du dépôt, signe le relevé complet de l'application (chaque fichier et son empreinte, droits, liens, identifiant, version) ; signature et clé publique vont dans `Contents/Resources`. Le poste vérifie avec la clé de l'application **qu'il fait tourner**. Une application signée par Apple n'est pas touchée.
+
+**Conséquences.** Perdre la clé privée coupe les mises à jour d'un clic des postes livrés. Un poste d'avant cette décision installe la première version signée sans la vérifier.
+
+### ADR-059 : Réglages d'instance à l'administrateur, comptes au mot de passe provisoire ✅ implémenté (26 et 27/09/2026)
+
+**Décision.** Le niveau d'approbation, la boîte mail commune (serveur d'envoi compris) et l'envoi sans confirmation se règlent par l'administrateur seul (`reserveeALAdministration`, index.ts). Créer directement le compte de quelqu'un : l'administrateur seul, avec un mot de passe provisoire qui n'ouvre que le choix d'un mot de passe à soi (`/helix/auth/mot-de-passe-provisoire`) ; les autres invitent.
+
+### ADR-060 : Les mails reçus des employés, avec des droits réduits ✅ implémenté, pas essayé avec le vrai OpenClaw (27/09/2026)
+
+**Décision.** Un second profil OpenClaw par employé (`nomCourrier`) pour les missions déclenchées par un mail : lecture, mémoire et outils Helix seulement ; ni navigateur, ni messagerie, ni commande, ni écriture. Le web passe par `gateway/src/webGarde.ts` : recherche DuckDuckGo, et lecture d'une page seulement si son adresse a déjà été vue pendant ce mail ; jamais la boucle locale ni le réseau interne (`sortieReseau.ts`). Le mail entre des bornes tirées au sort. Si le profil ne se prépare pas, le mail n'est pas traité.
+
+### ADR-061 : Instructions masquées ajoutées par l'instance, écritures avec version de base ✅ implémenté (27/09/2026)
+
+**Décision.** Un agent partagé aux instructions masquées arrive sur les autres postes sans elles (`filtrer`, authz.ts) ; leur Chat envoie une marque et l'identifiant de l'agent, et l'instance la remplace au moment d'appeler le modèle (`instructionsAgents.ts`). Chaque envoi d'une collection porte la version sur laquelle il s'appuie (`base`) : si l'instance a changé, 409, le poste relit, fusionne ce qu'il avait en attente et renvoie (`sync.ts`).
+
+**Conséquences.** Le modèle lit toujours les instructions masquées (limite dite à l'écran). Un poste d'une version antérieure, sans `base`, garde l'ancien comportement.
 
 ## 7. Roadmap
 

@@ -101,6 +101,11 @@ Ce qui reste fictif sur cet écran :
 plus utilisée : `models` dans `src/data/mock/models.ts` est du code mort. Le
 sélecteur affiche les modèles réellement servis par la passerelle.
 
+Ajouté le 27/09/2026 : **« Créer une vidéo »** dans le même menu, avec la même pastille
+(« Vidéo · modèle × », paysage ou portrait) : le modèle selon la machine, la taille à
+télécharger, la vidéo lue dans le Chat avec « Télécharger ». Mesuré sur un Mac de 16 Go :
+environ 11 minutes pour deux secondes.
+
 Ajouté le 24/09/2026 : le **« + »** du composeur ouvre un menu (« Ajouter des
 photos et fichiers », « Créer une image ») ; « Créer une image » pose une
 pastille **« Image · modèle × »** dont le menu règle le format (carré,
@@ -135,16 +140,13 @@ exposés), connecteurs (les serveurs réellement lancés) ; carte **Préparer
 Cowork** (`PreparerCowork`), qui diagnostique l'atelier bureautique, annonce ce
 qui sera installé, puis installe et vérifie.
 
-Ce qui ne fonctionne pas :
-
-- ❌ le popover **« Approuver pour moi »** (`ApprovalSelector`,
-  `src/components/chat/CoworkSelectors.tsx`). Les trois niveaux « Demander une
-  approbation / Approuver pour moi / Accès complet » sont un affichage sans
-  état : aucun `onClick`, la deuxième option est cochée en dur. **Un agent écrit
-  et supprime aujourd'hui sans rien demander.** Seul le périmètre du dossier le
-  borne. C'est le point le plus trompeur de l'interface ;
-- ❌ le bouton **« Créer une compétence »** du panneau droit : `disabled`, à
-  50 % d'opacité.
+**Niveau d'approbation** (`ApprovalSelector`, `src/components/chat/CoworkSelectors.tsx`) :
+depuis le 26/09/2026 dans la barre du bas de la zone de saisie, à côté du « + », comme sur
+Claude, et aussi dans Code. Trois niveaux réels, tenus par l'instance : « Tout approuver »
+(avec le risque dit : un texte piégé lu par l'agent peut le faire agir sans carte),
+« Demander avant de modifier », « Demander pour tout ». Le menu s'ouvre vers le bas.
+Seul l'administrateur change le niveau ; pour les autres, les options sont grisées et le
+menu le dit. (La note d'avant, « affichage sans état », décrivait une version ancienne.)
 
 ### `/code` Code (BETA)
 
@@ -160,7 +162,8 @@ projet (titre = début de la première demande, date ou heure), avec « Nouvelle
 session » au lieu de « Nouveau Chat » et « Rechercher une session... » ; une croix
 au survol retire une session de la liste (sa conversation reste chez OpenCode). Les
 Chats ne montrent rien de Code, et inversement. L'adresse dit ce qui est affiché :
-`/code` est l'accueil (sélecteur de dossier, saisie, « Sessions récentes »), `/code?s=<id>`
+`/code` est l'accueil (sélecteur de dossier, saisie ; « Sessions récentes » retiré le
+27/09/2026, les sessions restent dans la barre latérale), `/code?s=<id>`
 une session, dont l'historique est relu chez OpenCode ; ouvrir Code ne reprend plus
 la dernière session. Revenir à l'accueil n'arrête pas une session qui travaille :
 rouverte, elle reprend son flux là où l'instance l'a vu, dans la même bulle. Vu dans
@@ -217,6 +220,19 @@ Ce qui fonctionne : création d'un agent (nom, description, prompt système,
 visibilité personnelle ou organisation), persistance, onglets Tous /
 Organisation / Personnels, et surtout **usage réel** : un agent créé ici est
 sélectionnable dans le Chat et exécutable sur une tâche.
+
+**Photo et instructions masquées** (27/09/2026) : un clic sur l'avatar d'une carte
+(son propriétaire) choisit une photo, recadrée en 256 pixels, retirée par la petite croix ;
+elle apparaît aussi dans le choix de l'agent du Chat et sur la fiche de l'employé. Pour un
+agent partagé, « Masquer ses instructions » (à la création, ou sur la carte) : les autres
+reçoivent l'agent sans elles, et l'instance les ajoute au Chat ; la carte le dit
+(« instructions masquées »).
+
+**Missions** (27/09/2026) : l'onglet Missions de la fiche d'un employé les ajoute et les
+modifie directement (« Ajouter une mission », « Modifier les missions »), avec le même
+choix que les tâches programmées : chaque jour, du lundi au vendredi, chaque semaine et son
+jour, chaque mois (1 à 28, ou le dernier jour), chaque heure, et l'heure à la minute.
+« À chaque mail reçu » n'est plus proposé ; une mission qui l'a le garde.
 
 **Depuis 0.14.0, plus d'onglet Employés** : chaque agent créé est mis en service tout
 seul, et sa carte ouvre la fiche décrite ci-dessous (état « En service », ou l'étape de
@@ -325,8 +341,16 @@ appliqués aux trois vues. Le calendrier place les tâches à leur date, en sema
 ou en mois. Vue, rubrique, filtre et tri sont retenus par personne sur le poste.
 Une tâche rangée dans un projet reste visible de sa seule propriétaire.
 
-⚠ Non traités : la planification, les rappels d'échéance, l'assignation à un
-humain (le champ « Assigné à » existe, il n'ouvre aucun flux).
+**Programmées** (26/09/2026, `src/components/taches/TachesProgrammees.tsx`) : rubrique
+de gauche « Programmées ». « Nouvelle tâche programmée » : titre, consigne, rythme (chaque
+jour, du lundi au vendredi, chaque semaine et son jour, chaque mois et son jour ou le
+dernier), heure, « Fait par » (l'agent du Chat ou l'un de ses agents), « Avec mes outils ».
+Chaque tâche : rythme et prochaine fois, « Lancer maintenant », « Mettre en pause »,
+« Supprimer », changement d'agent, dernier compte rendu dépliable et « Ouvrir dans un
+Chat ». Les listes sont celles de l'application : elles défilent d'elles-mêmes.
+
+⚠ Non traités : les rappels d'échéance, l'assignation à un humain (le champ « Assigné
+à » existe, il n'ouvre aucun flux).
 
 ---
 

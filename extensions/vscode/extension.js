@@ -27,16 +27,45 @@ const crypto = require("node:crypto");
 /** Taille maximale du fichier ouvert joint à une question, en caractères. */
 const FICHIER_MAX = 30_000;
 
+const BOUCLE = ["127.0.0.1", "localhost", "::1", "[::1]"];
+
+/**
+ * Réglages de l'extension, avec les règles de la ligne de commande
+ * (`adresseInstance`, cli/helix.mjs).
+ *
+ * Revue de sécurité du 26/09/2026 : `helix.adresse` et `helix.jeton` étaient
+ * réglables par le `.vscode/settings.json` d'un dépôt ouvert. Un dépôt piégé
+ * désignait son serveur, et recevait le jeton du poste, le fichier ouvert, la
+ * séance, puis le mot de passe à la connexion. Désormais :
+ *  - ces deux réglages sont de portée « machine » (package.json) : un espace de
+ *    travail ne peut plus les changer ;
+ *  - http n'est accepté que sur la boucle locale ; ailleurs, https ;
+ *  - le jeton du poste n'est lu que pour une adresse locale, et seulement pour
+ *    le port que l'application a réellement ouvert (`instance-port`).
+ */
 function reglages() {
   const c = vscode.workspace.getConfiguration("helix");
   const adresse = String(c.get("adresse") || "http://127.0.0.1:8787").replace(/\/+$/, "");
+  let url;
+  try {
+    url = new URL(adresse);
+  } catch {
+    throw new Error(`Adresse d'instance illisible : « ${adresse} ».`);
+  }
+  const locale = BOUCLE.includes(url.hostname);
+  if (url.protocol === "http:" && !locale) {
+    throw new Error(`Adresse refusée : « ${adresse} ». Hors de cet ordinateur, l'instance se joint en https.`);
+  }
+  if (url.protocol !== "http:" && url.protocol !== "https:") throw new Error(`Adresse refusée : « ${adresse} ».`);
   let jeton = String(c.get("jeton") || "");
-  if (!jeton) {
+  if (!jeton && locale) {
     try {
       const dossier = process.env.HELIX_DATA_DIR || path.join(os.homedir(), ".helix", "data");
-      jeton = fs.readFileSync(path.join(dossier, "instance-token"), "utf8").trim();
+      const ouvert = fs.readFileSync(path.join(dossier, "instance-port"), "utf8").trim();
+      const vise = url.port || (url.protocol === "https:" ? "443" : "80");
+      if (ouvert === vise) jeton = fs.readFileSync(path.join(dossier, "instance-token"), "utf8").trim();
     } catch {
-      /* pas d'application Helix sur ce poste : il faudra régler le jeton */
+      /* pas d'application Helix sur ce poste, ou d'une version qui ne note pas son port : il faudra régler le jeton */
     }
   }
   return { adresse, jeton, modele: String(c.get("modele") || "") };
@@ -58,6 +87,8 @@ async function demander(messages, surMorceau, signal) {
   let res;
   try {
     res = await fetch(`${adresse}/v1/chat/completions`, {
+      // Jamais de redirection suivie : l'en-tête d'autorisation partirait ailleurs.
+      redirect: "error",
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${jeton}` },
       body: JSON.stringify({ messages, stream: true, ...(modele ? { model: modele } : {}) }),
@@ -106,11 +137,16 @@ async function demander(messages, surMorceau, signal) {
  * et la séance est gardée dans le coffre de VS Code (SecretStorage), jamais
  * dans les réglages en clair.
  */
-const CLE_SEANCE = "helix.seance";
+/*
+ * Une séance par adresse : celle d'une instance n'est jamais présentée à une
+ * autre (revue du 26/09/2026, une clé unique « helix.seance » la donnait à
+ * toute adresse réglée ensuite).
+ */
+const cleSeance = () => `helix.seance:${reglages().adresse}`;
 
 /** @param {vscode.ExtensionContext} contexte */
 async function seance(contexte) {
-  return (await contexte.secrets.get(CLE_SEANCE)) || "";
+  return (await contexte.secrets.get(cleSeance())) || "";
 }
 
 /**
@@ -123,6 +159,8 @@ async function appel(chemin, options = {}) {
   const { seance: s, ...reste } = options;
   return fetch(`${adresse}${chemin}`, {
     ...reste,
+    // Jamais de redirection suivie : `fetch` renverrait `X-Helix-Session` à l'adresse désignée (vérifié sur Node 24).
+    redirect: "error",
     headers: {
       "Content-Type": "application/json",
       ...(jeton ? { Authorization: `Bearer ${jeton}` } : {}),
@@ -161,7 +199,7 @@ async function seConnecter(contexte) {
   if (!r.ok || !jetonSeance) {
     return void vscode.window.showErrorMessage(corps?.error?.message || "Connexion refusée.");
   }
-  await contexte.secrets.store(CLE_SEANCE, jetonSeance);
+  await contexte.secrets.store(cleSeance(), jetonSeance);
   vscode.window.showInformationMessage(`Connecté à Helix : ${choix.label}.`);
 }
 
@@ -236,7 +274,7 @@ async function demanderAuCode(contexte, etat, texte, surEvenement, signal) {
   if (!etat.session) {
     const r = await appel("/helix/code/session", { method: "POST", seance: s, body: JSON.stringify({ dossier }) });
     const corps = await r.json().catch(() => ({}));
-    if (r.status === 401) await contexte.secrets.delete(CLE_SEANCE);
+    if (r.status === 401) await contexte.secrets.delete(cleSeance());
     if (!r.ok) throw new Error(corps?.error?.message || `Session refusée (${r.status}).`);
     etat.session = corps?.data?.id || corps?.id;
   }
@@ -531,7 +569,7 @@ function activate(contexte) {
     vscode.commands.registerCommand("helix.nouveau", () => vue.nouveau()),
     vscode.commands.registerCommand("helix.seConnecter", () => seConnecter(contexte)),
     vscode.commands.registerCommand("helix.seDeconnecter", async () => {
-      await contexte.secrets.delete(CLE_SEANCE);
+      await contexte.secrets.delete(cleSeance());
       vscode.window.showInformationMessage("Déconnecté de Helix.");
     }),
   );

@@ -9,8 +9,10 @@ Le Chat de votre instance Helix dans VS Code : vos modèles (locaux d'abord), vo
 
 ## Réglages
 
-- `helix.adresse` : par défaut `http://127.0.0.1:8787`, l'application Helix de cet ordinateur.
-- `helix.jeton` : vide, il est lu dans `~/.helix/data/instance-token`. Pour une instance d'entreprise, celui que vous donne l'administrateur.
+- `helix.adresse` : par défaut `http://127.0.0.1:8787`, l'application Helix de cet ordinateur. Hors de cet ordinateur, en `https` seulement.
+- `helix.jeton` : vide, il est lu dans `~/.helix/data/instance-token`, et seulement pour le port que l'application a ouvert. Pour une instance d'entreprise, celui que vous donne l'administrateur.
+
+Ces deux réglages sont ceux de la machine : le `.vscode/settings.json` d'un dépôt ne peut pas les changer, et l'extension ne s'active que dans un espace de travail de confiance. La séance est gardée par adresse d'instance.
 - `helix.modele` : vide, Helix choisit (mode Auto).
 
 Licence AGPL-3.0, comme Helix.

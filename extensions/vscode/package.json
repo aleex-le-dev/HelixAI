@@ -2,7 +2,7 @@
   "name": "helix-ai",
   "displayName": "Helix AI",
   "description": "Le Chat de votre instance Helix dans VS Code : vos modèles, sur votre machine ou celle de votre entreprise.",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "publisher": "helix-agence",
   "license": "AGPL-3.0-only",
   "repository": {
@@ -79,12 +79,14 @@
         "helix.adresse": {
           "type": "string",
           "default": "http://127.0.0.1:8787",
-          "description": "Adresse de l'instance Helix. Par défaut, celle de l'application Helix de cet ordinateur."
+          "description": "Adresse de l'instance Helix. Par défaut, celle de l'application Helix de cet ordinateur. Hors de cet ordinateur, en https. Réglable seulement pour la machine, jamais par un espace de travail.",
+          "scope": "machine"
         },
         "helix.jeton": {
           "type": "string",
           "default": "",
-          "description": "Jeton d'instance. Vide : lu dans ~/.helix/data/instance-token, pour l'instance de cet ordinateur."
+          "description": "Jeton d'instance. Vide : lu dans ~/.helix/data/instance-token, pour l'instance de cet ordinateur.",
+          "scope": "machine"
         },
         "helix.modele": {
           "type": "string",
@@ -92,6 +94,12 @@
           "description": "Modèle à utiliser (identifiant Helix). Vide : Helix choisit, comme en mode Auto."
         }
       }
+    }
+  },
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": false,
+      "description": "L'extension envoie le fichier ouvert et la sélection à l'instance Helix : elle ne s'active que dans un espace de confiance."
     }
   }
 }

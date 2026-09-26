@@ -148,8 +148,10 @@ function scriptPassage(nom) {
     const boutons = [...document.querySelectorAll('button, [role="button"]')];
     const libelle = (b) => ((b.innerText || "") + " " + (b.getAttribute("aria-label") || "")).replace(/\\s+/g, " ").trim();
     const bouton = (re) => boutons.find((b) => re.test(libelle(b)) && !b.disabled && b.offsetParent !== null);
-    if (/vous avez quitté|l'appel est terminé|la réunion est terminée|vous avez été (exclu|retiré)|you left the (meeting|call)|you've been removed|the (call|meeting) (has )?ended|return to home screen|revenir à l'écran d'accueil/i.test(texte)) return { phase: "fin" };
-    if (/a refusé votre demande|denied your request|vous ne pouvez pas participer|you can't join this|impossible de rejoindre|this meeting has been locked|réunion est verrouillée/i.test(texte)) return { phase: "refus" };
+    const extrait = texte.replace(/\s+/g, " ").trim().slice(0, 300);
+    // Le refus d'abord : sa page montre aussi « Revenir à l'écran d'accueil », qui passait pour une fin de réunion.
+    if (/a refusé votre demande|denied your request|vous ne pouvez pas (participer|rejoindre)|you can't join|you cannot join|impossible de rejoindre|this meeting has been locked|réunion est verrouillée|n'avez pas été autorisé|not allowed to join/i.test(texte)) return { phase: "refus", extrait };
+    if (/vous avez quitté|l'appel est terminé|la réunion est terminée|vous avez été (exclu|retiré)|you left the (meeting|call)|you've been removed|the (call|meeting) (has )?ended|return to home screen|revenir à l'écran d'accueil/i.test(texte)) return { phase: "fin", extrait };
     const quitter = boutons.find((b) => /^(quitter l'appel|leave call)$/i.test((b.getAttribute("aria-label") || "").trim()));
     if (quitter) {
       let participants = null;
@@ -160,20 +162,26 @@ function scriptPassage(nom) {
       return { phase: "appel", participants };
     }
     if (/veuillez patienter|patientez|quelqu'un vous|vous rejoindrez|asking to be let in|waiting for someone|someone in the call to let you in|wait until a meeting host|demande de participation/i.test(texte)) return { phase: "attente" };
+    /*
+     * Le script ne clique plus lui-même : il rend le centre de l'élément, et le
+     * processus principal y envoie un vrai clic (sendInputEvent). Mesuré le
+     * 26/09/2026 sur une vraie réunion : le bouton « Participer » cliqué par
+     * script restait sans effet, et la personne devait cliquer à sa place.
+     */
+    const centre = (el) => { const r = el.getBoundingClientRect(); return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) }; };
+    // Une bulle d'avertissement (« Aucun micro détecté ») posée sur la page : on la ferme, elle peut masquer le bouton.
+    const seul = (b) => [b.innerText || "", b.getAttribute("aria-label") || ""].map((x) => x.replace(/\s+/g, " ").trim());
+    const fermer = boutons.find((b) => b.offsetParent !== null && b.closest('[role="dialog"], [role="alertdialog"]') && seul(b).some((x) => /^(fermer|close|ok|j'ai compris|got it|ignorer|dismiss)$/i.test(x)));
+    if (fermer) return { phase: "preparation", clic: centre(fermer), extrait };
     const sans = bouton(/continuer sans (micro|microphone)|continue without (microphone|mic)/i);
-    if (sans) { sans.click(); return { phase: "preparation" }; }
+    if (sans) return { phase: "preparation", clic: centre(sans), extrait };
     const champ = [...document.querySelectorAll("input")].find((i) => /nom|name/i.test((i.getAttribute("aria-label") || "") + " " + (i.placeholder || "")) && i.offsetParent !== null);
-    if (champ && champ.value !== ${JSON.stringify(nom)}) {
-      const pose = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set;
-      champ.focus();
-      pose.call(champ, ${JSON.stringify(nom)});
-      champ.dispatchEvent(new Event("input", { bubbles: true }));
-      return { phase: "nom" };
-    }
-    const entrer = bouton(/^(demander à participer|participer|rejoindre maintenant|rejoindre|ask to join|join now|join)$/i);
-    if (entrer) { entrer.click(); return { phase: "demande" }; }
-    if (/connectez-vous|sign in to|se connecter pour|utilisez un compte|you need to sign in/i.test(texte) && !champ) return { phase: "connexion-requise" };
-    return { phase: "chargement" };
+    if (champ && champ.value.trim() !== ${JSON.stringify(nom)}) return { phase: "nom", saisie: centre(champ), extrait };
+    // Le libellé peut être « Participer », ou le texte suivi de son aria-label identique : on compare les deux séparément.
+    const entrer = boutons.find((b) => !b.disabled && b.offsetParent !== null && [b.innerText || "", b.getAttribute("aria-label") || ""].some((x) => /^(demander à participer|participer|rejoindre maintenant|rejoindre|ask to join|join now|join)$/i.test(x.replace(/\s+/g, " ").trim())));
+    if (entrer) return { phase: "demande", clic: centre(entrer), extrait };
+    if (/connectez-vous|sign in to|se connecter pour|utilisez un compte|you need to sign in/i.test(texte) && !champ) return { phase: "connexion-requise", extrait };
+    return { phase: "chargement", extrait };
   })()`;
 }
 
@@ -182,6 +190,36 @@ const SCRIPT_QUITTER = `(() => {
   if (b) b.click();
   return Boolean(b);
 })()`;
+
+/* ---- Vraies entrées et diagnostic ----------------------------------------- */
+
+/** Un clic de souris au point donné (coordonnées de la page), comme un humain. */
+async function vraiClic(fenetre, { x, y }) {
+  if (!fenetre || fenetre.isDestroyed() || !Number.isFinite(x) || !Number.isFinite(y)) return;
+  const wc = fenetre.webContents;
+  wc.sendInputEvent({ type: "mouseMove", x, y });
+  wc.sendInputEvent({ type: "mouseDown", x, y, button: "left", clickCount: 1 });
+  await new Promise((r) => setTimeout(r, 60));
+  wc.sendInputEvent({ type: "mouseUp", x, y, button: "left", clickCount: 1 });
+}
+
+/*
+ * Ce que le bot lit à chaque passage, dans un fichier temporaire de la machine
+ * (jamais envoyé nulle part) : phase et début du texte de la page d'accueil de
+ * la réunion. Il sert à comprendre un blocage sans rejouer la réunion ; il est
+ * écrasé à chaque bot, et ne contient rien une fois l'enregistrement commencé.
+ */
+function diagnostic(bot, lu) {
+  try {
+    const ligne = `${new Date().toISOString()} ${lu?.phase ?? "?"} ${lu?.clic ? `clic(${lu.clic.x},${lu.clic.y}) ` : ""}${lu?.saisie ? "saisie " : ""}${bot.debutEnregistrement ? "" : (lu?.extrait ?? "")}\n`;
+    if (!bot.diagOuvert) {
+      fs.writeFileSync(path.join(os.tmpdir(), "helix-bot-diagnostic.txt"), ligne, { mode: 0o600 });
+      bot.diagOuvert = true;
+    } else fs.appendFileSync(path.join(os.tmpdir(), "helix-bot-diagnostic.txt"), ligne);
+  } catch {
+    /* sans diagnostic, le bot fonctionne pareil */
+  }
+}
 
 /* ---- Cycle de vie d'un bot ------------------------------------------------ */
 
@@ -265,9 +303,28 @@ async function passage(bot) {
   }
   const maintenant = Date.now();
   const phase = lu && lu.phase;
-  if (phase === "fin") return arreterEnregistrement(bot);
+  diagnostic(bot, lu);
+  if (lu && lu.clic && !bot.debutEnregistrement) {
+    // Un vrai clic, pas un .click() de script : Meet ignore ces derniers.
+    await vraiClic(bot.fenetre, lu.clic);
+    bot.dernierClic = maintenant;
+  }
+  if (lu && lu.saisie && !bot.debutEnregistrement) {
+    await vraiClic(bot.fenetre, lu.saisie);
+    const wc = bot.fenetre.webContents;
+    // Tout sélectionner, effacer, puis écrire le nom comme au clavier.
+    wc.sendInputEvent({ type: "keyDown", keyCode: "a", modifiers: [process.platform === "darwin" ? "meta" : "control"] });
+    wc.sendInputEvent({ type: "keyUp", keyCode: "a", modifiers: [process.platform === "darwin" ? "meta" : "control"] });
+    wc.sendInputEvent({ type: "keyDown", keyCode: "Backspace" });
+    wc.sendInputEvent({ type: "keyUp", keyCode: "Backspace" });
+    await wc.insertText(bot.nom);
+  }
+  if (phase === "fin") {
+    if (!bot.debutEnregistrement) bot.erreurAttendue = `La page de la réunion s'est fermée avant l'entrée du bot. Elle disait : « ${String(lu.extrait ?? "").slice(0, 200)} »`;
+    return arreterEnregistrement(bot);
+  }
   if (phase === "refus") {
-    bot.erreurAttendue = "La demande du bot a été refusée, ou la réunion n'accepte pas d'invités.";
+    bot.erreurAttendue = `Google Meet n'a pas laissé entrer le bot. La page disait : « ${String(lu.extrait ?? "").slice(0, 200)} »`;
     return arreterEnregistrement(bot);
   }
   if (phase === "connexion-requise") {

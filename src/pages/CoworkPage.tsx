@@ -415,6 +415,12 @@ export function CoworkPage() {
       onEffortChange={(e) =>
         update({ preferredEffort: e as NiveauRaisonnement })
       }
+      /*
+       * Le niveau d'approbation dans la barre du bas, à côté du « + », comme
+       * le sélecteur de permissions de Claude (demandé par Medhi le
+       * 26/09/2026) : c'est là qu'on le cherche au moment d'envoyer.
+       */
+      accessoire={<ApprovalSelector />}
       contextBar={
         <>
           <DossierTravailChip
@@ -433,7 +439,6 @@ export function CoworkPage() {
               })
             }
           />
-          <ApprovalSelector />
           <ScreenAccessChip modeleVoit={modeleVoit} />
           <ConnaissancesChip choisies={bases} onChange={setBases} side={chat.messages.length > 0 ? "top" : "bottom"} />
         </>

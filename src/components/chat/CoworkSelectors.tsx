@@ -73,7 +73,7 @@ const NIVEAUX: {
     valeur: "tout",
     titre: t("Tout approuver"),
     resume: t("Sans approbation"),
-    description: t("L'agent agit sans jamais vous demander."),
+    description: t("L'agent agit sans vous demander, sauf pour ce qui se confirme toujours (supprimer un événement, par exemple)."),
     icone: <CircleAlert size={17} strokeWidth={1.75} className="text-warning" />,
   },
   {
@@ -121,7 +121,7 @@ export function ApprovalSelector() {
       )}
     >
       <p className="px-2.5 pb-1 pt-1 text-sm font-semibold text-foreground">
-        {t("Ce que Cowork peut faire sans vous")}
+        {t("Ce que l'agent peut faire sans vous")}
       </p>
       {NIVEAUX.map((option) => (
         <OptionRow

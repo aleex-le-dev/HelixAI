@@ -70,6 +70,8 @@ export const COLLECTIONS_INTERNES = [
    */
   "clientGoogle",
   "agendaGoogle",
+  // Tâches programmées (tachesProgrammees.ts) : exécutées par l'instance, jamais recopiées sur les postes.
+  "tachesProgrammees",
   "connecteurs",
   /*
    * Autorisations OAuth des services distants (oauthMcp.ts) : jetons d'accès

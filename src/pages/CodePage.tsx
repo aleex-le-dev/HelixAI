@@ -9,6 +9,7 @@ import { IconButton } from "@/components/ui/IconButton";
 import { SuiviCodePanel } from "@/components/code/SuiviCode";
 import { Composer } from "@/components/chat/Composer";
 import { DossierTravailChip } from "@/components/chat/DossierTravailChip";
+import { ApprovalSelector } from "@/components/chat/CoworkSelectors";
 import { MessageList } from "@/components/chat/MessageList";
 import { InfoBox } from "@/components/ui/InfoBox";
 import { useCode } from "@/hooks/useCode";
@@ -108,6 +109,12 @@ export function CodePage() {
       onEffortChange={(e) =>
         update({ preferredEffort: e as NiveauRaisonnement })
       }
+      /*
+       * Les demandes d'OpenCode passent par la même barrière que Cowork
+       * (permissionsCode.ts) : le même niveau, choisi ici aussi, décide ce qui
+       * arrive en carte (écrire, lancer une commande, aller sur le réseau).
+       */
+      accessoire={<ApprovalSelector />}
       contextBar={
         <DossierTravailChip
           dossier={dossierAffiche}

@@ -17,6 +17,7 @@ import { groupesDe } from "./groupes.ts";
 import * as courrier from "./courrier.ts";
 import * as controleWeb from "./controleWeb.ts";
 import * as agenda from "./agenda.ts";
+import * as tachesProgrammees from "./tachesProgrammees.ts";
 import * as drive from "./drive.ts";
 import * as slack from "./slack.ts";
 import { journaliser } from "./audit.ts";
@@ -868,6 +869,8 @@ export async function handleChatRequest(
 
   // La bibliothèque de l'équipe et les réunions transcrites : ce que la personne y voit, en lecture.
   const outilsBibliotheque = qui ? [...bibliotheque.toolsForModel(), ...reunions.toolsForModel()] : [];
+  // Programmer une tâche (tachesProgrammees.ts) : pour une personne identifiée, jamais pour une tâche programmée elle-même.
+  const outilsTaches = qui && !req.headers["x-helix-tache"] ? tachesProgrammees.toolsForModel() : [];
 
   const useTools =
     body.tools === true &&
@@ -878,7 +881,8 @@ export async function handleChatRequest(
       outilsAgenda.length > 0 ||
       outilsDrive.length > 0 ||
       outilsSlack.length > 0 ||
-      outilsBibliotheque.length > 0);
+      outilsBibliotheque.length > 0 ||
+      outilsTaches.length > 0);
   // Fichiers, écran, bureautique, courrier et agenda arrivent dans la même
   // liste : l'agent enchaîne les cinq dans une seule demande, sans que
   // l'utilisateur ait à changer de surface.
@@ -894,6 +898,7 @@ export async function handleChatRequest(
         ...outilsDrive,
         ...outilsSlack,
         ...outilsBibliotheque,
+        ...outilsTaches,
       ]
     : undefined;
 

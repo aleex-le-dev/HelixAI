@@ -34,6 +34,7 @@ import {
   TriangleAlert,
   Link2,
   Hourglass,
+  CalendarClock,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { IconButton } from "@/components/ui/IconButton";
@@ -68,6 +69,7 @@ import { useFormats } from "@/lib/formats";
 import { features } from "@/config/branding";
 import { libelleOutil } from "@/lib/libellesOutils";
 import { t, tf } from "@/lib/i18n";
+import { TachesProgrammees } from "@/components/taches/TachesProgrammees";
 
 /* ========================================================================== */
 /* Vues de gauche                                                              */
@@ -108,6 +110,8 @@ const RUBRIQUES: { id: RubriqueFixe; label: string; icon: typeof Inbox }[] = [
 ];
 
 const PREFIXE_PROJET = "projet:";
+/** La rubrique des tâches programmées (TachesProgrammees.tsx) : ni des cartes, ni un projet. */
+const RUBRIQUE_PROGRAMMEES = "programmees";
 
 interface Contexte {
   moi: string;
@@ -247,6 +251,7 @@ function lirePreferences(userId: string): Preferences {
       rubrique:
         typeof brut.rubrique === "string" &&
         (RUBRIQUES.some((r) => r.id === brut.rubrique) ||
+          brut.rubrique === RUBRIQUE_PROGRAMMEES ||
           (brut.rubrique as string).startsWith(PREFIXE_PROJET))
           ? (brut.rubrique as string)
           : PREFERENCES_DEFAUT.rubrique,
@@ -715,6 +720,15 @@ function ProjectsPanel({
             </button>
           );
         })}
+        <button
+          type="button"
+          aria-current={rubrique === RUBRIQUE_PROGRAMMEES ? "page" : undefined}
+          onClick={() => onRubrique(RUBRIQUE_PROGRAMMEES)}
+          className={entree(rubrique === RUBRIQUE_PROGRAMMEES)}
+        >
+          <CalendarClock size={16} strokeWidth={1.75} />
+          <span className="min-w-0 flex-1 truncate text-left">{t("Programmées")}</span>
+        </button>
       </nav>
 
       {features.projets && (
@@ -1466,6 +1480,21 @@ export function TachesPage() {
     { value: SANS_PROJET, label: t("Sans projet") },
     ...projects.map((p) => ({ value: p.id, label: p.name })),
   ];
+
+  if (rubrique === RUBRIQUE_PROGRAMMEES) {
+    return (
+      <div className="flex h-full min-w-0">
+        <ProjectsPanel
+          rubrique={rubrique}
+          onRubrique={(id) => regler({ rubrique: id })}
+          projets={projects}
+          compteurs={compteurs}
+          onNouveauProjet={() => setProjetModal(true)}
+        />
+        <TachesProgrammees />
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-full min-w-0">

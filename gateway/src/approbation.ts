@@ -203,6 +203,9 @@ export function modifie(outil: string): boolean {
    * reconnue modifie, comme pour le courrier.
    */
   if (outil.startsWith("agenda__")) return !AGENDA_LECTURE.has(outil);
+  // Programmer une tâche la fait tourner seule ensuite : elle se confirme ; lister ne touche à rien.
+  if (outil === "taches__lister") return false;
+  if (outil.startsWith("taches__")) return true;
   /*
    * Google Drive et Slack sont en lecture seule (drive.ts, slack.ts). Ils sont
    * reconnus par leurs noms exacts, pas par leur préfixe : un serveur MCP ajouté
@@ -340,6 +343,14 @@ export function resumerOutil(outil: string, args: Record<string, unknown>): stri
     return "utiliser votre agenda";
   }
 
+  if (outil === "taches__lister") return "consulter vos tâches programmées";
+  if (outil === "taches__programmer") {
+    const titre = typeof args.titre === "string" && args.titre.trim() ? ` « ${args.titre.trim().slice(0, 80)} »` : "";
+    const rythme = ({ "chaque-jour": "chaque jour", "jours-ouvres": "du lundi au vendredi", "chaque-semaine": "chaque semaine", "chaque-mois": "chaque mois" } as Record<string, string>)[String(args.rythme)] ?? "régulièrement";
+    const heure = typeof args.heure === "string" ? ` à ${args.heure.slice(0, 5)}` : "";
+    const consigne = typeof args.consigne === "string" && args.consigne.trim() ? ` : « ${args.consigne.trim().slice(0, 200)} »` : "";
+    return `programmer la tâche${titre}, ${rythme}${heure}, exécutée seule avec vos outils${consigne}`;
+  }
   if (outil === "controle__site_web") return `contrôler le code web du dossier ${texteOu(args.dossier, "de travail")}`;
   if (outil === "bibliotheque__chercher") return "chercher des documents dans la bibliothèque de l'équipe";
   if (outil === "bibliotheque__lire") return "lire un document de la bibliothèque de l'équipe";

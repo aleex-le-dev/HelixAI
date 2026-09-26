@@ -66,9 +66,10 @@ export function Popover({
    * s'ouvre du côté qui en a le plus quand le côté demandé en manque, et ne
    * dépasse jamais la fenêtre : au-delà, c'est lui qui défile, pas la page.
    */
-  const [placement, setPlacement] = useState<{ cote: "bottom" | "top"; hauteur: number }>({
+  const [placement, setPlacement] = useState<{ cote: "bottom" | "top"; hauteur: number; alignement: Align }>({
     cote: side,
     hauteur: 480,
+    alignement: align,
   });
 
   useLayoutEffect(() => {
@@ -83,12 +84,23 @@ export function Popover({
       let cote = side;
       if (side === "bottom" && dessous < SOUHAITE && dessus > dessous) cote = "top";
       if (side === "top" && dessus < SOUHAITE && dessous > dessus) cote = "bottom";
-      setPlacement({ cote, hauteur: Math.max(160, cote === "bottom" ? dessous : dessus) });
+      /*
+       * Même chose en largeur (26/09/2026) : le tri des tâches, aligné à
+       * droite de son bouton, passait sous le panneau de gauche quand le
+       * bouton revenait à la ligne en début de rangée. Le panneau s'aligne
+       * alors de l'autre côté, s'il y tient mieux.
+       */
+      const panneau = rootRef.current?.querySelector<HTMLElement>('[role="menu"]');
+      const large = width ?? panneau?.offsetWidth ?? 0;
+      let alignement = align;
+      if (align === "end" && cadre.right - large < marge && window.innerWidth - cadre.left > cadre.right) alignement = "start";
+      if (align === "start" && cadre.left + large > window.innerWidth - marge && cadre.right > window.innerWidth - cadre.left) alignement = "end";
+      setPlacement({ cote, hauteur: Math.max(160, cote === "bottom" ? dessous : dessus), alignement });
     };
     mesurer();
     window.addEventListener("resize", mesurer);
     return () => window.removeEventListener("resize", mesurer);
-  }, [open, side]);
+  }, [open, side, align, width]);
 
   const setOpen = (next: boolean) => {
     if (!isControlled) setUncontrolled(next);
@@ -138,7 +150,7 @@ export function Popover({
               ? "popover-center"
               : "animate-[popover_120ms_ease-out]",
             placement.cote === "bottom" ? "top-full mt-2" : "bottom-full mb-2",
-            alignClass[align],
+            alignClass[placement.alignement],
             panelClassName,
           )}
         >

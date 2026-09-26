@@ -2641,6 +2641,26 @@ encore essayé : une écriture réelle. Revue des connecteurs (SECURITE.md § 27
 épinglées, scripts d'installation coupés, sept paquets abandonnés retirés ou remplacés,
 17 services en ligne et 13 serveurs locaux démarrés et vérifiés sans compte.
 
+**Fait le 26/09/2026 : les tâches programmées.** Demandé par Medhi, « comme le fait
+Claude » : une consigne, un rythme (chaque jour, du lundi au vendredi, chaque semaine un
+jour choisi, chaque mois un jour ou le dernier), une heure, et l'instance l'exécute avec les
+outils de la personne, fenêtre fermée ou non (`gateway/src/tachesProgrammees.ts`, écran
+Tâches, rubrique « Programmées », `src/components/taches/TachesProgrammees.tsx`). Elles se
+créent là, ou depuis un Chat (outil `taches__programmer`, qui passe par la carte d'accord).
+L'exécution passe par la route du Chat, appelée par la passerelle elle-même sur la boucle
+locale avec une clé tirée au sort à chaque démarrage : la barrière d'approbation, le
+journal et les outils sont ceux d'un Chat ordinaire, au nom de la propriétaire. Chacune ne
+voit et ne touche que les siennes ; les vingt derniers comptes rendus sont gardés et
+s'ouvrent dans un Chat. Vérifié par `npm run securite` (section 3 ter). **Pas encore
+essayé** : une exécution à l'heure dite sur l'application installée.
+
+**Fait le 26/09/2026 : le niveau d'approbation dans la barre du bas.** Demandé par Medhi :
+le sélecteur (« Sans approbation », etc.) quitte la rangée de puces de Cowork pour la barre
+du bas, à côté du « + », comme sur Claude, et il est aussi dans Code, dont les demandes
+d'OpenCode passent par la même barrière (`permissionsCode.ts`). Le libellé de « Tout
+approuver » ne dit plus « sans jamais vous demander » : ce qui se confirme toujours
+(supprimer un événement) se confirme aussi à ce niveau.
+
 **Fait le 26/09/2026 : mises à jour d'un clic, sans signature ni serveur.** Décidé par
 Medhi : pas de mise à jour automatique, mais une fenêtre « Nouvelle version » avec
 « Installer maintenant » (`src/components/layout/FenetreMiseAJour.tsx`). La source est

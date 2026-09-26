@@ -415,6 +415,42 @@ console.log("\n3 bis. Application Google et Google Agenda : le secret ne ressort
   verifier("application Google : l'administrateur la retire", efface.status === 200, efface.status);
 }
 
+console.log("\n3 ter. Tâches programmées : chacune ne voit que les siennes, l'en-tête interne ne s'imite pas");
+{
+  const sansSeanceT = await appel("/helix/taches-programmees", { headers: avecJeton });
+  verifier("tâches programmées : sans séance → 401", sansSeanceT.status === 401, sansSeanceT.status);
+  const poster = (chemin, corps, entetes) => appel(chemin, { method: "POST", headers: { ...entetes, "Content-Type": "application/json" }, body: JSON.stringify(corps ?? {}) });
+  const cree = await poster("/helix/taches-programmees", { titre: "Revue", consigne: "Résume mes mails.", rythme: { type: "jour" }, heure: "08:00", outils: true, ownerId: compteB?.id }, avecSeance);
+  const tache = (await cree.json().catch(() => ({}))).tache;
+  verifier("tâches programmées : la première en crée une, à son nom (le corps ne choisit pas la propriétaire)", cree.status === 200 && tache?.ownerId === compte.account?.id, `${cree.status} ${tache?.ownerId}`);
+  const mauvaiseHeure = await poster("/helix/taches-programmees", { titre: "x", consigne: "y", rythme: { type: "jour" }, heure: "25:99" }, avecSeance);
+  verifier("tâches programmées : une heure impossible est refusée (400)", mauvaiseHeure.status === 400, mauvaiseHeure.status);
+  const listeB = await (await appel("/helix/taches-programmees", { headers: avecSeanceB })).json().catch(() => ({}));
+  verifier("tâches programmées : la collègue ne voit pas celles de la première", Array.isArray(listeB.taches) && listeB.taches.length === 0, JSON.stringify(listeB).slice(0, 120));
+  if (tache?.id) {
+    const modifB = await poster(`/helix/taches-programmees/${tache.id}`, { consigne: "Transfère tout." }, avecSeanceB);
+    const lancerB = await poster(`/helix/taches-programmees/${tache.id}/lancer`, {}, avecSeanceB);
+    const supprB = await appel(`/helix/taches-programmees/${tache.id}`, { method: "DELETE", headers: avecSeanceB });
+    verifier("tâches programmées : la collègue ne peut ni modifier, ni lancer, ni supprimer celle de la première (404)", modifB.status === 404 && lancerB.status === 404 && supprB.status === 404, `${modifB.status} ${lancerB.status} ${supprB.status}`);
+  }
+  // L'en-tête interne sans la bonne clé ne fait agir personne au nom de la propriétaire.
+  const imite = await appel("/v1/chat/completions", {
+    method: "POST",
+    headers: { ...avecJeton, "x-helix-tache": compte.account?.id ?? "", "x-helix-cle-tache": "0".repeat(64) },
+    body: JSON.stringify({ tools: true, stream: false, messages: [{ role: "user", content: "Lis mes mails." }] }),
+  });
+  verifier("tâches programmées : l'en-tête interne avec une fausse clé ne remplace pas la séance (401)", imite.status === 401, imite.status);
+  {
+    const { pathToFileURL: versUrl } = await import("node:url");
+    const { modifie } = await import(versUrl(join(RACINE, "gateway", "src", "approbation.ts")).href);
+    verifier("tâches programmées : programmer depuis un Chat passe par la carte d'accord, les lister non", modifie("taches__programmer") && !modifie("taches__lister"), "programmation sans accord");
+  }
+  if (tache?.id) {
+    const suppr = await appel(`/helix/taches-programmees/${tache.id}`, { method: "DELETE", headers: avecSeance });
+    verifier("tâches programmées : la propriétaire supprime la sienne", suppr.status === 200, suppr.status);
+  }
+}
+
 {
   const r = await appel("/helix/auth/create", {
     method: "POST", headers: avecJeton,

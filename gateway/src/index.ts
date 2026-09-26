@@ -7,7 +7,7 @@ import { avecLangueDe, t, tf } from "./langue.ts";
 import * as telechargement from "./telechargement.ts";
 import https from "node:https";
 import { tlsMaterial } from "./tls.ts";
-import { createHash, randomBytes } from "node:crypto";
+import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import * as debit from "./debit.ts";
 import * as clesApi from "./clesApi.ts";
 import * as flux from "./flux.ts";
@@ -151,6 +151,7 @@ import {
 import * as connecteurs from "./connecteurs.ts";
 import * as drive from "./drive.ts";
 import * as agendaGoogle from "./agendaGoogle.ts";
+import * as tachesProgrammees from "./tachesProgrammees.ts";
 import { chargerClientGoogle, effacerClientGoogle, enregistrerClientGoogle, etatClientGoogle } from "./clientGoogle.ts";
 import * as slack from "./slack.ts";
 import { conservationJours, journaliser, lire as lireAudit, verifier as verifierAudit, jours as joursAudit } from "./audit.ts";
@@ -412,7 +413,24 @@ async function handleChat(
     if (typeof body.tools === "boolean") delete body.tools;
   }
 
-  const qui = await demandeur(req, url);
+  /*
+   * Une tâche programmée (tachesProgrammees.ts) : la passerelle qui s'appelle
+   * elle-même, depuis la boucle locale, avec la clé tirée au sort à ce
+   * démarrage. L'agent agit alors au nom de la propriétaire de la tâche.
+   */
+  const tacheDe = req.headers["x-helix-tache"];
+  const cleTache = req.headers["x-helix-cle-tache"];
+  const parTache =
+    typeof tacheDe === "string" &&
+    typeof cleTache === "string" &&
+    cleTache.length === CLE_TACHES.length &&
+    timingSafeEqual(Buffer.from(cleTache), Buffer.from(CLE_TACHES)) &&
+    depuisCePoste(req)
+      ? (await publicAccounts().catch(() => [])).some((c) => c.id === tacheDe)
+        ? { userId: tacheDe }
+        : null
+      : null;
+  const qui = parTache ?? (await demandeur(req, url));
   if (body.tools === true && !qui) {
     return send(res, 401, {
       error: {
@@ -1035,6 +1053,25 @@ async function handleAgendaOublier(
  * Les routes d'état, au jeton seul, disent si un compte est branché et lequel,
  * jamais un jeton ni un contenu.
  */
+/** Les tâches programmées de la personne : chacune ne voit et ne touche que les siennes. */
+async function handleTachesProgrammees(req: http.IncomingMessage, res: http.ServerResponse, url: URL, path: string): Promise<void> {
+  const qui = await demandeur(req, url);
+  if (!qui) return send(res, 401, sansSeance());
+  const [, , , id, action] = path.split("/");
+  const corps = async () => (await readJson(req).catch(() => ({}))) as Record<string, unknown>;
+  const repondre = <T,>(r: tachesProgrammees.Resultat<T>, cle: string) => (r.ok ? send(res, 200, { [cle]: r.valeur }) : send(res, r.statut, { error: { message: r.message } }));
+  try {
+    if (!id && req.method === "GET") return send(res, 200, { taches: await tachesProgrammees.lister(qui.userId) });
+    if (!id && req.method === "POST") return repondre(await tachesProgrammees.creer(await corps(), qui.userId), "tache");
+    if (id && !action && req.method === "POST") return repondre(await tachesProgrammees.modifier(id, await corps(), qui.userId), "tache");
+    if (id && !action && req.method === "DELETE") return repondre(await tachesProgrammees.supprimer(id, qui.userId), "supprimee");
+    if (id && action === "lancer" && req.method === "POST") return repondre(await tachesProgrammees.lancerMaintenant(id, qui.userId), "execution");
+  } catch (err) {
+    return send(res, 503, { error: { message: err instanceof Error ? err.message : String(err) } });
+  }
+  send(res, 404, { error: { message: t("Introuvable.") } });
+}
+
 /*
  * L'application Google de l'instance : son identifiant se voit (il n'est pas
  * secret), son secret jamais. La changer vaut pour toute l'instance : réservé
@@ -4854,6 +4891,8 @@ const traiter = (
     if (req.method === "POST" && path === "/helix/agenda/oublier")
       return handleAgendaOublier(req, res, url);
 
+    // Tâches programmées (tachesProgrammees.ts).
+    if (path === "/helix/taches-programmees" || path.startsWith("/helix/taches-programmees/")) return handleTachesProgrammees(req, res, url, path);
     // Application Google de l'instance (clientGoogle.ts), partagée par Drive et Google Agenda.
     if (req.method === "GET" && path === "/helix/google/client") return handleClientGoogleEtat(req, res, url);
     if (req.method === "POST" && path === "/helix/google/client") return handleClientGoogleEnregistrer(req, res, url);
@@ -5222,6 +5261,61 @@ void preparerMagasin().then(() => server.listen(PORT, HOST, () => {
  * au hasard, lui est donc réservée. Rien n'y passe qui ne passe déjà en clair
  * sur une instance non partagée (même machine), et le jeton y reste exigé.
  */
+/*
+ * Les tâches programmées (tachesProgrammees.ts) s'exécutent par la route du
+ * Chat, sur la boucle locale, au nom de leur propriétaire. Cette clé, tirée au
+ * sort à chaque démarrage et jamais écrite, est ce qui l'autorise : sans elle,
+ * l'en-tête « x-helix-tache » ne vaut rien (vérifié dans handleChatCompletions).
+ */
+const CLE_TACHES = randomBytes(32).toString("base64url");
+
+function demarrerTachesProgrammees(url: string): void {
+  tachesProgrammees.demarrer(async (ownerId, messages, outils) => {
+    const reponse = await fetch(`${url}/v1/chat/completions`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${instanceToken()}`,
+        "x-helix-tache": ownerId,
+        "x-helix-cle-tache": CLE_TACHES,
+      },
+      body: JSON.stringify({ messages, role: "chat", effort: "moyen", tools: outils, stream: true }),
+      signal: AbortSignal.timeout(30 * 60_000),
+    });
+    if (!reponse.ok || !reponse.body) {
+      const j = (await reponse.json().catch(() => ({}))) as { error?: { message?: string } };
+      throw new Error(j.error?.message ?? tf("Le Chat de l'instance a refusé la tâche ({0}).", String(reponse.status)));
+    }
+    // Le flux SSE du Chat : on garde le texte de la réponse, pas les événements de l'écran.
+    const lecteur = reponse.body.getReader();
+    const decodeur = new TextDecoder();
+    let tampon = "";
+    let texte = "";
+    for (;;) {
+      const { done, value } = await lecteur.read();
+      if (done) break;
+      tampon += decodeur.decode(value, { stream: true });
+      const evenements = tampon.split("\n\n");
+      tampon = evenements.pop() ?? "";
+      for (const ev of evenements) {
+        for (const ligne of ev.split("\n")) {
+          if (!ligne.startsWith("data:")) continue;
+          const charge = ligne.slice(5).trim();
+          if (!charge || charge === "[DONE]") continue;
+          try {
+            const j = JSON.parse(charge) as { helix?: unknown; choices?: { delta?: { content?: unknown } }[] };
+            const c = j.choices?.[0]?.delta?.content;
+            if (!j.helix && typeof c === "string") texte += c;
+          } catch {
+            /* ligne illisible : ignorée */
+          }
+        }
+      }
+    }
+    return texte;
+  });
+}
+
 async function demarrerEmployes(): Promise<void> {
   let url = `http://127.0.0.1:${PORT}`;
   if (tls) {
@@ -5231,6 +5325,7 @@ async function demarrerEmployes(): Promise<void> {
     if (adresse && typeof adresse === "object") url = `http://127.0.0.1:${adresse.port}`;
   }
   employes.connaitrePasserelle({ url, jeton: instanceToken() });
+  demarrerTachesProgrammees(url);
   // Missions « à chaque mail reçu » : la boîte est relevée même si aucune n'existe encore (le tour ne lit rien alors).
   employes.demarrerDeclencheurCourrier();
   // Réunions dont la transcription a été interrompue par un arrêt : elles reprennent.

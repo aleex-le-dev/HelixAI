@@ -4,6 +4,7 @@ import { toolsForModel as outilsMcp, callTool as appelerMcp, workspace } from ".
 import * as bureau from "./bureau.ts";
 import * as courrier from "./courrier.ts";
 import * as agenda from "./agenda.ts";
+import * as tachesProgrammees from "./tachesProgrammees.ts";
 import * as drive from "./drive.ts";
 import * as slack from "./slack.ts";
 import * as bibliotheque from "./bibliotheque.ts";
@@ -36,7 +37,7 @@ export const DESCRIPTION_FAMILLE: Record<Famille, string> = {
   fichiers: "les fichiers du dossier de travail de l'équipe : lister, lire, chercher, écrire, déplacer",
   bibliotheque: "la bibliothèque de l'équipe, en lecture : chercher et lire les documents ouverts à toute l'équipe",
   courrier: "la boîte mail de l'entreprise : derniers messages, recherche, lecture, brouillons, et envoi quand il est activé (chaque mail attend l'accord d'une personne)",
-  agenda: "l'agenda de l'entreprise, en lecture seule : événements à venir, journée, recherche",
+  agenda: "l'agenda de l'entreprise : événements à venir, journée, recherche ; avec Google Agenda branché en écriture, créer, modifier ou supprimer un événement (chaque écriture attend l'accord d'une personne, sauf niveau « Tout approuver »)",
   drive: "le Google Drive de l'entreprise, en lecture seule : recherche, fichiers récents, lecture",
   slack: "le Slack de l'entreprise, en lecture seule : salons, messages, fils, recherche",
   bureau: "la création de documents Word, Excel, PowerPoint et PDF dans le dossier de travail",
@@ -87,6 +88,8 @@ export async function executerOutil(
    */
   pour?: { userId: string; groupes: string[] },
 ): Promise<{ ok: boolean; content: string }> {
+  // Les tâches programmées (tachesProgrammees.ts) : au nom de la personne, hors des familles des employés.
+  if (nom.startsWith("taches__")) return tachesProgrammees.callTool(nom, args, pour?.userId);
   switch (familleDe(nom)) {
     case "bibliotheque":
       return bibliotheque.callTool(nom, args, pour ?? { userId: "", groupes: [] });

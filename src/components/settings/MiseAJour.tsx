@@ -127,15 +127,13 @@ export function MiseAJour() {
     case "disponible":
       corps = (
         <>
-          <p className="text-sm text-foreground">{t("Version")}{" "}{etat.versionDisponible} disponible.</p>
+          <p className="text-sm text-foreground">{tf("Version {0} disponible.", etat.versionDisponible ?? "")}</p>
           <p className="text-xs text-muted-foreground">
-            {t("Cette installation n'est pas signée : macOS refuserait qu'elle se remplace seule. Téléchargez le paquet, puis installez-le comme la première fois.")}
+            {t("Cette installation n'est pas signée : elle ne se met pas à jour seule, mais s'installe d'un clic. L'archive est vérifiée par son empreinte avant de remplacer l'application.")}
           </p>
-          {etat.lienPaquet && (
-            <Button size="sm" icon={Download} onClick={() => void api.ouvrirPaquet()}>
-              {t("Télécharger le paquet")}
-            </Button>
-          )}
+          <Button size="sm" icon={Download} onClick={() => void api.installer()}>
+            {t("Installer maintenant")}
+          </Button>
         </>
       );
       break;

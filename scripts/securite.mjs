@@ -238,6 +238,8 @@ const ROUTES = [
   ["GET", "/helix/connaissances"], ["POST", "/helix/connaissances/chercher"],
   ["GET", "/helix/entrainement"], ["POST", "/helix/entrainement/lancer"],
   ["GET", "/helix/cles-api"], ["POST", "/helix/cles-api"],
+  // Ajoutées le 26/09/2026 : mises à jour des postes servies par l'instance (telechargement.ts).
+  ["GET", "/helix/mises-a-jour/latest-mac.yml"], ["GET", "/helix/mises-a-jour/Helix-0.27.0-mac-arm64.zip"],
 ];
 for (const [methode, chemin] of ROUTES) {
   const r = await appel(chemin, { method: methode, headers: { "Content-Type": "application/json" }, body: methode === "POST" ? "{}" : undefined });
@@ -1448,6 +1450,19 @@ console.log("\n7 quater. Export RGPD et effacement : bases, images, entraînemen
     indexeAvant && !existsSync(indexDe(aSupprimer)) && !(baseFin?.documents ?? []).some((d) => d.id === aSupprimer),
     `index avant : ${indexeAvant}`,
   );
+}
+
+/* ------------------------------------------------------------------------- */
+console.log("\n7 quinquies. Mises à jour des postes : seulement l'archive de l'application");
+{
+  // Instance lancée depuis les sources : rien à servir, et elle le dit par un 404, jamais par un fichier.
+  const yml = await appel("/helix/mises-a-jour/latest-mac.yml", { headers: avecJeton });
+  verifier("sans application installée, pas de description de version (404)", yml.status === 404, yml.status);
+  for (const nom of ["..%2F..%2Finstance-token", "instance-token.zip", "..%2Fdonnees.zip"]) {
+    const r = await appel(`/helix/mises-a-jour/${nom}`, { headers: avecJeton });
+    const corps = await r.text();
+    verifier(`archive « ${nom} » : 404, rien de lu`, r.status === 404 && !corps.includes(JETON), `${r.status} ${corps.slice(0, 40)}`);
+  }
 }
 
 /* ------------------------------------------------------------------------- */

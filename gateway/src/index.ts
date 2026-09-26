@@ -4754,6 +4754,25 @@ const traiter = (
      * d'en-tête sur un lien : il se présente donc avec un billet d'une minute
      * et d'un seul usage (`?flux=`), exactement comme les flux d'évènements.
      */
+    /*
+     * Mises à jour des postes rattachés (telechargement.ts, fluxMiseAJour) :
+     * le jeton d'instance suffit, c'est le processus principal de
+     * l'application qui demande, sans séance. Seulement la description de la
+     * version et l'archive de l'application : rien des données de personne.
+     */
+    if (req.method === "GET" && path === "/helix/mises-a-jour/latest-mac.yml") {
+      const f = await telechargement.fluxMiseAJour();
+      if ("erreur" in f) return send(res, 404, { error: { message: f.erreur } });
+      res.writeHead(200, { "Content-Type": "text/yaml; charset=utf-8", "Cache-Control": "no-store" });
+      return void res.end(f.yml);
+    }
+    {
+      const archive = /^\/helix\/mises-a-jour\/([A-Za-z0-9._-]+\.zip)$/.exec(path);
+      if (req.method === "GET" && archive) {
+        if (archive[1] !== telechargement.nomArchiveMiseAJour()) return send(res, 404, { error: { message: t("Archive inconnue.") } });
+        return telechargement.servir(res, "macos");
+      }
+    }
     if (req.method === "GET" && path === "/helix/telecharger") {
       return avecSeance(req, res, url, () => {
         send(res, 200, {

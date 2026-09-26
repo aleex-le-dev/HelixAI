@@ -211,3 +211,61 @@ export async function servir(res: http.ServerResponse, plateforme: Plateforme): 
   });
   createReadStream(chemin).pipe(res);
 }
+
+/* ------------------------------------------------------------------ */
+/* Mises à jour des postes, servies par l'instance                     */
+/* ------------------------------------------------------------------ */
+
+/*
+ * Décidé par Medhi le 26/09/2026 : pas de mise à jour automatique (il faudrait
+ * un certificat Apple et un serveur), mais une fenêtre « Nouvelle version,
+ * Installer » sur chaque poste. La source est l'instance à laquelle le poste
+ * est rattaché : elle a déjà l'application dans sa version exacte (ci-dessus).
+ * Elle la décrit au format que lit electron-updater (`latest-mac.yml`, avec
+ * l'empreinte SHA-512 de l'archive), et la sert. Rien ne passe par Internet.
+ */
+let empreinteGardee: { chemin: string; mtime: number; sha512: string } | null = null;
+
+async function sha512Base64(chemin: string): Promise<string> {
+  const mtime = statSync(chemin).mtimeMs;
+  if (empreinteGardee && empreinteGardee.chemin === chemin && empreinteGardee.mtime === mtime) return empreinteGardee.sha512;
+  const { createHash } = await import("node:crypto");
+  const hash = createHash("sha512");
+  await new Promise<void>((resolve, reject) => {
+    createReadStream(chemin).on("data", (d) => hash.update(d)).on("end", () => resolve()).on("error", reject);
+  });
+  const sha512 = hash.digest("base64");
+  empreinteGardee = { chemin, mtime, sha512 };
+  return sha512;
+}
+
+/** `latest-mac.yml` de l'application que fait tourner l'instance, ou la raison de son absence. */
+export async function fluxMiseAJour(): Promise<{ yml: string } | { erreur: string }> {
+  const preparation = await preparer();
+  const e = etat("macos");
+  if (!preparation.ok || !e.pret || !e.version) return { erreur: e.raison ?? preparation.message };
+  const chemin = cheminPaquet(e.version);
+  const nom = basename(chemin);
+  const sha512 = await sha512Base64(chemin);
+  const taille = statSync(chemin).size;
+  const date = new Date(statSync(chemin).mtimeMs).toISOString();
+  return {
+    yml: [
+      `version: ${e.version}`,
+      "files:",
+      `  - url: ${nom}`,
+      `    sha512: ${sha512}`,
+      `    size: ${taille}`,
+      `path: ${nom}`,
+      `sha512: ${sha512}`,
+      `releaseDate: '${date}'`,
+      "",
+    ].join("\n"),
+  };
+}
+
+/** Le nom de l'archive servie pour les mises à jour (pour vérifier la demande). */
+export function nomArchiveMiseAJour(): string | null {
+  const e = etat("macos");
+  return e.disponible && e.version ? basename(cheminPaquet(e.version)) : null;
+}

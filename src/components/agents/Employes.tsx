@@ -635,7 +635,7 @@ export function PanneauEmploye({
       <SegmentedTabs className="mt-4" size="sm" options={onglets} value={onglet} onChange={setOnglet} />
       <div className="mt-4 min-h-[340px]">
         {onglet === "discuter" && <Conversation employe={employe} />}
-        {onglet === "missions" && <Missions employe={employe} />}
+        {onglet === "missions" && <Missions employe={employe} etat={etat} onChange={onChange} />}
         {onglet === "activite" && <Activite employe={employe} />}
         {onglet === "canaux" && <CanauxEmploye employe={employe} etat={etat} onChange={onChange} />}
         {onglet === "reglages" && (
@@ -803,19 +803,82 @@ function Bulle({ question }: { question: string }) {
   );
 }
 
-function Missions({ employe }: { employe: Employe }) {
+function Missions({ employe, etat, onChange }: { employe: Employe; etat: EtatEmployes; onChange: () => Promise<void> }) {
   const [info, setInfo] = useState<string | null>(null);
   const [lancee, setLancee] = useState<string | null>(null);
+  /*
+   * Ses missions se créent et se modifient ici aussi (27/09/2026, demandé par
+   * Medhi : l'onglet disait « Ajoutez-en dans Réglages »). Même éditeur, même
+   * enregistrement que dans Réglages : seules les missions changent.
+   */
+  const [edition, setEdition] = useState<Mission[] | null>(null);
+  const [occupe, setOccupe] = useState(false);
+  const courrier = {
+    branchee: Boolean(etat.familles.find((f) => f.id === "courrier")?.disponible),
+    acces: Boolean(employe.toutesLesFamilles) || employe.outils.includes("courrier"),
+  };
+  const nouvelle = (): Mission => ({ nom: "", consigne: "", rythme: "jours-ouvres", heure: "08:30" });
+
+  if (edition) {
+    const enregistrer = async () => {
+      setOccupe(true);
+      setInfo(null);
+      try {
+        const r = await modifierEmploye(employe.id, { missions: edition.filter((m) => m.nom.trim() || m.consigne.trim()) });
+        await onChange();
+        setEdition(null);
+        setInfo(r.avertissement ?? t("Missions enregistrées."));
+      } catch (err) {
+        setInfo(message(err));
+      } finally {
+        setOccupe(false);
+      }
+    };
+    return (
+      <div className="space-y-3">
+        <EditeurMissions valeur={edition} onChange={setEdition} courrier={courrier} />
+        {info && <InfoBox tone="muted">{info}</InfoBox>}
+        <div className="flex justify-end gap-2">
+          <Button variant="ghost" size="sm" disabled={occupe} onClick={() => { setEdition(null); setInfo(null); }}>
+            {t("Annuler")}
+          </Button>
+          <Button size="sm" icon={occupe ? Loader2 : Check} disabled={occupe} onClick={() => void enregistrer()}>
+            {t("Enregistrer les missions")}
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
   if (employe.missions.length === 0) {
     return (
-      <p className="pt-10 text-center text-sm text-muted-foreground">
-        {t("Aucune mission planifiée.")}
-        {employe.estProprietaire && t(" Ajoutez-en dans Réglages.")}
-      </p>
+      <div className="flex flex-col items-center gap-3 pt-10 text-center">
+        <p className="max-w-md text-sm text-muted-foreground">
+          {t("Aucune mission planifiée. Une mission, c'est une consigne qu'il suit seul, à l'heure dite ou à chaque mail reçu, puis dont il rend compte.")}
+        </p>
+        {employe.estProprietaire && (
+          <Button size="sm" icon={Plus} onClick={() => setEdition([nouvelle()])}>
+            {t("Ajouter une mission")}
+          </Button>
+        )}
+        {info && <InfoBox tone="muted">{info}</InfoBox>}
+      </div>
     );
   }
   return (
     <div className="space-y-2">
+      {employe.estProprietaire && (
+        <div className="flex justify-end gap-2">
+          <Button variant="ghost" size="sm" onClick={() => setEdition(employe.missions.map((m) => ({ ...m })))}>
+            {t("Modifier les missions")}
+          </Button>
+          {employe.missions.length < 12 && (
+            <Button variant="secondary" size="sm" icon={Plus} onClick={() => setEdition([...employe.missions.map((m) => ({ ...m })), nouvelle()])}>
+              {t("Ajouter une mission")}
+            </Button>
+          )}
+        </div>
+      )}
       {employe.missions.map((m) => (
         <div key={m.id} className="rounded-xl border border-border p-3">
           <div className="flex flex-wrap items-center justify-between gap-2">

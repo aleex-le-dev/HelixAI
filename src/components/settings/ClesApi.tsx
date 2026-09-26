@@ -170,7 +170,7 @@ function CleMontreeUneFois({ nom, secret, onFermer }: { nom: string; secret: str
           {t("L'instance n'en garde qu'une empreinte : si vous la perdez, révoquez-la et créez-en une autre. Traitez-la comme un mot de passe : quiconque la détient parle aux modèles en votre nom. Ne la collez ni dans un Chat, ni dans un dépôt de code.")}
         </p>
       </InfoBox>
-      <ACopier valeur={secret} libelle={t("la clé")} />
+      <ACopier valeur={secret} libelle={t("la clé")} effacerApres={60_000} />
       <Button icon={Check} variant="secondary" onClick={onFermer}>
         {t("J'ai copié la clé")}
       </Button>

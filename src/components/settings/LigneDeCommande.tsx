@@ -18,6 +18,8 @@ interface EtatCli {
   disponible: boolean;
   installe: boolean;
   aJour: boolean;
+  /** Un autre programme occupe déjà ~/.local/bin/helix : il n'est jamais remplacé. */
+  etranger?: boolean;
   dansLePath: boolean;
   chemin: string;
   profil: string;
@@ -97,7 +99,9 @@ export function LigneDeCommande() {
           <div className="flex flex-wrap items-center gap-3 rounded-xl border border-border px-4 py-3">
             <span className="min-w-0 flex-1">
               <span className="block text-sm font-medium text-foreground">
-                {etat.installe && etat.aJour
+                {etat.etranger
+                  ? t("Un autre programme nommé helix est déjà installé à cet endroit : il n'est pas remplacé.")
+                  : etat.installe && etat.aJour
                   ? t("La commande helix est en place.")
                   : etat.installe
                     ? t("La commande helix vise une autre copie de l'application : mettez-la à jour.")
@@ -110,14 +114,19 @@ export function LigneDeCommande() {
                 {t("Retirer")}
               </Button>
             )}
-            {!(etat.installe && etat.aJour) && (
+            {!etat.etranger && !(etat.installe && etat.aJour) && (
               <Button icon={occupe ? Loader2 : Check} disabled={occupe} onClick={() => void agir((p) => p.installer())}>
                 {etat.installe ? t("Mettre à jour") : t("Mettre en place")}
               </Button>
             )}
           </div>
 
-          {!etat.installe && (
+          {etat.etranger && (
+            <p className="text-xs text-muted-foreground">
+              {tf("Renommez ou retirez vous-même {0} si vous voulez le remplacer par la commande de l'application, puis revenez ici.", etat.chemin)}
+            </p>
+          )}
+          {!etat.installe && !etat.etranger && (
             <p className="text-xs text-muted-foreground">
               {tf(
                 "Un petit lanceur est posé dans {0}, sans droit d'administrateur. Si ce dossier n'est pas dans le PATH de votre terminal, une ligne marquée est ajoutée à {1} ; « Retirer » enlève les deux.",

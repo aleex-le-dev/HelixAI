@@ -244,6 +244,12 @@ function lireSeance(adresse) {
 function ecrireSeances(contenu) {
   const chemin = fichierSeance();
   fs.mkdirSync(path.dirname(chemin), { recursive: true, mode: 0o700 });
+  // `mode` ne change pas un dossier qui existe déjà (revue du 26/09/2026 : ~/.helix restait en 0755).
+  try {
+    fs.chmodSync(path.dirname(chemin), 0o700);
+  } catch {
+    /* dossier d'un autre propriétaire : on n'y touche pas */
+  }
   // Écriture atomique, en 0600 dès la création : la séance vaut identité.
   const temp = `${chemin}.${process.pid}.tmp`;
   fs.writeFileSync(temp, JSON.stringify(contenu, null, 2), { encoding: "utf8", mode: 0o600 });

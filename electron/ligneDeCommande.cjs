@@ -19,7 +19,7 @@
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
-const { execFileSync } = require("node:child_process");
+const { execFile } = require("node:child_process");
 const { app } = require("electron");
 
 const MARQUE = "# Ajouté par HelixAI (ligne de commande helix)";
@@ -48,29 +48,43 @@ function contenuLanceur() {
 /**
  * Le PATH du shell de connexion. Une application lancée depuis le Finder n'a
  * pas celui du terminal : on le demande au shell de la personne.
+ *
+ * Asynchrone, et gardé cinq minutes : revue du 26/09/2026, l'appel synchrone
+ * gelait le processus principal jusqu'à 4 s à chaque ouverture de l'onglet, et
+ * relançait .zprofile / .zlogin à chaque fois.
  */
+let pathGarde = null;
 function pathDuShell() {
+  if (pathGarde && Date.now() - pathGarde.le < 5 * 60_000) return Promise.resolve(pathGarde.valeur);
   const shell = process.env.SHELL || (process.platform === "darwin" ? "/bin/zsh" : "/bin/sh");
-  try {
-    return execFileSync(shell, ["-l", "-c", 'printf %s "$PATH"'], { encoding: "utf8", timeout: 4000 });
-  } catch {
-    return "";
-  }
+  return new Promise((resolve) => {
+    execFile(shell, ["-l", "-c", 'printf %s "$PATH"'], { encoding: "utf8", timeout: 4000 }, (err, sortie) => {
+      const valeur = err ? "" : String(sortie);
+      pathGarde = { le: Date.now(), valeur };
+      resolve(valeur);
+    });
+  });
 }
 
-function etat() {
+/** Le lanceur posé par l'application porte cette phrase ; un autre programme nommé helix, non. */
+const estLeNotre = (contenu) => contenu.includes("posé par l'application");
+
+async function etat() {
   const disponible = process.platform !== "win32" && fs.existsSync(script());
   let installe = false;
   let aJour = false;
+  // Un fichier ~/.local/bin/helix qui n'est pas le nôtre : on ne le remplace pas (revue du 26/09/2026).
+  let etranger = false;
   try {
     const actuel = fs.readFileSync(lanceur(), "utf8");
-    installe = true;
+    etranger = !estLeNotre(actuel);
+    installe = !etranger;
     // L'application a pu être déplacée ou mise à jour ailleurs : le lanceur viserait un binaire absent.
-    aJour = actuel === contenuLanceur();
+    aJour = installe && actuel === contenuLanceur();
   } catch {
-    /* pas de lanceur */
+    etranger = fs.existsSync(lanceur());
   }
-  const dansLePath = pathDuShell().split(":").includes(dossierLanceur());
+  const dansLePath = (await pathDuShell()).split(":").includes(dossierLanceur());
   let ligneAjoutee = false;
   try {
     ligneAjoutee = fs.readFileSync(profil(), "utf8").includes(MARQUE);
@@ -81,6 +95,7 @@ function etat() {
     disponible,
     installe,
     aJour,
+    etranger,
     dansLePath: dansLePath || ligneAjoutee,
     chemin: lanceur(),
     profil: profil(),
@@ -88,14 +103,23 @@ function etat() {
   };
 }
 
-function installer() {
+async function installer() {
   if (process.platform === "win32") throw new Error("Windows n'est pas encore pris en charge.");
   if (!fs.existsSync(script())) throw new Error("La ligne de commande est absente de ce paquet.");
+  if (fs.existsSync(lanceur())) {
+    let actuel = "";
+    try {
+      actuel = fs.readFileSync(lanceur(), "utf8");
+    } catch {
+      /* illisible : traité comme étranger */
+    }
+    if (!estLeNotre(actuel)) return etat();
+  }
   fs.mkdirSync(dossierLanceur(), { recursive: true });
   const tmp = `${lanceur()}.${process.pid}.tmp`;
   fs.writeFileSync(tmp, contenuLanceur(), { mode: 0o755 });
   fs.renameSync(tmp, lanceur());
-  if (!pathDuShell().split(":").includes(dossierLanceur())) {
+  if (!(await pathDuShell()).split(":").includes(dossierLanceur())) {
     let actuel = "";
     try {
       actuel = fs.readFileSync(profil(), "utf8");
@@ -110,11 +134,11 @@ function installer() {
   return etat();
 }
 
-function retirer() {
+async function retirer() {
   try {
     const actuel = fs.readFileSync(lanceur(), "utf8");
     // On ne retire qu'un lanceur posé par l'application, jamais un autre programme nommé helix.
-    if (actuel.includes("posé par l'application")) fs.rmSync(lanceur(), { force: true });
+    if (estLeNotre(actuel)) fs.rmSync(lanceur(), { force: true });
   } catch {
     /* déjà absent */
   }

@@ -23,6 +23,7 @@ export function ACopier({
   libelle,
   note,
   className,
+  effacerApres,
 }: {
   valeur: string;
   /** Ce que la personne copie, pour le lecteur d'écran : « l'adresse », « le code ». */
@@ -30,13 +31,38 @@ export function ACopier({
   /** Une ligne de contexte sous la valeur : d'où elle est joignable, par exemple. */
   note?: string;
   className?: string;
+  /**
+   * Pour un secret (clé d'API) : au bout de ce délai, en millisecondes, le
+   * presse-papiers est vidé s'il contient encore la valeur. Revue du
+   * 26/09/2026 : une clé copiée y restait indéfiniment. Si la lecture du
+   * presse-papiers est refusée, on ne vide rien (ce serait peut-être autre
+   * chose que la personne a copié depuis), et la note le dit.
+   */
+  effacerApres?: number;
 }) {
   const [etat, setEtat] = useState<"prêt" | "copié" | "sélectionné">("prêt");
   const valeurRef = useRef<HTMLSpanElement>(null);
   const minuterie = useRef<number | undefined>(undefined);
 
-  // Le retour visuel s'efface seul ; le démontage l'emporte avec lui.
+  const effacement = useRef<number | undefined>(undefined);
+  const [efface, setEfface] = useState<"attente" | "fait" | "impossible" | null>(null);
+
+  // Le retour visuel s'efface seul ; le démontage l'emporte avec lui. Le vidage du presse-papiers, lui, reste prévu.
   useEffect(() => () => window.clearTimeout(minuterie.current), []);
+
+  const prevoirEffacement = () => {
+    if (!effacerApres) return;
+    window.clearTimeout(effacement.current);
+    setEfface("attente");
+    effacement.current = window.setTimeout(async () => {
+      try {
+        if ((await navigator.clipboard.readText()) === valeur) await navigator.clipboard.writeText("");
+        setEfface("fait");
+      } catch {
+        setEfface("impossible");
+      }
+    }, effacerApres);
+  };
 
   const revenirAuRepos = () => {
     window.clearTimeout(minuterie.current);
@@ -48,6 +74,7 @@ export function ACopier({
       await navigator.clipboard.writeText(valeur);
       setEtat("copié");
       revenirAuRepos();
+      prevoirEffacement();
     } catch {
       // Refusé : on sélectionne, et le raccourci clavier fait le reste.
       const noeud = valeurRef.current;
@@ -78,11 +105,17 @@ export function ACopier({
         >
           {valeur}
         </span>
-        {(etat === "sélectionné" || note) && (
+        {(etat === "sélectionné" || note || efface) && (
           <span className="mt-0.5 block text-xs text-muted-foreground">
             {etat === "sélectionné"
               ? t("Copie automatique refusée : le texte est sélectionné, copiez-le au clavier.")
-              : note}
+              : efface === "attente"
+                ? tf("Le presse-papiers sera vidé dans {0} s, s'il la contient encore.", Math.round((effacerApres ?? 0) / 1000))
+                : efface === "fait"
+                  ? t("Presse-papiers vidé.")
+                  : efface === "impossible"
+                    ? t("Le presse-papiers n'a pas pu être relu : il n'a pas été vidé. Copiez autre chose par-dessus une fois la clé collée.")
+                    : note}
           </span>
         )}
       </span>
@@ -98,7 +131,7 @@ export function ACopier({
             ? tf("{0} : copié", libelle)
             : etat === "sélectionné"
               ? tf("{0} : sélectionné, à copier au clavier", libelle)
-              : `Copier ${libelle}`
+              : tf("Copier {0}", libelle)
         }
         size={30}
         iconSize={15}

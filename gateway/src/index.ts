@@ -57,7 +57,7 @@ import { deployment, autoProvisionEnabled } from "./deployment.ts";
 import { db, isCollection, COLLECTIONS, migrerChiffrement, type Collection } from "./db.ts";
 import { exporterDonnees } from "./export.ts";
 import { chargerReglagesEcran, configEcran, definirModeEcran, modeModifiable } from "./reglagesEcran.ts";
-import { readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, readFileSync, writeFileSync } from "node:fs";
 import { join as joindre } from "node:path";
 import { homedir as dossierPersonnel } from "node:os";
 import * as images from "./images.ts";
@@ -4936,6 +4936,13 @@ void preparerMagasin().then(() => server.listen(PORT, HOST, () => {
   try {
     const dossier = process.env.HELIX_DATA_DIR ?? joindre(dossierPersonnel(), ".helix", "data");
     writeFileSync(joindre(dossier, "instance-port"), `${PORT}\n`, { encoding: "utf8", mode: 0o600 });
+    /*
+     * ~/.helix lui-même en 0700 : revue du 26/09/2026, il restait en 0755
+     * (`mkdirSync({ mode })` ne change pas un dossier existant), et les autres
+     * comptes du Mac voyaient la liste de ce qu'il contient. Seulement pour le
+     * dossier par défaut : un HELIX_DATA_DIR choisi appartient à l'administrateur.
+     */
+    if (!process.env.HELIX_DATA_DIR) chmodSync(joindre(dossierPersonnel(), ".helix"), 0o700);
   } catch (err) {
     console.error("[helix-gateway] port non noté pour la ligne de commande :", err instanceof Error ? err.message : err);
   }

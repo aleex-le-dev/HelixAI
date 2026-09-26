@@ -377,6 +377,18 @@ function toModelInfo(
   let roles = classifyRoles(id);
   if (extra.voit === true && !roles.includes("vision")) roles = [...roles, "vision"];
   if (extra.voit === false) roles = roles.filter((r) => r !== "vision" && r !== "gui");
+  /*
+   * Le code aussi : un modèle de conversation que LM Studio déclare entraîné à
+   * appeler des outils (`trainedForToolUse`) sait travailler en agent de code,
+   * quel que soit son nom. Vu le 26/09/2026 : le rôle ne venait que du nom
+   * (« coder », « qwen3 », « glm »…), et un poste qui n'avait que Mistral,
+   * gpt-oss ou Granite, pourtant installés par Helix, n'avait « aucun modèle
+   * disponible » dans Code.
+   */
+  // Sauf un modèle fait pour l'écran (Qwen3-VL, UI-TARS…) : LM Studio le déclare lui aussi « outils », et il code mal.
+  if (extra.outils === true && roles.includes("chat") && !roles.includes("code") && !/-vl-|\bvl\b|ui-?tars|open-?cua|embed|nomic|rerank/i.test(id)) {
+    roles = [...roles, "code"];
+  }
   return {
     id,
     uid: `${backend.id}/${id}`,

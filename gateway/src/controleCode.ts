@@ -1,5 +1,6 @@
 import { readFileSync, readdirSync, statSync } from "node:fs";
-import { dirname, extname, join, relative, sep } from "node:path";
+import { execFile } from "node:child_process";
+import { basename, dirname, extname, join, relative, sep } from "node:path";
 import { applicationPreparee, problemesMetier } from "./application.ts";
 import { controler } from "./controleWeb.ts";
 import { estProtege } from "./zonesProtegees.ts";
@@ -28,6 +29,28 @@ import { t, tf } from "./langue.ts";
  *     panneau de suivi dit où on en est.
  * Un programme vérifie, pas le modèle : il ne se contente pas de « c'est fait ».
  */
+
+/** Le début de chaque relance : sessionsCode.ts s'en sert pour ne pas l'afficher comme un message de la personne. */
+export const ENTETE_RELANCE = "[Contrôle automatique de Helix] Le travail n'est pas terminé : un programme a vérifié les fichiers et essayé les pages dans un vrai navigateur, et a trouvé ces problèmes :";
+
+/*
+ * La méthode jointe à chaque demande de code (index.ts), quel que soit le
+ * modèle. Tirée des essais du 26/09/2026 avec Qwen3 8B : ses « edit » échouaient
+ * faute de recopier exactement le texte à remplacer (trois fois de suite sur un
+ * fichier de 30 lignes), puis il annonçait le travail fait. Réécrire en entier
+ * un fichier court a marché du premier coup. Le marqueur du début sert à
+ * retirer ce texte de l'historique affiché (sessionsCode.ts).
+ */
+export const METHODE_CODE = [
+  "",
+  "",
+  "---",
+  "Méthode de travail (Helix), pour un travail juste du premier coup :",
+  "- Avant de modifier un fichier, lis-le. Un fichier de moins de 300 lignes : réécris-le EN ENTIER avec write, plutôt qu'avec edit. Un fichier plus long : edit, en recopiant exactement le texte à remplacer, lu juste avant.",
+  "- Un morceau à la fois : un fichier complet et juste, puis le suivant. Relis chaque fichier écrit.",
+  "- N'utilise que des fonctions, des champs et des fichiers qui existent vraiment : vérifie-les dans le code avant de t'en servir.",
+  "- Ne dis « fait », « corrigé » ou « testé » que pour ce que tu as vraiment fait. Un programme contrôlera ton travail après toi et te renverra ce qui ne va pas.",
+].join("\n");
 
 /** Relances automatiques par demande de la personne : au-delà, on s'arrête et on dit ce qui reste. */
 export const TOURS_MAX = 5;
@@ -73,7 +96,7 @@ export function demandeArretee(sessionID: string): boolean {
 }
 
 /** Fichiers web du dossier modifiés depuis `depuis`, sans node_modules ni fichiers cachés. */
-function modifiesDepuis(dossier: string, depuis: number): string[] {
+function modifiesDepuis(dossier: string, depuis: number, extensions: Set<string> = WEB): string[] {
   const trouves: string[] = [];
   const pile = [dossier];
   let vus = 0;
@@ -96,10 +119,61 @@ function modifiesDepuis(dossier: string, depuis: number): string[] {
         continue;
       }
       if (st.isDirectory()) pile.push(chemin);
-      else if (WEB.has(extname(nom).toLowerCase()) && st.mtimeMs >= depuis && !estProtege(chemin)) trouves.push(chemin);
+      else if (extensions.has(extname(nom).toLowerCase()) && st.mtimeMs >= depuis && !estProtege(chemin)) trouves.push(chemin);
     }
   }
   return trouves;
+}
+
+/*
+ * Au-delà du web : Python et JSON, ajoutés le 26/09/2026 (« tout doit être
+ * optimisé pour qu'un petit modèle soit vraiment utile en code »). Sans rien
+ * exécuter de ce que l'agent a écrit : Python est seulement analysé (`ast.parse`
+ * lit le texte, n'importe ni ne lance rien), JSON seulement relu.
+ */
+const AUTRES = new Set([".py", ".json"]);
+/** Fichiers de réglages qui admettent des commentaires : ce n'est pas du JSON strict. */
+const JSON_TOLERANT = /^(tsconfig|jsconfig)[\w.-]*\.json$|^\.?(eslintrc|babelrc)|settings\.json$|launch\.json$|extensions\.json$/i;
+const ANALYSE_PYTHON = [
+  "import ast, json, sys",
+  "sortie = []",
+  "for f in sys.argv[1:]:",
+  "    try:",
+  "        ast.parse(open(f, encoding='utf-8').read(), f)",
+  "    except SyntaxError as e:",
+  "        sortie.append({'f': f, 'l': e.lineno or 0, 'm': e.msg or 'syntaxe'})",
+  "    except Exception as e:",
+  "        sortie.append({'f': f, 'l': 0, 'm': str(e)[:200]})",
+  "print(json.dumps(sortie))",
+].join("\n");
+
+async function problemesAutres(dossier: string, depuis: number): Promise<{ problemes: string[]; fichiers: number }> {
+  const touches = modifiesDepuis(dossier, depuis, AUTRES).slice(0, 60);
+  const problemes: string[] = [];
+  const rel = (f: string) => relative(dossier, f) || f;
+  for (const f of touches.filter((x) => x.endsWith(".json") && !JSON_TOLERANT.test(basename(x)))) {
+    try {
+      const st = statSync(f);
+      if (st.size > 2_000_000) continue;
+      JSON.parse(readFileSync(f, "utf8"));
+    } catch (err) {
+      problemes.push(`${rel(f)} : JSON invalide (${(err instanceof Error ? err.message : String(err)).slice(0, 160)}).`);
+    }
+  }
+  const python = touches.filter((x) => x.endsWith(".py"));
+  if (python.length > 0) {
+    const r = await new Promise<string>((resolve) => {
+      execFile("python3", ["-I", "-c", ANALYSE_PYTHON, ...python], { timeout: 20_000, maxBuffer: 1_000_000 }, (err, stdout) => resolve(err ? "" : stdout));
+    });
+    try {
+      for (const e of JSON.parse(r || "[]") as { f: string; l: number; m: string }[]) {
+        problemes.push(`${rel(e.f)}${e.l ? `, ligne ${e.l}` : ""} : erreur de syntaxe Python (${e.m}).`);
+      }
+    } catch {
+      // Python absent ou réponse illisible : rien n'est affirmé.
+    }
+  }
+  return { problemes, fichiers: touches.length };
 }
 
 interface RapportRendu {
@@ -174,7 +248,7 @@ function fonctionsDefinies(dossier: string): string[] {
  * passent devant la lisibilité et les formulaires.
  */
 const gravite = (p: string) =>
-  /syntaxe|compile|SyntaxError/i.test(p) ? 0 : /erreur à l'exécution|n'est définie|introuvable|absent/i.test(p) ? 1 : /vide/i.test(p) ? 2 : 3;
+  /syntaxe|compile|SyntaxError|JSON invalide/i.test(p) ? 0 : /erreur à l'exécution|n'est définie|introuvable|absent/i.test(p) ? 1 : /vide/i.test(p) ? 2 : 3;
 
 /** Contrôle ce que le tour a modifié. Rend les problèmes (vides si tout va bien) et ce qui a été vérifié. */
 export async function controlerTourCode(
@@ -183,12 +257,13 @@ export async function controlerTourCode(
 ): Promise<{ problemes: string[]; fichiers: number; pagesEssayees: number; essaiReel: boolean; dossiers?: string[] }> {
   const suivi = suivis.get(sessionID);
   const depuis = suivi?.debut ?? Date.now() - 10 * 60_000;
+  const autres = await problemesAutres(dossier, depuis);
   const touches = modifiesDepuis(dossier, depuis);
-  if (touches.length === 0) return { problemes: [], fichiers: 0, pagesEssayees: 0, essaiReel: false, dossiers: [] };
+  if (touches.length === 0) return { problemes: autres.problemes, fichiers: autres.fichiers, pagesEssayees: 0, essaiReel: false, dossiers: [] };
   const dossiers = [...new Set(touches.map((f) => dirname(f)))];
   const retenus = dossiers.filter((d) => !dossiers.some((p) => p !== d && d.startsWith(p + sep)));
-  const problemes: string[] = [];
-  let fichiers = 0;
+  const problemes: string[] = [...autres.problemes];
+  let fichiers = autres.fichiers;
   for (const d of retenus) {
     const r = controler(d, { racine: dossier });
     fichiers += r.fichiers;
@@ -248,7 +323,9 @@ export async function apresTourCode(
     statut(
       r.essaiReel
         ? tf("Contrôle automatique : {0} fichier(s) vérifié(s) et {1} page(s) essayée(s), aucun problème trouvé.", r.fichiers, r.pagesEssayees)
-        : tf("Contrôle automatique : {0} fichier(s) vérifié(s), aucun problème trouvé (pages non essayées : navigateur de l'application indisponible).", r.fichiers),
+        : (r.dossiers?.length ?? 0) === 0
+          ? tf("Contrôle automatique : {0} fichier(s) vérifié(s), aucun problème trouvé.", r.fichiers)
+          : tf("Contrôle automatique : {0} fichier(s) vérifié(s), aucun problème trouvé (pages non essayées : navigateur de l'application indisponible).", r.fichiers),
     );
     console.log(`[code] contrôle automatique : propre (${r.fichiers} fichiers, ${r.pagesEssayees} pages essayées).`);
     return;
@@ -266,10 +343,12 @@ export async function apresTourCode(
   // Une fonction appelée qui n'existe pas : on lui dit celles qui existent, pour qu'il appelle la bonne ou écrive la manquante.
   const definies = r.problemes.some((x) => /n'est définie/.test(x)) ? [...new Set((r.dossiers ?? []).flatMap(fonctionsDefinies))] : [];
   const texte = [
+    // Le texte en toutes lettres : le relevé des traductions (scripts/i18n-passerelle.mjs) ne lit que les chaînes écrites dans t().
     t("[Contrôle automatique de Helix] Le travail n'est pas terminé : un programme a vérifié les fichiers et essayé les pages dans un vrai navigateur, et a trouvé ces problèmes :"),
     ...r.problemes.map((x) => `- ${x}`),
     ...(definies.length > 0 ? ["", tf("Fonctions qui existent vraiment dans les scripts : {0}. Écris celles qui manquent, ou appelle celles-ci.", definies.join(", "))] : []),
     "",
+    t("Un fichier de moins de 300 lignes : réécris-le en entier avec write, plutôt qu'avec edit (un edit échoue si le texte à remplacer n'est pas recopié à l'identique)."),
     t("Corrige-les tous, dans les fichiers concernés. Relis chaque fichier modifié en entier avant de dire que c'est fini. Ne réponds pas « c'est fait » sans avoir corrigé : le contrôle repassera après toi."),
   ].join("\n");
   const ok = await relancer(texte);

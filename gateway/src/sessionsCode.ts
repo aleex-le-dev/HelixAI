@@ -1,3 +1,5 @@
+import { ENTETE_RELANCE } from "./controleCode.ts";
+import { t } from "./langue.ts";
 import { db } from "./db.ts";
 
 /**
@@ -211,13 +213,36 @@ export interface MessageHistorique {
 }
 
 const ARRET = /^\[La demande précédente a été arrêtée par la personne[^\]]*\]\s*/;
-const DESIGN = "\n\n---\nDesign : ce projet a un design";
+/*
+ * Ce que Helix ajoute à la demande pour le modèle (index.ts, design.ts,
+ * application.ts) : retiré de l'historique, qui montre ce que la personne a
+ * écrit. Vu le 26/09/2026 : la consigne d'une application préparée
+ * réapparaissait en entier dans la bulle de la personne à la réouverture.
+ */
+const AJOUTS = ["\n\n---\nDesign : ce projet a un design", "\n\n---\nHelix a déjà construit", "\n\n---\nMéthode de travail (Helix)"];
+/*
+ * Une relance du contrôle automatique (controleCode.ts) est envoyée comme un
+ * message de la personne : à la réouverture, elle s'affichait dans sa bulle,
+ * comme si elle l'avait écrite. Reconnue à son début, en français ou dans la
+ * langue de l'instance.
+ */
+
 
 /** Ce que la personne a écrit, sans ce que Helix y a ajouté pour le modèle (index.ts, useCode.ts). */
 function demandeAffichee(texte: string): string {
-  const i = texte.indexOf(DESIGN);
-  return (i >= 0 ? texte.slice(0, i) : texte).replace(ARRET, "");
+  let fin = texte.length;
+  for (const a of AJOUTS) {
+    const i = texte.indexOf(a);
+    if (i >= 0 && i < fin) fin = i;
+  }
+  return texte.slice(0, fin).replace(ARRET, "");
 }
+
+const estRelance = (texte: string) => {
+  const debut = texte.trimStart();
+  const entete = (x: string) => x.slice(0, x.indexOf("]") + 1);
+  return [entete(ENTETE_RELANCE), entete(t(ENTETE_RELANCE))].some((e) => e.length > 2 && debut.startsWith(e));
+};
 
 /** Ce qu'un outil a reçu, sans le contenu d'un fichier entier : de quoi le libeller. */
 function entreeCourte(entree: unknown): Record<string, unknown> {
@@ -277,6 +302,13 @@ export function historiqueDe(messages: MessageOpenCode[]): MessageHistorique[] {
       }
     }
     if (role === "user") {
+      // Une relance de Helix : la réponse continue, avec une ligne qui le dit (comme à l'écran pendant le travail).
+      if (estRelance(textes.join("\n\n"))) {
+        const precedent = rendu[rendu.length - 1];
+        const note = `*${t("Contrôle automatique : problèmes trouvés, l'agent reprend son travail.")}*`;
+        if (precedent?.role === "assistant") precedent.texte = [precedent.texte, note].filter(Boolean).join("\n\n");
+        continue;
+      }
       const texte = demandeAffichee(textes.join("\n\n"));
       if (texte.trim()) rendu.push({ role, texte, outils: [] });
       continue;

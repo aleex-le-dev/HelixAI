@@ -64,7 +64,7 @@ import * as images from "./images.ts";
 import { contenuLogiciel, logicielsTrouves, pageLogiciel } from "./importLocal.ts";
 import * as entrainement from "./entrainement.ts";
 import { choisirDesign, corrigerPages, estApplication, estDemandeDeSite, preparerDesign, projetDejaCommence } from "./design.ts";
-import { apresTourCode, arretDemandeCode, demandeArretee, nouvelleDemandeCode } from "./controleCode.ts";
+import { METHODE_CODE, apresTourCode, arretDemandeCode, demandeArretee, nouvelleDemandeCode } from "./controleCode.ts";
 import { applicationPreparee, consigneApplication, ecrireApplication, planifierApplication } from "./application.ts";
 import { arreterMachine, arreterMachineEnPartant, choisirSysteme, demarrerMachine, diagnosticMachine, effacerMachine, preparationMachineEnCours, progressionMachine, systemeMachine } from "./machine.ts";
 import { apercuEffacement, effacerCompte, sansComptesDisparus } from "./effacement.ts";
@@ -2515,6 +2515,9 @@ async function handleCodePrompt(
       console.log(`[code] design non préparé : ${err instanceof Error ? err.message : String(err)}`);
     }
   }
+
+  // La méthode qui rend un petit modèle juste du premier coup (controleCode.ts), pour toute demande.
+  texteEnvoye += METHODE_CODE;
 
   /*
    * Qui envoie cette demande : les connecteurs que l'agent de code appellera

@@ -1985,8 +1985,8 @@ export function toolsForModel(): {
       ? [
           fn(
             "creer",
-            "Crée un événement dans Google Agenda. Personne n'est invité et aucun courriel ne part. " +
-              "La personne verra l'événement et l'acceptera avant qu'il soit créé.",
+            `Crée un événement dans Google Agenda, une seule fois. Aujourd'hui, nous sommes le ${agendaGoogle.aujourdhui()} : ` +
+              "calcule « demain », « lundi prochain »… à partir de cette date. Personne n'est invité et aucun courriel ne part.",
             {
               titre: { type: "string", description: "Nom de l'événement." },
               debut: { type: "string", description: "AAAA-MM-JJTHH:MM (heure de ce poste), ou AAAA-MM-JJ pour une journée entière." },
@@ -1999,7 +1999,7 @@ export function toolsForModel(): {
           ),
           fn(
             "modifier",
-            "Modifie un événement existant de Google Agenda, désigné par l'identifiant donné par agenda__prochains, agenda__jour ou agenda__chercher. Seuls les champs donnés changent.",
+            `Modifie un événement existant de Google Agenda, désigné par l'identifiant donné par agenda__prochains, agenda__jour ou agenda__chercher. Seuls les champs donnés changent. Aujourd'hui : ${agendaGoogle.aujourdhui()}.`,
             {
               identifiant: { type: "string", description: "Identifiant de l'événement, recopié tel quel." },
               titre: { type: "string" },

@@ -710,13 +710,41 @@ function exigerEcriture(): void {
 
 const idSur = (id: string) => /^[A-Za-z0-9_@.-]{1,1024}$/.test(id);
 
+/** Aujourd'hui, en toutes lettres, pour l'agent qui ne connaît pas la date (mesuré le 26/09/2026 : il écrivait 2023). */
+export function aujourdhui(): string {
+  const d = new Date();
+  const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  return `${d.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric" })} (${iso}), ${String(d.getHours()).padStart(2, "0")} h ${String(d.getMinutes()).padStart(2, "0")}`;
+}
+
+/*
+ * Créations récentes, pour refuser un doublon. Mesuré le 26/09/2026 : Qwen3 8B,
+ * au niveau « Tout approuver », a créé trois fois le même rendez-vous de suite.
+ */
+const creesRecemment = new Map<string, { id: string; quand: number }>();
+
 export async function creerEvenement(e: EcritureEvenement, agenda: string | null): Promise<string> {
   exigerEcriture();
   const c = corpsEvenement(e, true);
   if (!c.ok) throw new ErreurAgendaGoogle("api", c.message);
+  // Une date passée est presque toujours une année devinée par le modèle : on refuse, en lui donnant la vraie date.
+  const debut = c.corps.start as { date?: string; dateTime?: string };
+  const debutMs = debut.dateTime ? Date.parse(debut.dateTime) : debut.date ? jourLocal(debut.date) : NaN;
+  const minuit = new Date();
+  minuit.setHours(0, 0, 0, 0);
+  if (Number.isFinite(debutMs) && debutMs < minuit.getTime()) {
+    throw new ErreurAgendaGoogle("api", `Rien n'a été créé : cette date est passée. Aujourd'hui, nous sommes le ${aujourdhui()}. Recalcule la date à partir d'aujourd'hui.`);
+  }
+  const cle = `${String(c.corps.summary ?? "").toLowerCase()}|${debut.dateTime ?? debut.date ?? ""}|${agenda ?? ""}`;
+  const deja = creesRecemment.get(cle);
+  if (deja && Date.now() - deja.quand < 15 * 60_000) {
+    return `Déjà fait : cet événement a été créé il y a quelques minutes (identifiant : ${deja.id}). Rien n'a été créé de plus ; ne le recrée pas.`;
+  }
   const cal = await idAgenda(agenda);
   const r = await api(`/calendar/v3/calendars/${encodeURIComponent(cal)}/events?sendUpdates=none`, undefined, { methode: "POST", corps: c.corps });
-  return `Événement créé : « ${String(r.summary ?? e.titre ?? "")} » (identifiant : ${String(r.id ?? "")}).`;
+  creesRecemment.set(cle, { id: String(r.id ?? ""), quand: Date.now() });
+  const quand = debut.dateTime ? new Date(Date.parse(debut.dateTime)).toLocaleString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" }) : debut.date;
+  return `Événement créé : « ${String(r.summary ?? e.titre ?? "")} », le ${quand} (identifiant : ${String(r.id ?? "")}). C'est fait : ne le recrée pas.`;
 }
 
 export async function modifierEvenement(id: string, e: EcritureEvenement, agenda: string | null): Promise<string> {

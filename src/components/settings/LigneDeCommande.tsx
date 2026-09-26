@@ -16,6 +16,8 @@ import { t, tf } from "@/lib/i18n";
 
 interface EtatCli {
   disponible: boolean;
+  /** Pourquoi elle n'est pas proposée (absent d'une application plus ancienne). */
+  empechement?: "windows" | "appimage" | null;
   installe: boolean;
   aJour: boolean;
   /** Un autre programme occupe déjà ~/.local/bin/helix : il n'est jamais remplacé. */
@@ -92,7 +94,9 @@ export function LigneDeCommande() {
         <InfoBox className="mt-4" leading={<Info size={15} strokeWidth={1.75} />}>
           {etat === null
             ? t("La commande se met en place depuis l'application de bureau de cet ordinateur, dans ce même écran.")
-            : t("La ligne de commande n'est pas encore prise en charge sur ce système.")}
+            : etat.empechement === "appimage"
+              ? t("Avec l'AppImage, l'application change de place à chaque lancement : la commande ne resterait pas en place. Installez le paquet .deb pour l'avoir.")
+              : t("La ligne de commande n'est pas encore prise en charge sur ce système.")}
         </InfoBox>
       ) : (
         <div className="mt-4 space-y-3">

@@ -1,10 +1,10 @@
-import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, writeFileSync, chmodSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync, chmodSync, renameSync } from "node:fs";
 import { join } from "node:path";
 import { homedir, hostname } from "node:os";
 import { deployment } from "./deployment.ts";
 import { surLeReseau } from "./config.ts";
 import { nomsEtAdresses } from "./reseau.ts";
+import { expireBientot, fabriquerAutoSigne } from "./certificat.ts";
 
 /**
  * Chiffrement du transport.
@@ -35,13 +35,10 @@ export interface TlsMaterial {
 
 const dossierTls = () => join(process.env.HELIX_DATA_DIR ?? join(homedir(), ".helix", "data"), "tls");
 
-/** Le certificat auto-signé arrive-t-il à expiration ? On le refait avant. */
+/** Le certificat auto-signé arrive-t-il à expiration (dans 30 jours) ? On le refait avant. */
 function bientotExpire(certPath: string): boolean {
   try {
-    execFileSync("openssl", ["x509", "-checkend", String(30 * 24 * 3600), "-noout", "-in", certPath], {
-      stdio: "ignore",
-    });
-    return false;
+    return expireBientot(readFileSync(certPath));
   } catch {
     return true;
   }
@@ -96,30 +93,27 @@ function genererAutoSigne(): { certPath: string; keyPath: string } | null {
 
   const nom = hostname();
   try {
-    execFileSync(
-      "openssl",
-      [
-        "req", "-x509", "-newkey", "rsa:2048", "-nodes",
-        "-keyout", keyPath,
-        "-out", certPath,
-        "-days", "365",
-        "-subj", `/CN=${nom}`,
-        "-addext", `subjectAltName=${nomsAlternatifs()}`,
-      ],
-      { stdio: "ignore", timeout: 30_000 },
-    );
+    /*
+     * Fabriqué par node:crypto (certificat.ts) depuis le 27/09/2026, plus par
+     * openssl : Windows n'en a pas, et l'instance partagée servait alors en
+     * clair. Écrit à côté puis renommé : un arrêt au milieu ne laisse pas une
+     * clé qui ne va pas avec son certificat.
+     */
+    const { noms, ips } = nomsEtAdresses();
+    const fait = fabriquerAutoSigne(nom, [...noms, "localhost"], [...ips, "127.0.0.1"]);
+    // La clé privée ne doit être lisible que par le compte qui l'héberge.
+    writeFileSync(`${keyPath}.tmp`, fait.key, { mode: 0o600 });
+    writeFileSync(`${certPath}.tmp`, fait.cert, { mode: 0o644 });
+    renameSync(`${keyPath}.tmp`, keyPath);
+    renameSync(`${certPath}.tmp`, certPath);
+    chmodSync(keyPath, 0o600);
     // La liste couverte est notée à côté : elle sert à savoir quand refaire le
     // certificat, l'adresse d'une machine n'étant pas éternelle.
     writeFileSync(join(dir, "instance-noms.txt"), nomsAlternatifs(), "utf8");
-    // La clé privée ne doit être lisible que par le compte qui l'héberge.
-    chmodSync(keyPath, 0o600);
     console.log(`[helix] certificat auto-signé généré pour « ${nom} ».`);
     return { certPath, keyPath };
   } catch (err) {
-    console.error(
-      "[helix] impossible de générer un certificat (openssl absent ?) :",
-      err instanceof Error ? err.message : String(err),
-    );
+    console.error("[helix] impossible de générer un certificat :", err instanceof Error ? err.message : String(err));
     return null;
   }
 }
@@ -169,7 +163,17 @@ export function tlsMaterial(): TlsMaterial | null {
   if (!exposee && !demandeExplicite) return null;
 
   const fichiers = genererAutoSigne();
-  if (!fichiers) return null;
+  /*
+   * Jamais en clair sur le réseau faute de certificat (audit Windows du
+   * 27/09/2026 : sans openssl, `null` ici servait l'instance partagée en
+   * clair). L'instance ne démarre pas, et le dit.
+   */
+  if (!fichiers) {
+    throw new Error(
+      "Impossible de fabriquer le certificat de l'instance partagée : elle ne s'ouvre pas en clair sur le réseau. " +
+        "Vérifiez que le dossier des données est accessible en écriture, ou déclarez votre certificat (`tls.cert`, `tls.key`).",
+    );
+  }
 
   return {
     cert: readFileSync(fichiers.certPath),

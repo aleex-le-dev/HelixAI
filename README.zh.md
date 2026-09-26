@@ -38,10 +38,10 @@ HelixAI 将 Chat、智能体、编程、知识库和模型微调整合到一个*
 | 平台 | 状态 |
 |---|---|
 | **macOS（Apple 芯片）** | 已构建并日常使用。从源码构建，然后运行 `npm run package` |
-| **Windows** | 已列入打包配置，尚未构建 |
-| **Linux** | 已列入打包配置，尚未构建 |
+| **Windows 10/11（x64）** | 安装程序已构建（`npx electron-builder --win nsis --x64`），**尚未在真实的 Windows 电脑上试用**。未签名：SmartScreen 会发出警告 |
+| **Linux（x64）** | `.deb` 和 AppImage 已构建（`npx electron-builder --linux AppImage deb --x64`），**尚未在真实的 Linux 机器上试用**。在 Ubuntu 24.04 上请优先使用 `.deb` |
 
-模型运行在 [LM Studio](https://lmstudio.ai) 中；在 macOS 上，首次启动页面可以为您安装它。
+模型运行在 [LM Studio](https://lmstudio.ai) 中，首次启动页面会为您安装：macOS 上安装应用本身，Windows 和 Linux 上安装其无界面引擎（llmster），每次都会校验其发布的校验值。一键更新仅在 macOS 上提供；在 Windows 和 Linux 上，请在旧版本之上安装新安装包。
 
 ## 功能
 

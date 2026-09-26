@@ -1,3 +1,4 @@
+import { nomProduit } from "./marque.ts";
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { execFile } from "node:child_process";
 import { basename, dirname, extname, join, relative, sep } from "node:path";
@@ -374,7 +375,7 @@ const gravite = (p: string) =>
 export async function controlerTourCode(
   sessionID: string,
   dossier: string,
-): Promise<{ problemes: string[]; fichiers: number; pagesEssayees: number; essaiReel: boolean; dossiers?: string[]; tests?: { commande: string; reussi: boolean } }> {
+): Promise<{ problemes: string[]; fichiers: number; pagesEssayees: number; essaiReel: boolean; dossiers?: string[]; tests?: { commande: string; reussi: boolean; nonLances?: boolean } }> {
   const suivi = suivis.get(sessionID);
   const depuis = suivi?.debut ?? Date.now() - 10 * 60_000;
   const autres = await problemesAutres(dossier, depuis);
@@ -385,7 +386,13 @@ export async function controlerTourCode(
   const essaiDesTests = async (problemes: string[]) => {
     if (problemes.some((x) => /syntaxe|compile|SyntaxError/i.test(x))) return undefined;
     const r = await essayerTests(dossier).catch(() => null);
-    if (!r || "sans" in r) return undefined;
+    if (!r) return undefined;
+    /*
+     * Des tests, mais pas de bac à sable sur ce système (Windows, Linux) : ils
+     * ne sont pas lancés, et le compte rendu le dit au lieu de se taire (audit
+     * du 27/09/2026).
+     */
+    if ("sans" in r) return { commande: "", reussi: false, nonLances: true };
     if (!r.reussi) {
       problemes.push(
         `Les tests du projet échouent (${r.commande}, lancés par Helix dans un bac à sable, sans réseau). Fin de la sortie :\n${r.sortie.slice(-1800)}\nCorrige le programme ; si c'est le test qui se trompe, corrige le test.`,
@@ -486,14 +493,17 @@ export async function apresTourCode(
     return statut("");
   }
   if (r.problemes.length === 0) {
+    const nonLances = r.tests?.nonLances
+      ? ` ${tf("Les tests du projet n'ont pas été lancés : sur ce système, {0} n'a pas de bac à sable où les faire tourner sans risque.", nomProduit())}`
+      : "";
     statut(
-      r.tests?.reussi
+      (r.tests?.reussi
         ? tf("Contrôle automatique : {0} fichier(s) vérifié(s), et les tests du projet réussissent ({1}, dans un bac à sable).", r.fichiers, r.tests.commande)
         : r.essaiReel
         ? tf("Contrôle automatique : {0} fichier(s) vérifié(s) et {1} page(s) essayée(s), aucun problème trouvé.", r.fichiers, r.pagesEssayees)
         : (r.dossiers?.length ?? 0) === 0
           ? tf("Contrôle automatique : {0} fichier(s) vérifié(s), aucun problème trouvé.", r.fichiers)
-          : tf("Contrôle automatique : {0} fichier(s) vérifié(s), aucun problème trouvé (pages non essayées : navigateur de l'application indisponible).", r.fichiers),
+          : tf("Contrôle automatique : {0} fichier(s) vérifié(s), aucun problème trouvé (pages non essayées : navigateur de l'application indisponible).", r.fichiers)) + nonLances,
     );
     console.log(`[code] contrôle automatique : propre (${r.fichiers} fichiers, ${r.pagesEssayees} pages essayées).`);
     await passerALaSuite();

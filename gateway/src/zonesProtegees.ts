@@ -29,6 +29,13 @@ import { basename, dirname, isAbsolute, join, resolve, sep } from "node:path";
  * celle de l'agent, comme n'importe quel document.
  */
 
+/*
+ * Sous Windows, le chemin réel « natif » : celui de Node en JavaScript ne
+ * développe pas les noms courts (`C:\Users\MEDHI~1`), et un chemin écrit
+ * ainsi passait à côté de la zone qu'il désigne (audit Windows du 27/09/2026).
+ */
+const reel = (p: string): string => (process.platform === "win32" ? realpathSync.native(p) : realpathSync(p));
+
 /** Dossier des données de l'instance, tel que la passerelle le calcule partout. */
 const dossierDonnees = (): string => process.env.HELIX_DATA_DIR ?? join(homedir(), ".helix", "data");
 
@@ -82,6 +89,21 @@ function calculerZones(): string[] {
     // Profil de l'application de bureau (séance ouverte dans son stockage local).
     join(maison, "Library", "Application Support", "Helix"),
     join(maison, "Library", "Application Support", "helix-plateforme"),
+    /*
+     * Linux et Windows (audit du 27/09/2026). Linux : les trousseaux de GNOME,
+     * les profils de Firefox et de Thunderbird (mots de passe, cookies), les
+     * certificats de Chromium, les données des applications Flatpak. Windows :
+     * tout `AppData`, où vivent le profil de Helix (séance, cookies du bot de
+     * réunion), les jetons de gh et de gcloud, les identifiants de Windows
+     * (`Microsoft\Credentials`, `Protect`).
+     */
+    join(maison, ".local", "share", "keyrings"),
+    join(maison, ".mozilla"),
+    join(maison, ".thunderbird"),
+    join(maison, ".pki"),
+    join(maison, ".var", "app"),
+    join(maison, "AppData"),
+    ...[process.env.APPDATA, process.env.LOCALAPPDATA].filter((d): d is string => process.platform === "win32" && Boolean(d)),
   ];
   if (process.env.HELIX_PROFIL_ESSAI) zones.push(process.env.HELIX_PROFIL_ESSAI);
   // Chacune sous sa forme réelle aussi : `/var` et `/private/var` sur macOS,
@@ -90,7 +112,7 @@ function calculerZones(): string[] {
   for (const z of zones) {
     toutes.add(resolve(z));
     try {
-      toutes.add(realpathSync(z));
+      toutes.add(reel(z));
     } catch {
       /* absente sur ce poste */
     }
@@ -101,8 +123,18 @@ function calculerZones(): string[] {
 /** Forme repliée : le système de fichiers de macOS ignore la casse (voir `replier`, opencode.ts). */
 const replier = (chemin: string) => chemin.normalize("NFC").toLowerCase();
 
+/*
+ * Sous Windows, des formes de chemin qui contournent la comparaison : un
+ * chemin réseau ou de périphérique (`\\serveur\…`, `\\?\C:\…`), et un flux de
+ * données secondaire (`fichier:flux`, un deux-points après la lettre du
+ * disque). Aucun n'a d'usage légitime ici : refusés comme une zone.
+ */
+const douteuxSousWindows = (chemin: string): boolean =>
+  process.platform === "win32" && (/^[\\/]{2}/.test(chemin) || chemin.slice(2).includes(":"));
+
 /** Ce chemin (absolu, déjà réel de préférence) est-il dans une zone protégée ? */
 export function estProtege(chemin: string): boolean {
+  if (douteuxSousWindows(chemin)) return true;
   const cible = replier(resolve(chemin));
   return zonesProtegees().some((z) => {
     const zone = replier(z);
@@ -124,7 +156,7 @@ export function contientUneZone(dossier: string): boolean {
 export function cheminReel(chemin: string): string {
   const absolu = resolve(chemin);
   try {
-    return realpathSync(absolu);
+    return reel(absolu);
   } catch {
     const parent = dirname(absolu);
     if (parent === absolu) return absolu;
@@ -134,7 +166,7 @@ export function cheminReel(chemin: string): string {
 
 /** `~` et `~/…` comme les développe le serveur de fichiers MCP. */
 const developper = (chemin: string) =>
-  chemin === "~" ? homedir() : chemin.startsWith("~/") ? join(homedir(), chemin.slice(2)) : chemin;
+  chemin === "~" ? homedir() : chemin.startsWith("~/") || (process.platform === "win32" && chemin.startsWith("~\\")) ? join(homedir(), chemin.slice(2)) : chemin;
 
 /**
  * Un appel au serveur de fichiers MCP touche-t-il une zone protégée ?

@@ -52,6 +52,8 @@ const etat = {
   derniereVerification: null,
   message: null,
   lienPaquet: null,
+  /** Le système du poste : hors de macOS, l'écran dit que la mise à jour se fait à la main. */
+  plateforme: process.platform,
 };
 
 function publier(changements) {
@@ -183,6 +185,18 @@ async function demarrerMiseAJour(permis) {
   if (typeof permis === "function") expediteurPermis = permis;
   if (!app.isPackaged) {
     publier({ phase: "inactif", message: "Pas de mise à jour en développement." });
+    return;
+  }
+
+  /*
+   * Windows et Linux (audit du 27/09/2026) : l'installation d'un clic ne sait
+   * remplacer qu'une application macOS, et l'instance ne sert que celle-là.
+   * Le bouton « Installer » était proposé puis échouait à coup sûr, après le
+   * téléchargement. L'écran dit désormais que la mise à jour se fait à la
+   * main, avec le paquet du prestataire, et rien n'est contacté.
+   */
+  if (process.platform !== "darwin") {
+    publier({ phase: "non-configuree", message: null });
     return;
   }
 

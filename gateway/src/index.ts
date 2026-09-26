@@ -1,3 +1,5 @@
+// En premier : sous Windows, rien de ce que lance la passerelle n'ouvre de console (processus.ts).
+import "./processus.ts";
 import http from "node:http";
 import { once } from "node:events";
 import { estEnvoiEnFlux, lireEnvoi, LIBELLE_DOCUMENT_MAX } from "./televersement.ts";
@@ -5386,6 +5388,28 @@ for (const signal of ["SIGINT", "SIGTERM"] as const) {
   });
 }
 process.on("exit", arreterProprement);
+
+/*
+ * Sous Windows, il n'y a pas de signal à recevoir : `kill()` tuait net la
+ * passerelle, et rien de ce qui précède ne tournait (audit du 27/09/2026 :
+ * OpenCode, OpenClaw, le serveur de LM Studio restaient derrière). L'application
+ * ouvre un canal au lancement et y demande l'arrêt. Canal coupé (application
+ * arrêtée net, ou plantée) : la passerelle s'arrête aussi, au lieu de rester
+ * seule sur le port. Sans canal (passerelle lancée à la main, serveur), rien
+ * ne change.
+ */
+if (typeof process.send === "function") {
+  process.on("message", (m) => {
+    if (m && typeof m === "object" && (m as { type?: unknown }).type === "arret") {
+      arreterProprement();
+      process.exit(0);
+    }
+  });
+  process.on("disconnect", () => {
+    arreterProprement();
+    process.exit(0);
+  });
+}
 
 /*
  * Le magasin est remis sous sa forme chiffrée actuelle **avant** la première

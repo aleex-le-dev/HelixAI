@@ -50,10 +50,25 @@ npm run verifier:signature # contrôle signature, durcissement, Gatekeeper, nota
 
 Mode d'emploi de la signature, pas à pas : [`SIGNATURE.md`](../SIGNATURE.md) § 1.
 
-Génère `release/Helix-<version>-<arch>.dmg` et `.zip` (macOS), `.exe` (Windows) ou
-`.AppImage` (Linux) selon la plateforme de construction. **Seul macOS a été
-construit et éprouvé** ; Windows et Linux sont prévus dans la configuration mais
-repoussés à la demande du client. L'installeur embarque
+Génère `release/Helix-<version>-<arch>.dmg` et `.zip` (macOS). Windows et Linux se
+fabriquent depuis ce même Mac, après `npm run build` (27/09/2026) :
+
+```bash
+npx electron-builder --win nsis --x64 --publish never
+npx electron-builder --linux AppImage deb --x64 --publish never
+```
+
+Ils donnent `release/Helix Setup <version>.exe` (installateur NSIS pour le compte, sans
+droits d'administration, en français, anglais ou chinois selon Windows),
+`release/helix-plateforme_<version>_amd64.deb` et `release/Helix-<version>.AppImage`. La
+chaîne NSIS récente (`toolsets.nsis` 1.2.1) est nécessaire sur un Mac Apple Silicon sans
+Rosetta ; l'AppImage prend le runtime statique (`toolsets.appimage` 1.0.3, noté bêta par
+electron-builder), qui se passe de libfuse2. Le `.deb` tire les bibliothèques du moteur
+(`libatomic1`, `libgomp1`) et recommande `python3`, `python3-venv` et `unzip` : apt les
+installe avec lui. Il pose aussi le bac à sable de Chromium et son profil AppArmor, que
+l'AppImage n'a pas (sur Ubuntu 24.04, l'AppImage démarre sans bac à sable).
+**Seul macOS a été éprouvé sur une vraie machine** ; les paquets Windows et Linux sont
+construits et leur contenu vérifié, pas encore installés sur un vrai PC. L'installeur embarque
 l'interface, la passerelle compilée (`dist-gateway/index.cjs`) et l'icône. La
 passerelle tourne dans le runtime Node d'Electron : **lancer Helix et converser
 ne demande aucune installation de Node**.
@@ -65,7 +80,7 @@ machine :
 |---|---|---|
 | Outils fichiers (MCP) | `npx` (donc Node/npm) sur le poste | Le serveur de fichiers ne démarre pas, l'agent n'a pas d'outils |
 | Écran Code | `opencode` installé (`~/.opencode/bin/opencode` ou dans le `PATH`) | L'écran Code signale que le moteur est absent |
-| Modèles locaux | LM Studio | L'écran de mise en route propose de l'installer, sans intervention, sur macOS uniquement |
+| Modèles locaux | LM Studio | L'écran de mise en route l'installe, sans intervention : l'application sur macOS, son moteur sans interface (llmster) sur Windows et Linux |
 
 Avec un modèle local, l'écran Code peut attendre une ou deux minutes avant le premier
 mot : le modèle lit d'abord toute la demande, et la relit s'il l'a perdue parce qu'un

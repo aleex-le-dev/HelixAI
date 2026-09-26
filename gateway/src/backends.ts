@@ -2,17 +2,28 @@ import { redirectionPour, refusSortie } from "./sortieReseau.ts";
 import { execFile, execFileSync } from "node:child_process";
 import { promisify } from "node:util";
 import { homedir, totalmem } from "node:os";
+import { join } from "node:path";
+import { lmsDeLlmster } from "./engine.ts";
 import { BACKENDS, classifyRoles, isReasoningModel, tousLesBackends } from "./config.ts";
 import type { BackendConfig, BackendStatus, ModelInfo } from "./types.ts";
 import { t, tf } from "./langue.ts";
 
 const exec = promisify(execFile);
 
-/** Emplacements usuels du binaire `lms` (LM Studio l'ajoute rarement au PATH). */
-const LMS_CANDIDATES = [
-  `${homedir()}/.lmstudio/bin/lms`,
-  `${homedir()}/.cache/lm-studio/bin/lms`,
-  "lms",
+/*
+ * Emplacements usuels du binaire `lms` (LM Studio l'ajoute rarement au PATH).
+ * Sous Windows, `lms.exe` (un nom sans extension n'y est pas trouvé), et le
+ * dossier que désigne `~/.lmstudio-home-pointer` s'il existe (engine.ts).
+ */
+const extensionLms = process.platform === "win32" ? ".exe" : "";
+const LMS_CANDIDATES = () => [
+  ...new Set([
+    lmsDeLlmster(),
+    join(homedir(), ".lmstudio", "bin", `lms${extensionLms}`),
+    join(homedir(), ".cache", "lm-studio", "bin", `lms${extensionLms}`),
+    ...(process.platform === "win32" && process.env.LOCALAPPDATA ? [join(process.env.LOCALAPPDATA, "lm-studio", "bin", "lms.exe")] : []),
+    "lms",
+  ]),
 ];
 
 let lmsPathCache: string | null | undefined;
@@ -32,7 +43,7 @@ export function oublierLms(): void {
 /** Localise le binaire `lms`, ou `null` s'il est absent. */
 export async function findLms(): Promise<string | null> {
   if (lmsPathCache !== undefined) return lmsPathCache;
-  for (const candidate of LMS_CANDIDATES) {
+  for (const candidate of LMS_CANDIDATES()) {
     try {
       await exec(candidate, ["version"], { timeout: 5000 });
       lmsPathCache = candidate;
@@ -195,6 +206,14 @@ export async function ensureLmStudioServer(): Promise<boolean> {
      */
   }
 
+  /*
+   * Linux et Windows : le moteur sans interface (llmster, engine.ts) tourne
+   * comme un service, qu'on allume avant son serveur. Sans effet s'il tourne
+   * déjà. Pas sur macOS : c'est l'application LM Studio, partagée, qui y sert.
+   */
+  if (process.platform !== "darwin") {
+    await exec(lms, ["daemon", "up"], { timeout: 60_000 }).catch(() => undefined);
+  }
   try {
     console.log("[helix] serveur LM Studio arrêté, démarrage...");
     await exec(lms, ["server", "start"], { timeout: 30_000 });

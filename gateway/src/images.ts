@@ -11,6 +11,7 @@ import { journaliser } from "./audit.ts";
 import { t, tf } from "./langue.ts";
 import { db } from "./db.ts";
 import { voitConversation, type Demandeur } from "./authz.ts";
+import { arreterArbre } from "./processus.ts";
 
 const exec = promisify(execFile);
 
@@ -471,9 +472,30 @@ export async function telecharger(url: string, destination: string, sha256: stri
 
 async function extraire(archive: string, dossier: string): Promise<void> {
   mkdirSync(dossier, { recursive: true });
-  // `tar` lit les .zip sur Mac (bsdtar) comme sur Windows 10 et plus ; `unzip` sous Linux.
-  if (process.platform === "linux") await exec("unzip", ["-o", "-q", archive, "-d", dossier], { timeout: 120_000 });
-  else await exec("tar", ["-xf", archive, "-C", dossier], { timeout: 120_000 });
+  if (process.platform === "linux") {
+    /*
+     * `unzip` manque aux installations minimales (audit du 27/09/2026) : le
+     * module `zipfile` de Python, présent presque partout, le remplace. Les
+     * droits d'exécution sont remis ensuite (`chmod`, plus bas).
+     */
+    try {
+      await exec("unzip", ["-o", "-q", archive, "-d", dossier], { timeout: 120_000 });
+    } catch {
+      try {
+        await exec("python3", ["-m", "zipfile", "-e", archive, dossier], { timeout: 120_000 });
+      } catch {
+        throw new Error(t("Impossible d'ouvrir l'archive du moteur d'images : installez unzip (sudo apt install unzip), puis réessayez."));
+      }
+    }
+    return;
+  }
+  /*
+   * `tar` lit les .zip sur Mac (bsdtar) comme sur Windows 10 et plus. Sous
+   * Windows, celui du système lui-même : celui de Git, s'il passe avant dans
+   * le PATH, ne sait pas lire `C:`.
+   */
+  const tar = process.platform === "win32" ? join(process.env.SystemRoot ?? "C:\\Windows", "System32", "tar.exe") : "tar";
+  await exec(tar, ["-xf", archive, "-C", dossier], { timeout: 120_000 });
 }
 
 export function installerImages(qui: string, id: string): Promise<void> {
@@ -702,7 +724,7 @@ export async function lancerCreation(description: string, format: Format, qui: s
       };
       p.stdout.on("data", lire);
       p.stderr.on("data", lire);
-      const garde = setTimeout(() => p.kill(), moteur.lent ? 30 * 60_000 : 10 * 60_000);
+      const garde = setTimeout(() => arreterArbre(p), moteur.lent ? 30 * 60_000 : 10 * 60_000);
       p.on("close", (c) => {
         clearTimeout(garde);
         travailActif = null;
@@ -1099,7 +1121,7 @@ export async function lancerVideo(description: string, format: "paysage" | "port
       // 45 minutes au plus : au-delà, la machine n'est pas faite pour, et on le dit plutôt que de la bloquer.
       const garde = setTimeout(() => {
         tr.erreur = t("Arrêtée au bout de 45 minutes : cette machine est trop juste pour ce réglage.");
-        p.kill();
+        arreterArbre(p);
       }, 45 * 60_000);
       p.on("close", (c) => {
         clearTimeout(garde);

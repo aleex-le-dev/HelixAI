@@ -433,6 +433,8 @@ export interface Capability {
   problemes: string[];
   /** Mode `sandbox` : le système de la machine de l'agent. */
   systeme?: "linux" | "macos";
+  /** Piloter l'écran de cette machine même (« Cet écran ») : macOS seulement, l'écran ne le propose pas ailleurs. */
+  hotePossible: boolean;
 }
 
 /** Le parc contient-il un modèle capable de lire une capture d'écran ? */
@@ -483,6 +485,7 @@ async function measure(): Promise<Capability> {
     source: config.source,
     modifiable: modifiable.ok,
     ...(modifiable.ok ? {} : { raisonNonModifiable: modifiable.raison }),
+    hotePossible: process.platform === "darwin",
   };
 
   if (config.mode === "desactive") {

@@ -13,7 +13,7 @@ import {
   statSync,
   readdirSync,
 } from "node:fs";
-import { join, dirname } from "node:path";
+import { join, dirname, parse, sep } from "node:path";
 import { homedir } from "node:os";
 import { PORT, NIVEAUX_EFFORT } from "./config.ts";
 import { instanceToken } from "./auth.ts";
@@ -24,6 +24,7 @@ import { CONSIGNES_CODE } from "./allegementCode.ts";
 import { optionsDeChargement } from "./backends.ts";
 import { contientUneZone, estProtege } from "./zonesProtegees.ts";
 import type { ModelInfo } from "./types.ts";
+import { arreterArbre } from "./processus.ts";
 
 /**
  * Moteur de l'écran Code : OpenCode en mode serveur (ARCHITECTURE.md, ADR-003).
@@ -583,7 +584,9 @@ export function environnementOpenCode(): Record<string, string> {
   const env: Record<string, string> = {};
   for (const [nom, valeur] of Object.entries(process.env)) {
     if (valeur === undefined) continue;
-    if (TRANSMISES.includes(nom) || nom.startsWith("LC_")) env[nom] = valeur;
+    // Sous Windows, les noms ne tiennent pas compte de la casse, et le PATH s'y appelle souvent `Path` : sans ce repli, OpenCode partait sans PATH.
+    const transmise = process.platform === "win32" ? TRANSMISES.some((t) => t.toUpperCase() === nom.toUpperCase()) : TRANSMISES.includes(nom);
+    if (transmise || nom.startsWith("LC_")) env[nom] = valeur;
   }
   return {
     ...env,
@@ -755,7 +758,7 @@ export async function ensureServer(): Promise<number | null> {
       }
     }
 
-    proc.kill();
+    arreterArbre(proc);
     lastError = "Le serveur OpenCode n'a pas démarré à temps.";
     return null;
   })();
@@ -792,7 +795,7 @@ export async function status(userId?: string): Promise<CodeStatus> {
 }
 
 export function stopServer(): void {
-  child?.kill();
+  arreterArbre(child);
   child = null;
   port = null;
 }
@@ -979,9 +982,17 @@ const dossiersChoisis = new Map<string, string>();
  */
 export function toutLePoste(): string[] {
   const lieux = [homedir()];
-  // Points de montage, selon le système. Seuls ceux qui existent sont ouverts :
-  // un chemin inexistant fait refuser le serveur de fichiers au démarrage.
-  for (const montage of ["/Volumes", "/media", "/mnt"]) {
+  /*
+   * Points de montage, selon le système. Seuls ceux qui existent sont ouverts :
+   * un chemin inexistant fait refuser le serveur de fichiers au démarrage.
+   * `/run/media` : là où Fedora et Arch montent une clé USB. Sous Windows, les
+   * autres disques (D:, E:…), comme `/Volumes` sur macOS ; pas celui du système.
+   */
+  const disques =
+    process.platform === "win32"
+      ? "DEFGHIJKLMNOPQRSTUVWXYZ".split("").map((l) => `${l}:\\`).filter((d) => d.toUpperCase() !== `${(process.env.SystemDrive ?? "C:").toUpperCase()}\\`)
+      : ["/Volumes", "/media", "/mnt", "/run/media"];
+  for (const montage of disques) {
     try {
       if (statSync(montage).isDirectory()) lieux.push(montage);
     } catch {
@@ -991,16 +1002,32 @@ export function toutLePoste(): string[] {
   return lieux;
 }
 
-const INTERDITS = [
-  "/System",
-  "/usr",
-  "/bin",
-  "/sbin",
-  "/private/etc",
-  "/private/var/db",
-  "/Library/Security",
-  "/Applications",
-];
+/*
+ * Selon le système (audit Windows et Linux du 27/09/2026 : la liste ne
+ * connaissait que macOS, et `C:\Windows` ou `/etc` passaient). Sous Linux,
+ * pas `/var` entier ni `/opt` ni `/srv` : on y range parfois des projets
+ * (`/var/www`) ; leurs parties du système, si.
+ */
+const INTERDITS =
+  process.platform === "win32"
+    ? (() => {
+        const disque = process.env.SystemDrive ?? "C:";
+        return [
+          process.env.SystemRoot ?? `${disque}\\Windows`,
+          process.env.ProgramFiles ?? `${disque}\\Program Files`,
+          process.env["ProgramFiles(x86)"] ?? `${disque}\\Program Files (x86)`,
+          process.env.ProgramData ?? `${disque}\\ProgramData`,
+          `${disque}\\$Recycle.Bin`,
+          `${disque}\\System Volume Information`,
+          `${disque}\\Recovery`,
+        ];
+      })()
+    : process.platform === "linux"
+      ? ["/bin", "/sbin", "/usr", "/lib", "/lib32", "/lib64", "/libx32", "/etc", "/boot", "/dev", "/proc", "/sys", "/run", "/root", "/snap", "/var/lib", "/var/log", "/var/cache", "/var/spool", "/var/db", "/var/run"]
+      : ["/System", "/usr", "/bin", "/sbin", "/private/etc", "/private/var/db", "/Library/Security", "/Applications"];
+
+/** Chemin réel, noms courts de Windows développés (`realpathSync` en JavaScript ne le fait pas). */
+const cheminReelNatif = (p: string) => (process.platform === "win32" ? realpathSync.native(p) : realpathSync(p));
 
 /**
  * Forme repliée d'un chemin, pour comparer à la liste des interdits.
@@ -1053,7 +1080,7 @@ export type UsageDossier = "code" | "cowork" | "parcours";
 export function validerDossier(chemin: string, usage: UsageDossier = "code"): { ok: true; chemin: string } | { ok: false; raison: string } {
   let resolu: string;
   try {
-    resolu = realpathSync(chemin);
+    resolu = cheminReelNatif(chemin);
   } catch {
     return { ok: false, raison: t("Ce dossier n'existe pas.") };
   }
@@ -1066,8 +1093,8 @@ export function validerDossier(chemin: string, usage: UsageDossier = "code"): { 
     return { ok: false, raison: t("Ce dossier n'est pas lisible.") };
   }
 
-  // La racine du disque contient tout : la désigner reviendrait à ne rien borner.
-  if (resolu === "/") {
+  // La racine du disque contient tout : la désigner reviendrait à ne rien borner (`/`, `C:\`, `\\serveur\partage\`).
+  if (resolu === "/" || parse(resolu).root === resolu) {
     return {
       ok: false,
       raison: t("Choisissez un dossier précis plutôt que la racine du disque."),
@@ -1079,7 +1106,7 @@ export function validerDossier(chemin: string, usage: UsageDossier = "code"): { 
     const organe = replier(interdit);
 
     // Le dossier EST un organe du système, ou se trouve à l'intérieur.
-    if (cible === organe || cible.startsWith(organe + "/")) {
+    if (cible === organe || cible.startsWith(organe + sep)) {
       return {
         ok: false,
         raison: t(
@@ -1094,7 +1121,7 @@ export function validerDossier(chemin: string, usage: UsageDossier = "code"): { 
      * descend au premier appel. Même raisonnement que pour la racine du disque,
      * appliqué à chaque interdit.
      */
-    if (organe.startsWith(cible + "/")) {
+    if (organe.startsWith(cible.endsWith(sep) ? cible : cible + sep)) {
       return {
         ok: false,
         raison: tf(
@@ -1118,7 +1145,7 @@ export function validerDossier(chemin: string, usage: UsageDossier = "code"): { 
     if (usage === "code") {
       let maison = homedir();
       try {
-        maison = realpathSync(maison);
+        maison = cheminReelNatif(maison);
       } catch {
         /* dossier personnel introuvable : comparé tel quel */
       }

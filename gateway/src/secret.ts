@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { randomBytes, createCipheriv, createDecipheriv } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { closeSync, existsSync, fsyncSync, linkSync, mkdirSync, openSync, readFileSync, renameSync, unlinkSync, writeSync } from "node:fs";
 import { open, rename, rm } from "node:fs/promises";
 import { join, dirname } from "node:path";
 import { homedir } from "node:os";
@@ -190,21 +190,78 @@ export function cleDonnees(): Buffer | null {
    * données sur le même disque — mais cela protège encore d'une sauvegarde
    * recopiée ou d'un partage réseau mal réglé. Le compromis est documenté.
    */
+  /*
+   * Mêmes règles que le trousseau (audit Windows et Linux du 27/09/2026 :
+   * c'est le mode par défaut de ces deux systèmes). Avant, une clé tronquée
+   * était remplacée par une neuve sans rien dire, et toutes les données
+   * chiffrées avec l'ancienne devenaient illisibles ; une clé qu'un
+   * antivirus tenait verrouillée faisait écrire en clair.
+   */
   const chemin = cheminCleFichier();
-  try {
-    if (existsSync(chemin)) {
-      const cle = Buffer.from(readFileSync(chemin, "utf8").trim(), "base64");
-      if (cle.length === 32) {
-        cache = cle;
-        return cache;
-      }
+  if (existsSync(chemin)) {
+    let texte: string;
+    try {
+      texte = readFileSync(chemin, "utf8");
+    } catch (err) {
+      throw new Error(
+        `La clé de chiffrement (${chemin}) ne peut pas être lue (${(err as NodeJS.ErrnoException).code ?? "erreur"}). ` +
+          `${nomProduit()} refuse de démarrer plutôt que d'écrire vos données en clair ou de remplacer la clé. ` +
+          "Vérifiez qu'aucun autre programme (un antivirus) ne la tient ouverte, puis relancez.",
+      );
     }
-    const nouvelle = randomBytes(32);
-    mkdirSync(dirname(chemin), { recursive: true });
-    writeFileSync(chemin, nouvelle.toString("base64"), { mode: 0o600 });
+    const cle = Buffer.from(texte.trim(), "base64");
+    if (cle.length !== 32) {
+      throw new Error(
+        `La clé de chiffrement (${chemin}) est abîmée. ${nomProduit()} refuse de démarrer plutôt que de la remplacer : ` +
+          "les données chiffrées avec elle deviendraient illisibles pour toujours. Remettez ce fichier depuis une sauvegarde.",
+      );
+    }
+    cache = cle;
+    return cache;
+  }
+
+  /*
+   * Création : écrite à côté, forcée sur le disque, puis mise en place sans
+   * jamais écraser une clé qui serait apparue entre-temps (lien dur, qui
+   * échoue si le nom existe), et relue. Une clé qu'on ne relit pas à
+   * l'identique n'est pas utilisée : les données restent en clair, et le
+   * journal le dit.
+   */
+  const nouvelle = randomBytes(32);
+  const temp = `${chemin}.${process.pid}.tmp`;
+  try {
+    mkdirSync(dirname(chemin), { recursive: true, mode: 0o700 });
+    const fd = openSync(temp, "wx", 0o600);
+    try {
+      writeSync(fd, nouvelle.toString("base64"));
+      fsyncSync(fd);
+    } finally {
+      closeSync(fd);
+    }
+    try {
+      linkSync(temp, chemin);
+      unlinkSync(temp);
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === "EEXIST") {
+        unlinkSync(temp);
+        return cleDonnees();
+      }
+      // Un système de fichiers sans liens durs (clé USB en FAT) : renommer, si la place est toujours libre.
+      if (existsSync(chemin)) {
+        unlinkSync(temp);
+        return cleDonnees();
+      }
+      renameSync(temp, chemin);
+    }
+    const relue = Buffer.from(readFileSync(chemin, "utf8").trim(), "base64");
+    if (!relue.equals(nouvelle)) throw new Error("clé relue différente");
     cache = nouvelle;
     return cache;
-  } catch {
+  } catch (err) {
+    try {
+      unlinkSync(temp);
+    } catch {}
+    console.warn(`[helix] clé de chiffrement impossible à créer (${(err as Error).message}) : les données restent en clair.`);
     return null;
   }
 }

@@ -271,7 +271,7 @@ export function ActivationEcran({
         </div>
         {erreurBloc}
 
-        {capability.modifiable && (
+        {capability.modifiable && capability.hotePossible !== false && (
           <div className="rounded-xl border border-border p-3">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="flex min-w-0 flex-1 items-start gap-3">

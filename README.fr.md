@@ -42,11 +42,14 @@ notariée par Apple, construisez-la depuis les sources (ci-dessous) : quelques m
 | Plateforme | État |
 |---|---|
 | **macOS (Apple Silicon)** | Construit et utilisé tous les jours. Depuis les sources, puis `npm run package` |
-| **Windows** | Prévu dans la configuration d'empaquetage, jamais construit |
-| **Linux** | Prévu dans la configuration d'empaquetage, jamais construit |
+| **Windows 10/11 (x64)** | Installateur construit (`npx electron-builder --win nsis --x64`), **pas encore essayé sur un vrai PC Windows**. Non signé : SmartScreen avertit |
+| **Linux (x64)** | `.deb` et AppImage construits (`npx electron-builder --linux AppImage deb --x64`), **pas encore essayés sur une vraie machine Linux**. Préférez le `.deb` sur Ubuntu 24.04 |
 
 Les modèles tournent dans [LM Studio](https://lmstudio.ai), que l'écran de première
-installation peut installer pour vous sur macOS.
+installation installe pour vous : l'application sur macOS, son moteur sans interface
+(llmster) sur Windows et Linux, chaque fois avec son empreinte publiée vérifiée. La mise
+à jour d'un clic n'existe que sur macOS ; sur Windows et Linux, installez le nouveau
+paquet par-dessus l'ancien.
 
 ## Fonctions
 

@@ -42,11 +42,13 @@ build it from source (below); it takes a few minutes.
 | Platform | Status |
 |---|---|
 | **macOS (Apple Silicon)** | Built and used daily. Build from source, then `npm run package` |
-| **Windows** | Planned in the packaging configuration, never built yet |
-| **Linux** | Planned in the packaging configuration, never built yet |
+| **Windows 10/11 (x64)** | Installer built (`npx electron-builder --win nsis --x64`), **not yet tried on a real Windows PC**. Unsigned: SmartScreen warns |
+| **Linux (x64)** | `.deb` and AppImage built (`npx electron-builder --linux AppImage deb --x64`), **not yet tried on a real Linux machine**. Prefer the `.deb` on Ubuntu 24.04 |
 
-Models run in [LM Studio](https://lmstudio.ai), which the first-run screen can install
-for you on macOS.
+Models run in [LM Studio](https://lmstudio.ai), which the first-run screen installs for
+you: the app on macOS, its headless engine (llmster) on Windows and Linux, each time with
+its published checksum verified. One-click updates exist on macOS only; on Windows and
+Linux, install the new package over the old one.
 
 ## Features
 

@@ -14,6 +14,10 @@
  * bouton « Retirer » enlève le lanceur et cette ligne, et rien d'autre.
  *
  * Windows : pas encore fait (il faudrait un .cmd et le PATH du registre).
+ * Linux en AppImage : non plus (audit du 27/09/2026). L'application y tourne
+ * depuis un dossier monté à un nouvel endroit à chaque lancement
+ * (`/tmp/.mount_…`) : le lanceur aurait visé un chemin disparu au redémarrage
+ * suivant. Le paquet .deb, installé à une place fixe, l'a.
  */
 
 const fs = require("node:fs");
@@ -69,8 +73,11 @@ function pathDuShell() {
 /** Le lanceur posé par l'application porte cette phrase ; un autre programme nommé helix, non. */
 const estLeNotre = (contenu) => contenu.includes("posé par l'application");
 
+/** Pourquoi la commande n'est pas proposée ici, ou null. */
+const empechement = () => (process.platform === "win32" ? "windows" : process.env.APPIMAGE ? "appimage" : null);
+
 async function etat() {
-  const disponible = process.platform !== "win32" && fs.existsSync(script());
+  const disponible = empechement() === null && fs.existsSync(script());
   let installe = false;
   let aJour = false;
   // Un fichier ~/.local/bin/helix qui n'est pas le nôtre : on ne le remplace pas (revue du 26/09/2026).
@@ -93,6 +100,7 @@ async function etat() {
   }
   return {
     disponible,
+    empechement: empechement(),
     installe,
     aJour,
     etranger,
@@ -104,7 +112,7 @@ async function etat() {
 }
 
 async function installer() {
-  if (process.platform === "win32") throw new Error("Windows n'est pas encore pris en charge.");
+  if (empechement()) throw new Error(empechement() === "appimage" ? "Pas avec l'AppImage : installez le paquet .deb." : "Windows n'est pas encore pris en charge.");
   if (!fs.existsSync(script())) throw new Error("La ligne de commande est absente de ce paquet.");
   if (fs.existsSync(lanceur())) {
     let actuel = "";

@@ -3,6 +3,8 @@
   "private": true,
   "version": "0.27.0",
   "license": "AGPL-3.0-only",
+  "description": "Plateforme d'IA souveraine, locale et open source",
+  "desktopName": "helix-plateforme.desktop",
   "author": {
     "name": "Medhi Clabaut (Helix Agence, SIREN 994 907 145)",
     "email": "contact@helix-agence.fr",
@@ -97,9 +99,49 @@
     },
     "linux": {
       "target": [
-        "AppImage"
+        "AppImage",
+        "deb"
       ],
-      "category": "Office"
+      "category": "Office",
+      "synopsis": "Plateforme d'IA locale et souveraine",
+      "syncDesktopName": true
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "multiLanguageInstaller": true,
+      "installerLanguages": [
+        "fr_FR",
+        "en_US",
+        "zh_CN"
+      ],
+      "deleteAppDataOnUninstall": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    },
+    "deb": {
+      "depends": [
+        "libgtk-3-0",
+        "libnotify4",
+        "libnss3",
+        "libxss1",
+        "libxtst6",
+        "xdg-utils",
+        "libatspi2.0-0",
+        "libuuid1",
+        "libsecret-1-0",
+        "libatomic1",
+        "libgomp1"
+      ],
+      "recommends": [
+        "python3",
+        "python3-venv",
+        "unzip"
+      ]
+    },
+    "toolsets": {
+      "appimage": "1.0.3",
+      "nsis": "1.2.1"
     }
   },
   "devDependencies": {

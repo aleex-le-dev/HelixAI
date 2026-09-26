@@ -66,20 +66,56 @@ function executer(bin: string, args: string[], env: NodeJS.ProcessEnv, delaiMs: 
   });
 }
 
-/** Archive officielle de Node pour cette machine, ou la raison pour laquelle il n'y en a pas. */
-function plateformeNode(): { dossier: string; cleIndex: string } | { erreur: string } {
+/**
+ * Archive officielle de Node pour cette machine, ou la raison pour laquelle il
+ * n'y en a pas. `pour` : OpenClaw ne s'installe pas sous Windows (il y demande
+ * WSL) ; l'atelier, lui, s'y sert de ce Node pour npm quand la machine n'en a
+ * pas (27/09/2026).
+ */
+function plateformeNode(pour: "openclaw" | "atelier" = "openclaw"): { dossier: string; cleIndex: string; extension: ".tar.gz" | ".zip" } | { erreur: string } {
   const a = arch() === "arm64" ? "arm64" : arch() === "x64" ? "x64" : null;
-  if (!a) return { erreur: `Processeur non pris en charge par OpenClaw (${arch()}).` };
+  if (!a) return { erreur: tf("Processeur non pris en charge ({0}).", arch()) };
+  if (platform() === "win32" && pour === "atelier") return { dossier: `win-${a}`, cleIndex: `win-${a}-zip`, extension: ".zip" };
   if (platform() === "darwin") {
     // Node 24 exige macOS 13.5 ou plus récent (Darwin 22.6).
     const [maj = 0, min = 0] = release().split(".").map(Number);
     if (maj < 22 || (maj === 22 && min < 6)) {
-      return { erreur: "OpenClaw demande macOS 13.5 ou plus récent sur cette machine." };
+      return { erreur: t("OpenClaw demande macOS 13.5 ou plus récent sur cette machine.") };
     }
-    return { dossier: `darwin-${a}`, cleIndex: `osx-${a}-tar` };
+    return { dossier: `darwin-${a}`, cleIndex: `osx-${a}-tar`, extension: ".tar.gz" };
   }
-  if (platform() === "linux") return { dossier: `linux-${a}`, cleIndex: `linux-${a}` };
-  return { erreur: "L'installation automatique d'OpenClaw est prévue pour macOS et Linux." };
+  if (platform() === "linux") return { dossier: `linux-${a}`, cleIndex: `linux-${a}`, extension: ".tar.gz" };
+  return { erreur: t("L'installation automatique d'OpenClaw est prévue pour macOS et Linux (sous Windows, OpenClaw demande WSL).") };
+}
+
+/** Le Node privé : `node.exe` à la racine de son dossier sous Windows, dans `bin/` ailleurs. */
+const executableNode = (dossier: string) => (platform() === "win32" ? join(dossier, "node.exe") : join(dossier, "bin", "node"));
+
+/**
+ * Le npm du Node privé, s'il est installé : son script (`npm-cli.js`), que
+ * l'atelier lance par Node (atelier.ts).
+ */
+export function npmPrive(): string | null {
+  const dossier = join(racine(), "node");
+  // Le script lui-même, lancé par Node (atelier.ts) : `bin/npm` passe par `env node`, introuvable sans Node sur la machine.
+  const npm = platform() === "win32" ? join(dossier, "node_modules", "npm", "bin", "npm-cli.js") : join(dossier, "lib", "node_modules", "npm", "bin", "npm-cli.js");
+  return existsSync(npm) && existsSync(executableNode(dossier)) ? npm : null;
+}
+
+/** Le Node privé peut-il être installé ici ? La raison sinon. */
+export function nodePriveInstallable(): string | null {
+  const p = plateformeNode("atelier");
+  return "erreur" in p ? p.erreur : null;
+}
+
+/** Installe le Node privé seul (sans OpenClaw), pour l'atelier. Rend le chemin de son npm. */
+export async function assurerNodePrive(): Promise<string> {
+  const deja = npmPrive();
+  if (deja) return deja;
+  await installerNode("atelier");
+  const npm = npmPrive();
+  if (!npm) throw new Error(t("Node s'est installé, mais son npm est introuvable."));
+  return npm;
 }
 
 /** `fetch`, avec une erreur en français quand le réseau manque (« fetch failed » sinon). */
@@ -106,14 +142,14 @@ async function versionNode(cleIndex: string): Promise<string> {
   return retenue.version.replace(/^v/, "");
 }
 
-async function installerNode(): Promise<string> {
-  const p = plateformeNode();
+async function installerNode(pour: "openclaw" | "atelier" = "openclaw"): Promise<string> {
+  const p = plateformeNode(pour);
   if ("erreur" in p) throw new Error(p.erreur);
   const version = await versionNode(p.cleIndex);
   const nom = `node-v${version}-${p.dossier}`;
   const dossierNode = join(racine(), nom);
   const lien = join(racine(), "node");
-  if (existsSync(join(dossierNode, "bin", "node"))) {
+  if (existsSync(executableNode(dossierNode))) {
     relier(lien, nom);
     return version;
   }
@@ -124,11 +160,11 @@ async function installerNode(): Promise<string> {
   const attendue = (await sommes.text())
     .split("\n")
     .map((l) => l.trim().split(/\s+/))
-    .find(([, f]) => f === `${nom}.tar.gz`)?.[0];
-  if (!attendue) throw new Error("Empreinte de l'archive de Node introuvable.");
+    .find(([, f]) => f === `${nom}${p.extension}`)?.[0];
+  if (!attendue) throw new Error(t("Empreinte de l'archive de Node introuvable."));
 
-  const archive = join(tmpdir(), `helix-${nom}-${Date.now()}.tar.gz`);
-  const r = await telecharger(`${base}/${nom}.tar.gz`, 10 * 60_000);
+  const archive = join(tmpdir(), `helix-${nom}-${Date.now()}${p.extension}`);
+  const r = await telecharger(`${base}/${nom}${p.extension}`, 10 * 60_000);
   if (!r.ok || !r.body) throw new Error(`Téléchargement de Node impossible (${r.status}).`);
   const total = Number(r.headers.get("content-length") ?? 0);
   const empreinte = createHash("sha256");
@@ -153,11 +189,13 @@ async function installerNode(): Promise<string> {
   mkdirSync(racine(), { recursive: true, mode: 0o700 });
   const provisoire = join(racine(), `.extraction-${Date.now()}`);
   mkdirSync(provisoire, { recursive: true });
-  const t = await executer("/usr/bin/tar", ["-xzf", archive, "-C", provisoire], process.env, 5 * 60_000);
+  // Le `tar` du système : sous Windows, celui de Windows, qui ouvre aussi les .zip (celui de Git ne sait pas lire `C:`).
+  const tar = platform() === "win32" ? join(process.env.SystemRoot ?? "C:\\Windows", "System32", "tar.exe") : "/usr/bin/tar";
+  const extraction = await executer(tar, [p.extension === ".zip" ? "-xf" : "-xzf", archive, "-C", provisoire], process.env, 5 * 60_000);
   rmSync(archive, { force: true });
-  if (!t.ok) {
+  if (!extraction.ok) {
     rmSync(provisoire, { recursive: true, force: true });
-    throw new Error(`Extraction de Node impossible : ${t.erreur.slice(-200)}`);
+    throw new Error(tf("Extraction de Node impossible : {0}", extraction.erreur.slice(-200)));
   }
   rmSync(dossierNode, { recursive: true, force: true });
   renameSync(join(provisoire, nom), dossierNode);
@@ -174,7 +212,9 @@ function relier(lien: string, cible: string): void {
   } catch {
     /* pas encore de lien */
   }
-  symlinkSync(cible, lien);
+  // Sous Windows, une « junction » (un lien de dossier ordinaire y demande les droits d'administration), vers un chemin absolu.
+  if (platform() === "win32") symlinkSync(join(racine(), cible), lien, "junction");
+  else symlinkSync(cible, lien);
 }
 
 async function installerPaquet(version: string): Promise<string> {

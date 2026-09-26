@@ -3,7 +3,7 @@ import * as webGarde from "./webGarde.ts";
 import { chmodSync, cpSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, writeFileSync, renameSync } from "node:fs";
 import { open as ouvrirFichier, rename as renommer, rm as effacer } from "node:fs/promises";
 import { homedir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, join, delimiter } from "node:path";
 import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { db } from "./db.ts";
 import { deployment } from "./deployment.ts";
@@ -19,6 +19,7 @@ import { t, tf } from "./langue.ts";
 import { OUTIL_EMPLOYE } from "./connaissances.ts";
 import { groupesDe, listerGroupes } from "./groupes.ts";
 import { chiffrerOctets, dechiffrerOctets } from "./secret.ts";
+import { arreterArbre } from "./processus.ts";
 
 /**
  * Employés : des agents OpenClaw déployés et pilotés par Helix.
@@ -482,7 +483,7 @@ function candidats(): string[] {
   if (impose) liste.push(impose);
   // Celui qu'Helix a installé passe avant tout autre : c'est la version éprouvée.
   liste.push(binaireGere());
-  for (const d of (process.env.PATH ?? "").split(":")) if (d) liste.push(join(d, "openclaw"));
+  for (const d of (process.env.PATH ?? "").split(delimiter)) if (d) liste.push(join(d, "openclaw"));
   // L'application lancée depuis le Finder n'hérite pas du PATH du terminal.
   const nvm = join(homedir(), ".nvm", "versions", "node");
   if (existsSync(nvm)) {
@@ -1190,7 +1191,7 @@ async function demarrerProcessus(moteur: Moteur): Promise<void> {
       await new Promise((r) => setTimeout(r, 500));
     }
     // Arrêté, il est relancé par la surveillance de `lancerProcessus` (délai croissant).
-    processus?.kill("SIGTERM");
+    arreterArbre(processus);
     throw new Error(t("L'instance de vos agents est lancée mais ne répond pas. Elle va être relancée : réessayez dans une minute."));
   }
   demarrage = lancerProcessus(moteur).finally(() => {
@@ -1244,7 +1245,7 @@ async function lancerProcessus(moteur: Moteur): Promise<void> {
     await new Promise((r) => setTimeout(r, 500));
   }
   // Toujours fermé après 45 s : arrêté, il sera relancé par la surveillance ci-dessus plutôt que de rester muet.
-  p.kill("SIGTERM");
+  arreterArbre(p);
   throw new Error(t("L'instance de vos agents ne s'est pas ouverte à temps. Elle va être relancée : réessayez dans une minute."));
 }
 
@@ -1253,7 +1254,7 @@ export function arreterEmployes(): void {
   if (minuterieCourrier) clearInterval(minuterieCourrier);
   minuterieCourrier = null;
   arretDemande = true;
-  processus?.kill("SIGTERM");
+  arreterArbre(processus);
 }
 
 /** Arrête l'instance et attend qu'elle ait rendu son port (pour la relancer aussitôt). */
@@ -1263,14 +1264,14 @@ async function arreterProcessus(): Promise<void> {
   arretDemande = true;
   await new Promise<void>((resolve) => {
     const minuterie = setTimeout(() => {
-      p.kill("SIGKILL");
+      arreterArbre(p, "SIGKILL");
       resolve();
     }, 10_000);
     p.once("exit", () => {
       clearTimeout(minuterie);
       resolve();
     });
-    p.kill("SIGTERM");
+    arreterArbre(p);
   });
   processus = null;
   for (let i = 0; i < 40 && (await portOuvert(portOpenClaw())); i++) await new Promise((r) => setTimeout(r, 250));
@@ -1389,7 +1390,7 @@ async function instanceMuette(): Promise<string | null> {
   if (await portOuvert(portOpenClaw())) return null;
   const { moteur, raison } = await detecterMoteur();
   if (!moteur) return raison ?? t("OpenClaw introuvable.");
-  if (processus && !demarrage) processus.kill("SIGTERM");
+  if (processus && !demarrage) arreterArbre(processus);
   return t("L'instance de vos agents ne répond pas. Elle va être relancée : réessayez dans une minute.");
 }
 

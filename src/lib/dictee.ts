@@ -1,6 +1,7 @@
 import { apiFetch } from "./endpoint";
 import { branding } from "@/config/branding";
 import { t, tf } from "@/lib/i18n";
+import { plateformePoste } from "./plateforme";
 
 /**
  * Dictée, côté interface.
@@ -167,6 +168,10 @@ function formatEnregistrement(): string | undefined {
 export function messageErreurMicro(err: unknown): string {
   const nom = err instanceof DOMException ? err.name : "";
   if (nom === "NotAllowedError" || nom === "SecurityError") {
+    // Le réglage n'est pas au même endroit selon le système.
+    const p = plateformePoste();
+    if (p === "win32") return tf("L'accès au micro est refusé. Autorisez les applications de bureau à utiliser le micro (Paramètres de Windows, Confidentialité et sécurité, Microphone), puis relancez {0}.", branding.name);
+    if (p === "linux") return t("L'accès au micro est refusé. Vérifiez qu'un micro est choisi et non coupé dans les réglages du son du système, puis réessayez.");
     return tf("L'accès au micro est refusé. Autorisez {0} dans Réglages Système, Confidentialité et sécurité, Micro, puis réessayez.", branding.name);
   }
   if (nom === "NotFoundError" || nom === "OverconstrainedError") {

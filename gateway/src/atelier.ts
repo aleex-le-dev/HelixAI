@@ -13,7 +13,8 @@ import {
 } from "node:fs/promises";
 import { constants, existsSync, readdirSync, readFileSync } from "node:fs";
 import { cpus, homedir, tmpdir, totalmem } from "node:os";
-import { join, delimiter } from "node:path";
+import { dirname, join, delimiter } from "node:path";
+import { assurerNodePrive, nodePriveInstallable, npmPrive } from "./installationOpenClaw.ts";
 
 const exec = promisify(execFile);
 
@@ -190,25 +191,102 @@ async function localiser(nom: string, candidats: string[]): Promise<string | nul
   for (const candidat of candidats) {
     if (await existe(candidat, constants.X_OK)) return candidat;
   }
+  // Sous Windows, un programme porte son extension (`python.exe`), et le PATH n'en dit rien.
+  const noms = process.platform === "win32" ? [`${nom}.exe`, nom] : [nom];
   for (const dossier of (process.env.PATH ?? "").split(delimiter)) {
     if (!dossier) continue;
-    const chemin = join(dossier, nom);
-    if (await existe(chemin, constants.X_OK)) return chemin;
+    /*
+     * Les alias du Microsoft Store (`WindowsApps\python.exe`) ne sont pas
+     * Python : ils ouvrent le Store. Les compter faisait croire à un Python
+     * présent, puis tout échouait.
+     */
+    if (process.platform === "win32" && /[\\/]WindowsApps[\\/]?$/i.test(dossier)) continue;
+    for (const n of noms) {
+      const chemin = join(dossier, n);
+      if (await existe(chemin, constants.X_OK)) return chemin;
+    }
   }
   return null;
 }
 
 const CANDIDATS_HOMEBREW = ["/opt/homebrew/bin", "/usr/local/bin", "/usr/bin"];
-const cheminsUsuels = (nom: string) => CANDIDATS_HOMEBREW.map((d) => join(d, nom));
+const cheminsUsuels = (nom: string) => (process.platform === "win32" ? [] : CANDIDATS_HOMEBREW.map((d) => join(d, nom)));
 
-const trouverPython = () => localiser("python3", cheminsUsuels("python3"));
-const trouverNpm = () => localiser("npm", cheminsUsuels("npm"));
+/*
+ * Windows (audit du 27/09/2026) : ni `python3` ni `npm` n'y existent sous ce
+ * nom, et l'atelier disait « Python 3 est absent » sur une machine qui l'avait.
+ * Python : le lanceur `py` connaît les Python installés et rend le vrai
+ * chemin ; sinon `python.exe` dans le PATH. npm : un `.cmd`, que Node refuse de
+ * lancer sans interpréteur de commandes ; on lance donc son script lui-même
+ * (`npm-cli.js`, rangé à côté de `node.exe`), par Node.
+ */
+async function trouverPython(): Promise<string | null> {
+  if (process.platform !== "win32") return localiser("python3", cheminsUsuels("python3"));
+  const lanceurs = [join(process.env.SystemRoot ?? "C:\\Windows", "py.exe"), join(process.env.LOCALAPPDATA ?? homedir(), "Programs", "Python", "Launcher", "py.exe")];
+  for (const py of lanceurs) {
+    if (!(await existe(py))) continue;
+    try {
+      const { stdout } = await exec(py, ["-3", "-c", "import sys; print(sys.executable)"], { timeout: 20_000 });
+      const chemin = String(stdout).trim();
+      if (chemin && (await existe(chemin))) return chemin;
+    } catch {
+      /* lanceur sans Python 3 */
+    }
+  }
+  return localiser("python", []);
+}
+async function trouverNpm(): Promise<string | null> {
+  if (process.platform !== "win32") return (await localiser("npm", cheminsUsuels("npm"))) ?? npmPrive();
+  const node = await trouverNode();
+  const script = node ? join(dirname(node), "node_modules", "npm", "bin", "npm-cli.js") : null;
+  return script && (await existe(script)) ? script : npmPrive();
+}
 const trouverNode = () => localiser("node", cheminsUsuels("node"));
+
+/*
+ * Comment installer ce qui manque, selon le système : la commande exacte, que
+ * la personne lance elle-même (Helix ne passe pas administrateur). Python et
+ * Node ne sont pas posés par Helix : leurs licences (PSF, et celle de npm)
+ * ne sont pas dans la liste des licences admises (CLAUDE.md).
+ */
+const commentPython = (): string =>
+  process.platform === "win32"
+    ? t("site officiel python.org, ou dans un terminal : winget install -e --id Python.Python.3.12")
+    : process.platform === "linux"
+      ? t("sudo apt install python3 python3-venv (Debian, Ubuntu), ou sudo dnf install python3 (Fedora)")
+      : t("site officiel python.org, ou Homebrew : brew install python");
+const commentNode = (): string =>
+  process.platform === "win32"
+    ? t("site officiel nodejs.org, ou dans un terminal : winget install -e --id OpenJS.NodeJS.LTS")
+    : process.platform === "linux"
+      ? t("sudo apt install nodejs npm (Debian, Ubuntu), ou sudo dnf install nodejs npm (Fedora)")
+      : t("site officiel nodejs.org, ou Homebrew : brew install node");
+
+/*
+ * Debian et Ubuntu livrent Python sans son module `venv` (paquet à part,
+ * `python3-venv`) : la création de l'environnement échouait au milieu de
+ * l'installation. On le vérifie avant.
+ */
+async function venvDisponible(python: string): Promise<boolean> {
+  try {
+    await exec(python, ["-c", "import venv, ensurepip"], { timeout: 20_000 });
+    return true;
+  } catch {
+    return false;
+  }
+}
+const obstacleVenv = (): string =>
+  tf("Python est là, mais sans son module de création d'environnement (venv). Installez-le, puis réessayez : {0}.", process.platform === "linux" ? "sudo apt install python3-venv" : commentPython());
+
+/** Un script JavaScript (npm sous Windows) se lance par Node ; le reste, tel quel. */
+const commandeDe = (commande: string, args: string[]): [string, string[]] =>
+  commande.endsWith(".js") ? [process.execPath, [commande, ...args]] : [commande, args];
 
 /** Première ligne de `<outil> --version`, ou `null` si l'outil ne répond pas. */
 async function versionDe(chemin: string, args: string[] = ["--version"]): Promise<string | null> {
   try {
-    const { stdout, stderr } = await exec(chemin, args, { timeout: 20_000 });
+    const [exe, arguments_] = commandeDe(chemin, args);
+    const { stdout, stderr } = await exec(exe, arguments_, { timeout: 20_000 });
     const brut = `${stdout}${stderr}`.trim();
     return brut.split("\n")[0]?.trim() || null;
   } catch {
@@ -411,12 +489,19 @@ export async function diagnostic(): Promise<Diagnostic> {
   const obstacles: string[] = [];
   if (!cheminPython || !versionPython) {
     obstacles.push(
-      "Python 3 est absent de cette machine. C'est le socle qui sait écrire et relire les documents Word, Excel et PowerPoint. Installez Python 3 (site officiel python.org, ou Homebrew), puis relancez ce diagnostic.",
+      tf("Python 3 est absent de cette machine. C'est le socle qui sait écrire et relire les documents Word, Excel et PowerPoint. Installez Python 3 ({0}), puis relancez ce diagnostic.", commentPython()),
     );
+  } else if (!(await existe(pythonVenv(), constants.X_OK)) && !(await venvDisponible(cheminPython))) {
+    obstacles.push(obstacleVenv());
   }
-  if (!cheminNpm || !versionNpm) {
+  /*
+   * Sans npm sur la machine, Helix pose son propre Node officiel (vérifié par
+   * son empreinte publiée, installationOpenClaw.ts) à la préparation : ce
+   * n'est un obstacle que là où il ne sait pas le faire.
+   */
+  if ((!cheminNpm || !versionNpm) && nodePriveInstallable() !== null) {
     obstacles.push(
-      "npm est absent de cette machine. Il accompagne Node et sert à récupérer les bibliothèques de documents. Installez Node (site officiel nodejs.org, ou Homebrew), puis relancez ce diagnostic.",
+      tf("npm est absent de cette machine. Il accompagne Node et sert à récupérer les bibliothèques de documents. Installez Node ({0}), puis relancez ce diagnostic.", commentNode()),
     );
   }
 
@@ -487,8 +572,9 @@ function lancer(
 ): Promise<void> {
   const { cwd, timeout = 30 * 60_000, onLigne, env } = options;
 
+  const [exe, arguments_] = commandeDe(commande, args);
   return new Promise((resolve, reject) => {
-    const enfant = spawn(commande, args, {
+    const enfant = spawn(exe, arguments_, {
       cwd,
       shell: false,
       stdio: ["ignore", "pipe", "pipe"],
@@ -642,8 +728,11 @@ async function executerPreparation(onProgres: (p: Progres) => void): Promise<Bil
 
   /* -------------------------------- Node ------------------------------------- */
   try {
-    const npm = await trouverNpm();
-    if (!npm) throw new Error("npm est introuvable.");
+    let npm = await trouverNpm();
+    if (!npm) {
+      onProgres({ phase: "node", message: t("Installation de Node (nodejs.org, empreinte vérifiée)..."), percent: 70 });
+      npm = await assurerNodePrive();
+    }
 
     onProgres({ phase: "node", message: t("Préparation de l'espace Node isolé..."), percent: 72 });
     await mkdir(dossierNode(), { recursive: true });
@@ -914,7 +1003,8 @@ export async function verifier(): Promise<Verification> {
      */
     if (await existe(modulesNode())) {
       try {
-        await symlink(modulesNode(), join(travail, "node_modules"), "dir");
+        // « junction » sous Windows : un lien de dossier ordinaire y demande les droits d'administration.
+        await symlink(modulesNode(), join(travail, "node_modules"), process.platform === "win32" ? "junction" : "dir");
         const scriptNode = join(travail, "verification.mjs");
         await writeFile(scriptNode, SCRIPT_NODE, "utf8");
 
@@ -1212,10 +1302,13 @@ export async function diagnosticDictee(): Promise<DiagnosticDictee> {
 
   const obstacles: string[] = [];
   // Le venv existant suffit : c'est lui qui servira, pas le Python du système.
-  if (!venv && !(await trouverPython())) {
+  const pythonSysteme = venv ? null : await trouverPython();
+  if (!venv && !pythonSysteme) {
     obstacles.push(
-      "Python 3 est absent de cette machine. C'est lui qui fait tourner la transcription. Installez Python 3 (site officiel python.org, ou Homebrew), puis réessayez.",
+      tf("Python 3 est absent de cette machine. C'est lui qui fait tourner la transcription. Installez Python 3 ({0}), puis réessayez.", commentPython()),
     );
+  } else if (!venv && pythonSysteme && !(await venvDisponible(pythonSysteme))) {
+    obstacles.push(obstacleVenv());
   }
 
   return {

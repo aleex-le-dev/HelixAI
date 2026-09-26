@@ -2229,6 +2229,67 @@ console.log("\n11 quater. Relecture du 27/09/2026 : moteur local réservé, donn
   }
 }
 
+console.log("\n11 quinquies. Windows et Linux : ce qui se vérifie depuis ce poste (27/09/2026)");
+{
+  const { spawnSync } = await import("node:child_process");
+  const { mkdtempSync: dossierNeuf, writeFileSync: ecrireF, readdirSync: lister } = await import("node:fs");
+  const { tmpdir } = await import("node:os");
+  // Chaque essai dans un Node à part : le profil de déploiement et la clé se figent au premier appel.
+  const essai = (code, env = {}) => {
+    const r = spawnSync(process.execPath, ["--experimental-strip-types", "--no-warnings", "--input-type=module", "-e", code], {
+      cwd: RACINE,
+      env: { ...process.env, ...env },
+      encoding: "utf8",
+      timeout: 60_000,
+    });
+    return `${r.stdout ?? ""}${r.stderr ?? ""}`;
+  };
+
+  // Instance partagée : le certificat est fabriqué sans openssl (Windows n'en a pas), et sert vraiment.
+  const d1 = dossierNeuf(join(tmpdir(), "helix-tls-"));
+  ecrireF(join(d1, "helix.config.json"), JSON.stringify({ share: true }));
+  const tlsSortie = essai(
+    `const { tlsMaterial } = await import("./gateway/src/tls.ts");
+     const https = (await import("node:https")).default;
+     const { X509Certificate } = await import("node:crypto");
+     const m = tlsMaterial();
+     const x = new X509Certificate(m.cert);
+     const srv = https.createServer({ cert: m.cert, key: m.key }, (q, r) => r.end("TLS-OK")).listen(0, "127.0.0.1", () => {
+       https.get({ host: "127.0.0.1", port: srv.address().port, ca: m.cert }, (r) => { let t = ""; r.on("data", (b) => (t += b)); r.on("end", () => { console.log(t, m.autoSigne, x.subjectAltName.includes("IP Address:127.0.0.1"), "true"); srv.close(); }); })
+         .on("error", (e) => { console.log("ERREUR", e.message); srv.close(); });
+     });`,
+    { HELIX_CONFIG: join(d1, "helix.config.json"), HELIX_DATA_DIR: d1, PATH: "/nonexistent" },
+  );
+  verifier("instance partagée sans openssl : certificat fabriqué, couvrant la boucle locale, et une connexion TLS réelle passe", /TLS-OK true true/.test(tlsSortie), tlsSortie.slice(0, 200));
+
+  // Clé de données en fichier (défaut de Windows et Linux) : abîmée, l'instance refuse de démarrer au lieu de la remplacer.
+  const d2 = dossierNeuf(join(tmpdir(), "helix-cle-"));
+  ecrireF(join(d2, "helix.config.json"), JSON.stringify({ chiffrement: "fichier" }));
+  ecrireF(join(d2, ".cle"), "QUJD");
+  const cleSortie = essai(`const m = await import("./gateway/src/secret.ts"); try { m.cleDonnees(); console.log("ACCEPTEE"); } catch (e) { console.log("REFUS", e.message.slice(0, 40)); }`, { HELIX_CONFIG: join(d2, "helix.config.json"), HELIX_DATA_DIR: d2 });
+  verifier("clé de données tronquée : refus de démarrer, la clé n'est pas remplacée", cleSortie.includes("REFUS") && readFileSync(join(d2, ".cle"), "utf8") === "QUJD", cleSortie.slice(0, 160));
+  const d3 = dossierNeuf(join(tmpdir(), "helix-cle-"));
+  ecrireF(join(d3, "helix.config.json"), JSON.stringify({ chiffrement: "fichier" }));
+  const neuve = essai(`const m = await import("./gateway/src/secret.ts"); console.log("TAILLE", m.cleDonnees()?.length);`, { HELIX_CONFIG: join(d3, "helix.config.json"), HELIX_DATA_DIR: d3 });
+  verifier("clé de données neuve : 32 octets, écrite sans fichier provisoire laissé", neuve.includes("TAILLE 32") && lister(d3).filter((n) => n.includes(".tmp")).length === 0, neuve.slice(0, 160));
+
+  // Zones protégées : celles de Windows et de Linux valent aussi (un dossier d'équipe copié d'un autre poste).
+  const zones = essai(`const z = await import("./gateway/src/zonesProtegees.ts"); const { homedir } = await import("node:os"); const { join } = await import("node:path");
+    console.log(["AppData/Roaming/Helix/Local Storage", "AppData/Roaming/GitHub CLI/hosts.yml", ".local/share/keyrings/login.keyring", ".mozilla/firefox/profil/logins.json", ".pki/nssdb", ".config/Helix/Local Storage"].map((c) => z.estProtege(join(homedir(), c))).join(","));`);
+  verifier("zones protégées : AppData, trousseaux GNOME, profils Firefox, certificats, profil Linux de l'application", zones.trim() === "true,true,true,true,true,true", zones.slice(0, 160));
+
+  // Sous Windows (simulé), rien de ce que lance la passerelle n'ouvre de console, promisify compris.
+  const consoles = essai(`Object.defineProperty(process, "platform", { value: "win32" });
+    const cp = (await import("node:module")).createRequire(import.meta.url)("node:child_process");
+    const vus = [];
+    for (const nom of ["spawn", "execFile", "exec", "execFileSync"]) { const f = (...a) => { vus.push(JSON.stringify(a.filter((x) => typeof x === "object" && x && !Array.isArray(x)))); return { on() {} }; }; const c = cp[nom][Symbol.for("nodejs.util.promisify.custom")]; if (c) f[Symbol.for("nodejs.util.promisify.custom")] = (...a) => { vus.push(JSON.stringify(a.filter((x) => typeof x === "object" && x && !Array.isArray(x)))); return Promise.resolve({ stdout: "" }); }; cp[nom] = f; }
+    await import("./gateway/src/processus.ts");
+    const m = await import("node:child_process"); const { promisify } = await import("node:util");
+    m.spawn("lms", ["ls"]); m.execFile("a", () => {}); m.exec("dir"); m.execFileSync("b", ["c"], { stdio: "ignore" }); await promisify(m.execFile)("nvidia-smi", ["-q"]);
+    console.log(vus.every((v) => v.includes('"windowsHide":true')) && vus.length === 5 ? "CACHEES" : vus.join(" "));`);
+  verifier("Windows (simulé) : les processus lancés par la passerelle n'ouvrent pas de console", consoles.includes("CACHEES"), consoles.slice(0, 200));
+}
+
 console.log("\n12. Deviner un mot de passe");
 {
   let bloque = false;

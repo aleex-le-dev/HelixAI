@@ -52,6 +52,10 @@ const grandInitial = (() => {
 })();
 
 contextBridge.exposeInMainWorld("helix", {
+  /** La langue de l'écran, pour les textes de l'application elle-même (zone de notification, menu). */
+  langue: (code) => ipcRenderer.send("helix:langue", String(code)),
+  /** Le système du poste (`darwin`, `win32`, `linux`) : l'écran dit ce qui vaut ici. */
+  plateforme: process.platform,
   /** Ouvre le sélecteur de dossier du système. Renvoie le chemin, ou null. */
   choisirDossier: () => ipcRenderer.invoke("helix:choisir-dossier"),
   /**

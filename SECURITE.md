@@ -3105,3 +3105,27 @@ l'instance de l'extérieur. Tout est rejoué par `npm run securite`
 | Une invitation partie par mail était affichée comme un échec (le code n'est plus rendu dans ce cas). | Le succès se lit à l'adresse rendue. |
 | Helix Code redemandait l'accord pour chaque fichier d'un même dossier. | Les modifications de fichiers de l'agent de code sont approuvées par dossier, comme celles du serveur de fichiers ; ses commandes restent approuvées mot pour mot. |
 | Deux postes : un Chat rangé dans un projet, ou une invitation acceptée, pouvait revenir en arrière à la fusion (même `updatedAt` des deux côtés). | Fusion à trois au niveau de chaque élément : celui qui a changé depuis le départ l'emporte. |
+
+### 29.2 Windows et Linux (27 septembre 2026)
+
+Avant la première construction pour ces deux systèmes, un agent a relu le code pour ce qui
+n'y tient pas. Tout ce qui touche à la sécurité est corrigé ; ce qui se vérifie depuis un Mac
+l'est par `npm run securite` (section 11 quinquies). **Rien n'a encore tourné sur un vrai
+Windows ni un vrai Linux.**
+
+| Trouvé | Correctif | Vérifié |
+|---|---|---|
+| **Instance partagée en clair sous Windows** : sans openssl, pas de certificat, et `tlsMaterial()` rendait `null`. | Le certificat est fabriqué par `node:crypto` (`certificat.ts` : ECDSA P-256, SHA-256, noms alternatifs, relu par `X509Certificate` avant usage), sur les trois systèmes ; une instance exposée sans certificat ne démarre pas. | Connexion TLS réelle sans openssl dans le PATH ; `openssl verify` du certificat |
+| **Clé de données remplaçable** (mode fichier, défaut de Windows et Linux) : tronquée, remplacée sans rien dire ; verrouillée, écritures en clair. | Même règle que le trousseau : présente mais illisible ou abîmée, refus de démarrer. Création par fichier provisoire `wx`, `fsync`, lien dur qui n'écrase jamais, relecture. | Clé tronquée refusée et intacte ; clé neuve de 32 octets |
+| **Linux sans trousseau** : Chromium chiffre avec une clé écrite dans son code (`basic_text`) et se dit chiffré. | Tenu pour non chiffré (`chiffrementPoste.cjs`) : le coffre et le grand stockage le disent et retombent sur le stockage du navigateur. | Relu, pas essayé sur Linux |
+| **Zones protégées** : rien de `AppData` (profil de Helix, jetons de gh et gcloud, identifiants de Windows), ni trousseaux GNOME, Firefox, Thunderbird, certificats de Chromium, Flatpak. Noms courts (`MEDHI~1`) non développés. | Ajoutés ; chemin réel natif sous Windows ; chemins réseau, de périphérique et flux secondaires (`fichier:flux`) refusés. | 6 chemins vérifiés |
+| **Dossiers système** acceptés comme dossier de travail (`C:\Windows`, `C:\`, `/etc`, `/root`). | Liste propre à chaque système, séparateur du système, racine de disque reconnue partout. | Relu, pas essayé hors macOS |
+| **Arrêt** : sous Windows, `kill()` tuait net la passerelle, qui laissait OpenCode, OpenClaw, l'entraînement et LM Studio derrière. | Arrêt demandé par un canal, puis `taskkill /T /F` ; les processus lancés par la passerelle s'arrêtent avec tout leur arbre ; canal coupé, la passerelle s'arrête aussi. | Relu |
+| **Consoles** : chaque programme lancé ouvrait une fenêtre noire. | `windowsHide` par défaut pour tout le processus (`processus.ts`), `promisify` compris. | Windows simulé : les 5 formes d'appel |
+| **Moteur LM Studio** sous Windows et Linux | Archive officielle de llmster et son empreinte SHA-512 publiée par l'éditeur, vérifiée avant ouverture ; aucun script téléchargé n'est exécuté. **Limite** : l'empreinte vient du même serveur que l'archive (sur macOS, d'un catalogue tiers). | Version et empreinte lues en ligne ; installation pas essayée |
+| **AppImage** sur Ubuntu 24.04 : démarre sans le bac à sable de Chromium (`--no-sandbox` ajouté par son lanceur, faute d'espaces de noms). | Un `.deb` est construit aussi, avec le bac à sable et son profil AppArmor : c'est lui à conseiller sur Ubuntu et Debian. | Contenu du `.deb` relu |
+
+Restent, dits comme tels : l'installateur Windows n'est pas signé (SmartScreen avertit) ; une
+clé de moteur local ajoutée par un membre avant le 27/09 reste utilisable ; OpenClaw, la ligne
+de commande, les essais de code en bac à sable et la mise à jour d'un clic n'existent pas sous
+Windows ; le contrôle de l'écran de la machine elle-même reste réservé à macOS.

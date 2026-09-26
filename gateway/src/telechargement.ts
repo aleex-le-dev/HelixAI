@@ -103,7 +103,7 @@ export function etat(plateforme: Plateforme): EtatPaquet {
       plateforme,
       disponible: false,
       pret: false,
-      raison: t("Pas encore construit : les paquets Windows et Linux sont prévus, mais n'ont pas encore été produits."),
+      raison: t("L'instance ne sert que l'application macOS. Pour Windows et Linux, installez le paquet fourni par votre prestataire."),
     };
   }
   if (process.platform !== "darwin") {

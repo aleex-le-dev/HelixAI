@@ -41,8 +41,11 @@ let autorisationAuto = null;
 let minuterieAuto = null;
 const dejaLances = new Set();
 
+/** Le navigateur que Meet s'attend à voir, selon le système réel (il disait « Macintosh » partout). */
 function uaChrome() {
-  return `Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${process.versions.chrome} Safari/537.36`;
+  const systeme =
+    process.platform === "win32" ? "Windows NT 10.0; Win64; x64" : process.platform === "linux" ? "X11; Linux x86_64" : "Macintosh; Intel Mac OS X 10_15_7";
+  return `Mozilla/5.0 (${systeme}) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${process.versions.chrome} Safari/537.36`;
 }
 
 function sessionBot() {

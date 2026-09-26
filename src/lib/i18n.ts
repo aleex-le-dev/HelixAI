@@ -206,3 +206,10 @@ try {
 } catch {
   /* rendu hors navigateur */
 }
+
+// L'application de bureau suit la même langue pour ses propres textes (zone de notification, menu de Windows et Linux).
+try {
+  (window as unknown as { helix?: { langue?: (code: string) => void } }).helix?.langue?.(courante);
+} catch {
+  /* navigateur, ou application d'une version antérieure */
+}

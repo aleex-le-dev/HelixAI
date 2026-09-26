@@ -28,9 +28,23 @@ export interface Hardware {
   gpuVramGb?: number;
 }
 
+/*
+ * Lue une fois par démarrage (audit Windows du 27/09/2026) : `detectHardware`
+ * est appelé d'une quinzaine d'endroits, et chaque appel attendait
+ * `nvidia-smi` (jusqu'à 3 s), la passerelle entière bloquée pendant ce temps.
+ * La mémoire d'une carte ne change pas en cours de route.
+ */
+let vramLue: { valeur: number | undefined } | null = null;
+
 /** Mémoire de la carte NVIDIA, lue par `nvidia-smi`. Indéfinie si absente. */
 function memoireGraphique(platform: NodeJS.Platform): number | undefined {
   if (platform !== "win32" && platform !== "linux") return undefined;
+  if (vramLue) return vramLue.valeur;
+  vramLue = { valeur: lireMemoireGraphique() };
+  return vramLue.valeur;
+}
+
+function lireMemoireGraphique(): number | undefined {
   try {
     const sortie = execFileSync("nvidia-smi", ["--query-gpu=memory.total", "--format=csv,noheader,nounits"], {
       timeout: 3000,

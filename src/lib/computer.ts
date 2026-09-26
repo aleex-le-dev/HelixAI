@@ -64,6 +64,8 @@ export interface Capability {
   enAttente: { id: string; action: Action; createdAt: number }[];
   /** Mode `sandbox` : le système de la machine de l'agent. */
   systeme?: "linux" | "macos";
+  /** « Cet écran » : seulement quand l'instance tourne sur macOS (absent d'une instance plus ancienne : proposé, comme avant). */
+  hotePossible?: boolean;
 }
 
 const INDISPONIBLE: Capability = {

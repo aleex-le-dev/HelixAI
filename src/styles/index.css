@@ -124,7 +124,7 @@
   .titlebar-inset {
     padding-top: 0.75rem;
   }
-  :root[data-desktop="1"] .titlebar-inset {
+  :root[data-titre="flottant"] .titlebar-inset {
     /* Les pastilles occupent la bande 16-28 px : on démarre franchement dessous. */
     padding-top: 2.5rem;
   }
@@ -150,18 +150,18 @@
   }
 
   /* La bande de titre déplace la fenêtre ; les commandes restent cliquables. */
-  :root[data-desktop="1"] .titlebar-drag {
+  :root[data-titre="flottant"] .titlebar-drag {
     -webkit-app-region: drag;
   }
-  :root[data-desktop="1"] .titlebar-drag button,
-  :root[data-desktop="1"] .titlebar-drag a,
-  :root[data-desktop="1"] .titlebar-drag input {
+  :root[data-titre="flottant"] .titlebar-drag button,
+  :root[data-titre="flottant"] .titlebar-drag a,
+  :root[data-titre="flottant"] .titlebar-drag input {
     -webkit-app-region: no-drag;
   }
   .fenetre-poignee {
     display: none;
   }
-  :root[data-desktop="1"] .fenetre-poignee {
+  :root[data-titre="flottant"] .fenetre-poignee {
     display: block;
     -webkit-app-region: drag;
   }

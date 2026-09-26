@@ -16,6 +16,7 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const { safeStorage } = require("electron");
+const { chiffrementSur } = require("./chiffrementPoste.cjs");
 
 const CLES = new Set(["sessions"]);
 /** Copies gardées quand une collection rétrécit brutalement (voir `poser`). */
@@ -24,13 +25,8 @@ const COPIES_MAX = 3;
 const dossier = () => path.join(process.env.HELIX_DATA_DIR ?? path.join(os.homedir(), ".helix"), "poste");
 const chemin = (cle) => path.join(dossier(), `${cle}.enc`);
 
-function disponible() {
-  try {
-    return safeStorage.isEncryptionAvailable();
-  } catch {
-    return false;
-  }
-}
+// Pas le chiffrement de Chromium à clé connue de tous (Linux sans trousseau) : voir chiffrementPoste.cjs.
+const disponible = () => chiffrementSur();
 
 /*
  * Clés dont le fichier existe mais n'a pas pu être lu au démarrage (trousseau

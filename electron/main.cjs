@@ -5,6 +5,7 @@ const grandStockage = require("./grandStockage.cjs");
 const ligneDeCommande = require("./ligneDeCommande.cjs");
 const { demarrerRendu } = require("./rendu.cjs");
 const { installerBotReunion, arreterTousLesBots, botsActifs } = require("./botReunion.cjs");
+const { installerZoneNotification } = require("./zoneNotification.cjs");
 
 /*
  * Profil d'essai : un paquet de test lancé sur la machine d'un intégrateur ne
@@ -17,6 +18,7 @@ const path = require("node:path");
 const http = require("node:http");
 const fs = require("node:fs");
 const os = require("node:os");
+const { pathToFileURL } = require("node:url");
 
 /**
  * Processus principal Helix.
@@ -78,6 +80,12 @@ if (!instanceUnique) app.quit();
 
 let gateway = null;
 let mainWindow = null;
+/** Windows et Linux : l'icône de la zone de notification (zoneNotification.cjs), null sur macOS ou si elle n'a pas pu être posée. */
+let zone = null;
+/** « Quitter » a été demandé : fermer la fenêtre ne doit plus seulement la cacher. */
+let quitterVraiment = false;
+/** Langue de l'écran, que l'interface donne au démarrage : pour les quelques textes de ce processus. */
+let langueEcran = ["fr", "en", "zh"].includes(app.getLocale().slice(0, 2)) ? app.getLocale().slice(0, 2) : "fr";
 /** Arrêt volontaire : empêche le redémarrage automatique à la fermeture. */
 let arretDemande = false;
 let redemarrages = 0;
@@ -146,7 +154,9 @@ async function startGateway() {
       // Le banc d'essai des pages : adresse sur la boucle locale et clé, pour la passerelle seule.
       ...(rendu ? { HELIX_RENDU_URL: rendu.url, HELIX_RENDU_CLE: rendu.cle } : {}),
     },
-    stdio: ["ignore", "pipe", "pipe"],
+    // Le canal (`ipc`) sert à demander l'arrêt : sous Windows, il n'y a pas de signal (voir stopGateway).
+    stdio: ["ignore", "pipe", "pipe", "ipc"],
+    windowsHide: true,
   });
   gateway = enfant;
 
@@ -213,7 +223,25 @@ function stopGateway() {
   if (!enfant || enfant.exitCode !== null || enfant.signalCode !== null) return Promise.resolve();
   return new Promise((resolve) => {
     enfant.once("exit", () => resolve());
-    enfant.kill();
+    if (process.platform === "win32") {
+      /*
+       * Sous Windows, `kill()` tue net : la passerelle n'arrêtait pas ce
+       * qu'elle avait lancé (audit du 27/09/2026). On lui demande de s'arrêter
+       * par le canal ; au bout de 4 s, l'arbre entier est abattu.
+       */
+      try {
+        enfant.send({ type: "arret" });
+      } catch {
+        /* canal déjà fermé */
+      }
+      setTimeout(() => {
+        if (enfant.exitCode === null && enfant.pid) {
+          spawn("taskkill", ["/pid", String(enfant.pid), "/T", "/F"], { stdio: "ignore", windowsHide: true });
+        }
+      }, 4000).unref?.();
+    } else {
+      enfant.kill();
+    }
     setTimeout(resolve, 5000).unref?.();
   });
 }
@@ -392,10 +420,14 @@ app.on("open-url", (evenement, lien) => {
 app.on("second-instance", (_evenement, argv) => {
   const lien = argv.find((a) => typeof a === "string" && a.startsWith(`${SCHEMA}://`));
   if (lien) recevoirLien(lien);
-  else if (mainWindow && !mainWindow.isDestroyed()) {
-    if (mainWindow.isMinimized()) mainWindow.restore();
-    mainWindow.focus();
-  }
+  // Relancer l'application rouvre sa fenêtre, même cachée dans la zone de notification.
+  else montrerFenetre();
+});
+
+ipcMain.on("helix:langue", (_evenement, code) => {
+  if (!["fr", "en", "zh"].includes(code)) return;
+  langueEcran = code;
+  zone?.changerLangue(code);
 });
 
 /*
@@ -579,7 +611,8 @@ function servirInterface() {
       cible = path.join(racine, "index.html");
     }
 
-    const reponse = await net.fetch(`file://${cible}`);
+    // `pathToFileURL` : sous Windows, `file://C:\…` n'est pas une adresse valide (audit du 27/09/2026).
+    const reponse = await net.fetch(pathToFileURL(cible).toString());
     const entetes = new Headers(reponse.headers);
     entetes.set("X-Content-Type-Options", "nosniff");
     entetes.set("Referrer-Policy", "no-referrer");
@@ -689,6 +722,8 @@ function createWindow() {
     // Barre de titre native discrète : les commandes de fenêtre restent celles
     // du système, l'interface Helix occupe toute la surface.
     titleBarStyle: process.platform === "darwin" ? "hiddenInset" : "default",
+    // Windows et Linux : le menu (zoneNotification.cjs) se cache ; la touche Alt l'affiche.
+    autoHideMenuBar: true,
     /*
      * Les trois pastilles macOS flottent au-dessus de la barre latérale et
      * occupent 52 px. Ce calage leur laisse 12 px de marge de part et d'autre
@@ -907,7 +942,12 @@ function createWindow() {
    * l'interface : sur son propre poste, l'utilisateur n'a rien à saisir, alors
    * que la passerelle reste fermée à tout appel extérieur non autorisé.
    */
-  const query = { desktop: "1" };
+  /*
+   * `titre=flottant` : seulement sur macOS, où la barre de titre est masquée.
+   * Windows et Linux gardent la barre du système : ni place à réserver, ni
+   * bande à glisser (audit du 27/09/2026).
+   */
+  const query = { desktop: "1", ...(process.platform === "darwin" ? { titre: "flottant" } : {}) };
   const token = readInstanceToken();
   if (token) query.token = token;
 
@@ -919,9 +959,31 @@ function createWindow() {
     mainWindow.loadURL(`${ORIGINE_APP}/index.html?${params}`);
   }
 
+  /*
+   * Windows et Linux : fermer cache la fenêtre, l'application continue dans
+   * la zone de notification (comme le Dock sur macOS). Voir zoneNotification.cjs.
+   */
+  mainWindow.on("close", (evenement) => {
+    if (process.platform === "darwin" || !zone || quitterVraiment) return;
+    evenement.preventDefault();
+    mainWindow.hide();
+    zone.avertirUneFois();
+  });
+
   mainWindow.on("closed", () => {
     mainWindow = null;
   });
+}
+
+/** Rouvre la fenêtre, où qu'elle soit : cachée, réduite, ou fermée (macOS). */
+function montrerFenetre() {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    createWindow();
+    return;
+  }
+  if (mainWindow.isMinimized()) mainWindow.restore();
+  mainWindow.show();
+  mainWindow.focus();
 }
 
 /**
@@ -1073,6 +1135,18 @@ app.whenReady().then(async () => {
   } else {
     await startGateway();
   }
+  if (process.platform !== "darwin") {
+    zone = installerZoneNotification({
+      nom: app.getName(),
+      icone: path.join(__dirname, "..", "build", "icon.png"),
+      langue: langueEcran,
+      montrer: montrerFenetre,
+      quitter: () => {
+        quitterVraiment = true;
+        app.quit();
+      },
+    });
+  }
   createWindow();
   void demarrerMiseAJour(depuisLaFenetre);
 
@@ -1089,7 +1163,8 @@ app.whenReady().then(async () => {
  * la fenêtre rouverte depuis le Dock n'avait plus rien derrière elle.)
  */
 app.on("window-all-closed", () => {
-  if (process.platform !== "darwin") app.quit();
+  // Windows et Linux : l'icône de la zone de notification tient l'application ouverte ; sans elle, on quitte comme avant.
+  if (process.platform !== "darwin" && !zone) app.quit();
 });
 
 /*
@@ -1099,6 +1174,8 @@ app.on("window-all-closed", () => {
  */
 let sortieDesBots = false;
 app.on("before-quit", (event) => {
+  // Quitter depuis n'importe où (menu, Ctrl+Q, fin de session) : la fenêtre se ferme pour de bon.
+  quitterVraiment = true;
   if (botsActifs() && !sortieDesBots) {
     event.preventDefault();
     sortieDesBots = true;

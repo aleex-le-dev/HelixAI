@@ -19,19 +19,15 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const { safeStorage } = require("electron");
+const { chiffrementSur } = require("./chiffrementPoste.cjs");
 
 function fichier() {
   return path.join(process.env.HELIX_DATA_DIR ?? path.join(os.homedir(), ".helix"), "secrets.enc");
 }
 
 /** Le système sait-il chiffrer pour ce compte ? */
-function disponible() {
-  try {
-    return safeStorage.isEncryptionAvailable();
-  } catch {
-    return false;
-  }
-}
+// Pas le chiffrement de Chromium à clé connue de tous (Linux sans trousseau) : voir chiffrementPoste.cjs.
+const disponible = () => chiffrementSur();
 
 /**
  * Le coffre tel qu'il est : `illisible` quand le fichier existe mais ne se

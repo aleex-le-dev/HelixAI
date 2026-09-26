@@ -256,7 +256,21 @@ class JsonStore implements Store {
     mkdirSync(dirname(file), { recursive: true, mode: 0o700 });
     // 600 dès l'écriture : ces fichiers ne regardent que le compte hôte.
     writeFileSync(temp, JSON.stringify(envelope), { encoding: "utf8", mode: 0o600 });
-    renameSync(temp, file);
+    /*
+     * Sous Windows, un antivirus ou l'indexation tiennent parfois le fichier
+     * un instant : le renommage échoue (EPERM, EBUSY), puis passe. Quelques
+     * essais rapprochés, puis l'erreur, telle quelle (audit du 27/09/2026).
+     */
+    for (let essai = 0; ; essai++) {
+      try {
+        renameSync(temp, file);
+        return;
+      } catch (err) {
+        const code = (err as NodeJS.ErrnoException).code;
+        if (process.platform !== "win32" || essai >= 8 || (code !== "EPERM" && code !== "EBUSY" && code !== "EACCES")) throw err;
+        await new Promise((r) => setTimeout(r, 50 * (essai + 1)));
+      }
+    }
   }
 
   describe(): string {

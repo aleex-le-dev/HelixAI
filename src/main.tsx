@@ -13,6 +13,10 @@ import { appliquerReprise, reprendreAnciensSecrets } from "./lib/coffre";
 if (new URLSearchParams(window.location.search).has("desktop")) {
   document.documentElement.dataset.desktop = "1";
 }
+// macOS seulement : la barre de titre y est masquée (Windows et Linux gardent celle du système).
+if (new URLSearchParams(window.location.search).get("titre") === "flottant") {
+  document.documentElement.dataset.titre = "flottant";
+}
 
 /*
  * Déplace dans le trousseau du système ce qu'une version antérieure avait

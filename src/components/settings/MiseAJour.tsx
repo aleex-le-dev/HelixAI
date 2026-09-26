@@ -33,6 +33,8 @@ interface EtatMiseAJour {
   derniereVerification: string | null;
   message: string | null;
   lienPaquet: string | null;
+  /** Système du poste (absent d'une application plus ancienne). */
+  plateforme?: string;
 }
 
 interface PontMiseAJour {
@@ -100,10 +102,17 @@ export function MiseAJour() {
     case "non-configuree":
       corps = (
         <>
-          <p className="text-xs text-muted-foreground">
-            {t("Aucune adresse de mise à jour n'est inscrite dans cette installation :")}{" "}{branding.name}{" "}
-            {t("ne contacte aucun serveur de mise à jour. Pour changer de version, installez le paquet fourni par votre prestataire.")}
-          </p>
+          {etat.plateforme && etat.plateforme !== "darwin" ? (
+            <p className="text-xs text-muted-foreground">
+              {t("Sur Windows et Linux, la mise à jour se fait à la main :")}{" "}{branding.name}{" "}
+              {t("ne contacte aucun serveur de mise à jour. Pour changer de version, installez le nouveau paquet fourni par votre prestataire, par-dessus celui-ci : vos données restent en place.")}
+            </p>
+          ) : (
+            <p className="text-xs text-muted-foreground">
+              {t("Aucune adresse de mise à jour n'est inscrite dans cette installation :")}{" "}{branding.name}{" "}
+              {t("ne contacte aucun serveur de mise à jour. Pour changer de version, installez le paquet fourni par votre prestataire.")}
+            </p>
+          )}
           {etat.message && (
             <InfoBox tone="warning" leading={<TriangleAlert size={15} strokeWidth={1.75} />}>
               {etat.message}

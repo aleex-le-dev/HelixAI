@@ -2738,6 +2738,41 @@ Seuls restent toujours confirmés : envoyer un mail, supprimer un événement, p
 tâche ; et un employé qui traite un mail reçu n'a jamais le web. L'écran dit ce risque au
 moment du choix (niveau d'approbation, palier « étendu »). Ne pas refaire à l'envers.
 
+**Fait le 27/09/2026 : les versions Windows et Linux, construites.** Demandé par Medhi (« fais
+la version Windows et Linux », « tout s'installe en automatique sans soucis, bien adapté »).
+Construits depuis ce Mac : `release/Helix Setup 0.27.0.exe` (NSIS, pour le compte, sans droits
+d'administration), `release/helix-plateforme_0.27.0_amd64.deb` et `release/Helix-0.27.0.AppImage`.
+**Aucun n'a encore été installé sur un vrai PC Windows ni sur une vraie machine Linux** : leur
+contenu a été vérifié (passerelle, ligne de commande, modules, dépendances du .deb, bac à sable
+de Chromium, profil AppArmor, liens `helix://`), pas leur fonctionnement. Ce qui a changé pour
+qu'ils tiennent (SECURITE.md § 29.2, audit Windows et Linux du même jour) :
+- **Installation automatique** : le moteur de LM Studio s'installe seul aussi sur Windows et
+  Linux (son moteur sans interface, llmster, par l'archive officielle et son empreinte
+  SHA-512, sans exécuter de script téléchargé, sans droits d'administration) ; l'atelier
+  trouve Python et npm sous Windows (`py`, `python.exe`, `npm-cli.js`, sans les alias du
+  Microsoft Store), et, sans npm sur la machine, pose le Node officiel de Helix (déjà utilisé
+  pour OpenClaw, empreinte vérifiée), zip compris sous Windows ; les archives d'images
+  s'ouvrent sans `unzip` sous Linux. Le `.deb` fait installer par apt `libatomic1`,
+  `libgomp1`, `python3`, `python3-venv` et `unzip`. **Pas posés par Helix** : Python (licence
+  PSF, hors de la liste Apache/MIT) ; l'écran donne la commande exacte (winget, apt, dnf).
+- **Fenêtre fermée** : l'application reste dans la zone de notification (tâches et employés
+  continuent), « Quitter » arrête tout ; menu de fenêtre dans la langue de l'écran ; la
+  passerelle s'arrête proprement sous Windows (canal, puis tout son arbre de processus) et
+  plus aucune console ne s'ouvre ; la barre de titre de macOS n'est plus imitée ailleurs.
+- **Sécurité** : certificat de l'instance partagée fabriqué sans openssl (absent de Windows ;
+  l'instance servait alors en clair), et jamais d'instance partagée en clair ; clé de données
+  abîmée ou illisible : refus de démarrer au lieu d'une clé neuve ; chiffrement « à clé
+  connue » de Chromium sous Linux tenu pour absent ; zones protégées de Windows (`AppData`)
+  et de Linux (trousseaux, Firefox, certificats) ; dossiers système de Windows et de Linux
+  refusés comme dossiers de travail.
+- **Honnêteté de l'écran** : mise à jour à la main hors de macOS (plus de bouton qui échoue),
+  « Cet écran » absent hors de macOS, tests de Helix Code non lancés (pas de bac à sable) dits
+  comme tels, ligne de commande absente avec l'AppImage (le `.deb` l'a), message du micro
+  propre à chaque système.
+Vérifié : `npm run securite`, 423 contrôles (5 de plus, section 11 quinquies, dont un Windows
+simulé pour les consoles et une connexion TLS réelle sans openssl), typecheck, traductions à
+100 %, et l'application Mac reconstruite (listes de choix, barre de titre).
+
 **Fait le 27/09/2026 : relecture des correctifs et test d'intrusion.** Demandé par Medhi
 (« refait un tour sur les potentielles bugs … une fois le code sûr à 100 % … fais la version
 Windows et Linux »). Un agent a relu les correctifs du jour, un autre a attaqué l'instance de
@@ -2804,8 +2839,13 @@ pas de source (c'est lui la source) : il se met à jour en installant le nouveau
 
 7. **Qwen-Image** (texte lisible dans l'image) : 48 Go ou carte de 24 Go.
 8. **Machine macOS de Cowork** (Lume) : Mac de 32 Go.
-9. **Windows et Linux** : images, machine de l'agent, dictée, ligne de commande
-   (mode brut du terminal, chemins), jamais essayés sur place.
+9. **Windows et Linux** : paquets construits le 27/09/2026, jamais installés sur place.
+   À essayer, dans l'ordre : installation (SmartScreen sous Windows, `sudo apt install
+   ./helix-plateforme_…_amd64.deb` sous Ubuntu 24.04), démarrage et passerelle, icône de la
+   zone de notification (GNOME sans l'extension AppIndicator ne la montre pas), installation
+   du moteur llmster et premier modèle, un Chat ; puis images, dictée, atelier, Helix Code,
+   machine de l'agent. OpenClaw n'est pas proposé sous Windows (il y demande WSL) ; la ligne
+   de commande non plus ; ni la mise à jour d'un clic.
 10. **Entraînement sur carte NVIDIA** : installation de PyTorch CUDA, QLoRA, comparaison
     et fusion par peft jamais essayés sur une vraie machine (seule la conversion GGUF
     l'a été, sur le Mac) ; paquets NVIDIA figés à la version mais sans empreintes.
@@ -2929,7 +2969,7 @@ pas de source (c'est lui la source) : il se met à jour en installant le nouveau
     n'est pas borné par ces zones (OpenCode a ses propres outils, fichiers de Helix Code
     non touchés par cette correction) : à décider avec le client ; la liste des zones
     est celle des emplacements connus, pas une garantie sur tout secret du poste ;
-    Windows et Linux (trousseaux, `%APPDATA%`) pas couverts ; le choix « Depuis Helix »
+    Windows et Linux couverts depuis le 27/09/2026 (§ 29.2 de SECURITE.md) ; le choix « Depuis Helix »
     de l'écran d'un employé n'a été vérifié que par l'API (pas d'employé sur l'instance
     jetable).
 25. **Clés d'API** (§ 3.13, 26/09/2026) : essayer le paquet `openai` lui-même (pas

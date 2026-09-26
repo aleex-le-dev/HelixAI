@@ -23,6 +23,7 @@ import { journaliser } from "./audit.ts";
 import { chiffrerOctets, dechiffrerOctets } from "./secret.ts";
 import { t, tf } from "./langue.ts";
 import empreintesPaquets from "./entrainement-paquets.json" with { type: "json" };
+import { arreterArbre } from "./processus.ts";
 
 const exec = promisify(execFile);
 
@@ -1736,9 +1737,9 @@ export function arreter(qui: string): boolean {
   arretDemande = true;
   const p = processus;
   if (p && p.exitCode === null) {
-    p.kill("SIGTERM");
+    arreterArbre(p);
     setTimeout(() => {
-      if (p.exitCode === null) p.kill("SIGKILL");
+      if (p.exitCode === null) arreterArbre(p, "SIGKILL");
     }, 5000).unref();
   }
   return true;
@@ -1753,7 +1754,7 @@ export function arreterEnPartant(): void {
   arretDemande = true;
   if (processus && processus.exitCode === null) {
     try {
-      processus.kill("SIGKILL");
+      arreterArbre(processus, "SIGKILL");
     } catch {
       /* déjà parti */
     }

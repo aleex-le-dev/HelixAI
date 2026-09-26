@@ -2668,6 +2668,20 @@ d'OpenCode passent par la même barrière (`permissionsCode.ts`). Le libellé de
 approuver » ne dit plus « sans jamais vous demander » : ce qui se confirme toujours
 (supprimer un événement) se confirme aussi à ce niveau.
 
+**Fait le 27/09/2026 : créer une vidéo, comme une image.** Demandé par Medhi (« générer des
+vidéos, avec un modèle en fonction du PC »). Menu « + », « Créer une vidéo » : la même pastille
+que pour les images propose le modèle qui tient sur la machine, annonce le téléchargement, suit
+l'installation. Même moteur que les images (stable-diffusion.cpp, mode `vid_gen`, qui écrit une
+vidéo WebM lue dans le Chat), mêmes droits (la vidéo se voit par qui voit le Chat), même
+effacement et même export (`gateway/src/images.ts`). Modèles Wan d'Alibaba, Apache 2.0, comme
+leur encodeur umt5-xxl et leurs décodeurs, chaque fichier à une révision et une empreinte
+relevées le 27/09/2026 : **Wan 2.1 1,3 milliard** (dès 16 Go ou une carte de 8 Go ; 832 × 480,
+deux secondes à 16 images/s ; 6,8 Go à télécharger, moteur compris) et **Wan 2.2 TI2V
+5 milliards** (dès 32 Go ou une carte de 16 Go ; 1024 × 576, deux secondes à 24 images/s ;
+12,8 Go). Pas sur le processeur seul. **Pas encore essayé de bout en bout** : il faut les
+télécharger, et l'écran le dit (« pas encore vérifié avec Helix »). Temps de calcul inconnus
+tant que ce n'est pas essayé.
+
 **Fait le 27/09/2026 : une photo pour chaque agent.** Demandé par Medhi. Choisie à la création
 ou en cliquant sur l'avatar de sa carte (son propriétaire seul), recadrée en carré de 256 pixels
 comme la photo de profil ; elle apparaît sur sa carte, dans le choix de l'agent du Chat et sur

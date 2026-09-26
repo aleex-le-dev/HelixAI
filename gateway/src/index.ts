@@ -1389,6 +1389,10 @@ const EXECUTION: { methode: string; chemin: string }[] = [
   { methode: "POST", chemin: "/helix/images/desinstaller" },
   { methode: "POST", chemin: "/helix/images/choisir" },
   { methode: "POST", chemin: "/helix/images/creer" },
+  { methode: "POST", chemin: "/helix/videos/installer" },
+  { methode: "POST", chemin: "/helix/videos/desinstaller" },
+  { methode: "POST", chemin: "/helix/videos/choisir" },
+  { methode: "POST", chemin: "/helix/videos/creer" },
   { methode: "POST", chemin: "/helix/dictee" },
   /*
    * Approuver une action, ou desserrer le niveau d'approbation, engage une
@@ -3723,6 +3727,47 @@ async function handleImagesInstaller(req: http.IncomingMessage, res: http.Server
   send(res, 202, await images.etatImages());
 }
 
+/* ------------------------------- vidéos -------------------------------- */
+
+/*
+ * La vidéo, comme les images (27/09/2026) : même moteur, mêmes droits. Le
+ * suivi d'une création et la lecture du fichier passent par les routes des
+ * images (`/helix/images/travail`, `/helix/images/fichier`), qui ne font pas
+ * la différence.
+ */
+async function handleVideos(req: http.IncomingMessage, res: http.ServerResponse, url: URL, action: string): Promise<void> {
+  const qui = await demandeur(req, url);
+  if (!qui) return send(res, 401, sansSeance());
+  if (req.method === "GET" && action === "") return send(res, 200, await images.etatVideos());
+  const body = (await readJson(req).catch(() => ({}))) as { modele?: unknown; description?: unknown; format?: unknown; chat?: unknown };
+  const id = typeof body.modele === "string" ? body.modele : undefined;
+  try {
+    if (req.method === "POST" && action === "desinstaller") {
+      await images.desinstallerVideos(qui.userId, id);
+      return send(res, 200, await images.etatVideos());
+    }
+    if (req.method === "POST" && action === "choisir") {
+      if (!id || !images.choisirModeleVideo(id)) return send(res, 409, { error: { message: t("Ce modèle n'est pas installé.") } });
+      return send(res, 200, await images.etatVideos());
+    }
+    if (req.method === "POST" && action === "installer") {
+      if (!id) return send(res, 400, { error: { message: t("`modele` est requis.") } });
+      void images.installerVideos(qui.userId, id).catch(() => undefined);
+      return send(res, 202, await images.etatVideos());
+    }
+    if (req.method === "POST" && action === "creer") {
+      const description = typeof body.description === "string" ? body.description.trim().slice(0, 2000) : "";
+      if (!description) return send(res, 400, { error: { message: t("Décrivez la vidéo à créer.") } });
+      const format = body.format === "portrait" ? "portrait" : "paysage";
+      const chat = typeof body.chat === "string" && /^[\w-]{1,100}$/.test(body.chat) ? body.chat : undefined;
+      return send(res, 202, await images.lancerVideo(description, format, qui.userId, chat));
+    }
+  } catch (err) {
+    return send(res, 409, { error: { message: err instanceof Error ? err.message : String(err) } });
+  }
+  send(res, 404, { error: { message: tf("Route inconnue : {0} {1}", req.method, url.pathname) } });
+}
+
 /* ---------------------------- entraînement ----------------------------- */
 
 /**
@@ -3820,7 +3865,8 @@ async function handleImagesFichier(req: http.IncomingMessage, res: http.ServerRe
    * Un collègue ne garde pas l'image en cache : le partage du Chat peut lui
    * être retiré, et l'instance doit alors cesser de la lui servir.
    */
-  res.writeHead(200, { "Content-Type": "image/png", "Content-Length": octets.length, ...entetesOrigine(req), ...ENTETES_SECURITE, "Cache-Control": vue.auteur ? "private, max-age=86400" : "no-store" });
+  // Une image (PNG) ou une vidéo (WebM) : le registre sait laquelle (images.ts, `fichierCree`).
+  res.writeHead(200, { "Content-Type": vue.type, "Content-Length": octets.length, ...entetesOrigine(req), ...ENTETES_SECURITE, "Cache-Control": vue.auteur ? "private, max-age=86400" : "no-store" });
   res.end(octets);
 }
 
@@ -4984,6 +5030,7 @@ const traiter = (
     if (req.method === "POST" && path === "/helix/machine/arreter") return handleMachineAction(req, res, url, "arreter");
     if (req.method === "POST" && path === "/helix/machine/effacer") return handleMachineAction(req, res, url, "effacer");
     if (req.method === "GET" && path === "/helix/machine/ecran") return handleMachineEcran(req, res, url);
+    if (path === "/helix/videos" || path.startsWith("/helix/videos/")) return handleVideos(req, res, url, path.slice("/helix/videos".length).replace(/^\//, ""));
     if (req.method === "GET" && path === "/helix/images") return handleImagesEtat(req, res, url);
     if (routeEntrainement(path)) return handleEntrainement(req, res, url, path === "/helix/entrainement" ? "" : path.slice("/helix/entrainement/".length));
     if (req.method === "GET" && path === "/helix/import/logiciels") return handleImportLogiciels(req, res, url);

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode, type KeyboardEvent } from "react";
-import {
+import { Film,
   Plus,
   Mic,
   ArrowUp,
@@ -46,6 +46,8 @@ interface ComposerProps {
   onRetirerPiece?: (index: number) => void;
   /** Menu « + » : « Créer une image ». Absent : pas d'entrée image dans le menu. */
   onCreerImage?: () => void;
+  /** « Créer une vidéo » dans le menu « + » (27/09/2026). */
+  onCreerVideo?: () => void;
   /** Pastille affichée à côté du « + » (outil choisi dans le menu, par exemple « Image »). */
   accessoire?: ReactNode;
 }
@@ -71,6 +73,7 @@ export function Composer({
   onAjouterFichiers,
   onRetirerPiece,
   onCreerImage,
+  onCreerVideo,
   accessoire,
 }: ComposerProps) {
   const [menuPlus, setMenuPlus] = useState(false);
@@ -302,6 +305,20 @@ export function Composer({
                   <span className="shrink-0 whitespace-nowrap text-sm text-foreground">{t("Créer une image")}</span>
                   <span className="truncate text-xs text-muted-foreground">{t("Transformez vos idées en images")}</span>
                 </button>
+                {onCreerVideo && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMenuPlus(false);
+                      onCreerVideo();
+                    }}
+                    className="flex w-full items-center gap-3 rounded-lg px-2.5 py-2 text-left hover:bg-muted"
+                  >
+                    <Film size={16} strokeWidth={1.75} className="shrink-0 text-foreground" />
+                    <span className="shrink-0 whitespace-nowrap text-sm text-foreground">{t("Créer une vidéo")}</span>
+                    <span className="truncate text-xs text-muted-foreground">{t("Quelques secondes, sur cette machine")}</span>
+                  </button>
+                )}
               </Popover>
             ) : (
               <IconButton

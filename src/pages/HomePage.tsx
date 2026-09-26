@@ -33,6 +33,8 @@ export function HomePage() {
   const [draft, setDraft] = useState("");
   /** Bouton « Image » : le prochain envoi crée une image au lieu d'une réponse. */
   const [modeImage, setModeImage] = useState(false);
+  /** Une vidéo plutôt qu'une image (27/09/2026) : même mode, même pastille, autre genre. */
+  const [modeVideo, setModeVideo] = useState(false);
   const [formatImage, setFormatImage] = useState<Format>("carre");
   const { profile, update } = useProfile();
   const { models, loading: modelsLoading, refresh: refreshModels } = useModels();
@@ -232,7 +234,7 @@ export function HomePage() {
     const pieces = jointes.pieces;
     setDraft("");
     if (modeImage) {
-      void chat.creerImage(text, formatImage);
+      void chat.creerImage(text, modeVideo && formatImage === "carre" ? "paysage" : formatImage, modeVideo);
       return;
     }
     jointes.vider();
@@ -300,7 +302,9 @@ export function HomePage() {
     <Composer
       placeholder={
         modeImage
-          ? t("Décrivez l'image à créer...")
+          ? modeVideo
+            ? t("Décrivez la vidéo à créer : ce qu'on voit, ce qui bouge...")
+            : t("Décrivez l'image à créer...")
           : t("Posez votre question... @ pour mentionner un document ou une transcription")
       }
       value={draft}
@@ -311,8 +315,29 @@ export function HomePage() {
       pieces={jointes.pieces}
       onAjouterFichiers={(f) => void jointes.ajouter(f)}
       onRetirerPiece={jointes.retirer}
-      onCreerImage={() => setModeImage(true)}
-      accessoire={modeImage ? <ImageChip onFermer={() => setModeImage(false)} format={formatImage} onFormat={setFormatImage} /> : null}
+      onCreerImage={() => {
+        setModeVideo(false);
+        setModeImage(true);
+      }}
+      onCreerVideo={() => {
+        setModeVideo(true);
+        if (formatImage === "carre") setFormatImage("paysage");
+        setModeImage(true);
+      }}
+      accessoire={
+        modeImage ? (
+          <ImageChip
+            key={modeVideo ? "video" : "image"}
+            genre={modeVideo ? "video" : "image"}
+            onFermer={() => {
+              setModeImage(false);
+              setModeVideo(false);
+            }}
+            format={formatImage}
+            onFormat={setFormatImage}
+          />
+        ) : null
+      }
       modelUid={modelUid}
       onModelChange={(uid) => update({ preferredModelUid: uid })}
       effort={effort}

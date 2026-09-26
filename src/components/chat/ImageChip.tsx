@@ -1,12 +1,15 @@
 import { useCallback, useEffect, useState } from "react";
-import { Image as ImageIcon, Loader2, Download, TriangleAlert, Square, RectangleVertical, RectangleHorizontal, X, ChevronDown, Check } from "lucide-react";
+import { Image as ImageIcon, Film, Loader2, Download, TriangleAlert, Square, RectangleVertical, RectangleHorizontal, X, ChevronDown, Check } from "lucide-react";
 import { Popover } from "@/components/ui/Popover";
 import { Button } from "@/components/ui/Button";
 import { SegmentedTabs } from "@/components/ui/SegmentedTabs";
 import {
   choisirModeleImage,
+  choisirModeleVideo,
   etatImages,
+  etatVideos,
   installerImages,
+  installerVideos,
   type EtatImages,
   type Format,
   type IdModele,
@@ -28,18 +31,25 @@ export function ImageChip({
   onFermer,
   format,
   onFormat,
+  genre = "image",
 }: {
   onFermer: () => void;
   format: Format;
   onFormat: (f: Format) => void;
+  /** « video » : la même pastille pour les vidéos (27/09/2026), mêmes modèles proposés selon la machine. */
+  genre?: "image" | "video";
 }) {
+  const video = genre === "video";
+  const lireEtat = video ? etatVideos : etatImages;
+  const installer = video ? installerVideos : (id: string) => installerImages(id as IdModele);
+  const choisir = video ? choisirModeleVideo : (id: string) => choisirModeleImage(id as IdModele);
   const [open, setOpen] = useState(false);
   const [etat, setEtat] = useState<EtatImages | null | undefined>(undefined);
   const [erreur, setErreur] = useState<string | null>(null);
 
   const relire = useCallback(() => {
-    void etatImages().then(setEtat);
-  }, []);
+    void lireEtat().then(setEtat);
+  }, [lireEtat]);
 
   useEffect(relire, [relire]);
 
@@ -86,10 +96,10 @@ export function ImageChip({
             onClick={p.onClick}
             aria-expanded={p["aria-expanded"]}
             className="inline-flex h-8 items-center gap-1.5 rounded-full pl-3 pr-1.5 font-medium hover:bg-primary/10"
-            title={t("Réglages de l'image")}
+            title={video ? t("Réglages de la vidéo") : t("Réglages de l'image")}
           >
-            <ImageIcon size={15} strokeWidth={1.75} />
-            {t("Image")}
+            {video ? <Film size={15} strokeWidth={1.75} /> : <ImageIcon size={15} strokeWidth={1.75} />}
+            {video ? t("Vidéo") : t("Image")}
             {actif && <span className="hidden font-normal opacity-80 sm:inline">· {actif.nom}</span>}
             <ChevronDown size={13} strokeWidth={1.75} className="opacity-70" />
           </button>
@@ -101,7 +111,7 @@ export function ImageChip({
           </p>
         )}
         {etat === null && (
-          <p className="px-2.5 py-2 text-xs text-muted-foreground">{t("Instance injoignable : impossible de savoir si elle crée des images.")}</p>
+          <p className="px-2.5 py-2 text-xs text-muted-foreground">{video ? t("Instance injoignable : impossible de savoir si elle crée des vidéos.") : t("Instance injoignable : impossible de savoir si elle crée des images.")}</p>
         )}
         {etat && (
           <div className="space-y-3 px-2.5 py-2">
@@ -112,7 +122,8 @@ export function ImageChip({
                 value={format}
                 onChange={(id) => onFormat(id as Format)}
                 options={[
-                  { id: "carre", label: t("Carré"), icon: Square },
+                  // Les modèles vidéo tournent en paysage ou en portrait, pas en carré.
+                  ...(video ? [] : [{ id: "carre", label: t("Carré"), icon: Square }]),
                   { id: "portrait", label: t("Portrait"), icon: RectangleVertical },
                   { id: "paysage", label: t("Paysage"), icon: RectangleHorizontal },
                 ]}
@@ -131,7 +142,7 @@ export function ImageChip({
                           <button
                             type="button"
                             disabled={!m.installe}
-                            onClick={() => void agir(() => choisirModeleImage(m.id as IdModele))}
+                            onClick={() => void agir(() => choisir(m.id))}
                             className="min-w-0 flex-1 text-left disabled:cursor-default"
                           >
                             <span className="flex flex-wrap items-center gap-1.5 text-sm font-medium text-foreground">
@@ -155,7 +166,7 @@ export function ImageChip({
                               variant="secondary"
                               icon={Download}
                               disabled={enInstallation}
-                              onClick={() => void agir(() => installerImages(m.id as IdModele))}
+                              onClick={() => void agir(() => installer(m.id))}
                             >
                               {tf("{0} Go", m.telechargementGo)}
                             </Button>
@@ -189,7 +200,7 @@ export function ImageChip({
       <button
         type="button"
         onClick={onFermer}
-        aria-label={t("Ne plus créer d'image")}
+        aria-label={video ? t("Ne plus créer de vidéo") : t("Ne plus créer d'image")}
         className="mr-1 inline-flex h-6 w-6 items-center justify-center rounded-full hover:bg-primary/15"
       >
         <X size={13} strokeWidth={2} />

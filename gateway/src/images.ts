@@ -586,7 +586,7 @@ export interface Travail {
   message: string;
   etape: number;
   total: number;
-  image?: { id: string; largeur: number; hauteur: number; description: string };
+  image?: { id: string; largeur: number; hauteur: number; description: string; video?: boolean };
   erreur?: string;
   debut: number;
 }
@@ -605,15 +605,18 @@ export function travail(id: string, pour: string): Travail | null {
  * plate. Par le modèle de conversation local, sans raisonnement. S'il ne
  * répond pas, la description part telle quelle : l'image se fait quand même.
  */
-async function preparerDescription(texte: string, qui: string): Promise<string> {
+async function preparerDescription(texte: string, qui: string, video = false): Promise<string> {
   const r = await completer(
     [
       {
         role: "system",
-        content:
-          "You turn a request for an image into a prompt for an image model. Reply with the prompt only, in English, one paragraph, " +
-          "under 90 words: subject, setting, style, lighting, framing. Keep every detail the person gave, invent nothing contradictory. " +
-          "If the person wants text written in the image, keep that text exactly, in its original language, between quotes.",
+        content: video
+          ? "You turn a request for a short video into a prompt for a video model. Reply with the prompt only, in English, one paragraph, " +
+            "under 80 words: subject, what moves and how, camera movement, setting, style, lighting. Keep every detail the person gave, " +
+            "invent nothing contradictory. Two seconds of video: one simple continuous action."
+          : "You turn a request for an image into a prompt for an image model. Reply with the prompt only, in English, one paragraph, " +
+            "under 90 words: subject, setting, style, lighting, framing. Keep every detail the person gave, invent nothing contradictory. " +
+            "If the person wants text written in the image, keep that text exactly, in its original language, between quotes.",
       },
       { role: "user", content: texte },
     ],
@@ -733,10 +736,387 @@ export async function lancerCreation(description: string, format: Format, qui: s
 }
 
 /* ------------------------------------------------------------------ */
+/* Vidéos                                                              */
+/* ------------------------------------------------------------------ */
+
+/*
+ * Demandé par Medhi le 27/09/2026 : « générer des vidéos, comme les images,
+ * avec un modèle en fonction du PC ». Le même moteur (stable-diffusion.cpp,
+ * mode `vid_gen`, qui écrit directement une vidéo WebM, lisible par
+ * l'interface sans outil de plus ; vérifié dans les sources des deux
+ * versions épinglées), les mêmes téléchargements vérifiés, le même rangement
+ * que les images (registre, droits par Chat, effacement, export).
+ *
+ * Modèles Wan d'Alibaba, sous licence Apache 2.0, comme leur encodeur de
+ * texte (umt5-xxl, Google) et leurs décodeurs : chaque fichier à une
+ * révision précise, avec son empreinte, relevées sur Hugging Face le
+ * 27/09/2026.
+ *  - Wan 2.1, 1,3 milliard de paramètres : le plus léger, 832 x 480, deux
+ *    secondes (33 images à 16 par seconde) ; dès 16 Go (Mac) ou une carte de
+ *    8 Go ;
+ *  - Wan 2.2 TI2V, 5 milliards : plus net, 1024 x 576, deux secondes à 24
+ *    images par seconde ; dès 32 Go ou une carte de 16 Go.
+ * Pas sur le processeur seul : il y passerait des heures.
+ *
+ * Pas encore essayés de bout en bout avec Helix (il faut les télécharger) :
+ * l'écran le dit, comme pour les modèles d'images pas encore essayés.
+ */
+
+export type IdModeleVideo = "wan21-1.3b" | "wan22-5b";
+
+interface VarianteVideo {
+  id: string;
+  diffusion: Fichier;
+  texte: Fichier;
+  vae: Fichier;
+  memoireMac: number;
+  vramPc: number;
+  /** En paysage ; le portrait les échange. Multiples de 32. */
+  largeur: number;
+  hauteur: number;
+  /** Nombre d'images, de la forme 4n + 1 comme l'exigent les modèles Wan. */
+  images: number;
+  ips: number;
+}
+
+interface ModeleVideo {
+  id: IdModeleVideo;
+  nom: string;
+  editeur: string;
+  licence: string;
+  atout: string;
+  etapes: number;
+  cfg: number;
+  /** `--flow-shift` : 3 pour Wan 2.1 en 480p, 5 pour Wan 2.2 (valeurs des exemples du moteur et des auteurs). */
+  decalage: number;
+  verifie: boolean;
+  variantes: VarianteVideo[];
+}
+
+const W21 = "Comfy-Org/Wan_2.1_ComfyUI_repackaged";
+const W21R = "123acf1cc74bccbb9bfff8ac1ee72edc08c2341d";
+const W22 = "Comfy-Org/Wan_2.2_ComfyUI_Repackaged";
+const W22R = "ee6f4a40737a995bf5818954cfce6d59443b0f04";
+const U5 = "city96/umt5-xxl-encoder-gguf";
+const U5R = "b535255bee98c2b0a59ea7c0ae2dcd0c6657b3b7";
+const W5 = "QuantStack/Wan2.2-TI2V-5B-GGUF";
+const W5R = "57437632ddd08bdcbd1508c866aa22e126ed51d2";
+
+const UMT5_Q4: Fichier = { depot: U5, revision: U5R, chemin: "umt5-xxl-encoder-Q4_K_M.gguf", taille: 3_655_145_312, sha256: "17cf97a5bbbc60a646d6105b832b6f657ce904a8a1ad970e4b59df0c67584a40" };
+const UMT5_Q8: Fichier = { depot: U5, revision: U5R, chemin: "umt5-xxl-encoder-Q8_0.gguf", taille: 6_043_068_256, sha256: "2521d4de0bf9e1cc6549866463ceae85e4ec3239bc6063f7488810be39033bbc" };
+const VAE_WAN21: Fichier = { depot: W21, revision: W21R, chemin: "split_files/vae/wan_2.1_vae.safetensors", taille: 253_815_318, sha256: "2fc39d31359a4b0a64f55876d8ff7fa8d780956ae2cb13463b0223e15148976b" };
+const VAE_WAN22: Fichier = { depot: W22, revision: W22R, chemin: "split_files/vae/wan2.2_vae.safetensors", taille: 1_409_400_960, sha256: "e40321bd36b9709991dae2530eb4ac303dd168276980d3e9bc4b6e2b75fed156" };
+
+const MODELES_VIDEO: ModeleVideo[] = [
+  {
+    id: "wan21-1.3b",
+    nom: "Wan 2.1 (1,3 milliard)",
+    editeur: "Alibaba (Wan-AI)",
+    licence: "Apache 2.0",
+    atout: t("Le plus léger : deux secondes en 480p, sur une machine de 16 Go."),
+    etapes: 20,
+    cfg: 6,
+    decalage: 3,
+    verifie: false,
+    variantes: [
+      {
+        id: "standard",
+        memoireMac: 16,
+        vramPc: 8,
+        diffusion: { depot: W21, revision: W21R, chemin: "split_files/diffusion_models/wan2.1_t2v_1.3B_fp16.safetensors", taille: 2_838_303_560, sha256: "be531024cd9018cb5b48c40cfbb6a6191645b1c792eb8bf4f8c1c6e10f924dc5" },
+        texte: UMT5_Q4,
+        vae: VAE_WAN21,
+        largeur: 832,
+        hauteur: 480,
+        images: 33,
+        ips: 16,
+      },
+    ],
+  },
+  {
+    id: "wan22-5b",
+    nom: "Wan 2.2 (5 milliards)",
+    editeur: "Alibaba (Wan-AI)",
+    licence: "Apache 2.0",
+    atout: t("Plus net et plus fluide, à 24 images par seconde ; pour les machines de 32 Go et plus."),
+    etapes: 20,
+    cfg: 5,
+    decalage: 5,
+    verifie: false,
+    variantes: [
+      {
+        id: "fin",
+        memoireMac: 32,
+        vramPc: 16,
+        diffusion: { depot: W5, revision: W5R, chemin: "Wan2.2-TI2V-5B-Q8_0.gguf", taille: 5_400_179_040, sha256: "57bece983817ab2f957546683bb670f13be7d99022d45674840cd999a050ea8f" },
+        texte: UMT5_Q8,
+        vae: VAE_WAN22,
+        largeur: 1024,
+        hauteur: 576,
+        images: 49,
+        ips: 24,
+      },
+    ],
+  },
+];
+
+/** Ce que les modèles Wan évitent, tel que leurs auteurs le donnent (en chinois dans leurs exemples). */
+const NEGATIF_WAN =
+  "色调艳丽，过曝，静态，细节模糊不清，字幕，风格，作品，画作，画面，静止，整体发灰，最差质量，低质量，JPEG压缩残留，丑陋的，残缺的，多余的手指，画得不好的手部，画得不好的脸部，畸形的，毁容的，形态畸形的肢体，手指融合，静止不动的画面，杂乱的背景，三条腿，背景人很多，倒着走";
+
+const fichiersVideo = (v: VarianteVideo) => [v.diffusion, v.texte, v.vae];
+const tailleVideo = (v: VarianteVideo) => fichiersVideo(v).reduce((s, f) => s + f.taille, 0);
+const modeleVideo = (id: string) => MODELES_VIDEO.find((m) => m.id === id);
+
+/** Sur Mac, la mémoire unifiée ; sur PC, celle de la carte. Jamais le processeur seul. */
+function varianteVideo(m: ModeleVideo, hw: Hardware): VarianteVideo | null {
+  const vram = hw.gpuVramGb ?? 0;
+  return m.variantes.find((v) => (hw.appleSilicon ? hw.totalMemoryGb >= v.memoireMac : vram >= v.vramPc)) ?? null;
+}
+
+const conseilleVideo = (hw: Hardware): IdModeleVideo =>
+  (hw.appleSilicon ? hw.totalMemoryGb >= 32 : (hw.gpuVramGb ?? 0) >= 16) ? "wan22-5b" : "wan21-1.3b";
+
+const installeeVideo = (m: ModeleVideo) => m.variantes.find((v) => fichiersVideo(v).every(fichierPresent)) ?? null;
+const fichierChoixVideo = () => join(racine(), "choix-video.json");
+
+function modeleVideoActif(hw: Hardware): { m: ModeleVideo; v: VarianteVideo } | null {
+  let voulu: string | undefined;
+  try {
+    voulu = (JSON.parse(readFileSync(fichierChoixVideo(), "utf8")) as { modele?: string }).modele;
+  } catch {
+    /* rien de choisi */
+  }
+  const ordre = [modeleVideo(voulu ?? ""), modeleVideo(conseilleVideo(hw)), ...MODELES_VIDEO].filter(Boolean) as ModeleVideo[];
+  for (const m of ordre) {
+    const v = installeeVideo(m);
+    if (v) return { m, v };
+  }
+  return null;
+}
+
+export function choisirModeleVideo(id: string): boolean {
+  const m = modeleVideo(id);
+  if (!m || !installeeVideo(m)) return false;
+  mkdirSync(racine(), { recursive: true, mode: 0o700 });
+  writeFileSync(fichierChoixVideo(), JSON.stringify({ modele: id }), { mode: 0o600 });
+  return true;
+}
+
+let installationVideo: EtatImages["installation"] = null;
+
+/** Même forme que l'état des images : l'écran se sert du même panneau. */
+export async function etatVideos(): Promise<Omit<EtatImages, "actif" | "modeles"> & { actif: string | null; modeles: (Omit<ModeleProposé, "id"> & { id: string })[] }> {
+  const hw = detectHardware();
+  const moteur = moteurPour(hw, await versionMac());
+  const moteurPret = Boolean(moteur && programme(moteur));
+  const actif = modeleVideoActif(hw);
+  const modeles = MODELES_VIDEO.map((m) => {
+    const v = varianteVideo(m, hw);
+    return {
+      id: m.id,
+      nom: m.nom,
+      editeur: m.editeur,
+      licence: m.licence,
+      // Traduit à la demande : la constante est lue au chargement, dans la langue de l'instance.
+      atout: t(m.atout),
+      possible: Boolean(moteur && !moteur.lent && v),
+      telechargementGo: v ? go(tailleVideo(v) + (moteurPret ? 0 : (moteur?.taille ?? 0) + (moteur?.complement?.taille ?? 0))) : 0,
+      installe: Boolean(installeeVideo(m)),
+      conseille: m.id === conseilleVideo(hw),
+      verifie: m.verifie,
+    };
+  });
+  const possible = modeles.some((m) => m.possible);
+  let raison: string;
+  if (!moteur) raison = t("Aucun moteur vidéo n'est publié pour ce système (Mac à puce Apple sous macOS 15 ou plus, Windows ou Linux 64 bits).");
+  else if (moteur.lent) raison = t("Sans carte graphique reconnue, la vidéo n'est pas proposée : le processeur y passerait des heures.");
+  else if (!possible) raison = tf("{0} Go de mémoire : il en faut 16 au moins pour créer des vidéos sur cette machine.", hw.totalMemoryGb);
+  else raison = t("Les vidéos sont créées sur cette machine, par un modèle ouvert : rien ne part sur internet. Comptez plusieurs minutes pour deux secondes de vidéo.");
+  return { possible, raison, pret: moteurPret && Boolean(actif), actif: actif?.m.id ?? null, modeles, lent: false, installation: installationVideo };
+}
+
+/** Le moteur, s'il manque (partagé avec les images). Rend les octets téléchargés. */
+async function installerMoteurSiBesoin(moteur: Moteur, avancer: (fait: number) => void): Promise<number> {
+  if (programme(moteur)) return 0;
+  const archives = [{ url: moteur.archive, sha256: moteur.sha256, taille: moteur.taille }, ...(moteur.complement ? [{ url: moteur.complement.archive, sha256: moteur.complement.sha256, taille: moteur.complement.taille }] : [])];
+  let fait = 0;
+  for (const a of archives) {
+    const tmp = join(tmpdir(), `helix-images-${randomBytes(4).toString("hex")}.zip`);
+    await telecharger(a.url, tmp, a.sha256, a.taille, (f) => avancer(fait + f));
+    try {
+      await extraire(tmp, dossierMoteur(moteur));
+    } finally {
+      rmSync(tmp, { force: true });
+    }
+    fait += a.taille;
+  }
+  const bin = programme(moteur);
+  if (!bin) throw new Error(t("Le moteur d'images est installé, mais son programme est introuvable."));
+  if (process.platform !== "win32") await exec("chmod", ["755", bin]).catch(() => undefined);
+  return fait;
+}
+
+export function installerVideos(qui: string, id: string): Promise<void> {
+  // Une installation à la fois, images ou vidéos : elles partagent le moteur et le dossier des modèles.
+  if (enCours) return Promise.reject(new Error(t("Une installation est déjà en cours : attendez qu'elle finisse.")));
+  const m = modeleVideo(id);
+  if (!m) return Promise.reject(new Error(t("Modèle vidéo inconnu.")));
+  installationVideo = { modele: m.id as unknown as IdModele, etape: "telechargement", message: t("Téléchargement du moteur vidéo..."), fait: 0, total: 0 };
+  enCours = (async () => {
+    const hw = detectHardware();
+    const moteur = moteurPour(hw, await versionMac());
+    const v = varianteVideo(m, hw);
+    if (!moteur || moteur.lent || !v) throw new Error(tf("Cette machine ne peut pas faire tourner {0}.", m.nom));
+    const aFaire = fichiersVideo(v).filter((f) => !fichierPresent(f));
+    const moteurTaille = programme(moteur) ? 0 : moteur.taille + (moteur.complement?.taille ?? 0);
+    const total = aFaire.reduce((s, f) => s + f.taille, 0) + moteurTaille;
+    let precedents = 0;
+    const suivre = (message: string) => (fait: number) => (installationVideo = { modele: m.id as unknown as IdModele, etape: "telechargement", message, fait: precedents + fait, total });
+    precedents += await installerMoteurSiBesoin(moteur, suivre(t("Téléchargement du moteur vidéo...")));
+    mkdirSync(dossierModeles(), { recursive: true, mode: 0o700 });
+    for (const f of aFaire) {
+      await telecharger(hf(f), join(dossierModeles(), nomLocal(f)), f.sha256, f.taille, suivre(tf("Téléchargement de {0} ({1} Go)...", m.nom, go(total))));
+      precedents += f.taille;
+    }
+    installationVideo = null;
+    choisirModeleVideo(m.id);
+    journaliser("images.installees", qui, { modele: m.id, variante: v.id, moteur: moteur.version, video: true });
+  })()
+    .catch((err: unknown) => {
+      installationVideo = { modele: m.id as unknown as IdModele, etape: "erreur", message: t("L'installation n'a pas abouti."), fait: 0, total: 0, erreur: err instanceof Error ? err.message : String(err) };
+      throw err;
+    })
+    .finally(() => {
+      enCours = null;
+    });
+  return enCours;
+}
+
+/** Retire un modèle vidéo (ou tous) ; ce que partagent d'autres modèles reste, les vidéos créées aussi. */
+export async function desinstallerVideos(qui: string, id?: string): Promise<void> {
+  const creationEnCours = [...travaux.values()].some((x) => x.etat === "preparation" || x.etat === "encours");
+  if (enCours || travailActif || creationEnCours) throw new Error(t("Une installation ou une création est en cours : attendez qu'elle finisse."));
+  const cibles = id ? MODELES_VIDEO.filter((x) => x.id === id) : MODELES_VIDEO;
+  const gardes = new Set(
+    [...MODELES.flatMap((x) => x.variantes.flatMap(fichiersDe)), ...MODELES_VIDEO.filter((x) => !cibles.includes(x)).flatMap((x) => x.variantes.flatMap(fichiersVideo))].map(nomLocal),
+  );
+  for (const f of cibles.flatMap((x) => x.variantes.flatMap(fichiersVideo))) if (!gardes.has(nomLocal(f))) rmSync(join(dossierModeles(), nomLocal(f)), { force: true });
+  installationVideo = null;
+  journaliser("images.desinstallees", qui, { modele: id ?? "videos", video: true });
+}
+
+/** Lance une vidéo ; elle se suit comme une image (`travail`). */
+export async function lancerVideo(description: string, format: "paysage" | "portrait", qui: string, chat?: string): Promise<Travail> {
+  if (travailActif || [...travaux.values()].some((x) => x.etat === "preparation" || x.etat === "encours")) {
+    throw new Error(t("Une image ou une vidéo est déjà en cours de création sur cette machine : attendez qu'elle soit finie."));
+  }
+  const hw = detectHardware();
+  const moteur = moteurPour(hw, await versionMac());
+  const actif = modeleVideoActif(hw);
+  const bin = moteur ? programme(moteur) : null;
+  if (!moteur || !bin || !actif) throw new Error(t("La création de vidéos n'est pas encore installée sur cette machine."));
+
+  const tr: Travail = { id: randomBytes(12).toString("hex"), pour: qui, etat: "preparation", message: t("Préparation de la description..."), etape: 0, total: actif.m.etapes, debut: Date.now() };
+  travaux.set(tr.id, tr);
+  for (const [k, v] of travaux) if (Date.now() - v.debut > 3_600_000 * 3) travaux.delete(k);
+
+  void (async () => {
+    const { m: mod, v: niveau } = actif;
+    const [largeur, hauteur] = format === "portrait" ? [niveau.hauteur, niveau.largeur] : [niveau.largeur, niveau.hauteur];
+    const invite = await preparerDescription(description, qui, true);
+    tr.message = t("Place faite en mémoire...");
+    await libererPourImage(tailleVideo(niveau) * 1.5);
+    mkdirSync(dossierCreees(), { recursive: true, mode: 0o700 });
+    const videoId = randomBytes(16).toString("hex");
+    const sortie = join(dossierCreees(), `${videoId}.webm`);
+    const f = (x: Fichier) => join(dossierModeles(), nomLocal(x));
+    const args = [
+      "-M", "vid_gen",
+      "--diffusion-model", f(niveau.diffusion),
+      "--vae", f(niveau.vae),
+      "--t5xxl", f(niveau.texte),
+      "-p", invite,
+      "-n", NEGATIF_WAN,
+      "--cfg-scale", String(mod.cfg),
+      "--sampling-method", "euler",
+      "--steps", String(mod.etapes),
+      "-W", String(largeur),
+      "-H", String(hauteur),
+      "--video-frames", String(niveau.images),
+      "--fps", String(niveau.ips),
+      "--flow-shift", String(mod.decalage),
+      "--seed", String(Math.floor(Math.random() * 2 ** 31)),
+      "--diffusion-fa",
+      // Le décodage des images demande beaucoup de mémoire (le moteur le dit lui-même) : par morceaux.
+      "--vae-tiling",
+      "-o", sortie,
+      ...(moteur.delester ? ["--offload-to-cpu"] : []),
+    ];
+    tr.etat = "encours";
+    tr.message = t("Création de la vidéo...");
+    const code = await new Promise<number | null>((ok) => {
+      const p = spawn(bin, args, { stdio: ["ignore", "pipe", "pipe"], cwd: dossierCreees() });
+      travailActif = p;
+      let journal = "";
+      const lire = (d: Buffer) => {
+        const s = d.toString();
+        journal = (journal + s).slice(-3000);
+        const toutes = [...s.matchAll(/\|\s*(\d+)\/(\d+)\s*-/g)].filter((x) => Number(x[2]) === mod.etapes);
+        const derniere = toutes[toutes.length - 1];
+        if (derniere) {
+          tr.etape = Number(derniere[1]);
+          tr.total = Number(derniere[2]);
+          tr.message = tr.etape >= tr.total ? t("Assemblage des images de la vidéo...") : tf("Création de la vidéo : étape {0} sur {1}", tr.etape, tr.total);
+        }
+      };
+      p.stdout.on("data", lire);
+      p.stderr.on("data", lire);
+      // Une vidéo prend bien plus qu'une image : une heure et demie au plus.
+      const garde = setTimeout(() => p.kill(), 90 * 60_000);
+      p.on("close", (c) => {
+        clearTimeout(garde);
+        travailActif = null;
+        if (c !== 0) tr.erreur = journal.trim().split("\n").slice(-3).join(" ");
+        ok(c);
+      });
+      p.on("error", (e) => {
+        clearTimeout(garde);
+        travailActif = null;
+        tr.erreur = e.message;
+        ok(-1);
+      });
+    });
+    if (code === 0 && existsSync(sortie)) {
+      const registre = lireIndex() ?? mettreDeCoteIndex();
+      const secondes = Math.round((niveau.images / niveau.ips) * 10) / 10;
+      registre[videoId] = { pour: qui, ...(chat ? { chat } : {}), description, invite, date: new Date().toISOString(), largeur, hauteur, video: true, secondes };
+      ecrireIndex(registre);
+      tr.image = { id: videoId, largeur, hauteur, description, video: true };
+      tr.etat = "fait";
+      tr.message = t("Vidéo créée.");
+      journaliser("images.creee", qui, { modele: mod.id, variante: niveau.id, secondes: Math.round((Date.now() - tr.debut) / 1000), video: true });
+    } else {
+      rmSync(sortie, { force: true });
+      tr.etat = "echec";
+      tr.message = t("La vidéo n'a pas pu être créée.");
+    }
+  })().catch((err: unknown) => {
+    tr.etat = "echec";
+    tr.message = t("La vidéo n'a pas pu être créée.");
+    tr.erreur = err instanceof Error ? err.message : String(err);
+  });
+  return tr;
+}
+
+/* ------------------------------------------------------------------ */
 /* Images créées                                                       */
 /* ------------------------------------------------------------------ */
 
-type Registre = Record<string, { pour: string; chat?: string; description: string; invite: string; date: string; largeur: number; hauteur: number }>;
+type Registre = Record<string, { pour: string; chat?: string; description: string; invite: string; date: string; largeur: number; hauteur: number; video?: boolean; secondes?: number }>;
+
+/** Le fichier d'une création : image PNG, ou vidéo WebM (27/09/2026). */
+const fichierCree = (id: string, e: { video?: boolean }) => join(dossierCreees(), `${id}.${e.video ? "webm" : "png"}`);
 
 /**
  * Le registre des images, `{}` s'il n'existe pas encore, `null` s'il existe
@@ -846,18 +1226,19 @@ async function chatsContenant(id: string): Promise<VueChat[]> {
  *   auteur qui la contient. Un Chat d'une autre personne où l'identifiant
  *   aurait été recopié ne l'ouvre pas.
  */
-export async function imageVisible(id: string, qui: Demandeur): Promise<{ chemin: string; auteur: boolean } | null> {
+export async function imageVisible(id: string, qui: Demandeur): Promise<{ chemin: string; auteur: boolean; type: string } | null> {
   if (!/^[0-9a-f]{32}$/.test(id)) return null;
   const e = lireIndex()?.[id];
   if (!e) return null;
-  const p = join(dossierCreees(), `${id}.png`);
+  const p = fichierCree(id, e);
   if (!existsSync(p)) return null;
-  if (e.pour === qui.userId) return { chemin: p, auteur: true };
+  const type = e.video ? "video/webm" : "image/png";
+  if (e.pour === qui.userId) return { chemin: p, auteur: true, type };
   const chats = await chatsContenant(id);
   const autorise = chats.some(
     (c) => (e.chat ? c.id === e.chat : c.ownerId === e.pour) && voitConversation(c as unknown as Record<string, unknown>, qui),
   );
-  return autorise ? { chemin: p, auteur: false } : null;
+  return autorise ? { chemin: p, auteur: false, type } : null;
 }
 
 /**
@@ -869,14 +1250,14 @@ export async function imageVisible(id: string, qui: Demandeur): Promise<{ chemin
  * demande qui les a produites. Le fichier se télécharge depuis son Chat. Un
  * registre illisible rend une liste vide, que l'export signale.
  */
-export function imagesDe(userId: string): { lisible: boolean; images: { id: string; description: string; invite: string; date: string; largeur: number; hauteur: number }[] } {
+export function imagesDe(userId: string): { lisible: boolean; images: { id: string; description: string; invite: string; date: string; largeur: number; hauteur: number; video?: boolean }[] } {
   const registre = lireIndex();
   if (!registre) return { lisible: false, images: [] };
   return {
     lisible: true,
     images: Object.entries(registre)
       .filter(([, e]) => e.pour === userId)
-      .map(([id, e]) => ({ id, description: e.description, invite: e.invite, date: e.date, largeur: e.largeur, hauteur: e.hauteur })),
+      .map(([id, e]) => ({ id, description: e.description, invite: e.invite, date: e.date, largeur: e.largeur, hauteur: e.hauteur, ...(e.video ? { video: true } : {}) })),
   };
 }
 
@@ -887,7 +1268,7 @@ export function oublierImagesDe(userId: string): number {
   let n = 0;
   for (const [id, e] of Object.entries(registre)) {
     if (e.pour !== userId) continue;
-    rmSync(join(dossierCreees(), `${id}.png`), { force: true });
+    rmSync(fichierCree(id, e), { force: true });
     delete registre[id];
     n++;
   }

@@ -4,7 +4,7 @@ import { notifySessionsChanged } from "./useSessions";
 import { contexteTexte, images, type Attachment } from "@/lib/attachments";
 import { currentUser } from "@/lib/store/identity";
 import { t, tf } from "@/lib/i18n";
-import { creerImage as creerSurLaMachine, type Format, type ImageCreee } from "@/lib/images";
+import { creerImage as creerSurLaMachine, creerVideo as creerVideoSurLaMachine, type Format, type ImageCreee } from "@/lib/images";
 import type { NiveauRaisonnement } from "@/lib/store/profile";
 import type { Citation } from "@/lib/connaissances";
 import {
@@ -541,7 +541,8 @@ export function useChat(options: Options) {
    * qu'une image a été faite, et de quoi.
    */
   const creerImage = useCallback(
-    async (description: string, format: Format) => {
+    /** `video` : une courte vidéo plutôt qu'une image, par le même moteur (27/09/2026). */
+    async (description: string, format: Format, video = false) => {
       const texte = description.trim();
       if (!texte || busy) return;
       const userMsg: Message = { id: newId(), role: "user", content: texte };
@@ -575,12 +576,13 @@ export function useChat(options: Options) {
       ]);
       abortRef.current = controller;
       try {
-        const image = await creerSurLaMachine(texte, format, (tr) => patch(replyId, { statut: tr.message }), controller.signal, sessionRef.current?.id);
-        patch(replyId, { content: tf("Image créée : « {0} »", texte), image, streaming: false, statut: undefined });
+        const creer = video ? creerVideoSurLaMachine : creerSurLaMachine;
+        const image = await creer(texte, format, (tr) => patch(replyId, { statut: tr.message }), controller.signal, sessionRef.current?.id);
+        patch(replyId, { content: video ? tf("Vidéo créée : « {0} »", texte) : tf("Image créée : « {0} »", texte), image, streaming: false, statut: undefined });
         persist();
       } catch (err) {
         if (controller.signal.aborted) {
-          patch(replyId, { streaming: false, statut: undefined, error: t("Suivi arrêté : l'image se termine quand même sur la machine, mais n'apparaîtra pas ici.") });
+          patch(replyId, { streaming: false, statut: undefined, error: video ? t("Suivi arrêté : la vidéo se termine quand même sur la machine, mais n'apparaîtra pas ici.") : t("Suivi arrêté : l'image se termine quand même sur la machine, mais n'apparaîtra pas ici.") });
         } else {
           patch(replyId, { streaming: false, statut: undefined, error: messageDErreur(err) });
         }

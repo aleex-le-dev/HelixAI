@@ -36,6 +36,8 @@ export interface ImageCreee {
   largeur: number;
   hauteur: number;
   description: string;
+  /** Une vidéo (WebM), créée par le même moteur (27/09/2026). */
+  video?: boolean;
 }
 
 export interface Travail {
@@ -98,6 +100,48 @@ export async function creerImage(
   suivre(tr);
   while (tr.etat === "preparation" || tr.etat === "encours") {
     await new Promise((r) => setTimeout(r, 1000));
+    if (signal?.aborted) throw new DOMException("arrêt", "AbortError");
+    const r = await apiFetch(`/helix/images/travail/${tr.id}`);
+    if (!r.ok) throw new Error(await lireErreur(r));
+    tr = (await r.json()) as Travail;
+    suivre(tr);
+  }
+  if (tr.etat !== "fait" || !tr.image) throw new Error(tr.message + (tr.erreur ? ` ${tr.erreur}` : ""));
+  return tr.image;
+}
+
+/* ---- Vidéos (gateway/src/images.ts, même panneau, mêmes droits) ---- */
+
+export async function etatVideos(): Promise<EtatImages | null> {
+  try {
+    const res = await apiFetch("/helix/videos");
+    return res.ok ? ((await res.json()) as EtatImages) : null;
+  } catch {
+    return null;
+  }
+}
+export const installerVideos = (modele: string) => action("/helix/videos/installer", modele as IdModele);
+export const choisirModeleVideo = (modele: string) => action("/helix/videos/choisir", modele as IdModele);
+export const retirerModeleVideo = (modele: string) => action("/helix/videos/desinstaller", modele as IdModele);
+
+/** Crée une vidéo et suit sa création, comme une image. */
+export async function creerVideo(
+  description: string,
+  format: Format,
+  suivre: (tr: Travail) => void,
+  signal?: AbortSignal,
+  chat?: string,
+): Promise<ImageCreee> {
+  const res = await apiFetch("/helix/videos/creer", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ description, format: format === "portrait" ? "portrait" : "paysage", chat }),
+  });
+  if (!res.ok) throw new Error(await lireErreur(res));
+  let tr = (await res.json()) as Travail;
+  suivre(tr);
+  while (tr.etat === "preparation" || tr.etat === "encours") {
+    await new Promise((r) => setTimeout(r, 2000));
     if (signal?.aborted) throw new DOMException("arrêt", "AbortError");
     const r = await apiFetch(`/helix/images/travail/${tr.id}`);
     if (!r.ok) throw new Error(await lireErreur(r));

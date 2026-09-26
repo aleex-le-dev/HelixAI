@@ -265,6 +265,9 @@ const SEANCE_REQUISE = [
   // Ajoutés le 24/09/2026 : images, import depuis les logiciels du poste, machine de l'agent.
   ["GET", "/helix/images"], ["POST", "/helix/images/installer"], ["POST", "/helix/images/creer"],
   ["POST", "/helix/images/choisir"], ["POST", "/helix/images/desinstaller"],
+  // Ajoutées le 27/09/2026 : vidéos (images.ts, même moteur, mêmes droits).
+  ["GET", "/helix/videos"], ["POST", "/helix/videos/installer"], ["POST", "/helix/videos/creer"],
+  ["POST", "/helix/videos/choisir"], ["POST", "/helix/videos/desinstaller"],
   ["GET", "/helix/images/fichier/0123456789abcdef0123456789abcdef"], ["GET", "/helix/images/travail/abc"],
   ["GET", "/helix/import/logiciels"], ["GET", "/helix/import/logiciel/claude-code"],
   ["GET", "/helix/machine"], ["POST", "/helix/machine/effacer"],

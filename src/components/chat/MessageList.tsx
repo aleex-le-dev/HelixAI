@@ -227,18 +227,21 @@ function ImageGeneree({ image }: { image: ImageCreee }) {
       if (adresse) URL.revokeObjectURL(adresse);
     };
   }, [image.id]);
-  const nom = `${image.description.slice(0, 40).replace(/[^\p{L}\p{N}]+/gu, "-").replace(/^-|-$/g, "") || "image"}.png`;
+  const nom = `${image.description.slice(0, 40).replace(/[^\p{L}\p{N}]+/gu, "-").replace(/^-|-$/g, "") || (image.video ? "video" : "image")}.${image.video ? "webm" : "png"}`;
   return (
     <figure className="mt-3 w-full max-w-[460px]">
       <div
         className="overflow-hidden rounded-2xl border border-border bg-muted"
         style={{ aspectRatio: `${image.largeur} / ${image.hauteur}` }}
       >
-        {url ? (
+        {url && image.video ? (
+          // Une vidéo créée sur la machine (27/09/2026) : lue sur place, en boucle, comme un aperçu.
+          <video src={url} controls loop playsInline className="h-full w-full object-cover" aria-label={image.description} />
+        ) : url ? (
           <img src={url} alt={image.description} className="h-full w-full object-cover" />
         ) : (
           <div className="flex h-full items-center justify-center text-xs text-muted-foreground">
-            {url === null ? t("Image indisponible sur ce poste.") : <Loader2 size={16} className="animate-spin" />}
+            {url === null ? (image.video ? t("Vidéo indisponible sur ce poste.") : t("Image indisponible sur ce poste.")) : <Loader2 size={16} className="animate-spin" />}
           </div>
         )}
       </div>

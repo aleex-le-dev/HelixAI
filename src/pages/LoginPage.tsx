@@ -23,6 +23,7 @@ import {
   createAccount,
   authenticate,
   definirPremierMotDePasse,
+  remplacerMotDePasseProvisoire,
   validerDeuxFacteurs,
   preparerInscription,
   activerInscription,
@@ -47,6 +48,8 @@ type Mode =
   | "choix"
   | "connexion"
   | "premier"
+  /** Mot de passe choisi par l'administrateur qui a créé le compte : en choisir un à soi. */
+  | "provisoire"
   | "deuxfacteurs"
   /** Instance qui impose le second facteur : activation avant la séance. */
   | "inscription"
@@ -147,6 +150,13 @@ export function LoginPage({ onSignedIn }: { onSignedIn: () => void }) {
       setMode("premier");
       return;
     }
+    // Le mot de passe saisi reste en mémoire le temps de l'étape : il prouve qu'on a bien reçu le provisoire.
+    if (issue.raison === "a-changer") {
+      setNewPassword("");
+      setConfirmation("");
+      setMode("provisoire");
+      return;
+    }
     if (issue.raison === "deux-facteurs") {
       setDefi(issue.defi);
       setCode("");
@@ -208,6 +218,12 @@ export function LoginPage({ onSignedIn }: { onSignedIn: () => void }) {
   // dès la première lettre tapée.
   const saisiesDifferentes = confirmation !== "" && confirmation !== newPassword;
   const nouveauValide = newPassword.length >= MOT_DE_PASSE_MIN && confirmation === newPassword;
+
+  const provisoire = (account: Account) =>
+    enTravail(async () => {
+      if (!nouveauValide) return;
+      suite(await remplacerMotDePasseProvisoire(account.id, password, newPassword, rester));
+    });
 
   const premier = (account: Account) =>
     enTravail(async () => {
@@ -347,7 +363,7 @@ export function LoginPage({ onSignedIn }: { onSignedIn: () => void }) {
           <p className="text-sm text-muted-foreground">
             {mode === "creation"
               ? t("Créez votre compte pour commencer.")
-              : mode === "premier"
+              : mode === "premier" || mode === "provisoire"
                 ? t("Choisissez votre mot de passe.")
                 : mode === "deuxfacteurs"
                   ? t("Dernière étape : le code de vérification.")
@@ -449,6 +465,20 @@ export function LoginPage({ onSignedIn }: { onSignedIn: () => void }) {
               disabled={busy || !nouveauValide}
               onClick={() => void premier(selected)}
             >
+              {t("Enregistrer et me connecter")}
+            </Button>
+            {lienRetour(t("Changer de compte"))}
+          </div>
+        )}
+
+        {mode === "provisoire" && selected && (
+          <div className="space-y-4">
+            {carteDuCompte(selected)}
+            <InfoBox tone="info" leading={<KeyRound size={15} strokeWidth={1.75} />}>
+              {t("Ce mot de passe a été choisi par la personne qui a créé votre compte. Choisissez le vôtre : elle ne le connaîtra pas, et l'ancien ne servira plus.")}
+            </InfoBox>
+            {champsNouveau(() => void provisoire(selected), true)}
+            <Button icon={LogIn} block disabled={busy || !nouveauValide} onClick={() => void provisoire(selected)}>
               {t("Enregistrer et me connecter")}
             </Button>
             {lienRetour(t("Changer de compte"))}

@@ -80,7 +80,15 @@ export function Popover({
       const marge = 16;
       const dessous = window.innerHeight - cadre.bottom - marge - 8;
       const dessus = cadre.top - marge - 8;
-      const SOUHAITE = 360;
+      /*
+       * La place qu'il faut, c'est la hauteur réelle du contenu, pas un chiffre
+       * fixe (27/09/2026, vu par Medhi) : le choix du niveau d'approbation
+       * s'ouvrait vers le haut là où le menu « + » s'ouvre vers le bas, parce
+       * qu'il réclamait 360 pixels sans en avoir besoin. On ne change de côté
+       * que si le contenu n'y tient pas et qu'il y a plus de place en face.
+       */
+      const panneauMesure = rootRef.current?.querySelector<HTMLElement>('[role="menu"]');
+      const SOUHAITE = Math.min(panneauMesure?.scrollHeight ?? 360, 480);
       let cote = side;
       if (side === "bottom" && dessous < SOUHAITE && dessus > dessous) cote = "top";
       if (side === "top" && dessus < SOUHAITE && dessous > dessus) cote = "bottom";

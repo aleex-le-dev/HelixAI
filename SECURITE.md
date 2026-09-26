@@ -3005,21 +3005,48 @@ constat a été relu avant d'être corrigé ; les corrections sont vérifiées p
 | Écran | « Masquer le prompt aux non-administrateurs » ne faisait rien | Interrupteur retiré ; l'écran dit que les instructions d'un agent partagé se lisent |
 | Divers | Nom de modèle ou code d'appairage commençant par `-` lu comme une option ; noms de dossiers privés de la Bibliothèque dans la recherche | Refusés ; chemin arrêté au premier dossier invisible |
 
+### Fermé le 27 septembre 2026
+
+**Comptes créés par un collègue.** Seul l'administrateur crée encore
+directement le compte de quelqu'un (`/helix/auth/create` avec une séance) ; un
+collègue invite, et la personne ouvre son compte elle-même avec le code reçu.
+Même créé par l'administrateur, le mot de passe est **provisoire**
+(`motDePasseProvisoire`, accounts.ts) : il n'ouvre pas de séance, seulement le
+choix d'un mot de passe à soi (`/helix/auth/mot-de-passe-provisoire`, écran de
+connexion, étape « Choisissez votre mot de passe »), différent du provisoire,
+qui ne vaut plus rien ensuite. Vérifié par `npm run securite` (section 3,
+3 contrôles). Limite dite : l'administrateur qui a choisi le provisoire peut
+encore se connecter avant la personne et choisir le mot de passe à sa place ;
+elle ne pourra alors plus entrer, et le verra. L'invitation par mail reste la
+voie qui ne laisse ce pouvoir à personne.
+
+**Employés qui traitent un mail reçu.** Chaque employé a désormais, chez
+OpenClaw, un second profil réservé aux mails reçus (`nomCourrier`,
+employes.ts) : même modèle, même espace, mais seulement la lecture, sa mémoire
+et ses outils Helix ; **ni le web, ni un navigateur, ni une messagerie, ni une
+commande, ni l'écriture d'un fichier**, quel que soit son palier (« étendu »
+ou « libre » compris). Ses outils Helix qui modifient attendent toujours une
+personne (`traiteUnMailRecu`, serveurOutils.ts). Si ce profil ne peut pas être
+préparé, le mail n'est pas traité, et l'activité le dit : il n'est jamais
+confié au profil ordinaire. Le texte du mail est placé entre des bornes tirées
+au sort pour chaque mail, retirées du texte s'il les contenait : un mail qui
+écrirait lui-même « fin du mail » suivi de fausses consignes n'en sort pas.
+Vérifié par `npm run securite` (la configuration écrite, section 7 ter). **Pas
+encore essayé avec le vrai OpenClaw** : un mail réel traité par ce profil.
+
 ### Restant, dit comme tel
 
-- **Mise à jour sans signature** (élevée, décision de Medhi) : l'instance peut
-  faire installer n'importe quelle application à ses postes (§ 9). Fermer :
-  une clé d'éditeur inscrite dans le paquet, qui signe l'archive.
-- **Comptes créés par un collègue** (élevée en entreprise) : celui qui crée le
-  compte d'une autre personne choisit son mot de passe et le garde, et le
-  compte hérite de ce qu'on a partagé à cette adresse. Fermer : un mot de passe
-  à changer à la première connexion, une route pour changer le sien, et
-  l'adresse considérée comme non prouvée tant que la personne ne s'est pas
-  connectée par l'invitation.
-- **Employés déclenchés par un mail** (plausible) : au palier « étendu », les
-  outils web d'OpenClaw restent ouverts pendant qu'ils traitent un mail reçu ;
-  un mail piégé pourrait faire sortir ce que l'employé a lu dans une adresse
-  web.
+- **Mise à jour sans signature** (élevée, décision de Medhi) : l'instance
+  décrit la nouvelle version, fournit l'archive **et** son empreinte. Une
+  instance piratée peut donc fournir une fausse application avec l'empreinte
+  qui va avec : le poste la vérifie, la trouve conforme, et l'installe sur un
+  clic. Elle hérite alors des autorisations de macOS accordées à Helix (écran,
+  accessibilité, micro). Fermer : une paire de clés d'éditeur. La clé privée
+  reste chez l'éditeur (jamais dans le dépôt) et signe chaque version à sa
+  fabrication ; la clé publique est inscrite dans l'application. Un poste
+  n'installe alors que ce que la clé de l'éditeur a signé, d'où qu'il le
+  reçoive. Le prix : garder cette clé en lieu sûr, sans quoi plus aucune mise à
+  jour d'un clic ne s'installe.
 - **Bot de réunion** (faible) : la protection du § 18.5 capture les
   constructeurs, pas leurs méthodes (`addEventListener`, `then`…) ; un script
   hostile sur la page de Meet pourrait encore substituer son propre son.

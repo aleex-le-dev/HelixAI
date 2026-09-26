@@ -630,6 +630,7 @@
   "Plan de Helix arrêté à l'étape {0} sur {1} : les problèmes ci-dessus restent à régler.": "Helix plan stopped at step {0} of {1}: the problems above remain to be fixed.",
   "Plan de Helix terminé : les {0} étapes sont faites et contrôlées.": "Helix plan finished: all {0} steps are done and checked.",
   "Posez au moins une question pour comparer (avec moins de 20 exemples, aucun n'est mis de côté).": "Ask at least one question to compare (with fewer than 20 examples, none are held out).",
+  "Pour ajouter un collègue, invitez-le : il ouvrira son compte lui-même et choisira son mot de passe. Seul l'administrateur crée un compte directement.": "To add a colleague, invite them: they will open their account themselves and choose their password. Only the administrator creates an account directly.",
   "Pour réagir aux mails reçus, il lui faut l'accès à la boîte mail : cochez « Courrier » dans ses outils.": "To react to incoming emails, it needs access to the mailbox: tick “Mail” in its tools.",
   "Préparation de l'espace Node isolé...": "Preparing the isolated Node space…",
   "Préparation de la description...": "Preparing the description...",

@@ -147,7 +147,7 @@ export function ApprovalSelector() {
         </p>
       )}
       <p className="border-t border-border px-2.5 pb-1 pt-2 text-xs leading-relaxed text-muted-foreground">
-        {t("Le niveau est gardé par l'instance, pas par ce poste : il vaut pour tous les postes qui s'y rattachent et survit au redémarrage. Le contrôle de l'écran garde en plus la règle fixée par votre administrateur, que ce réglage peut resserrer mais jamais assouplir.")}
+        {t("Vaut pour toute l'instance, et reste après un redémarrage.")}
       </p>
     </Popover>
   );

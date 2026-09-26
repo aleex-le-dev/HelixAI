@@ -107,7 +107,7 @@ function nomDuPoste(): string {
  *  le mot de passe devienne obligatoire, il doit en choisir un. */
 export type Connexion =
   | { ok: true; account: Account }
-  | { ok: false; raison: "a-definir" | "deja-defini" | "expire" | "refuse"; message: string }
+  | { ok: false; raison: "a-definir" | "a-changer" | "deja-defini" | "expire" | "refuse"; message: string }
   /**
    * Mot de passe juste, reste le code (`deux-facteurs`), ou l'instance impose
    * un second facteur que ce compte n'a pas encore (`inscription`). `defi`
@@ -134,6 +134,8 @@ async function lireConnexion(res: Response, repli: string): Promise<Connexion> {
   if (body.error?.code === "mot-de-passe-a-definir") {
     return { ok: false, raison: "a-definir", message };
   }
+  // Mot de passe choisi par l'administrateur qui a créé le compte : la personne en choisit un à elle.
+  if (body.error?.code === "mot-de-passe-a-changer") return { ok: false, raison: "a-changer", message };
   if (body.error?.code === "mot-de-passe-deja-defini") {
     return { ok: false, raison: "deja-defini", message };
   }
@@ -188,6 +190,21 @@ export async function definirPremierMotDePasse(
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ accountId, password, poste: nomDuPoste(), rester }),
+  });
+  return lireConnexion(res, t("Impossible d'enregistrer ce mot de passe."));
+}
+
+/** Remplace le mot de passe provisoire par le sien, puis connecte (second facteur compris). */
+export async function remplacerMotDePasseProvisoire(
+  accountId: string,
+  provisoire: string,
+  nouveau: string,
+  rester = false,
+): Promise<Connexion> {
+  const res = await apiFetch("/helix/auth/mot-de-passe-provisoire", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ accountId, password: provisoire, nouveau, poste: nomDuPoste(), rester }),
   });
   return lireConnexion(res, t("Impossible d'enregistrer ce mot de passe."));
 }

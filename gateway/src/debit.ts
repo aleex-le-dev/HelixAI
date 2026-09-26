@@ -45,6 +45,7 @@ const REGLES: { methode: string; chemin: string; regle: Regle }[] = [
   { methode: "POST", chemin: "/helix/auth/verify", regle: { max: 30, fenetreMs: 60_000 } },
   { methode: "POST", chemin: "/helix/auth/deux-facteurs", regle: { max: 30, fenetreMs: 60_000 } },
   { methode: "POST", chemin: "/helix/auth/premier-mot-de-passe", regle: { max: 10, fenetreMs: 60_000 } },
+  { methode: "POST", chemin: "/helix/auth/mot-de-passe-provisoire", regle: { max: 10, fenetreMs: 60_000 } },
   { methode: "POST", chemin: "/helix/auth/create", regle: { max: 10, fenetreMs: 60_000 } },
   /*
    * Rattachement par code d'invitation : c'est la seule route publique qui

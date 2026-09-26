@@ -110,34 +110,3 @@ export function SessionsCodeListe({ recherche = "" }: { recherche?: string }) {
     </div>
   );
 }
-
-/** Les sessions les plus récentes, sur l'accueil de Code. */
-export function SessionsRecentes({ max = 6 }: { max?: number }) {
-  const { sessions } = useSessionsCode();
-  const navigate = useNavigate();
-  if (sessions.length === 0) return null;
-  return (
-    <section className="mt-8" aria-label={t("Sessions récentes")}>
-      <h2 className="mb-2 px-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{t("Sessions récentes")}</h2>
-      <ul className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-card">
-        {sessions.slice(0, max).map((s) => (
-          <li key={s.id}>
-            <button
-              type="button"
-              onClick={() => navigate(`/code?s=${encodeURIComponent(s.id)}`)}
-              className="flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-muted/60"
-            >
-              <span className="min-w-0 flex-1">
-                <span className="block truncate text-sm text-foreground">{s.titre || t("Session sans demande")}</span>
-                <span className="block truncate text-xs text-muted-foreground" title={s.dossier}>
-                  {nomDossier(s.dossier)}
-                </span>
-              </span>
-              <span className="shrink-0 text-xs tabular-nums text-muted-foreground">{dateCourte(s.maj)}</span>
-            </button>
-          </li>
-        ))}
-      </ul>
-    </section>
-  );
-}

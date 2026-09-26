@@ -91,6 +91,7 @@ import {
   verifyAccount,
   modifierProfil,
   definirPremierMotDePasse,
+  remplacerMotDePasseProvisoire,
   validerSecondFacteur,
   etatDeuxFacteurs,
   preparerDeuxFacteurs,
@@ -1752,6 +1753,18 @@ async function handleAuthCreate(
           },
         });
       }
+      /*
+       * Créer directement le compte de quelqu'un d'autre : l'administrateur
+       * seul (revue du 26/09/2026). Un collègue invite (invitations.ts) : la
+       * personne ouvre alors son compte elle-même. Et même par
+       * l'administrateur, le mot de passe choisi est provisoire : il ne sert
+       * qu'à en choisir un à soi, à la première connexion.
+       */
+      if (!(await estAdministrateur(qui.userId))) {
+        return send(res, 403, {
+          error: { message: t("Pour ajouter un collègue, invitez-le : il ouvrira son compte lui-même et choisira son mot de passe. Seul l'administrateur crée un compte directement.") },
+        });
+      }
     }
   }
 
@@ -1759,6 +1772,8 @@ async function handleAuthCreate(
     fullName: body.fullName ?? "",
     email: emailImpose ?? body.email ?? "",
     password: body.password,
+    // Ni l'amorçage ni l'invitation : quelqu'un d'autre a choisi ce mot de passe.
+    provisoire: !amorcage && !emailImpose,
   });
   if (!result.ok) return send(res, 400, { error: { message: result.reason } });
 
@@ -1830,7 +1845,20 @@ async function handleAuthVerify(
     return send(res, 400, { error: { message: t("`accountId` est requis.") } });
   }
   const result = await verifyAccount(body.accountId, body.password);
+  return repondreConnexion(res, result, body as Record<string, unknown>);
+}
+
+/** La suite commune d'une vérification de mot de passe : séance, ou l'étape suivante. */
+async function repondreConnexion(
+  res: http.ServerResponse,
+  result: Awaited<ReturnType<typeof verifyAccount>>,
+  body: Record<string, unknown>,
+): Promise<void> {
   if (!result.ok) {
+    // Mot de passe choisi par qui a créé le compte : la personne en choisit un à elle d'abord.
+    if (result.aChanger) {
+      return send(res, 409, { error: { message: result.reason, code: "mot-de-passe-a-changer" } });
+    }
     // 409 plutôt que 401 : ce n'est pas un mauvais mot de passe, c'est un
     // compte à qui il en manque un. L'interface bascule sur la saisie du premier.
     if (result.aDefinir) {
@@ -1859,10 +1887,23 @@ async function handleAuthVerify(
    */
   const seance = await openSession(
     result.account.id,
-    body.poste ?? "Poste",
-    resterConnecte(body as Record<string, unknown>),
+    typeof body.poste === "string" ? body.poste : "Poste",
+    resterConnecte(body),
   );
   send(res, 200, { account: result.account, session: seance });
+}
+
+/**
+ * Le mot de passe provisoire remplacé par celui de la personne, puis la
+ * connexion comme d'habitude (second facteur compris). Au jeton seul, comme la
+ * connexion : la personne n'a pas encore de séance.
+ */
+async function handleChangerProvisoire(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
+  const body = (await readJson(req).catch(() => ({}))) as Record<string, unknown>;
+  if (typeof body.accountId !== "string" || !body.accountId) return send(res, 400, { error: { message: t("`accountId` est requis.") } });
+  const r = await remplacerMotDePasseProvisoire(body.accountId, body.password, body.nouveau);
+  if (!r.ok) return send(res, r.statut, { error: { message: r.reason } });
+  return repondreConnexion(res, await verifyAccount(body.accountId, String(body.nouveau)), body);
 }
 
 /**
@@ -4839,6 +4880,8 @@ const traiter = (
       return handleAuthCreate(req, res, url);
     if (req.method === "POST" && path === "/helix/auth/premier-mot-de-passe")
       return handlePremierMotDePasse(req, res);
+    if (req.method === "POST" && path === "/helix/auth/mot-de-passe-provisoire")
+      return handleChangerProvisoire(req, res);
     if (req.method === "POST" && path === "/helix/auth/verify")
       return handleAuthVerify(req, res);
     if (req.method === "GET" && path === "/helix/export") return handleExport(req, res, url);

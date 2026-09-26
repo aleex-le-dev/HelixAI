@@ -320,27 +320,57 @@ const avecSeance = { ...avecJeton, "X-Helix-Session": SEANCE };
  * partagé (section 7).
  */
 const MDP_B = "Autre2PasseSolide!57";
+/*
+ * Créé par l'administrateur (la première) : le mot de passe qu'elle choisit
+ * est provisoire (revue du 26/09/2026). Il ne donne pas de séance ; la
+ * collègue en choisit un à elle, et c'est lui qui la connecte.
+ */
+const PROVISOIRE_B = "Provisoire2Passe!11";
 const creeB = await appel("/helix/auth/create", {
   method: "POST", headers: avecSeance,
-  body: JSON.stringify({ fullName: "Collègue", email: "collegue@example.test", password: MDP_B }),
+  body: JSON.stringify({ fullName: "Collègue", email: "collegue@example.test", password: PROVISOIRE_B }),
 });
 const compteB = (await creeB.json()).account;
-const connexionB = await (await appel("/helix/auth/verify", {
-  method: "POST", headers: avecJeton, body: JSON.stringify({ accountId: compteB?.id, password: MDP_B }),
+const avecProvisoire = await appel("/helix/auth/verify", {
+  method: "POST", headers: avecJeton, body: JSON.stringify({ accountId: compteB?.id, password: PROVISOIRE_B }),
+});
+const jProvisoire = await avecProvisoire.json().catch(() => ({}));
+const identiqueRefuse = await appel("/helix/auth/mot-de-passe-provisoire", {
+  method: "POST", headers: avecJeton, body: JSON.stringify({ accountId: compteB?.id, password: PROVISOIRE_B, nouveau: PROVISOIRE_B }),
+});
+const connexionB = await (await appel("/helix/auth/mot-de-passe-provisoire", {
+  method: "POST", headers: avecJeton, body: JSON.stringify({ accountId: compteB?.id, password: PROVISOIRE_B, nouveau: MDP_B }),
 })).json();
+const provisoireApres = await appel("/helix/auth/verify", {
+  method: "POST", headers: avecJeton, body: JSON.stringify({ accountId: compteB?.id, password: PROVISOIRE_B }),
+});
 const SEANCE_B = connexionB.session?.token;
 const avecSeanceB = { ...avecJeton, "X-Helix-Session": SEANCE_B };
 // Un témoin, membre d'aucun groupe (section 7 ter, agents de groupes), connecté lui aussi avant les essais de force brute.
 const creeC = await appel("/helix/auth/create", {
   method: "POST", headers: avecSeance,
-  body: JSON.stringify({ fullName: "Témoin", email: "temoin@example.test", password: "Temoin2PasseSolide!31" }),
+  body: JSON.stringify({ fullName: "Témoin", email: "temoin@example.test", password: "Provisoire2Temoin!12" }),
 });
 const compteC = (await creeC.json()).account;
-const connexionC = await (await appel("/helix/auth/verify", {
-  method: "POST", headers: avecJeton, body: JSON.stringify({ accountId: compteC?.id, password: "Temoin2PasseSolide!31" }),
+const connexionC = await (await appel("/helix/auth/mot-de-passe-provisoire", {
+  method: "POST", headers: avecJeton, body: JSON.stringify({ accountId: compteC?.id, password: "Provisoire2Temoin!12", nouveau: "Temoin2PasseSolide!31" }),
 })).json();
 const avecSeanceC = { ...avecJeton, "X-Helix-Session": connexionC.session?.token };
-verifier("un collègue inscrit par un compte connecté peut se connecter", Boolean(compteB?.id && SEANCE_B), `${creeB.status} ${JSON.stringify(connexionB).slice(0, 80)}`);
+verifier("un collègue inscrit par l'administrateur se connecte, une fois son propre mot de passe choisi", Boolean(compteB?.id && SEANCE_B), `${creeB.status} ${JSON.stringify(connexionB).slice(0, 80)}`);
+verifier(
+  "le mot de passe choisi par l'administrateur n'ouvre pas de séance : il ne sert qu'à en choisir un à soi (409)",
+  avecProvisoire.status === 409 && jProvisoire.error?.code === "mot-de-passe-a-changer" && !jProvisoire.session,
+  `${avecProvisoire.status} ${JSON.stringify(jProvisoire).slice(0, 100)}`,
+);
+verifier("le nouveau mot de passe doit différer du provisoire, et le provisoire ne vaut plus rien ensuite", identiqueRefuse.status === 400 && provisoireApres.status === 401, `${identiqueRefuse.status} ${provisoireApres.status}`);
+{
+  // Un membre qui n'administre pas ne crée pas de compte : il invite (la personne choisit alors elle-même son mot de passe).
+  const parB = await appel("/helix/auth/create", {
+    method: "POST", headers: avecSeanceB,
+    body: JSON.stringify({ fullName: "Par B", email: "par-b@example.test", password: "ParB2PasseSolide!77" }),
+  });
+  verifier("un membre qui n'administre pas ne crée pas le compte d'un autre (403) : il l'invite", parB.status === 403, parB.status);
+}
 /*
  * Ici, tant que les séances de la première et de la collègue sont fraîches :
  * les essais de mots de passe qui suivent en révoquent.
@@ -1015,6 +1045,21 @@ console.log("\n7 ter. Employés OpenClaw et bases de connaissances : ce qui est 
       configOc.includes(cleDe(employe?.id)) && configOc.includes(cleDe(sansBases?.id)) && !configOc.includes(CLE_INSTANCE),
       "clé absente ou clé de l'instance écrite",
     );
+    // Revue du 26/09/2026 : chaque employé a un profil pour les mails reçus, sans aucune sortie.
+    {
+      const entrees = JSON.parse(configOc).agents?.entries ?? {};
+      const profil = entrees[`helix-${employe?.id}-courrier`];
+      const refus = new Set(profil?.tools?.deny ?? []);
+      const permis = profil?.tools?.alsoAllow ?? [];
+      verifier(
+        "employé : son profil des mails reçus n'a ni web, ni navigateur, ni messagerie, ni commande, ni écriture de fichier",
+        ["group:web", "browser", "message", "group:runtime", "write", "edit", "apply_patch", "cron"].every((x) => refus.has(x)) &&
+          profil?.tools?.exec?.mode === "deny" &&
+          !permis.some((x) => ["group:web", "browser", "message", "write", "edit", "group:runtime"].includes(x)) &&
+          permis.includes(`helix-${employe?.id}__*`),
+        JSON.stringify(profil?.tools ?? null).slice(0, 200),
+      );
+    }
 
     const liste = await (await mcp(employe?.id, "tools/list", {})).text();
     verifier("l'outil connaissances__chercher est proposé à l'employé qui a des bases", liste.includes("connaissances__chercher"), liste.slice(0, 80));

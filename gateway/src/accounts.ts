@@ -21,6 +21,12 @@ const DIGEST = "sha256";
 
 export interface StoredAccount {
   id: string;
+  /**
+   * Mot de passe choisi par quelqu'un d'autre (l'administrateur qui a créé le
+   * compte) : il ouvre une seule chose, le choix d'un mot de passe à soi. Pas
+   * de séance avant (27/09/2026, revue de sécurité § 28).
+   */
+  motDePasseProvisoire?: boolean;
   handle: string;
   fullName: string;
   email: string;
@@ -227,6 +233,8 @@ export function createAccount(input: {
   email: string;
   password?: string;
   organisationId?: string;
+  /** Créé par quelqu'un d'autre que la personne : son mot de passe est à changer à la première connexion. */
+  provisoire?: boolean;
 }): Promise<{ ok: true; account: PublicAccount } | { ok: false; reason: string }> {
   return enFile(() => creerCompte(input));
 }
@@ -236,6 +244,7 @@ async function creerCompte(input: {
   email: string;
   password?: string;
   organisationId?: string;
+  provisoire?: boolean;
 }): Promise<{ ok: true; account: PublicAccount } | { ok: false; reason: string }> {
   const fullName = (input.fullName ?? "").trim();
   const email = normalise(input.email ?? "");
@@ -274,6 +283,7 @@ async function creerCompte(input: {
     createdAt: new Date().toISOString(),
     salt,
     passwordHash: derive(input.password as string, salt),
+    ...(input.provisoire ? { motDePasseProvisoire: true } : {}),
   };
 
   await save([...accounts, account]);
@@ -380,6 +390,43 @@ export function definirPremierMotDePasse(
   });
 }
 
+/**
+ * Remplace le mot de passe provisoire par celui que la personne choisit : il
+ * faut le provisoire (compté dans le même blocage que la connexion), et un
+ * nouveau différent. Le compte redevient alors un compte comme les autres.
+ */
+export function remplacerMotDePasseProvisoire(
+  accountId: string,
+  provisoire: unknown,
+  nouveau: unknown,
+): Promise<{ ok: true } | { ok: false; reason: string; statut: number }> {
+  return enFile(async () => {
+    const attente = blocageRestant(accountId);
+    if (attente > 0) return { ok: false, reason: `Trop de tentatives. Réessayez dans ${Math.ceil(attente / 1000)} secondes.`, statut: 429 };
+    const accounts = await load();
+    const compte = accounts.find((a) => a.id === accountId);
+    if (!compte || !compte.passwordHash || !compte.salt) return { ok: false, reason: "Compte introuvable.", statut: 404 };
+    if (!compte.motDePasseProvisoire) return { ok: false, reason: "Ce compte a déjà son propre mot de passe.", statut: 409 };
+    const attendu = Buffer.from(compte.passwordHash, "hex");
+    const donne = Buffer.from(derive(String(provisoire ?? ""), compte.salt), "hex");
+    if (typeof provisoire !== "string" || attendu.length !== donne.length || !timingSafeEqual(attendu, donne)) {
+      noterEchec(accountId);
+      journaliser("connexion.refusee", accountId, { motif: "mot de passe provisoire incorrect" });
+      return { ok: false, reason: "Mot de passe provisoire incorrect.", statut: 401 };
+    }
+    const refus = motDePasseRefuse(nouveau);
+    if (refus) return { ok: false, reason: refus, statut: 400 };
+    if (nouveau === provisoire) return { ok: false, reason: "Choisissez un mot de passe différent de celui qu'on vous a donné.", statut: 400 };
+    const salt = randomBytes(16).toString("hex");
+    compte.salt = salt;
+    compte.passwordHash = derive(nouveau as string, salt);
+    delete compte.motDePasseProvisoire;
+    await save(accounts);
+    journaliser("motdepasse.defini", accountId, { remplaceLeProvisoire: true });
+    return { ok: true };
+  });
+}
+
 /** Combien de temps ce compte reste-t-il bloqué ? 0 s'il ne l'est pas. */
 function blocageRestant(accountId: string): number {
   const suivi = echecs.get(accountId);
@@ -404,7 +451,7 @@ export async function verifyAccount(
   password?: string,
 ): Promise<
   | { ok: true; account: PublicAccount }
-  | { ok: false; reason: string; aDefinir?: boolean; defi?: string; inscription?: string }
+  | { ok: false; reason: string; aDefinir?: boolean; aChanger?: boolean; defi?: string; inscription?: string }
 > {
   const attente = blocageRestant(accountId);
   if (attente > 0) {
@@ -441,6 +488,17 @@ export async function verifyAccount(
     noterEchec(accountId);
     journaliser("connexion.refusee", accountId, { motif: "mot de passe incorrect" });
     return { ok: false, reason: "Mot de passe incorrect." };
+  }
+
+  /*
+   * Mot de passe choisi par qui a créé le compte : il est juste, mais il
+   * n'ouvre rien d'autre que le choix d'un mot de passe à soi. Sans cela, la
+   * personne qui a créé le compte le connaissait pour toujours et pouvait s'y
+   * connecter à volonté (revue du 26/09/2026).
+   */
+  if (account.motDePasseProvisoire) {
+    echecs.delete(accountId);
+    return { ok: false, reason: "Choisissez votre propre mot de passe : celui-ci a été choisi par la personne qui a créé votre compte.", aChanger: true };
   }
 
   /*

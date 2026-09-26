@@ -630,6 +630,7 @@
   "Plan de Helix arrêté à l'étape {0} sur {1} : les problèmes ci-dessus restent à régler.": "Helix 计划在第 {0} 步（共 {1} 步）停止：上述问题仍需解决。",
   "Plan de Helix terminé : les {0} étapes sont faites et contrôlées.": "Helix 计划完成：{0} 个步骤均已完成并检查。",
   "Posez au moins une question pour comparer (avec moins de 20 exemples, aucun n'est mis de côté).": "请至少提出一个问题用于对比（示例少于 20 个时不会预留示例）。",
+  "Pour ajouter un collègue, invitez-le : il ouvrira son compte lui-même et choisira son mot de passe. Seul l'administrateur crée un compte directement.": "要添加同事，请邀请对方：对方会自行开通账户并设置密码。只有管理员可以直接创建账户。",
   "Pour réagir aux mails reçus, il lui faut l'accès à la boîte mail : cochez « Courrier » dans ses outils.": "要响应收到的邮件，它需要访问邮箱：请在其工具中勾选“邮件”。",
   "Préparation de l'espace Node isolé...": "正在准备独立的 Node 环境…",
   "Préparation de la description...": "正在准备描述...",

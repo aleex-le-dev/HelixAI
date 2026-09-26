@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { PanelRight, TriangleAlert } from "lucide-react";
-import { SessionsRecentes } from "@/components/code/SessionsCode";
 import { useSessionsCode } from "@/hooks/useSessionsCode";
 import { signalerSessionsCode } from "@/lib/code";
 import { LogoMark } from "@/components/ui/Logo";
@@ -222,8 +221,6 @@ export function CodePage() {
             </InfoBox>
           )}
 
-          {/* Une session demandée par l'adresse se charge : pas de liste en attendant. */}
-          {!demandee && <SessionsRecentes />}
         </div>
       </div>
     </div>

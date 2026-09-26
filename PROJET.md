@@ -2668,6 +2668,19 @@ d'OpenCode passent par la même barrière (`permissionsCode.ts`). Le libellé de
 approuver » ne dit plus « sans jamais vous demander » : ce qui se confirme toujours
 (supprimer un événement) se confirme aussi à ce niveau.
 
+**Fait le 27/09/2026 : les deux suites de la revue de sécurité.** Décidé par Medhi (« fais
+au mieux », « qu'il soit efficace et évite l'injection de prompt ») :
+- **Comptes** : un collègue invite, seul l'administrateur crée un compte directement, et
+  le mot de passe qu'il choisit est provisoire : la personne en choisit un à elle à sa
+  première connexion (écran de connexion), l'ancien ne vaut plus rien.
+- **Employés et mails reçus** : un second profil OpenClaw par employé, réservé aux mails
+  reçus, sans web, navigateur, messagerie, commande ni écriture de fichier ; le mail entre
+  des bornes tirées au sort. Pas encore essayé avec le vrai OpenClaw.
+- **Écran** : le choix du niveau d'approbation s'ouvre vers le bas quand il y tient (le menu
+  mesure sa vraie hauteur), « Sessions récentes » retiré de l'accueil de Code (les sessions
+  restent dans la barre de gauche).
+Reste à décider : signer les mises à jour (SECURITE.md § 28).
+
 **Fait le 26/09/2026 : revue de sécurité par six agents.** Demandée par Medhi (« un
 tour complet niveau sécurité avec plusieurs agents ») : six agents en lecture seule, un par
 domaine, chaque constat relu puis corrigé, et vérifié par `npm run securite` (376 contrôles).
@@ -2682,8 +2695,7 @@ une tâche et supprimer un événement se confirment toujours ; la carte montre 
 recevra ; quand le mail d'invitation part, le code n'est plus montré à qui invite ;
 l'interrupteur « Masquer le prompt » est retiré (il ne faisait rien). **À décider** : signer
 les mises à jour (une instance compromise peut aujourd'hui faire installer n'importe quelle
-application à ses postes), le mot de passe choisi par le collègue qui crée un compte, les
-outils web d'un employé qui traite un mail reçu (SECURITE.md § 28, « Restant »).
+application à ses postes) ; les deux autres points ont été fermés le 27/09 (ci-dessus).
 **À faire** : que l'instance ajoute elle-même les instructions d'un agent au Chat, pour
 pouvoir un jour les cacher vraiment.
 

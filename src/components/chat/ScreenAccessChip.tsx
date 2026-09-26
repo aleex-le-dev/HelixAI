@@ -66,7 +66,7 @@ export function ScreenAccessChip({ modeleVoit = true }: { modeleVoit?: boolean }
           aria-expanded={p["aria-expanded"]}
         >
           {sansVision
-            ? t("Écran : modèle sans vision")
+            ? t("Écran : sans vision")
             : actif
               ? tf("Écran : {0}", MODE_LABEL[capability.mode].toLowerCase())
               : t("Écran indisponible")}

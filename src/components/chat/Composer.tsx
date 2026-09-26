@@ -176,9 +176,15 @@ export function Composer({
     <div className={cn("w-full", className)}>
       <div className="rounded-2xl bg-muted/50 p-1.5">
         {contextBar && (
-          // `flex-wrap` : sur une fenêtre étroite, les puces passent à la ligne
-          // au lieu de déborder de la carte.
-          <div className="flex flex-wrap items-center gap-1 px-1.5 py-1">{contextBar}</div>
+          /*
+           * Une seule ligne : quand la place manque, les libellés des puces se
+           * raccourcissent (points de suspension, libellé complet au survol)
+           * au lieu de faire passer la dernière puce seule sur une seconde
+           * ligne (vu par Medhi le 26/09/2026 dans Cowork : « Connaissances »
+           * tombait en dessous). Pas d'`overflow-hidden` ici : il couperait
+           * les menus qui s'ouvrent sous les puces.
+           */
+          <div className="flex min-w-0 flex-nowrap items-center gap-1 px-1.5 py-1 [&>*]:min-w-0">{contextBar}</div>
         )}
         {/* La carte porte l'etat de focus, pas le textarea : un seul contour. */}
         {survol && (

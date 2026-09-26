@@ -20,7 +20,8 @@ export const Chip = forwardRef<HTMLButtonElement, ChipProps>(function Chip(
       ref={ref}
       type="button"
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1.5 text-sm font-medium transition-colors",
+        // `min-w-0` et le libellé tronqué : dans une barre trop étroite, la puce raccourcit au lieu de passer à la ligne.
+        "inline-flex min-w-0 max-w-full items-center gap-1.5 rounded-full px-2.5 py-1.5 text-sm font-medium transition-colors",
         "text-muted-foreground hover:bg-muted hover:text-foreground",
         // Une puce desactivee doit cesser d'inviter au clic : sans cela elle
         // s'allume au survol et laisse croire qu'elle ouvre quelque chose.
@@ -30,8 +31,12 @@ export const Chip = forwardRef<HTMLButtonElement, ChipProps>(function Chip(
       )}
       {...props}
     >
-      {leading}
-      {children && <span className="whitespace-nowrap">{children}</span>}
+      {leading && <span className="inline-flex shrink-0">{leading}</span>}
+      {children && (
+        <span className="min-w-0 truncate whitespace-nowrap" title={typeof children === "string" ? children : undefined}>
+          {children}
+        </span>
+      )}
       {chevron && (
         <ChevronDown
           size={14}

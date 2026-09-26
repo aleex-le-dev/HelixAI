@@ -66,6 +66,40 @@ export interface Plan {
  * Volontairement stricte sur la forme : un petit modèle bavarde, et un plan
  * noyé dans des explications n'est pas exploitable. On demande du JSON nu.
  */
+/**
+ * La langue d'une demande, devinée sur son texte : lettres chinoises, mots et
+ * accents français, anglais sinon. `null` quand rien ne tranche.
+ */
+export function langueDe(texte: string): "fr" | "en" | "zh" | null {
+  const t = texte.toLowerCase();
+  if ((texte.match(/[\u3400-\u9fff]/g) ?? []).length >= 4) return "zh";
+  const fr = (t.match(/\b(le|la|les|un|une|des|du|de|et|pour|avec|qui|que|dans|sur|est|fais|ajoute|écris|ecris|peux|mon|mes|demain|aujourd'hui)\b/g) ?? []).length + (t.match(/[éèêàçùâîô]/g) ?? []).length;
+  const en = (t.match(/\b(the|a|an|and|for|with|that|which|in|on|is|make|write|add|build|create|my|please|tomorrow|today)\b/g) ?? []).length;
+  if (fr > en) return "fr";
+  if (en > fr) return "en";
+  return null;
+}
+
+/*
+ * La phrase qui fixe la langue de la réponse. Mesuré le 26/09/2026 avec Qwen3 8B :
+ * « Réponds dans la langue de la demande (en anglais si elle est en anglais) »
+ * le faisait répondre en anglais à une demande en français (« No existing events
+ * found for tomorrow… ») : le mot « anglais » l'y poussait. On nomme donc la
+ * langue elle-même, et seulement elle.
+ */
+export function phraseLangue(texte: string, verbe: "Réponds" | "Écris" = "Réponds"): string {
+  switch (langueDe(texte)) {
+    case "fr":
+      return `${verbe} en français.`;
+    case "en":
+      return `${verbe} en anglais : la demande est en anglais.`;
+    case "zh":
+      return `${verbe} en chinois : la demande est en chinois.`;
+    default:
+      return `${verbe} dans la langue de la demande.`;
+  }
+}
+
 export function consigneDePlan(
   demande: string,
   options: { contexte?: string; espace?: string; avecOutils: boolean },
@@ -113,7 +147,7 @@ export function consigneDePlan(
      * étapes même pour une demande en anglais (vu le 25/09/2026 : « Rechercher le
      * nombre de jours de congés... » sous une question anglaise, écran en anglais).
      */
-    "- Écris l'objectif et les étapes dans la langue de la demande (en anglais si elle est en anglais).",
+    `- ${phraseLangue(demande, "Écris")} Objectif et étapes compris.`,
     "- Si le travail porte sur une liste (des fichiers, des clients, des mails), une étape",
     "  qui la relève d'abord, puis des étapes qui la traitent par petits paquets.",
     ...regles,
@@ -227,7 +261,7 @@ export function consigneDeRevue(objectif: string, controleAuto: string[] = [], c
     "- chaque action demandée produit son effet tout de suite (un clic, une coche changent l'affichage sans rechargement) ;",
     "- les textes affichés sont dans la langue de la demande (en français si elle est en français).",
     "Corrige tout de suite ce qui est petit, avec les outils. Ne refais pas ce qui est bon.",
-    "Puis dis en quelques phrases ce qui est fait, et termine par une de ces deux lignes, exactement :",
+    `Puis dis en quelques phrases ce qui est fait (${phraseLangue(objectif).replace(/\.$/, "").toLowerCase()}), et termine par une de ces deux lignes, exactement :`,
     `${VERIFIE} : TOUT EST FAIT`,
     `${VERIFIE} : INCOMPLET, suivi de la liste de ce qui manque ou reste à corriger`,
   ].join("\n");
@@ -427,7 +461,7 @@ export function consigneDEtape(
     etape,
     "",
     "Fais uniquement cette étape, avec les outils. Ne fais pas les suivantes.",
-    "Réponds dans la langue de la demande générale (en anglais si elle est en anglais).",
+    phraseLangue(objectif),
     "",
     "N'INVENTE RIEN : ni un nom de fichier, de dossier ou de client, ni un montant,",
     "ni un total, ni une date. Toute valeur vient soit d'une liste que tu as obtenue,",
@@ -473,7 +507,7 @@ export function consigneDePartie(
     derniere ? "C'est la dernière partie : tu peux conclure l'ensemble." : "Ce n'est pas la dernière partie : ne conclus pas l'ensemble.",
     "N'invente ni chiffre, ni nom, ni fait qui ne soit pas dans la demande ou dans les passages des bases de connaissances fournis plus haut : si une information manque, écris-le entre crochets.",
     // Même raison que dans consigneDePlan : la consigne est en français, la réponse suit la demande.
-    "Écris dans la langue du document à rédiger (en anglais s'il est demandé en anglais).",
+    phraseLangue(objectif, "Écris"),
   ]
     .filter((l) => l !== "")
     .join("\n");

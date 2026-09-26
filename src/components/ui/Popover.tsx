@@ -120,7 +120,7 @@ export function Popover({
   }, [open]);
 
   return (
-    <div ref={rootRef} className={cn("relative inline-flex", className)}>
+    <div ref={rootRef} className={cn("relative inline-flex min-w-0", className)}>
       {trigger({
         onClick: () => setOpen(!open),
         "aria-expanded": open,

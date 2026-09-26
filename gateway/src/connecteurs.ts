@@ -917,7 +917,7 @@ const ID_VALIDE = /^[a-z0-9][a-z0-9_-]{0,31}$/;
  * `code`, `connaissances` et `taches` manquaient (revue du 26/09/2026) : un
  * connecteur libre nommé « code » voyait son outil `read` passer sans carte.
  */
-const IDS_RESERVES = new Set(["courrier", "agenda", "drive", "slack", "bureau", "ecran", "bibliotheque", "reunions", "controle", "code", "connaissances", "taches", "machine", "helix"]);
+const IDS_RESERVES = new Set(["courrier", "agenda", "drive", "slack", "bureau", "ecran", "bibliotheque", "reunions", "controle", "code", "connaissances", "taches", "machine", "helix", "web"]);
 
 /**
  * Ce que la requête a le droit d'apporter, selon le régime de l'instance.

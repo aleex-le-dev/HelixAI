@@ -1,4 +1,5 @@
 import { apiFetch } from "./endpoint";
+import { decrireRythme as decrireRythmeTache } from "@/lib/tachesProgrammees";
 import { DOCUMENT_MAX, EXTRACTION_MAX, LIBELLE_DOCUMENT_MAX, envoyerEnFlux } from "./televersement";
 import { t, tf } from "@/lib/i18n";
 
@@ -9,7 +10,7 @@ import { t, tf } from "@/lib/i18n";
  */
 
 export type Famille = "fichiers" | "bibliotheque" | "courrier" | "agenda" | "drive" | "slack" | "bureau";
-export type Rythme = "jours-ouvres" | "chaque-jour" | "chaque-heure" | "chaque-semaine" | "a-chaque-mail";
+export type Rythme = "jours-ouvres" | "chaque-jour" | "chaque-heure" | "chaque-semaine" | "chaque-mois" | "a-chaque-mail";
 export type Liberte = "encadre" | "etendu" | "libre";
 export type TypeCanal = "telegram" | "whatsapp" | "discord" | "slack" | "mattermost";
 
@@ -37,6 +38,8 @@ export interface Mission {
   /** « À chaque mail reçu » : ne réagir qu'aux messages dont l'expéditeur, ou l'objet, contient ce texte. */
   filtre?: { de?: string; objet?: string };
   heure: string;
+  /** « Chaque semaine » : 0 dimanche … 6 samedi ; « chaque mois » : 1 à 28, ou -1 pour le dernier jour. */
+  jour?: number;
   planifiee?: boolean;
 }
 
@@ -161,11 +164,13 @@ export const DETAIL_FAMILLE: Record<Famille, string> = {
   bureau: t("Créer des documents Word, Excel, PowerPoint et PDF"),
 };
 
+/** Dans l'ordre du choix, comme les tâches programmées (27/09/2026). */
 export const LIBELLE_RYTHME: Record<Rythme, string> = {
-  "jours-ouvres": t("Chaque jour ouvré"),
   "chaque-jour": t("Chaque jour"),
+  "jours-ouvres": t("Du lundi au vendredi"),
+  "chaque-semaine": t("Chaque semaine"),
+  "chaque-mois": t("Chaque mois"),
   "chaque-heure": t("Chaque heure"),
-  "chaque-semaine": t("Chaque lundi"),
   "a-chaque-mail": t("À chaque mail reçu"),
 };
 
@@ -176,7 +181,7 @@ export function libelleModele(m: EtatEmployes["modeles"][number]): string {
 }
 
 /** « Chaque jour ouvré à 8 h 30 » : l'heure n'a pas de sens pour « chaque heure ». */
-export function decrireRythme(m: Pick<Mission, "rythme" | "heure" | "filtre">): string {
+export function decrireRythme(m: Pick<Mission, "rythme" | "heure" | "filtre" | "jour">): string {
   if (m.rythme === "a-chaque-mail") {
     const conditions = [
       m.filtre?.de ? tf("de « {0} »", m.filtre.de) : "",
@@ -185,8 +190,16 @@ export function decrireRythme(m: Pick<Mission, "rythme" | "heure" | "filtre">): 
     return conditions.length ? tf("À chaque mail reçu {0}", conditions.join(" et ")) : LIBELLE_RYTHME[m.rythme];
   }
   if (m.rythme === "chaque-heure") return LIBELLE_RYTHME[m.rythme];
-  const [h, min] = m.heure.split(":");
-  return tf("{0} à {1} h{2}", LIBELLE_RYTHME[m.rythme], Number(h), min && min !== "00" ? ` ${min}` : "");
+  // Même phrase que pour les tâches programmées : « Chaque mardi à 9 h 30 », « Le 5 de chaque mois à 8 h ».
+  const rythme =
+    m.rythme === "chaque-jour"
+      ? { type: "jour" as const }
+      : m.rythme === "jours-ouvres"
+        ? { type: "jours-ouvres" as const }
+        : m.rythme === "chaque-semaine"
+          ? { type: "semaine" as const, jour: m.jour ?? 1 }
+          : { type: "mois" as const, jour: m.jour ?? 1 };
+  return decrireRythmeTache(rythme, m.heure);
 }
 
 /**

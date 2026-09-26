@@ -2668,6 +2668,16 @@ d'OpenCode passent par la même barrière (`permissionsCode.ts`). Le libellé de
 approuver » ne dit plus « sans jamais vous demander » : ce qui se confirme toujours
 (supprimer un événement) se confirme aussi à ce niveau.
 
+**Fait le 27/09/2026 : le web gardé pour les mails reçus, et des missions qu'on programme
+comme les tâches.** Demandé par Medhi : un employé qui traite un mail doit pouvoir aller sur
+le web sans qu'un mail piégé s'en serve (`webGarde.ts` : recherche DuckDuckGo en GET, lecture
+d'une page seulement si son adresse a déjà été vue ; détail SECURITE.md § 28). Les missions
+se programment avec le même choix que les tâches : chaque jour, du lundi au vendredi, chaque
+semaine un jour choisi, chaque mois (1 à 28, ou le dernier jour), chaque heure, à chaque mail
+reçu, et l'heure à la minute. Pas 29 à 31 : croner, la planification d'OpenClaw, sauterait les
+mois plus courts. Pas encore essayé avec le vrai OpenClaw : une mission du mois, et un mail
+réel qui fait chercher sur le web.
+
 **Décidé par Medhi le 27/09/2026 : « Tout approuver » veut dire accepter le risque.** Pas de
 carte ajoutée après la lecture d'un contenu venu du dehors (mail, page web, document) : à ce
 niveau, un texte piégé peut faire agir l'agent sans carte, et on l'accepte en le choisissant ;

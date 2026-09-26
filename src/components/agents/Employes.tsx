@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from "react";
+import { joursSemaine } from "@/lib/tachesProgrammees";
 import { useNavigate } from "react-router-dom";
 import {
   Check,
@@ -472,7 +473,6 @@ function ChoixAutonomie({ valeur, onChange }: { valeur: boolean; onChange: (v: b
   );
 }
 
-const HEURES = Array.from({ length: 48 }, (_, i) => `${String(Math.floor(i / 2)).padStart(2, "0")}:${i % 2 ? "30" : "00"}`);
 
 function EditeurMissions({
   valeur,
@@ -533,12 +533,37 @@ function EditeurMissions({
                 maxLength={2000}
                 onChange={(e) => changer(i, { consigne: e.target.value })}
               />
-              <div className="grid grid-cols-2 gap-2">
+              {/*
+                Comme les tâches programmées (27/09/2026, demandé par Medhi) :
+                le rythme, puis le jour s'il en faut un, puis l'heure, à la
+                minute près.
+              */}
+              <div className="flex flex-wrap gap-2 [&>*]:min-w-[140px] [&>*]:flex-1">
                 <Select
                   value={m.rythme}
-                  onChange={(v) => changer(i, { rythme: v as Rythme })}
+                  onChange={(v) => {
+                    const rythme = v as Rythme;
+                    changer(i, { rythme, ...(rythme === "chaque-semaine" ? { jour: 1 } : rythme === "chaque-mois" ? { jour: 1 } : { jour: undefined }) });
+                  }}
                   options={(Object.keys(LIBELLE_RYTHME) as Rythme[]).map((r) => ({ value: r, label: LIBELLE_RYTHME[r] }))}
                 />
+                {m.rythme === "chaque-semaine" && (
+                  <Select
+                    value={String(m.jour ?? 1)}
+                    onChange={(v) => changer(i, { jour: Number(v) })}
+                    options={[1, 2, 3, 4, 5, 6, 0].map((j) => ({ value: String(j), label: joursSemaine()[j] ?? "" }))}
+                  />
+                )}
+                {m.rythme === "chaque-mois" && (
+                  <Select
+                    value={String(m.jour ?? 1)}
+                    onChange={(v) => changer(i, { jour: Number(v) })}
+                    options={[
+                      ...Array.from({ length: 28 }, (_, k) => ({ value: String(k + 1), label: tf("Le {0}", String(k + 1)) })),
+                      { value: "-1", label: t("Le dernier jour") },
+                    ]}
+                  />
+                )}
                 {m.rythme === "a-chaque-mail" ? (
                   <Input
                     placeholder={t("Seulement de… (facultatif)")}
@@ -547,13 +572,8 @@ function EditeurMissions({
                     maxLength={120}
                     onChange={(e) => changer(i, { filtre: { ...m.filtre, de: e.target.value } })}
                   />
-                ) : (
-                  <Select
-                    value={m.heure}
-                    disabled={m.rythme === "chaque-heure"}
-                    onChange={(v) => changer(i, { heure: v })}
-                    options={HEURES.map((h) => ({ value: h, label: `${Number(h.slice(0, 2))} h ${h.slice(3)}` }))}
-                  />
+                ) : m.rythme === "chaque-heure" ? null : (
+                  <Input type="time" aria-label={t("Heure")} value={m.heure} onChange={(e) => e.target.value && changer(i, { heure: e.target.value })} />
                 )}
               </div>
               {m.rythme === "a-chaque-mail" && (

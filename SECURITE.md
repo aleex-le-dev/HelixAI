@@ -3025,9 +3025,20 @@ voie qui ne laisse ce pouvoir à personne.
 **Employés qui traitent un mail reçu.** Chaque employé a désormais, chez
 OpenClaw, un second profil réservé aux mails reçus (`nomCourrier`,
 employes.ts) : même modèle, même espace, mais seulement la lecture, sa mémoire
-et ses outils Helix ; **ni le web, ni un navigateur, ni une messagerie, ni une
-commande, ni l'écriture d'un fichier**, quel que soit son palier (« étendu »
-ou « libre » compris). Ses outils Helix qui modifient attendent toujours une
+et ses outils Helix ; **ni navigateur, ni messagerie, ni commande, ni écriture
+de fichier**, quel que soit son palier (« étendu » ou « libre » compris).
+**Le web, gardé** (27/09/2026, demandé par Medhi : « éviter l'injection, pas
+l'empêcher de travailler ») : aux paliers qui ont le web, il cherche et lit des
+pages par les outils de Helix (`webGarde.ts`), pas par ceux d'OpenClaw. Il ne
+peut ouvrir qu'une adresse **déjà vue** pendant ce mail (dans le mail, dans le
+résultat d'un outil, dans une recherche ou une page lue), jamais une adresse
+qu'il compose : faire sortir ce qu'il a lu demanderait de l'écrire dans une
+adresse, et une adresse neuve ne s'ouvre pas. Jamais la boucle locale, le
+réseau interne ni les métadonnées d'hébergeur, à chaque redirection. Reste :
+un bit par choix de lien sur une page piégée, les recherches qui partent chez
+DuckDuckGo. Vérifié le 27/09/2026 sur le vrai web (recherche, lecture d'un
+résultat, refus d'une adresse composée) et par `npm run securite` (5 contrôles,
+sans réseau). Ses outils Helix qui modifient attendent toujours une
 personne (`traiteUnMailRecu`, serveurOutils.ts). Si ce profil ne peut pas être
 préparé, le mail n'est pas traité, et l'activité le dit : il n'est jamais
 confié au profil ordinaire. Le texte du mail est placé entre des bornes tirées

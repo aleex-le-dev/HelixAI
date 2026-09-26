@@ -19,6 +19,7 @@ import { outilsDeFamille, executerOutil, cibleDe, type DefinitionOutil } from ".
 import { demandeToujours, modifie, verifierOutil } from "./approbation.ts";
 import { journaliser } from "./audit.ts";
 import { OUTIL_EMPLOYE, chercherPourEmploye, outilEmploye } from "./connaissances.ts";
+import * as webGarde from "./webGarde.ts";
 
 /**
  * Serveur d'outils des employés : les outils d'Helix, servis par MCP à
@@ -44,7 +45,13 @@ import { OUTIL_EMPLOYE, chercherPourEmploye, outilEmploye } from "./connaissance
  */
 function outilsDe(e: Employe): DefinitionOutil[] {
   const familles = famillesEffectives(e).flatMap((f) => outilsDeFamille(f));
-  return (e.connaissances?.length ?? 0) > 0 ? [...familles, outilEmploye()] : familles;
+  const avecBases = (e.connaissances?.length ?? 0) > 0 ? [...familles, outilEmploye()] : familles;
+  /*
+   * Le web gardé (webGarde.ts), pour les paliers qui ont le web : c'est lui
+   * que son profil des mails reçus utilise, puisqu'il n'a pas celui
+   * d'OpenClaw. Au palier « encadré », pas de web du tout.
+   */
+  return (e.liberte ?? "encadre") === "encadre" ? avecBases : [...avecBases, ...(webGarde.outilsWeb() as DefinitionOutil[])];
 }
 
 /** L'auteur tel que le journal le retient : l'employé, pas une personne. */
@@ -142,7 +149,11 @@ export async function servirOutils(
     // Ce qu'il a lu hors de l'équipe reste dans sa mémoire : noté (un nombre), pour qu'un élargissement la vide d'abord.
     if (bases && bases.horsEquipe > 0) noterLectureHorsEquipe(courant.id, bases.horsEquipe);
     // Plusieurs personnes lui parlent : dans la bibliothèque, il ne voit que ce qui est ouvert à toute l'équipe.
-    const r = bases ?? (await executerOutil(nom, args, { userId: qui, groupes: [] }));
+    const r =
+      bases ??
+      (nom.startsWith("web__") ? await webGarde.callTool(nom, args, courant.id) : await executerOutil(nom, args, { userId: qui, groupes: [] }));
+    // Pendant un mail reçu : ce qu'un outil rend (un autre mail, un document) devient ouvrable par web__lire, et rien d'autre.
+    if (traiteUnMailRecu(courant.id)) webGarde.noterVues(courant.id, r.content);
     // Le journal dit combien de passages sont sortis, jamais lesquels ni la question.
     journaliser("outil.appele", qui, {
       outil: nom,

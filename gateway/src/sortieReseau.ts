@@ -58,7 +58,11 @@ const boucleLocale = (hote: string): boolean =>
  * d'un moteur de modèles installé sur la machine (LM Studio, Ollama), qui est
  * la raison d'être du fournisseur « compatible ».
  */
-export async function adresseSortanteSure(brute: string): Promise<Resultat<true>> {
+export async function adresseSortanteSure(
+  brute: string,
+  /** Le web des employés (webGarde.ts) : la boucle locale non plus, où tournent la passerelle, LM Studio, OpenClaw. */
+  options: { boucleLocale?: boolean } = {},
+): Promise<Resultat<true>> {
   let url: URL;
   try {
     url = new URL(brute);
@@ -66,7 +70,11 @@ export async function adresseSortanteSure(brute: string): Promise<Resultat<true>
     return { ok: false, statut: 400, message: t("Adresse invalide.") };
   }
   const hote = url.hostname.toLowerCase();
-  if (boucleLocale(hote)) return { ok: true, valeur: true };
+  if (boucleLocale(hote)) {
+    return options.boucleLocale === false
+      ? { ok: false, statut: 400, message: t("Adresse de cette machine : refusée.") }
+      : { ok: true, valeur: true };
+  }
 
   let adresses: { address: string }[] = [];
   try {

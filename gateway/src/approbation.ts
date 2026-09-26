@@ -161,6 +161,12 @@ const COURRIER_LECTURE = new Set(["courrier__derniers", "courrier__chercher", "c
 const BIBLIOTHEQUE_LECTURE = new Set(["bibliotheque__chercher", "bibliotheque__lire", "reunions__chercher", "reunions__lire"]);
 /** Recherche d'un employé dans les bases de connaissances de son agent (connaissances.ts) : ne touche à rien. */
 const CONNAISSANCES_LECTURE = new Set(["connaissances__chercher"]);
+/*
+ * Le web gardé des employés (webGarde.ts) : chercher, et ouvrir une adresse
+ * déjà vue pendant le traitement d'un mail. Traités comme des lectures : ils
+ * ne font sortir que ce qui a été vu, pas ce que l'agent compose (27/09/2026).
+ */
+const WEB_LECTURE = new Set(["web__chercher", "web__lire"]);
 /** Le contrôle du code web lit des fichiers et ne touche à rien (controleWeb.ts). */
 const CONTROLE_LECTURE = new Set(["controle__site_web"]);
 
@@ -223,7 +229,7 @@ export function modifie(outil: string): boolean {
    * sous l'identifiant « slack » apporterait des `slack__…` qui, eux, peuvent
    * écrire, et ne doivent pas hériter du laissez-passer.
    */
-  if (DRIVE_LECTURE.has(outil) || SLACK_LECTURE.has(outil) || BIBLIOTHEQUE_LECTURE.has(outil) || CONNAISSANCES_LECTURE.has(outil) || CONTROLE_LECTURE.has(outil)) return false;
+  if (DRIVE_LECTURE.has(outil) || SLACK_LECTURE.has(outil) || BIBLIOTHEQUE_LECTURE.has(outil) || CONNAISSANCES_LECTURE.has(outil) || CONTROLE_LECTURE.has(outil) || WEB_LECTURE.has(outil)) return false;
   if (outil.startsWith("bureau__")) return !BUREAU_LECTURE.has(outil.slice("bureau__".length));
 
   const separateur = outil.indexOf("__");
@@ -364,6 +370,8 @@ export function resumerOutil(outil: string, args: Record<string, unknown>): stri
     const agent = typeof args.agent === "string" && args.agent.trim() ? ` par l'agent « ${args.agent.trim().slice(0, 60)} »` : "";
     return `programmer la tâche${titre}, ${rythme}${heure}, exécutée seule${agent} avec vos outils${consigne}`;
   }
+  if (outil === "web__chercher") return `chercher sur le web « ${texteOu(args.requete, "")} »`;
+  if (outil === "web__lire") return `lire la page ${texteOu(args.adresse, "web")}`;
   if (outil === "controle__site_web") return `contrôler le code web du dossier ${texteOu(args.dossier, "de travail")}`;
   if (outil === "bibliotheque__chercher") return "chercher des documents dans la bibliothèque de l'équipe";
   if (outil === "bibliotheque__lire") return "lire un document de la bibliothèque de l'équipe";

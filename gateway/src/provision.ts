@@ -224,9 +224,12 @@ function classement(hw: Hardware, catalogue: CatalogEntry[], verifiesSeulement: 
  * (`verifie`), et s'il ne se charge pas, les suivants du classement prennent
  * le relais (`replis`), jusqu'au plus léger vérifié.
  *
- * Pour piloter l'écran, on garde les modèles essayés à ce geste
- * (`verifiesSeulement`) : un modèle qui lit les images sans savoir désigner un
- * point à l'écran ne répond pas moins bien, il clique à côté.
+ * Pour piloter l'écran, même règle depuis le 26/09/2026 (Medhi : « pour tout,
+ * tout doit s'adapter, et au pire toujours plusieurs modèles proposés ») : le
+ * mieux noté qui tient est installé, et s'il ne se charge pas, les suivants,
+ * jusqu'au plus léger essayé (Qwen3-VL). Un modèle qui lit les images sans
+ * savoir désigner un point à l'écran clique à côté : l'écran le dit (« pas
+ * encore vérifié avec Helix »), et les autres restent proposés.
  */
 function best(hw: Hardware, catalogue: CatalogEntry[], verifiesSeulement = false): CatalogEntry {
   const verifies = catalogue.filter((e) => e.verifie).sort((a, b) => a.downloadGb - b.downloadGb);
@@ -235,7 +238,7 @@ function best(hw: Hardware, catalogue: CatalogEntry[], verifiesSeulement = false
 
 /** Modèles de repli si le conseillé ne se charge pas : les suivants du classement, puis le plus léger vérifié. */
 export function replis(hw: Hardware, catalogue: CatalogEntry[], depart: CatalogEntry): CatalogEntry[] {
-  const suite = classement(hw, catalogue, catalogue === VISION_CATALOG).filter((e) => e.key !== depart.key);
+  const suite = classement(hw, catalogue, false).filter((e) => e.key !== depart.key);
   const leger = [...catalogue].filter((e) => e.verifie).sort((a, b) => a.downloadGb - b.downloadGb)[0];
   return [depart, ...suite, ...(leger && leger.key !== depart.key && !suite.includes(leger) ? [leger] : [])];
 }
@@ -251,7 +254,7 @@ export function replis(hw: Hardware, catalogue: CatalogEntry[], depart: CatalogE
  */
 export function adaptesALaMachine(hw: Hardware): (CatalogEntry & { role: "chat" | "gui"; recommande: boolean })[] {
   const conseilChat = best(hw, CATALOG).key;
-  const conseilEcran = best(hw, VISION_CATALOG, true).key;
+  const conseilEcran = best(hw, VISION_CATALOG).key;
   /*
    * Du choix, pas six variantes du même éditeur. Classés à la note seule, les
    * six premiers étaient presque tous des Qwen (le client : « ils proposent pas
@@ -268,8 +271,9 @@ export function adaptesALaMachine(hw: Hardware): (CatalogEntry & { role: "chat" 
   });
   return [
     ...[...tete, ...unParEditeur].map((e) => ({ ...e, role: "chat" as const, recommande: e.key === conseilChat })),
-    ...classement(hw, VISION_CATALOG, true)
-      .slice(0, 1)
+    // Plusieurs modèles d'écran proposés, pas un seul : si le conseillé déçoit, on en installe un autre d'un clic.
+    ...classement(hw, VISION_CATALOG, false)
+      .slice(0, 3)
       .map((e) => ({ ...e, role: "gui" as const, recommande: e.key === conseilEcran })),
   ];
 }
@@ -283,7 +287,7 @@ export function recommend(hw: Hardware): CatalogEntry {
  * conversation : les deux tournent en même temps quand Cowork pilote l'écran.
  */
 export function recommendVision(hw: Hardware): CatalogEntry {
-  return best(hw, VISION_CATALOG, true);
+  return best(hw, VISION_CATALOG);
 }
 
 /** Délai d'inactivité au bout duquel un modèle libère la mémoire. */

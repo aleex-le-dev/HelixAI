@@ -1924,7 +1924,10 @@ fenêtre sur macOS ne coupe plus la passerelle (les employés continuent).
   128 Go Qwen3.8 27B, 256 Go DeepSeek V4 Flash ; PC NVIDIA 8 ou 12 Go avec 32 Go de
   RAM Qwen3.5 35B A3B. Les autres sont proposés dans « À installer » (6 au plus),
   marqués « pas encore vérifié avec Helix ». Aujourd'hui seuls Qwen3, Qwen3.5 9B et
-  Qwen3-VL sont vérifiés.
+  Qwen3-VL sont vérifiés. **Écran, 26/09/2026** : même règle (le mieux noté qui tient,
+  puis les suivants), et trois modèles d'écran proposés au lieu d'un. Le catalogue de
+  l'écran ne contient que Qwen3-VL (2B à 30B) : Qwen3.5, mesuré le 24/09, ne visait
+  juste qu'une fois sur deux ; il n'y entre pas tant qu'un essai ne le justifie pas.
   Kimi K3 (43,6), GLM-5.3 (44,8), MiniMax : plusieurs centaines de Go, serveur
   seulement, donc par prestataire ou clé. En local : GLM-4.7 Flash (MIT, 16 Go,
   14,9) et DeepSeek V4 Flash (MIT, 150 Go, 34,3, machines de 256 Go) ajoutés.
@@ -2528,6 +2531,22 @@ un Chat supprimé arrête la sienne. Vérifié dans le navigateur : poème lanc�
 Chat ouvert, roue visible, Chat rouvert en direct (plan qui avance), réponse finie
 pendant qu'un autre Chat était affiché, et enregistrée. Limite : une page rechargée
 ou l'application fermée coupe la réponse (rien n'est gardé avant sa fin).
+
+**Fait le 26/09/2026 : revue de sécurité du poste de travail, corrigée** (SECURITE.md
+§ 24). Extension VS Code 0.2.4 (adresse et jeton de portée machine, https hors du poste,
+jeton du poste seulement pour le port de l'application `instance-port`, séance par
+adresse, pas de redirection suivie ; vérifié par un faux `vscode`, pas dans un vrai VS
+Code) ; CLI (texte venu de l'instance nettoyé des séquences de terminal, horloge
+suspendue pendant un accord, destinataires affichés en dernier, `redirect: "error"`,
+jeton seulement pour le port de l'application) ; synchronisation (aucune poussée avant
+une relecture de la séance, modifications en attente notées dans
+`helix:sync:a-pousser` et fusionnées à la relecture : vérifié dans le navigateur, un
+Chat créé instance coupée et un Chat arrivé d'un autre poste se retrouvent tous deux,
+sur le poste et sur l'instance) ; lanceur `helix` qui ne remplace jamais un programme
+étranger (essayé dans un HOME d'essai), shell de connexion lu sans geler l'application ;
+`~/.helix` en 0700 ; clé d'API vidée du presse-papiers après une minute si elle y est
+encore. Non corrigé, documenté : RunAsNode reste actif (la passerelle et le lanceur en
+ont besoin).
 
 **Ce qui attend une machine qu'on n'a pas**
 

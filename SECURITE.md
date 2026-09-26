@@ -2840,3 +2840,28 @@ son expiration, dans la limite de 60 requêtes par minute ; rien ne détecte un 
 anormal. La limite est en mémoire : elle repart à zéro au redémarrage de la passerelle
 (comme `debit.ts`). Une clé sans expiration ne meurt qu'à la révocation.
 
+## 24. Revue du poste de travail (26 septembre 2026)
+
+Revue en lecture seule du poste (application, CLI, extension, stockage), problèmes
+confirmés par essai puis corrigés le même jour. `npm run securite` : 307 contrôles, tous
+réussis le 26/09/2026.
+
+| Gravité | Problème | Correction |
+|---|---|---|
+| Élevée | CLI : texte venu du modèle (réponse, carte d'accord, commande, tâches) écrit tel quel ; une séquence de terminal pouvait réécrire le destinataire affiché avant « Accorder ? » | tout JSON de l'instance nettoyé à la lecture (`nettoyer`, contrôles C0 sauf \n et \t, C1, bidi) ; destinataires affichés en dernier ; horloge d'état suspendue pendant un accord |
+| Élevée | Extension VS Code : `helix.adresse` et `helix.jeton` réglables par le `.vscode/settings.json` d'un dépôt, jeton du poste lu pour toute adresse, séance unique | réglages de portée `machine`, `untrustedWorkspaces: false`, http seulement en boucle locale, jeton du poste seulement pour le port de l'application (`instance-port`), séance rangée par adresse |
+| Moyenne | Synchronisation : une relecture remplaçait les Chats du poste jamais poussés ; au lancement suivant un fichier illisible, une liste partielle pouvait partir | aucune poussée avant une relecture de la séance ; modifications en attente gardées au redémarrage (`helix:sync:a-pousser`) et fusionnées par identifiant (le plus récent l'emporte, ce que le poste a seul est gardé) |
+| Moyenne-faible | « Mettre à jour » écrasait un `~/.local/bin/helix` étranger | refusé, et l'écran dit de le retirer soi-même |
+| Faible | séance renvoyée à une autre origine sur redirection (CLI, extension) | `redirect: "error"` |
+| Faible | jeton du poste envoyé à n'importe quel port local (CLI) | seulement au port noté par la passerelle (`instance-port`, 0600) |
+| Faible | shell de connexion lancé de façon synchrone (gel jusqu'à 4 s) | asynchrone, gardé cinq minutes |
+| Faible | `~/.helix` en 0755 | passé en 0700 par la passerelle et la CLI (dossier par défaut seulement) |
+| Faible | clé d'API laissée dans le presse-papiers | vidée après 60 s si elle y est encore ; sinon l'écran le dit |
+
+Ce qui reste vrai : aucun fusible Electron n'est configuré, RunAsNode reste actif parce
+que la passerelle et le lanceur `helix` en ont besoin ; tout processus du compte peut donc
+lancer le binaire de l'application comme Node et hériter des autorisations macOS accordées
+à l'application (écran, accessibilité). La contrepartie d'une fusion de synchronisation :
+un élément supprimé sur un autre poste pendant que celui-ci avait des modifications en
+attente revient. Pas encore essayé : l'extension dans un vrai VS Code avec un dépôt piégé,
+un trousseau refusé.

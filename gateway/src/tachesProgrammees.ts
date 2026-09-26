@@ -293,6 +293,15 @@ export async function supprimer(id: string, ownerId: string): Promise<Resultat<n
   return { ok: true, valeur: null };
 }
 
+/** Effacement d'un compte (effacement.ts) : ses tâches et leurs comptes rendus partent avec lui. */
+export async function oublierPersonne(ownerId: string): Promise<number> {
+  const liste = await charger();
+  const avant = liste.length;
+  taches = liste.filter((x) => x.ownerId !== ownerId);
+  await ecrire();
+  return avant - taches.length;
+}
+
 /* ------------------------------------ exécution ------------------------------------ */
 
 /** Fourni par index.ts : un appel au Chat de l'instance, avec outils, au nom de la personne. Rend le texte de la réponse. */
@@ -302,6 +311,8 @@ export interface OptionsAppel {
   modele?: string;
   /** Les bases de connaissances de l'agent, lues au nom de la propriétaire. */
   connaissances?: string[];
+  /** Le titre de la tâche, que ses cartes d'accord affichent. */
+  titre?: string;
 }
 type AppelChat = (ownerId: string, messages: { role: string; content: string }[], options: OptionsAppel) => Promise<string>;
 let appeler: AppelChat | null = null;
@@ -338,7 +349,7 @@ async function executer(x: TacheProgrammee): Promise<Execution> {
     resultat = (await appeler(x.ownerId, [
       { role: "system", content: consigneSysteme(x, outils, agent) },
       { role: "user", content: `${x.titre}\n\n${x.consigne}` },
-    ], { outils, ...(agent?.modele ? { modele: agent.modele } : {}), ...(agent && agent.connaissances.length > 0 ? { connaissances: agent.connaissances } : {}) })).trim();
+    ], { outils, titre: x.titre, ...(agent?.modele ? { modele: agent.modele } : {}), ...(agent && agent.connaissances.length > 0 ? { connaissances: agent.connaissances } : {}) })).trim();
     ok = resultat.length > 0;
     if (!ok) resultat = t("Le modèle n'a rien répondu.");
   } catch (err) {

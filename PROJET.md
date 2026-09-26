@@ -2668,6 +2668,25 @@ d'OpenCode passent par la même barrière (`permissionsCode.ts`). Le libellé de
 approuver » ne dit plus « sans jamais vous demander » : ce qui se confirme toujours
 (supprimer un événement) se confirme aussi à ce niveau.
 
+**Fait le 26/09/2026 : revue de sécurité par six agents.** Demandée par Medhi (« un
+tour complet niveau sécurité avec plusieurs agents ») : six agents en lecture seule, un par
+domaine, chaque constat relu puis corrigé, et vérifié par `npm run securite` (376 contrôles).
+Détail dans SECURITE.md § 28. Les plus sérieux : la cage des tests de Helix Code se
+franchissait par un lien symbolique (reproduit avec de faux secrets) ; toute séance pouvait
+diriger l'envoi de la boîte commune vers son propre serveur et en recevoir le mot de passe ;
+un accord pour écrire un fichier couvrait la création d'une tâche programmée ; un fichier
+de données illisible était lu comme vide, puis écrasé. **Changements visibles** : le niveau
+d'approbation, la boîte mail commune et son envoi se règlent par l'administrateur seul
+(l'écran le dit à un membre) ; créer une clé d'API demande son mot de passe ; programmer
+une tâche et supprimer un événement se confirment toujours ; la carte montre ce que l'outil
+recevra ; quand le mail d'invitation part, le code n'est plus montré à qui invite ;
+l'interrupteur « Masquer le prompt » est retiré (il ne faisait rien). **À décider** : signer
+les mises à jour (une instance compromise peut aujourd'hui faire installer n'importe quelle
+application à ses postes), le mot de passe choisi par le collègue qui crée un compte, les
+outils web d'un employé qui traite un mail reçu (SECURITE.md § 28, « Restant »).
+**À faire** : que l'instance ajoute elle-même les instructions d'un agent au Chat, pour
+pouvoir un jour les cacher vraiment.
+
 **Fait le 26/09/2026 : mises à jour d'un clic, sans signature ni serveur.** Décidé par
 Medhi : pas de mise à jour automatique, mais une fenêtre « Nouvelle version » avec
 « Installer maintenant » (`src/components/layout/FenetreMiseAJour.tsx`). La source est

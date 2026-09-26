@@ -1,3 +1,4 @@
+import { redirectionPour, refusSortie } from "./sortieReseau.ts";
 import type http from "node:http";
 import { readFileSync } from "node:fs";
 import { isAbsolute, resolve as resoudreChemin, sep } from "node:path";
@@ -218,10 +219,14 @@ async function callUpstream(
   /** Coupé quand la personne ferme le flux : le moteur cesse alors de générer pour rien. */
   signal?: AbortSignal,
 ): Promise<Response> {
+  // Un modèle ajouté par clé : adresse revérifiée à chaque appel, et aucune redirection suivie (sortieReseau.ts).
+  const refus = await refusSortie(backend);
+  if (refus) return new Response(JSON.stringify({ error: { message: refus } }), { status: 502, headers: { "Content-Type": "application/json" } });
   const envoyer = (corps: Record<string, unknown>) =>
     fetch(`${backend.baseUrl}/chat/completions`, {
       method: "POST",
       signal,
+      redirect: redirectionPour(backend),
       headers: {
         "Content-Type": "application/json",
         ...(backend.entetes ?? {}),
@@ -754,7 +759,12 @@ export async function handleChatRequest(
    * l'écran ; et sans `stream: true`, la réponse est un objet JSON unique,
    * comme le veut l'API d'OpenAI (le relais ne rendait que du flux).
    */
-  options: { parCleApi?: boolean; nonFlux?: boolean } = {},
+  options: {
+    parCleApi?: boolean;
+    nonFlux?: boolean;
+    /** Titre de la tâche programmée qui s'exécute (tachesProgrammees.ts) : ses cartes le disent. */
+    tache?: string;
+  } = {},
 ): Promise<void> {
   const nonFlux = options.parCleApi === true && options.nonFlux === true;
   /*
@@ -1354,7 +1364,7 @@ export async function handleChatRequest(
               message: `L'outil « ${call.name} » ne fait pas partie de ceux qui te sont proposés : il n'a pas été lancé. Utilise uniquement les outils de ta liste.`,
             } as approbation.Verdict)
           : call.lisible
-            ? await approbation.verifierOutil(portee, call.name, args, qui ?? "agent")
+            ? await approbation.verifierOutil(portee, call.name, args, qui ?? "agent", undefined, false, "chat", undefined, options.tache)
             : ({ autorise: true } as approbation.Verdict);
 
         /*

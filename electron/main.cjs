@@ -135,7 +135,7 @@ async function startGateway() {
     ? path.join(__dirname, "..", "dist-gateway", "index.cjs")
     : path.join(process.resourcesPath, "dist-gateway", "index.cjs");
 
-  gateway = spawn(process.execPath, [entry], {
+  const enfant = spawn(process.execPath, [entry], {
     env: {
       ...process.env,
       // Permet au binaire Electron de se comporter comme Node pour ce process.
@@ -148,9 +148,10 @@ async function startGateway() {
     },
     stdio: ["ignore", "pipe", "pipe"],
   });
+  gateway = enfant;
 
-  gateway.stdout.on("data", (b) => process.stdout.write(`[passerelle] ${b}`));
-  gateway.stderr.on("data", (b) => {
+  enfant.stdout.on("data", (b) => process.stdout.write(`[passerelle] ${b}`));
+  enfant.stderr.on("data", (b) => {
     const texte = String(b);
     process.stderr.write(`[passerelle] ${texte}`);
     /*
@@ -170,7 +171,16 @@ async function startGateway() {
    * reste ouverte sur une coquille vide, et l'utilisateur n'a d'autre recours
    * que de quitter et rouvrir.
    */
-  gateway.on("exit", (code) => {
+  enfant.on("exit", (code) => {
+    /*
+     * Seul l'arrêt de la passerelle EN COURS compte (revue du 26/09/2026) :
+     * au redémarrage demandé par l'écran, l'ancienne s'arrêtait après que la
+     * nouvelle était lancée, effaçait sa référence et relançait une troisième
+     * copie, qui échouait sur le port pris, et ainsi de suite chaque seconde ;
+     * la passerelle servante n'était plus connue de personne et survivait à
+     * la fermeture de l'application.
+     */
+    if (gateway !== enfant) return;
     gateway = null;
     if (arretDemande) return;
 
@@ -194,13 +204,18 @@ async function startGateway() {
   console.error("[helix] la passerelle n'a pas démarré à temps.");
 }
 
+/** Arrête la passerelle ; la promesse se résout quand elle est vraiment arrêtée (port libéré), 5 s au plus. */
 function stopGateway() {
   // Arrêt voulu : le superviseur ne doit pas la relancer derrière nous.
   arretDemande = true;
-  if (gateway && !gateway.killed) {
-    gateway.kill();
-    gateway = null;
-  }
+  const enfant = gateway;
+  gateway = null;
+  if (!enfant || enfant.exitCode !== null || enfant.signalCode !== null) return Promise.resolve();
+  return new Promise((resolve) => {
+    enfant.once("exit", () => resolve());
+    enfant.kill();
+    setTimeout(resolve, 5000).unref?.();
+  });
 }
 
 /**
@@ -459,7 +474,8 @@ ipcMain.handle("helix:coffre-vider", (event) => {
 ipcMain.handle("helix:passerelle-redemarrer", async (event) => {
   if (!depuisLaFenetre(event)) throw new Error("Refusé.");
   if (posteRattache()) return { ok: false, motif: "poste rattaché" };
-  stopGateway();
+  // L'ancienne libère d'abord le port : sans cela la nouvelle échouait dessus.
+  await stopGateway();
   // `stopGateway` a posé l'arrêt volontaire : on le lève pour le redémarrage.
   arretDemande = false;
   const vivante = await startGateway();
@@ -771,6 +787,12 @@ function createWindow() {
   const pageDeHelix = (url) => {
     try {
       const { protocol, hostname } = new URL(url);
+      /*
+       * `helix://app` : l'origine de l'interface livrée depuis la 0.23.0. Elle
+       * manquait ici (revue du 26/09/2026) : la dictée et l'enregistrement
+       * d'une réunion au micro étaient refusés dans l'application empaquetée.
+       */
+      if (protocol === "helix:") return hostname === "app";
       return protocol === "file:" || hostname === "localhost" || hostname === "127.0.0.1";
     } catch {
       return false;
@@ -1052,7 +1074,7 @@ app.whenReady().then(async () => {
     await startGateway();
   }
   createWindow();
-  void demarrerMiseAJour();
+  void demarrerMiseAJour(depuisLaFenetre);
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();

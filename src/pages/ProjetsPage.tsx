@@ -431,7 +431,7 @@ function MembersModal({
       text:
         (result.invitation?.motif ?? result.echecInvitation ?? t("Le mail n'a pas pu partir.")) +
         t(" Transmettez-lui vous-même ces deux lignes :"),
-      code: result.invitation
+      code: result.invitation?.code
         ? { adresse: result.invitation.adresse, code: result.invitation.code }
         : undefined,
     });

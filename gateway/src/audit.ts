@@ -80,6 +80,8 @@ export type AuditAction =
   | "outil.demande"
   | "outil.approuve"
   | "outil.refuse"
+  /** Un réglage de toute l'instance tenté par qui n'en est pas l'administrateur (index.ts). */
+  | "reglage.refuse"
   | "approbation.niveau"
   /*
    * Connecteurs. Brancher un connecteur fait tourner un programme de plus sur

@@ -114,7 +114,14 @@ export async function servirOutils(
     const forcer = (nom === "courrier__envoyer" || modifie(nom)) && traiteUnMailRecu(id);
     const sansAccord = courant.autonome && !demandeToujours(nom) && !forcer;
     if (!sansAccord) {
-      const verdict = await verifierOutil(null, nom, args, qui, courant.nom, forcer);
+      /*
+       * La carte est pour sa propriétaire : c'est elle qui répond. Jusqu'au
+       * 26/09/2026 elle était adressée à l'employé lui-même (`employe:<id>`),
+       * que personne n'incarne : aucune carte ne pouvait être acceptée, et
+       * tout ce qui modifie était refusé (revue de sécurité). La carte nomme
+       * l'employé, et le journal aussi.
+       */
+      const verdict = await verifierOutil(null, nom, args, courant.ownerId ?? qui, courant.nom, forcer);
       if (!verdict.autorise) return texte(verdict.message, true);
     }
 

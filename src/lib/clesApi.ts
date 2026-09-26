@@ -51,8 +51,8 @@ export async function chargerClesApi(): Promise<EtatClesApi> {
 }
 
 /** Rend la clé en clair : c'est la seule fois qu'elle existe hors du programme qui la recevra. */
-export async function creerCleApi(nom: string, jours: number | null): Promise<{ cle: CleApi; secret: string }> {
-  return lire(await poster("/helix/cles-api", { nom, jours }));
+export async function creerCleApi(nom: string, jours: number | null, motDePasse: string, code?: string): Promise<{ cle: CleApi; secret: string }> {
+  return lire(await poster("/helix/cles-api", { nom, jours, motDePasse, ...(code ? { code } : {}) }));
 }
 
 export async function renommerCleApi(id: string, nom: string): Promise<CleApi> {

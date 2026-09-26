@@ -423,7 +423,8 @@ async function handleChat(
   const parTache =
     typeof tacheDe === "string" &&
     typeof cleTache === "string" &&
-    cleTache.length === CLE_TACHES.length &&
+    // Longueur en octets : un en-tête non ASCII faisait lever timingSafeEqual (erreur 500).
+    Buffer.byteLength(cleTache) === Buffer.byteLength(CLE_TACHES) &&
     timingSafeEqual(Buffer.from(cleTache), Buffer.from(CLE_TACHES)) &&
     depuisCePoste(req)
       ? (await publicAccounts().catch(() => [])).some((c) => c.id === tacheDe)
@@ -431,6 +432,14 @@ async function handleChat(
         : null
       : null;
   const qui = parTache ?? (await demandeur(req, url));
+  const titreDeTache = (r: http.IncomingMessage) => {
+    const brut = r.headers["x-helix-tache-titre"];
+    try {
+      return typeof brut === "string" ? decodeURIComponent(brut).slice(0, 120) : undefined;
+    } catch {
+      return undefined;
+    }
+  };
   if (body.tools === true && !qui) {
     return send(res, 401, {
       error: {
@@ -465,7 +474,11 @@ async function handleChat(
     req,
     qui?.userId ?? parEmploye,
     titulaire,
-    idCle ? { parCleApi: true, nonFlux: body.stream !== true } : {},
+    {
+      ...(idCle ? { parCleApi: true, nonFlux: body.stream !== true } : {}),
+      // Le titre n'est lu que d'un appel de tâche authentifié par sa clé : ailleurs, l'en-tête ne vaut rien.
+      ...(parTache ? { tache: titreDeTache(req) } : {}),
+    },
   );
   if (idCle && qui) {
     // Au journal de la titulaire : la route, le modèle demandé, l'issue. Jamais les messages ni la réponse.
@@ -845,6 +858,23 @@ async function handleDictee(
  * Route de lecture : elle ne dit rien du mot de passe, qui ne sort jamais du
  * module (voir courrier.ts).
  */
+/**
+ * Les réglages qui valent pour toute l'instance, et donc pour les agents de
+ * tous ses membres : la boîte mail commune, son serveur d'envoi, l'envoi sans
+ * confirmation, le niveau d'approbation. Revue de sécurité du 26/09/2026 :
+ * une séance suffisait. Un collègue pouvait ainsi diriger l'envoi vers son
+ * propre serveur, qui recevait au passage le mot de passe de la boîte
+ * (reproduit avec un faux serveur), ou passer les agents de tous en « Tout
+ * approuver ». Sur une instance d'une seule personne, c'est elle
+ * l'administratrice (roles.ts) : rien ne change pour elle.
+ */
+async function reserveeALAdministration(res: http.ServerResponse, qui: Demandeur, message: string): Promise<boolean> {
+  if (await estAdministrateur(qui.userId)) return false;
+  journaliser("reglage.refuse", qui.userId, {});
+  send(res, 403, { error: { message } });
+  return true;
+}
+
 async function handleCourrierEtat(res: http.ServerResponse, url: URL): Promise<void> {
   const adresse = url.searchParams.get("adresse") ?? "";
   send(res, 200, {
@@ -878,6 +908,7 @@ async function handleCourrierOauth(
 ): Promise<void> {
   const qui = await demandeur(req, url);
   if (!qui) return send(res, 401, sansSeance());
+  if (await reserveeALAdministration(res, qui, t("Seul l'administrateur de l'instance peut changer la boîte mail commune et son envoi."))) return;
 
   const body = (await readJson(req).catch(() => ({}))) as {
     adresse?: unknown;
@@ -920,6 +951,7 @@ async function handleCourrierConfigurer(
 ): Promise<void> {
   const qui = await demandeur(req, url);
   if (!qui) return send(res, 401, sansSeance());
+  if (await reserveeALAdministration(res, qui, t("Seul l'administrateur de l'instance peut changer la boîte mail commune et son envoi."))) return;
 
   const body = await readJson(req).catch(() => ({}));
   const resultat = await configurerCourrier(body);
@@ -943,6 +975,7 @@ async function handleCourrierEnvoi(
 ): Promise<void> {
   const qui = await demandeur(req, url);
   if (!qui) return send(res, 401, sansSeance());
+  if (await reserveeALAdministration(res, qui, t("Seul l'administrateur de l'instance peut changer la boîte mail commune et son envoi."))) return;
 
   const body = await readJson(req).catch(() => ({}));
   const resultat = await reglerEnvoiCourrier(body);
@@ -960,6 +993,7 @@ async function handleCourrierConfirmation(
 ): Promise<void> {
   const qui = await demandeur(req, url);
   if (!qui) return send(res, 401, sansSeance());
+  if (await reserveeALAdministration(res, qui, t("Seul l'administrateur de l'instance peut changer la boîte mail commune et son envoi."))) return;
   const body = await readJson(req).catch(() => ({}));
   const resultat = await reglerConfirmationCourrier(body);
   if (resultat.ok) {
@@ -976,6 +1010,7 @@ async function handleCourrierOublier(
 ): Promise<void> {
   const qui = await demandeur(req, url);
   if (!qui) return send(res, 401, sansSeance());
+  if (await reserveeALAdministration(res, qui, t("Seul l'administrateur de l'instance peut changer la boîte mail commune et son envoi."))) return;
 
   const resultat = await oublierCourrier();
   journaliser("donnees.ecrites", qui.userId, { collection: "courrier.compte", adresse: null });
@@ -1571,6 +1606,15 @@ async function handleDataRead(
   send(res, 200, { collection: name, value: valeur, revision });
 }
 
+/** Une file par collection : ce qui s'y lit puis s'y écrit ne se croise pas. */
+const filesDeCollection = new Map<string, Promise<unknown>>();
+function enFileDeCollection<T>(nom: string, travail: () => Promise<T>): Promise<T> {
+  const avant = filesDeCollection.get(nom) ?? Promise.resolve();
+  const suite = avant.catch(() => undefined).then(travail);
+  filesDeCollection.set(nom, suite.catch(() => undefined));
+  return suite;
+}
+
 async function handleDataWrite(
   req: http.IncomingMessage,
   res: http.ServerResponse,
@@ -1602,13 +1646,31 @@ async function handleDataWrite(
   }
 
   /*
+   * Une liste, et rien d'autre (les profils : un objet). Un corps sans
+   * `value`, ou `{}`, valait « je n'ai plus rien » et effaçait tout ce que
+   * l'appelant possédait (revue du 26/09/2026) : la moitié serveur de la perte
+   * du 20/09.
+   */
+  const forme = name === "profiles" ? body.value !== null && typeof body.value === "object" && !Array.isArray(body.value) : Array.isArray(body.value);
+  if (!forme) {
+    return send(res, 400, { error: { message: name === "profiles" ? t("« value » doit être un objet.") : t("« value » doit être une liste : rien n'a été écrit.") } });
+  }
+
+  /*
    * Le poste envoie la collection entière. On n'en retient que ce qu'il a le
    * droit de toucher : sans cette fusion, pousser une liste vide effacerait le
    * travail de toute l'entreprise.
+   *
+   * Lire, fusionner, écrire : une écriture à la fois par collection. Sur
+   * PostgreSQL, deux envois simultanés lisaient le même état et le second
+   * effaçait ce que le premier venait d'ajouter (revue du 26/09/2026).
    */
-  const fusion = fusionner(name, await db().read(name), body.value ?? null, qui);
-  // Un collègue peut renvoyer une copie où figure encore un compte supprimé.
-  await db().write(name, await sansComptesDisparus(name, fusion.valeur));
+  const fusion = await enFileDeCollection(name, async () => {
+    const f = fusionner(name, await db().read(name), body.value ?? null, qui);
+    // Un collègue peut renvoyer une copie où figure encore un compte supprimé.
+    await db().write(name, await sansComptesDisparus(name, f.valeur));
+    return f;
+  });
   // Deux écritures dans la même milliseconde ont la même révision : le relevé des images ne s'y fie pas seul.
   if (name === "sessions") images.oublierChatsDesImages();
 
@@ -3090,7 +3152,15 @@ function adresseJoignable(req: http.IncomingMessage): string | null {
   const vue = adresseVue(req);
   const hoteVu = vue ? new URL(vue).hostname.toLowerCase() : "";
   const boucle = ["localhost", "127.0.0.1", "::1", "[::1]"].includes(hoteVu);
-  if (vue && !boucle) return vue;
+  /*
+   * `Host` est écrit par l'appelant (revue du 26/09/2026) : `Host: evil.tld`
+   * faisait partir, de la vraie boîte de l'instance, une invitation dont le
+   * lien menait chez un autre, prêt à recueillir le mot de passe du nouveau
+   * collègue. Il n'est repris que s'il désigne une adresse que l'instance
+   * annonce elle-même.
+   */
+  const connues = instancePartagee() ? adressesPourLesCollegues(PORT, Boolean(tls)) : [];
+  if (vue && !boucle && connues.some((a) => new URL(a).hostname.toLowerCase() === hoteVu)) return vue;
   if (!instancePartagee()) return null;
   /*
    * Surtout pas `hostname()` : sur ce Mac il rend « Mini-de-Clabaut » quand le
@@ -3242,6 +3312,7 @@ async function handleInviter(
     moi?.fullName?.trim() || "Un collègue",
     base,
     autres,
+    await estAdministrateur(qui.userId),
   );
   if (!resultat.ok) return send(res, resultat.statut, { error: { message: resultat.message } });
   send(res, 200, { ...resultat.valeur, adresse: base });
@@ -3255,12 +3326,14 @@ async function handleInvitations(
 ): Promise<void> {
   const qui = await demandeur(req, url);
   if (!qui) return send(res, 401, sansSeance());
-  if (req.method === "GET") return send(res, 200, { invitations: await invitations.enAttente() });
+  // Chacun ne voit et n'annule que les siennes : la liste de toutes désignait qui viser (revue du 26/09/2026).
+  const admin = await estAdministrateur(qui.userId);
+  if (req.method === "GET") return send(res, 200, { invitations: await invitations.enAttente(qui.userId, admin) });
 
   const body = (await readJson(req).catch(() => ({}))) as { email?: unknown };
-  const r = await invitations.annuler(body.email, qui.userId);
+  const r = await invitations.annuler(body.email, qui.userId, admin);
   if (!r.ok) return send(res, r.statut, { error: { message: r.message } });
-  send(res, 200, { ok: true, invitations: await invitations.enAttente() });
+  send(res, 200, { ok: true, invitations: await invitations.enAttente(qui.userId, admin) });
 }
 
 /**
@@ -3371,7 +3444,13 @@ async function handleOauthRetour(
   if (erreur) {
     return repondre(
       "Autorisation refusée",
-      url.searchParams.get("error_description") ?? "Le service a refusé la demande.",
+      /*
+       * Un message fixe, pas `error_description` : cette page est publique, et
+       * n'importe qui pouvait faire afficher son propre texte à l'adresse de
+       * l'instance (revue du 26/09/2026). Le code d'erreur, lui, est un mot du
+       * protocole, borné.
+       */
+      tf("Le service a refusé la demande (code : {0}). Recommencez depuis {1}.", erreur.replace(/[^a-z_]/gi, "").slice(0, 40) || "inconnu", nomProduit()),
       false,
       400,
     );
@@ -3864,9 +3943,11 @@ function handleComputerStream(req: http.IncomingMessage, res: http.ServerRespons
  * Le niveau est tenu par la passerelle, pas par le poste : l'interface le lit
  * ici et n'en garde aucune copie qui ferait autorité.
  */
-function handleApprobationEtat(res: http.ServerResponse, qui: Demandeur): void {
+async function handleApprobationEtat(res: http.ServerResponse, qui: Demandeur): Promise<void> {
   send(res, 200, {
     niveau: approbation.niveau(),
+    // L'écran ne propose de changer le niveau qu'à qui en a le droit.
+    modifiable: await estAdministrateur(qui.userId),
     delaiMs: approbation.DELAI,
     // Les siennes seulement : le détail porte le mail entier, destinataires
     // compris, et les chemins des fichiers que l'agent veut toucher.
@@ -3889,6 +3970,7 @@ async function handleApprobationNiveau(
     });
   }
 
+  if (await reserveeALAdministration(res, qui, t("Seul l'administrateur de l'instance peut changer le niveau d'approbation : il vaut pour les agents de tous ses membres."))) return;
   approbation.definirNiveau(body.niveau, qui.userId);
   send(res, 200, { niveau: approbation.niveau() });
 }
@@ -4046,6 +4128,14 @@ async function handleClesApi(
   }
   if (!id && req.method === "POST") {
     const b = await corps();
+    /*
+     * Une clé survit à la séance qui la crée : son mot de passe d'abord (et
+     * son code, si le second facteur est actif), comme pour ouvrir l'instance
+     * au réseau. Revue du 26/09/2026 : une séance volée quelques secondes
+     * suffisait à se ménager un accès durable.
+     */
+    const refus = await confirmerIdentite(qui.userId, b.motDePasse, b.code);
+    if (refus) return send(res, refus.statut, { error: { message: refus.reason, code: "identite-a-confirmer" } });
     return repondre(await clesApi.creerCle(qui.userId, { nom: b.nom, jours: b.jours }), (v) => v);
   }
   if (id && !action && req.method === "POST") {
@@ -4700,20 +4790,28 @@ const traiter = (
    */
   const entete = req.headers["x-helix-session"];
   const jeton = (typeof entete === "string" ? entete : entete?.[0]) ?? url.searchParams.get("session");
-  const appelant = jeton
-    ? `s:${createHash("sha256").update(jeton).digest("hex").slice(0, 32)}`
-    : `a:${req.socket.remoteAddress ?? "inconnue"}`;
-  const debitVerdict = debit.verifier(req.method ?? "", path, appelant);
-  if (!debitVerdict.ok) {
-    res.setHeader("Retry-After", String(debitVerdict.retenteDans ?? 60));
-    return send(res, 429, {
-      error: {
-        message: tf("Trop de requêtes sur cette route. Réessayez dans {0} seconde{1}.", debitVerdict.retenteDans, (debitVerdict.retenteDans ?? 0) > 1 ? "s" : ""),
-      },
-    });
-  }
-
+  /*
+   * Une séance ne compte comme appelant que si elle est valide (revue du
+   * 26/09/2026) : un en-tête inventé à chaque requête donnait un compteur
+   * neuf à chaque fois, et l'essai de mots de passe sur tous les comptes
+   * n'était plus freiné. Sinon, c'est l'adresse qui compte. `demandeur` est
+   * mémorisé par requête : la route ne refait pas la recherche.
+   */
   const run = async () => {
+    const seanceValide = jeton ? Boolean(await demandeur(req, url).catch(() => null)) : false;
+    const appelant = jeton && seanceValide
+      ? `s:${createHash("sha256").update(jeton).digest("hex").slice(0, 32)}`
+      : `a:${req.socket.remoteAddress ?? "inconnue"}`;
+    const debitVerdict = debit.verifier(req.method ?? "", path, appelant);
+    if (!debitVerdict.ok) {
+      res.setHeader("Retry-After", String(debitVerdict.retenteDans ?? 60));
+      return send(res, 429, {
+        error: {
+          message: tf("Trop de requêtes sur cette route. Réessayez dans {0} seconde{1}.", debitVerdict.retenteDans, (debitVerdict.retenteDans ?? 0) > 1 ? "s" : ""),
+        },
+      });
+    }
+
     if (req.method === "GET" && (path === "/health" || path === "/")) {
       return handleHealth(res, hasValidToken(req, url));
     }
@@ -5283,6 +5381,7 @@ function demarrerTachesProgrammees(url: string): void {
         Authorization: `Bearer ${instanceToken()}`,
         "x-helix-tache": ownerId,
         "x-helix-cle-tache": CLE_TACHES,
+        ...(options.titre ? { "x-helix-tache-titre": encodeURIComponent(options.titre) } : {}),
       },
       body: JSON.stringify({
         messages,

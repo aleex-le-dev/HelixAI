@@ -136,10 +136,22 @@ function messageErreur(err) {
   return `Vérification impossible : ${brut.slice(0, 160)}`;
 }
 
+/*
+ * Qui a le droit d'appeler ces canaux : la fenêtre principale seule, comme
+ * tous les autres (main.cjs, `depuisLaFenetre`). Ils ne vérifiaient rien
+ * jusqu'à la revue du 26/09/2026. Tant que main.cjs n'a pas donné sa règle,
+ * personne.
+ */
+let expediteurPermis = () => false;
+const garde = (fn) => (event, ...args) => {
+  if (!expediteurPermis(event)) throw new Error("Refusé.");
+  return fn(event, ...args);
+};
+
 function brancher() {
-  ipcMain.handle("helix:maj-etat", () => ({ ...etat }));
-  ipcMain.handle("helix:maj-verifier", () => verifier());
-  ipcMain.handle("helix:maj-installer", () => {
+  ipcMain.handle("helix:maj-etat", garde(() => ({ ...etat })));
+  ipcMain.handle("helix:maj-verifier", garde(() => verifier()));
+  ipcMain.handle("helix:maj-installer", garde(() => {
     // Application signée : la mise à jour téléchargée par electron-updater.
     if (updater && etat.phase === "prete" && etat.automatique) {
       setImmediate(() => updater.quitAndInstall());
@@ -151,21 +163,23 @@ function brancher() {
       return true;
     }
     return false;
-  });
-  ipcMain.handle("helix:maj-ouvrir-paquet", () => {
+  }));
+  ipcMain.handle("helix:maj-ouvrir-paquet", garde(() => {
     // Le lien vient du flux de l'agence, jamais de la page, et reste du web :
     // un flux altéré ne doit pas pouvoir faire ouvrir un `file:` ou un `smb:`.
     if (!etat.lienPaquet || !/^https?:\/\//i.test(etat.lienPaquet)) return false;
     void shell.openExternal(etat.lienPaquet);
     return true;
-  });
+  }));
 }
 
 /**
  * À appeler une fois, application prête. En développement, rien n'est fait :
  * il n'y a pas de paquet à remplacer.
  */
-async function demarrerMiseAJour() {
+/** @param {(event: Electron.IpcMainInvokeEvent) => boolean} permis la règle des canaux (main.cjs). */
+async function demarrerMiseAJour(permis) {
+  if (typeof permis === "function") expediteurPermis = permis;
   if (!app.isPackaged) {
     publier({ phase: "inactif", message: "Pas de mise à jour en développement." });
     return;

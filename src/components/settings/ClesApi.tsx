@@ -110,13 +110,15 @@ export function ClesApi() {
 function CreationCle({ onAnnuler, onCreee }: { onAnnuler: () => void; onCreee: (nom: string, secret: string) => void }) {
   const [nom, setNom] = useState("");
   const [jours, setJours] = useState<number | null>(90);
+  const [motDePasse, setMotDePasse] = useState("");
+  const [code, setCode] = useState("");
   const [occupe, setOccupe] = useState(false);
   const [erreur, setErreur] = useState<string | null>(null);
   const creer = async () => {
     setOccupe(true);
     setErreur(null);
     try {
-      const r = await creerCleApi(nom.trim(), jours);
+      const r = await creerCleApi(nom.trim(), jours, motDePasse, code.trim() || undefined);
       onCreee(r.cle.nom, r.secret);
     } catch (err) {
       setErreur(message(err));
@@ -132,7 +134,6 @@ function CreationCle({ onAnnuler, onCreee }: { onAnnuler: () => void; onCreee: (
           maxLength={60}
           placeholder={t("Script de relance des devis")}
           onChange={(e) => setNom(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && nom.trim() && void creer()}
           autoFocus
         />
       </Field>
@@ -143,13 +144,25 @@ function CreationCle({ onAnnuler, onCreee }: { onAnnuler: () => void; onCreee: (
           options={DUREES.map((d) => ({ value: d === null ? "jamais" : String(d), label: libelleDuree(d) }))}
         />
       </Field>
+      <Field label={t("Votre mot de passe")} hint={t("Une clé dure plus longtemps que votre séance : on vérifie que c'est bien vous.")}>
+        <Input
+          type="password"
+          value={motDePasse}
+          autoComplete="current-password"
+          onChange={(e) => setMotDePasse(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && nom.trim() && motDePasse && void creer()}
+        />
+      </Field>
+      <Field label={t("Code de vérification")} hint={t("Seulement si la double authentification est active.")}>
+        <Input value={code} inputMode="numeric" autoComplete="one-time-code" onChange={(e) => setCode(e.target.value)} />
+      </Field>
       {erreur && (
         <InfoBox tone="warning" className="sm:col-span-2" leading={<TriangleAlert size={15} strokeWidth={1.75} />}>
           {erreur}
         </InfoBox>
       )}
       <div className="flex gap-2 sm:col-span-2">
-        <Button icon={occupe ? Loader2 : KeyRound} disabled={occupe || !nom.trim()} onClick={() => void creer()}>
+        <Button icon={occupe ? Loader2 : KeyRound} disabled={occupe || !nom.trim() || !motDePasse} onClick={() => void creer()}>
           {t("Créer la clé")}
         </Button>
         <Button variant="ghost" onClick={onAnnuler}>

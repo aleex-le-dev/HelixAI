@@ -122,13 +122,49 @@ export function ToolApproval() {
     );
   }
 
+  /*
+   * Hors fichiers, ce que l'outil recevra (revue du 26/09/2026) : le nom d'un
+   * outil de connecteur ne dit pas ce qui part vers le service, ni une tâche
+   * programmée ce qu'elle fera seule chaque jour. Et tous les fichiers visés,
+   * pas seulement le premier.
+   */
+  const { arguments: donnees, cibles, tache, unique } = demande.detail ?? {};
+  const contenu =
+    donnees || (cibles && cibles.length > 1) ? (
+      <div className="space-y-2">
+        {cibles && cibles.length > 1 && (
+          <ul className="max-h-32 overflow-y-auto rounded-xl border border-border bg-muted/40 px-3 py-2 font-mono text-xs text-foreground">
+            {cibles.map((c) => (
+              <li key={c} className="truncate" title={c}>
+                {c}
+              </li>
+            ))}
+          </ul>
+        )}
+        {donnees && (
+          <pre className="max-h-56 overflow-auto whitespace-pre-wrap break-words rounded-xl border border-border bg-muted/40 px-3 py-2.5 font-mono text-xs text-foreground">
+            {donnees}
+          </pre>
+        )}
+      </div>
+    ) : undefined;
+
   return (
     <CarteApprobation
       icone={<FileCog size={16} strokeWidth={1.75} />}
-      titre={employe ? tf("{0}, votre agent, demande votre accord", employe) : deCode ? t("L'agent de code demande votre accord") : t("L'agent veut agir sur vos fichiers")}
+      titre={
+        tache
+          ? tf("La tâche programmée « {0} » demande votre accord", tache)
+          : employe
+            ? tf("{0}, votre agent, demande votre accord", employe)
+            : deCode
+              ? t("L'agent de code demande votre accord")
+              : t("L'agent demande votre accord")
+      }
       phrase={phraseDemande(demande.resume, demande.detail?.outil, demande.detail?.url ?? demande.detail?.cible, employe)}
-      // Un employé n'a pas de « demande » en cours : chaque accord ne vaut que pour une action.
-      note={employe ? t("Autoriser vaut pour cette action seulement.") : etendue}
+      contenu={contenu}
+      // Un employé n'a pas de « demande » en cours : chaque accord ne vaut que pour une action. Hors fichiers non plus.
+      note={employe || unique ? t("Autoriser vaut pour cette action seulement.") : etendue}
       pied={
         <>
           <ShieldCheck size={12} strokeWidth={1.75} />

@@ -23,12 +23,14 @@ import {
 
 interface Magasin {
   niveau: NiveauApprobation | null;
+  /** Faux : le niveau se lit, mais seul l'administrateur le change (index.ts). */
+  modifiable: boolean;
   enAttente: DemandeApprobation[];
   /** Délai avant qu'une demande sans réponse soit considérée comme refusée. */
   delaiMs: number;
 }
 
-let magasin: Magasin = { niveau: null, enAttente: [], delaiMs: 120_000 };
+let magasin: Magasin = { niveau: null, modifiable: false, enAttente: [], delaiMs: 120_000 };
 const abonnes = new Set<(m: Magasin) => void>();
 let flux: (() => void) | null = null;
 let sondageEnCours: Promise<void> | null = null;
@@ -45,6 +47,7 @@ function sonder(): Promise<void> {
     .then((etat) => {
       publier({
         niveau: etat.niveau,
+        modifiable: etat.modifiable !== false,
         enAttente: etat.enAttente,
         delaiMs: etat.delaiMs,
       });
@@ -96,15 +99,23 @@ export function useApprobation() {
     await repondreApprobation(id, accord);
   }, []);
 
-  const changerNiveau = useCallback(async (niveau: NiveauApprobation) => {
-    await setNiveauApprobation(niveau);
+  /** Rend le message de refus, s'il y en a un (réservé à l'administrateur). */
+  const changerNiveau = useCallback(async (niveau: NiveauApprobation): Promise<string | null> => {
+    let refus: string | null = null;
+    try {
+      await setNiveauApprobation(niveau);
+    } catch (err) {
+      refus = err instanceof Error ? err.message : String(err);
+    }
     // On relit plutôt que de croire : c'est la passerelle qui fait foi.
     publier({ niveau: null });
     await sonder();
+    return refus;
   }, []);
 
   return {
     niveau: etat.niveau,
+    modifiable: etat.modifiable,
     enAttente: etat.enAttente,
     delaiMs: etat.delaiMs,
     repondre,

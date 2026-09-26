@@ -1113,7 +1113,20 @@ plus rien derrière elle.
 **Mise à jour** (`electron/miseAJour.cjs`, détail dans SIGNATURE.md § 4) : une seule
 adresse, celle de l'agence, en HTTPS ; installation automatique **seulement** si
 l'application porte une signature d'éditeur, auquel cas macOS exige que la mise à
-jour porte la même. Sinon, simple avertissement « version disponible ».
+jour porte la même.
+
+**Correction du 26/09/2026 (revue § 28) :** ce paragraphe ne disait plus vrai.
+Depuis le même jour, une application sans signature s'installe aussi d'un clic
+(« Installer maintenant »), depuis l'instance à laquelle le poste est rattaché
+(décidé par Medhi, PROJET.md). L'empreinte SHA-512 vient de cette même
+instance, avec l'archive : elle protège d'une archive abîmée en route, **pas
+d'une instance compromise**, qui peut proposer n'importe quelle application
+sous le bon identifiant et un numéro de version plus grand. Cette application
+hériterait alors des autorisations de macOS accordées à Helix (écran,
+accessibilité, micro). Le poste fait donc confiance à son instance pour le code
+qu'il exécute, comme il lui fait déjà confiance pour ses données. Fermer cette
+porte demande une signature de l'éditeur sur l'archive (une clé publique
+inscrite dans le paquet), décision à prendre (§ 28, « à décider »).
 
 ---
 
@@ -2878,16 +2891,28 @@ ne peut rien faire hors de l'essai :
 
 | Garde | Comment |
 |---|---|
-| Une copie, pas le projet | Le projet est copié dans un dossier temporaire (4 000 fichiers, 80 Mo au plus) ; `node_modules` et les environnements Python sont liés en lecture seule, pas copiés. La copie est effacée après l'essai. |
-| Bac à sable de macOS | `sandbox-exec`, profil « tout refusé par défaut » : lecture du système, des outils (Homebrew, Node, Xcode) et de la copie seulement ; écriture dans la copie seulement ; **aucun réseau**. |
+| Une copie, pas le projet | Le projet est copié dans un dossier temporaire (4 000 fichiers, 80 Mo au plus), **sans suivre les liens symboliques** ; `node_modules` et les environnements Python sont liés en lecture seule, pas copiés, **et seulement s'ils sont vraiment dans le projet**. La copie est effacée après l'essai. |
+| Bac à sable de macOS | `sandbox-exec`, profil « tout refusé par défaut » : lecture du système, des dossiers d'outils de Homebrew (bin, lib, Cellar, opt, share…, **pas `var/` ni `etc/`**), de Node, de Xcode et de la copie seulement ; métadonnées de ces seuls chemins et des dossiers qui y mènent ; écriture dans la copie seulement ; **aucun réseau** ; **les seuls services du système** dont Node et Python ont besoin (annuaire des comptes, journal, notifications) ; **aucun Apple Event**. |
 | Environnement vide | Seulement `PATH`, `HOME` (dans la copie), `TMPDIR` (dans la copie) et la langue : aucun jeton, aucune variable de la passerelle. |
-| Bornes | 90 secondes au plus (arrêt forcé), sortie tronquée à 6 000 caractères. |
+| Bornes | 90 secondes au plus ; le test tourne dans **son propre groupe de processus**, arrêté en entier à la fin, dans tous les cas (ce qu'il a lancé ne lui survit pas) ; sortie tronquée à 6 000 caractères. |
 | Hors macOS | Pas de cage connue : les tests **ne sont pas lancés**, et rien n'est affirmé. |
 
-Vérifié par `npm run securite` (section 6 quater, 5 contrôles) : un test piégé
+Vérifié par `npm run securite` (section 6 quater, 10 contrôles) : un test piégé
 essaie de lire un fichier secret hors du projet, d'écrire hors de la copie et
 de joindre la passerelle sur 127.0.0.1 ; les trois sont refusés, et la copie
-est effacée.
+est effacée. Depuis la revue du 26/09/2026 (§ 28), un second piège passe par un
+lien symbolique, par un `node_modules` qui pointe vers le dossier parent, lit
+les métadonnées d'un secret, le presse-papiers, ouvre une application, envoie
+un ordre au Finder et laisse un processus derrière lui : tout est refusé ou
+arrêté.
+
+**Correction du 26/09/2026 :** ce tableau décrivait une cage plus fermée
+qu'elle ne l'était. Avant la revue du § 28, un lien symbolique du projet était
+suivi à la copie (une clé SSH y entrait), un `node_modules` lié vers le haut
+ouvrait tout le dossier personnel, tous les services du système étaient
+joignables, `/opt/homebrew/var` était lisible, et la limite de temps
+n'arrêtait que le premier processus. Les agents d'audit l'ont reproduit avec de
+faux secrets ; c'est corrigé et vérifié.
 
 Les autres contrôles de Code n'exécutent rien : Python est lu par `ast.parse`
 (`gateway/src/analysePython.ts`, lancé en `python3 -I` avec le Python du
@@ -2936,3 +2961,75 @@ documentation, navigateur) ; les 7 serveurs à clé démarrent avec une clé
 factice ; Kubernetes refuse un fichier de configuration factice et démarre
 sans. Non vérifié : un appel réel avec un compte de chacun de ces services.
 Vérifié par `npm run securite` (section 6 quinquies, 5 contrôles).
+
+## 28. Revue de sécurité par six agents (26 septembre 2026)
+
+Demandée par Medhi : « un tour complet niveau sécurité avec plusieurs agents ».
+Six agents ont lu le code en parallèle, chacun sur un domaine (accès et séances,
+barrière d'approbation et outils des agents, connecteurs et secrets,
+cloisonnement des données, coquille Electron, exécution de code), en lecture
+seule, avec des essais sur de fausses données dans un dossier à part. Chaque
+constat a été relu avant d'être corrigé ; les corrections sont vérifiées par
+`npm run securite` (376 contrôles, dont les sections 3 quater, 6 quater et 12).
+
+### Corrigé
+
+| Domaine | Constat (gravité) | Correction |
+|---|---|---|
+| Code | Cage des tests : liens symboliques suivis, `node_modules` lié vers le haut, services du système ouverts, Homebrew `var/` lisible, métadonnées de tout le disque, processus survivants (élevée, reproduit) | § 25 ; `essaisCode.ts` |
+| Electron | Les pages écrites par Helix Code étaient essayées en `file://`, qui peut lire les autres fichiers du disque dans Electron, avec le réseau ouvert (élevée) | Servies par un serveur éphémère limité au dossier du projet (`rendu.cjs`) ; permissions refusées |
+| Accès | Toute séance changeait le serveur d'envoi de la boîte commune, qui recevait alors son mot de passe (élevée, reproduit) ; passait l'instance en « Tout approuver » ; activait l'envoi sans confirmation | Réservé à l'administrateur (`reserveeALAdministration`, index.ts) ; l'écran le dit |
+| Barrière | La mémoire d'un accord ne nommait pas l'outil : une écriture approuvée dans un dossier couvrait une tâche programmée portant un `path` (élevée, reproduit) ; un appel de connecteur approuvé couvrait les suivants | Portée par dossier pour les fichiers et l'atelier seulement ; ailleurs, l'appel exact |
+| Barrière | La carte d'une tâche programmée coupait sa consigne à 200 caractères, et « Tout approuver » la laissait passer sans carte | Toujours confirmée, consigne entière, arguments montrés sur la carte, titre de la tâche sur les cartes qu'elle pose |
+| Barrière | `agenda__supprimer` passait par la vérification d'un mail (refus sans envoi, carte de mail sinon), et suivait « envoyer sans confirmation » | Chemin propre, toujours confirmé, indépendant de ce réglage |
+| Barrière | Une commande de Helix Code était coupée à 4 000 caractères sur la carte (un `curl` final passait sans être vu) | Entière jusqu'à 20 000 caractères, refusée au-delà |
+| Barrière | Les noms `code`, `connaissances`, `taches` n'étaient pas réservés aux connecteurs | Réservés |
+| Données | Un fichier de données illisible était lu comme vide, puis écrasé par le prochain envoi d'un poste (élevée) | Seul un fichier absent vaut « vide » ; sinon erreur, rien n'est écrit |
+| Données | Envoi sans liste = tout effacer ; deux envois simultanés sur PostgreSQL = le second efface le premier | 400 si ce n'est pas une liste ; une écriture à la fois par collection |
+| Données | Créer un Chat « au nom » d'un autre en s'y invitant ; un membre de projet réécrivait la liste des membres ; un invité changeait les bases de connaissances d'un Chat partagé | Nouveaux enregistrements au nom de l'appelant seulement ; membres et bases réservés au propriétaire |
+| Données | Tâches programmées et compétences oubliées par l'effacement d'un compte et par l'export | Effacées et exportées |
+| Poste | Une séance expirée laissait l'état de synchronisation en mémoire : la personne suivante pouvait pousser la copie de la précédente | Rechargement de la fenêtre à l'expiration |
+| Connecteurs | Les commandes des connecteurs enregistrés n'étaient pas revérifiées au démarrage (une ligne écrite dans la base aurait lancé `/bin/sh`) | Commande du catalogue imposée hors régime libre |
+| Connecteurs | Le champ `KUBECONFIG` pouvait désigner un fichier qui déclare une commande à lancer | Fichier refusé s'il en déclare une ; le serveur reçoit une copie vérifiée |
+| Connecteurs | Liste des connecteurs illisible puis écrasée par un ajout | Plus aucune écriture tant qu'elle n'est pas relue |
+| Réseau | Les modèles ajoutés par clé suivaient les redirections vers le réseau interne après le premier essai (reproduit) | Adresse revérifiée à chaque appel, aucune redirection suivie (`sortieReseau.ts`). Reste : le « DNS rebinding » |
+| Mail | STARTTLS : des réponses glissées en clair étaient lues après le chiffrement (reproduit) | Connexion abandonnée |
+| OAuth | Autorisation de connecteur sans limite de temps ; texte de l'appelant affiché sur la page publique de retour | Dix minutes, comparaison à durée constante ; message fixe |
+| Accès | Limite de débit contournée par un en-tête de séance inventé (mesuré) | Compteur par séance valide, sinon par adresse |
+| Accès | L'invitant recevait le code même quand le mail était parti ; la liste de toutes les invitations en attente ; une invitation remplaçait celle d'un collègue ; lien d'invitation bâti sur `Host` | Code dans la boîte de l'invitée seulement ; chacun voit les siennes ; pas de remplacement sauf administrateur ; adresses annoncées par l'instance seulement |
+| Accès | Rôle d'administrateur pris en se déclarant l'adresse d'un administrateur sans compte | Une adresse déclarée ne donne pas le rôle |
+| Accès | Clés d'API créées par une séance seule, et survivant à la remise à zéro du mot de passe | Mot de passe exigé ; clés révoquées avec le mot de passe et le second facteur |
+| Electron | Redémarrage de la passerelle : boucle de relances et passerelle orpheline après ⌘Q (simulé) | Seul l'arrêt de la passerelle en cours compte ; la nouvelle attend la libération du port |
+| Electron | Canaux de mise à jour sans contrôle de l'expéditeur ; coffre écrasé quand il ne se déchiffrait pas ; micro refusé sur `helix://app` | Contrôle ajouté ; coffre illisible mis de côté ; `helix://app` admis |
+| Employés | Leurs cartes étaient adressées à eux-mêmes : personne ne pouvait répondre | Adressées à leur propriétaire |
+| Écran | « Masquer le prompt aux non-administrateurs » ne faisait rien | Interrupteur retiré ; l'écran dit que les instructions d'un agent partagé se lisent |
+| Divers | Nom de modèle ou code d'appairage commençant par `-` lu comme une option ; noms de dossiers privés de la Bibliothèque dans la recherche | Refusés ; chemin arrêté au premier dossier invisible |
+
+### Restant, dit comme tel
+
+- **Mise à jour sans signature** (élevée, décision de Medhi) : l'instance peut
+  faire installer n'importe quelle application à ses postes (§ 9). Fermer :
+  une clé d'éditeur inscrite dans le paquet, qui signe l'archive.
+- **Comptes créés par un collègue** (élevée en entreprise) : celui qui crée le
+  compte d'une autre personne choisit son mot de passe et le garde, et le
+  compte hérite de ce qu'on a partagé à cette adresse. Fermer : un mot de passe
+  à changer à la première connexion, une route pour changer le sien, et
+  l'adresse considérée comme non prouvée tant que la personne ne s'est pas
+  connectée par l'invitation.
+- **Employés déclenchés par un mail** (plausible) : au palier « étendu », les
+  outils web d'OpenClaw restent ouverts pendant qu'ils traitent un mail reçu ;
+  un mail piégé pourrait faire sortir ce que l'employé a lu dans une adresse
+  web.
+- **Bot de réunion** (faible) : la protection du § 18.5 capture les
+  constructeurs, pas leurs méthodes (`addEventListener`, `then`…) ; un script
+  hostile sur la page de Meet pourrait encore substituer son propre son.
+  Fermer : Electron 35 (`contextBridge.executeInMainWorld`), déjà prévu.
+- **Écran de la machine des agents** : visible de toute séance connectée.
+- **Chiffrement au repos** : une valeur en clair est encore acceptée (reprise
+  des installations d'avant le chiffrement). Les connecteurs sont maintenant
+  revérifiés au démarrage ; les autres collections, non.
+- **« DNS rebinding »** vers un modèle ajouté par clé : voir `sortieReseau.ts`.
+- **Même personne, deux postes** : un envoi du second, moins de quatre secondes
+  après une création sur le premier, peut encore l'effacer (suppression par
+  absence) ; il faudrait une révision attendue (`If-Match`).
+

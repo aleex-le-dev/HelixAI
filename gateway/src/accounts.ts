@@ -1,3 +1,4 @@
+import { oublierClesDe } from "./clesApi.ts";
 import { pbkdf2Sync, randomBytes, timingSafeEqual } from "node:crypto";
 import { db } from "./db.ts";
 import { journaliser } from "./audit.ts";
@@ -331,8 +332,14 @@ export async function definirMotDePasse(
    * mot de passe ne fermait rien.
    */
   const fermees = await revokeAll(accountId);
+  /*
+   * Ses clés d'API aussi (revue du 26/09/2026) : sans cela, une séance volée
+   * qui avait eu le temps d'en créer une gardait l'accès après la remise à
+   * zéro du mot de passe, bases de connaissances comprises.
+   */
+  const cles = await oublierClesDe(accountId);
 
-  journaliser("motdepasse.redefini", accountId, { par: "outil local", seancesFermees: fermees });
+  journaliser("motdepasse.redefini", accountId, { par: "outil local", seancesFermees: fermees, clesApiRevoquees: cles });
   return { ok: true };
 }
 
@@ -1132,7 +1139,8 @@ export async function retirerDeuxFacteurs(accountId: string): Promise<{ ok: bool
   // Même raison que pour le mot de passe : cet outil sert quand on a perdu la
   // main, et une séance ouverte avant garderait ce que l'on vient de retirer.
   const fermees = await revokeAll(accountId);
-  journaliser("deuxfacteurs.desactive", accountId, { par: "outil local", seancesFermees: fermees });
+  const cles = await oublierClesDe(accountId);
+  journaliser("deuxfacteurs.desactive", accountId, { par: "outil local", seancesFermees: fermees, clesApiRevoquees: cles });
   return { ok: true };
 }
 

@@ -157,12 +157,52 @@ function partageDuProprietaire(
     (p) => concerne(p) && estEnregistrement(p) && memeEmail(p.email, String((anciens.find(concerne) as { email?: string } | undefined)?.email ?? "")),
   );
   const partages = anciens.map((p) => (concerne(p) && aMoi && monEntree ? { ...(monEntree as object), userId: qui.userId } : p));
-  const { sharedWith: _s, sharedGroupIds: _g, visibility: _v, ...reste } = envoye;
+  /*
+   * Les bases de connaissances et le classement restent ceux de la
+   * propriétaire (revue du 26/09/2026) : un invité qui y mettait l'identifiant
+   * d'une base qu'elle seule voit faisait entrer ses passages dans la
+   * conversation partagée, dès qu'elle y écrivait de nouveau.
+   */
+  const { sharedWith: _s, sharedGroupIds: _g, visibility: _v, connaissances: _k, projectId: _p, ...reste } = envoye;
   return {
     ...reste,
     ...(avant.sharedWith !== undefined ? { sharedWith: partages } : {}),
     ...(avant.sharedGroupIds !== undefined ? { sharedGroupIds: avant.sharedGroupIds } : {}),
     ...(avant.visibility !== undefined ? { visibility: avant.visibility } : {}),
+    ...(avant.connaissances !== undefined ? { connaissances: avant.connaissances } : {}),
+    ...(avant.projectId !== undefined ? { projectId: avant.projectId } : {}),
+  };
+}
+
+/**
+ * Ce qu'un membre (non propriétaire) peut changer à un projet : son contenu,
+ * pas qui en fait partie, ni ses bases de connaissances. Revue du 26/09/2026 :
+ * un membre pouvait retirer un collègue et y ajouter quelqu'un du dehors, ce
+ * que l'écran réserve au propriétaire. Une exception, comme pour un Chat
+ * partagé : sa propre invitation, qu'il accepte (statut, identifiant), sans
+ * changer son rôle.
+ */
+function projetDuProprietaire(
+  avant: Record<string, unknown>,
+  envoye: Record<string, unknown>,
+  qui: Demandeur,
+): Record<string, unknown> {
+  const concerne = (m: unknown) =>
+    (m as { userId?: string }).userId === qui.userId || memeEmail((m as { email?: string }).email, qui.email);
+  const anciens = Array.isArray(avant.members) ? avant.members : [];
+  const nouveaux = Array.isArray(envoye.members) ? envoye.members : [];
+  const monAncienne = anciens.find(concerne) as Record<string, unknown> | undefined;
+  const maNouvelle = nouveaux.find((m) => concerne(m) && estEnregistrement(m)) as Record<string, unknown> | undefined;
+  const membres = anciens.map((m) =>
+    monAncienne && m === monAncienne && maNouvelle
+      ? { ...monAncienne, status: maNouvelle.status ?? monAncienne.status, userId: qui.userId }
+      : m,
+  );
+  const { members: _m, connaissances: _k, ...reste } = envoye;
+  return {
+    ...reste,
+    members: membres,
+    ...(avant.connaissances !== undefined ? { connaissances: avant.connaissances } : {}),
   };
 }
 
@@ -292,14 +332,26 @@ export function fusionner(
       resultat.push(collection === "agents" ? groupesDeLAgent(item, envoye, qui) : envoye);
       continue;
     }
-    const retouche = collection === "sessions" ? partageDuProprietaire(item, envoye, qui) : envoye;
+    const retouche =
+      collection === "sessions"
+        ? partageDuProprietaire(item, envoye, qui)
+        : collection === "projects"
+          ? projetDuProprietaire(item, envoye, qui)
+          : envoye;
     resultat.push({ ...retouche, ownerId: item.ownerId });
   }
 
-  // 2. Les nouveaux enregistrements, s'ils lui appartiennent bien.
+  /*
+   * 2. Les nouveaux enregistrements, s'ils lui appartiennent bien : à son nom,
+   * et à son nom seulement. Revue du 26/09/2026 : il suffisait de se mettre
+   * dans `sharedWith` (ou `members`) pour créer un Chat « de » quelqu'un
+   * d'autre, messages inventés compris, que toute l'équipe voyait comme le
+   * sien ; et la copie d'un collègue remettait les Chats d'un compte effacé,
+   * que personne ne pouvait plus supprimer.
+   */
   for (const item of apres) {
     if (avantParId.has(String(item.id))) continue;
-    if (regle.modifie(item, qui)) resultat.push(collection === "agents" ? groupesDeLAgent(undefined, item, qui) : item);
+    if (item.ownerId === qui.userId && regle.modifie(item, qui)) resultat.push(collection === "agents" ? groupesDeLAgent(undefined, item, qui) : item);
     else refuses += 1;
   }
 

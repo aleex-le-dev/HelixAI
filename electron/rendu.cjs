@@ -21,6 +21,16 @@
  *    change à l'écran.
  * La fenêtre est isolée (session en mémoire, bac à sable, sans Node), les
  * boîtes de dialogue sont neutralisées, et elle est détruite après l'essai.
+ *
+ * La page n'est plus ouverte en `file://` (revue de sécurité du 26/09/2026) :
+ * l'application garde à ces pages le droit Electron de lire les autres
+ * fichiers du disque (fusible GrantFileProtocolExtraPrivileges), et une page
+ * écrite par un modèle, ou le script d'un CDN qu'elle charge, aurait pu lire
+ * ~/.helix puis l'envoyer au dehors. Elle est servie par un serveur éphémère
+ * sur la boucle locale, qui ne sert que le dossier du projet (chemins réels,
+ * liens symboliques compris) ; sous `http://127.0.0.1`, le navigateur refuse
+ * tout `file://`. Les permissions (caméra, micro, notifications…) sont
+ * refusées d'office.
  */
 
 const http = require("node:http");
@@ -97,8 +107,59 @@ const ANALYSE = String.raw`(async () => {
   return { texteAuChargement: auChargement.length, extrait: auChargement.slice(0, 120), illisibles, essais, erreurs };
 })()`;
 
+const TYPES = {
+  ".html": "text/html; charset=utf-8", ".htm": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8",
+  ".mjs": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8", ".json": "application/json; charset=utf-8",
+  ".svg": "image/svg+xml", ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".gif": "image/gif",
+  ".webp": "image/webp", ".ico": "image/x-icon", ".woff": "font/woff", ".woff2": "font/woff2", ".ttf": "font/ttf",
+  ".txt": "text/plain; charset=utf-8", ".csv": "text/csv; charset=utf-8", ".wasm": "application/wasm",
+};
+
+/**
+ * Sert le dossier `racine`, et rien d'autre, le temps d'un essai. Un chemin
+ * qui en sort (`..`, lien symbolique vers ailleurs) reçoit un 404.
+ */
+function servirDossier(racine) {
+  const reelle = fs.realpathSync(racine);
+  const serveur = http.createServer((req, res) => {
+    const refuser = () => { res.writeHead(404); res.end(); };
+    if (req.method !== "GET" && req.method !== "HEAD") return refuser();
+    let chemin;
+    try {
+      chemin = decodeURIComponent(new URL(req.url ?? "/", "http://x").pathname);
+    } catch {
+      return refuser();
+    }
+    let cible;
+    try {
+      cible = fs.realpathSync(path.join(reelle, chemin));
+    } catch {
+      return refuser();
+    }
+    if (cible !== reelle && !cible.startsWith(reelle + path.sep)) return refuser();
+    let info;
+    try {
+      info = fs.statSync(cible);
+    } catch {
+      return refuser();
+    }
+    if (info.isDirectory()) {
+      const index = path.join(cible, "index.html");
+      if (!fs.existsSync(index)) return refuser();
+      cible = index;
+    }
+    res.writeHead(200, { "Content-Type": TYPES[path.extname(cible).toLowerCase()] ?? "application/octet-stream", "Cache-Control": "no-store" });
+    if (req.method === "HEAD") return res.end();
+    fs.createReadStream(cible).on("error", () => res.destroy()).pipe(res);
+  });
+  return new Promise((resolve, reject) => {
+    serveur.once("error", reject);
+    serveur.listen(0, "127.0.0.1", () => resolve({ serveur, origine: `http://127.0.0.1:${serveur.address().port}`, reelle }));
+  });
+}
+
 /** Ouvre la page, attend, analyse. Rend le rapport, jamais d'exception. */
-async function rendre(fichier) {
+async function rendre(fichier, racine) {
   const partition = `rendu-${crypto.randomBytes(6).toString("hex")}`;
   const ses = session.fromPartition(partition, { cache: false });
   const fenetre = new BrowserWindow({
@@ -109,6 +170,10 @@ async function rendre(fichier) {
   });
   const console_ = [];
   const echecs = [];
+  // Ni caméra, ni micro, ni notifications, ni presse-papiers pour une page à l'essai.
+  ses.setPermissionRequestHandler((_wc, _permission, callback) => callback(false));
+  ses.setPermissionCheckHandler(() => false);
+  let service = null;
   fenetre.webContents.on("console-message", (_e, niveau, message) => {
     if (niveau >= 3 || /error|uncaught/i.test(String(message))) console_.push(String(message).slice(0, 300));
   });
@@ -120,8 +185,9 @@ async function rendre(fichier) {
      * Google Fonts sortaient toutes « introuvables », net::ERR_CACHE_MISS).
      */
     if (/ERR_ABORTED|ERR_CACHE_MISS|ERR_BLOCKED_BY_CLIENT/.test(d.error)) return;
-    if (!d.url.startsWith("file:") && /fonts\.(googleapis|gstatic)\.com/.test(d.url)) return;
-    echecs.push(`${d.url.replace(/^file:\/\/[^?#]*\//, "")} (${d.error})`);
+    const locale = service && d.url.startsWith(service.origine + "/");
+    if (!locale && /fonts\.(googleapis|gstatic)\.com/.test(d.url)) return;
+    echecs.push(`${locale ? d.url.slice(service.origine.length + 1) : d.url} (${d.error})`);
   });
   // Un bouton « Exporter » ne doit pas ouvrir de fenêtre d'enregistrement pendant l'essai.
   ses.on("will-download", (_e, item) => item.cancel());
@@ -130,7 +196,11 @@ async function rendre(fichier) {
   fenetre.webContents.on("will-navigate", (e) => e.preventDefault());
   const minuterie = setTimeout(() => fenetre.destroy(), DUREE_MAX_MS);
   try {
-    await fenetre.loadFile(fichier).catch((err) => echecs.push(String(err?.message ?? err).slice(0, 200)));
+    service = await servirDossier(racine);
+    const relatif = path.relative(service.reelle, fs.realpathSync(fichier));
+    if (relatif.startsWith("..") || path.isAbsolute(relatif)) throw new Error("La page n'est pas dans le dossier du projet.");
+    const adresse = `${service.origine}/${relatif.split(path.sep).map(encodeURIComponent).join("/")}`;
+    await fenetre.loadURL(adresse).catch((err) => echecs.push(String(err?.message ?? err).slice(0, 200)));
     await new Promise((r) => setTimeout(r, ATTENTE_CHARGEMENT_MS));
     const analyse = await fenetre.webContents.executeJavaScript(ANALYSE, true).catch((err) => ({ erreurAnalyse: String(err?.message ?? err) }));
     return { ok: true, console: [...new Set(console_)].slice(0, 12), ressources: [...new Set(echecs)].slice(0, 12), ...analyse };
@@ -139,6 +209,7 @@ async function rendre(fichier) {
   } finally {
     clearTimeout(minuterie);
     if (!fenetre.isDestroyed()) fenetre.destroy();
+    service?.serveur.close();
     void ses.clearStorageData().catch(() => {});
   }
 }
@@ -159,11 +230,16 @@ function demarrerRendu() {
     req.on("data", (c) => { corps += c; if (corps.length > 10_000) req.destroy(); });
     req.on("end", () => {
       let fichier = "";
-      try { fichier = String(JSON.parse(corps).fichier ?? ""); } catch { return refuser(400); }
-      // Seulement une page HTML qui existe, par un chemin absolu. La passerelle a déjà vérifié le dossier.
-      if (!path.isAbsolute(fichier) || !/\.html?$/i.test(fichier) || !fs.existsSync(fichier)) return refuser(400);
+      let racine = "";
+      try {
+        const j = JSON.parse(corps);
+        fichier = String(j.fichier ?? "");
+        racine = String(j.racine ?? "") || path.dirname(fichier);
+      } catch { return refuser(400); }
+      // Seulement une page HTML qui existe, par un chemin absolu, dans un dossier qui existe. La passerelle a déjà vérifié le dossier.
+      if (!path.isAbsolute(fichier) || !path.isAbsolute(racine) || !/\.html?$/i.test(fichier) || !fs.existsSync(fichier) || !fs.existsSync(racine)) return refuser(400);
       occupe = occupe.then(async () => {
-        const rapport = await rendre(fichier);
+        const rapport = await rendre(fichier, racine);
         res.writeHead(200, { "Content-Type": "application/json" });
         res.end(JSON.stringify(rapport));
       });

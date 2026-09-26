@@ -179,10 +179,21 @@ const CONTROLE_LECTURE = new Set(["controle__site_web"]);
  * niveau « Tout approuver » ni pour un agent autonome. Aux autres niveaux,
  * chaque mail reste montré en entier.
  */
-// Supprimer un événement ne se reprend pas non plus (26/09/2026).
-const TOUJOURS_DEMANDER = new Set(["courrier__envoyer", "agenda__supprimer"]);
+const ENVOI = new Set(["courrier__envoyer"]);
+/**
+ * Toujours une carte, à tout niveau, même « Tout approuver », et un accord qui
+ * ne vaut que pour cet appel : supprimer un événement (ne se reprend pas), et
+ * programmer une tâche (elle tournera ensuite seule, avec les outils de la
+ * personne, sans que personne la relise : un texte venu du dehors qui en
+ * crée une s'installe pour de bon). Revue de sécurité du 26/09/2026 : la
+ * suppression passait par la vérification d'un mail (refusée sans envoi
+ * activé, présentée comme un mail sinon) et suivait le choix « envoyer sans
+ * confirmation » ; elle a désormais son propre chemin, que ce choix ne
+ * touche pas.
+ */
+const TOUJOURS_CONFIRMER = new Set(["agenda__supprimer", "taches__programmer"]);
 
-export const demandeToujours = (outil: string) => TOUJOURS_DEMANDER.has(outil) && !envoiSansAccord();
+export const demandeToujours = (outil: string) => TOUJOURS_CONFIRMER.has(outil) || (ENVOI.has(outil) && !envoiSansAccord());
 
 /**
  * Outils livrés d'OpenCode qui ne font que lire le dossier du projet
@@ -348,7 +359,8 @@ export function resumerOutil(outil: string, args: Record<string, unknown>): stri
     const titre = typeof args.titre === "string" && args.titre.trim() ? ` « ${args.titre.trim().slice(0, 80)} »` : "";
     const rythme = ({ "chaque-jour": "chaque jour", "jours-ouvres": "du lundi au vendredi", "chaque-semaine": "chaque semaine", "chaque-mois": "chaque mois" } as Record<string, string>)[String(args.rythme)] ?? "régulièrement";
     const heure = typeof args.heure === "string" ? ` à ${args.heure.slice(0, 5)}` : "";
-    const consigne = typeof args.consigne === "string" && args.consigne.trim() ? ` : « ${args.consigne.trim().slice(0, 200)} »` : "";
+    // La consigne entière : c'est elle qui tournera seule, chaque fois (la carte la montre aussi dans son détail).
+    const consigne = typeof args.consigne === "string" && args.consigne.trim() ? ` : « ${args.consigne.trim()} »` : "";
     const agent = typeof args.agent === "string" && args.agent.trim() ? ` par l'agent « ${args.agent.trim().slice(0, 60)} »` : "";
     return `programmer la tâche${titre}, ${rythme}${heure}, exécutée seule${agent} avec vos outils${consigne}`;
   }
@@ -642,6 +654,25 @@ export function fermerDemande(id: string): void {
   contextes.delete(id);
 }
 
+/**
+ * Les outils dont un accord peut couvrir un dossier : le serveur de fichiers
+ * et l'atelier bureautique, qui écrivent vraiment à l'endroit de `path`. Les
+ * autres (connecteurs, agenda, tâches, brouillons…) sont couverts appel par
+ * appel, arguments compris. Revue de sécurité du 26/09/2026 : la clé ne
+ * nommait pas l'outil, et tout outil acceptant un `path` qu'il ignore héritait
+ * d'une écriture approuvée dans ce dossier (vérifié : une tâche programmée
+ * créée sans carte après un fichier accordé) ; un appel d'un connecteur
+ * approuvé couvrait aussi tous les suivants, quel que soit leur contenu.
+ */
+const porteeParDossier = (outil: string) => !outil.includes("__") || outil.startsWith(`${SERVEUR_FICHIERS}__`) || outil.startsWith("bureau__");
+
+/** Tous les chemins désignés (un `read_multiple_files` en porte plusieurs). */
+function chemins(args: Record<string, unknown>): string[] {
+  if (Array.isArray(args.paths)) return args.paths.filter((p): p is string => typeof p === "string" && p.length > 0);
+  const un = chemin(args);
+  return un ? [un] : [];
+}
+
 /** Clé de portée : ce que couvre une réponse déjà donnée. */
 function portee(outil: string, args: Record<string, unknown>, courant: Niveau): string {
   const cible = chemin(args);
@@ -658,11 +689,9 @@ function portee(outil: string, args: Record<string, unknown>, courant: Niveau): 
   if (outil === "code__bash" || outil === "code__webfetch" || outil === "code__websearch" || outil === "code__codesearch") {
     return `${outil}|${String(args.commande ?? args.url ?? args.requete ?? "")}`;
   }
-  if (!cible) {
-    const pour = outil === "courrier__brouillon" ? `|${String(args.a ?? args.en_reponse_a ?? "")}` : "";
-    return `${outil}${pour}|*`;
-  }
-  const dossier = dirname(cible);
+  if (!porteeParDossier(outil) || !cible) return `${outil}|${JSON.stringify(args)}`;
+  // Plusieurs fichiers : tous leurs dossiers entrent dans la clé (le premier seul laissait passer les autres).
+  const dossier = [...new Set(chemins(args).map((c) => dirname(c)))].sort().join("+");
 
   /*
    * Un déplacement a deux extrémités. Autoriser « sortir un fichier de
@@ -687,6 +716,13 @@ function portee(outil: string, args: Record<string, unknown>, courant: Niveau): 
 /* ------------------------------------------------------------------ */
 /* La barrière                                                         */
 /* ------------------------------------------------------------------ */
+
+/** Les arguments tels que l'outil les recevra, lisibles, et dits tronqués quand ils le sont. */
+function argumentsLisibles(args: Record<string, unknown>): string {
+  const texte = JSON.stringify(args, null, 2) ?? "{}";
+  const MAX = 8000;
+  return texte.length > MAX ? `${texte.slice(0, MAX)}\n… (${texte.length - MAX} caractères de plus, non montrés)` : texte;
+}
 
 /**
  * `parLaPersonne` : le refus vient d'elle (ou de son silence), pas d'une règle.
@@ -764,6 +800,11 @@ export async function verifierOutil(
   surface: "chat" | "code" = "chat",
   /** Reçoit l'identifiant de la carte, si une carte est posée (permissionsCode.ts, pour la retirer). */
   surCarte?: (id: string) => void,
+  /**
+   * La tâche programmée qui fait l'appel : sa carte le dit, pour qu'on ne la
+   * prenne pas pour une demande du Chat qu'on a sous les yeux.
+   */
+  tacheEnCours?: string,
 ): Promise<Verdict> {
   const origine = employe ? "employe" : surface;
   /*
@@ -778,17 +819,18 @@ export async function verifierOutil(
   if (faux) return { autorise: false, message: faux };
 
   const courant = niveau();
-  if (TOUJOURS_DEMANDER.has(outil)) {
+  if (ENVOI.has(outil)) {
     if (!forcer && !demandeToujours(outil) && courant === "tout") return { autorise: true };
     return verifierEnvoi(contexte, outil, args, qui, courant, employe, origine);
   }
+  const toujours = TOUJOURS_CONFIRMER.has(outil);
   /*
    * « Tout approuver » vaut pour ce que l'entreprise demande elle-même, pas
    * pour ce qu'un texte venu du dehors fait faire : `forcer` traverse le
    * niveau. C'est le cas d'un agent déclenché par un mail reçu (serveurOutils.ts).
    */
-  if (courant === "tout" && !forcer) return { autorise: true };
-  if (courant === "modifications" && !modifie(outil)) return { autorise: true };
+  if (!toujours && courant === "tout" && !forcer) return { autorise: true };
+  if (!toujours && courant === "modifications" && !modifie(outil)) return { autorise: true };
 
   let resume = resumerOutil(outil, args);
   // Une réponse se juge à ce qu'elle répond : la carte nomme l'expéditeur et l'objet du message.
@@ -800,14 +842,15 @@ export async function verifierOutil(
   const memoire = contexte ? contextes.get(contexte) : undefined;
 
   const deja = memoire?.get(cle);
-  if (deja) {
+  // Un accord « toujours confirmé » ne se réutilise pas ; un refus, si : on ne repose pas la question qu'on vient de refuser.
+  if (deja && !(toujours && deja.accord)) {
     return deja.accord
       ? { autorise: true }
       : { autorise: false, message: messageDeRefus(resume, deja.issue, true), parLaPersonne: true };
   }
 
   // Le journal dit ce que l'agent a voulu toucher, jamais ce qu'il y a dedans.
-  journaliser("outil.demande", qui, { outil, cible: chemin(args), niveau: courant });
+  journaliser("outil.demande", qui, { outil, cible: chemin(args), niveau: courant, ...(employe ? { employe } : {}) });
 
   const { issue, par } = await demander(
     {
@@ -824,13 +867,22 @@ export async function verifierOutil(
         ...(typeof args.commande === "string" ? { commande: args.commande } : {}),
         ...(typeof args.url === "string" ? { url: args.url } : {}),
         ...(employe ? { employe } : {}),
+        // Ce que l'accord couvre : cet appel seul, ou les suivants au même endroit.
+        unique: toujours || !porteeParDossier(outil),
+        ...(chemins(args).length > 1 ? { cibles: chemins(args).slice(0, 50) } : {}),
+        /*
+         * Hors fichiers, la carte montre ce que l'outil recevra (un connecteur,
+         * un événement, une tâche) : le nom de l'outil ne dit pas ce qui part.
+         */
+        ...(!porteeParDossier(outil) && !outil.startsWith("code__") ? { arguments: argumentsLisibles(args) } : {}),
+        ...(tacheEnCours ? { tache: tacheEnCours } : {}),
       },
     },
     surCarte,
   );
 
   const accord = issue === "accord";
-  memoire?.set(cle, { accord, issue });
+  if (!(toujours && accord)) memoire?.set(cle, { accord, issue });
 
   // L'entrée est au nom de qui a répondu ; la personne pour qui l'agent
   // travaillait figure dans le détail. Sans réponse, personne n'a décidé.

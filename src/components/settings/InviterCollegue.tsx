@@ -120,7 +120,7 @@ export function InviterCollegue() {
         >
           {creee.envoye ? (
             <>
-              {t("Invitation envoyée à")}{" "}{creee.email}{t(". Le code vaut sept jours et ne sert qu'une fois. Le mail porte un lien qui la connecte en un clic ; voici le même, si vous préférez le lui transmettre autrement.")}
+              {t("Invitation envoyée à")}{" "}{creee.email}{t(". Le mail porte un lien qui la connecte en un clic, et un code valable sept jours, pour un seul usage. Ils ne s'affichent pas ici : c'est ce qui prouve que la personne lit bien cette adresse.")}
             </>
           ) : (
             <>{creee.motif}{" "}{t("Transmettez-lui ce lien :")}</>
@@ -130,15 +130,17 @@ export function InviterCollegue() {
             collé, il fait la même chose. L'adresse et le code restent dessous,
             parce qu'ils se dictent au téléphone, ce qu'un lien ne fait pas.
           */}
-          <div className="mt-2 space-y-1.5">
-            <ACopier
-              valeur={creee.lien}
-              libelle={t("le lien")}
-              note={t("Un clic suffit si l'application est installée.")}
-            />
-            <ACopier valeur={creee.adresse} libelle={t("l'adresse")} note={t("À saisir à la main.")} />
-            <ACopier valeur={creee.code} libelle={t("le code")} note={t("Sept jours, un seul usage.")} />
-          </div>
+          {creee.lien && creee.code && (
+            <div className="mt-2 space-y-1.5">
+              <ACopier
+                valeur={creee.lien}
+                libelle={t("le lien")}
+                note={t("Un clic suffit si l'application est installée.")}
+              />
+              <ACopier valeur={creee.adresse} libelle={t("l'adresse")} note={t("À saisir à la main.")} />
+              <ACopier valeur={creee.code} libelle={t("le code")} note={t("Sept jours, un seul usage.")} />
+            </div>
+          )}
         </InfoBox>
       )}
 

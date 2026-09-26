@@ -1,4 +1,4 @@
-import { randomBytes } from "node:crypto";
+import { randomBytes, timingSafeEqual } from "node:crypto";
 import { chiffrer, dechiffrer } from "./secret.ts";
 import { db, type StoredCollection } from "./db.ts";
 import { journaliser } from "./audit.ts";
@@ -62,6 +62,8 @@ interface Autorisation {
   verificateur?: unknown;
   /** `state` de l'autorisation en cours : il lie le retour à la demande. */
   etat?: string;
+  /** Quand ce `state` a été tiré : au-delà de dix minutes, le retour n'est plus reçu. */
+  etatLe?: string;
   /** Compte qui a lancé l'autorisation : c'est à lui que le retour appartient. */
   pour?: string;
   /** Adresse de retour telle qu'elle a été enregistrée auprès du service. */
@@ -159,7 +161,7 @@ export class FournisseurAutorisation {
 
   async state(): Promise<string> {
     const etat = randomBytes(24).toString("base64url");
-    await majeur(this.id, { url: this.url, etat, retour: this.retour });
+    await majeur(this.id, { url: this.url, etat, etatLe: new Date().toISOString(), retour: this.retour });
     return etat;
   }
 
@@ -189,6 +191,7 @@ export class FournisseurAutorisation {
       // d'objet, et ce qui n'a plus d'objet ne doit plus être conservé.
       verificateur: undefined,
       etat: undefined,
+      etatLe: undefined,
     });
   }
 
@@ -222,10 +225,32 @@ export class FournisseurAutorisation {
   }
 }
 
+/**
+ * Une autorisation lancée et jamais finie ne reste pas ouverte (revue du
+ * 26/09/2026) : son adresse, retrouvée dans un historique de navigateur,
+ * permettait à quelqu'un d'autre de la terminer avec son propre compte et
+ * d'y brancher le connecteur de toute l'instance. Dix minutes, comme la
+ * connexion d'une boîte mail (courrierOauth.ts).
+ */
+const DUREE_AUTORISATION_MS = 10 * 60_000;
+
+const memeEtat = (a: string, b: string) => {
+  const x = Buffer.from(a);
+  const y = Buffer.from(b);
+  return x.length === y.length && timingSafeEqual(x, y);
+};
+
 /** Retrouve le connecteur dont l'autorisation attend ce `state`. */
 export async function connecteurDuRetour(etat: string): Promise<{ id: string; url: string; retour: string; pour?: string } | null> {
-  const a = (await lire()).find((x) => x.etat && x.etat === etat);
-  return a ? { id: a.id, url: a.url, retour: a.retour ?? "", pour: a.pour } : null;
+  const a = (await lire()).find((x) => x.etat && memeEtat(x.etat, etat));
+  if (!a) return null;
+  // Un `state` sans date vient d'avant cette règle : trop vieux, par prudence.
+  const depuis = a.etatLe ? Date.parse(a.etatLe) : Number.NaN;
+  if (!Number.isFinite(depuis) || Date.now() - depuis > DUREE_AUTORISATION_MS) {
+    await majeur(a.id, { etat: undefined, etatLe: undefined, verificateur: undefined });
+    return null;
+  }
+  return { id: a.id, url: a.url, retour: a.retour ?? "", pour: a.pour };
 }
 
 /**

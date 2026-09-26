@@ -200,13 +200,28 @@ class JsonStore implements Store {
     return join(this.dir, `${collection}.json`);
   }
 
+  /**
+   * « Jamais écrit » et « illisible » ne se confondent pas (revue de sécurité
+   * du 26/09/2026) : un fichier présent qu'on ne sait pas lire (droits,
+   * disque, fichier tronqué) rendait `null`, comme une collection vide, et la
+   * prochaine écriture d'un poste effaçait tout ce qu'il ne contenait pas
+   * (les Chats des autres, les comptes, les employés). Seul un fichier absent
+   * vaut « rien » ; le reste lève, et personne n'écrit par-dessus ce qu'on n'a
+   * pas pu lire (règle du projet, pertes du 20/09 et du 24/09).
+   */
   private load(collection: StoredCollection): Envelope {
     const file = this.path(collection);
-    if (!existsSync(file)) return { value: null, revision: 0 };
+    let texte: string;
     try {
-      return JSON.parse(readFileSync(file, "utf8")) as Envelope;
+      texte = readFileSync(file, "utf8");
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === "ENOENT") return { value: null, revision: 0 };
+      throw new Error(`collection « ${collection} » illisible (${(err as NodeJS.ErrnoException).code ?? "erreur"}) : rien n'est écrit par-dessus`);
+    }
+    try {
+      return JSON.parse(texte) as Envelope;
     } catch {
-      return { value: null, revision: 0 };
+      throw new Error(`collection « ${collection} » abîmée (JSON illisible) : rien n'est écrit par-dessus`);
     }
   }
 
@@ -372,7 +387,14 @@ export async function migrerChiffrement(): Promise<{ reecrites: StoredCollection
   if (!chiffrementActif()) return { reecrites };
   const magasin = db();
   for (const collection of [...COLLECTIONS, ...COLLECTIONS_INTERNES]) {
-    const brut = await magasin.readRaw(collection);
+    let brut: unknown;
+    try {
+      brut = await magasin.readRaw(collection);
+    } catch (err) {
+      // Illisible : on la laisse telle quelle, sans bloquer le démarrage ; ce qui la lira le dira.
+      console.error("[db]", err instanceof Error ? err.message : err);
+      continue;
+    }
     if (brut === null || brut === undefined || estChiffreLie(brut)) continue;
     await magasin.write(collection, await magasin.read(collection));
     reecrites.push(collection);

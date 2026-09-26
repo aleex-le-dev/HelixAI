@@ -1,11 +1,11 @@
 import { randomBytes } from "node:crypto";
-import { lookup } from "node:dns/promises";
 import { db } from "./db.ts";
 import { brancherBackendsSupplementaires } from "./config.ts";
 import { invalidate } from "./router.ts";
 import { journaliser } from "./audit.ts";
 import type { BackendConfig } from "./types.ts";
 import { t, tf } from "./langue.ts";
+import { adresseSortanteSure } from "./sortieReseau.ts";
 
 /**
  * Modèles cloud branchés par une clé, depuis l'interface.
@@ -176,68 +176,7 @@ const PAS_DE_CONVERSATION =
 
 export type Resultat<T> = { ok: true; valeur: T } | { ok: false; statut: number; message: string };
 
-/**
- * Une adresse IP appartient-elle au réseau interne de la machine ?
- *
- * Sert à refuser les cibles qu'une séance n'a rien à faire d'atteindre par
- * l'intermédiaire de l'instance : le réseau local de l'entreprise, les
- * métadonnées d'hébergeur (169.254.169.254), les adresses de service.
- */
-function interne(ip: string): boolean {
-  const v4 = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(ip.replace(/^::ffff:/i, ""));
-  if (v4) {
-    const [a, b] = [Number(v4[1]), Number(v4[2])];
-    if (a === 10 || a === 127 || a === 0) return true;
-    if (a === 172 && b >= 16 && b <= 31) return true;
-    if (a === 192 && b === 168) return true;
-    if (a === 169 && b === 254) return true;
-    if (a === 100 && b >= 64 && b <= 127) return true; // CGNAT
-    return false;
-  }
-  const v6 = ip.toLowerCase();
-  return v6 === "::1" || v6 === "::" || v6.startsWith("fc") || v6.startsWith("fd") || v6.startsWith("fe80");
-}
 
-const boucleLocale = (hote: string): boolean =>
-  hote === "localhost" || hote === "127.0.0.1" || hote === "::1" || hote === "[::1]";
-
-/**
- * Vérifie qu'une adresse d'API n'est pas une porte vers le réseau interne.
- *
- * Avec le fournisseur « compatible », c'est la personne qui choisit l'hôte, et
- * c'est l'instance qui se connecte : sans ce contrôle, toute séance faisait
- * balayer le réseau de l'entreprise par le serveur, et lisait le résultat dans
- * la réponse. La boucle locale reste admise, et seulement elle : c'est le cas
- * d'un moteur de modèles installé sur la machine (LM Studio, Ollama), qui est
- * la raison d'être du fournisseur « compatible ».
- */
-async function adresseSortanteSure(brute: string): Promise<Resultat<true>> {
-  let url: URL;
-  try {
-    url = new URL(brute);
-  } catch {
-    return { ok: false, statut: 400, message: t("Adresse invalide.") };
-  }
-  const hote = url.hostname.toLowerCase();
-  if (boucleLocale(hote)) return { ok: true, valeur: true };
-
-  let adresses: { address: string }[] = [];
-  try {
-    adresses = await lookup(hote, { all: true });
-  } catch {
-    return { ok: false, statut: 400, message: tf("Nom introuvable : {0}.", hote) };
-  }
-  if (adresses.some((a) => interne(a.address))) {
-    return {
-      ok: false,
-      statut: 400,
-      message:
-        "Cette adresse désigne une machine du réseau interne. Donnez l'adresse publique du " +
-        "fournisseur, ou celle d'un moteur installé sur cette machine (localhost).",
-    };
-  }
-  return { ok: true, valeur: true };
-}
 
 function adresseDe(fournisseur: string, adresse: unknown): Resultat<Fournisseur> {
   const f = CATALOGUE.find((x) => x.id === fournisseur);

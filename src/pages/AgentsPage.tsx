@@ -644,17 +644,18 @@ function AgentModal({
             </div>
           )}
 
+          {/*
+            « Masquer le prompt aux non-administrateurs » retiré le 26/09/2026
+            (revue de sécurité) : rien ne le faisait respecter. Les
+            instructions d'un agent partagé partent vers chaque poste qui s'en
+            sert, parce que c'est le poste qui les donne au modèle. Les cacher
+            vraiment demande que l'instance les ajoute elle-même au Chat
+            (PROJET.md, à faire). L'écran ne promet pas ce qui n'existe pas.
+          */}
           {visibility !== "personnel" && (
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-foreground">
-                {t("Masquer le prompt aux non-administrateurs")}
-              </span>
-              <Switch
-                checked={hidePrompt}
-                onChange={setHidePrompt}
-                label={t("Masquer le prompt aux non-administrateurs")}
-              />
-            </div>
+            <p className="text-xs text-muted-foreground">
+              {t("Les instructions d'un agent partagé sont lisibles par celles et ceux à qui il est partagé.")}
+            </p>
           )}
         </div>
       </div>

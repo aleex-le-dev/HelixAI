@@ -1,7 +1,7 @@
-import { execFile, execFileSync } from "node:child_process";
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
+import { execFileSync, spawn } from "node:child_process";
+import { copyFileSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { delimiter, dirname, join, relative } from "node:path";
+import { delimiter, dirname, join, relative, sep } from "node:path";
 
 /**
  * Les tests du projet, lancés pour de vrai, mais dans une cage.
@@ -24,6 +24,30 @@ import { delimiter, dirname, join, relative } from "node:path";
  *  - un environnement vide (seulement PATH, HOME dans la copie, la langue),
  *    une limite de temps, une sortie tronquée.
  * Hors macOS, pas de cage connue : aucun essai, et c'est dit.
+ *
+ * Revue de sécurité du 26/09/2026 (agents d'audit, chaque point reproduit
+ * avec de faux secrets puis corrigé et revérifié) :
+ *  - un lien symbolique du projet était suivi à la copie : `k -> ~/.ssh/id_…`
+ *    faisait entrer la clé dans la cage, et la sortie du test la rendait au
+ *    modèle. Les liens ne sont plus copiés ;
+ *  - un `node_modules` qui était un lien vers `../..` ouvrait en lecture tout
+ *    le dossier personnel. Un dossier de dépendances n'est lu en place que
+ *    s'il est vraiment dans le projet ;
+ *  - tous les services du système étaient joignables (`mach-lookup` sans
+ *    filtre) : ouvrir une application, lire le presse-papiers, piloter une
+ *    autre application. Seuls restent ceux dont Node et Python ont besoin
+ *    (annuaire des comptes, journal, notifications), et les Apple Events sont
+ *    refusés ; vérifié : `pbpaste`, `open`, un ordre au Finder ou à System
+ *    Events échouent, `node --test` et `unittest` passent ;
+ *  - `/opt/homebrew` et `/usr/local` étaient lisibles en entier, `var/`
+ *    compris (les fichiers de PostgreSQL) : seuls les dossiers d'outils
+ *    restent (bin, lib, Cellar, opt, share…) ;
+ *  - les métadonnées de tout le disque étaient lisibles (existence et taille
+ *    de ~/.ssh/…) : seulement celles de ce qui est lisible, et des dossiers
+ *    qui y mènent ;
+ *  - la limite de temps n'arrêtait que le premier processus : ce qu'il avait
+ *    lancé continuait après l'essai. Le test tourne dans son propre groupe de
+ *    processus, arrêté en entier à la fin, dans tous les cas.
  */
 
 const DUREE_MAX_MS = 90_000;
@@ -55,19 +79,39 @@ function trouver(nom: string, preferes: string[] = []): string | null {
 
 const guillemets = (s: string) => `"${s.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
 
-function profil(copie: string, lectures: string[]): string {
-  const lus = [...new Set(lectures)].map((d) => `(subpath ${guillemets(d)})`).join(" ");
+/** Les dossiers d'outils de Homebrew : pas `var/` ni `etc/`, qui gardent les données des services (PostgreSQL…). */
+const OUTILS_HOMEBREW = ["/opt/homebrew", "/usr/local"].flatMap((p) => ["bin", "sbin", "lib", "libexec", "Cellar", "opt", "share", "Frameworks", "include"].map((d) => `${p}/${d}`));
+const SYSTEME = ["/usr", "/bin", "/sbin", "/System", "/Library", "/private/etc", "/private/var/db", "/dev", "/Applications/Xcode.app"];
+/** Les seuls services du système joignables : l'annuaire des comptes (getpwuid), le journal, les notifications. */
+const SERVICES = [
+  "com.apple.system.opendirectoryd.libinfo",
+  "com.apple.system.opendirectoryd.membership",
+  "com.apple.system.DirectoryService.libinfo_v1",
+  "com.apple.system.DirectoryService.membership_v1",
+  "com.apple.system.notification_center",
+  "com.apple.system.logger",
+  "com.apple.logd",
+  "com.apple.diagnosticd",
+];
+
+export function profil(copie: string, lectures: string[]): string {
+  const lisibles = [...new Set([...SYSTEME, ...OUTILS_HOMEBREW, ...lectures, copie])];
+  // Pour atteindre un chemin, il faut lire les métadonnées des dossiers qui y mènent, et rien de plus.
+  const chemins = new Set(["/", "/private", "/var", "/tmp", "/etc", "/private/var", "/private/tmp", "/opt", "/usr/local"]);
+  for (const p of lisibles) for (let d = dirname(p); d !== "/" && !chemins.has(d); d = dirname(d)) chemins.add(d);
+  const sous = lisibles.map((d) => `(subpath ${guillemets(d)})`).join(" ");
   return `(version 1)
 (deny default)
 (allow process-exec*)
 (allow process-fork)
-(allow signal (target self))
+(allow signal (target same-sandbox))
 (allow sysctl-read)
-(allow mach-lookup)
+(allow mach-lookup ${SERVICES.map((m) => `(global-name ${guillemets(m)})`).join(" ")})
 (allow ipc-posix-shm-read-data)
-(allow file-read-metadata)
-(allow file-read* (literal "/") (subpath "/usr") (subpath "/bin") (subpath "/sbin") (subpath "/System") (subpath "/Library") (subpath "/opt/homebrew") (subpath "/usr/local") (subpath "/private/etc") (subpath "/private/var/db") (subpath "/dev") (subpath "/Applications/Xcode.app") ${lus} (subpath ${guillemets(copie)}))
+(allow file-read-metadata ${[...chemins].map((d) => `(literal ${guillemets(d)})`).join(" ")} ${sous})
+(allow file-read* (literal "/") ${sous})
 (allow file-write* (subpath ${guillemets(copie)}) (literal "/dev/null") (literal "/dev/tty"))
+(deny appleevent-send)
 (deny network*)
 `;
 }
@@ -77,6 +121,8 @@ function copier(dossier: string, copie: string): { lectures: string[] } {
   let fichiers = 0;
   let octets = 0;
   const lectures: string[] = [];
+  const racine = realpathSync(dossier);
+  const dansLeProjet = (p: string) => p === racine || p.startsWith(racine + sep);
   const parcourir = (source: string, cible: string) => {
     let noms: string[] = [];
     try {
@@ -89,16 +135,20 @@ function copier(dossier: string, copie: string): { lectures: string[] } {
       const c = join(cible, nom);
       let st;
       try {
-        st = statSync(s);
+        // `lstat` : un lien symbolique n'est jamais suivi à la copie (il pouvait pointer vers ~/.ssh).
+        st = lstatSync(s);
       } catch {
         continue;
       }
       if (IGNORES.test(nom)) {
-        // Les dépendances installées sont lues en place (lecture seule) : un lien dans la copie.
+        // Les dépendances installées sont lues en place (lecture seule) : un lien dans la copie. Seulement un vrai dossier du projet.
         if (st.isDirectory() && (nom === "node_modules" || /venv$/.test(nom))) {
           try {
-            symlinkSync(realpathSync(s), c);
-            lectures.push(realpathSync(s));
+            const reel = realpathSync(s);
+            if (dansLeProjet(reel)) {
+              symlinkSync(reel, c);
+              lectures.push(reel);
+            }
           } catch {}
         }
         continue;
@@ -199,15 +249,35 @@ export async function essayerTests(dossier: string): Promise<ResultatEssai | { s
       npm_config_update_notifier: "false",
     };
     const r = await new Promise<{ code: number | null; sortie: string }>((resolve) => {
-      execFile(
-        "/usr/bin/sandbox-exec",
-        ["-f", fichierProfil, commande.exe, ...commande.args],
-        { cwd: copie, env, timeout: DUREE_MAX_MS, maxBuffer: 4_000_000, killSignal: "SIGKILL" },
-        (err, stdout, stderr) => {
-          const code = err && typeof (err as { code?: unknown }).code === "number" ? ((err as { code: number }).code) : err ? null : 0;
-          resolve({ code, sortie: `${stdout ?? ""}${stderr ? `\n${stderr}` : ""}` });
-        },
-      );
+      // Son propre groupe de processus (`detached`) : tout ce que le test lance s'arrête avec lui.
+      const enfant = spawn("/usr/bin/sandbox-exec", ["-f", fichierProfil, commande.exe, ...commande.args], { cwd: copie, env, detached: true, stdio: ["ignore", "pipe", "pipe"] });
+      const morceaux: Buffer[] = [];
+      let taille = 0;
+      const garder = (b: Buffer) => {
+        if (taille > 4_000_000) return;
+        taille += b.length;
+        morceaux.push(b);
+      };
+      enfant.stdout.on("data", garder);
+      enfant.stderr.on("data", garder);
+      const arreterGroupe = () => {
+        try {
+          if (enfant.pid) process.kill(-enfant.pid, "SIGKILL");
+        } catch {}
+      };
+      let hors = false;
+      const minuterie = setTimeout(() => {
+        hors = true;
+        arreterGroupe();
+      }, DUREE_MAX_MS);
+      const fin = (code: number | null) => {
+        clearTimeout(minuterie);
+        // Même quand le test a fini : ce qu'il a laissé tourner derrière lui s'arrête aussi.
+        arreterGroupe();
+        resolve({ code: hors ? null : code, sortie: Buffer.concat(morceaux).toString("utf8") });
+      };
+      enfant.once("error", () => fin(null));
+      enfant.once("close", (code) => fin(code));
     });
     const dureeMs = Date.now() - debut;
     const propre = r.sortie.split(copie).join(".").replace(/\u001b\[[0-9;]*m/g, "").trim();

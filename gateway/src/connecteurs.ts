@@ -1,3 +1,6 @@
+import { chmodSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
 import { chiffrer, dechiffrer, chiffrementActif } from "./secret.ts";
 import { db, type StoredCollection } from "./db.ts";
 import { deployment } from "./deployment.ts";
@@ -589,6 +592,12 @@ interface ConnecteurEnregistre {
  * une fois au démarrage par `charger()`.
  */
 let enMemoire: ConnecteurEnregistre[] = [];
+/**
+ * La liste n'a pas pu être lue : plus rien ne s'écrit tant qu'elle ne l'est
+ * pas. Sans cela, ajouter un connecteur écrivait `[nouveau]` par-dessus tous
+ * les autres et leurs secrets (revue du 26/09/2026, règle du projet).
+ */
+let listeIllisible = false;
 let chargement: Promise<void> | null = null;
 
 async function lire(): Promise<ConnecteurEnregistre[]> {
@@ -623,7 +632,38 @@ function environnement(c: ConnecteurEnregistre): Record<string, string> {
     const clair = dechiffrer(coffre, placeDuSecret(c.id, nom));
     if (typeof clair === "string") env[nom] = clair;
   }
+  if (c.id === "kubernetes" && env.KUBECONFIG) env.KUBECONFIG = kubeconfigVerifie(env.KUBECONFIG);
   return env;
+}
+
+/**
+ * Un kubeconfig peut déclarer une commande (`users[].user.exec`, ou un
+ * `auth-provider`) que la bibliothèque de Kubernetes lance d'elle-même au
+ * premier appel. Revue de sécurité du 26/09/2026 : le champ était un chemin
+ * libre, et un fichier écrit par l'agent dans l'espace de travail suffisait à
+ * faire lancer n'importe quelle commande par l'instance (vérifié sur la
+ * version épinglée). Le fichier est relu à chaque démarrage, refusé s'il
+ * déclare une commande, et c'est une COPIE, gardée à part et lisible par
+ * l'instance seule, que le serveur reçoit : changer l'original ensuite n'y
+ * fait rien.
+ */
+function kubeconfigVerifie(chemin: string): string {
+  let texte: string;
+  try {
+    if (statSync(chemin).size > 1_000_000) throw new Error("trop gros");
+    texte = readFileSync(chemin, "utf8");
+  } catch (err) {
+    throw new Error(tf("kubeconfig illisible ({0}) : {1}", chemin, err instanceof Error ? err.message : String(err)));
+  }
+  if (/^\s*-?\s*["']?(exec|auth-provider)["']?\s*:/m.test(texte) || /"(exec|auth-provider)"\s*:/.test(texte)) {
+    throw new Error(t("Ce kubeconfig déclare une commande à lancer (« exec » ou « auth-provider ») : refusé. Utilisez un compte de service avec un jeton ou un certificat."));
+  }
+  const dossier = join(process.env.HELIX_DATA_DIR ?? join(homedir(), ".helix", "data"), "kubeconfig");
+  mkdirSync(dossier, { recursive: true, mode: 0o700 });
+  const copie = join(dossier, "kubernetes.yaml");
+  writeFileSync(copie, texte, { mode: 0o600 });
+  chmodSync(copie, 0o600);
+  return copie;
 }
 
 /*
@@ -647,8 +687,32 @@ const DERNIERES_VERSIONS: Record<string, string> = {
 /** Un nom de paquet npm sans version (« @portee/nom » ou « nom »). */
 const sansVersion = (a: string) => /^(@[a-z0-9._-]+\/)?[a-z0-9._-]+$/i.test(a);
 export function aligner(c: ConnecteurEnregistre): ConnecteurEnregistre {
-  if (c.url || c.command !== "npx") return c;
   const e = CATALOGUE.find((x) => x.id === c.id);
+  /*
+   * Hors régime libre, un connecteur local lance la commande du catalogue, et
+   * elle seule, relue ici à chaque démarrage (revue du 26/09/2026) : le
+   * chiffrement au repos accepte encore une valeur en clair (migration), et
+   * qui pouvait écrire dans la base (l'hôte PostgreSQL, que SECURITE.md § 3
+   * compte parmi les menaces) y aurait glissé `{command: "/bin/sh", …}`, lancé
+   * au démarrage suivant. Une adresse distante n'exécute rien ici.
+   */
+  if (!c.url && !commandeLibreAutorisee()) {
+    if (e?.command) return { ...c, command: e.command, args: [...(e.args ?? [])], libre: false };
+    /*
+     * Retiré du catalogue le 26/09/2026 mais encore installé ici : seulement
+     * `npx -y` et son paquet connu, à sa dernière version publiée, plus des
+     * arguments de position (une adresse, un dossier), jamais une option.
+     */
+    const args = c.args ?? [];
+    const paquet = args.find((a) => DERNIERES_VERSIONS[a.replace(/(?<=.)@[^@/]+$/, "")]);
+    const nom = paquet?.replace(/(?<=.)@[^@/]+$/, "");
+    const autres = args.filter((a) => a !== "-y" && a !== paquet);
+    if (c.command !== "npx" || !nom || autres.some((a) => a.startsWith("-"))) {
+      throw new Error(tf("connecteur « {0} » hors catalogue, ignoré (les connecteurs libres ne sont pas autorisés sur cette instance)", c.id));
+    }
+    return { ...c, command: "npx", args: ["-y", `${nom}@${DERNIERES_VERSIONS[nom]}`, ...autres], libre: false };
+  }
+  if (c.url || c.command !== "npx") return c;
   if (e?.command === "npx" && e.args) return { ...c, args: [...e.args] };
   const args = (c.args ?? []).map((a) => (sansVersion(a) && DERNIERES_VERSIONS[a] ? `${a}@${DERNIERES_VERSIONS[a]}` : a));
   return { ...c, args };
@@ -721,8 +785,10 @@ export async function charger(): Promise<void> {
         err instanceof Error ? err.message : err,
       );
       enMemoire = [];
+      listeIllisible = true;
       return;
     }
+    listeIllisible = false;
     for (const c of enMemoire) {
       try {
         declarer(versConfig(c));
@@ -738,6 +804,7 @@ export async function charger(): Promise<void> {
 }
 
 async function ecrire(liste: ConnecteurEnregistre[]): Promise<void> {
+  if (listeIllisible) throw new Error(t("La liste des connecteurs n'a pas pu être lue : rien n'est modifié tant qu'elle ne l'est pas. Redémarrez l'application ; si cela persiste, le trousseau ou la clé de chiffrement est en cause."));
   enMemoire = liste;
   await db().write(COLLECTION, liste);
 }
@@ -844,7 +911,13 @@ const ID_VALIDE = /^[a-z0-9][a-z0-9_-]{0,31}$/;
  * leur classement « lecture seule » dans la barrière d'approbation, ou leur
  * place dans la puce « Outils ». Ils sont donc refusés à l'ajout.
  */
-const IDS_RESERVES = new Set(["courrier", "agenda", "drive", "slack", "bureau", "ecran", "bibliotheque", "reunions", "controle"]);
+/*
+ * Les préfixes des outils intégrés : un connecteur qui en prendrait un
+ * hériterait de leur traitement par la barrière (approbation.ts, `modifie`).
+ * `code`, `connaissances` et `taches` manquaient (revue du 26/09/2026) : un
+ * connecteur libre nommé « code » voyait son outil `read` passer sans carte.
+ */
+const IDS_RESERVES = new Set(["courrier", "agenda", "drive", "slack", "bureau", "ecran", "bibliotheque", "reunions", "controle", "code", "connaissances", "taches", "machine", "helix"]);
 
 /**
  * Ce que la requête a le droit d'apporter, selon le régime de l'instance.

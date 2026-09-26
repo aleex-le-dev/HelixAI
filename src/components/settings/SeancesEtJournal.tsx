@@ -55,6 +55,7 @@ const LIBELLES: Record<string, string> = {
   "outil.demande": t("Autorisation d'outil demandée"),
   "outil.approuve": t("Outil autorisé"),
   "outil.refuse": t("Outil refusé"),
+  "reglage.refuse": t("Réglage de l'instance refusé (réservé à l'administrateur)"),
   "approbation.niveau": t("Niveau d'approbation modifié"),
   "connecteur.ajoute": t("Connecteur ajouté"),
   "connecteur.retire": t("Connecteur retiré"),

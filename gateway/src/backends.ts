@@ -1,3 +1,4 @@
+import { redirectionPour, refusSortie } from "./sortieReseau.ts";
 import { execFile, execFileSync } from "node:child_process";
 import { promisify } from "node:util";
 import { homedir, totalmem } from "node:os";
@@ -117,11 +118,13 @@ async function fetchJson(
   apiKey?: string,
   timeoutMs = 4000,
   entetes: Record<string, string> = {},
+  redirect: "error" | "follow" = "follow",
 ): Promise<unknown> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const res = await fetch(url, {
+      redirect,
       signal: controller.signal,
       headers: { ...entetes, ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}) },
     });
@@ -272,11 +275,14 @@ export async function discover(): Promise<Discovery> {
       try {
         // Un fournisseur cloud répond moins vite qu'un serveur local, et rend des centaines de modèles.
         const distant = backend.origine === "agence" || backend.origine === "cle";
+        const refus = await refusSortie(backend);
+        if (refus) throw new Error(refus);
         const payload = (await fetchJson(
           `${backend.baseUrl}/models`,
           backend.apiKey,
           distant ? 8000 : 4000,
           backend.entetes,
+          redirectionPour(backend),
         )) as {
           data?: { id: string }[];
         };
@@ -583,6 +589,13 @@ export async function loadModel(modelKey: string): Promise<{ ok: boolean; messag
    * on s'abstient aussi : mieux vaut que la demande échoue et le dise qu'une
    * copie de plusieurs gigaoctets qui fait tomber tout le reste.
    */
+  /*
+   * Un nom qui commence par « - » serait lu par `lms` comme une option (revue
+   * du 26/09/2026) ; et rien d'autre qu'un nom de modèle n'a à passer ici.
+   */
+  if (!/^[A-Za-z0-9@_./:+-]{1,300}$/.test(modelKey) || modelKey.startsWith("-")) {
+    return { ok: false, message: t("Nom de modèle invalide.") };
+  }
   let enMemoire: LmsModelEntry[] | null = null;
   try {
     const { stdout } = await exec(lms, ["ps", "--json"], { timeout: 15_000 });

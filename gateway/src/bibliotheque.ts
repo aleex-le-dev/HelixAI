@@ -526,11 +526,21 @@ export async function idsDocuments(): Promise<string[]> {
 }
 
 /** Chemin lisible d'un élément (« Clients / Dupont »), pour les agents. */
-export async function cheminDe(id: string): Promise<string> {
+/**
+ * Le chemin d'un élément, tel que `qui` peut le voir : on s'arrête au premier
+ * dossier qu'il ne voit pas (revue du 26/09/2026 : le nom de dossiers privés
+ * d'un collègue sortait par la recherche et par la liste des documents des
+ * bases de connaissances). Au-delà, « … ».
+ */
+export async function cheminDe(id: string, qui: Qui): Promise<string> {
   const liste = await charger();
   const parId = new Map(liste.map((e) => [e.id, e]));
   const noms: string[] = [];
   for (let p = parId.get(id)?.parentId ? parId.get(parId.get(id)!.parentId!) : undefined; p && noms.length < 20; p = p.parentId ? parId.get(p.parentId) : undefined) {
+    if (!peutVoir(p, qui)) {
+      noms.unshift("…");
+      break;
+    }
     noms.unshift(p.nom);
   }
   return noms.join(" / ");
@@ -677,7 +687,7 @@ export async function callTool(nom: string, args: Record<string, unknown>, qui: 
     }
     const lignes = await Promise.all(
       trouves.slice(0, combien).map(async ({ e, extrait, position, longueur }) => {
-        const ou = await cheminDe(e.id);
+        const ou = await cheminDe(e.id, qui);
         return [
           `Identifiant : ${e.id}`,
           `Nom : ${e.nom}`,

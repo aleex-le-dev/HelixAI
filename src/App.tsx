@@ -155,8 +155,19 @@ export default function App() {
    * face à une application qui affiche son nom et refuse tout.
    */
   useEffect(() => {
+    /*
+     * On recharge la fenêtre (revue du 26/09/2026) : la synchronisation garde
+     * en mémoire ce qu'elle a déjà relu de l'instance. Sans rechargement, la
+     * personne suivante qui se connectait sur ce poste repartait sur cet état,
+     * sans relire, et son premier envoi poussait la copie de la précédente :
+     * l'instance effaçait alors ce qui, à elle, n'y figurait pas. Rechargée,
+     * la synchronisation relit tout avant d'écrire quoi que ce soit.
+     */
     const expiree = () => {
-      clearCurrentUser().finally(() => setSignedIn(false));
+      clearCurrentUser().finally(() => {
+        setSignedIn(false);
+        window.location.reload();
+      });
     };
     window.addEventListener(SEANCE_EXPIREE, expiree);
     return () => window.removeEventListener(SEANCE_EXPIREE, expiree);

@@ -306,7 +306,7 @@ interface RapportRendu {
 }
 
 /** Essaie une page dans le navigateur de l'application ; `null` si l'application ne le prête pas (passerelle seule). */
-async function essayerPage(fichier: string): Promise<RapportRendu | null> {
+async function essayerPage(fichier: string, racine: string): Promise<RapportRendu | null> {
   const url = process.env.HELIX_RENDU_URL;
   const cle = process.env.HELIX_RENDU_CLE;
   if (!url || !cle) return null;
@@ -314,7 +314,8 @@ async function essayerPage(fichier: string): Promise<RapportRendu | null> {
     const r = await fetch(`${url}/rendre`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "X-Helix-Cle": cle },
-      body: JSON.stringify({ fichier }),
+      // La racine du projet : la page n'est servie que depuis là (electron/rendu.cjs).
+      body: JSON.stringify({ fichier, racine }),
       signal: AbortSignal.timeout(40_000),
     });
     return r.ok ? ((await r.json()) as RapportRendu) : null;
@@ -425,7 +426,7 @@ export async function controlerTourCode(
   // Pas d'essai réel d'une page dont le script ne compile pas : l'erreur est déjà dite.
   if (!problemes.some((x) => /syntaxe|compile|SyntaxError/i.test(x))) {
     for (const page of pages.slice(0, PAGES_ESSAYEES_MAX)) {
-      const r = await essayerPage(page);
+      const r = await essayerPage(page, dossier);
       if (!r) break;
       essaiReel = true;
       pagesEssayees++;

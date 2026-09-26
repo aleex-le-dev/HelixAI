@@ -2617,7 +2617,8 @@ export async function accepterDemande(id: string, canal: string, code: string, q
   const r = await employeDuProprietaire(id, qui);
   if (!r.ok) return r;
   if (!(r.valeur.e.canaux ?? []).some((c) => c.type === canal)) return { ok: false, statut: 404, message: t("Canal introuvable.") };
-  if (!/^[A-Za-z0-9-]{3,32}$/.test(code)) return { ok: false, statut: 400, message: t("Code invalide.") };
+  // Premier caractère alphanumérique : « --account » aurait été lu comme une option d'OpenClaw.
+  if (!/^[A-Za-z0-9][A-Za-z0-9-]{2,31}$/.test(code)) return { ok: false, statut: 400, message: t("Code invalide.") };
   const s = await oc(["pairing", "approve", "--channel", canal, "--account", id, code, "--notify"]);
   if (!s.ok) return { ok: false, statut: 400, message: t("Ce code n'est plus valable (une demande expire au bout d'une heure).") };
   journaliser("employe.acces_accepte", qui, { employe: id, canal });

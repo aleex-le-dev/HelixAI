@@ -47,7 +47,14 @@ export async function estAdministrateur(accountId: string): Promise<boolean> {
   if (!compte) return false;
 
   const liste = declarees();
-  if (liste.length > 0) return liste.includes(normalise(compte.email));
+  /*
+   * Une adresse que la personne s'est déclarée elle-même (changement de
+   * profil, que rien ne vérifie) ne donne pas le rôle (revue du 26/09/2026) :
+   * il suffisait de prendre l'adresse d'un administrateur qui n'avait pas
+   * encore de compte pour lire tout le journal et régler l'instance. Même
+   * règle que pour les partages (`adresseDePartage`, accounts.ts).
+   */
+  if (liste.length > 0) return !compte.adresseDeclareeLe && liste.includes(normalise(compte.email));
 
   /*
    * Aucun profil : le compte le plus ancien. `createdAt` est posé à la

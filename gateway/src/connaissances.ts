@@ -436,7 +436,7 @@ export async function documentsDisponibles(qui: Qui) {
     docs
       .sort((a, b) => a.nom.localeCompare(b.nom, "fr", { numeric: true }))
       .slice(0, 5_000)
-      .map(async (e) => ({ id: e.id, nom: e.nom, dossier: await bibliotheque.cheminDe(e.id), aTexte: Boolean(e.aTexte), taille: e.taille ?? 0 })),
+      .map(async (e) => ({ id: e.id, nom: e.nom, dossier: await bibliotheque.cheminDe(e.id, qui), aTexte: Boolean(e.aTexte), taille: e.taille ?? 0 })),
   );
 }
 

@@ -187,6 +187,14 @@ export interface DemandeApprobation {
     url?: string;
     /** Le mail tel qu'il partira, pour un envoi : destinataires résolus, objet, texte entier. */
     envoi?: { a: string; cc: string; objet: string; corps: string; enReponse: boolean };
+    /** L'accord ne vaut que pour cet appel (hors fichiers, ou toujours confirmé). */
+    unique?: boolean;
+    /** Tous les fichiers visés, quand il y en a plusieurs. */
+    cibles?: string[];
+    /** Ce que l'outil recevra, hors fichiers (connecteur, événement, tâche), éventuellement tronqué et dit. */
+    arguments?: string;
+    /** La tâche programmée qui demande, quand ce n'est pas le Chat ouvert. */
+    tache?: string;
   };
   createdAt: number;
 }
@@ -196,6 +204,8 @@ export interface EtatApprobation {
   /** Délai au bout duquel une demande sans réponse est refusée. */
   delaiMs: number;
   enAttente: DemandeApprobation[];
+  /** Cette personne peut-elle changer le niveau ? L'administrateur seul : il vaut pour toute l'instance. */
+  modifiable?: boolean;
 }
 
 export async function fetchApprobation(): Promise<EtatApprobation> {

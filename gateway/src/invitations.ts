@@ -125,13 +125,16 @@ export async function inviter(
   nomInvitant: string,
   adresseInstance: string,
   autresAdresses: string[] = [],
+  /** L'administrateur peut remplacer l'invitation d'un collègue ; les autres, seulement la leur. */
+  administrateur = false,
 ): Promise<
   Resultat<{
-    code: string;
+    /** Absent quand le mail est parti : le code est alors la preuve que la personne lit cette adresse. */
+    code?: string;
     email: string;
     expire: string;
     envoye: boolean;
-    lien: string;
+    lien?: string;
     motif?: string;
   }>
 > {
@@ -141,6 +144,16 @@ export async function inviter(
   }
 
   const liste = await lire();
+  /*
+   * L'invitation d'un collègue ne se remplace pas par la sienne (revue du
+   * 26/09/2026) : cela annulait son code et en donnait un neuf à qui voulait
+   * ouvrir le compte de l'invitée à sa place, et hériter de ce qu'on lui avait
+   * partagé.
+   */
+  const enCours = liste.find((i) => i.email === email && !i.utiliseeLe && i.expire > Date.now());
+  if (enCours && enCours.parQui !== parQui && !administrateur) {
+    return { ok: false, statut: 409, message: t("Un collègue a déjà invité cette adresse : son invitation est en attente. Demandez-lui, ou à l'administrateur, de la renvoyer.") };
+  }
   const code = tirerCode();
   const expire = Date.now() + DUREE_MS;
 
@@ -186,11 +199,17 @@ export async function inviter(
   return {
     ok: true,
     valeur: {
-      code,
+      /*
+       * Le mail est parti : le code et le lien restent dans la boîte de
+       * l'invitée, pas dans l'écran de qui l'invite (revue du 26/09/2026).
+       * Sinon l'invitant pouvait ouvrir le compte lui-même, avec un mot de
+       * passe de son choix, et le mail ne prouvait plus rien. Sans mail, il
+       * faut bien les lui remettre : c'est lui qui les transmet.
+       */
+      ...(envoye ? {} : { code, lien: lienDInvitation(adresseInstance, code) }),
       email,
       expire: new Date(expire).toISOString(),
       envoye,
-      lien: lienDInvitation(adresseInstance, code),
       ...(motif ? { motif } : {}),
     },
   };
@@ -326,18 +345,20 @@ export async function consommer(codeBrut: unknown): Promise<Resultat<{ email: st
 }
 
 /** Invitations en attente, pour l'écran qui les affiche. Jamais les codes. */
-export async function enAttente(): Promise<{ email: string; creeLe: string; expire: string }[]> {
+/** Les invitations en attente que cette personne a envoyées ; toutes, pour l'administrateur. */
+export async function enAttente(qui: string, administrateur: boolean): Promise<{ email: string; creeLe: string; expire: string }[]> {
   const maintenant = Date.now();
   return (await lire())
-    .filter((i) => !i.utiliseeLe && i.expire > maintenant)
+    .filter((i) => !i.utiliseeLe && i.expire > maintenant && (administrateur || i.parQui === qui))
     .map((i) => ({ email: i.email, creeLe: i.creeLe, expire: new Date(i.expire).toISOString() }));
 }
 
 /** Annule une invitation en attente : le code cesse aussitôt de valoir. */
-export async function annuler(emailBrut: unknown, qui: string): Promise<Resultat<null>> {
+export async function annuler(emailBrut: unknown, qui: string, administrateur = false): Promise<Resultat<null>> {
   const email = normalise(emailBrut);
   const liste = await lire();
-  const suite = liste.filter((i) => i.email !== email || i.utiliseeLe);
+  // Seulement la sienne (l'administrateur : toutes).
+  const suite = liste.filter((i) => i.email !== email || i.utiliseeLe || (!administrateur && i.parQui !== qui));
   if (suite.length === liste.length) {
     return { ok: false, statut: 404, message: t("Aucune invitation en attente pour cette adresse.") };
   }

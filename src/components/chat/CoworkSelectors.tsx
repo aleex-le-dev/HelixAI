@@ -95,7 +95,8 @@ const NIVEAUX: {
 
 export function ApprovalSelector() {
   const [open, setOpen] = useState(false);
-  const { niveau, changerNiveau } = useApprobation();
+  const [refus, setRefus] = useState<string | null>(null);
+  const { niveau, modifiable, changerNiveau } = useApprobation();
 
   // Tant que l'instance n'a pas répondu, on n'affiche aucun niveau : annoncer
   // une protection qu'on n'a pas vérifiée serait revenir au défaut d'origine.
@@ -130,12 +131,21 @@ export function ApprovalSelector() {
           title={option.titre}
           description={option.description}
           selected={option.valeur === niveau}
+          disabled={!modifiable && option.valeur !== niveau}
           onClick={() => {
-            setOpen(false);
-            void changerNiveau(option.valeur);
+            if (!modifiable) return;
+            void changerNiveau(option.valeur).then((m) => {
+              setRefus(m);
+              if (!m) setOpen(false);
+            });
           }}
         />
       ))}
+      {(!modifiable || refus) && (
+        <p className="px-2.5 pt-1 text-xs leading-relaxed text-warning">
+          {refus ?? t("Seul l'administrateur de l'instance peut changer ce niveau : il vaut pour les agents de tous ses membres.")}
+        </p>
+      )}
       <p className="border-t border-border px-2.5 pb-1 pt-2 text-xs leading-relaxed text-muted-foreground">
         {t("Le niveau est gardé par l'instance, pas par ce poste : il vaut pour tous les postes qui s'y rattachent et survit au redémarrage. Le contrôle de l'écran garde en plus la règle fixée par votre administrateur, que ce réglage peut resserrer mais jamais assouplir.")}
       </p>

@@ -12,6 +12,7 @@ import { oublierPersonneEntrainement } from "./entrainement.ts";
 import { oublierSessionsCode } from "./sessionsCode.ts";
 import { oublierClesDe } from "./clesApi.ts";
 import { api, enMarche } from "./opencode.ts";
+import { oublierPersonne as oublierTachesProgrammees } from "./tachesProgrammees.ts";
 
 /**
  * Suppression d'un compte (RGPD, article 17).
@@ -191,6 +192,14 @@ export async function effacerCompte(
   await db().write("tasks", tachesApres);
   await db().write("agents", agentsApres);
   await db().write("employes", employesApres);
+  /*
+   * Ses compétences et ses tâches programmées (consignes et vingt derniers
+   * comptes rendus, souvent des résumés de ses mails) : oubliées jusqu'à la
+   * revue du 26/09/2026, elles survivaient à l'effacement du compte.
+   */
+  const competences = await db().read("competences");
+  if (Array.isArray(competences)) await db().write("competences", tableau(competences).filter((c) => c.ownerId !== userId));
+  const tachesProgrammees = await oublierTachesProgrammees(userId);
   // Ses clés de modèles cloud, personnelles comme partagées : elles engagent son moyen de paiement.
   const cles = await db().read("clesModeles");
   if (Array.isArray(cles)) await db().write("clesModeles", tableau(cles).filter((c) => c.ownerId !== userId));
@@ -247,6 +256,7 @@ export async function effacerCompte(
     conversations: apercu.conversations,
     taches: apercu.taches,
     agents: apercu.agents,
+    tachesProgrammees,
     employes: apercu.employes.length,
     projetsSupprimes: apercu.projetsSupprimes.length,
     projetsConfies: apercu.projetsConfies.length,

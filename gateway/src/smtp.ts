@@ -133,6 +133,17 @@ class Session {
   }
 
   async passerEnTls(serveur: string): Promise<void> {
+    /*
+     * Rien de ce qui est arrivé en clair ne doit être lu après le passage en
+     * TLS (revue du 26/09/2026, reproduit) : quelqu'un sur le chemin glissait
+     * des réponses derrière le « 220 », consommées ensuite comme si le serveur
+     * chiffré les avait dites (un envoi refusé passait pour accepté). Des
+     * octets en trop à ce moment : la connexion est abandonnée.
+     */
+    if (this.recues.length > 0 || this.tampon.length > 0 || this.lignes.length > 0) {
+      this.socket.destroy();
+      throw new ErreurSmtp("Le serveur d'envoi a répondu plus que demandé avant le chiffrement : connexion abandonnée par prudence.");
+    }
     this.detacher();
     const brut = this.socket as Socket;
     const securise = await new Promise<TLSSocket>((ok, ko) => {

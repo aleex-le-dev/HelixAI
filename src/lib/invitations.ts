@@ -90,7 +90,8 @@ export interface Invitation {
 }
 
 export interface InvitationCreee {
-  code: string;
+  /** Absent quand le mail est parti : il reste dans la boîte de l'invitée (revue du 26/09/2026). */
+  code?: string;
   email: string;
   expire: string;
   /** Le mail est-il réellement parti ? */
@@ -99,7 +100,7 @@ export interface InvitationCreee {
   motif?: string;
   adresse: string;
   /** Lien `helix://rejoindre` : une seule chose à transmettre, au lieu de deux. */
-  lien: string;
+  lien?: string;
 }
 
 /** Ce que rend une invitation de projet : le membre, et le sort du mail. */

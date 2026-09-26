@@ -11,6 +11,7 @@ import { connaissancesPourExport } from "./connaissances.ts";
 import { imagesDe } from "./images.ts";
 import { projetsPourExport } from "./entrainement.ts";
 import { clesDe as clesApiDe } from "./clesApi.ts";
+import { lister as tachesProgrammeesDe } from "./tachesProgrammees.ts";
 
 /**
  * Export des données d'une personne (RGPD, articles 15 et 20).
@@ -56,6 +57,8 @@ export interface ExportDonnees {
   projets: { role: "proprietaire" | "membre"; projet: unknown }[];
   taches: unknown[];
   agents: unknown[];
+  competences: unknown[];
+  tachesProgrammees: unknown[];
   /** Employés OpenClaw qu'elle a déployés, et ce qu'elle a dit à chacun (les siens et ceux des collègues). */
   employes: unknown[];
   echangesAvecLesEmployes: unknown;
@@ -107,6 +110,9 @@ export async function exporterDonnees(qui: Demandeur): Promise<ExportDonnees> {
   const taches = tableau(await db().read("tasks")).filter((t) => t.ownerId === qui.userId);
   // Ses agents seulement : un agent d'organisation écrit par un collègue est à lui.
   const agents = tableau(await db().read("agents")).filter((a) => a.ownerId === qui.userId);
+  // Ses compétences et ses tâches programmées, oubliées de l'export jusqu'au 26/09/2026.
+  const competences = tableau(await db().read("competences")).filter((c) => c.ownerId === qui.userId);
+  const tachesProgrammees = await tachesProgrammeesDe(qui.userId);
   const employes = tableau(await db().read("employes")).filter((e) => e.ownerId === qui.userId);
   // Ses clés de modèles cloud : le fournisseur et les modèles, jamais la clé elle-même.
   const clesModeles = tableau(await db().read("clesModeles"))
@@ -143,6 +149,8 @@ export async function exporterDonnees(qui: Demandeur): Promise<ExportDonnees> {
     projets,
     taches,
     agents,
+    competences,
+    tachesProgrammees,
     employes,
     echangesAvecLesEmployes,
     clesModeles,

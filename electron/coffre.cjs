@@ -33,17 +33,32 @@ function disponible() {
   }
 }
 
-function lire() {
-  if (!disponible()) return {};
+/**
+ * Le coffre tel qu'il est : `illisible` quand le fichier existe mais ne se
+ * déchiffre pas (autre compte, autre identité d'application, trousseau qui
+ * refuse). À distinguer d'un coffre absent : écrire par-dessus un coffre
+ * illisible effaçait la séance et l'adresse de l'instance (revue du
+ * 26/09/2026, règle du projet : ne jamais écrire du vide sur ce qu'on n'a pas
+ * pu lire).
+ */
+function lireEtat() {
+  if (!disponible()) return { valeurs: {}, illisible: false };
+  let brut;
   try {
-    const brut = fs.readFileSync(fichier());
-    const clair = safeStorage.decryptString(brut);
-    const valeurs = JSON.parse(clair);
-    return valeurs && typeof valeurs === "object" && !Array.isArray(valeurs) ? valeurs : {};
+    brut = fs.readFileSync(fichier());
   } catch {
-    // Absent, illisible, ou chiffré par un autre compte : on repart de zéro.
-    return {};
+    return { valeurs: {}, illisible: false };
   }
+  try {
+    const valeurs = JSON.parse(safeStorage.decryptString(brut));
+    return { valeurs: valeurs && typeof valeurs === "object" && !Array.isArray(valeurs) ? valeurs : {}, illisible: false };
+  } catch {
+    return { valeurs: {}, illisible: true };
+  }
+}
+
+function lire() {
+  return lireEtat().valeurs;
 }
 
 function ecrire(valeurs) {
@@ -51,8 +66,11 @@ function ecrire(valeurs) {
   try {
     const chemin = fichier();
     fs.mkdirSync(path.dirname(chemin), { recursive: true });
-    fs.writeFileSync(chemin, safeStorage.encryptString(JSON.stringify(valeurs)));
-    fs.chmodSync(chemin, 0o600);
+    // Écrit à côté puis renommé : une coupure en pleine écriture ne laisse pas un coffre à moitié écrit.
+    const provisoire = `${chemin}.${process.pid}.tmp`;
+    fs.writeFileSync(provisoire, safeStorage.encryptString(JSON.stringify(valeurs)), { mode: 0o600 });
+    fs.chmodSync(provisoire, 0o600);
+    fs.renameSync(provisoire, chemin);
     return true;
   } catch (err) {
     console.error("[helix] coffre non écrit :", err instanceof Error ? err.message : err);
@@ -63,7 +81,19 @@ function ecrire(valeurs) {
 /** Range une valeur, ou l'efface (`valeur` nulle). */
 function poser(cle, valeur) {
   if (typeof cle !== "string" || !cle) return false;
-  const valeurs = lire();
+  const { valeurs, illisible } = lireEtat();
+  if (illisible) {
+    /*
+     * On ne sait pas le relire, mais un autre lancement le pourra peut-être
+     * (l'application empaquetée, quand c'est le développement qui écrit) : il
+     * est mis de côté, jamais écrasé.
+     */
+    try {
+      fs.renameSync(fichier(), `${fichier()}.illisible-${new Date().toISOString().replace(/[:.]/g, "-")}`);
+    } catch {
+      return false;
+    }
+  }
   if (valeur === null || valeur === undefined) delete valeurs[cle];
   else if (typeof valeur === "string") valeurs[cle] = valeur;
   else return false;

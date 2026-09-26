@@ -1,7 +1,7 @@
 import { annuler, fermerDemande, modifie, ouvrirDemande, verifierOutil } from "./approbation.ts";
 import { journaliser } from "./audit.ts";
 import { sessionCode } from "./sessionsCode.ts";
-import { t } from "./langue.ts";
+import { t, tf } from "./langue.ts";
 import { cheminReel, estProtege } from "./zonesProtegees.ts";
 
 /**
@@ -81,6 +81,14 @@ export function permissionRepondueAilleurs(idOpenCode: string): void {
 const texte = (v: unknown, max = 4000): string => (typeof v === "string" ? v.slice(0, max) : "");
 
 /**
+ * Au-delà, une commande n'est pas soumise : refusée sans carte, l'agent la
+ * découpe. Revue de sécurité du 26/09/2026 : la carte coupait à 4000
+ * caractères, et un `curl` placé après un long texte partait sans avoir été
+ * montré ; deux commandes au même début partageaient aussi le même accord.
+ */
+export const COMMANDE_MAX = 20_000;
+
+/**
  * Traduit une demande d'OpenCode en appel d'outil pour la barrière :
  * `code__bash` + `{ commande }`, `code__edit` + `{ path }`, etc. Le chemin
  * visé passe par `path`, que la barrière sait lire (portée par dossier).
@@ -91,7 +99,8 @@ export function outilDe(d: DemandeOpenCode, dossier: string): { outil: string; a
   const outil = `code__${d.permission.replace(/[^A-Za-z0-9_]/g, "_").slice(0, 60)}`;
   switch (d.permission) {
     case "bash":
-      return { outil, args: { commande: texte(m.command) || texte(motif), dossier } };
+      // Entière (un caractère de plus que le maximum, pour savoir qu'elle le dépasse) : la carte et l'accord portent sur toute la commande.
+      return { outil, args: { commande: texte(m.command, COMMANDE_MAX + 1) || texte(motif, COMMANDE_MAX + 1), dossier } };
     case "edit":
     case "write":
     case "apply_patch": {
@@ -137,6 +146,9 @@ export async function traiterPermissionCode(
   }
 
   const { outil, args } = outilDe(d, dossier);
+  if (typeof args.commande === "string" && args.commande.length > COMMANDE_MAX) {
+    return refuser("commande-trop-longue", tf("Refusé par l'instance : cette commande dépasse {0} caractères, elle ne peut pas être montrée en entier pour accord. Découpe-la, ou écris d'abord un fichier puis lance-le.", String(COMMANDE_MAX)), proprietaire);
+  }
   /*
    * Une zone protégée (zonesProtegees.ts : données de l'instance, `~/.helix`,
    * clés, réglages d'autres logiciels) ne se lit ni ne s'écrit, même avec un

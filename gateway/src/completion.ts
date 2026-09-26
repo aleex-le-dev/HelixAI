@@ -1,3 +1,4 @@
+import { redirectionPour, refusSortie } from "./sortieReseau.ts";
 import { models, resolve } from "./router.ts";
 import { backendById } from "./backends.ts";
 import * as usage from "./usage.ts";
@@ -82,10 +83,13 @@ export async function completer(
       : {}),
   };
 
+  const refus = await refusSortie(backend);
+  if (refus) return { ok: false, message: refus };
   let reponse: Response;
   try {
     reponse = await fetch(`${backend.baseUrl}/chat/completions`, {
       method: "POST",
+      redirect: redirectionPour(backend),
       headers: {
         "Content-Type": "application/json",
         ...(backend.entetes ?? {}),

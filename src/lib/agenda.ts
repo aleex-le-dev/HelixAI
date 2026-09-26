@@ -33,7 +33,10 @@ export interface Calendrier {
 }
 
 export interface EtatAgenda {
+  /** Un compte CalDAV est enregistré. */
   configure: boolean;
+  /** Un agenda est branché, par CalDAV ou par la connexion Google. */
+  branche?: boolean;
   url?: string;
   identifiant?: string;
   /** Horodatage ISO de l'enregistrement. */

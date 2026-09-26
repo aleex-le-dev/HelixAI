@@ -150,6 +150,8 @@ import {
 } from "./agenda.ts";
 import * as connecteurs from "./connecteurs.ts";
 import * as drive from "./drive.ts";
+import * as agendaGoogle from "./agendaGoogle.ts";
+import { chargerClientGoogle, effacerClientGoogle, enregistrerClientGoogle, etatClientGoogle } from "./clientGoogle.ts";
 import * as slack from "./slack.ts";
 import { conservationJours, journaliser, lire as lireAudit, verifier as verifierAudit, jours as joursAudit } from "./audit.ts";
 import * as computer from "./computer.ts";
@@ -1033,6 +1035,62 @@ async function handleAgendaOublier(
  * Les routes d'état, au jeton seul, disent si un compte est branché et lequel,
  * jamais un jeton ni un contenu.
  */
+/*
+ * L'application Google de l'instance : son identifiant se voit (il n'est pas
+ * secret), son secret jamais. La changer vaut pour toute l'instance : réservé
+ * à l'administrateur, comme le journal complet (roles.ts).
+ */
+async function handleClientGoogleEtat(req: http.IncomingMessage, res: http.ServerResponse, url: URL): Promise<void> {
+  const qui = await demandeur(req, url);
+  if (!qui) return send(res, 401, sansSeance());
+  send(res, 200, { ...etatClientGoogle(), modifiable: await estAdministrateur(qui.userId) });
+}
+
+async function handleClientGoogleEnregistrer(req: http.IncomingMessage, res: http.ServerResponse, url: URL): Promise<void> {
+  const qui = await demandeur(req, url);
+  if (!qui) return send(res, 401, sansSeance());
+  if (!(await estAdministrateur(qui.userId))) return send(res, 403, { error: { message: t("Seul l'administrateur de l'instance peut enregistrer l'application Google.") } });
+  const body = (await readJson(req).catch(() => ({}))) as { clientId?: unknown; clientSecret?: unknown };
+  const r = await enregistrerClientGoogle(body.clientId, body.clientSecret, qui.userId);
+  send(res, r.ok ? 200 : 400, { ...r, etat: etatClientGoogle() });
+}
+
+async function handleClientGoogleEffacer(req: http.IncomingMessage, res: http.ServerResponse, url: URL): Promise<void> {
+  const qui = await demandeur(req, url);
+  if (!qui) return send(res, 401, sansSeance());
+  if (!(await estAdministrateur(qui.userId))) return send(res, 403, { error: { message: t("Seul l'administrateur de l'instance peut retirer l'application Google.") } });
+  const r = await effacerClientGoogle(qui.userId);
+  send(res, 200, { ...r, etat: etatClientGoogle() });
+}
+
+async function handleAgendaGoogleEtat(req: http.IncomingMessage, res: http.ServerResponse, url: URL): Promise<void> {
+  const qui = await demandeur(req, url);
+  if (!qui) return send(res, 401, sansSeance());
+  send(res, 200, { ...(await agendaGoogle.etat()), client: etatClientGoogle() });
+}
+
+async function handleAgendaGoogleConnecter(req: http.IncomingMessage, res: http.ServerResponse, url: URL): Promise<void> {
+  const qui = await demandeur(req, url);
+  if (!qui) return send(res, 401, sansSeance());
+  const r = await agendaGoogle.demarrer(qui.userId);
+  send(res, r.ok ? 200 : 400, r);
+}
+
+async function handleAgendaGoogleCode(req: http.IncomingMessage, res: http.ServerResponse, url: URL): Promise<void> {
+  const qui = await demandeur(req, url);
+  if (!qui) return send(res, 401, sansSeance());
+  const body = (await readJson(req).catch(() => ({}))) as { adresse?: unknown };
+  const r = await agendaGoogle.collerAdresse(body.adresse, qui.userId);
+  send(res, r.ok ? 200 : 400, { ...r, etat: await agendaGoogle.etat() });
+}
+
+async function handleAgendaGoogleOublier(req: http.IncomingMessage, res: http.ServerResponse, url: URL): Promise<void> {
+  const qui = await demandeur(req, url);
+  if (!qui) return send(res, 401, sansSeance());
+  const r = await agendaGoogle.oublier(qui.userId);
+  send(res, 200, { ...r, etat: await agendaGoogle.etat() });
+}
+
 async function handleDriveEtat(res: http.ServerResponse): Promise<void> {
   send(res, 200, await drive.etat());
 }
@@ -4190,7 +4248,7 @@ async function handleReunions(req: http.IncomingMessage, res: http.ServerRespons
       reunions: liste.map((r) => ({ ...r, estProprietaire: r.ownerId === qui.userId })),
       reglages,
       transcription: { installee: dictee.installee, modele: dictee.modele },
-      agenda: Boolean(agenda.configure),
+      agenda: Boolean(agenda.branche),
     });
   }
   if (!id && req.method === "POST") return repondre(await reunions.creer(await corps(), moi), (reunion) => ({ reunion }));
@@ -4795,6 +4853,15 @@ const traiter = (
     if (req.method === "POST" && path === "/helix/agenda/oublier")
       return handleAgendaOublier(req, res, url);
 
+    // Application Google de l'instance (clientGoogle.ts), partagée par Drive et Google Agenda.
+    if (req.method === "GET" && path === "/helix/google/client") return handleClientGoogleEtat(req, res, url);
+    if (req.method === "POST" && path === "/helix/google/client") return handleClientGoogleEnregistrer(req, res, url);
+    if (req.method === "POST" && path === "/helix/google/client/effacer") return handleClientGoogleEffacer(req, res, url);
+    // Google Agenda par la connexion Google (agendaGoogle.ts).
+    if (req.method === "GET" && path === "/helix/agenda/google") return handleAgendaGoogleEtat(req, res, url);
+    if (req.method === "POST" && path === "/helix/agenda/google/connecter") return handleAgendaGoogleConnecter(req, res, url);
+    if (req.method === "POST" && path === "/helix/agenda/google/code") return handleAgendaGoogleCode(req, res, url);
+    if (req.method === "POST" && path === "/helix/agenda/google/oublier") return handleAgendaGoogleOublier(req, res, url);
     if (req.method === "GET" && path === "/helix/drive") return handleDriveEtat(res);
     if (req.method === "POST" && path === "/helix/drive/connecter")
       return handleDriveConnecter(req, res, url);
@@ -5118,7 +5185,9 @@ void preparerMagasin().then(() => server.listen(PORT, HOST, () => {
   connaissances.demarrer();
   void chargerAgenda().catch(() => {});
   // Google Drive et Slack : même contrainte, même raison (drive.ts, slack.ts).
+  void chargerClientGoogle().catch(() => {});
   void drive.charger().catch(() => {});
+  void agendaGoogle.charger().catch(() => {});
   void slack.charger().catch(() => {});
 
   /*

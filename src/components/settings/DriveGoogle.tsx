@@ -19,6 +19,8 @@ import {
   type EtatDrive,
 } from "@/lib/drive";
 import { Card } from "@/components/settings/SettingsShell";
+import { FormulaireClientGoogle } from "@/components/settings/ClientGoogle";
+import { etatClientGoogle, type EtatClientGoogle } from "@/lib/google";
 import { Button } from "@/components/ui/Button";
 import { Field, Input } from "@/components/ui/Field";
 import { InfoBox } from "@/components/ui/InfoBox";
@@ -63,9 +65,11 @@ export function DriveGoogle({ onChange }: { onChange?: () => void } = {}) {
   const [adresseGoogle, setAdresseGoogle] = useState<string | null>(null);
   const [collage, setCollage] = useState("");
 
+  const [clientGoogle, setClientGoogle] = useState<EtatClientGoogle | null>(null);
   const relire = useCallback(async () => {
-    const e = await lireEtat();
+    const [e, c] = await Promise.all([lireEtat(), etatClientGoogle()]);
     setEtat(e);
+    setClientGoogle(c);
     return e;
   }, []);
 
@@ -180,36 +184,13 @@ export function DriveGoogle({ onChange }: { onChange?: () => void } = {}) {
             {t("L'identifiant Google renseigné sur l'instance n'a pas la bonne forme : il doit se terminer par « .apps.googleusercontent.com ». Vérifiez le copier-coller.")}
           </InfoBox>
         )}
-        <Card className="space-y-3 text-sm text-foreground">
-          <p className="font-medium">{t("Une préparation, une seule fois, avant de brancher Google Drive")}</p>
-          <p className="text-muted-foreground">
-            {t("Pour que vos documents aillent directement de cette instance à Google, sans passer par personne d'autre, votre entreprise crée sa propre autorisation Google. Comptez un quart d'heure, avec le compte Google de l'entreprise (idéalement celui d'un administrateur Google Workspace).")}
-          </p>
-          <ol className="list-decimal space-y-2 pl-5">
-            <li>
-              {t("Ouvrez")}{" "}<span className="font-medium">console.cloud.google.com</span>{" "}{t("et créez un projet, par exemple « Agents")}{" "}{branding.name} ».
-            </li>
-            <li>
-              {t("Dans « API et services », puis « Bibliothèque », cherchez « Google Drive API » et cliquez sur « Activer ».")}
-            </li>
-            <li>
-              {t("Ouvrez « Plateforme Google Auth » (l'ancien « Écran de consentement OAuth »). Dans « Audience », choisissez")}{" "}<span className="font-medium">{t("Interne")}</span>{" "}{t("si votre entreprise a Google Workspace : l'autorisation reste réservée à vos collaborateurs, et Google n'exige aucune vérification. Sans Workspace (adresse Gmail), choisissez « Externe » et ajoutez votre adresse comme utilisateur de test.")}
-            </li>
-            <li>
-              {t("Dans « Clients », créez un client de type")}{" "}
-              <span className="font-medium">{t("Application de bureau")}</span>{t(". Google affiche un identifiant, qui se termine par « .apps.googleusercontent.com », et un code secret : gardez les deux.")}
-            </li>
-            <li>
-              {t("Transmettez-les à la personne qui a installé")}{" "}{branding.name}{t(". Elle les ajoute au profil de déploiement de l'instance, rubrique « google », puis redémarre l'instance. Cet écran propose alors de brancher le Drive.")}
-            </li>
-          </ol>
-          <pre className="overflow-x-auto rounded-lg bg-muted px-3 py-2 text-xs text-foreground">
-            {`"google": {\n  "clientId": "….apps.googleusercontent.com",\n  "clientSecret": "…"\n}`}
-          </pre>
-        </Card>
-        <InfoBox tone="muted" leading={<Info size={15} strokeWidth={1.75} />}>
-          {t("Avec un projet « Externe » resté en mode Test, Google fait expirer l'accès au bout de sept jours : il faudra reconnecter chaque semaine. Passer le projet en production supprime cette limite ; Google affiche alors, à la connexion, un avertissement « application non validée » que vous pouvez franchir, puisque vous en êtes l'éditeur.")}
-        </InfoBox>
+        {/*
+          * L'application Google se saisit à l'écran depuis le 26/09/2026
+          * (ClientGoogle.tsx), partagée avec Google Agenda ; le profil de
+          * déploiement (« google » dans helix.config.json) reste possible et
+          * l'emporte.
+          */}
+        <FormulaireClientGoogle etat={clientGoogle} api="Google Drive API" onEnregistre={() => void relire()} />
       </div>
     );
   }

@@ -4,6 +4,7 @@ import { db, type StoredCollection } from "./db.ts";
 import { chiffrer, dechiffrer, chiffrementActif } from "./secret.ts";
 import { nomProduit, NomProduit } from "./marque.ts";
 import { t, tf } from "./langue.ts";
+import * as agendaGoogle from "./agendaGoogle.ts";
 
 /**
  * Connecteur agenda de Helix, en CalDAV.
@@ -67,7 +68,10 @@ export interface Calendrier {
 
 /** Ce que l'interface a le droit de savoir. Jamais le mot de passe. */
 export interface EtatAgenda {
+  /** Un compte CalDAV est enregistré (ce formulaire). */
   configure: boolean;
+  /** Un agenda est branché, par CalDAV ou par Google Agenda (agendaGoogle.ts). */
+  branche: boolean;
   url?: string;
   identifiant?: string;
   /** Horodatage ISO de l'enregistrement, pour afficher « configuré le… ». */
@@ -1652,7 +1656,7 @@ let cache: CompteEnregistre | null | undefined;
 let chargementEnCours: Promise<CompteEnregistre | null> | null = null;
 
 /** Découverte gardée en mémoire : trois requêtes par appel d'outil, sinon. */
-let calendriersCache: { quand: number; liste: Calendrier[] } | null = null;
+let calendriersCache: { quand: number; liste: Calendrier[]; source?: "caldav" | "google" } | null = null;
 
 /** À appeler après une configuration ou un oubli : la liste d'outils change. */
 export function oublierCompteAgenda(): void {
@@ -1830,7 +1834,7 @@ export async function configurer(
   await db().write(COLLECTION, enregistre);
   cache = enregistre;
   chargementEnCours = null;
-  calendriersCache = { quand: Date.now(), liste: calendriers };
+  calendriersCache = { quand: Date.now(), liste: calendriers, source: "caldav" };
   expandRefuse = false;
 
   const combien = verdict.compte.retenus.length || calendriers.length;
@@ -1845,9 +1849,12 @@ export async function configurer(
 export async function etat(): Promise<EtatAgenda> {
   await charger();
   const compte = cache ?? null;
-  if (!compte) return { configure: false, chiffrementDonnees: chiffrementActif() };
+  // Un agenda branché par l'un ou l'autre chemin : c'est ce que les suggestions et les réunions regardent.
+  const google = await agendaGoogle.charger();
+  if (!compte) return { configure: false, branche: google, chiffrementDonnees: chiffrementActif() };
   return {
     configure: true,
+    branche: true,
     url: compte.url,
     identifiant: compte.identifiant,
     depuis: compte.depuis,
@@ -1878,6 +1885,8 @@ export async function oublier(): Promise<{ ok: true; message: string }> {
  */
 function messageUtilisateur(err: unknown): string {
   if (err instanceof ErreurAgenda) return err.message;
+  // Google Agenda (agendaGoogle.ts) a ses propres erreurs, déjà écrites pour la personne.
+  if (!cache && agendaGoogle.connecte()) return agendaGoogle.messageUtilisateur(err);
   return "La connexion au serveur d'agenda a échoué. Vérifiez l'adresse, l'identifiant et le mot de passe.";
 }
 
@@ -1898,9 +1907,15 @@ export function toolsForModel(): {
   if (cache === undefined) {
     // Premier appel avant `charger()` : on lance la lecture pour le tour suivant.
     void charger();
-    return [];
   }
-  if (cache === null) return [];
+  /*
+   * Deux chemins vers un agenda : CalDAV (ce module), ou Google Agenda par la
+   * connexion Google (agendaGoogle.ts, ajouté le 26/09/2026 : Google refuse
+   * les mots de passe d'application pour ses agendas). Les outils sont les
+   * mêmes ; CalDAV l'emporte quand les deux sont branchés.
+   */
+  const caldav = cache !== undefined && cache !== null;
+  if (!caldav && !agendaGoogle.connecte()) return [];
 
   const fn = (
     name: string,
@@ -1963,7 +1978,7 @@ export function toolsForModel(): {
 }
 
 export function hasTools(): boolean {
-  return cache !== undefined && cache !== null;
+  return (cache !== undefined && cache !== null) || agendaGoogle.connecte();
 }
 
 const refus = (message: string) => ({ ok: false, content: message });
@@ -2004,20 +2019,31 @@ function normaliser(texte: string): string {
     .toLowerCase();
 }
 
+/** Ce que les outils demandent à un agenda, par CalDAV ou par Google. */
+type ClientAgenda = Pick<ClientCalDav, "decouvrir" | "evenements">;
+
+/** Un agenda est-il branché, par l'un ou l'autre chemin ? */
+async function agendaBranche(): Promise<boolean> {
+  return (await charger()) || (await agendaGoogle.charger());
+}
+
 /** Ouvre une session, exécute, et ne laisse aucune connexion ouverte derrière. */
-async function avecClient<T>(action: (client: ClientCalDav) => Promise<T>): Promise<T> {
+async function avecClient<T>(action: (client: ClientAgenda, source: "caldav" | "google") => Promise<T>): Promise<T> {
   await charger();
-  if (!cache) throw new ErreurAgenda("authentification", "Aucun agenda n'est configuré.");
-  return action(new ClientCalDav(compteComplet(cache)));
+  if (cache) return action(new ClientCalDav(compteComplet(cache)), "caldav");
+  if (await agendaGoogle.charger()) return action(new agendaGoogle.ClientGoogleAgenda(), "google");
+  throw new ErreurAgenda("authentification", "Aucun agenda n'est configuré.");
 }
 
 /** Agendas à interroger, découverte mise en cache et filtre du modèle appliqué. */
 async function calendriersRetenus(
-  client: ClientCalDav,
+  client: ClientAgenda,
   demande: string | null,
+  source: "caldav" | "google" = "caldav",
 ): Promise<{ ok: true; liste: Calendrier[] } | { ok: false; message: string }> {
-  if (!calendriersCache || Date.now() - calendriersCache.quand > LIMITES.cacheMs) {
-    calendriersCache = { quand: Date.now(), liste: await client.decouvrir() };
+  // La liste en cache est celle d'un chemin : passer de CalDAV à Google (ou l'inverse) la relit.
+  if (!calendriersCache || calendriersCache.source !== source || Date.now() - calendriersCache.quand > LIMITES.cacheMs) {
+    calendriersCache = { quand: Date.now(), liste: await client.decouvrir(), source };
   }
   let liste = calendriersCache.liste;
 
@@ -2101,7 +2127,7 @@ export async function callTool(
     return refus(`Outil inconnu : ${qualifiedName}.`);
   }
 
-  if (!(await charger())) {
+  if (!(await agendaBranche())) {
     return refus(
       "Aucun agenda n'est connecté à " + nomProduit() + ". Demande à l'utilisateur de le configurer dans les " +
         "paramètres, puis reprends. N'essaie pas d'autres outils d'agenda.",
@@ -2111,8 +2137,8 @@ export async function callTool(
   const demandeCalendrier = critere(args.calendrier);
 
   try {
-    return await avecClient(async (client) => {
-      const agendas = await calendriersRetenus(client, demandeCalendrier);
+    return await avecClient(async (client, source) => {
+      const agendas = await calendriersRetenus(client, demandeCalendrier, source);
       if (!agendas.ok) return refus(agendas.message);
       const plusieurs = agendas.liste.length > 1;
 
@@ -2219,9 +2245,9 @@ export async function callTool(
  * Liste vide sans agenda branché ; une erreur de serveur remonte telle quelle.
  */
 export async function evenementsEntre(debutMs: number, finMs: number): Promise<Evenement[]> {
-  if (!(await charger())) return [];
-  return avecClient(async (client) => {
-    const agendas = await calendriersRetenus(client, null);
+  if (!(await agendaBranche())) return [];
+  return avecClient(async (client, source) => {
+    const agendas = await calendriersRetenus(client, null, source);
     if (!agendas.ok) return [];
     const lots: Evenement[][] = [];
     for (const c of agendas.liste) lots.push(await client.evenements(c, debutMs, finMs, null));

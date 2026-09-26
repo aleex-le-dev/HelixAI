@@ -84,7 +84,7 @@ export async function suggestionsDuMoment(): Promise<Suggestion[]> {
       outils: true,
     });
   }
-  if (agenda?.configure) {
+  if (agenda?.branche ?? agenda?.configure) {
     liste.push({
       icone: CalendarClock,
       libelle: t("Voir mes rendez-vous de la semaine"),
@@ -98,7 +98,7 @@ export async function suggestionsDuMoment(): Promise<Suggestion[]> {
   if (chats === 0) liste.push({ icone: Import, libelle: t("Reprendre vos Chats d'une autre IA"), genre: "aller", chemin: "/parametres/importer" });
 
   if (!courrier?.configure && courrier !== null) liste.push({ icone: Mail, libelle: t("Connecter votre messagerie"), genre: "aller", chemin: "/parametres/mcp" });
-  if (!agenda?.configure && agenda !== null) liste.push({ icone: Calendar, libelle: t("Connecter votre agenda"), genre: "aller", chemin: "/parametres/mcp" });
+  if (!(agenda?.branche ?? agenda?.configure) && agenda !== null) liste.push({ icone: Calendar, libelle: t("Connecter votre agenda"), genre: "aller", chemin: "/parametres/mcp" });
 
   if (agents.length === 0) {
     liste.push({ icone: Bot, libelle: t("Créer votre premier agent"), genre: "aller", chemin: "/agents" });

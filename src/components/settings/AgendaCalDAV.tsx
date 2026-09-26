@@ -26,6 +26,7 @@ import { Field, Input } from "@/components/ui/Field";
 import { InfoBox } from "@/components/ui/InfoBox";
 import { branding } from "@/config/branding";
 import { formaterDate } from "@/lib/formats";
+import { AgendaGoogle } from "@/components/settings/AgendaGoogle";
 import { t, tf } from "@/lib/i18n";
 
 /**
@@ -295,7 +296,7 @@ export function AgendaCalDAV({ onChange }: { onChange?: () => void } = {}) {
             disabled={retrait}
             onClick={() => void retirer()}
           >
-            {retrait ? "Retrait…" : "Retirer cet agenda"}
+            {retrait ? t("Retrait…") : t("Retirer cet agenda")}
           </Button>
         </div>
       </div>
@@ -311,6 +312,9 @@ export function AgendaCalDAV({ onChange }: { onChange?: () => void } = {}) {
 
   return (
     <div className="space-y-3">
+      {/* Google Agenda ne s'ouvre qu'avec la connexion Google (AgendaGoogle.tsx) : proposé avant le formulaire CalDAV. */}
+      <AgendaGoogle onChange={onChange} />
+      <p className="px-1 pt-1 text-sm font-medium text-foreground">{t("Ou un autre agenda (iCloud, Nextcloud, Fastmail…), par CalDAV")}</p>
       {!etat.chiffrementDonnees && (
         <InfoBox tone="warning" leading={<ShieldAlert size={15} strokeWidth={1.75} />}>
           {t("Le chiffrement des données n'est pas actif sur cette instance.")}{" "}{branding.name}{" "}

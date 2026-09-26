@@ -240,6 +240,10 @@ const ROUTES = [
   ["GET", "/helix/cles-api"], ["POST", "/helix/cles-api"],
   // Ajoutées le 26/09/2026 : mises à jour des postes servies par l'instance (telechargement.ts).
   ["GET", "/helix/mises-a-jour/latest-mac.yml"], ["GET", "/helix/mises-a-jour/Helix-0.27.0-mac-arm64.zip"],
+  // Ajoutées le 26/09/2026 : application Google de l'instance et Google Agenda (clientGoogle.ts, agendaGoogle.ts).
+  ["GET", "/helix/google/client"], ["POST", "/helix/google/client"], ["POST", "/helix/google/client/effacer"],
+  ["GET", "/helix/agenda/google"], ["POST", "/helix/agenda/google/connecter"], ["POST", "/helix/agenda/google/code"],
+  ["POST", "/helix/agenda/google/oublier"],
 ];
 for (const [methode, chemin] of ROUTES) {
   const r = await appel(chemin, { method: methode, headers: { "Content-Type": "application/json" }, body: methode === "POST" ? "{}" : undefined });
@@ -337,6 +341,65 @@ const connexionC = await (await appel("/helix/auth/verify", {
 })).json();
 const avecSeanceC = { ...avecJeton, "X-Helix-Session": connexionC.session?.token };
 verifier("un collègue inscrit par un compte connecté peut se connecter", Boolean(compteB?.id && SEANCE_B), `${creeB.status} ${JSON.stringify(connexionB).slice(0, 80)}`);
+/*
+ * Ici, tant que les séances de la première et de la collègue sont fraîches :
+ * les essais de mots de passe qui suivent en révoquent.
+ */
+console.log("\n3 bis. Application Google et Google Agenda : le secret ne ressort jamais");
+{
+  const sansSeanceG = await appel("/helix/google/client", { headers: avecJeton });
+  verifier("application Google : sans séance → 401", sansSeanceG.status === 401, sansSeanceG.status);
+  const poster = (chemin, corps, entetes) => appel(chemin, { method: "POST", headers: { ...entetes, "Content-Type": "application/json" }, body: JSON.stringify(corps ?? {}) });
+  const ID = "123456789012-abcdefghijklmnopqrstuvwxyz012345.apps.googleusercontent.com";
+  const SECRET = "GOCSPX-SECRET-DE-TEST-QUI-NE-DOIT-JAMAIS-RESSORTIR";
+  const nonAdmin = await poster("/helix/google/client", { clientId: ID, clientSecret: SECRET }, avecSeanceB);
+  verifier("application Google : un compte non administrateur ne l'enregistre pas (403)", nonAdmin.status === 403, nonAdmin.status);
+  const mauvais = await poster("/helix/google/client", { clientId: "mon-projet-123", clientSecret: SECRET }, avecSeance);
+  verifier("application Google : un identifiant mal formé est refusé (400)", mauvais.status === 400, mauvais.status);
+  const bon = await poster("/helix/google/client", { clientId: ID, clientSecret: SECRET }, avecSeance);
+  const corpsBon = await bon.text();
+  verifier("application Google : l'administrateur l'enregistre", bon.status === 200, `${bon.status} ${corpsBon.slice(0, 120)}`);
+  verifier("application Google : la réponse d'enregistrement ne rend pas le secret", !corpsBon.includes(SECRET), corpsBon.slice(0, 200));
+  for (const [nom, entetes] of [["administrateur", avecSeance], ["autre compte", avecSeanceB]]) {
+    const etatG = await (await appel("/helix/google/client", { headers: entetes })).text();
+    verifier(`application Google : l'état (${nom}) ne contient pas le secret`, !etatG.includes(SECRET) && etatG.includes(ID), etatG.slice(0, 200));
+    const etatA = await (await appel("/helix/agenda/google", { headers: entetes })).text();
+    verifier(`Google Agenda : l'état (${nom}) ne contient ni secret ni jeton`, !etatA.includes(SECRET) && !/refresh_token|access_token/.test(etatA), etatA.slice(0, 200));
+  }
+  // Relu sur le disque de l'instance jetable, tel qu'il est écrit.
+  let brut = "";
+  try {
+    brut = readFileSync(join(DONNEES, "clientGoogle.json"), "utf8");
+  } catch (e) {
+    brut = `illisible : ${e.message}`;
+  }
+  verifier("application Google : le secret est chiffré au repos", brut.length > 0 && !brut.startsWith("illisible") && !brut.includes(SECRET), brut.slice(0, 120));
+  const depart = await poster("/helix/agenda/google/connecter", {}, avecSeance);
+  const jDepart = await depart.json().catch(() => ({}));
+  const adresse = typeof jDepart.url === "string" ? new URL(jDepart.url) : null;
+  verifier(
+    "Google Agenda : l'autorisation part vers Google, en PKCE S256, portée calendar.readonly seule, retour sur la boucle locale",
+    adresse?.hostname === "accounts.google.com" &&
+      adresse.searchParams.get("code_challenge_method") === "S256" &&
+      adresse.searchParams.get("scope") === "https://www.googleapis.com/auth/calendar.readonly" &&
+      /^http:\/\/127\.0\.0\.1:\d+\/$/.test(adresse.searchParams.get("redirect_uri") ?? ""),
+    jDepart.url ?? JSON.stringify(jDepart).slice(0, 200),
+  );
+  verifier("Google Agenda : le secret ne voyage pas dans l'adresse d'autorisation", !(jDepart.url ?? "").includes(SECRET) && !adresse?.searchParams.has("client_secret"), jDepart.url);
+  const fauxRetour = await poster("/helix/agenda/google/code", { adresse: `${adresse?.searchParams.get("redirect_uri") ?? "http://127.0.0.1:1/"}?state=faux&code=abc` }, avecSeance);
+  const jFaux = await fauxRetour.json().catch(() => ({}));
+  verifier("Google Agenda : un retour au « state » faux est ignoré", fauxRetour.status === 400 && jFaux.ok === false, JSON.stringify(jFaux).slice(0, 160));
+  if (adresse) {
+    // Frapper directement au port de la boucle locale avec un faux « state » n'enregistre rien non plus.
+    const direct = await fetch(`${adresse.searchParams.get("redirect_uri")}?state=faux&code=abc`).catch(() => null);
+    const etatApres = await (await appel("/helix/agenda/google", { headers: avecSeance })).json();
+    verifier("Google Agenda : la boucle locale refuse un faux « state » et n'enregistre rien", (direct?.status ?? 400) === 400 && etatApres.configure === false, `${direct?.status} ${JSON.stringify(etatApres).slice(0, 120)}`);
+  }
+  await poster("/helix/agenda/google/oublier", {}, avecSeance);
+  const efface = await poster("/helix/google/client/effacer", {}, avecSeance);
+  verifier("application Google : l'administrateur la retire", efface.status === 200, efface.status);
+}
+
 {
   const r = await appel("/helix/auth/create", {
     method: "POST", headers: avecJeton,

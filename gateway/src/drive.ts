@@ -2,7 +2,7 @@ import http from "node:http";
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { db, type StoredCollection } from "./db.ts";
 import { chiffrer, dechiffrer, chiffrementActif } from "./secret.ts";
-import { deployment } from "./deployment.ts";
+import { clientGoogle } from "./clientGoogle.ts";
 import { journaliser } from "./audit.ts";
 import {
   requeteHttps,
@@ -171,26 +171,20 @@ const RECONNECTER =
 
 /* ------------------------- identifiants du client OAuth ----------------------- */
 
-/**
- * Forme d'un identifiant de client OAuth Google : un numéro de projet, un
- * tiret, une chaîne, puis le domaine fixe de Google. Une valeur d'une autre
- * forme est presque toujours un copier-coller raté (l'identifiant du projet,
- * ou le secret à la place de l'identifiant) : on le dit tout de suite plutôt
- * que de laisser Google répondre par une page d'erreur en anglais.
- */
-const FORME_IDENTIFIANT = /^[0-9]+-[a-z0-9]+\.apps\.googleusercontent\.com$/;
+// La forme d'un identifiant Google est vérifiée dans clientGoogle.ts (FORME_IDENTIFIANT_GOOGLE).
 
 type Identifiants =
   | { ok: true; clientId: string; clientSecret: string }
   | { ok: false; manque: "identifiant" | "identifiant-invalide" };
 
+/*
+ * Le client vient du profil de déploiement, ou de l'écran des connecteurs
+ * depuis le 26/09/2026 (clientGoogle.ts, partagé avec Google Agenda).
+ */
 function identifiants(): Identifiants {
-  const google = deployment().google;
-  const clientId = typeof google?.clientId === "string" ? google.clientId.trim() : "";
-  const clientSecret = typeof google?.clientSecret === "string" ? google.clientSecret.trim() : "";
-  if (!clientId) return { ok: false, manque: "identifiant" };
-  if (!FORME_IDENTIFIANT.test(clientId)) return { ok: false, manque: "identifiant-invalide" };
-  return { ok: true, clientId, clientSecret };
+  const c = clientGoogle();
+  if (!c.ok) return c;
+  return { ok: true, clientId: c.clientId, clientSecret: c.clientSecret };
 }
 
 /* ------------------------------- persistance ---------------------------------- */
@@ -713,7 +707,7 @@ export async function demarrer(qui: string): Promise<{ ok: boolean; message: str
       ok: false,
       message:
         id.manque === "identifiant"
-          ? "Aucun client OAuth Google n'est configuré sur cette instance : l'intégrateur doit renseigner « google » dans helix.config.json."
+          ? "Aucune application Google n'est enregistrée sur cette instance : renseignez-la dans Paramètres, Connecteurs (ou « google » dans helix.config.json)."
           : "L'identifiant du client OAuth Google de helix.config.json n'a pas la bonne forme : il se termine par « .apps.googleusercontent.com ».",
     };
   }

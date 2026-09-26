@@ -63,6 +63,13 @@ export const COLLECTIONS_INTERNES = [
   // slack.ts) : chacun ouvre les documents ou les conversations de l'entreprise.
   "driveCompte",
   "slackCompte",
+  /*
+   * Client OAuth Google saisi à l'écran (clientGoogle.ts), partagé par Drive et
+   * Google Agenda, et jeton d'actualisation de Google Agenda (agendaGoogle.ts) :
+   * internes pour la même raison que le Drive (26/09/2026).
+   */
+  "clientGoogle",
+  "agendaGoogle",
   "connecteurs",
   /*
    * Autorisations OAuth des services distants (oauthMcp.ts) : jetons d'accès

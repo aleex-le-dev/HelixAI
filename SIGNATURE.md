@@ -153,11 +153,39 @@ xattr -d com.apple.quarantine /Applications/Helix.app
 
 ## 4. Mise à jour de l'application
 
-**Depuis le 26/09/2026, sans signature** : un poste rattaché à une instance reçoit une
+**Depuis le 26/09/2026, sans signature Apple** : un poste rattaché à une instance reçoit une
 fenêtre « Nouvelle version, Installer maintenant » ; l'instance sert l'application qu'elle
 fait tourner, et le poste l'installe après avoir vérifié son empreinte (PROJET.md, « Fait le
-26/09/2026 : mises à jour d'un clic »). Ce qui suit décrit le régime avec un serveur de
-l'agence et une application signée.
+26/09/2026 : mises à jour d'un clic »).
+
+**Depuis le 27/09/2026, signée par la clé de l'éditeur** (`electron/signatureEditeur.cjs`) :
+l'empreinte venait de la même source que l'archive, et ne protégeait donc pas d'une
+instance piratée (SECURITE.md § 28). Désormais :
+
+1. **Une fois** : `npm run cle:editeur` crée la paire de clés Ed25519. La clé privée va
+   dans `~/.helix-editeur/cle-privee-mises-a-jour.pem` (dossier 700, fichier 600), jamais
+   dans le dépôt, jamais affichée. **Gardez-en une copie en lieu sûr** : sans elle, les
+   postes déjà livrés refuseront toute mise à jour d'un clic. Ne la remplacez pas : les
+   postes ne connaissent que celle-là. Créée le 27/09/2026 sur le Mac de Medhi,
+   empreinte `5efb-aa74-00fe-cdd7`.
+2. **À chaque fabrication** (`npm run package`) : l'étape `afterSign`
+   (`scripts/signature/signer-mise-a-jour.cjs`) relève chaque fichier de l'application
+   (empreinte SHA-256, droit d'exécution), chaque lien et sa cible, avec l'identifiant et
+   la version, signe ce relevé, et pose la signature et la clé publique dans
+   `Contents/Resources`. Elle revérifie aussitôt. Sans clé, la fabrication s'arrête, sauf
+   `HELIX_SANS_CLE_EDITEUR=1` (l'application n'aura pas de clé, et ses postes
+   refuseront les mises à jour d'un clic). Une application signée par Apple n'en a pas
+   besoin, et n'est pas touchée.
+3. **Sur le poste** : après le téléchargement, l'application qui tourne refait le relevé
+   de la nouvelle et vérifie la signature **avec sa propre clé publique**, jamais avec
+   celle qu'apporte la nouvelle. Clé absente, signature fausse, fichier ajouté ou modifié,
+   autre version : rien ne s'installe, et la fenêtre dit pourquoi.
+
+Limite dite : un poste qui tourne encore sur une version d'avant le 27/09/2026 n'a pas ce
+contrôle ; il installera la première version signée sans la vérifier. Toutes les
+suivantes le seront.
+
+Ce qui suit décrit le régime avec un serveur de l'agence et une application signée par Apple.
 
 `electron/miseAJour.cjs`, écran Paramètres, Préférences, « À propos ».
 
@@ -182,7 +210,7 @@ Un dossier par client si les paquets diffèrent (marque, profil de déploiement)
 | Application | Ce qui se passe |
 |---|---|
 | **Signée** (Developer ID) | Vérification au lancement puis toutes les six heures ; téléchargement en arrière-plan ; installation à la fermeture, ou tout de suite par « Redémarrer pour installer ». macOS n'installe une mise à jour que si elle porte la **même signature** que l'application en place : un tiers ne peut pas glisser une version piégée, même en compromettant le serveur |
-| **Non signée** | Vérification seulement : « Version X disponible », avec un lien vers le `.dmg` sur votre serveur. macOS refuserait de toute façon qu'une application non signée se remplace seule |
+| **Non signée** | Depuis un serveur de l'agence : vérification seulement, « Version X disponible », avec un lien vers le `.dmg`. Depuis l'instance du poste : « Installer maintenant », après vérification de la signature de l'éditeur (ci-dessus) |
 
 L'écran n'affiche « aucune version plus récente » qu'**après** une vérification
 réussie, avec son heure : l'ancien badge « À jour » l'affirmait sans rien vérifier.

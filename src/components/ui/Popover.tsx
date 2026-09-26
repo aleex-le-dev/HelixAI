@@ -24,6 +24,12 @@ interface PopoverProps {
   align?: Align;
   /** Cote d'ouverture. */
   side?: "bottom" | "top";
+  /**
+   * Garder ce côté, même quand le contenu y tient mal : il défile alors. Le
+   * menu ne change de côté que s'il reste moins de 160 pixels (27/09/2026 :
+   * Medhi veut le choix d'approbation vers le bas, comme le menu « + »).
+   */
+  coteFixe?: boolean;
   /** Largeur fixe du panneau (px). */
   width?: number;
   className?: string;
@@ -47,6 +53,7 @@ export function Popover({
   onOpenChange,
   align = "start",
   side = "bottom",
+  coteFixe = false,
   width,
   className,
   panelClassName,
@@ -88,7 +95,7 @@ export function Popover({
        * que si le contenu n'y tient pas et qu'il y a plus de place en face.
        */
       const panneauMesure = rootRef.current?.querySelector<HTMLElement>('[role="menu"]');
-      const SOUHAITE = Math.min(panneauMesure?.scrollHeight ?? 360, 480);
+      const SOUHAITE = coteFixe ? 160 : Math.min(panneauMesure?.scrollHeight ?? 360, 480);
       let cote = side;
       if (side === "bottom" && dessous < SOUHAITE && dessus > dessous) cote = "top";
       if (side === "top" && dessus < SOUHAITE && dessous > dessus) cote = "bottom";
@@ -108,7 +115,7 @@ export function Popover({
     mesurer();
     window.addEventListener("resize", mesurer);
     return () => window.removeEventListener("resize", mesurer);
-  }, [open, side, align, width]);
+  }, [open, side, align, width, coteFixe]);
 
   const setOpen = (next: boolean) => {
     if (!isControlled) setUncontrolled(next);

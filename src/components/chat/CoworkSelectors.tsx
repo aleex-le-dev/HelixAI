@@ -109,6 +109,8 @@ export function ApprovalSelector() {
       open={open}
       onOpenChange={setOpen}
       align="start"
+      side="bottom"
+      coteFixe
       width={340}
       trigger={(p) => (
         <Chip

@@ -30,6 +30,7 @@
     "motdepasse": "node --experimental-strip-types gateway/tools/motdepasse.ts",
     "typecheck:gateway": "tsc --noEmit -p tsconfig.gateway.json",
     "package:signe": "node scripts/signature/construire.mjs",
+    "cle:editeur": "node scripts/signature/cle-editeur.mjs",
     "verifier:signature": "node scripts/signature/verifier.mjs"
   },
   "dependencies": {
@@ -42,6 +43,7 @@
   },
   "build": {
     "appId": "fr.helix.plateforme",
+    "afterSign": "scripts/signature/signer-mise-a-jour.cjs",
     "copyright": "Copyright © 2026 Medhi Clabaut — Helix Agence, SIREN 994 907 145",
     "productName": "Helix",
     "protocols": {

@@ -1124,9 +1124,11 @@ d'une instance compromise**, qui peut proposer n'importe quelle application
 sous le bon identifiant et un numéro de version plus grand. Cette application
 hériterait alors des autorisations de macOS accordées à Helix (écran,
 accessibilité, micro). Le poste fait donc confiance à son instance pour le code
-qu'il exécute, comme il lui fait déjà confiance pour ses données. Fermer cette
-porte demande une signature de l'éditeur sur l'archive (une clé publique
-inscrite dans le paquet), décision à prendre (§ 28, « à décider »).
+qu'il exécute, comme il lui fait déjà confiance pour ses données.
+
+**Fermé le 27/09/2026** : la mise à jour doit porter la signature de la clé de
+l'éditeur, vérifiée par le poste avec la clé publique de l'application qu'il
+fait déjà tourner (§ 28, SIGNATURE.md § 4).
 
 ---
 
@@ -3034,19 +3036,23 @@ au sort pour chaque mail, retirées du texte s'il les contenait : un mail qui
 Vérifié par `npm run securite` (la configuration écrite, section 7 ter). **Pas
 encore essayé avec le vrai OpenClaw** : un mail réel traité par ce profil.
 
+**Mises à jour signées par l'éditeur.** L'instance donnait l'annonce,
+l'archive **et** son empreinte : une instance piratée pouvait donc faire
+installer une fausse application, avec l'empreinte qui va avec. Désormais une
+paire de clés Ed25519 (`electron/signatureEditeur.cjs`, SIGNATURE.md § 4) : la
+clé privée reste chez l'éditeur (`~/.helix-editeur`, jamais dans le dépôt) et
+signe, à chaque fabrication, le relevé complet de l'application (chaque
+fichier et son empreinte, chaque lien, l'identifiant, la version) ; la clé
+publique est posée dans l'application. Le poste refait le relevé de ce qu'il
+reçoit et le vérifie avec la clé de l'application **qu'il fait déjà tourner**.
+Vérifié par `npm run securite` (section 11 bis, 6 contrôles : une application
+signée passée par `ditto` est reconnue ; re-signée par une autre clé, un
+fichier modifié ou ajouté, une autre version, pas de signature : refusée).
+Limite dite : un poste encore sur une version d'avant n'a pas ce contrôle et
+installera la première version signée sans la vérifier.
+
 ### Restant, dit comme tel
 
-- **Mise à jour sans signature** (élevée, décision de Medhi) : l'instance
-  décrit la nouvelle version, fournit l'archive **et** son empreinte. Une
-  instance piratée peut donc fournir une fausse application avec l'empreinte
-  qui va avec : le poste la vérifie, la trouve conforme, et l'installe sur un
-  clic. Elle hérite alors des autorisations de macOS accordées à Helix (écran,
-  accessibilité, micro). Fermer : une paire de clés d'éditeur. La clé privée
-  reste chez l'éditeur (jamais dans le dépôt) et signe chaque version à sa
-  fabrication ; la clé publique est inscrite dans l'application. Un poste
-  n'installe alors que ce que la clé de l'éditeur a signé, d'où qu'il le
-  reçoive. Le prix : garder cette clé en lieu sûr, sans quoi plus aucune mise à
-  jour d'un clic ne s'installe.
 - **Bot de réunion** (faible) : la protection du § 18.5 capture les
   constructeurs, pas leurs méthodes (`addEventListener`, `then`…) ; un script
   hostile sur la page de Meet pourrait encore substituer son propre son.

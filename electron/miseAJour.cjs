@@ -27,6 +27,7 @@ const crypto = require("node:crypto");
 const { execFile, spawn } = require("node:child_process");
 const { app, BrowserWindow, ipcMain, shell, net } = require("electron");
 const coffre = require("./coffre.cjs");
+const signatureEditeur = require("./signatureEditeur.cjs");
 
 /** Toutes les six heures, et une première fois peu après le lancement. */
 const INTERVALLE_MS = 6 * 60 * 60 * 1000;
@@ -300,7 +301,20 @@ async function installerSansSignature() {
   if ((await lirePlist(nouvelle, "CFBundleIdentifier")) !== (await lirePlist(actuelle, "CFBundleIdentifier"))) {
     throw new Error("l'archive contient une autre application");
   }
+  const identifiant = await lirePlist(actuelle, "CFBundleIdentifier");
   if ((await lirePlist(nouvelle, "CFBundleShortVersionString")) !== annonce.version) throw new Error("la version de l'archive n'est pas celle annoncée");
+  /*
+   * La signature de l'éditeur (electron/signatureEditeur.cjs, 27/09/2026).
+   * L'empreinte ci-dessus vient de la même source que l'archive : elle dit
+   * que rien ne s'est abîmé en route, pas qui l'a faite. La clé qui tranche
+   * est celle de l'application qui tourne ici, jamais celle qu'apporte la
+   * nouvelle. Sans clé, ou si la signature ne va pas : rien ne s'installe.
+   */
+  const cle = signatureEditeur.cleDeLApplication(actuelle);
+  if (!cle) throw new Error("cette application n'a pas de clé d'éditeur : une mise à jour ne peut pas y être vérifiée. Installez-la à la main, depuis le paquet de votre prestataire");
+  publier({ message: "Vérification de la signature de l'éditeur…" });
+  const verdict = await signatureEditeur.verifierApplication(nouvelle, cle, { identifiant, version: annonce.version });
+  if (!verdict.ok) throw new Error(`la mise à jour a été refusée : ${verdict.raison}`);
   fs.accessSync(path.dirname(actuelle), fs.constants.W_OK);
   const q = (s) => `'${String(s).replace(/'/g, `'\\''`)}'`;
   const avant = `${actuelle}.avant-maj`;

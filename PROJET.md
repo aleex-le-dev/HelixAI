@@ -2679,7 +2679,11 @@ au mieux », « qu'il soit efficace et évite l'injection de prompt ») :
 - **Écran** : le choix du niveau d'approbation s'ouvre vers le bas quand il y tient (le menu
   mesure sa vraie hauteur), « Sessions récentes » retiré de l'accueil de Code (les sessions
   restent dans la barre de gauche).
-Reste à décider : signer les mises à jour (SECURITE.md § 28).
+Le même jour, sur le « go » de Medhi : **les mises à jour d'un clic sont signées par la clé de
+l'éditeur** (`npm run cle:editeur` une fois, puis chaque `npm run package` signe ; le poste
+vérifie avec la clé de l'application qu'il fait tourner, SIGNATURE.md § 4). Clé créée sur le
+Mac de Medhi, empreinte `5efb-aa74-00fe-cdd7` : **à sauvegarder en lieu sûr**. Le choix du
+niveau d'approbation s'ouvre toujours vers le bas (il défile s'il manque de place).
 
 **Fait le 26/09/2026 : revue de sécurité par six agents.** Demandée par Medhi (« un
 tour complet niveau sécurité avec plusieurs agents ») : six agents en lecture seule, un par

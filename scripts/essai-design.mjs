@@ -21,6 +21,9 @@ const oui = [
   "Crée un site avec une API de contact",
   "rends la page plus belle",
   "fais la maquette HTML de l'écran d'inscription",
+  "Tu peux faire un petit ERP fonctionnel pour un cabinet d'avocat ?",
+  "Crée un CRM pour mes clients",
+  "fais un tableau de bord des ventes",
 ];
 const non = [
   "Ajoute une interface User en TypeScript",
@@ -35,6 +38,8 @@ const non = [
   "Pourquoi mon CSS ne compile pas avec Tailwind ?",
   "ajoute un champ email à l'interface Client",
   "mets à jour les dépendances du package",
+  "Crée une application mobile de notes",
+  "écris un script de gestion des fichiers en ligne de commande",
 ];
 let ok = 0, ko = [];
 for (const q of oui) estDemandeDeSite(q) ? ok++ : ko.push("attendu OUI : " + q);

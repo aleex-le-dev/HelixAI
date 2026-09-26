@@ -86,9 +86,17 @@ const PAGES = donnees.pages as PlanPage[];
  * Le dossier déjà commencé reste protégé par `projetDejaCommence`.
  */
 const SITE_SUR = /\b(site|sites|landing|vitrine|portfolio|website|webpage|homepage|page web|pages web|page d'accueil|page daccueil|application web|app web|site web|e-?commerce|boutique en ligne|blog)\b/;
-const SITE_AMBIGU = /\b(page|pages|interface|interfaces|formulaire|formulaires|maquette|maquettes|accueil|html|css|front-?end|web|boutique|ecran|ecrans|form|ui)\b/;
+const SITE_AMBIGU = /\b(page|pages|interface|interfaces|formulaire|formulaires|maquette|maquettes|accueil|html|css|front-?end|web|boutique|ecran|ecrans|form|ui|erp|crm|application|applications|appli|logiciel|gestion|tableau de bord|dashboard|back-?office)\b/;
+/*
+ * Une application de gestion (ERP, CRM, suivi, tableau de bord) : ajouté le
+ * 26/09/2026. « Tu peux faire un petit ERP fonctionnel pour un cabinet
+ * d'avocat ? » ne recevait ni design ni règle : page blanche à l'ouverture,
+ * onglets blanc sur gris, listes figées. Elle reçoit le design et des règles de
+ * comportement propres aux applications (`CONSIGNE_APPLICATION`).
+ */
+const APPLICATION = /\b(erp|crm|application|applications|appli|logiciel|gestion|tableau de bord|dashboard|back-?office|suivi (des|de|du)|outil (de|pour))\b/;
 const CREATION = /\b(cree|creer|creez|crees|fais|faire|faites|fait|construis|construire|construisez|concois|concevoir|developpe|developper|realise|realiser|genere|generer|monte|monter|dessine|dessiner|refais|refaire|embellis|embellir|habille|habiller|design|designer|create|build|make|design|generate|develop|mock ?up|plus (beau|belle|beaux|belles|joli|jolie|moderne|professionnel|professionnelle|pro|attrayant|attrayante)|more (beautiful|modern|professional))\b/;
-const CODE_CONTEXTE = /\b(typescript|javascript|python|java|rust|golang|php|type|types|typage|api|apis|endpoint|endpoints|route|routes|serveur|server|backend|back-?end|base de donnees|database|sql|requete|requetes|query|classe|classes|class|fonction|fonctions|function|methode|methodes|method|variable|variables|test|tests|unitaire|bug|bugs|erreur|erreurs|error|exception|stack ?trace|pagination|schema|migration|module|modules|package|dependance|dependances|import|export|refactor|refactorise|refactoriser|compile|compilation|script|scripts|regex|json|cli|terminal|props|enum|struct)\b/;
+const CODE_CONTEXTE = /\b(ligne de commande|mobile|android|ios|typescript|javascript|python|java|rust|golang|php|type|types|typage|api|apis|endpoint|endpoints|route|routes|serveur|server|backend|back-?end|base de donnees|database|sql|requete|requetes|query|classe|classes|class|fonction|fonctions|function|methode|methodes|method|variable|variables|test|tests|unitaire|bug|bugs|erreur|erreurs|error|exception|stack ?trace|pagination|schema|migration|module|modules|package|dependance|dependances|import|export|refactor|refactorise|refactoriser|compile|compilation|script|scripts|regex|json|cli|terminal|props|enum|struct)\b/;
 
 const sansAccents = (texte: string) =>
   texte
@@ -96,6 +104,11 @@ const sansAccents = (texte: string) =>
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .replace(/[’]/g, "'");
+
+/** Une demande de site qui est une application (formulaires, listes, données), pas une vitrine. */
+export function estApplication(texte: string): boolean {
+  return estDemandeDeSite(texte) && APPLICATION.test(sansAccents(texte));
+}
 
 export function estDemandeDeSite(texte: string): boolean {
   const t = sansAccents(texte);
@@ -881,7 +894,27 @@ ${Object.keys(ICONES)
  * rend la consigne à joindre à la demande. Un design déjà là n'est jamais
  * écrasé : la personne a pu le retoucher, ou un premier site l'a fixé.
  */
-export async function preparerDesign(dossier: string, demande: string, qui: string): Promise<{ consigne: string; cree: boolean; design?: Design }> {
+/**
+ * Règles de comportement d'une application, tirées de ce que Qwen3 8B a raté
+ * sur l'ERP du 26/09/2026. Le contrôle automatique (controleCode.ts) vérifie
+ * ensuite, dans un vrai navigateur, la page d'ouverture, la lisibilité et les
+ * formulaires.
+ */
+const CONSIGNE_APPLICATION = [
+  "Application : règles de qualité (un programme les vérifiera dans un vrai navigateur à la fin) :",
+  '6. En haut, <header class="entete"> avec le nom de l\'application et une <nav> de <button> pour passer d\'une partie à l\'autre. La première partie est affichée dès l\'ouverture : jamais de page vide au chargement.',
+  "7. Chaque partie : un <form> avec des <label> et des champs, puis la liste dans un <table> (<thead>, <tbody>). Une liste vide affiche une phrase (« Aucun client pour l'instant »).",
+  "8. Après chaque ajout, modification ou suppression : enregistre (localStorage), puis mets à jour TOUT de suite toutes les listes ET tous les menus déroulants qui en dépendent (une fonction rafraichir() appelée après chaque changement). Jamais besoin de recharger la page.",
+  '9. Montants en euros : valeur.toLocaleString("fr-FR", { style: "currency", currency: "EUR" }) ; dates : toLocaleDateString("fr-FR"). Demande confirmation avant une suppression.',
+  "10. Chaque fonction appelée existe et fait vraiment son travail : pas de fonction vide, pas de « TODO », pas de faute de frappe. À la fin, relis chaque fichier en entier.",
+].join("\n");
+
+export async function preparerDesign(
+  dossier: string,
+  demande: string,
+  qui: string,
+  options: { application?: boolean } = {},
+): Promise<{ consigne: string; cree: boolean; design?: Design }> {
   const dossierDesign = join(dossier, "design");
   const feuille = join(dossierDesign, "helix.css");
   /*
@@ -916,6 +949,7 @@ export async function preparerDesign(dossier: string, demande: string, qui: stri
     '   les boutons en <a class="bouton">, le bas en <footer class="pied">. Les exemples complets sont dans design/DESIGN.md.',
     "4. Pas d'image inventée : à la place, <div class=\"visuel\"></div>. Pas d'émoji comme icône.",
     "5. Un vrai contenu, précis, dans la langue de la demande.",
+    ...(options.application ? [CONSIGNE_APPLICATION] : []),
   ].join("\n");
   if (!design) return { consigne, cree: false };
   mkdirSync(dossierDesign, { recursive: true });

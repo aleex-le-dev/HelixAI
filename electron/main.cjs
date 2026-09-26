@@ -3,6 +3,7 @@ const { demarrerMiseAJour } = require("./miseAJour.cjs");
 const coffre = require("./coffre.cjs");
 const grandStockage = require("./grandStockage.cjs");
 const ligneDeCommande = require("./ligneDeCommande.cjs");
+const { demarrerRendu } = require("./rendu.cjs");
 const { installerBotReunion, arreterTousLesBots, botsActifs } = require("./botReunion.cjs");
 
 /*
@@ -109,7 +110,11 @@ function ping(port) {
  */
 const ATTENTE_MAX_MS = 30_000;
 
+/** Banc d'essai des pages de Helix Code (electron/rendu.cjs), démarré une fois, prêté à la passerelle. */
+let rendu = null;
+
 async function startGateway() {
+  if (!rendu && app.isReady()) rendu = await demarrerRendu().catch(() => null);
   /*
    * En développement, une passerelle lancée à la main est réutilisée : c'est
    * pratique pour itérer. Dans l'application livrée, jamais — l'application
@@ -138,6 +143,8 @@ async function startGateway() {
       HELIX_GATEWAY_PORT: String(GATEWAY_PORT),
       // Marque blanche : les messages de la passerelle disent le nom du produit livré.
       HELIX_NOM_PRODUIT: app.getName(),
+      // Le banc d'essai des pages : adresse sur la boucle locale et clé, pour la passerelle seule.
+      ...(rendu ? { HELIX_RENDU_URL: rendu.url, HELIX_RENDU_CLE: rendu.cle } : {}),
     },
     stdio: ["ignore", "pipe", "pipe"],
   });

@@ -210,8 +210,9 @@ function classesSansEffet(code: string, css: string, posees: Set<string>): { cla
  * problèmes trouvés, en phrases, chemins relatifs à l'espace de travail.
  * `langue` : celle de la demande, pour signaler les textes d'interface dans une autre.
  */
-export function controler(dossier: string, options: { langue?: "fr" } = {}): { problemes: string[]; fichiers: number } {
-  const racine = workspace();
+export function controler(dossier: string, options: { langue?: "fr"; racine?: string } = {}): { problemes: string[]; fichiers: number } {
+  // `racine` : le dossier de projet de Helix Code (controleCode.ts) ; sinon l'espace de Cowork.
+  const racine = options.racine ?? workspace();
   const rel = (f: string) => relative(racine, f) || f;
   const fichiers = lister(dossier);
   const problemes: string[] = [];

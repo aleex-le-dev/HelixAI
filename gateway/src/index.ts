@@ -63,7 +63,8 @@ import { homedir as dossierPersonnel } from "node:os";
 import * as images from "./images.ts";
 import { contenuLogiciel, logicielsTrouves, pageLogiciel } from "./importLocal.ts";
 import * as entrainement from "./entrainement.ts";
-import { corrigerPages, estDemandeDeSite, preparerDesign } from "./design.ts";
+import { corrigerPages, estApplication, estDemandeDeSite, preparerDesign } from "./design.ts";
+import { apresTourCode, arretDemandeCode, nouvelleDemandeCode } from "./controleCode.ts";
 import { arreterMachine, arreterMachineEnPartant, choisirSysteme, demarrerMachine, diagnosticMachine, effacerMachine, preparationMachineEnCours, progressionMachine, systemeMachine } from "./machine.ts";
 import { apercuEffacement, effacerCompte, sansComptesDisparus } from "./effacement.ts";
 import { authorise, cheminDuJeton, hasValidToken, instanceToken } from "./auth.ts";
@@ -172,6 +173,9 @@ import {
   ecouterDossier as ecouterDossierCode,
   abonner as abonnerCode,
   dernierNumero as dernierNumeroCode,
+  surFinDeTour as surFinDeTourCode,
+  noterRelanceHelix,
+  publierStatut as publierStatutCode,
   type EvenementCode,
 } from "./fluxCode.ts";
 import {
@@ -2349,6 +2353,38 @@ async function attendreAppel(texte: string, depuis: number): Promise<boolean> {
  */
 const SESSION_CODE = /^[A-Za-z0-9_-]{1,64}$/;
 
+/*
+ * Contrôle automatique de fin de tour (controleCode.ts) : Helix vérifie ce que
+ * l'agent a écrit, essaie les pages, et le relance avec la liste des problèmes
+ * tant que ce n'est pas propre. La relance part dans la même session, avec le
+ * même modèle, au nom de la même personne ; les clients la suivent dans le même
+ * tour (`relanceHelix`, fluxCode.ts).
+ */
+surFinDeTourCode((sessionID, dossier) => {
+  void apresTourCode(
+    sessionID,
+    dossier,
+    async (texte) => {
+      const reglage = modeleDeSession.get(sessionID);
+      if (!reglage) return false;
+      const messageID = idMessageCode();
+      noterRelanceHelix(messageID);
+      try {
+        const reponse = await codeApi(`/session/${sessionID}/prompt_async?directory=${encodeURIComponent(reglage.dossier)}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ messageID, ...refModele(reglage.modele, reglage.variante), parts: [{ type: "text", text: texte }] }),
+        });
+        await reponse.text().catch(() => "");
+        return reponse.ok;
+      } catch {
+        return false;
+      }
+    },
+    (message) => publierStatutCode(sessionID, { etat: "controle", message }),
+  ).catch((err) => console.error("[code] contrôle automatique :", err instanceof Error ? err.message : err));
+});
+
 async function handleCodePrompt(
   req: http.IncomingMessage,
   res: http.ServerResponse,
@@ -2434,7 +2470,7 @@ async function handleCodePrompt(
   if (estDemandeDeSite(body.text)) {
     try {
       const qui = await demandeur(req, new URL(req.url ?? "/", "http://localhost"));
-      const prepare = await preparerDesign(reglageEnvoi.dossier, body.text, qui?.userId ?? "code");
+      const prepare = await preparerDesign(reglageEnvoi.dossier, body.text, qui?.userId ?? "code", { application: estApplication(body.text) });
       texteEnvoye = body.text + prepare.consigne;
       if (prepare.design) console.log(`[code] design préparé : ${prepare.design.produit}, ${prepare.design.style}, ${prepare.design.polices.nom}.`);
     } catch (err) {
@@ -2453,6 +2489,8 @@ async function handleCodePrompt(
   if (auteur) noterDemandeCode(body.sessionID, auteur.userId, dossierDemande);
   // Les accords donnés aux outils d'OpenCode valent pour un tour (permissionsCode.ts).
   nouveauTourCode(body.sessionID);
+  // Une demande de la personne : le contrôle automatique repart de zéro (controleCode.ts).
+  nouvelleDemandeCode(body.sessionID);
 
   /*
    * `prompt_async` rend la main tout de suite (204), comme le faisait la
@@ -2567,6 +2605,8 @@ async function handleCodeInterrupt(
   const qui = await demandeur(req, new URL(req.url ?? "/", "http://localhost"));
   const acces = await refusSessionCode(body.sessionID, qui?.userId);
   if ("statut" in acces) return send(res, acces.statut, { error: { message: acces.message } });
+  // Arrêtée par la personne : le contrôle automatique ne relance plus l'agent derrière elle.
+  arretDemandeCode(body.sessionID);
   const dossier = acces.session.dossier;
   const upstream = await codeApi(`/session/${body.sessionID}/abort?directory=${encodeURIComponent(dossier)}`, {
     method: "POST",

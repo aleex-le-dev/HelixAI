@@ -2548,6 +2548,28 @@ sur le poste et sur l'instance) ; lanceur `helix` qui ne remplace jamais un prog
 encore. Non corrigé, documenté : RunAsNode reste actif (la passerelle et le lanceur en
 ont besoin).
 
+**Fait le 26/09/2026 : contrôle automatique de Helix Code** (`gateway/src/controleCode.ts`,
+`electron/rendu.cjs`). Demandé par Medhi : « le petit modèle doit produire un bon niveau
+de logiciel, même si c'est long ». À la fin de chaque tour, Helix contrôle lui-même les
+fichiers web modifiés (syntaxe, fichiers liés, fonctions appelées, éléments cherchés) et
+ouvre les pages modifiées dans une fenêtre cachée de l'application (erreurs à l'exécution,
+page presque vide, texte au contraste < 3, boutons et formulaires essayés avec des valeurs
+d'exemple) ; s'il reste un problème, il relance l'agent dans la même session avec la liste
+triée par gravité (et les fonctions qui existent vraiment), jusqu'à cinq fois ; l'écran
+suit la relance dans la même bulle et affiche le bilan ; « Arrêter » coupe les relances.
+Les applications de gestion (ERP, CRM, tableau de bord) reçoivent le kit de design et des
+règles de comportement (`CONSIGNE_APPLICATION`, design.ts). Mesuré le 26/09/2026 avec
+Qwen3 8B sur « Tu peux faire un petit ERP fonctionnel pour un cabinet d'avocat ? » : design
+posé, application écrite en ~7 min et annoncée « prête à l'emploi » ; le contrôle trouve
+10 problèmes (fonction `chargerSection` absente, tableaux absents, erreurs au clic) ; trois
+relances n'en corrigent aucun, l'agent affirmant pourtant avoir défini la fonction. Le
+contrôle fait son travail ; **Qwen3 8B n'a pas le niveau pour corriger** : il faut un modèle
+plus fort (Qwen3.5 9B, choix de Helix pour 16 Go, à réinstaller sur ce poste). Ternary
+Bonsai 2 27B (prism-ml, Apache 2.0, 8,6 Go, empreinte vérifiée) : non pris en charge par
+LM Studio (`prism_hadamard_qwen35`, moteur propre exigé). Pas encore essayé : la boucle dans
+l'application empaquetée (le banc d'essai n'existe qu'avec Electron), et avec un modèle
+plus fort.
+
 **Ce qui attend une machine qu'on n'a pas**
 
 7. **Qwen-Image** (texte lisible dans l'image) : 48 Go ou carte de 24 Go.

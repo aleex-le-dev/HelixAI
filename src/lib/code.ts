@@ -143,7 +143,8 @@ export async function interruptCode(sessionID: string): Promise<boolean> {
 /** Événement OpenCode traduit en langage Helix. */
 export type CodeEvent =
   /** Une demande commence à être traitée : `messageID` dit laquelle. */
-  | { kind: "demande"; messageID: string }
+  /** `relance` : envoyée par Helix lui-même (contrôle automatique), la suite du même tour. */
+  | { kind: "demande"; messageID: string; relance?: boolean }
   /** Une étape du modèle commence : l'agent travaille (encore). */
   | { kind: "etape" }
   | { kind: "reasoning"; text: string }
@@ -151,7 +152,7 @@ export type CodeEvent =
   | { kind: "tool_start"; callID: string; tool: string; input: Record<string, unknown> }
   | { kind: "tool_end"; callID: string; ok: boolean; preview: string }
   /** Ce qui se passe sans être une réponse : nouvelle tentative, résumé… */
-  | { kind: "statut"; text: string }
+  | { kind: "statut"; text: string; controle?: boolean }
   /**
    * Le modèle n'a encore rien rendu : il lit la demande, attend son tour ou se
    * charge (`helix.statut`, envoyé par l'instance toutes les dix secondes,
@@ -210,10 +211,12 @@ export function translate(raw: unknown): CodeEvent | null {
   const data = event.data ?? {};
 
   if (type === "session.next.prompted" && typeof data.messageID === "string") {
-    return { kind: "demande", messageID: data.messageID };
+    return { kind: "demande", messageID: data.messageID, ...(data.relanceHelix === true ? { relance: true } : {}) };
   }
   if (type === "helix.statut") {
     const etat = data.etat;
+    // Contrôle automatique de fin de tour (gateway/src/controleCode.ts) : une ligne d'état, texte déjà traduit.
+    if (etat === "controle") return typeof data.message === "string" ? { kind: "statut", text: data.message, controle: true } : null;
     if (etat !== "lecture" && etat !== "attente" && etat !== "chargement" && etat !== "fin") return null;
     const nombre = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : undefined);
     /*

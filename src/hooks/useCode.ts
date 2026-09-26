@@ -52,6 +52,8 @@ interface Tour {
   enAttente: CodeEvent[];
   /** Le tour s'est terminé (normalement ou non). */
   fini: boolean;
+  /** Quand il s'est terminé : une relance du contrôle automatique peut encore le rouvrir un moment. */
+  finiLe?: number;
   /** Position de chaque outil dans la liste affichée, par identifiant d'appel. */
   outils: Map<string, number>;
 }
@@ -215,6 +217,7 @@ export function useCode(dossier?: string, reglages: ReglagesCode = {}) {
   const terminer = useCallback(
     (tour: Tour, note?: string, issue: "fini" | "echec" = note ? "echec" : "fini") => {
       tour.fini = true;
+      tour.finiLe = Date.now();
       if (memoire.suivi.current) memoire.suivi.current = terminerSuivi(memoire.suivi.current, issue);
       const current = listRef.current.find((m) => m.id === tour.replyId);
       if (current) {
@@ -241,11 +244,32 @@ export function useCode(dossier?: string, reglages: ReglagesCode = {}) {
   const appliquer = useCallback(
     (tour: Tour, event: CodeEvent) => {
       if (event.kind === "demande") {
+        /*
+         * Une relance du contrôle automatique de Helix est la suite de notre
+         * demande : même bulle, et le tour rendu se rouvre. Sans cela, l'écran
+         * disait « terminé » pendant que l'agent corrigeait derrière.
+         */
+        if (event.relance) {
+          tour.actif = true;
+          if (tour.fini) {
+            tour.fini = false;
+            if (memoire.suivi.current) memoire.suivi.current = { ...memoire.suivi.current, fin: undefined, issue: undefined };
+            patch(tour.replyId, { streaming: true, error: undefined });
+            marquerOccupe(true);
+          }
+          return;
+        }
         // Sans identifiant rendu par l'envoi, on ne peut pas trier : tout est pris.
         if (tour.messageID !== undefined) tour.actif = event.messageID === tour.messageID;
         return;
       }
       if (!tour.actif) return;
+      // Le bilan du contrôle automatique arrive après la fin du tour : il s'ajoute à la réponse.
+      if (tour.fini && event.kind === "statut" && event.controle) {
+        const actuel = listRef.current.find((m) => m.id === tour.replyId);
+        if (actuel && event.text) patch(tour.replyId, { content: actuel.content ? `${actuel.content}\n\n*${event.text}*` : `*${event.text}*`, statut: undefined });
+        return;
+      }
       // Tour déjà terminé : seule une nouvelle étape le rouvre (voir « etape »).
       if (tour.fini && event.kind !== "etape") return;
       const current = listRef.current.find((m) => m.id === tour.replyId);
@@ -390,8 +414,20 @@ export function useCode(dossier?: string, reglages: ReglagesCode = {}) {
             if (fluxRef.current?.fermer !== fermer) return;
             fluxRef.current = null;
             const tour = tourRef.current;
-            // Au repos, rien à faire : l'envoi suivant se réabonnera.
-            if (!tour || tour.fini || tour.sessionID !== sessionID) return;
+            /*
+             * Au repos, rien à faire : l'envoi suivant se réabonnera. Sauf juste
+             * après un tour : le contrôle automatique de Helix peut encore relancer
+             * l'agent (gateway/src/controleCode.ts). Vu le 26/09/2026 : le flux
+             * tombé entre deux corrections, l'écran ratait toutes les suivantes.
+             */
+            const relancePossible = tour?.fini && tour.finiLe !== undefined && Date.now() - tour.finiLe < 15 * 60_000;
+            if (!tour || tour.sessionID !== sessionID || (tour.fini && !relancePossible)) return;
+            if (tour.fini) {
+              setTimeout(() => {
+                if (tourRef.current === tour && !fluxRef.current) listen(sessionID);
+              }, 2000);
+              return;
+            }
             /*
              * En plein travail : on se réabonne, sans rien perdre ni rien
              * rejouer. Le flux pouvait tomber sans prévenir (délai

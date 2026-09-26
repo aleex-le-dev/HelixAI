@@ -150,6 +150,22 @@ export function suivreSession(sessionID: string, dossier: string): void {
  * `helix.activite`. C'est ce qui tient le guet de silence des clients au
  * repos pendant une lecture de plusieurs minutes.
  */
+/**
+ * Fin d'un tour de l'agent principal (le modèle s'arrête sans appeler d'outil) :
+ * le contrôle automatique de Helix passe derrière (controleCode.ts). Un seul
+ * abonné, posé par index.ts ; les sous-agents n'en déclenchent pas.
+ */
+let surFin: ((sessionID: string, dossier: string) => void) | null = null;
+/** Messages envoyés par Helix lui-même (relance du contrôle automatique) : les clients les suivent dans le même tour. */
+const relancesHelix = new Set<string>();
+export function noterRelanceHelix(messageID: string): void {
+  if (relancesHelix.size > 500) relancesHelix.clear();
+  relancesHelix.add(messageID);
+}
+export function surFinDeTour(f: (sessionID: string, dossier: string) => void): void {
+  surFin = f;
+}
+
 export function publierStatut(sessionID: string, donnees: Record<string, unknown>): void {
   const suivi = sessions.get(sessionID);
   if (suivi) publier(sessionID, suivi, "helix.statut", donnees, false);
@@ -311,7 +327,7 @@ export function traduire(brut: { type?: string; properties?: Record<string, unkn
         suivi.demandes.add(info.id);
         suivi.echecDit = false;
         suivi.natures.clear();
-        publier(sessionID, suivi, "session.next.prompted", { messageID: info.id });
+        publier(sessionID, suivi, "session.next.prompted", { messageID: info.id, ...(relancesHelix.has(info.id) ? { relanceHelix: true } : {}) });
       }
       return;
     }
@@ -405,6 +421,10 @@ export function traduire(brut: { type?: string; properties?: Record<string, unkn
             assistantMessageID: part.messageID,
             finish: part.reason ?? "unknown",
           });
+          if (part.reason === "stop" && surFin) {
+            const dossier = suivi.dossier;
+            setTimeout(() => surFin?.(sessionID, dossier), 0);
+          }
           return;
         case "compaction":
           if (suivi.finies.has(id)) return;

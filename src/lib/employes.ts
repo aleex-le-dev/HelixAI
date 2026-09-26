@@ -358,7 +358,7 @@ export const PALIERS: Record<Liberte, { titre: string; detail: string }> = {
   },
   etendu: {
     titre: t("Étendu"),
-    detail: t("En plus : recherche sur le web, lecture de pages, navigateur, envoi de messages sur ses canaux."),
+    detail: t("En plus : recherche sur le web, lecture de pages, navigateur, envoi de messages sur ses canaux. Ces accès ne demandent pas votre accord : une page piégée peut le détourner (sauf pendant le traitement d'un mail reçu, où il ne les a pas)."),
   },
   libre: {
     titre: t("Libre"),

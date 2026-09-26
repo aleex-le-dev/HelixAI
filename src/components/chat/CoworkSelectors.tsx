@@ -73,7 +73,11 @@ const NIVEAUX: {
     valeur: "tout",
     titre: t("Tout approuver"),
     resume: t("Sans approbation"),
-    description: t("L'agent agit sans vous demander, sauf pour ce qui se confirme toujours (supprimer un événement, par exemple)."),
+    /*
+     * Le risque dit au moment du choix (décidé par Medhi le 27/09/2026 : à ce
+     * niveau, on l'accepte ; sinon, on reste en vérification).
+     */
+    description: t("L'agent agit sans vous demander, sauf pour supprimer un événement, programmer une tâche, et envoyer un mail (sauf envoi sans confirmation activé). Un texte piégé qu'il lit (mail, page web, document) peut alors le faire agir sans que vous le voyiez."),
     icone: <CircleAlert size={17} strokeWidth={1.75} className="text-warning" />,
   },
   {

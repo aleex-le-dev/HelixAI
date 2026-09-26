@@ -2668,6 +2668,15 @@ d'OpenCode passent par la même barrière (`permissionsCode.ts`). Le libellé de
 approuver » ne dit plus « sans jamais vous demander » : ce qui se confirme toujours
 (supprimer un événement) se confirme aussi à ce niveau.
 
+**Décidé par Medhi le 27/09/2026 : « Tout approuver » veut dire accepter le risque.** Pas de
+carte ajoutée après la lecture d'un contenu venu du dehors (mail, page web, document) : à ce
+niveau, un texte piégé peut faire agir l'agent sans carte, et on l'accepte en le choisissant ;
+qui ne l'accepte pas reste en « Demander avant de modifier » ou « Demander pour tout ». Même
+chose pour le palier « étendu » des employés (ses accès au web ne passent pas par la carte).
+Seuls restent toujours confirmés : envoyer un mail, supprimer un événement, programmer une
+tâche ; et un employé qui traite un mail reçu n'a jamais le web. L'écran dit ce risque au
+moment du choix (niveau d'approbation, palier « étendu »). Ne pas refaire à l'envers.
+
 **Fait le 27/09/2026 : les deux suites de la revue de sécurité.** Décidé par Medhi (« fais
 au mieux », « qu'il soit efficace et évite l'injection de prompt ») :
 - **Comptes** : un collègue invite, seul l'administrateur crée un compte directement, et

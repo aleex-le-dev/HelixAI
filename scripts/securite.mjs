@@ -533,6 +533,21 @@ console.log("\n3 quater. Revue du 26/09/2026 : réglages de l'instance, données
   );
   await appel("/helix/data/projects", { method: "PUT", headers: avecSeance, body: JSON.stringify({ value: projetsA }) });
 
+  // La photo d'un agent : une image intégrée seulement (27/09/2026).
+  {
+    const agentsAvantPhoto = (await (await appel("/helix/data/agents", { headers: avecSeance })).json()).value ?? [];
+    const base = { description: "", instructions: "", visibility: "personnel", hidePrompt: false, ownerId: compte.account?.id, organisationId: "org_default", toolsEnabled: false, createdAt: "", updatedAt: "" };
+    const valide = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGBQg=";
+    await appel("/helix/data/agents", { method: "PUT", headers: avecSeance, body: JSON.stringify({ value: [...agentsAvantPhoto, { ...base, id: "agent-photo-ok", name: "Avec photo", photo: valide }, { ...base, id: "agent-photo-url", name: "Photo douteuse", photo: "https://attaquant.example/pixel.png?qui=moi" }] }) });
+    const relus = (await (await appel("/helix/data/agents", { headers: avecSeance })).json()).value ?? [];
+    verifier(
+      "photo d'agent : une image intégrée est gardée, une adresse est retirée",
+      relus.find((x) => x.id === "agent-photo-ok")?.photo === valide && relus.some((x) => x.id === "agent-photo-url") && relus.find((x) => x.id === "agent-photo-url")?.photo === undefined,
+      JSON.stringify(relus.filter((x) => String(x.id).startsWith("agent-photo")).map((x) => [x.id, String(x.photo ?? "").slice(0, 30)])),
+    );
+    await appel("/helix/data/agents", { method: "PUT", headers: avecSeance, body: JSON.stringify({ value: agentsAvantPhoto }) });
+  }
+
   // La page publique de retour OAuth n'affiche pas un texte fourni par l'appelant.
   const retourOauth = await (await appel("/helix/oauth/retour?error=access_denied&error_description=TEXTE-PIRATE-7788")).text();
   verifier("la page publique de retour d'autorisation n'affiche pas le texte de l'appelant", !retourOauth.includes("TEXTE-PIRATE-7788"), retourOauth.slice(0, 120));

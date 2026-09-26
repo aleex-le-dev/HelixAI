@@ -37,6 +37,8 @@ export interface Agent {
    * Chacun n'y lit que ce qu'il voit : l'instance le vérifie à chaque question.
    */
   connaissances?: string[];
+  /** Sa photo, en image intégrée réduite à 256 pixels (27/09/2026). Sans photo, l'étincelle des agents. */
+  photo?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -76,7 +78,7 @@ export function getAgent(id: string): Agent | undefined {
 export function createAgent(
   owner: User,
   data: Pick<Agent, "name" | "description" | "instructions" | "visibility" | "hidePrompt"> &
-    Partial<Pick<Agent, "toolsEnabled" | "modelUid" | "connaissances" | "groupIds">>,
+    Partial<Pick<Agent, "toolsEnabled" | "modelUid" | "connaissances" | "groupIds" | "photo">>,
 ): Agent {
   const now = new Date().toISOString();
   const agent: Agent = {
@@ -92,6 +94,7 @@ export function createAgent(
     toolsEnabled: data.toolsEnabled ?? true,
     modelUid: data.modelUid,
     ...(data.connaissances && data.connaissances.length > 0 ? { connaissances: data.connaissances } : {}),
+    ...(data.photo ? { photo: data.photo } : {}),
     createdAt: now,
     updatedAt: now,
   };

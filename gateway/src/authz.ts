@@ -103,7 +103,21 @@ function voitAgent(agent: Record<string, unknown>, qui: Demandeur): boolean {
  * règle que la Bibliothèque) ; ceux qu'il avait déjà restent, pour qu'un
  * auteur sorti d'un groupe ne le lui retire pas sans le vouloir.
  */
-function groupesDeLAgent(avant: Record<string, unknown> | undefined, envoye: Record<string, unknown>, qui: Demandeur): Record<string, unknown> {
+/**
+ * La photo d'un agent (27/09/2026) : une image intégrée, JPEG, PNG ou WebP,
+ * de taille raisonnable, et rien d'autre. Elle voyage vers chaque poste qui
+ * voit l'agent : une adresse ou un texte de plusieurs mégaoctets n'y passent pas.
+ */
+const PHOTO_AGENT = /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/;
+function sansPhotoDouteuse(agent: Record<string, unknown>): Record<string, unknown> {
+  if (agent.photo === undefined) return agent;
+  if (typeof agent.photo === "string" && agent.photo.length < 200_000 && PHOTO_AGENT.test(agent.photo)) return agent;
+  const { photo: _p, ...reste } = agent;
+  return reste;
+}
+
+function groupesDeLAgent(avant: Record<string, unknown> | undefined, brut: Record<string, unknown>, qui: Demandeur): Record<string, unknown> {
+  const envoye = sansPhotoDouteuse(brut);
   if (!Array.isArray(envoye.groupIds)) return envoye;
   const deja = Array.isArray(avant?.groupIds) ? avant.groupIds : [];
   const groupIds = [...new Set(envoye.groupIds.filter((g): g is string => typeof g === "string" && (deja.includes(g) || (qui.groupes ?? []).includes(g))))];

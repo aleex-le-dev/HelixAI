@@ -2668,6 +2668,12 @@ d'OpenCode passent par la même barrière (`permissionsCode.ts`). Le libellé de
 approuver » ne dit plus « sans jamais vous demander » : ce qui se confirme toujours
 (supprimer un événement) se confirme aussi à ce niveau.
 
+**Fait le 27/09/2026 : une photo pour chaque agent.** Demandé par Medhi. Choisie à la création
+ou en cliquant sur l'avatar de sa carte (son propriétaire seul), recadrée en carré de 256 pixels
+comme la photo de profil ; elle apparaît sur sa carte, dans le choix de l'agent du Chat et sur
+la fiche de l'employé qui lui est lié. L'instance n'accepte qu'une image intégrée (JPEG, PNG,
+WebP, moins de 200 Ko) : une adresse est retirée (`npm run securite`).
+
 **Fait le 27/09/2026 : le web gardé pour les mails reçus, et des missions qu'on programme
 comme les tâches.** Demandé par Medhi : un employé qui traite un mail doit pouvoir aller sur
 le web sans qu'un mail piégé s'en serve (`webGarde.ts` : recherche DuckDuckGo en GET, lecture

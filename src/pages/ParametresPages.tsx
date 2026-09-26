@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
+import { reduirePhoto } from "@/lib/photo";
 import {
   ShieldOff,
   Check,
@@ -94,29 +95,6 @@ import { t, tf } from "@/lib/i18n";
  * gardé seulement dans le navigateur serait écrasé à la connexion suivante,
  * et resterait faux sur l'écran de connexion des collègues.
  */
-/** Réduit une image à un carré de 256 pixels (recadrage au centre), en JPEG : quelques dizaines de Ko. */
-function reduirePhoto(fichier: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const url = URL.createObjectURL(fichier);
-    const image = new Image();
-    image.onload = () => {
-      const cote = Math.min(image.naturalWidth, image.naturalHeight);
-      const toile = document.createElement("canvas");
-      toile.width = 256;
-      toile.height = 256;
-      const ctx = toile.getContext("2d");
-      if (!ctx) return reject(new Error("Image illisible."));
-      ctx.drawImage(image, (image.naturalWidth - cote) / 2, (image.naturalHeight - cote) / 2, cote, cote, 0, 0, 256, 256);
-      URL.revokeObjectURL(url);
-      resolve(toile.toDataURL("image/jpeg", 0.85));
-    };
-    image.onerror = () => {
-      URL.revokeObjectURL(url);
-      reject(new Error(t("Ce fichier n'est pas une image lisible.")));
-    };
-    image.src = url;
-  });
-}
 
 /**
  * Photo de profil, enregistrée sur l'instance aussitôt choisie : elle suit le

@@ -6,6 +6,7 @@ import { Popover } from "@/components/ui/Popover";
 import { useAgents } from "@/hooks/useAgents";
 import { useProjects } from "@/hooks/useProjects";
 import { DEFAULT_AGENT } from "@/lib/store/agents";
+import { AvatarAgent } from "@/components/ui/AvatarAgent";
 import { t, tf } from "@/lib/i18n";
 
 /** Champ de recherche compact interne aux popovers. */
@@ -216,7 +217,8 @@ export function AgentSelector({
       width={300}
       trigger={(p) => (
         <Chip
-          leading={<Bot size={15} strokeWidth={1.75} />}
+          // La photo de l'agent choisi, s'il en a une (27/09/2026).
+          leading={selected?.photo ? <AvatarAgent photo={selected.photo} nom={selected.name} size={16} /> : <Bot size={15} strokeWidth={1.75} />}
           onClick={p.onClick}
           active={open}
           aria-expanded={p["aria-expanded"]}
@@ -248,7 +250,7 @@ export function AgentSelector({
               }}
               className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-sm transition-colors hover:bg-muted"
             >
-              <Bot size={16} strokeWidth={1.75} className="shrink-0 text-muted-foreground" />
+              {agent.photo ? <AvatarAgent photo={agent.photo} nom={agent.name} size={18} /> : <Bot size={16} strokeWidth={1.75} className="shrink-0 text-muted-foreground" />}
               <span className="min-w-0 flex-1 truncate font-medium text-foreground">
                 {agent.name}
               </span>

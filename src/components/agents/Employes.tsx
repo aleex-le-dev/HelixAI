@@ -1,4 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from "react";
+import { getAgent } from "@/lib/store/agents";
+import { AvatarAgent } from "@/components/ui/AvatarAgent";
+import { photoValide } from "@/lib/photo";
 import { joursSemaine } from "@/lib/tachesProgrammees";
 import { useNavigate } from "react-router-dom";
 import {
@@ -637,9 +640,14 @@ export function PanneauEmploye({
   return (
     <Modal open onClose={onFermer} size="xl">
       <div className="flex items-start gap-3 pr-8">
-        <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-muted font-semibold text-foreground">
-          {initiales(employe.nom)}
-        </span>
+        {/* La photo de son agent, s'il en a une (27/09/2026) ; sinon ses initiales. */}
+        {photoValide(employe.agentId ? getAgent(employe.agentId)?.photo : undefined) ? (
+          <AvatarAgent photo={getAgent(employe.agentId!)?.photo} nom={employe.nom} size={44} />
+        ) : (
+          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-muted font-semibold text-foreground">
+            {initiales(employe.nom)}
+          </span>
+        )}
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <h2 className="text-lg font-semibold text-foreground">{employe.nom}</h2>

@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from "react";
-import { BookOpenText, Bot, Loader2, Plus, RefreshCw, Sparkle, Paperclip, Sparkles, Trash2, TriangleAlert, Wrench, X } from "lucide-react";
+import { BookOpenText, Bot, Loader2, Plus, RefreshCw, Paperclip, Sparkles, Trash2, TriangleAlert, Wrench, X } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/Button";
 import { SearchInput } from "@/components/ui/SearchInput";
@@ -12,7 +12,8 @@ import { branding } from "@/config/branding";
 import { useAgents } from "@/hooks/useAgents";
 import { useMiseEnService, type EtatMiseEnService } from "@/hooks/useMiseEnService";
 import { currentUser } from "@/lib/store/identity";
-import type { Agent, AgentVisibility } from "@/lib/store/agents";
+import { getAgent, type Agent, type AgentVisibility } from "@/lib/store/agents";
+import { AvatarAgent, ChoixPhotoAgent } from "@/components/ui/AvatarAgent";
 import { MiseAJourOpenClaw, PanneauEmploye, Statut, useEmployes } from "@/components/agents/Employes";
 import { ACCEPT_DOCUMENTS, retenirFichiers, supprimerEmploye, type Employe, type EtatEmployes } from "@/lib/employes";
 import { optimiserInstructions } from "@/lib/gateway";
@@ -148,6 +149,7 @@ export function AgentsPage() {
               onOuvrir={(id) => setOuvert(id)}
               onReessayer={() => reessayer(agent.id)}
               onConnaissances={(ids) => update(agent.id, { connaissances: ids })}
+              onPhoto={(photo) => update(agent.id, { photo: photo ?? undefined })}
               onDelete={async () => {
                 const e = employeDe(agent.id);
                 if (e && e.estProprietaire) await supprimerEmploye(e.id).catch(() => undefined);
@@ -244,6 +246,7 @@ function AgentCard({
   onOuvrir,
   onReessayer,
   onConnaissances,
+  onPhoto,
   onDelete,
 }: {
   agent: Agent;
@@ -255,6 +258,8 @@ function AgentCard({
   onOuvrir: (employeId: string) => void;
   onReessayer: () => void;
   onConnaissances: (ids: string[]) => void;
+  /** Sa photo, changée par son propriétaire (null : retirée). */
+  onPhoto: (photo: string | null) => void;
   onDelete: () => Promise<void>;
 }) {
   const [confirmer, setConfirmer] = useState(false);
@@ -270,9 +275,8 @@ function AgentCard({
         aria-label={employe ? tf("Ouvrir {0}", agent.name) : undefined}
       >
         <div className="flex w-full items-start gap-3 pr-6">
-          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-muted">
-            <Sparkle size={18} className="fill-info text-info" />
-          </span>
+          {/* La place de l'avatar : il est posé par-dessus, hors du bouton, pour que son propriétaire puisse y choisir une photo. */}
+          <span className="h-10 w-10 shrink-0" aria-hidden />
           <div className="min-w-0 flex-1">
             <p className="truncate font-medium text-foreground">{agent.name}</p>
             <p className="truncate text-xs text-muted-foreground">{libelleVisibilite(agent.visibility, agent.groupIds, groupes)}</p>
@@ -291,6 +295,9 @@ function AgentCard({
           )}
         </div>
       </button>
+      <div className="absolute left-4 top-4">
+        {canDelete ? <ChoixPhotoAgent photo={agent.photo} nom={agent.name} onChange={onPhoto} /> : <AvatarAgent photo={agent.photo} nom={agent.name} />}
+      </div>
       {/*
         * Bases de connaissances de l'agent : son propriétaire les change ici.
         * Dans le Chat, chacun y lit ce qu'il a le droit de voir ; l'employé
@@ -382,9 +389,7 @@ function CarteEmploye({
         className="flex h-full w-full flex-col gap-2 rounded-2xl border border-border bg-card p-4 text-left transition-shadow hover:shadow-sm"
       >
         <div className="flex w-full items-start gap-3">
-          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-muted">
-            <Sparkle size={18} className="fill-info text-info" />
-          </span>
+          <AvatarAgent photo={employe.agentId ? getAgent(employe.agentId)?.photo : undefined} nom={employe.nom} />
           <div className="min-w-0 flex-1">
             <p className="truncate font-medium text-foreground">{employe.nom}</p>
             <p className="text-xs text-muted-foreground">
@@ -405,6 +410,7 @@ function CarteEmploye({
 }
 
 interface NewAgent {
+  photo?: string;
   name: string;
   description: string;
   instructions: string;
@@ -441,8 +447,10 @@ function AgentModal({
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [instructions, setInstructions] = useState("");
+  const [photo, setPhoto] = useState<string | null>(null);
 
   const reset = () => {
+    setPhoto(null);
     setName("");
     setDescription("");
     setInstructions("");
@@ -473,12 +481,11 @@ function AgentModal({
       <div className="mt-5 grid gap-6 md:grid-cols-[220px_1fr]">
         {/* Colonne gauche : avatar + fichiers */}
         <div className="flex flex-col items-center gap-3 border-b border-border pb-5 md:border-b-0 md:border-r md:pb-0 md:pr-6">
-          <span className="flex h-24 w-24 items-center justify-center rounded-full bg-muted">
-            <Sparkle size={34} className="fill-info text-info" />
-          </span>
+          <ChoixPhotoAgent photo={photo ?? undefined} nom={name.trim() || t("Agent sans nom")} size={96} onChange={setPhoto} />
           <span className="text-sm font-medium text-foreground">
             {name.trim() || t("Agent sans nom")}
           </span>
+          <span className="-mt-2 text-[11px] text-muted-foreground">{t("Cliquez sur l'avatar pour lui donner une photo")}</span>
 
           <div className="mt-2 w-full space-y-2">
             <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
@@ -673,7 +680,7 @@ function AgentModal({
         <Button
           disabled={!name.trim() || (visibility === "groupes" && groupIds.length === 0)}
           onClick={() => {
-            onCreate({ name, description, instructions, visibility, groupIds, hidePrompt, toolsEnabled, connaissances }, fichiers);
+            onCreate({ name, description, instructions, visibility, groupIds, hidePrompt, toolsEnabled, connaissances, ...(photo ? { photo } : {}) }, fichiers);
             reset();
           }}
         >

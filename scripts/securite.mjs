@@ -86,6 +86,22 @@ const fauxModele = serveurHttp((req, res) => {
       const entree = JSON.parse(corps || "{}").input ?? [];
       return res.end(JSON.stringify({ data: (Array.isArray(entree) ? entree : [entree]).map((t, index) => ({ index, embedding: vecteur(String(t)) })) }));
     }
+    /*
+     * Faux modèle de conversation (ajouté le 26/09/2026, clés d'API) : il
+     * répond en flux, comme LM Studio, et recopie ses instructions système.
+     * La batterie y lit ce que les bases de connaissances y ont versé.
+     */
+    if (req.url === "/v1/chat/completions") {
+      const demande = JSON.parse(corps || "{}");
+      const systeme = (demande.messages ?? []).filter((m) => m.role === "system").map((m) => String(m.content)).join("\n");
+      res.setHeader("Content-Type", "text/event-stream");
+      const morceau = (o) => res.write(`data: ${JSON.stringify({ id: "essai-1", object: "chat.completion.chunk", created: 1, model: "essai-chat", ...o })}\n\n`);
+      morceau({ choices: [{ index: 0, delta: { role: "assistant", content: "Réponse d'essai. " } }] });
+      morceau({ choices: [{ index: 0, delta: { content: `ECHO[${systeme.slice(0, 6000)}]` } }] });
+      morceau({ choices: [{ index: 0, delta: {}, finish_reason: "stop" }] });
+      morceau({ choices: [], usage: { prompt_tokens: 11, completion_tokens: 7, total_tokens: 18 } });
+      return res.end("data: [DONE]\n\n");
+    }
     res.statusCode = 404;
     res.end("{}");
   });
@@ -221,6 +237,7 @@ const ROUTES = [
   ["POST", "/helix/openclaw/installer"], ["GET", "/helix/reseau"], ["POST", "/helix/invitations/inviter"],
   ["GET", "/helix/connaissances"], ["POST", "/helix/connaissances/chercher"],
   ["GET", "/helix/entrainement"], ["POST", "/helix/entrainement/lancer"],
+  ["GET", "/helix/cles-api"], ["POST", "/helix/cles-api"],
 ];
 for (const [methode, chemin] of ROUTES) {
   const r = await appel(chemin, { method: methode, headers: { "Content-Type": "application/json" }, body: methode === "POST" ? "{}" : undefined });
@@ -258,6 +275,8 @@ const SEANCE_REQUISE = [
   ["GET", "/helix/entrainement"], ["POST", "/helix/entrainement/installer"], ["POST", "/helix/entrainement/desinstaller"],
   ["POST", "/helix/entrainement/projets"], ["GET", "/helix/entrainement/projet?id=0123456789abcdef01234567"],
   ["POST", "/helix/entrainement/lancer"], ["POST", "/helix/entrainement/publier"], ["POST", "/helix/entrainement/supprimer"],
+  // Ajoutés le 26/09/2026 : clés d'API personnelles (clesApi.ts).
+  ["GET", "/helix/cles-api"], ["POST", "/helix/cles-api"], ["POST", "/helix/cles-api/cle_x"], ["POST", "/helix/cles-api/cle_x/revoquer"],
 ];
 for (const [methode, chemin] of SEANCE_REQUISE) {
   const r = await appel(chemin, { method: methode, headers: avecJeton, body: methode === "POST" ? "{}" : undefined });
@@ -1152,6 +1171,212 @@ console.log("\n7 ter. Employés OpenClaw et bases de connaissances : ce qui est 
 }
 
 /* ------------------------------------------------------------------------- */
+console.log("\n7 ter bis. Clés d'API personnelles : l'API compatible OpenAI, et rien d'autre");
+/*
+ * Ajouté le 26/09/2026 (clesApi.ts). Une clé remplace, pour /v1/models et
+ * /v1/chat/completions seulement, le jeton d'instance et la séance. Le faux
+ * modèle de conversation recopie ses instructions système : c'est là qu'on lit
+ * ce que les bases de connaissances y ont versé. Mots de contrôle : GOYAVE-6612
+ * (document privé de A, dans sa base), FIGUE-9043 (document privé de B, dans
+ * sa base privée) : la clé de A ne doit jamais faire sortir le second.
+ */
+const CLES_EN_CLAIR = [];
+{
+  const creer = async (entete, nom, jours) => {
+    const r = await appel("/helix/cles-api", { method: "POST", headers: entete, body: JSON.stringify({ nom, jours }) });
+    const corps = await r.json().catch(() => ({}));
+    if (corps.secret) CLES_EN_CLAIR.push(corps.secret);
+    return { status: r.status, ...corps };
+  };
+  const parCle = (cle, chemin, options = {}) =>
+    appel(chemin, { ...options, headers: { "Content-Type": "application/json", Authorization: `Bearer ${cle}`, ...(options.headers ?? {}) } });
+
+  const a = await creer(avecSeance, "Script de A", 90);
+  verifier(
+    "une personne connectée crée une clé : hlx_ puis 43 caractères, montrée une fois",
+    a.status === 200 && /^hlx_[A-Za-z0-9_-]{43}$/.test(a.secret ?? "") && a.cle?.fin === a.secret?.slice(-4) && a.cle?.expire,
+    `${a.status} ${JSON.stringify(a.cle)}`,
+  );
+  const CLE_A = a.secret;
+  const sansNom = await creer(avecSeance, "", null);
+  verifier("une clé sans nom est refusée (400)", sansNom.status === 400, sansNom.status);
+  const dureeInconnue = await creer(avecSeance, "Durée bizarre", 7);
+  verifier("une durée hors de 30, 90, 365 ou jamais est refusée (400)", dureeInconnue.status === 400, dureeInconnue.status);
+
+  const inventee = `hlx_${"A".repeat(43)}`;
+  for (const [methode, chemin] of [["GET", "/v1/models"], ["POST", "/v1/chat/completions"]]) {
+    const r = await parCle(inventee, chemin, { method: methode, body: methode === "POST" ? JSON.stringify({ messages: [{ role: "user", content: "x" }] }) : undefined });
+    verifier(`${methode} ${chemin} avec une clé inventée → 401`, r.status === 401, r.status);
+  }
+
+  const modeles = await parCle(CLE_A, "/v1/models");
+  const listeModeles = await modeles.json().catch(() => ({}));
+  const chat = listeModeles.data?.find((m) => /essai-chat/.test(m.id));
+  verifier("clé valide : GET /v1/models → 200, sans jeton d'instance ni séance", modeles.status === 200 && Boolean(chat), `${modeles.status} ${JSON.stringify(listeModeles).slice(0, 120)}`);
+
+  const question = (extra = {}) => JSON.stringify({ model: chat?.id, messages: [{ role: "user", content: "Quel est le code du wifi invité ?" }], ...extra });
+  const enFlux = await parCle(CLE_A, "/v1/chat/completions", { method: "POST", body: question({ stream: true }) });
+  const texteFlux = await enFlux.text();
+  verifier(
+    "clé valide : /v1/chat/completions en flux atteint le moteur",
+    enFlux.status === 200 && (enFlux.headers.get("content-type") ?? "").includes("text/event-stream") && texteFlux.includes("Réponse d'essai") && texteFlux.includes("[DONE]"),
+    `${enFlux.status} ${texteFlux.slice(0, 100)}`,
+  );
+  const sansFlux = await parCle(CLE_A, "/v1/chat/completions", { method: "POST", body: question() });
+  const objet = await sansFlux.json().catch(() => ({}));
+  verifier(
+    "sans stream: true, une réponse JSON chat.completion (le défaut du paquet openai)",
+    sansFlux.status === 200 && objet.object === "chat.completion" && objet.choices?.[0]?.message?.content?.includes("Réponse d'essai") && objet.usage?.total_tokens === 18,
+    `${sansFlux.status} ${JSON.stringify(objet).slice(0, 120)}`,
+  );
+  const outils = await parCle(CLE_A, "/v1/chat/completions", { method: "POST", body: question({ tools: true }) });
+  verifier("une clé ne fait pas agir l'instance (tools: true → 403)", outils.status === 403, outils.status);
+  const usage = await (await appel("/helix/usage", { headers: avecSeance })).json().catch(() => ({}));
+  verifier("la consommation par clé est comptée au nom de sa titulaire (Mon usage)", JSON.stringify(usage).includes("essai-chat"), JSON.stringify(usage).slice(0, 120));
+
+  for (const [methode, chemin] of [["GET", "/helix/data/sessions"], ["GET", "/helix/export"], ["POST", "/helix/cles-api"], ["GET", "/helix/cles-api"], ["GET", "/helix/models"], ["POST", "/helix/code/session"], ["GET", "/helix/connaissances"]]) {
+    const r = await parCle(CLE_A, chemin, { method: methode, body: methode === "POST" ? JSON.stringify({ nom: "Seconde clé" }) : undefined });
+    verifier(`la même clé sur ${methode} ${chemin} → 401 ou 403`, r.status === 401 || r.status === 403, r.status);
+  }
+  {
+    // La clé avec le jeton d'instance et une séance en plus : elle n'ouvre toujours pas /helix/*.
+    const r = await appel("/helix/export", { headers: { ...avecSeance, Authorization: `Bearer ${CLE_A}` } });
+    verifier("clé plus séance sur /helix/export : toujours refusé", r.status === 401 || r.status === 403, r.status);
+  }
+  for (const nom of ["api_key", "token", "key", "session"]) {
+    const r = await appel(`/v1/models?${nom}=${encodeURIComponent(CLE_A)}`, { headers: avecJeton });
+    verifier(`clé en paramètre d'URL (?${nom}=) refusée, même avec le jeton d'instance`, r.status === 401, r.status);
+  }
+  {
+    const r = await appel("/v1/models", { headers: { ...avecJeton, "X-Helix-Session": CLE_A } });
+    verifier("clé glissée dans l'en-tête de séance refusée", r.status === 401, r.status);
+  }
+
+  // Bases de connaissances : celles que la titulaire voit, et elles seules.
+  const document = async (entete, nom, texte) => {
+    const r = await appel("/helix/bibliotheque/documents", {
+      method: "POST", headers: entete,
+      body: JSON.stringify({ nom, contenu: Buffer.from(texte).toString("base64"), texte, visibilite: "prive" }),
+    });
+    return (await r.json()).element?.id;
+  };
+  const base = async (entete, nom, docs) => {
+    const b = (await (await appel("/helix/connaissances", { method: "POST", headers: entete, body: JSON.stringify({ nom, visibilite: "prive" }) })).json()).base;
+    await appel(`/helix/connaissances/${b?.id}/documents`, { method: "POST", headers: entete, body: JSON.stringify({ documents: docs }) });
+    return b?.id;
+  };
+  const kbA = await base(avecSeance, "Base-Cle-A", [await document(avecSeance, "Wifi-A.txt", "Le code du wifi invité est GOYAVE-6612.")]);
+  const kbB = await base(avecSeanceB, "Base-Cle-B-Privee", [await document(avecSeanceB, "Wifi-B.txt", "Le code du wifi invité de Bernard est FIGUE-9043.")]);
+  let pretes = false;
+  for (let i = 0; i < 60 && !pretes; i++) {
+    const ba = (await (await appel(`/helix/connaissances/${kbA}`, { headers: avecSeance })).json()).base;
+    const bb = (await (await appel(`/helix/connaissances/${kbB}`, { headers: avecSeanceB })).json()).base;
+    pretes = [ba, bb].every((b) => b?.documents?.length > 0 && b.documents.every((d) => d.etat === "pret"));
+    if (!pretes) await attendre(500);
+  }
+  const avecSaBase = await (await parCle(CLE_A, "/v1/chat/completions", { method: "POST", body: question({ connaissances: [kbA] }) })).json().catch(() => ({}));
+  verifier(
+    "clé de A avec sa base (connaissances: [kb_…]) : le passage arrive au modèle, sources rendues",
+    pretes && avecSaBase.choices?.[0]?.message?.content?.includes("GOYAVE-6612") && avecSaBase.helix?.sources?.length > 0,
+    `${pretes} ${JSON.stringify(avecSaBase).slice(0, 160)}`,
+  );
+  const baseDeB = await (await parCle(CLE_A, "/v1/chat/completions", { method: "POST", body: question({ connaissances: [kbB] }) })).json().catch(() => ({}));
+  verifier(
+    "la clé de A ne voit pas les bases de B",
+    !JSON.stringify(baseDeB).includes("FIGUE") && !JSON.stringify(baseDeB).includes("Base-Cle-B") && (baseDeB.helix?.sources ?? []).length === 0,
+    JSON.stringify(baseDeB).slice(0, 160),
+  );
+  const fluxBase = await (await parCle(CLE_A, "/v1/chat/completions", { method: "POST", body: question({ connaissances: [kbA], stream: true }) })).text();
+  verifier("en flux aussi, la base de la titulaire est consultée", fluxBase.includes("GOYAVE-6612"), fluxBase.slice(0, 120));
+
+  // Chacun ne voit que ses clés.
+  const listeA = await (await appel("/helix/cles-api", { headers: avecSeance })).json();
+  const listeB = await (await appel("/helix/cles-api", { headers: avecSeanceB })).json();
+  verifier(
+    "la liste des clés n'est visible que de leur titulaire, sans empreinte ni sel",
+    listeA.cles?.some((c) => c.id === a.cle?.id) && !listeB.cles?.some((c) => c.id === a.cle?.id) && !/empreinte|"sel"|hlx_/.test(JSON.stringify(listeA)),
+    `${JSON.stringify(listeA).slice(0, 100)} | ${JSON.stringify(listeB).slice(0, 60)}`,
+  );
+  verifier("la liste dit où joindre l'API (…/v1)", /^http:\/\/localhost:\d+\/v1$/.test(listeA.adresses?.locale ?? ""), JSON.stringify(listeA.adresses));
+  const revoqueParB = await appel(`/helix/cles-api/${a.cle?.id}/revoquer`, { method: "POST", headers: avecSeanceB, body: "{}" });
+  verifier("une collègue ne peut pas révoquer la clé d'une autre (404)", revoqueParB.status === 404, revoqueParB.status);
+  const renommeeParB = await appel(`/helix/cles-api/${a.cle?.id}`, { method: "POST", headers: avecSeanceB, body: JSON.stringify({ nom: "Volée" }) });
+  verifier("ni la renommer (404)", renommeeParB.status === 404, renommeeParB.status);
+  const renommee = await appel(`/helix/cles-api/${a.cle?.id}`, { method: "POST", headers: avecSeance, body: JSON.stringify({ nom: "Script de A, renommé" }) });
+  verifier("sa titulaire la renomme", renommee.status === 200 && (await renommee.json()).cle?.nom === "Script de A, renommé", renommee.status);
+
+  // Limite de débit, par clé.
+  const rapide = await creer(avecSeance, "Clé du débit", 30);
+  let limite = null;
+  for (let i = 0; i < 80 && limite === null; i++) {
+    const r = await parCle(rapide.secret, "/v1/models");
+    if (r.status === 429) limite = { i, retry: r.headers.get("retry-after") };
+  }
+  verifier("une clé qui tourne en boucle est freinée (429, Retry-After)", limite !== null && Number(limite.retry) > 0, "jamais freinée en 80 appels");
+  const autreApres = await parCle(CLE_A, "/v1/models");
+  verifier("la limite d'une clé ne freine pas les autres", autreApres.status === 200, autreApres.status);
+
+  // Expiration : on avance la date d'une clé dans le registre, comme le ferait le temps.
+  const perimee = await creer(avecSeance, "Clé bientôt périmée", 30);
+  verifier("avant son expiration, elle ouvre /v1/models", (await parCle(perimee.secret, "/v1/models")).status === 200, "refusée");
+  process.env.HELIX_DATA_DIR = DONNEES;
+  process.env.HELIX_CONFIG = join(AUX, "profil.json");
+  const { pathToFileURL } = await import("node:url");
+  const { db } = await import(pathToFileURL(join(RACINE, "gateway", "src", "db.ts")).href);
+  await attendre(300);
+  const registre = await db().read("clesApi");
+  await db().write("clesApi", registre.map((c) => (c.id === perimee.cle?.id ? { ...c, expire: new Date(Date.now() - 1000).toISOString() } : c)));
+  const apresExpiration = await parCle(perimee.secret, "/v1/models");
+  verifier("clé expirée → 401", apresExpiration.status === 401, apresExpiration.status);
+  const listeExpiree = await (await appel("/helix/cles-api", { headers: avecSeance })).json();
+  verifier("l'écran la montre expirée", listeExpiree.cles?.find((c) => c.id === perimee.cle?.id)?.expiree === true, JSON.stringify(listeExpiree.cles?.find((c) => c.id === perimee.cle?.id)));
+  verifier(
+    "le registre ne garde que des empreintes salées, jamais la clé",
+    Array.isArray(registre) && registre.every((c) => /^[0-9a-f]{64}$/.test(c.empreinte) && /^[0-9a-f]{32}$/.test(c.sel) && !JSON.stringify(c).includes("hlx_")),
+    JSON.stringify(registre?.[0]).slice(0, 120),
+  );
+
+  // Révocation : immédiate.
+  const revoquee = await appel(`/helix/cles-api/${a.cle?.id}/revoquer`, { method: "POST", headers: avecSeance, body: "{}" });
+  const apresRevocation = await parCle(CLE_A, "/v1/models");
+  verifier("clé révoquée → 401 aussitôt", revoquee.status === 200 && apresRevocation.status === 401, `${revoquee.status} puis ${apresRevocation.status}`);
+
+  // Limite de clés par personne.
+  let refus = null;
+  for (let i = 0; i < 25 && refus === null; i++) {
+    const r = await creer(avecSeanceB, `Clé ${i}`, null);
+    if (r.status !== 200) refus = r.status;
+  }
+  verifier("au-delà de 20 clés par personne, la création est refusée (409)", refus === 409, refus);
+
+  // L'export RGPD porte la liste, sans empreinte.
+  const exportA = await (await appel("/helix/export", { headers: avecSeance })).json();
+  verifier(
+    "l'export RGPD contient ses clés, sans empreinte, sans sel, sans la clé",
+    Array.isArray(exportA.clesApi) && exportA.clesApi.length > 0 && !/empreinte|"sel"/.test(JSON.stringify(exportA.clesApi)) && !CLES_EN_CLAIR.some((c) => JSON.stringify(exportA).includes(c)),
+    JSON.stringify(exportA.clesApi).slice(0, 120),
+  );
+
+  // Rien en clair sur le disque, journal d'audit compris.
+  const { statSync } = await import("node:fs");
+  const fichiers = [];
+  const parcourir = (d) => {
+    for (const n of readdirSync(d)) {
+      const p = join(d, n);
+      const s = statSync(p);
+      if (s.isDirectory()) parcourir(p);
+      else if (s.size < 20_000_000) fichiers.push(p);
+    }
+  };
+  parcourir(DONNEES);
+  const fuite = fichiers.find((f) => {
+    const brut = readFileSync(f, "latin1");
+    return CLES_EN_CLAIR.some((c) => brut.includes(c));
+  });
+  verifier(`aucune clé en clair sur le disque (${fichiers.length} fichiers, journal d'audit compris)`, CLES_EN_CLAIR.length > 0 && !fuite, fuite);
+}
+
+/* ------------------------------------------------------------------------- */
 console.log("\n7 quater. Export RGPD et effacement : bases, images, entraînement");
 {
   /*
@@ -1196,6 +1421,9 @@ console.log("\n7 quater. Export RGPD et effacement : bases, images, entraînemen
   const indexAvant = existsSync(indexDe(docEfface));
   const efface = await appel("/helix/compte/effacer", { method: "POST", headers: avecSeanceB, body: JSON.stringify({ password: MDP_B }) });
   verifier("effacer son compte réussit", efface.status === 200, efface.status);
+  // La dernière clé créée par la batterie est à elle (section 7 ter bis) : elle part avec le compte.
+  const cleDeB = await appel("/v1/models", { headers: { Authorization: `Bearer ${CLES_EN_CLAIR.at(-1)}` } });
+  verifier("l'effacement révoque ses clés d'API", cleDeB.status === 401, cleDeB.status);
   const restes = existsSync(join(DONNEES, "entrainement", projet.id ?? "absent"));
   verifier("l'effacement retire ses projets d'entraînement du disque", projet.id && !restes, restes ? "dossier resté" : projet.id);
   const bases = JSON.stringify(await (await appel("/helix/connaissances", { headers: avecSeance })).json());
@@ -1226,7 +1454,8 @@ console.log("\n7 quater. Export RGPD et effacement : bases, images, entraînemen
 console.log("\n8. Fin de séance");
 {
   const r1 = await appel("/helix/auth/revoke", { method: "POST", headers: avecSeance, body: JSON.stringify({ toutes: true }) });
-  const r2 = await appel("/helix/export", { headers: avecSeance });
+  // Pas l'export : sa limite de débit (une toutes les quelques secondes) répond 429 avant la séance, la batterie l'appelant plusieurs fois.
+  const r2 = await appel("/helix/data/sessions", { headers: avecSeance });
   verifier("fermer toutes ses séances les rend inutilisables", r1.status === 200 && r2.status === 401, `${r1.status} puis ${r2.status}`);
 }
 
@@ -1235,6 +1464,7 @@ console.log("\n9. Rien de secret dans le journal du serveur");
 verifier("le jeton d'instance n'apparaît pas dans le journal", !journal.includes(JETON), "trouvé");
 verifier("le jeton de séance n'apparaît pas dans le journal", !SEANCE || !journal.includes(SEANCE), "trouvé");
 verifier("le mot de passe n'apparaît pas dans le journal", !journal.includes("Mot2PasseSolide!42") && !journal.includes(MDP_B), "trouvé");
+verifier("aucune clé d'API n'apparaît dans le journal", CLES_EN_CLAIR.length > 0 && !CLES_EN_CLAIR.some((c) => journal.includes(c)), "trouvée");
 {
   /*
    * Joindre la passerelle par l'adresse réseau de la machine : elle ne doit

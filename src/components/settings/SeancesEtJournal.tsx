@@ -103,6 +103,10 @@ const LIBELLES: Record<string, string> = {
   "fournisseur.ajoute": t("Clé de modèle cloud branchée"),
   "fournisseur.modifie": t("Clé de modèle cloud modifiée"),
   "fournisseur.retire": t("Clé de modèle cloud retirée"),
+  "cleapi.creee": t("Clé d'API créée"),
+  "cleapi.renommee": t("Clé d'API renommée"),
+  "cleapi.revoquee": t("Clé d'API révoquée"),
+  "api.appel": t("Appel à l'API par une clé"),
 };
 
 /** Les évènements qui méritent l'œil : refus, blocages, actions sur l'écran. */

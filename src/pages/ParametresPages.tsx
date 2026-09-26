@@ -4,7 +4,6 @@ import {
   Check,
   ExternalLink,
   LogOut,
-  KeyRound,
   Server,
   MessageSquare,
   Info,
@@ -50,6 +49,7 @@ import { etat as etatSlack, type EtatSlack } from "@/lib/slack";
 import type { ServiceMaison } from "@/components/settings/Connecteurs";
 import { Usage } from "@/components/settings/Usage";
 import { ModelesCloud } from "@/components/settings/ModelesCloud";
+import { ClesApi } from "@/components/settings/ClesApi";
 import { EntrainerModele } from "@/components/settings/EntrainerModele";
 import { TelechargerApps } from "@/components/settings/TelechargerApps";
 import { ImporterChats } from "@/components/settings/ImporterChats";
@@ -1193,20 +1193,12 @@ function McpServers() {
 
 
 /* ========================================================================== */
-/* API développeur (aucune capture : placeholder sobre)                       */
+/* API développeur : clés personnelles et documentation (clesApi.ts)          */
 /* ========================================================================== */
 export function ApiSettings() {
   return (
     <SettingsPage title={t("API développeur")} subtitle={t("Clés d'accès et intégration programmatique")}>
-      <Card className="flex flex-col items-center gap-3 py-12 text-center">
-        <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-muted">
-          <KeyRound size={24} strokeWidth={1.5} className="text-muted-foreground" />
-        </span>
-        <p className="font-medium text-foreground">{t("Accès API bientôt disponible")}</p>
-        <p className="max-w-sm text-sm text-muted-foreground">
-          {t("La génération de clés d'API et la documentation développeur arrivent prochainement.")}
-        </p>
-      </Card>
+      <ClesApi />
     </SettingsPage>
   );
 }

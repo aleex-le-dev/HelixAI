@@ -108,6 +108,27 @@ export function verifier(methode: string, chemin: string, appelant: string): Ver
   return { ok: true };
 }
 
+/**
+ * Débit d'une clé d'API (clesApi.ts), toutes routes confondues : `max`
+ * requêtes par minute. Compté par clé et non par adresse, pour qu'une clé
+ * fuitée qui tourne en boucle s'arrête seule, sans freiner les collègues du
+ * même bureau.
+ */
+export function verifierCleApi(idCle: string, max: number): Verdict {
+  const maintenant = Date.now();
+  menage(maintenant);
+  const cle = `cle-api|${idCle}`;
+  const fenetreMs = 60_000;
+  const dates = (passages.get(cle) ?? []).filter((d) => d > maintenant - fenetreMs);
+  if (dates.length >= max) {
+    passages.set(cle, dates);
+    return { ok: false, retenteDans: Math.max(1, Math.ceil((dates[0]! + fenetreMs - maintenant) / 1000)) };
+  }
+  dates.push(maintenant);
+  passages.set(cle, dates);
+  return { ok: true };
+}
+
 /** Remet les compteurs à zéro. Pour les essais, et pour eux seuls. */
 export function oublierTout(): void {
   passages.clear();

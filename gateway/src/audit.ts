@@ -122,6 +122,16 @@ export type AuditAction =
   | "motdepasse.defini"
   | "compte.supprime"
   /*
+   * Clés d'API personnelles (clesApi.ts) : créée, renommée, révoquée, par qui,
+   * avec son nom et ses quatre derniers caractères. Chaque appel fait avec une
+   * clé est consigné sous `api.appel` : la route, le modèle demandé, l'issue,
+   * jamais les messages ni la réponse. La clé elle-même n'y figure jamais.
+   */
+  | "cleapi.creee"
+  | "cleapi.renommee"
+  | "cleapi.revoquee"
+  | "api.appel"
+  /*
    * Identité du compte. L'adresse est un identifiant de connexion et une clé
    * de partage : après coup, il faut pouvoir dire qui portait quelle adresse,
    * et depuis quand. Une tentative refusée faute du bon mot de passe est

@@ -126,6 +126,12 @@ export const COLLECTIONS_INTERNES = [
    * dates. Leur contenu reste chez OpenCode ; chacun ne liste que les siennes.
    */
   "sessionsCode",
+  /*
+   * Clés d'API personnelles (clesApi.ts) : empreintes salées, noms, dates.
+   * Interne parce qu'une empreinte n'a rien à faire sur un poste, et que la
+   * liste dit qui interroge l'instance par programme.
+   */
+  "clesApi",
 ] as const;
 
 export type StoredCollection = Collection | (typeof COLLECTIONS_INTERNES)[number];

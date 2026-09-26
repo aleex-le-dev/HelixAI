@@ -36,7 +36,18 @@ async function choisir(qui: string): Promise<{ model: ModelInfo } | { error: str
 
 export async function completer(
   messages: Message[],
-  options: { qui: string; maxTokens?: number; delaiMs?: number },
+  options: {
+    qui: string;
+    maxTokens?: number;
+    delaiMs?: number;
+    /**
+     * Réponse tenue à un schéma JSON (LM Studio : `response_format`, sortie
+     * contrainte par grammaire). Ajouté le 26/09/2026 pour le plan des
+     * applications de Helix Code (application.ts) : un petit modèle libre
+     * d'écrire oublie une accolade une fois sur quelques-unes.
+     */
+    schema?: { nom: string; schema: Record<string, unknown> };
+  },
 ): Promise<Completion> {
   const choix = await choisir(options.qui);
   if ("error" in choix) return { ok: false, message: choix.error };
@@ -61,6 +72,9 @@ export async function completer(
     max_tokens: options.maxTokens ?? 2048,
     // Qwen3.5 et suivants : `/no_think` n'y fait plus rien, LM Studio suit ce champ (chat.ts).
     ...(backend.kind === "lmstudio" && /qwen3/i.test(model.id) ? { reasoning_effort: "none" } : {}),
+    ...(options.schema && backend.kind === "lmstudio"
+      ? { response_format: { type: "json_schema", json_schema: { name: options.schema.nom, strict: true, schema: options.schema.schema } } }
+      : {}),
   };
 
   let reponse: Response;

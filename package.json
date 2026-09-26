@@ -18,7 +18,7 @@
     "gateway": "node gateway/src/index.ts",
     "app": "npm run build:gateway && electron .",
     "package": "npm run build && electron-builder --publish never",
-    "build:gateway": "esbuild gateway/src/index.ts --bundle --platform=node --target=node20 --format=cjs --outfile=dist-gateway/index.cjs --external:pg-native && esbuild gateway/tools/motdepasse.ts --bundle --platform=node --target=node20 --format=cjs --outfile=dist-gateway/motdepasse.cjs --external:pg-native",
+    "build:gateway": "node scripts/modele-application.mjs && esbuild gateway/src/index.ts --bundle --platform=node --target=node20 --format=cjs --outfile=dist-gateway/index.cjs --external:pg-native && esbuild gateway/tools/motdepasse.ts --bundle --platform=node --target=node20 --format=cjs --outfile=dist-gateway/motdepasse.cjs --external:pg-native",
     "build": "tsc --noEmit && npm run typecheck:gateway && vite build && npm run build:gateway",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit && npm run typecheck:gateway",

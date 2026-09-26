@@ -2570,6 +2570,31 @@ LM Studio (`prism_hadamard_qwen35`, moteur propre exigé). Pas encore essayé : 
 l'application empaquetée (le banc d'essai n'existe qu'avec Electron), et avec un modèle
 plus fort.
 
+**Fait le 26/09/2026 : les applications de gestion faites en plusieurs étapes**
+(`gateway/src/application.ts`, moteur dans `gateway/application/`). Demandé par Medhi, avec
+pour exemple l'écran d'un ERP classique : « le petit modèle avec le séquençage doit faire un
+beau logiciel même si ça prend du temps ». Décision : le petit modèle n'écrit plus le
+logiciel entier. Pour une demande d'application dans un dossier neuf : (1) le plan (parties,
+champs, liens) en JSON tenu par un schéma (`response_format` de LM Studio) ; (2) des fiches
+d'exemple, une partie à la fois ; (3) l'interface écrite par Helix à partir du plan, aux
+couleurs du design choisi (barre du haut, menu et filtres à gauche, liste triable et paginée,
+fiche détaillée avec ses éléments liés, formulaire, suppression confirmée, export CSV,
+tableau de bord, enregistrement sur le poste) ; (4) l'agent n'écrit que `app/metier.js`
+(champs ajoutés, calculs, contrôles, chiffres du tableau de bord), en entier avec `write`,
+puis le contrôle automatique vérifie aussi que ce fichier n'utilise que des parties et des
+champs qui existent (`problemesMetier`). L'écran suit chaque étape. Mesuré le même jour
+avec Qwen3 8B, sur la demande exacte, dans l'application empaquetée, trois essais :
+plan en ~3 min (5 parties liées : clients, dossiers, factures avec statut, avocats,
+audiences) ; au 1er essai ses trois `edit` de metier.js ont échoué (il sautait les
+commentaires) et il a annoncé les règles « ajoutées » : d'où l'écriture en entier ; au 2e,
+il cherchait à modifier plan.js avec des lignes du résumé : d'où `champs` dans metier.js ;
+au 3e, le contrôle a relevé des champs inventés (`montant_ht`) et la relance les a
+corrigés, mais l'agent a introduit `d.stat, "En cours"` (compteur toujours à zéro) en
+disant avoir corrigé le filtre : le contrôle lit maintenant aussi les champs des fiches
+parcourues (`donnees.dossiers.filter(d => d.…)`), pas encore essayé dans une vraie boucle.
+L'interface elle-même est vérifiée (ajout, suppression, filtres, recherche, champs
+calculés, sans erreur) ; les libellés du moteur sont en français seulement.
+
 **Fait le 26/09/2026 : mises à jour d'un clic, sans signature ni serveur.** Décidé par
 Medhi : pas de mise à jour automatique, mais une fenêtre « Nouvelle version » avec
 « Installer maintenant » (`src/components/layout/FenetreMiseAJour.tsx`). La source est

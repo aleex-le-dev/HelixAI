@@ -393,6 +393,15 @@ export function useCode(dossier?: string, reglages: ReglagesCode = {}) {
           if (!event) return;
           const tour = tourRef.current;
           if (!tour || tour.sessionID !== sessionID) return;
+          /*
+           * Helix prépare une application avant d'envoyer la demande (plusieurs
+           * minutes avec un petit modèle) : l'étape en cours s'affiche tout de
+           * suite, sans attendre l'identifiant de la demande.
+           */
+          if (event.kind === "statut" && event.preparation && !tour.fini) {
+            patch(tour.replyId, { statut: event.text });
+            return;
+          }
           // L'envoi n'a pas encore dit quel est notre message : on garde pour plus tard.
           if (tour.messageID === undefined && !tour.actif) {
             tour.enAttente.push(event);
@@ -454,7 +463,7 @@ export function useCode(dossier?: string, reglages: ReglagesCode = {}) {
       );
       fluxRef.current = { sessionID, fermer };
     },
-    [appliquer, terminer],
+    [appliquer, terminer, patch],
   );
 
   const send = useCallback(

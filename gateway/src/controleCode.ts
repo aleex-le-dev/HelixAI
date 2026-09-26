@@ -1,5 +1,6 @@
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { dirname, extname, join, relative, sep } from "node:path";
+import { applicationPreparee, problemesMetier } from "./application.ts";
 import { controler } from "./controleWeb.ts";
 import { estProtege } from "./zonesProtegees.ts";
 import { t, tf } from "./langue.ts";
@@ -64,6 +65,11 @@ export function arretDemandeCode(sessionID: string): void {
     s.enRelance = false;
     s.arrete = true;
   }
+}
+
+/** La personne a-t-elle arrêté la demande en cours (pendant la préparation d'une application, par exemple) ? */
+export function demandeArretee(sessionID: string): boolean {
+  return suivis.get(sessionID)?.arrete === true;
 }
 
 /** Fichiers web du dossier modifiés depuis `depuis`, sans node_modules ni fichiers cachés. */
@@ -187,6 +193,14 @@ export async function controlerTourCode(
     const r = controler(d, { racine: dossier });
     fichiers += r.fichiers;
     for (const x of r.problemes) if (!problemes.includes(x)) problemes.push(x);
+  }
+  // Une application préparée par Helix (application.ts) : ses règles du métier, vérifiées sur le plan.
+  if (applicationPreparee(dossier)) {
+    let prepareeCeTour = false;
+    try {
+      prepareeCeTour = statSync(join(dossier, "app", "plan.js")).mtimeMs >= depuis;
+    } catch {}
+    for (const x of problemesMetier(dossier, prepareeCeTour)) if (!problemes.includes(x)) problemes.push(x);
   }
   const pages = touches.filter((f) => /\.html?$/i.test(f));
   // Une page non touchée mais dont le script ou la feuille l'a été : on essaie l'index de son dossier.

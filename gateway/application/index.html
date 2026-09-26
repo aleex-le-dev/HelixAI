@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Application</title>
+  <!--POLICES-->
+  <link rel="stylesheet" href="app/theme.css">
+  <link rel="stylesheet" href="app/app.css">
+</head>
+<body>
+  <header class="barre-haut">
+    <button type="button" class="bouton bouton--icone barre-haut__menu" data-action="menu" aria-label="Ouvrir le menu"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
+    <span class="marque"><span class="marque__logo" aria-hidden="true"></span><span id="marque-nom">Application</span></span>
+    <span class="barre-haut__droite"><span id="aujourdhui" class="barre-haut__date"></span><span class="utilisateur"><span class="utilisateur__avatar" aria-hidden="true">M</span>Moi</span></span>
+  </header>
+  <div class="cadre">
+    <aside class="cote">
+      <nav id="menu" class="menu" aria-label="Parties de l'application"></nav>
+      <div id="filtres" class="filtres"></div>
+      <button type="button" class="bouton bouton--discret bouton--plein cote__pied" data-action="exemples">Remettre les exemples</button>
+    </aside>
+    <main id="app" class="contenu"></main>
+  </div>
+
+  <div id="fenetre" class="voile" hidden>
+    <form id="formulaire" class="fenetre" aria-labelledby="fenetre-titre">
+      <header class="fenetre__entete"><h2 id="fenetre-titre">Nouveau</h2><button type="button" class="bouton bouton--icone" data-action="fermer" aria-label="Fermer"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></header>
+      <div id="formulaire-champs" class="fenetre__corps grille-champs"></div>
+      <p id="formulaire-erreur" class="erreur" role="alert"></p>
+      <footer class="fenetre__pied"><button type="button" class="bouton bouton--secondaire" data-action="fermer">Annuler</button><button type="submit" class="bouton">Enregistrer</button></footer>
+    </form>
+  </div>
+
+  <div id="confirmation" class="voile" hidden>
+    <div class="fenetre fenetre--petite" role="alertdialog" aria-labelledby="confirmation-texte">
+      <div class="fenetre__corps"><p id="confirmation-texte"></p></div>
+      <footer class="fenetre__pied"><button type="button" class="bouton bouton--secondaire" data-action="annuler-confirmation">Annuler</button><button type="button" class="bouton bouton--danger-plein" data-action="confirmer">Confirmer</button></footer>
+    </div>
+  </div>
+
+  <div id="annonce" class="annonce" role="status" aria-live="polite"></div>
+
+  <script src="app/plan.js"></script>
+  <script src="app/metier.js"></script>
+  <script src="app/app.js"></script>
+</body>
+</html>

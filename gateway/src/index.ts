@@ -63,8 +63,9 @@ import { homedir as dossierPersonnel } from "node:os";
 import * as images from "./images.ts";
 import { contenuLogiciel, logicielsTrouves, pageLogiciel } from "./importLocal.ts";
 import * as entrainement from "./entrainement.ts";
-import { corrigerPages, estApplication, estDemandeDeSite, preparerDesign } from "./design.ts";
-import { apresTourCode, arretDemandeCode, nouvelleDemandeCode } from "./controleCode.ts";
+import { choisirDesign, corrigerPages, estApplication, estDemandeDeSite, preparerDesign, projetDejaCommence } from "./design.ts";
+import { apresTourCode, arretDemandeCode, demandeArretee, nouvelleDemandeCode } from "./controleCode.ts";
+import { applicationPreparee, consigneApplication, ecrireApplication, planifierApplication } from "./application.ts";
 import { arreterMachine, arreterMachineEnPartant, choisirSysteme, demarrerMachine, diagnosticMachine, effacerMachine, preparationMachineEnCours, progressionMachine, systemeMachine } from "./machine.ts";
 import { apercuEffacement, effacerCompte, sansComptesDisparus } from "./effacement.ts";
 import { authorise, cheminDuJeton, hasValidToken, instanceToken } from "./auth.ts";
@@ -2467,7 +2468,44 @@ async function handleCodePrompt(
    * Un petit modèle ne sait pas dessiner ; il sait suivre un guide.
    */
   let texteEnvoye = body.text;
-  if (estDemandeDeSite(body.text)) {
+  // Une demande de la personne : le contrôle automatique repart de zéro (controleCode.ts). Avant la
+  // préparation d'une application : les fichiers que Helix y écrit comptent parmi ceux à essayer.
+  nouvelleDemandeCode(body.sessionID);
+  /*
+   * Une application de gestion dans un dossier neuf : Helix la fait en
+   * plusieurs étapes (application.ts), le plan et les exemples par le modèle,
+   * l'interface par Helix, et l'agent n'écrit plus que les règles du métier.
+   * Plusieurs minutes avec un petit modèle : l'écran suit chaque étape.
+   */
+  let preparee = false;
+  if (estApplication(body.text) && !applicationPreparee(reglageEnvoi.dossier) && !projetDejaCommence(reglageEnvoi.dossier)) {
+    const statut = (message: string) => publierStatutCode(body.sessionID!, { etat: "preparation", message });
+    try {
+      const qui = await demandeur(req, new URL(req.url ?? "/", "http://localhost"));
+      statut(t("Helix prépare l'application : choix du design..."));
+      const design = await choisirDesign(body.text, qui?.userId ?? "code").catch(() => undefined);
+      const plan = await planifierApplication(body.text, qui?.userId ?? "code", statut);
+      if (plan && !demandeArretee(body.sessionID)) {
+        statut(t("Helix prépare l'application, étape 3 sur 4 : l'interface complète..."));
+        const ecrits = ecrireApplication(reglageEnvoi.dossier, plan, design);
+        texteEnvoye = body.text + consigneApplication(plan);
+        preparee = true;
+        statut(t("Helix prépare l'application, étape 4 sur 4 : l'agent de code ajoute les règles du métier..."));
+        console.log(`[code] application préparée : ${plan.nom}, ${plan.modules.length} parties, ${ecrits.length} fichiers.`);
+      } else if (!plan) {
+        console.log("[code] plan d'application inutilisable : la demande part avec le design seul.");
+      }
+    } catch (err) {
+      console.log(`[code] application non préparée : ${err instanceof Error ? err.message : String(err)}`);
+    }
+    // Arrêtée pendant la préparation : rien n'est envoyé à l'agent.
+    if (demandeArretee(body.sessionID)) return send(res, 200, { data: {} });
+  } else if (estApplication(body.text) && applicationPreparee(reglageEnvoi.dossier)) {
+    // La suite d'une application déjà préparée : l'agent garde la même méthode.
+    texteEnvoye = body.text + consigneApplication(null);
+    preparee = true;
+  }
+  if (!preparee && estDemandeDeSite(body.text)) {
     try {
       const qui = await demandeur(req, new URL(req.url ?? "/", "http://localhost"));
       const prepare = await preparerDesign(reglageEnvoi.dossier, body.text, qui?.userId ?? "code", { application: estApplication(body.text) });
@@ -2489,8 +2527,6 @@ async function handleCodePrompt(
   if (auteur) noterDemandeCode(body.sessionID, auteur.userId, dossierDemande);
   // Les accords donnés aux outils d'OpenCode valent pour un tour (permissionsCode.ts).
   nouveauTourCode(body.sessionID);
-  // Une demande de la personne : le contrôle automatique repart de zéro (controleCode.ts).
-  nouvelleDemandeCode(body.sessionID);
 
   /*
    * `prompt_async` rend la main tout de suite (204), comme le faisait la

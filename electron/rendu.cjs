@@ -123,6 +123,8 @@ async function rendre(fichier) {
     if (!d.url.startsWith("file:") && /fonts\.(googleapis|gstatic)\.com/.test(d.url)) return;
     echecs.push(`${d.url.replace(/^file:\/\/[^?#]*\//, "")} (${d.error})`);
   });
+  // Un bouton « Exporter » ne doit pas ouvrir de fenêtre d'enregistrement pendant l'essai.
+  ses.on("will-download", (_e, item) => item.cancel());
   // Aucune fenêtre ni navigation hors de la page essayée.
   fenetre.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
   fenetre.webContents.on("will-navigate", (e) => e.preventDefault());

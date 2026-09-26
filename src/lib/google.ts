@@ -19,6 +19,7 @@ export interface EtatClientGoogle {
 
 export interface EtatAgendaGoogle {
   configure: boolean;
+  ecriture?: boolean;
   compte?: string;
   depuis?: string;
   aReconnecter: boolean;
@@ -62,6 +63,6 @@ export const enregistrerClientGoogle = (clientId: string, clientSecret: string) 
 export const effacerClientGoogle = () => poster("/helix/google/client/effacer");
 
 export const etatAgendaGoogle = () => lire<EtatAgendaGoogle>("/helix/agenda/google");
-export const connecterAgendaGoogle = () => poster("/helix/agenda/google/connecter");
+export const connecterAgendaGoogle = (ecriture: boolean) => poster("/helix/agenda/google/connecter", { ecriture });
 export const collerAdresseAgendaGoogle = (adresse: string) => poster("/helix/agenda/google/code", { adresse });
 export const oublierAgendaGoogle = () => poster("/helix/agenda/google/oublier");

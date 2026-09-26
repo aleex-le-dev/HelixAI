@@ -30,7 +30,7 @@ import type { IncomingHttpHeaders, IncomingMessage } from "node:http";
  */
 
 export interface DemandeHttps {
-  methode: "GET" | "POST";
+  methode: "GET" | "POST" | "PATCH" | "PUT" | "DELETE";
   /** Nom d'hôte, constante du module appelant. */
   hote: string;
   /** Chemin et paramètres, déjà encodés par `URLSearchParams`. */

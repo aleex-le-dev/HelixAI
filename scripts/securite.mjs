@@ -395,6 +395,21 @@ console.log("\n3 bis. Application Google et Google Agenda : le secret ne ressort
     const etatApres = await (await appel("/helix/agenda/google", { headers: avecSeance })).json();
     verifier("Google Agenda : la boucle locale refuse un faux « state » et n'enregistre rien", (direct?.status ?? 400) === 400 && etatApres.configure === false, `${direct?.status} ${JSON.stringify(etatApres).slice(0, 120)}`);
   }
+  // Écriture choisie : la lecture et `calendar.events`, et rien d'autre (ni les réglages ni le partage des agendas).
+  const departEcriture = await (await poster("/helix/agenda/google/connecter", { ecriture: true }, avecSeance)).json().catch(() => ({}));
+  const porteesEcriture = typeof departEcriture.url === "string" ? new URL(departEcriture.url).searchParams.get("scope") : null;
+  verifier(
+    "Google Agenda en écriture : seulement la lecture et les événements (calendar.events)",
+    porteesEcriture === "https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/calendar.events",
+    porteesEcriture,
+  );
+  {
+    const { pathToFileURL: versUrl } = await import("node:url");
+    const { modifie, demandeToujours } = await import(versUrl(join(RACINE, "gateway", "src", "approbation.ts")).href);
+    verifier("agenda : consulter ne demande pas d'accord", !modifie("agenda__prochains") && !modifie("agenda__jour") && !modifie("agenda__chercher"), "lecture traitée comme modification");
+    verifier("agenda : créer et modifier un événement passent par la carte d'accord", modifie("agenda__creer") && modifie("agenda__modifier") && modifie("agenda__inconnu"), "écriture sans accord");
+    verifier("agenda : supprimer un événement est demandé à chaque fois, même au niveau « Tout approuver »", demandeToujours("agenda__supprimer"), "suppression sans confirmation");
+  }
   await poster("/helix/agenda/google/oublier", {}, avecSeance);
   const efface = await poster("/helix/google/client/effacer", {}, avecSeance);
   verifier("application Google : l'administrateur la retire", efface.status === 200, efface.status);

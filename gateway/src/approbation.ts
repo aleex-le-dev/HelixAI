@@ -156,6 +156,7 @@ const SLACK_LECTURE = new Set(["slack__salons", "slack__messages", "slack__fil",
  * demander. On échoue fermé : ce qu'on ne reconnaît pas passe par l'approbation.
  */
 const SERVEUR_FICHIERS = "fichiers";
+const AGENDA_LECTURE = new Set(["agenda__prochains", "agenda__jour", "agenda__chercher"]);
 const COURRIER_LECTURE = new Set(["courrier__derniers", "courrier__chercher", "courrier__lire"]);
 const BIBLIOTHEQUE_LECTURE = new Set(["bibliotheque__chercher", "bibliotheque__lire", "reunions__chercher", "reunions__lire"]);
 /** Recherche d'un employé dans les bases de connaissances de son agent (connaissances.ts) : ne touche à rien. */
@@ -178,7 +179,8 @@ const CONTROLE_LECTURE = new Set(["controle__site_web"]);
  * niveau « Tout approuver » ni pour un agent autonome. Aux autres niveaux,
  * chaque mail reste montré en entier.
  */
-const TOUJOURS_DEMANDER = new Set(["courrier__envoyer"]);
+// Supprimer un événement ne se reprend pas non plus (26/09/2026).
+const TOUJOURS_DEMANDER = new Set(["courrier__envoyer", "agenda__supprimer"]);
 
 export const demandeToujours = (outil: string) => TOUJOURS_DEMANDER.has(outil) && !envoiSansAccord();
 
@@ -194,9 +196,13 @@ const CODE_LECTURE = new Set(["code__read", "code__glob", "code__grep", "code__l
 export function modifie(outil: string): boolean {
   if (outil.startsWith("code__")) return !CODE_LECTURE.has(outil);
   if (outil.startsWith("courrier__")) return !COURRIER_LECTURE.has(outil);
-  // Le connecteur d'agenda est en lecture seule : il n'émet que des PROPFIND et
-  // des REPORT, jamais une écriture CalDAV. Voir agenda.ts.
-  if (outil.startsWith("agenda__")) return false;
+  /*
+   * Agenda : les trois lectures ne modifient rien. Depuis le 26/09/2026, Google
+   * Agenda peut aussi écrire (agenda__creer, agenda__modifier,
+   * agenda__supprimer, agendaGoogle.ts) : ce qui n'est pas une lecture
+   * reconnue modifie, comme pour le courrier.
+   */
+  if (outil.startsWith("agenda__")) return !AGENDA_LECTURE.has(outil);
   /*
    * Google Drive et Slack sont en lecture seule (drive.ts, slack.ts). Ils sont
    * reconnus par leurs noms exacts, pas par leur préfixe : un serveur MCP ajouté
@@ -320,6 +326,18 @@ export function resumerOutil(outil: string, args: Record<string, unknown>): stri
       return `envoyer le mail${objet}${pour} depuis votre boîte`;
     }
     return "utiliser votre messagerie";
+  }
+
+  if (outil.startsWith("agenda__")) {
+    const nom = outil.slice("agenda__".length);
+    const titre = typeof args.titre === "string" && args.titre.trim() ? ` « ${args.titre.trim().slice(0, 80)} »` : "";
+    const quandTexte = typeof args.debut === "string" && args.debut.trim() ? ` le ${args.debut.trim().replace("T", " à ").slice(0, 20)}` : "";
+    const ou = typeof args.calendrier === "string" && args.calendrier.trim() ? ` dans l'agenda « ${args.calendrier.trim().slice(0, 60)} »` : " dans votre agenda Google";
+    if (nom === "prochains" || nom === "jour" || nom === "chercher") return "consulter votre agenda";
+    if (nom === "creer") return `ajouter l'événement${titre}${quandTexte}${ou} (personne n'est invité)`;
+    if (nom === "modifier") return `modifier un événement${ou}${titre ? ` : nouveau titre${titre}` : ""}${quandTexte ? ` ; nouvelle date${quandTexte}` : ""}`;
+    if (nom === "supprimer") return `supprimer définitivement un événement${ou}`;
+    return "utiliser votre agenda";
   }
 
   if (outil === "controle__site_web") return `contrôler le code web du dossier ${texteOu(args.dossier, "de travail")}`;

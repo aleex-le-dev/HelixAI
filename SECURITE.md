@@ -2898,3 +2898,23 @@ Limite connue : `sandbox-exec` est marqué obsolète par Apple, mais il est
 toujours fourni et appliqué par macOS 27 (mesuré le 26/09/2026). S'il
 disparaissait, `cageDisponible()` le verrait et les tests cesseraient d'être
 lancés.
+
+## 26. Google Agenda par la connexion Google (26 septembre 2026)
+
+Essayé sur un vrai compte : Google refuse les mots de passe d'application pour
+ses agendas (CalDAV), alors qu'il les accepte pour Gmail. Google Agenda passe
+donc par sa propre connexion (`gateway/src/agendaGoogle.ts`), sur le modèle de
+Google Drive, avec l'application Google **de l'organisation** : aucun
+identifiant n'est livré avec le produit, rien ne passe par Helix Agence.
+
+| Garde | Comment |
+|---|---|
+| L'application Google | Saisie à l'écran une fois (`clientGoogle.ts`), partagée avec Drive ; **réservée à l'administrateur** ; le secret est chiffré au repos et ne ressort par aucune route. Le profil de déploiement l'emporte s'il en porte une. |
+| L'autorisation | Boucle locale, PKCE S256, `state` aléatoire comparé à durée constante ; un faux `state` est ignoré sans rien annuler. |
+| Les portées | `calendar.readonly`, plus `calendar.events` si la personne coche l'écriture. La portée accordée est relue : plus large ou plus étroite, l'accès est révoqué et rien n'est gardé. |
+| Les jetons | Jeton d'actualisation chiffré au repos ; jeton d'accès en mémoire seulement ; débrancher révoque aussi chez Google. |
+| L'écriture | `agenda__creer` et `agenda__modifier` passent par la carte d'accord ; `agenda__supprimer` est demandé **à chaque fois**, même au niveau « Tout approuver ». Personne n'est invité et Google n'envoie aucun courriel (`sendUpdates=none`). |
+
+Vérifié par `npm run securite` (section 3 bis, 20 contrôles). Pas encore
+vérifié avec un vrai compte au moment d'écrire ces lignes : l'échange réel avec
+Google, qui demande l'application Google Cloud de l'organisation.

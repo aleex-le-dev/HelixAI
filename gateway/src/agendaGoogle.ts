@@ -44,6 +44,13 @@ const HOTE_JETONS = "oauth2.googleapis.com";
 const HOTE_API = "www.googleapis.com";
 const CONSENTEMENT = "https://accounts.google.com/o/oauth2/v2/auth";
 const PORTEE = "https://www.googleapis.com/auth/calendar.readonly";
+/*
+ * Écrire (créer, modifier, supprimer un événement) : demandé par Medhi le
+ * 26/09/2026. Une portée de plus, choisie à la connexion, et chaque écriture
+ * passe par une carte d'accord (approbation.ts). `calendar.events` ne touche
+ * qu'aux événements, pas aux réglages ni au partage des agendas.
+ */
+const PORTEE_ECRITURE = "https://www.googleapis.com/auth/calendar.events";
 // Neutre : le produit est livré en marque blanche.
 const AGENT = "Connecteur-Agenda/1";
 const LIMITES = { delaiMs: 20_000, delaiTotalMs: 45_000, fluxMs: 10 * 60_000, octets: 4 * 1024 * 1024, evenementsParAgenda: 250 };
@@ -61,6 +68,8 @@ class ErreurAgendaGoogle extends Error {
 
 interface CompteEnregistre {
   compte: string;
+  /** Accès accordé en écriture (portée `calendar.events` en plus de la lecture). */
+  ecriture?: boolean;
   secret: unknown;
   clientId: string;
   depuis: string;
@@ -76,7 +85,7 @@ async function lireCompte(): Promise<CompteEnregistre | null> {
   if (!v || typeof v !== "object") return null;
   const c = v as Partial<CompteEnregistre>;
   if (!c.compte || c.secret === undefined || !c.clientId) return null;
-  return { compte: String(c.compte), secret: c.secret, clientId: String(c.clientId), depuis: String(c.depuis ?? ""), perdu: c.perdu ? String(c.perdu) : undefined };
+  return { compte: String(c.compte), ecriture: c.ecriture === true, secret: c.secret, clientId: String(c.clientId), depuis: String(c.depuis ?? ""), perdu: c.perdu ? String(c.perdu) : undefined };
 }
 
 export async function charger(): Promise<boolean> {
@@ -88,6 +97,11 @@ function utilisable(c: CompteEnregistre | null | undefined): c is CompteEnregist
   if (!c || c.perdu) return false;
   const id = clientGoogle();
   return id.ok && id.clientId === c.clientId;
+}
+
+/** Synchrone : l'agenda branché accepte-t-il l'écriture ? */
+export function ecritureActive(): boolean {
+  return connecte() && cache?.ecriture === true;
 }
 
 /** Synchrone, pour la liste des outils : un Google Agenda utilisable est-il branché ? */
@@ -205,16 +219,21 @@ function erreurApi(statut: number, json: Record<string, unknown>): ErreurAgendaG
   return new ErreurAgendaGoogle("api", `Google Agenda a refusé la requête (code ${statut}).`);
 }
 
-/** Un GET à l'API Calendar ; un 401 déclenche une actualisation et une seule reprise. */
-async function api(chemin: string, jetonForce?: string): Promise<Record<string, unknown>> {
+/** Un appel à l'API Calendar ; un 401 déclenche une actualisation et une seule reprise. */
+async function api(
+  chemin: string,
+  jetonForce?: string,
+  ecrire?: { methode: "POST" | "PATCH" | "DELETE"; corps?: Record<string, unknown> },
+): Promise<Record<string, unknown>> {
   for (let essai = 0; essai < 2; essai++) {
     const jeton = jetonForce ?? (await jetonValide());
     const r = await requeteHttps(
       {
-        methode: "GET",
+        methode: ecrire?.methode ?? "GET",
         hote: HOTE_API,
         chemin,
-        entetes: { Authorization: `Bearer ${jeton}`, Accept: "application/json" },
+        entetes: { Authorization: `Bearer ${jeton}`, Accept: "application/json", ...(ecrire?.corps ? { "Content-Type": "application/json" } : {}) },
+        ...(ecrire?.corps ? { corps: JSON.stringify(ecrire.corps) } : {}),
         limiteOctets: LIMITES.octets,
         auDela: "refuser",
         delaiMs: LIMITES.delaiMs,
@@ -227,6 +246,8 @@ async function api(chemin: string, jetonForce?: string): Promise<Record<string, 
       jetonAcces = null;
       continue;
     }
+    // 204 : une suppression réussie ne rend rien.
+    if (r.statut === 204) return {};
     if (r.statut !== 200) throw erreurApi(r.statut, lireJson(r));
     return lireJson(r);
   }
@@ -333,6 +354,8 @@ export class ClientGoogleAgenda {
 
 interface Flux {
   etat: string;
+  /** Portées demandées : la lecture, et l'écriture si la personne l'a choisie. */
+  portees: string[];
   verificateur: string;
   redirection: string;
   serveur: http.Server;
@@ -378,7 +401,7 @@ function pageRetour(res: http.ServerResponse, statut: number, titre: string, mes
   );
 }
 
-export async function demarrer(qui: string): Promise<{ ok: boolean; message: string; url?: string }> {
+export async function demarrer(qui: string, ecriture = false): Promise<{ ok: boolean; message: string; url?: string }> {
   const id = clientGoogle();
   if (!id.ok) {
     return {
@@ -423,8 +446,10 @@ export async function demarrer(qui: string): Promise<{ ok: boolean; message: str
     return { ok: false, message: t("Impossible d'ouvrir un port sur la boucle locale pour recevoir la réponse de Google.") };
   }
   const redirection = `http://127.0.0.1:${port}/`;
+  const portees = ecriture ? [PORTEE, PORTEE_ECRITURE] : [PORTEE];
   flux = {
     etat,
+    portees,
     verificateur,
     redirection,
     serveur,
@@ -437,7 +462,7 @@ export async function demarrer(qui: string): Promise<{ ok: boolean; message: str
     client_id: id.clientId,
     redirect_uri: redirection,
     response_type: "code",
-    scope: PORTEE,
+    scope: portees.join(" "),
     code_challenge: defi,
     code_challenge_method: "S256",
     state: etat,
@@ -469,14 +494,14 @@ async function recevoir(parametres: URLSearchParams, quiCollage: string | null):
   flux.echangeEnCours = true;
   const qui = quiCollage ?? flux.qui;
   try {
-    return conclure(true, await echanger(code, flux.verificateur, flux.redirection, qui));
+    return conclure(true, await echanger(code, flux.verificateur, flux.redirection, qui, flux.portees));
   } catch (err) {
     return conclure(false, messageUtilisateur(err));
   }
 }
 
 /** Échange le code, vérifie la portée, lit l'agenda principal (l'essai), puis seulement enregistre. */
-async function echanger(code: string, verificateur: string, redirection: string, qui: string): Promise<string> {
+async function echanger(code: string, verificateur: string, redirection: string, qui: string, portees: string[]): Promise<string> {
   const id = clientGoogle();
   if (!id.ok) throw new ErreurAgendaGoogle("config", "L'application Google n'est plus configurée sur cette instance.");
   const p = new URLSearchParams({ client_id: id.clientId, code, code_verifier: verificateur, grant_type: "authorization_code", redirect_uri: redirection });
@@ -490,11 +515,12 @@ async function echanger(code: string, verificateur: string, redirection: string,
   const actualisation = typeof json.refresh_token === "string" ? json.refresh_token : "";
   const accordees = typeof json.scope === "string" ? json.scope.split(/\s+/).filter(Boolean) : [];
   const revoquer = () => pointDeJetons("/revoke", new URLSearchParams({ token: actualisation || acces })).catch(() => null);
-  if (!accordees.includes(PORTEE)) {
+  // Exactement ce qui a été demandé : une case décochée, ou un accès plus large, et rien n'est gardé.
+  if (!portees.every((p) => accordees.includes(p))) {
     await revoquer();
-    throw new ErreurAgendaGoogle("acces", "L'accès à l'agenda n'a pas été accordé : la case correspondante était décochée dans la fenêtre Google. Recommencez en la laissant cochée.");
+    throw new ErreurAgendaGoogle("acces", "Tous les accès demandés n'ont pas été accordés : une case était décochée dans la fenêtre Google. Recommencez en les laissant cochées.");
   }
-  if (accordees.some((x) => x !== PORTEE)) {
+  if (accordees.some((x) => !portees.includes(x))) {
     await revoquer();
     throw new ErreurAgendaGoogle("acces", "Google a accordé plus que la lecture de l'agenda. Par prudence, rien n'a été enregistré et l'accès a été révoqué.");
   }
@@ -517,12 +543,15 @@ async function echanger(code: string, verificateur: string, redirection: string,
     await revoquer();
     throw new ErreurAgendaGoogle("api", "Google Agenda n'a pas indiqué l'agenda principal du compte. Recommencez.");
   }
-  const enregistre: CompteEnregistre = { compte, secret: chiffrer(actualisation), clientId: id.clientId, depuis: new Date().toISOString() };
+  const ecriture = portees.includes(PORTEE_ECRITURE);
+  const enregistre: CompteEnregistre = { compte, ecriture, secret: chiffrer(actualisation), clientId: id.clientId, depuis: new Date().toISOString() };
   await db().write(COLLECTION, enregistre);
   cache = enregistre;
   jetonAcces = { valeur: acces, expire: Date.now() + Math.min(Number(json.expires_in) || 3600, 3600) * 1000 };
-  journaliser("agenda_google.branche", qui, { compte });
-  return tf("Google Agenda connecté en lecture seule : {0}.", compte);
+  journaliser("agenda_google.branche", qui, { compte, ecriture });
+  return ecriture
+    ? tf("Google Agenda connecté en lecture et en écriture (chaque écriture vous sera demandée) : {0}.", compte)
+    : tf("Google Agenda connecté en lecture seule : {0}.", compte);
 }
 
 export async function collerAdresse(brut: unknown, qui: string): Promise<{ ok: boolean; message: string }> {
@@ -543,6 +572,7 @@ export async function collerAdresse(brut: unknown, qui: string): Promise<{ ok: b
 
 export interface EtatAgendaGoogle {
   configure: boolean;
+  ecriture?: boolean;
   compte?: string;
   depuis?: string;
   aReconnecter: boolean;
@@ -556,6 +586,7 @@ export async function etat(): Promise<EtatAgendaGoogle> {
   const c = cache ?? null;
   return {
     configure: utilisable(c),
+    ecriture: c?.ecriture === true,
     compte: c?.compte,
     depuis: c?.depuis,
     aReconnecter: Boolean(c) && !utilisable(c),
@@ -595,4 +626,114 @@ export async function oublier(qui: string): Promise<{ ok: true; message: string 
 export function messageUtilisateur(err: unknown): string {
   if (err instanceof ErreurAgendaGoogle || err instanceof ErreurTransport) return err.message;
   return t("La connexion à Google Agenda a échoué.");
+}
+
+/* ----------------------------------- écriture ------------------------------------ */
+
+/**
+ * Créer, modifier, supprimer un événement. Appelés par les outils de l'agent
+ * (agenda.ts) après la carte d'accord (approbation.ts). Aucun participant
+ * n'est invité, et Google n'envoie aucun courriel (`sendUpdates=none`) : un
+ * agent n'écrit pas aux gens au nom de la personne par ce chemin.
+ */
+export interface EcritureEvenement {
+  titre?: string;
+  /** « AAAA-MM-JJ » (journée entière) ou « AAAA-MM-JJTHH:MM », heure du poste. */
+  debut?: string;
+  fin?: string;
+  lieu?: string;
+  description?: string;
+}
+
+const ZONE = () => Intl.DateTimeFormat().resolvedOptions().timeZone || "Europe/Paris";
+
+/** Une date ou une date-heure de l'agent, reconstruite chiffre par chiffre ; `null` si elle ne se lit pas. */
+function momentGoogle(valeur: string): { date: string } | { dateTime: string; timeZone: string } | null {
+  const v = valeur.trim();
+  const jour = /^(\d{4})-(\d{2})-(\d{2})$/.exec(v);
+  if (jour) return { date: `${jour[1]}-${jour[2]}-${jour[3]}` };
+  const heure = /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})(?::\d{2})?$/.exec(v);
+  if (heure) {
+    const [, mo, j, h, mi] = heure.slice(1).map(Number);
+    if (mo! < 1 || mo! > 12 || j! < 1 || j! > 31 || h! > 23 || mi! > 59) return null;
+    return { dateTime: `${heure[1]}-${heure[2]}-${heure[3]}T${heure[4]}:${heure[5]}:00`, timeZone: ZONE() };
+  }
+  return null;
+}
+
+function corpsEvenement(e: EcritureEvenement, complet: boolean): { ok: true; corps: Record<string, unknown> } | { ok: false; message: string } {
+  const corps: Record<string, unknown> = {};
+  if (e.titre !== undefined) corps.summary = String(e.titre).slice(0, 300);
+  if (e.lieu !== undefined) corps.location = String(e.lieu).slice(0, 300);
+  if (e.description !== undefined) corps.description = String(e.description).slice(0, 4000);
+  if (e.debut !== undefined) {
+    const d = momentGoogle(e.debut);
+    if (!d) return { ok: false, message: "La date de début n'est pas comprise : écris-la AAAA-MM-JJ (journée entière) ou AAAA-MM-JJTHH:MM." };
+    corps.start = d;
+    let f = e.fin !== undefined ? momentGoogle(e.fin) : null;
+    if (e.fin !== undefined && !f) return { ok: false, message: "La date de fin n'est pas comprise : écris-la comme le début." };
+    if (!f) {
+      // Sans fin : une heure plus tard, ou le même jour pour une journée entière.
+      if ("date" in d) {
+        const [a, m, j] = d.date.split("-").map(Number);
+        const lendemain = new Date(a!, m! - 1, j! + 1);
+        f = { date: `${lendemain.getFullYear()}-${String(lendemain.getMonth() + 1).padStart(2, "0")}-${String(lendemain.getDate()).padStart(2, "0")}` };
+      } else {
+        const [date, h] = d.dateTime.split("T");
+        const [hh, mm] = h!.split(":").map(Number);
+        const t0 = new Date(`${date}T00:00:00`);
+        t0.setHours(hh! + 1, mm!);
+        f = { dateTime: `${t0.getFullYear()}-${String(t0.getMonth() + 1).padStart(2, "0")}-${String(t0.getDate()).padStart(2, "0")}T${String(t0.getHours()).padStart(2, "0")}:${String(t0.getMinutes()).padStart(2, "0")}:00`, timeZone: ZONE() };
+      }
+    }
+    if ("date" in d !== "date" in f) return { ok: false, message: "Le début et la fin doivent être tous deux des dates, ou tous deux des dates avec heure." };
+    corps.end = f;
+  } else if (complet) {
+    return { ok: false, message: "Donne « debut » : AAAA-MM-JJ pour une journée entière, ou AAAA-MM-JJTHH:MM." };
+  }
+  if (complet && !corps.summary) return { ok: false, message: "Donne « titre », le nom de l'événement." };
+  return { ok: true, corps };
+}
+
+async function idAgenda(nom: string | null): Promise<string> {
+  if (!nom) return "primary";
+  const liste = await new ClientGoogleAgenda().decouvrir();
+  const n = nom.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase();
+  const trouve = liste.find((c) => c.nom.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase().includes(n));
+  if (!trouve) throw new ErreurAgendaGoogle("api", `Aucun agenda ne s'appelle « ${nom} ». Agendas : ${liste.map((c) => c.nom).join(", ")}.`);
+  return trouve.url;
+}
+
+function exigerEcriture(): void {
+  if (!ecritureActive()) throw new ErreurAgendaGoogle("acces", "Google Agenda est branché en lecture seule : pour écrire, reconnectez-le en cochant l'écriture dans Paramètres, Connecteurs.");
+}
+
+const idSur = (id: string) => /^[A-Za-z0-9_@.-]{1,1024}$/.test(id);
+
+export async function creerEvenement(e: EcritureEvenement, agenda: string | null): Promise<string> {
+  exigerEcriture();
+  const c = corpsEvenement(e, true);
+  if (!c.ok) throw new ErreurAgendaGoogle("api", c.message);
+  const cal = await idAgenda(agenda);
+  const r = await api(`/calendar/v3/calendars/${encodeURIComponent(cal)}/events?sendUpdates=none`, undefined, { methode: "POST", corps: c.corps });
+  return `Événement créé : « ${String(r.summary ?? e.titre ?? "")} » (identifiant : ${String(r.id ?? "")}).`;
+}
+
+export async function modifierEvenement(id: string, e: EcritureEvenement, agenda: string | null): Promise<string> {
+  exigerEcriture();
+  if (!idSur(id)) throw new ErreurAgendaGoogle("api", "Identifiant d'événement illisible : reprends celui donné par la consultation de l'agenda.");
+  const c = corpsEvenement(e, false);
+  if (!c.ok) throw new ErreurAgendaGoogle("api", c.message);
+  if (Object.keys(c.corps).length === 0) throw new ErreurAgendaGoogle("api", "Rien à modifier : donne au moins un champ (titre, debut, fin, lieu, description).");
+  const cal = await idAgenda(agenda);
+  const r = await api(`/calendar/v3/calendars/${encodeURIComponent(cal)}/events/${encodeURIComponent(id)}?sendUpdates=none`, undefined, { methode: "PATCH", corps: c.corps });
+  return `Événement modifié : « ${String(r.summary ?? "")} ».`;
+}
+
+export async function supprimerEvenement(id: string, agenda: string | null): Promise<string> {
+  exigerEcriture();
+  if (!idSur(id)) throw new ErreurAgendaGoogle("api", "Identifiant d'événement illisible : reprends celui donné par la consultation de l'agenda.");
+  const cal = await idAgenda(agenda);
+  await api(`/calendar/v3/calendars/${encodeURIComponent(cal)}/events/${encodeURIComponent(id)}?sendUpdates=none`, undefined, { methode: "DELETE" });
+  return "Événement supprimé.";
 }

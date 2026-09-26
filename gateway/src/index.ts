@@ -1072,7 +1072,8 @@ async function handleAgendaGoogleEtat(req: http.IncomingMessage, res: http.Serve
 async function handleAgendaGoogleConnecter(req: http.IncomingMessage, res: http.ServerResponse, url: URL): Promise<void> {
   const qui = await demandeur(req, url);
   if (!qui) return send(res, 401, sansSeance());
-  const r = await agendaGoogle.demarrer(qui.userId);
+  const body = (await readJson(req).catch(() => ({}))) as { ecriture?: unknown };
+  const r = await agendaGoogle.demarrer(qui.userId, body.ecriture === true);
   send(res, r.ok ? 200 : 400, r);
 }
 

@@ -363,6 +363,7 @@
   "Google a interrompu l'autorisation : rien n'a été enregistré. Recommencez.": "Google 中断了授权：没有保存任何内容。请重试。",
   "Google Agenda a été débranché de cette instance. Google n'a pas confirmé la révocation : retirez l'accès depuis votre compte Google, rubrique Sécurité, « Vos connexions à des applications et services tiers ».": "Google 日历已从此实例断开。Google 未确认撤销：请在 Google 账户的“安全”部分，“您与第三方应用和服务的关联”中移除访问权限。",
   "Google Agenda a été débranché, et l'accès révoqué chez Google.": "Google 日历已断开，并已在 Google 端撤销访问权限。",
+  "Google Agenda connecté en lecture et en écriture (chaque écriture vous sera demandée) : {0}.": "Google 日历已以读写方式连接（每次写入都会征求您的同意）：{0}。",
   "Google Agenda connecté en lecture seule : {0}.": "Google 日历已以只读方式连接：{0}。",
   "Google Agenda est connecté": "Google 日历已连接",
   "Google Drive": "Google Drive",

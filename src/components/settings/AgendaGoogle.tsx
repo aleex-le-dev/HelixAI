@@ -33,6 +33,8 @@ export function AgendaGoogle({ onChange }: { onChange?: () => void }) {
   const [succes, setSucces] = useState<string | null>(null);
   const [adresseGoogle, setAdresseGoogle] = useState<string | null>(null);
   const [collage, setCollage] = useState("");
+  /** Écrire aussi (créer, modifier, supprimer), chaque écriture passant par une carte d'accord. */
+  const [ecriture, setEcriture] = useState(true);
 
   const relire = useCallback(async () => {
     const [e, c] = await Promise.all([etatAgendaGoogle(), etatClientGoogle()]);
@@ -67,7 +69,7 @@ export function AgendaGoogle({ onChange }: { onChange?: () => void }) {
     setEnCours(true);
     setErreur(null);
     setSucces(null);
-    const r = await connecterAgendaGoogle();
+    const r = await connecterAgendaGoogle(ecriture);
     setEnCours(false);
     if (!r.ok || !r.url) {
       setErreur(r.message);
@@ -135,14 +137,16 @@ export function AgendaGoogle({ onChange }: { onChange?: () => void }) {
           <div className="min-w-0 flex-1">
             <p className="truncate font-medium text-foreground">{etat.compte}</p>
             <p className="truncate text-sm text-muted-foreground">
-              {t("Google Agenda, par la connexion Google")}
+              {etat.ecriture ? t("Google Agenda, lecture et écriture") : t("Google Agenda, lecture seule")}
               {depuis && !Number.isNaN(depuis.getTime()) ? tf(", connecté le {0}", formaterDate(depuis)) : ""}
             </p>
           </div>
           <span className="shrink-0 rounded-full bg-success/15 px-2.5 py-1 text-xs font-medium text-success">{t("Connecté")}</span>
         </Card>
         <InfoBox leading={<Lock size={15} strokeWidth={1.75} />}>
-          {t("Lecture seule. Vos agents peuvent consulter vos agendas Google et y chercher ; ils ne peuvent ni créer, ni déplacer, ni supprimer un événement. L'accès est conservé chiffré sur l'instance et n'en ressort jamais ; le débrancher le révoque aussi chez Google.")}
+          {etat.ecriture
+            ? t("Vos agents peuvent consulter vos agendas Google, y chercher, et proposer d'y créer, de modifier ou de supprimer un événement : chaque écriture vous est montrée et n'a lieu qu'après votre accord. Personne n'est invité et aucun courriel ne part. L'accès est conservé chiffré sur l'instance et n'en ressort jamais ; le débrancher le révoque aussi chez Google.")
+            : t("Lecture seule. Vos agents peuvent consulter vos agendas Google et y chercher ; ils ne peuvent ni créer, ni déplacer, ni supprimer un événement. L'accès est conservé chiffré sur l'instance et n'en ressort jamais ; le débrancher le révoque aussi chez Google.")}
         </InfoBox>
         {messages}
         <div className="flex justify-end">
@@ -158,7 +162,7 @@ export function AgendaGoogle({ onChange }: { onChange?: () => void }) {
     <Card className="space-y-3">
       <div>
         <p className="font-medium text-foreground">{t("Google Agenda : se connecter avec Google")}</p>
-        <p className="text-sm text-muted-foreground">{t("Google refuse les mots de passe d'application pour ses agendas : c'est sa propre connexion qui les ouvre, en lecture seule.")}</p>
+        <p className="text-sm text-muted-foreground">{t("Google refuse les mots de passe d'application pour ses agendas : c'est sa propre connexion qui les ouvre.")}</p>
       </div>
       {etat.aReconnecter && (
         <InfoBox tone="warning" leading={<ShieldAlert size={15} strokeWidth={1.75} />}>
@@ -169,6 +173,13 @@ export function AgendaGoogle({ onChange }: { onChange?: () => void }) {
         <FormulaireClientGoogle etat={client} api="Google Calendar API" onEnregistre={() => void relire()} />
       ) : (
         <>
+          <label className="flex items-start gap-2 text-sm text-foreground">
+            <input type="checkbox" className="mt-1" checked={ecriture} onChange={(e) => setEcriture(e.target.checked)} disabled={attente} />
+            <span>
+              {t("Permettre aussi l'écriture : créer, modifier, supprimer un événement.")}{" "}
+              <span className="text-muted-foreground">{t("Chaque écriture vous sera montrée et demandera votre accord.")}</span>
+            </span>
+          </label>
           <div className="flex flex-wrap items-center justify-between gap-2">
             <p className="text-xs text-muted-foreground">
               {tf("Application Google : {0}", client.identifiant ?? "")}

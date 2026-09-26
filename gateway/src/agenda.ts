@@ -1006,10 +1006,12 @@ const STATUTS: Record<string, string> = {
 };
 
 /** Rendu texte d'un événement, pour la réponse d'outil. */
-export function rendre(e: Evenement, montrerAgenda: boolean): string {
+export function rendre(e: Evenement, montrerAgenda: boolean, montrerId = false): string {
   const lignes: string[] = [];
   lignes.push(e.titre || "(sans titre)");
   lignes.push(`  ${quand(e)}`);
+  // L'identifiant ne sert qu'à modifier ou supprimer (Google Agenda en écriture) : montré seulement alors.
+  if (montrerId && e.uid) lignes.push(`  Identifiant : ${e.uid}`);
   if (e.lieu) lignes.push(`  Lieu : ${e.lieu}`);
   if (montrerAgenda && e.calendrier) lignes.push(`  Agenda : ${e.calendrier}`);
   if (e.organisateur) lignes.push(`  Organisateur : ${e.organisateur}`);
@@ -1974,6 +1976,49 @@ export function toolsForModel(): {
       },
       ["texte"],
     ),
+    /*
+     * Écrire : seulement sur Google Agenda branché en écriture (agendaGoogle.ts),
+     * et chaque appel passe par une carte d'accord (approbation.ts). Le CalDAV
+     * reste en lecture seule.
+     */
+    ...(!caldav && agendaGoogle.ecritureActive()
+      ? [
+          fn(
+            "creer",
+            "Crée un événement dans Google Agenda. Personne n'est invité et aucun courriel ne part. " +
+              "La personne verra l'événement et l'acceptera avant qu'il soit créé.",
+            {
+              titre: { type: "string", description: "Nom de l'événement." },
+              debut: { type: "string", description: "AAAA-MM-JJTHH:MM (heure de ce poste), ou AAAA-MM-JJ pour une journée entière." },
+              fin: { type: "string", description: "Même format que le début. À omettre : une heure après le début (ou la journée)." },
+              lieu: { type: "string", description: "Lieu, facultatif." },
+              description: { type: "string", description: "Description, facultative." },
+              calendrier,
+            },
+            ["titre", "debut"],
+          ),
+          fn(
+            "modifier",
+            "Modifie un événement existant de Google Agenda, désigné par l'identifiant donné par agenda__prochains, agenda__jour ou agenda__chercher. Seuls les champs donnés changent.",
+            {
+              identifiant: { type: "string", description: "Identifiant de l'événement, recopié tel quel." },
+              titre: { type: "string" },
+              debut: { type: "string", description: "AAAA-MM-JJTHH:MM ou AAAA-MM-JJ." },
+              fin: { type: "string", description: "Même format que le début." },
+              lieu: { type: "string" },
+              description: { type: "string" },
+              calendrier,
+            },
+            ["identifiant"],
+          ),
+          fn(
+            "supprimer",
+            "Supprime un événement de Google Agenda, désigné par son identifiant. Irréversible : la personne le confirme à chaque fois.",
+            { identifiant: { type: "string", description: "Identifiant de l'événement, recopié tel quel." }, calendrier },
+            ["identifiant"],
+          ),
+        ]
+      : []),
   ];
 }
 
@@ -2102,12 +2147,13 @@ function assembler(lots: Evenement[][], debutMs: number, finMs: number): Eveneme
 }
 
 function rendreListe(evenements: Evenement[], periode: string, plusieurs: boolean): string {
+  const ids = !cache && agendaGoogle.ecritureActive();
   const gardes = evenements.slice(0, LIMITES.evenementsMax);
   const reste = evenements.length - gardes.length;
   const suite = reste > 0 ? ` (${reste} de plus non affiché(s), restreins la période)` : "";
   return (
     `${gardes.length} événement(s) ${periode}${suite}, du plus proche au plus lointain :\n\n` +
-    gardes.map((e) => rendre(e, plusieurs)).join("\n\n")
+    gardes.map((e) => rendre(e, plusieurs, ids)).join("\n\n")
   );
 }
 
@@ -2123,6 +2169,25 @@ export async function callTool(
   args: Record<string, unknown>,
 ): Promise<{ ok: boolean; content: string }> {
   const nom = qualifiedName.replace(/^agenda__/, "");
+  if (nom === "creer" || nom === "modifier" || nom === "supprimer") {
+    // L'accord a déjà été donné en amont (approbation.ts) : ici, on écrit, et on dit ce qui s'est passé.
+    const texte = (v: unknown) => (typeof v === "string" ? v : undefined);
+    const champs = { titre: texte(args.titre), debut: texte(args.debut), fin: texte(args.fin), lieu: texte(args.lieu), description: texte(args.description) };
+    try {
+      const id = texte(args.identifiant) ?? "";
+      const agendaNom = critere(args.calendrier);
+      const message =
+        nom === "creer"
+          ? await agendaGoogle.creerEvenement(champs, agendaNom)
+          : nom === "modifier"
+            ? await agendaGoogle.modifierEvenement(id, champs, agendaNom)
+            : await agendaGoogle.supprimerEvenement(id, agendaNom);
+      calendriersCache = null;
+      return { ok: true, content: message };
+    } catch (err) {
+      return refus(agendaGoogle.messageUtilisateur(err));
+    }
+  }
   if (nom !== "prochains" && nom !== "jour" && nom !== "chercher") {
     return refus(`Outil inconnu : ${qualifiedName}.`);
   }

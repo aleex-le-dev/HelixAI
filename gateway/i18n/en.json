@@ -363,6 +363,7 @@
   "Google a interrompu l'autorisation : rien n'a été enregistré. Recommencez.": "Google interrupted the authorisation: nothing was saved. Try again.",
   "Google Agenda a été débranché de cette instance. Google n'a pas confirmé la révocation : retirez l'accès depuis votre compte Google, rubrique Sécurité, « Vos connexions à des applications et services tiers ».": "Google Calendar was disconnected from this instance. Google did not confirm the revocation: remove the access from your Google account, Security section, “Your connections to third-party apps and services”.",
   "Google Agenda a été débranché, et l'accès révoqué chez Google.": "Google Calendar was disconnected, and the access revoked at Google.",
+  "Google Agenda connecté en lecture et en écriture (chaque écriture vous sera demandée) : {0}.": "Google Calendar connected for reading and writing (each write will be asked of you): {0}.",
   "Google Agenda connecté en lecture seule : {0}.": "Google Calendar connected, read-only: {0}.",
   "Google Agenda est connecté": "Google Calendar is connected",
   "Google Drive": "Google Drive",

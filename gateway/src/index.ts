@@ -1062,6 +1062,11 @@ async function handleTachesProgrammees(req: http.IncomingMessage, res: http.Serv
   const repondre = <T,>(r: tachesProgrammees.Resultat<T>, cle: string) => (r.ok ? send(res, 200, { [cle]: r.valeur }) : send(res, r.statut, { error: { message: r.message } }));
   try {
     if (!id && req.method === "GET") return send(res, 200, { taches: await tachesProgrammees.lister(qui.userId) });
+    // Les agents que la personne peut charger d'une tâche : nom et identifiant seulement, jamais leurs instructions.
+    if (id === "agents" && !action && req.method === "GET") {
+      const agents = await tachesProgrammees.agentsVisibles(qui.userId);
+      return send(res, 200, { agents: agents.map((a) => ({ id: a.id, nom: a.nom })) });
+    }
     if (!id && req.method === "POST") return repondre(await tachesProgrammees.creer(await corps(), qui.userId), "tache");
     if (id && !action && req.method === "POST") return repondre(await tachesProgrammees.modifier(id, await corps(), qui.userId), "tache");
     if (id && !action && req.method === "DELETE") return repondre(await tachesProgrammees.supprimer(id, qui.userId), "supprimee");
@@ -5270,7 +5275,7 @@ void preparerMagasin().then(() => server.listen(PORT, HOST, () => {
 const CLE_TACHES = randomBytes(32).toString("base64url");
 
 function demarrerTachesProgrammees(url: string): void {
-  tachesProgrammees.demarrer(async (ownerId, messages, outils) => {
+  tachesProgrammees.demarrer(async (ownerId, messages, options) => {
     const reponse = await fetch(`${url}/v1/chat/completions`, {
       method: "POST",
       headers: {
@@ -5279,7 +5284,15 @@ function demarrerTachesProgrammees(url: string): void {
         "x-helix-tache": ownerId,
         "x-helix-cle-tache": CLE_TACHES,
       },
-      body: JSON.stringify({ messages, role: "chat", effort: "moyen", tools: outils, stream: true }),
+      body: JSON.stringify({
+        messages,
+        role: "chat",
+        effort: "moyen",
+        tools: options.outils,
+        stream: true,
+        ...(options.modele ? { model: options.modele } : {}),
+        ...(options.connaissances ? { connaissances: options.connaissances } : {}),
+      }),
       signal: AbortSignal.timeout(30 * 60_000),
     });
     if (!reponse.ok || !reponse.body) {

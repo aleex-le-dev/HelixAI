@@ -1,14 +1,16 @@
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { CalendarClock, Check, ChevronDown, ChevronRight, Loader2, MessageSquare, Pause, Play, Plus, ShieldAlert, Trash2 } from "lucide-react";
+import { Bot, CalendarClock, Check, ChevronDown, ChevronRight, Loader2, MessageSquare, Pause, Play, Plus, ShieldAlert, Trash2 } from "lucide-react";
 import {
   creerTache,
   decrireRythme,
+  listerAgentsPossibles,
   joursSemaine,
   lancerTache,
   listerTaches,
   modifierTache,
   supprimerTache,
+  type AgentPossible,
   type Rythme,
   type TacheProgrammee,
 } from "@/lib/tachesProgrammees";
@@ -31,7 +33,7 @@ import { t, tf } from "@/lib/i18n";
 
 type TypeRythme = Rythme["type"];
 
-const vide = { titre: "", consigne: "", type: "jour" as TypeRythme, jourSemaine: 1, jourMois: 1, heure: "08:00", outils: true };
+const vide = { titre: "", consigne: "", type: "jour" as TypeRythme, jourSemaine: 1, jourMois: 1, heure: "08:00", outils: true, agentId: "" };
 
 function rythmeDe(f: typeof vide): Rythme {
   if (f.type === "semaine") return { type: "semaine", jour: f.jourSemaine };
@@ -44,6 +46,31 @@ const quandLisible = (iso: string) => {
   return Number.isNaN(d.getTime()) ? "" : d.toLocaleString(undefined, { weekday: "long", day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" });
 };
 
+const CLASSE_CHOIX = "rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground";
+
+/** Qui fait la tâche : l'agent du Chat, ou l'un des agents de la personne. */
+function ChoixAgent({ agents, valeur, onChange, disabled, compact }: { agents: AgentPossible[]; valeur: string; onChange: (id: string) => void; disabled?: boolean; compact?: boolean }) {
+  // Un agent qu'on ne voit plus reste nommé tel quel : l'écran ne fait pas croire que la tâche a changé de mains.
+  const inconnu = valeur && !agents.some((a) => a.id === valeur);
+  return (
+    <select
+      aria-label={t("Agent chargé de la tâche")}
+      className={compact ? "max-w-[200px] truncate rounded-md border border-border bg-background px-2 py-1 text-xs text-foreground" : CLASSE_CHOIX}
+      value={valeur}
+      disabled={disabled}
+      onChange={(e) => onChange(e.target.value)}
+    >
+      <option value="">{t("Agent du Chat")}</option>
+      {agents.map((a) => (
+        <option key={a.id} value={a.id}>
+          {a.nom}
+        </option>
+      ))}
+      {inconnu && <option value={valeur}>{t("Agent introuvable")}</option>}
+    </select>
+  );
+}
+
 export function TachesProgrammees() {
   const navigate = useNavigate();
   const [taches, setTaches] = useState<TacheProgrammee[] | null>(null);
@@ -51,6 +78,8 @@ export function TachesProgrammees() {
   const [formulaire, setFormulaire] = useState<typeof vide | null>(null);
   const [enCours, setEnCours] = useState<string | null>(null);
   const [ouverte, setOuverte] = useState<string | null>(null);
+  /** Les agents personnalisés (écran Agents) qu'on peut charger d'une tâche. */
+  const [agents, setAgents] = useState<AgentPossible[]>([]);
 
   const relire = useCallback(async () => {
     const r = await listerTaches();
@@ -58,6 +87,10 @@ export function TachesProgrammees() {
       setTaches(r.valeur.taches);
       setErreur(null);
     } else setErreur(r.message);
+  }, []);
+
+  useEffect(() => {
+    void listerAgentsPossibles().then((r) => r.ok && setAgents(r.valeur.agents));
   }, []);
 
   useEffect(() => {
@@ -69,7 +102,7 @@ export function TachesProgrammees() {
   const enregistrer = async () => {
     if (!formulaire) return;
     setEnCours("creation");
-    const r = await creerTache({ titre: formulaire.titre, consigne: formulaire.consigne, rythme: rythmeDe(formulaire), heure: formulaire.heure, outils: formulaire.outils });
+    const r = await creerTache({ titre: formulaire.titre, consigne: formulaire.consigne, rythme: rythmeDe(formulaire), heure: formulaire.heure, outils: formulaire.outils, ...(formulaire.agentId ? { agentId: formulaire.agentId } : {}) });
     setEnCours(null);
     if (!r.ok) return setErreur(r.message);
     setFormulaire(null);
@@ -182,7 +215,13 @@ export function TachesProgrammees() {
               <Field label={t("Heure")}>
                 <Input type="time" value={formulaire.heure} onChange={(e) => setFormulaire({ ...formulaire, heure: e.target.value })} />
               </Field>
+              <Field label={t("Fait par")}>
+                <ChoixAgent agents={agents} valeur={formulaire.agentId} onChange={(agentId) => setFormulaire({ ...formulaire, agentId })} />
+              </Field>
             </div>
+            {agents.length === 0 && (
+              <p className="text-xs text-muted-foreground">{t("Pour confier la tâche à un agent qui a ses propres instructions, créez-le d'abord dans l'écran Agents.")}</p>
+            )}
             <label className="flex items-start gap-2 text-sm text-foreground">
               <input type="checkbox" className="mt-1" checked={formulaire.outils} onChange={(e) => setFormulaire({ ...formulaire, outils: e.target.checked })} />
               <span>
@@ -232,6 +271,17 @@ export function TachesProgrammees() {
                     {decrireRythme(x.rythme, x.heure)}
                     {x.active ? ` · ${tf("prochaine fois : {0}", quandLisible(x.prochaine))}` : ""}
                   </p>
+                  <div className="mt-1.5 flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <Bot size={13} strokeWidth={1.75} className="shrink-0" />
+                    <span className="shrink-0">{t("Fait par")}</span>
+                    <ChoixAgent
+                      compact
+                      agents={agents}
+                      valeur={x.agentId ?? ""}
+                      disabled={Boolean(enCours) || x.enCours}
+                      onChange={(agentId) => void action(x.id, () => modifierTache(x.id, { agentId: agentId || null }))}
+                    />
+                  </div>
                 </div>
                 <div className="flex flex-wrap gap-1.5">
                   <Button variant="ghost" size="sm" icon={enCours === x.id || x.enCours ? Loader2 : Play} disabled={Boolean(enCours) || x.enCours} onClick={() => void action(x.id, () => lancerTache(x.id))}>
@@ -250,6 +300,7 @@ export function TachesProgrammees() {
                   <button type="button" className="flex w-full items-center gap-1.5 text-left text-xs text-muted-foreground" onClick={() => setOuverte(deplie ? null : x.id)}>
                     {deplie ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
                     {derniere.ok ? tf("Dernier compte rendu, le {0}", formaterDate(new Date(derniere.quand))) : tf("Dernière exécution en échec, le {0}", formaterDate(new Date(derniere.quand)))}
+                    {derniere.agent ? ` · ${derniere.agent}` : ""}
                   </button>
                   {deplie && (
                     <div className="mt-2 space-y-2">

@@ -349,7 +349,8 @@ export function resumerOutil(outil: string, args: Record<string, unknown>): stri
     const rythme = ({ "chaque-jour": "chaque jour", "jours-ouvres": "du lundi au vendredi", "chaque-semaine": "chaque semaine", "chaque-mois": "chaque mois" } as Record<string, string>)[String(args.rythme)] ?? "régulièrement";
     const heure = typeof args.heure === "string" ? ` à ${args.heure.slice(0, 5)}` : "";
     const consigne = typeof args.consigne === "string" && args.consigne.trim() ? ` : « ${args.consigne.trim().slice(0, 200)} »` : "";
-    return `programmer la tâche${titre}, ${rythme}${heure}, exécutée seule avec vos outils${consigne}`;
+    const agent = typeof args.agent === "string" && args.agent.trim() ? ` par l'agent « ${args.agent.trim().slice(0, 60)} »` : "";
+    return `programmer la tâche${titre}, ${rythme}${heure}, exécutée seule${agent} avec vos outils${consigne}`;
   }
   if (outil === "controle__site_web") return `contrôler le code web du dossier ${texteOu(args.dossier, "de travail")}`;
   if (outil === "bibliotheque__chercher") return "chercher des documents dans la bibliothèque de l'équipe";

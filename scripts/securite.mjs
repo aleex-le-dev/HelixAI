@@ -449,6 +449,21 @@ console.log("\n3 ter. Tâches programmées : chacune ne voit que les siennes, l'
     const suppr = await appel(`/helix/taches-programmees/${tache.id}`, { method: "DELETE", headers: avecSeance });
     verifier("tâches programmées : la propriétaire supprime la sienne", suppr.status === 200, suppr.status);
   }
+  // Confier une tâche à un agent : seulement à un agent qu'on voit, et la liste ne livre jamais ses instructions.
+  const agentsAvant = (await (await appel("/helix/data/agents", { headers: avecSeance })).json()).value ?? [];
+  const agentPerso = { id: "agent-essai-tache", name: "Agent des tâches", description: "", instructions: "Consigne privée de l'agent", visibility: "personnel", hidePrompt: false, ownerId: compte.account?.id, organisationId: "org_default", toolsEnabled: true, createdAt: "", updatedAt: "" };
+  await appel("/helix/data/agents", { method: "PUT", headers: avecSeance, body: JSON.stringify({ value: [...agentsAvant, agentPerso] }) });
+  const possiblesA = await (await appel("/helix/taches-programmees/agents", { headers: avecSeance })).text();
+  const possiblesB = await (await appel("/helix/taches-programmees/agents", { headers: avecSeanceB })).text();
+  verifier("tâches confiées à un agent : la propriétaire voit son agent, sans ses instructions", possiblesA.includes("agent-essai-tache") && !possiblesA.includes("Consigne privée"), possiblesA.slice(0, 160));
+  verifier("tâches confiées à un agent : la collègue ne voit pas l'agent personnel de la première", !possiblesB.includes("agent-essai-tache"), possiblesB.slice(0, 160));
+  const volee = await poster("/helix/taches-programmees", { titre: "x", consigne: "y", rythme: { type: "jour" }, heure: "08:00", agentId: "agent-essai-tache" }, avecSeanceB);
+  verifier("tâches confiées à un agent : la collègue ne charge pas l'agent personnel de la première d'une tâche (400)", volee.status === 400, volee.status);
+  const confiee = await poster("/helix/taches-programmees", { titre: "x", consigne: "y", rythme: { type: "jour" }, heure: "08:00", agentId: "agent-essai-tache" }, avecSeance);
+  const jConfiee = (await confiee.json().catch(() => ({}))).tache;
+  verifier("tâches confiées à un agent : la propriétaire confie une tâche à son agent", confiee.status === 200 && jConfiee?.agentId === "agent-essai-tache", `${confiee.status} ${jConfiee?.agentId}`);
+  if (jConfiee?.id) await appel(`/helix/taches-programmees/${jConfiee.id}`, { method: "DELETE", headers: avecSeance });
+  await appel("/helix/data/agents", { method: "PUT", headers: avecSeance, body: JSON.stringify({ value: agentsAvant }) });
 }
 
 {

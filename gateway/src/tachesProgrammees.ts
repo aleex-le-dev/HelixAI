@@ -1,6 +1,8 @@
 import { randomBytes } from "node:crypto";
 import { db } from "./db.ts";
 import { journaliser } from "./audit.ts";
+import { filtrer } from "./authz.ts";
+import { groupesDe } from "./groupes.ts";
 import { phraseLangue } from "./plan.ts";
 import { t, tf } from "./langue.ts";
 
@@ -39,6 +41,8 @@ export interface Execution {
   ok: boolean;
   resultat: string;
   dureeMs: number;
+  /** Le nom de l'agent qui l'a faite, tel qu'il était ce jour-là. */
+  agent?: string;
 }
 
 export interface TacheProgrammee {
@@ -51,6 +55,13 @@ export interface TacheProgrammee {
   heure: string;
   /** Avec les outils de la personne (courrier, agenda, fichiers…). */
   outils: boolean;
+  /**
+   * L'agent personnalisé qui fait la tâche (écran Agents) : ses instructions,
+   * son modèle, ses outils et ses bases de connaissances. Sans lui, l'agent du
+   * Chat. Ajouté le 26/09/2026 (« je veux pouvoir donner des tâches à des
+   * agents », Medhi).
+   */
+  agentId?: string;
   active: boolean;
   creeLe: string;
   prochaine: string;
@@ -155,6 +166,50 @@ const texte = (v: unknown, max: number) => String(v ?? "").replace(/\r/g, "").tr
 
 export type Resultat<T> = { ok: true; valeur: T } | { ok: false; statut: number; message: string };
 
+/* ------------------------------------- agents ------------------------------------- */
+
+export interface AgentDeTache {
+  id: string;
+  nom: string;
+  instructions: string;
+  outils: boolean;
+  modele?: string;
+  connaissances: string[];
+}
+
+/**
+ * Les agents que la propriétaire voit, à l'instant (authz.ts, `voitAgent`) :
+ * les siens, ceux de l'organisation, ceux partagés à l'un de ses groupes. Un
+ * agent qu'on ne lui partage plus ne fait plus ses tâches : il est relu à
+ * chaque exécution, jamais recopié dans la tâche.
+ */
+export async function agentsVisibles(ownerId: string): Promise<AgentDeTache[]> {
+  const tous = await db().read("agents");
+  const visibles = filtrer("agents", tous, { userId: ownerId, email: "", groupes: await groupesDe(ownerId) }) as Record<string, unknown>[];
+  return visibles
+    .filter((a) => typeof a.id === "string")
+    .map((a) => ({
+      id: String(a.id),
+      nom: String(a.name ?? "").trim() || t("Agent sans nom"),
+      instructions: String(a.instructions ?? ""),
+      outils: a.toolsEnabled !== false,
+      ...(typeof a.modelUid === "string" && a.modelUid ? { modele: a.modelUid } : {}),
+      connaissances: Array.isArray(a.connaissances) ? a.connaissances.filter((k): k is string => typeof k === "string") : [],
+    }));
+}
+
+async function agentDe(ownerId: string, agentId: string): Promise<AgentDeTache | null> {
+  return (await agentsVisibles(ownerId)).find((a) => a.id === agentId) ?? null;
+}
+
+/** `agentId` reçu : absent (inchangé), vide ou null (l'agent du Chat), ou un agent que la personne voit. */
+async function lireAgent(v: unknown, ownerId: string): Promise<{ ok: true; id: string | undefined } | { ok: false }> {
+  if (v === null || v === "") return { ok: true, id: undefined };
+  if (typeof v !== "string") return { ok: false };
+  return (await agentDe(ownerId, v).catch(() => null)) ? { ok: true, id: v } : { ok: false };
+}
+const AGENT_INCONNU = () => t("Cet agent est introuvable, ou il ne vous est pas partagé.");
+
 export async function lister(ownerId: string): Promise<TacheProgrammee[]> {
   return (await charger()).filter((x) => x.ownerId === ownerId).sort((a, b) => a.prochaine.localeCompare(b.prochaine));
 }
@@ -171,6 +226,8 @@ export async function creer(brut: Record<string, unknown>, ownerId: string): Pro
   if (!titre || !consigne) return { ok: false, statut: 400, message: t("Donnez un titre et une consigne à la tâche.") };
   if (!rythme) return { ok: false, statut: 400, message: t("Le rythme n'est pas compris : chaque jour, du lundi au vendredi, chaque semaine (un jour) ou chaque mois (un jour du mois).") };
   if (!heure) return { ok: false, statut: 400, message: t("L'heure n'est pas comprise : écrivez-la HH:MM, par exemple 08:30.") };
+  const agent = brut.agentId === undefined ? { ok: true as const, id: undefined } : await lireAgent(brut.agentId, ownerId);
+  if (!agent.ok) return { ok: false, statut: 400, message: AGENT_INCONNU() };
   const tache: TacheProgrammee = {
     id: nouvelId(),
     ownerId,
@@ -179,6 +236,7 @@ export async function creer(brut: Record<string, unknown>, ownerId: string): Pro
     rythme,
     heure,
     outils: brut.outils !== false,
+    ...(agent.id ? { agentId: agent.id } : {}),
     active: true,
     creeLe: new Date().toISOString(),
     prochaine: prochaineOccurrence(rythme, heure, new Date()).toISOString(),
@@ -213,6 +271,12 @@ export async function modifier(id: string, brut: Record<string, unknown>, ownerI
     x.heure = h;
   }
   if (typeof brut.outils === "boolean") x.outils = brut.outils;
+  if (brut.agentId !== undefined) {
+    const agent = await lireAgent(brut.agentId, ownerId);
+    if (!agent.ok) return { ok: false, statut: 400, message: AGENT_INCONNU() };
+    if (agent.id) x.agentId = agent.id;
+    else delete x.agentId;
+  }
   if (typeof brut.active === "boolean") x.active = brut.active;
   x.prochaine = prochaineOccurrence(x.rythme, x.heure, new Date()).toISOString();
   await ecrire();
@@ -232,17 +296,26 @@ export async function supprimer(id: string, ownerId: string): Promise<Resultat<n
 /* ------------------------------------ exécution ------------------------------------ */
 
 /** Fourni par index.ts : un appel au Chat de l'instance, avec outils, au nom de la personne. Rend le texte de la réponse. */
-type AppelChat = (ownerId: string, messages: { role: string; content: string }[], outils: boolean) => Promise<string>;
+export interface OptionsAppel {
+  outils: boolean;
+  /** Le modèle imposé par l'agent ; sinon celui du Chat. */
+  modele?: string;
+  /** Les bases de connaissances de l'agent, lues au nom de la propriétaire. */
+  connaissances?: string[];
+}
+type AppelChat = (ownerId: string, messages: { role: string; content: string }[], options: OptionsAppel) => Promise<string>;
 let appeler: AppelChat | null = null;
 let minuterie: ReturnType<typeof setInterval> | null = null;
 let occupe = false;
 
-function consigneSysteme(x: TacheProgrammee): string {
+function consigneSysteme(x: TacheProgrammee, outils: boolean, agent: AgentDeTache | null): string {
   const maintenant = new Date();
   return [
+    // Les instructions de l'agent d'abord : c'est sa personnalité et son métier, la suite dit le cadre.
+    ...(agent?.instructions.trim() ? [agent.instructions.trim(), ""] : []),
     "Tu exécutes une tâche programmée par la personne : personne n'est devant l'écran pour te répondre.",
     `Aujourd'hui, nous sommes le ${maintenant.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}, il est ${String(maintenant.getHours()).padStart(2, "0")} h ${String(maintenant.getMinutes()).padStart(2, "0")}.`,
-    x.outils ? "Fais le travail avec tes outils, réellement, plutôt que de décrire ce qu'il faudrait faire." : "Tu n'as pas d'outils pour cette tâche : réponds avec ce que tu sais.",
+    outils ? "Fais le travail avec tes outils, réellement, plutôt que de décrire ce qu'il faudrait faire." : "Tu n'as pas d'outils pour cette tâche : réponds avec ce que tu sais.",
     "Termine par un compte rendu clair et court, que la personne lira plus tard : ce que tu as trouvé ou fait, et ce qui demande son attention.",
     "N'invente rien : ce que tu n'as pas pu vérifier, dis-le.",
     phraseLangue(x.consigne),
@@ -254,19 +327,25 @@ async function executer(x: TacheProgrammee): Promise<Execution> {
   x.enCours = true;
   let resultat = "";
   let ok = false;
+  let nomAgent: string | undefined;
   try {
     if (!appeler) throw new Error(t("Le moteur des tâches n'est pas prêt."));
+    const agent = x.agentId ? await agentDe(x.ownerId, x.agentId) : null;
+    if (x.agentId && !agent) throw new Error(t("L'agent de cette tâche n'existe plus, ou il ne vous est plus partagé : choisissez-en un autre."));
+    nomAgent = agent?.nom;
+    // Les outils : il faut que la tâche les demande et que l'agent y ait droit.
+    const outils = x.outils && (agent?.outils ?? true);
     resultat = (await appeler(x.ownerId, [
-      { role: "system", content: consigneSysteme(x) },
+      { role: "system", content: consigneSysteme(x, outils, agent) },
       { role: "user", content: `${x.titre}\n\n${x.consigne}` },
-    ], x.outils)).trim();
+    ], { outils, ...(agent?.modele ? { modele: agent.modele } : {}), ...(agent && agent.connaissances.length > 0 ? { connaissances: agent.connaissances } : {}) })).trim();
     ok = resultat.length > 0;
     if (!ok) resultat = t("Le modèle n'a rien répondu.");
   } catch (err) {
     resultat = err instanceof Error ? err.message : String(err);
   }
   x.enCours = false;
-  const e: Execution = { quand: new Date(debut).toISOString(), ok, resultat: resultat.slice(0, RESULTAT_MAX), dureeMs: Date.now() - debut };
+  const e: Execution = { quand: new Date(debut).toISOString(), ok, resultat: resultat.slice(0, RESULTAT_MAX), dureeMs: Date.now() - debut, ...(nomAgent ? { agent: nomAgent } : {}) };
   x.executions = [e, ...x.executions].slice(0, EXECUTIONS_GARDEES);
   journaliser("tache_programmee.executee", x.ownerId, { id: x.id, ok, dureeMs: e.dureeMs });
   return e;
@@ -343,6 +422,7 @@ export function toolsForModel(): Outil[] {
             rythme: { type: "string", enum: ["chaque-jour", "jours-ouvres", "chaque-semaine", "chaque-mois"] },
             jour: { type: "number", description: "Pour chaque-semaine : 0 dimanche, 1 lundi … 6 samedi. Pour chaque-mois : 1 à 31, ou -1 pour le dernier jour du mois." },
             heure: { type: "string", description: "HH:MM, heure de la machine." },
+            agent: { type: "string", description: "Facultatif : le nom d'un agent de la personne (écran Agents) qui fera la tâche, si elle le demande. Sans lui, l'agent du Chat." },
           },
         },
       },
@@ -364,22 +444,40 @@ export async function callTool(nom: string, args: Record<string, unknown>, owner
     if (nom === "taches__lister") {
       const liste = await lister(ownerId);
       if (liste.length === 0) return { ok: true, content: "Aucune tâche programmée." };
+      const agents = await agentsVisibles(ownerId).catch(() => [] as AgentDeTache[]);
+      const par = (x: TacheProgrammee) => (x.agentId ? `, par l'agent « ${agents.find((a) => a.id === x.agentId)?.nom ?? "introuvable"} »` : "");
       return {
         ok: true,
         content: liste
-          .map((x) => `- ${x.titre} : ${decrireRythme(x.rythme, x.heure)}${x.active ? "" : " (en pause)"}, prochaine fois le ${new Date(x.prochaine).toLocaleString("fr-FR", { weekday: "long", day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" })}`)
+          .map((x) => `- ${x.titre} : ${decrireRythme(x.rythme, x.heure)}${par(x)}${x.active ? "" : " (en pause)"}, prochaine fois le ${new Date(x.prochaine).toLocaleString("fr-FR", { weekday: "long", day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" })}`)
           .join("\n"),
       };
     }
     if (nom === "taches__programmer") {
       const r = String(args.rythme ?? "");
       const rythme = r === "chaque-jour" ? { type: "jour" } : r === "jours-ouvres" ? { type: "jours-ouvres" } : r === "chaque-semaine" ? { type: "semaine", jour: args.jour } : r === "chaque-mois" ? { type: "mois", jour: args.jour } : null;
-      const cree = await creer({ titre: args.titre, consigne: args.consigne, rythme, heure: args.heure, outils: true }, ownerId);
+      let agentId: string | undefined;
+      if (typeof args.agent === "string" && args.agent.trim()) {
+        const agents = await agentsVisibles(ownerId);
+        const cherche = args.agent.trim().toLocaleLowerCase("fr");
+        const trouve = agents.find((a) => a.nom.toLocaleLowerCase("fr") === cherche) ?? agents.find((a) => a.nom.toLocaleLowerCase("fr").includes(cherche));
+        if (!trouve) {
+          return {
+            ok: false,
+            content: agents.length > 0
+              ? `Aucun agent ne s'appelle « ${args.agent} ». Agents de la personne : ${agents.map((a) => `« ${a.nom} »`).join(", ")}. Demande-lui lequel.`
+              : "La personne n'a aucun agent personnalisé : la tâche peut être faite par l'agent du Chat, ou elle en crée un dans l'écran Agents.",
+          };
+        }
+        agentId = trouve.id;
+      }
+      const cree = await creer({ titre: args.titre, consigne: args.consigne, rythme, heure: args.heure, outils: true, ...(agentId ? { agentId } : {}) }, ownerId);
       if (!cree.ok) return { ok: false, content: cree.message };
       const x = cree.valeur;
+      const par = agentId ? ` Elle sera faite par l'agent « ${(await agentDe(ownerId, agentId))?.nom ?? ""} ».` : "";
       return {
         ok: true,
-        content: `Tâche programmée : « ${x.titre} », ${decrireRythme(x.rythme, x.heure)}. Première exécution le ${new Date(x.prochaine).toLocaleString("fr-FR", { weekday: "long", day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" })}. Elle se retrouve dans l'écran Tâches. C'est fait : ne la recrée pas.`,
+        content: `Tâche programmée : « ${x.titre} », ${decrireRythme(x.rythme, x.heure)}.${par} Première exécution le ${new Date(x.prochaine).toLocaleString("fr-FR", { weekday: "long", day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" })}. Elle se retrouve dans l'écran Tâches. C'est fait : ne la recrée pas.`,
       };
     }
     return { ok: false, content: `Outil inconnu : ${nom}.` };

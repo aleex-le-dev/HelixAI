@@ -2653,6 +2653,13 @@ journal et les outils sont ceux d'un Chat ordinaire, au nom de la propriétaire.
 voit et ne touche que les siennes ; les vingt derniers comptes rendus sont gardés et
 s'ouvrent dans un Chat. Vérifié par `npm run securite` (section 3 ter). **Pas encore
 essayé** : une exécution à l'heure dite sur l'application installée.
+Le même jour, à la demande de Medhi (« je veux aussi pouvoir donner des tâches à des
+agents ») : une tâche programmée se confie à un agent personnalisé (écran Agents), à la
+création ou ensuite, depuis l'écran ou depuis un Chat (« … par l'agent Comptable »). Ses
+instructions, son modèle, son droit aux outils et ses bases de connaissances s'appliquent ;
+l'agent est relu à chaque exécution, et seulement parmi ceux que la propriétaire voit à cet
+instant (authz.ts) : un agent qu'on ne lui partage plus ne fait plus ses tâches, et
+l'exécution le dit. Les cartes du Kanban se confiaient déjà à un agent (`agentId`).
 
 **Fait le 26/09/2026 : le niveau d'approbation dans la barre du bas.** Demandé par Medhi :
 le sélecteur (« Sans approbation », etc.) quitte la rangée de puces de Cowork pour la barre

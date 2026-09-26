@@ -10,6 +10,8 @@ export interface Execution {
   ok: boolean;
   resultat: string;
   dureeMs: number;
+  /** L'agent qui l'a faite, s'il y en avait un. */
+  agent?: string;
 }
 
 export interface TacheProgrammee {
@@ -19,6 +21,8 @@ export interface TacheProgrammee {
   rythme: Rythme;
   heure: string;
   outils: boolean;
+  /** L'agent personnalisé chargé de la tâche ; sans lui, l'agent du Chat. */
+  agentId?: string;
   active: boolean;
   creeLe: string;
   prochaine: string;
@@ -38,9 +42,19 @@ async function appel<T>(chemin: string, init?: RequestInit): Promise<{ ok: true;
 }
 const json = (corps: unknown): RequestInit => ({ method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(corps) });
 
+/** Ce qu'on envoie : `agentId: null` rend la tâche à l'agent du Chat. */
+type Envoi = Partial<Omit<TacheProgrammee, "agentId">> & { agentId?: string | null };
+
+/** Les agents que la personne peut charger d'une tâche, tels que l'instance les voit. */
+export interface AgentPossible {
+  id: string;
+  nom: string;
+}
+export const listerAgentsPossibles = () => appel<{ agents: AgentPossible[] }>("/helix/taches-programmees/agents");
+
 export const listerTaches = () => appel<{ taches: TacheProgrammee[] }>("/helix/taches-programmees");
-export const creerTache = (x: Partial<TacheProgrammee>) => appel<{ tache: TacheProgrammee }>("/helix/taches-programmees", json(x));
-export const modifierTache = (id: string, x: Partial<TacheProgrammee>) => appel<{ tache: TacheProgrammee }>(`/helix/taches-programmees/${encodeURIComponent(id)}`, json(x));
+export const creerTache = (x: Envoi) => appel<{ tache: TacheProgrammee }>("/helix/taches-programmees", json(x));
+export const modifierTache = (id: string, x: Envoi) => appel<{ tache: TacheProgrammee }>(`/helix/taches-programmees/${encodeURIComponent(id)}`, json(x));
 export const supprimerTache = (id: string) => appel<{ supprimee: null }>(`/helix/taches-programmees/${encodeURIComponent(id)}`, { method: "DELETE" });
 export const lancerTache = (id: string) => appel<{ execution: Execution }>(`/helix/taches-programmees/${encodeURIComponent(id)}/lancer`, json({}));
 

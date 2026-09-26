@@ -182,6 +182,7 @@ export function CodePage() {
           <SuiviCodePanel
             suivi={code.suivi}
             dossier={dossierAffiche}
+            onArreter={code.arreterAction}
             onFermer={() => setSuiviOuvert(false)}
             className="fixed inset-y-0 right-0 z-40 shadow-lg lg:static lg:z-auto lg:shadow-none"
           />

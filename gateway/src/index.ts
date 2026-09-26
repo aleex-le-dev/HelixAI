@@ -57,7 +57,9 @@ import { deployment, autoProvisionEnabled } from "./deployment.ts";
 import { db, isCollection, COLLECTIONS, migrerChiffrement, type Collection } from "./db.ts";
 import { exporterDonnees } from "./export.ts";
 import { chargerReglagesEcran, configEcran, definirModeEcran, modeModifiable } from "./reglagesEcran.ts";
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
+import { join as joindre } from "node:path";
+import { homedir as dossierPersonnel } from "node:os";
 import * as images from "./images.ts";
 import { contenuLogiciel, logicielsTrouves, pageLogiciel } from "./importLocal.ts";
 import * as entrainement from "./entrainement.ts";
@@ -4925,6 +4927,18 @@ async function preparerMagasin(): Promise<void> {
 void preparerMagasin().then(() => server.listen(PORT, HOST, () => {
   const schema = tls ? "https" : "http";
   console.log(`[helix-gateway] écoute sur ${schema}://${HOST}:${PORT}`);
+  /*
+   * Le port réellement ouvert, à côté du jeton (0600). La ligne de commande
+   * ne lit le jeton du poste que pour ce port-là (cli/helix.mjs) : revue du
+   * 26/09/2026, elle l'envoyait à n'importe quel port de la boucle locale,
+   * c'est-à-dire à tout programme du poste qui y écoute.
+   */
+  try {
+    const dossier = process.env.HELIX_DATA_DIR ?? joindre(dossierPersonnel(), ".helix", "data");
+    writeFileSync(joindre(dossier, "instance-port"), `${PORT}\n`, { encoding: "utf8", mode: 0o600 });
+  } catch (err) {
+    console.error("[helix-gateway] port non noté pour la ligne de commande :", err instanceof Error ? err.message : err);
+  }
   if (HOST === "127.0.0.1") {
     console.log("  (boucle locale uniquement — « share »: true pour ouvrir au réseau)");
   }

@@ -55,8 +55,14 @@ function effacerEtat() {
   etatAffiche = false;
   enDebutDeLigne = true;
 }
+/**
+ * Une demande d'accord est à l'écran (`Approbations`) : la ligne d'état ne se
+ * réécrit plus. Revue du 26/09/2026 : réécrite chaque seconde par
+ * `\r\x1b[2K`, elle effaçait la ligne de la question pendant qu'on la lisait.
+ */
+let accordAffiche = false;
 function etatSurPlace(texte) {
-  if (!surPlace) return;
+  if (!surPlace || accordAffiche) return;
   if (!enDebutDeLigne && !etatAffiche) process.stdout.write("\n");
   const largeur = process.stdout.columns ? process.stdout.columns - 1 : 100;
   process.stdout.write(`\r\x1b[2K${discret(texte.length > largeur ? `${texte.slice(0, largeur - 1)}…` : texte)}`);
@@ -191,13 +197,18 @@ function contexte(options) {
   /*
    * Le jeton de l'application de ce poste n'est lu que pour une adresse
    * locale : l'envoyer à une instance d'entreprise lui remettrait la clé de
-   * l'instance de cet ordinateur.
+   * l'instance de cet ordinateur. Et seulement pour le port que l'application
+   * a réellement ouvert (`instance-port`, écrit par la passerelle à côté du
+   * jeton) : revue du 26/09/2026, n'importe quel programme du poste écoutant
+   * sur un autre port de la boucle locale le recevait.
    */
   if (!jeton && locale) {
     try {
-      jeton = fs.readFileSync(path.join(dossierDonnees(), "instance-token"), "utf8").trim();
+      const ouvert = fs.readFileSync(path.join(dossierDonnees(), "instance-port"), "utf8").trim();
+      const vise = new URL(adresse).port || (adresse.startsWith("https:") ? "443" : "80");
+      if (ouvert === vise) jeton = fs.readFileSync(path.join(dossierDonnees(), "instance-token"), "utf8").trim();
     } catch {
-      /* pas d'application sur ce poste : il faudra --jeton */
+      /* pas d'application sur ce poste (ou d'une version qui ne note pas son port) : il faudra HELIX_JETON */
     }
   }
   return { adresse, locale, jeton, seance: lireSeance(adresse)?.seance ?? "" };
@@ -270,6 +281,12 @@ async function appel(ctx, chemin, { methode = "GET", corps, seance = true, signa
       },
       body: corps !== undefined ? JSON.stringify(corps) : undefined,
       signal,
+      /*
+       * Jamais de redirection suivie : `fetch` renverrait `X-Helix-Session`
+       * (et le jeton) à l'adresse désignée par la redirection, même d'une
+       * autre origine (vérifié sur Node 24, revue du 26/09/2026).
+       */
+      redirect: "error",
     });
   } catch (err) {
     if (err?.name === "AbortError") throw err;
@@ -518,6 +535,8 @@ class Approbations {
     if (!demande) return;
     const courant = { id: demande.id, annuler: new AbortController(), repondu: false, issue: null, refuser: false };
     this.enCours = courant;
+    effacerEtat();
+    accordAffiche = true;
     try {
       ligne();
       const detail = demande.detail ?? {};
@@ -532,10 +551,11 @@ class Approbations {
       const envoi = detail.envoi;
       if (envoi && typeof envoi === "object") {
         const m = T.approbationMail;
-        if (envoi.a) ligne(`  ${m.a} : ${envoi.a}`);
-        if (envoi.cc) ligne(`  ${m.cc} : ${envoi.cc}`);
         if (envoi.objet) ligne(`  ${m.objet} : ${envoi.objet}`);
         if (envoi.corps) ligne(`  ${m.corps} :\n${String(envoi.corps).replace(/^/gm, "    ")}`);
+        // Les destinataires en dernier, juste avant la question : un long corps ne les fait pas sortir de l'écran.
+        if (envoi.cc) ligne(`  ${m.cc} : ${envoi.cc}`);
+        if (envoi.a) ligne(`  ${m.a} : ${envoi.a}`);
       }
       if (!interactif) {
         ligne(jaune(T.approbationSansTerminal(demande.resume ?? "")));
@@ -556,6 +576,7 @@ class Approbations {
       else ligne(rouge(T.approbationEchec((await jsonPropre(r).catch(() => ({})))?.error?.message ?? String(r.status))));
     } finally {
       this.enCours = null;
+      accordAffiche = false;
     }
   }
 }

@@ -173,6 +173,8 @@ export type CodeEvent =
   | {
       kind: "sous_outil";
       parentCallID?: string;
+      /** La session du sous-agent : de quoi l'arrêter seule (panneau de suivi). */
+      sousSession?: string;
       callID: string;
       tool: string;
       input: Record<string, unknown>;
@@ -239,6 +241,7 @@ export function translate(raw: unknown): CodeEvent | null {
     return {
       kind: "sous_outil",
       parentCallID: typeof data.parentCallID === "string" ? data.parentCallID : undefined,
+      sousSession: typeof data.sousSession === "string" && /^ses_[A-Za-z0-9]{1,64}$/.test(data.sousSession) ? data.sousSession : undefined,
       callID: String(data.callID ?? ""),
       tool: String(data.tool ?? "outil"),
       input: (data.input as Record<string, unknown>) ?? {},

@@ -17,7 +17,7 @@ import {
   type ReglagesCode,
 } from "@/lib/code";
 import type { Message, ToolTrace } from "./useChat";
-import { appliquerSuivi, suiviNeuf, terminerSuivi, type SuiviCode } from "@/lib/suiviCode";
+import { appliquerSuivi, suiviNeuf, terminerSuivi, type ActionCode, type SuiviCode } from "@/lib/suiviCode";
 
 import { ouvrirFlux } from "@/lib/flux";
 import { t } from "@/lib/i18n";
@@ -599,6 +599,27 @@ export function useCode(dossier?: string, reglages: ReglagesCode = {}) {
     }
   }, [patch, marquerOccupe]);
 
+  /*
+   * Arrêter une seule tâche du panneau de suivi (demandé par Medhi le
+   * 26/09/2026, comme « Tâches en arrière-plan » de Claude Code). Une
+   * sous-tâche a sa propre session chez OpenCode : on n'arrête qu'elle, et
+   * l'agent principal lit l'échec de sa sous-tâche puis continue. Une commande
+   * n'a pas de session à elle : OpenCode ne sait arrêter une commande qu'en
+   * arrêtant le tour entier, et c'est ce que fait le bouton (il le dit).
+   */
+  const arreterAction = useCallback(
+    (action: ActionCode) => {
+      if (action.tool === "task" && action.sousSession) {
+        void interruptCode(action.sousSession).then((ok) => {
+          if (!ok) setError(t("L'arrêt de la sous-tâche n'a pas été confirmé par l'agent de code."));
+        });
+        return;
+      }
+      stop();
+    },
+    [stop],
+  );
+
   const reset = useCallback(() => {
     // Repartir de zéro ne doit pas laisser l'agent travailler en arrière-plan, sans écran.
     if (busyRef.current && tourRef.current) void interruptCode(tourRef.current.sessionID);
@@ -708,5 +729,5 @@ export function useCode(dossier?: string, reglages: ReglagesCode = {}) {
     [nouvelle, commit, marquerOccupe, listen],
   );
 
-  return { status, messages, busy, error, send, stop, reset, suivi, sessionId, nouvelle, ouvrir };
+  return { status, messages, busy, error, send, stop, arreterAction, reset, suivi, sessionId, nouvelle, ouvrir };
 }

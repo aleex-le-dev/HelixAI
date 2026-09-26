@@ -2570,6 +2570,22 @@ LM Studio (`prism_hadamard_qwen35`, moteur propre exigé). Pas encore essayé : 
 l'application empaquetée (le banc d'essai n'existe qu'avec Electron), et avec un modèle
 plus fort.
 
+**Fait le 26/09/2026 : mises à jour d'un clic, sans signature ni serveur.** Décidé par
+Medhi : pas de mise à jour automatique, mais une fenêtre « Nouvelle version » avec
+« Installer maintenant » (`src/components/layout/FenetreMiseAJour.tsx`). La source est
+l'instance à laquelle le poste est rattaché : elle décrit l'application qu'elle fait
+tourner (`GET /helix/mises-a-jour/latest-mac.yml`, empreinte SHA-512 de l'archive) et la
+sert (jeton d'instance exigé, seulement cette archive). Le poste télécharge, vérifie
+l'empreinte, décompresse par `ditto`, contrôle l'identifiant et la version, puis un script
+remplace l'application une fois fermée, en gardant l'ancienne jusqu'à ce que la nouvelle
+soit en place, et la relance (`electron/miseAJour.cjs`, `installerSansSignature`). Le
+serveur de l'agence, s'il est un jour inscrit dans le paquet, reste prioritaire. Vérifié
+le 26/09/2026 sur l'application installée : description et archive servies, empreinte
+recalculée identique, 401 sans jeton ; une archive plus ancienne que l'application est
+refaite (elle servait la version de la veille). **Pas encore essayé** : une vraie mise à
+jour entre deux versions sur un poste rattaché. Le poste qui porte l'instance, lui, n'a
+pas de source (c'est lui la source) : il se met à jour en installant le nouveau paquet.
+
 **Ce qui attend une machine qu'on n'a pas**
 
 7. **Qwen-Image** (texte lisible dans l'image) : 48 Go ou carte de 24 Go.

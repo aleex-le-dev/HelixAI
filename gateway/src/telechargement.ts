@@ -125,7 +125,20 @@ export function etat(plateforme: Plateforme): EtatPaquet {
   }
   const version = versionDe(app) ?? "inconnue";
   const chemin = cheminPaquet(version);
-  const pret = existsSync(chemin);
+  /*
+   * Prêt seulement s'il est plus récent que l'application elle-même : mesuré le
+   * 26/09/2026, une application reconstruite sous le même numéro de version
+   * servait encore l'archive de la veille, donc l'ancienne application, à la
+   * fenêtre de mise à jour des postes.
+   */
+  let pret = existsSync(chemin);
+  if (pret) {
+    try {
+      pret = statSync(chemin).mtimeMs >= statSync(join(app, "Contents", "Info.plist")).mtimeMs;
+    } catch {
+      pret = false;
+    }
+  }
   return {
     plateforme,
     disponible: true,

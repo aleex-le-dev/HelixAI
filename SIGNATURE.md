@@ -153,6 +153,12 @@ xattr -d com.apple.quarantine /Applications/Helix.app
 
 ## 4. Mise à jour de l'application
 
+**Depuis le 26/09/2026, sans signature** : un poste rattaché à une instance reçoit une
+fenêtre « Nouvelle version, Installer maintenant » ; l'instance sert l'application qu'elle
+fait tourner, et le poste l'installe après avoir vérifié son empreinte (PROJET.md, « Fait le
+26/09/2026 : mises à jour d'un clic »). Ce qui suit décrit le régime avec un serveur de
+l'agence et une application signée.
+
 `electron/miseAJour.cjs`, écran Paramètres, Préférences, « À propos ».
 
 **Une seule adresse contactée** : celle que vous inscrivez dans le paquet à la

@@ -2674,13 +2674,33 @@ que pour les images propose le modèle qui tient sur la machine, annonce le tél
 l'installation. Même moteur que les images (stable-diffusion.cpp, mode `vid_gen`, qui écrit une
 vidéo WebM lue dans le Chat), mêmes droits (la vidéo se voit par qui voit le Chat), même
 effacement et même export (`gateway/src/images.ts`). Modèles Wan d'Alibaba, Apache 2.0, comme
-leur encodeur umt5-xxl et leurs décodeurs, chaque fichier à une révision et une empreinte
-relevées le 27/09/2026 : **Wan 2.1 1,3 milliard** (dès 16 Go ou une carte de 8 Go ; 832 × 480,
-deux secondes à 16 images/s ; 6,8 Go à télécharger, moteur compris) et **Wan 2.2 TI2V
-5 milliards** (dès 32 Go ou une carte de 16 Go ; 1024 × 576, deux secondes à 24 images/s ;
-12,8 Go). Pas sur le processeur seul. **Pas encore essayé de bout en bout** : il faut les
-télécharger, et l'écran le dit (« pas encore vérifié avec Helix »). Temps de calcul inconnus
-tant que ce n'est pas essayé.
+leur encodeur umt5-xxl, chaque fichier à une révision et une empreinte relevées le
+27/09/2026 : **Wan 2.1 1,3 milliard** (dès 16 Go ou une carte de 8 Go ; 624 × 352, deux
+secondes à 16 images/s, 15 étapes, décodeur allégé TAEHV de madebyollin, licence MIT ; 6,5 Go
+à télécharger, moteur compris) et **Wan 2.2 TI2V 5 milliards** (dès 32 Go ou une carte de
+16 Go ; 1024 × 576, deux secondes à 24 images/s, décodeur complet ; 12,8 Go). Pas sur le
+processeur seul. **Essayé de bout en bout le 27/09/2026 sur le Mac M4 de 16 Go de Medhi**
+(Wan 2.1, « un chat roux qui s'étire au soleil ») : téléchargement 5 min 37, vidéo en
+**10 min 54** (35 s par étape, décodage 70 s), chat roux sur le rebord, au soleil, qui bouge.
+Le premier réglage (832 × 480, 20 étapes, décodeur complet) prenait 80 s par étape et ne
+finissait pas son décodage au bout de 45 minutes : arrêté à la demande de Medhi (« 90 minutes
+c'est trop »). Plafond : 45 minutes, puis arrêt dit comme tel. Wan 2.2 : pas essayé (pas de
+machine de 32 Go ici).
+
+**Fait le 27/09/2026 : les instructions d'un agent vraiment masquées, et deux postes qui ne
+s'effacent plus.** Demandés par Medhi.
+- **Masquer** (interrupteur à la création, ou sur la carte de l'agent) : l'instance n'envoie
+  plus les instructions aux postes de celles et ceux à qui l'agent est partagé (authz.ts) ;
+  leur Chat met une marque à la place, que l'instance remplace au moment d'appeler le modèle
+  (`instructionsAgents.ts`), pour qui a le droit de se servir de l'agent. Le poste d'un
+  employé lié ne leur est plus montré non plus ; les tâches programmées lisent les vraies
+  instructions. Limite dite à l'écran : le modèle les lit, et une question insistante peut
+  lui en faire dire une partie.
+- **Deux postes** : chaque envoi dit sur quelle version il s'appuie (`base`) ; si l'instance a
+  changé depuis, 409, le poste relit, fusionne ce qu'il avait en attente et renvoie. Avant, la
+  même personne sur un second poste effaçait ce qu'elle venait de créer sur le premier. Un
+  poste d'une version antérieure n'envoie pas de `base` et garde l'ancien comportement.
+Vérifié par `npm run securite` (402 contrôles).
 
 **Fait le 27/09/2026 : une photo pour chaque agent.** Demandé par Medhi. Choisie à la création
 ou en cliquant sur l'avatar de sa carte (son propriétaire seul), recadrée en carré de 256 pixels

@@ -47,9 +47,11 @@ interface Fichier {
   chemin: string;
   taille: number;
   sha256: string;
+  /** Hors de Hugging Face (le décodeur allégé des vidéos, publié sur GitHub) : l'adresse exacte, à une révision fixe. */
+  url?: string;
 }
 
-const hf = (f: Fichier) => `https://huggingface.co/${f.depot}/resolve/${f.revision}/${f.chemin}`;
+const hf = (f: Fichier) => f.url ?? `https://huggingface.co/${f.depot}/resolve/${f.revision}/${f.chemin}`;
 const nomLocal = (f: Fichier) => f.chemin.split("/").pop()!;
 
 const Z = "leejet/Z-Image-Turbo-GGUF";
@@ -769,6 +771,15 @@ interface VarianteVideo {
   diffusion: Fichier;
   texte: Fichier;
   vae: Fichier;
+  /**
+   * Décodeur allégé (TAEHV, madebyollin, licence MIT), à la place du décodeur
+   * complet. Mesuré le 27/09/2026 sur un Mac M4 de 16 Go : les 20 étapes d'une
+   * vidéo de deux secondes prennent 31 minutes, puis le décodeur complet
+   * tournait encore 45 minutes plus tard, carte graphique à 100 %. Le moteur
+   * le recommande lui-même quand la mémoire graphique manque ; l'image est un
+   * peu moins fine.
+   */
+  allege?: boolean;
   memoireMac: number;
   vramPc: number;
   /** En paysage ; le portrait les échange. Multiples de 32. */
@@ -804,7 +815,10 @@ const W5R = "57437632ddd08bdcbd1508c866aa22e126ed51d2";
 
 const UMT5_Q4: Fichier = { depot: U5, revision: U5R, chemin: "umt5-xxl-encoder-Q4_K_M.gguf", taille: 3_655_145_312, sha256: "17cf97a5bbbc60a646d6105b832b6f657ce904a8a1ad970e4b59df0c67584a40" };
 const UMT5_Q8: Fichier = { depot: U5, revision: U5R, chemin: "umt5-xxl-encoder-Q8_0.gguf", taille: 6_043_068_256, sha256: "2521d4de0bf9e1cc6549866463ceae85e4ec3239bc6063f7488810be39033bbc" };
-const VAE_WAN21: Fichier = { depot: W21, revision: W21R, chemin: "split_files/vae/wan_2.1_vae.safetensors", taille: 253_815_318, sha256: "2fc39d31359a4b0a64f55876d8ff7fa8d780956ae2cb13463b0223e15148976b" };
+const TAEHV = "madebyollin/taehv";
+const TAEHV_R = "011dfc2112197741c540e0bdd5b7b67bcc930771";
+// Relevée en téléchargeant le fichier ; son empreinte Git est celle que publie GitHub pour cette révision.
+const TAE_WAN21: Fichier = { depot: TAEHV, revision: TAEHV_R, chemin: "taew2_1.safetensors", taille: 22_642_902, sha256: "04766eac0221b5390b985ae3fdcca652cbb4b1e8b82b28ea7ff89dfad1b1a93f", url: `https://raw.githubusercontent.com/${TAEHV}/${TAEHV_R}/safetensors/taew2_1.safetensors` };
 const VAE_WAN22: Fichier = { depot: W22, revision: W22R, chemin: "split_files/vae/wan2.2_vae.safetensors", taille: 1_409_400_960, sha256: "e40321bd36b9709991dae2530eb4ac303dd168276980d3e9bc4b6e2b75fed156" };
 
 const MODELES_VIDEO: ModeleVideo[] = [
@@ -813,8 +827,15 @@ const MODELES_VIDEO: ModeleVideo[] = [
     nom: "Wan 2.1 (1,3 milliard)",
     editeur: "Alibaba (Wan-AI)",
     licence: "Apache 2.0",
-    atout: t("Le plus léger : deux secondes en 480p, sur une machine de 16 Go."),
-    etapes: 20,
+    atout: t("Le plus léger : deux secondes de vidéo, sur une machine de 16 Go."),
+    /*
+     * 15 étapes et 624 x 352 (27/09/2026, demandé par Medhi : « 90 minutes
+     * c'est trop ») : mesuré sur un Mac M4 de 16 Go, 832 x 480 en 20 étapes
+     * prenait 80 secondes par étape, puis le décodeur complet ne finissait pas
+     * en 45 minutes. Environ deux fois moins de calcul par étape, un quart
+     * d'étapes en moins, et le décodeur allégé.
+     */
+    etapes: 15,
     cfg: 6,
     decalage: 3,
     verifie: false,
@@ -825,9 +846,10 @@ const MODELES_VIDEO: ModeleVideo[] = [
         vramPc: 8,
         diffusion: { depot: W21, revision: W21R, chemin: "split_files/diffusion_models/wan2.1_t2v_1.3B_fp16.safetensors", taille: 2_838_303_560, sha256: "be531024cd9018cb5b48c40cfbb6a6191645b1c792eb8bf4f8c1c6e10f924dc5" },
         texte: UMT5_Q4,
-        vae: VAE_WAN21,
-        largeur: 832,
-        hauteur: 480,
+        vae: TAE_WAN21,
+        allege: true,
+        largeur: 624,
+        hauteur: 352,
         images: 33,
         ips: 16,
       },
@@ -1034,7 +1056,7 @@ export async function lancerVideo(description: string, format: "paysage" | "port
     const args = [
       "-M", "vid_gen",
       "--diffusion-model", f(niveau.diffusion),
-      "--vae", f(niveau.vae),
+      ...(niveau.allege ? ["--tae", f(niveau.vae)] : ["--vae", f(niveau.vae)]),
       "--t5xxl", f(niveau.texte),
       "-p", invite,
       "-n", NEGATIF_WAN,
@@ -1072,8 +1094,11 @@ export async function lancerVideo(description: string, format: "paysage" | "port
       };
       p.stdout.on("data", lire);
       p.stderr.on("data", lire);
-      // Une vidéo prend bien plus qu'une image : une heure et demie au plus.
-      const garde = setTimeout(() => p.kill(), 90 * 60_000);
+      // 45 minutes au plus : au-delà, la machine n'est pas faite pour, et on le dit plutôt que de la bloquer.
+      const garde = setTimeout(() => {
+        tr.erreur = t("Arrêtée au bout de 45 minutes : cette machine est trop juste pour ce réglage.");
+        p.kill();
+      }, 45 * 60_000);
       p.on("close", (c) => {
         clearTimeout(garde);
         travailActif = null;

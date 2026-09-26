@@ -185,7 +185,9 @@ export interface AgentDeTache {
  */
 export async function agentsVisibles(ownerId: string): Promise<AgentDeTache[]> {
   const tous = await db().read("agents");
-  const visibles = filtrer("agents", tous, { userId: ownerId, email: "", groupes: await groupesDe(ownerId) }) as Record<string, unknown>[];
+  // Ceux qu'elle voit, mais avec leurs vraies instructions : une tâche se sert d'un agent masqué comme son Chat.
+  const vrais = new Map((Array.isArray(tous) ? (tous as Record<string, unknown>[]) : []).map((a) => [a.id, a]));
+  const visibles = (filtrer("agents", tous, { userId: ownerId, email: "", groupes: await groupesDe(ownerId) }) as Record<string, unknown>[]).map((a) => vrais.get(a.id) ?? a);
   return visibles
     .filter((a) => typeof a.id === "string")
     .map((a) => ({

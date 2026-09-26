@@ -147,6 +147,8 @@ interface Options {
   tools?: boolean;
   /** Bases de connaissances consultées à chaque question : celles de l'agent, du projet, et le choix de la zone de saisie. */
   connaissances?: string[];
+  /** L'agent choisi, pour que l'instance ajoute ses instructions masquées (store/agents.ts, `INSTRUCTIONS_MASQUEES`). */
+  agent?: string;
 }
 
 /** État d'une conversation branchée sur la passerelle, persistée en session. */
@@ -333,6 +335,7 @@ export function useChat(options: Options) {
             effort: options.effort,
             tools: options.tools,
             connaissances: options.connaissances,
+            agent: options.agent,
             signal: controller.signal,
           },
           {

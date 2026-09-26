@@ -24,8 +24,15 @@ export interface Agent {
   visibility: AgentVisibility;
   /** Pour la visibilité « groupes » : les groupes (de son auteur) à qui il est partagé. */
   groupIds?: string[];
-  /** Masquer le prompt aux non-administrateurs (agents d'organisation). */
+  /**
+   * Instructions masquées à celles et ceux à qui l'agent est partagé
+   * (27/09/2026) : l'instance ne les leur envoie plus (authz.ts) et les ajoute
+   * elle-même au Chat (chat.ts). Leur copie arrive sans, avec
+   * `instructionsMasquees`.
+   */
   hidePrompt: boolean;
+  /** Posé par l'instance sur la copie d'un agent dont les instructions ne sont pas envoyées à ce poste. */
+  instructionsMasquees?: boolean;
   ownerId: string;
   organisationId: string;
   /** Autoriser cet agent à utiliser les outils MCP. */
@@ -113,6 +120,16 @@ export function updateAgent(id: string, changes: Partial<Agent>): void {
 export function deleteAgent(id: string): void {
   persist(all().filter((a) => a.id !== id));
 }
+
+/**
+ * À la place des instructions masquées, dans le message système : l'instance
+ * le remplace par les vraies instructions de l'agent (chat.ts), à qui a le
+ * droit de s'en servir. Jamais montré au modèle tel quel.
+ */
+export const INSTRUCTIONS_MASQUEES = "⟦instructions-de-l-agent⟧";
+
+/** Les instructions à donner au message système : les siennes, ou la place que l'instance remplira. */
+export const instructionsPourLeChat = (a: Agent) => (a.instructionsMasquees ? INSTRUCTIONS_MASQUEES : a.instructions);
 
 /** Agent par défaut, toujours disponible. */
 export const DEFAULT_AGENT: Agent = {

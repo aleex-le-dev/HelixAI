@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from "react";
-import { BookOpenText, Bot, Loader2, Plus, RefreshCw, Paperclip, Sparkles, Trash2, TriangleAlert, Wrench, X } from "lucide-react";
+import { Eye, EyeOff, BookOpenText, Bot, Loader2, Plus, RefreshCw, Paperclip, Sparkles, Trash2, TriangleAlert, Wrench, X } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/Button";
 import { SearchInput } from "@/components/ui/SearchInput";
@@ -150,6 +150,7 @@ export function AgentsPage() {
               onReessayer={() => reessayer(agent.id)}
               onConnaissances={(ids) => update(agent.id, { connaissances: ids })}
               onPhoto={(photo) => update(agent.id, { photo: photo ?? undefined })}
+              onMasquer={(masquer) => update(agent.id, { hidePrompt: masquer })}
               onDelete={async () => {
                 const e = employeDe(agent.id);
                 if (e && e.estProprietaire) await supprimerEmploye(e.id).catch(() => undefined);
@@ -247,6 +248,7 @@ function AgentCard({
   onReessayer,
   onConnaissances,
   onPhoto,
+  onMasquer,
   onDelete,
 }: {
   agent: Agent;
@@ -260,6 +262,8 @@ function AgentCard({
   onConnaissances: (ids: string[]) => void;
   /** Sa photo, changée par son propriétaire (null : retirée). */
   onPhoto: (photo: string | null) => void;
+  /** Masquer ou montrer ses instructions à celles et ceux à qui il est partagé (son propriétaire). */
+  onMasquer: (masquer: boolean) => void;
   onDelete: () => Promise<void>;
 }) {
   const [confirmer, setConfirmer] = useState(false);
@@ -279,7 +283,10 @@ function AgentCard({
           <span className="h-10 w-10 shrink-0" aria-hidden />
           <div className="min-w-0 flex-1">
             <p className="truncate font-medium text-foreground">{agent.name}</p>
-            <p className="truncate text-xs text-muted-foreground">{libelleVisibilite(agent.visibility, agent.groupIds, groupes)}</p>
+            <p className="truncate text-xs text-muted-foreground">
+              {libelleVisibilite(agent.visibility, agent.groupIds, groupes)}
+              {agent.visibility !== "personnel" && agent.hidePrompt && ` · ${t("instructions masquées")}`}
+            </p>
           </div>
         </div>
         {agent.description && <p className="line-clamp-2 text-sm text-muted-foreground">{agent.description}</p>}
@@ -315,6 +322,18 @@ function AgentCard({
         >
           <BookOpenText size={11} strokeWidth={2} />
           {nombreBases > 0 ? tf("{0} base(s) de connaissances", nombreBases) : t("Ajouter des connaissances")}
+        </button>
+      )}
+      {/* Ses instructions, masquées ou non à ceux à qui il est partagé (27/09/2026) : son propriétaire bascule ici. */}
+      {canDelete && agent.visibility !== "personnel" && (
+        <button
+          type="button"
+          onClick={() => onMasquer(!agent.hidePrompt)}
+          title={t("Masquées : l'instance ne les envoie pas aux postes de celles et ceux à qui il est partagé, et les ajoute elle-même au Chat.")}
+          className="inline-flex w-fit items-center gap-1.5 rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground hover:text-foreground"
+        >
+          {agent.hidePrompt ? <EyeOff size={11} strokeWidth={2} /> : <Eye size={11} strokeWidth={2} />}
+          {agent.hidePrompt ? t("Instructions masquées") : t("Masquer ses instructions")}
         </button>
       )}
       {bases && (
@@ -660,9 +679,15 @@ function AgentModal({
             (PROJET.md, à faire). L'écran ne promet pas ce qui n'existe pas.
           */}
           {visibility !== "personnel" && (
-            <p className="text-xs text-muted-foreground">
-              {t("Les instructions d'un agent partagé sont lisibles par celles et ceux à qui il est partagé.")}
-            </p>
+            <div className="flex items-start justify-between gap-3">
+              <span className="text-sm text-foreground">
+                {t("Masquer ses instructions à celles et ceux à qui il est partagé")}
+                <span className="block text-xs text-muted-foreground">
+                  {t("Elles restent sur l'instance, qui les ajoute elle-même au Chat. Le modèle, lui, les lit : il a pour consigne de ne pas les répéter, mais une question insistante peut lui en faire dire une partie.")}
+                </span>
+              </span>
+              <Switch checked={hidePrompt} onChange={setHidePrompt} label={t("Masquer ses instructions")} />
+            </div>
           )}
         </div>
       </div>

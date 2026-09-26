@@ -3,7 +3,7 @@ import { getTask, updateTask, type Task, type TaskToolTrace } from "./store/task
 import { buildSystemPrompt, loadProfile } from "./store/profile";
 import { competencesVisibles, consignesDesCompetences } from "./store/competences";
 import { currentUser } from "./store/identity";
-import { getAgent, DEFAULT_AGENT, type Agent } from "./store/agents";
+import { getAgent, DEFAULT_AGENT, instructionsPourLeChat, type Agent } from "./store/agents";
 import { branding } from "@/config/branding";
 import { t, tf } from "@/lib/i18n";
 
@@ -74,7 +74,7 @@ export async function runTask(
   const systemPrompt = buildSystemPrompt(
     profile,
     branding.name,
-    agent.instructions,
+    instructionsPourLeChat(agent),
     consignesDesCompetences(competencesVisibles(currentUser())),
   );
 
@@ -110,6 +110,7 @@ export async function runTask(
         model: options.modelUid ?? agent.modelUid,
         effort: "moyen",
         tools: agent.toolsEnabled,
+        ...(agent.id !== DEFAULT_AGENT.id ? { agent: agent.id } : {}),
         signal: options.signal,
       },
       {

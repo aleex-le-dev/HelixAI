@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { Select } from "@/components/ui/Select";
 import { useNavigate } from "react-router-dom";
 import { Bot, CalendarClock, Check, ChevronDown, ChevronRight, Loader2, MessageSquare, Pause, Play, Plus, ShieldAlert, Trash2 } from "lucide-react";
 import {
@@ -46,28 +47,23 @@ const quandLisible = (iso: string) => {
   return Number.isNaN(d.getTime()) ? "" : d.toLocaleString(undefined, { weekday: "long", day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" });
 };
 
-const CLASSE_CHOIX = "rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground";
 
 /** Qui fait la tâche : l'agent du Chat, ou l'un des agents de la personne. */
 function ChoixAgent({ agents, valeur, onChange, disabled, compact }: { agents: AgentPossible[]; valeur: string; onChange: (id: string) => void; disabled?: boolean; compact?: boolean }) {
   // Un agent qu'on ne voit plus reste nommé tel quel : l'écran ne fait pas croire que la tâche a changé de mains.
   const inconnu = valeur && !agents.some((a) => a.id === valeur);
   return (
-    <select
-      aria-label={t("Agent chargé de la tâche")}
-      className={compact ? "max-w-[200px] truncate rounded-md border border-border bg-background px-2 py-1 text-xs text-foreground" : CLASSE_CHOIX}
+    <Select
+      className={compact ? "w-[200px]" : "min-w-[180px]"}
       value={valeur}
       disabled={disabled}
-      onChange={(e) => onChange(e.target.value)}
-    >
-      <option value="">{t("Agent du Chat")}</option>
-      {agents.map((a) => (
-        <option key={a.id} value={a.id}>
-          {a.nom}
-        </option>
-      ))}
-      {inconnu && <option value={valeur}>{t("Agent introuvable")}</option>}
-    </select>
+      onChange={onChange}
+      options={[
+        { value: "", label: t("Agent du Chat") },
+        ...agents.map((a) => ({ value: a.id, label: a.nom })),
+        ...(inconnu ? [{ value: valeur, label: t("Agent introuvable") }] : []),
+      ]}
+    />
   );
 }
 
@@ -170,46 +166,36 @@ export function TachesProgrammees() {
             </Field>
             <div className="flex flex-wrap items-end gap-3">
               <Field label={t("Rythme")}>
-                <select
-                  className="rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground"
+                <Select
+                  className="min-w-[190px]"
                   value={formulaire.type}
-                  onChange={(e) => setFormulaire({ ...formulaire, type: e.target.value as TypeRythme })}
-                >
-                  <option value="jour">{t("Chaque jour")}</option>
-                  <option value="jours-ouvres">{t("Du lundi au vendredi")}</option>
-                  <option value="semaine">{t("Chaque semaine")}</option>
-                  <option value="mois">{t("Chaque mois")}</option>
-                </select>
+                  onChange={(v) => setFormulaire({ ...formulaire, type: v as TypeRythme })}
+                  options={[
+                    { value: "jour", label: t("Chaque jour") },
+                    { value: "jours-ouvres", label: t("Du lundi au vendredi") },
+                    { value: "semaine", label: t("Chaque semaine") },
+                    { value: "mois", label: t("Chaque mois") },
+                  ]}
+                />
               </Field>
               {formulaire.type === "semaine" && (
                 <Field label={t("Jour")}>
-                  <select
-                    className="rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground"
-                    value={formulaire.jourSemaine}
-                    onChange={(e) => setFormulaire({ ...formulaire, jourSemaine: Number(e.target.value) })}
-                  >
-                    {[1, 2, 3, 4, 5, 6, 0].map((j) => (
-                      <option key={j} value={j}>
-                        {joursSemaine()[j]}
-                      </option>
-                    ))}
-                  </select>
+                  <Select
+                    className="min-w-[140px]"
+                    value={String(formulaire.jourSemaine)}
+                    onChange={(v) => setFormulaire({ ...formulaire, jourSemaine: Number(v) })}
+                    options={[1, 2, 3, 4, 5, 6, 0].map((j) => ({ value: String(j), label: joursSemaine()[j] ?? "" }))}
+                  />
                 </Field>
               )}
               {formulaire.type === "mois" && (
                 <Field label={t("Jour du mois")}>
-                  <select
-                    className="rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground"
-                    value={formulaire.jourMois}
-                    onChange={(e) => setFormulaire({ ...formulaire, jourMois: Number(e.target.value) })}
-                  >
-                    {Array.from({ length: 31 }, (_, i) => i + 1).map((j) => (
-                      <option key={j} value={j}>
-                        {j}
-                      </option>
-                    ))}
-                    <option value={-1}>{t("Le dernier jour")}</option>
-                  </select>
+                  <Select
+                    className="min-w-[150px]"
+                    value={String(formulaire.jourMois)}
+                    onChange={(v) => setFormulaire({ ...formulaire, jourMois: Number(v) })}
+                    options={[...Array.from({ length: 31 }, (_, k) => ({ value: String(k + 1), label: tf("Le {0}", String(k + 1)) })), { value: "-1", label: t("Le dernier jour") }]}
+                  />
                 </Field>
               )}
               <Field label={t("Heure")}>

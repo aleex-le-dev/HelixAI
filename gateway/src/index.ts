@@ -1670,12 +1670,28 @@ async function handleDataWrite(
    * PostgreSQL, deux envois simultanés lisaient le même état et le second
    * effaçait ce que le premier venait d'ajouter (revue du 26/09/2026).
    */
+  /*
+   * La version de l'instance sur laquelle ce poste s'appuie (`base`, 27/09/2026).
+   * Une absence vaut suppression : la même personne sur un second poste, qui
+   * n'avait pas encore relu, effaçait ce qu'elle venait de créer sur le
+   * premier. Si l'instance a changé depuis, rien n'est écrit : le poste relit,
+   * fusionne ce qu'il avait en attente (sync.ts) et renvoie. Un poste d'avant
+   * cette règle n'envoie pas de `base`, et garde l'ancien comportement.
+   */
+  const base = typeof (body as { base?: unknown }).base === "number" ? (body as { base: number }).base : undefined;
   const fusion = await enFileDeCollection(name, async () => {
+    if (base !== undefined && base !== (await db().revision(name))) return null;
     const f = fusionner(name, await db().read(name), body.value ?? null, qui);
     // Un collègue peut renvoyer une copie où figure encore un compte supprimé.
     await db().write(name, await sansComptesDisparus(name, f.valeur));
     return f;
   });
+  if (!fusion) {
+    return send(res, 409, {
+      error: { message: t("Cette copie n'est plus à jour : un autre poste a écrit entre-temps. Relisez, puis renvoyez."), code: "revision-depassee" },
+      revision: await db().revision(name),
+    });
+  }
   // Deux écritures dans la même milliseconde ont la même révision : le relevé des images ne s'y fie pas seul.
   if (name === "sessions") images.oublierChatsDesImages();
 
@@ -4549,6 +4565,9 @@ async function handleEmployes(
     const depuis = new Date(Date.now() - 30 * 86_400_000).toISOString().slice(0, 10);
     // Une mission « à chaque mail » est en place quand une boîte est branchée et qu'il y a accès.
     const boite = outilsDeFamille("courrier").length > 0;
+    // Les agents masqués (27/09/2026) : le poste d'un employé est la copie de leurs instructions, il ne sort pas non plus.
+    const agentsBruts = await db().read("agents").catch(() => null);
+    const masques = new Set((Array.isArray(agentsBruts) ? (agentsBruts as Record<string, unknown>[]) : []).filter((a) => a.hidePrompt === true).map((a) => String(a.id)));
     const vues = await Promise.all(
       liste.map(async (e) => {
         const conso = await consommationDe(auteurEmploye(e.id));
@@ -4560,6 +4579,7 @@ async function handleEmployes(
         const estProprietaire = e.ownerId === qui.userId;
         return {
           ...e,
+          ...(!estProprietaire && e.agentId && masques.has(e.agentId) ? { poste: "" } : {}),
           // Qui est autorisé sur un canal (numéros, identifiants) ne regarde que son propriétaire.
           canaux: (e.canaux ?? []).map((c) =>
             estProprietaire ? { ...c, nom: employes.CANAUX[c.type].nom } : { type: c.type, nom: employes.CANAUX[c.type].nom },

@@ -23,7 +23,7 @@ import { currentUser } from "@/lib/store/identity";
 import { useSessions, notifySessionsChanged } from "@/hooks/useSessions";
 import { useAgents } from "@/hooks/useAgents";
 import { useCompetences } from "@/hooks/useCompetences";
-import { DEFAULT_AGENT } from "@/lib/store/agents";
+import { DEFAULT_AGENT, instructionsPourLeChat } from "@/lib/store/agents";
 import { instance } from "@/lib/instance";
 import { branding, features } from "@/config/branding";
 import { t, tf } from "@/lib/i18n";
@@ -54,8 +54,8 @@ export function HomePage() {
   // plupart des demandes arrivent.
   const { consignes: consignesCompetences } = useCompetences();
   const systemPrompt = useMemo(
-    () => buildSystemPrompt(profile, branding.name, agent.instructions, consignesCompetences),
-    [profile, agent.instructions, consignesCompetences],
+    () => buildSystemPrompt(profile, branding.name, instructionsPourLeChat(agent), consignesCompetences),
+    [profile, agent, consignesCompetences],
   );
 
   // Une session menée sur un modèle local reste liée à cette machine.
@@ -97,6 +97,7 @@ export function HomePage() {
     origin,
     tools: toolsOn && toolsAllowed,
     connaissances,
+    ...(agent.id !== DEFAULT_AGENT.id ? { agent: agent.id } : {}),
   });
 
   // La conversation affichée suit l'URL : « /?c=<id> » rouvre une session,

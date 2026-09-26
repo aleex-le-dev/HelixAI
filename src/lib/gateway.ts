@@ -267,6 +267,8 @@ export async function streamChat(
     tools?: boolean;
     /** Bases de connaissances à consulter avant de répondre (l'instance vérifie les droits). */
     connaissances?: string[];
+    /** L'agent choisi : l'instance y ajoute elle-même ses instructions quand elles sont masquées (27/09/2026). */
+    agent?: string;
     signal?: AbortSignal;
   },
   handlers: StreamHandlers,
@@ -282,6 +284,7 @@ export async function streamChat(
       effort: opts.effort ?? "moyen",
       tools: opts.tools ?? false,
       ...(opts.connaissances && opts.connaissances.length > 0 ? { connaissances: opts.connaissances } : {}),
+      ...(opts.agent ? { agent: opts.agent } : {}),
       stream: true,
     }),
   });

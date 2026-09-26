@@ -1,3 +1,4 @@
+import { remplirInstructions } from "./instructionsAgents.ts";
 import { redirectionPour, refusSortie } from "./sortieReseau.ts";
 import type http from "node:http";
 import { readFileSync } from "node:fs";
@@ -985,7 +986,8 @@ export async function handleChatRequest(
     signaler({ type: "statut", message: "" });
   }
 
-  let messages: unknown[] = [...body.messages];
+  // Les instructions masquées d'un agent partagé : c'est l'instance qui les ajoute (instructionsAgents.ts).
+  let messages: unknown[] = await remplirInstructions([...body.messages], (body as { agent?: unknown }).agent, qui);
 
   /*
    * Ce que le modèle peut obtenir si la personne branche un service.

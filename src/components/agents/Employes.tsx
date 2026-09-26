@@ -507,7 +507,7 @@ function EditeurMissions({
       </div>
       {valeur.length === 0 ? (
         <p className="text-xs text-muted-foreground">
-          {t("Aucune : il travaillera quand on lui parle. Une mission, c'est une consigne qu'il suit seul, à l'heure dite ou à chaque mail reçu, puis dont il rend compte.")}
+          {t("Aucune : il travaillera quand on lui parle. Une mission, c'est une consigne qu'il suit seul, au rythme choisi, puis dont il rend compte.")}
         </p>
       ) : (
         <ul className="space-y-2">
@@ -548,7 +548,10 @@ function EditeurMissions({
                     const rythme = v as Rythme;
                     changer(i, { rythme, ...(rythme === "chaque-semaine" ? { jour: 1 } : rythme === "chaque-mois" ? { jour: 1 } : { jour: undefined }) });
                   }}
-                  options={(Object.keys(LIBELLE_RYTHME) as Rythme[]).map((r) => ({ value: r, label: LIBELLE_RYTHME[r] }))}
+                  // « À chaque mail reçu » n'est plus proposé (27/09/2026, demandé par Medhi) ; une mission qui l'a le garde.
+                  options={(Object.keys(LIBELLE_RYTHME) as Rythme[])
+                    .filter((r) => r !== "a-chaque-mail" || m.rythme === "a-chaque-mail")
+                    .map((r) => ({ value: r, label: LIBELLE_RYTHME[r] }))}
                 />
                 {m.rythme === "chaque-semaine" && (
                   <Select
@@ -882,7 +885,7 @@ function Missions({ employe, etat, onChange }: { employe: Employe; etat: EtatEmp
     return (
       <div className="flex flex-col items-center gap-3 pt-10 text-center">
         <p className="max-w-md text-sm text-muted-foreground">
-          {t("Aucune mission planifiée. Une mission, c'est une consigne qu'il suit seul, à l'heure dite ou à chaque mail reçu, puis dont il rend compte.")}
+          {t("Aucune mission planifiée. Une mission, c'est une consigne qu'il suit seul, au rythme choisi, puis dont il rend compte.")}
         </p>
         {employe.estProprietaire && (
           <Button size="sm" icon={Plus} onClick={() => setEdition([nouvelle()])}>

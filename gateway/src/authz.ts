@@ -265,7 +265,16 @@ export function filtrer(collection: Collection, valeur: unknown, qui: Demandeur)
 
   const regle = REGLES[collection];
   if (!regle) return valeur;
-  return tableau(valeur).filter((item) => regle.voit(item, qui));
+  const vus = tableau(valeur).filter((item) => regle.voit(item, qui));
+  /*
+   * Les instructions d'un agent partagé que son auteur a masquées ne partent
+   * pas vers les postes des autres (27/09/2026) : leur copie arrive sans, et
+   * l'instance les ajoute au Chat elle-même (instructionsAgents.ts).
+   */
+  if (collection === "agents") {
+    return vus.map((a) => (a.hidePrompt === true && a.ownerId !== qui.userId ? { ...a, instructions: "", instructionsMasquees: true } : a));
+  }
+  return vus;
 }
 
 /* ------------------------------------------------------------------ */

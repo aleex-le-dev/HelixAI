@@ -62,11 +62,22 @@ export function Select({
         <ChevronDown size={16} strokeWidth={1.75} className="shrink-0 text-muted-foreground" />
       </button>
       {open && (
-        <div className="absolute left-0 right-0 z-50 mt-1 rounded-lg border border-border bg-popover p-1 shadow-pop animate-[popover_120ms_ease-out]">
+        /*
+          La liste défile d'elle-même, pas la page (27/09/2026, vu par Medhi :
+          les 28 jours d'une mission faisaient défiler tout l'écran). Le choix
+          en cours est amené en vue à l'ouverture.
+        */
+        <div
+          ref={(el) => el?.querySelector<HTMLElement>('[aria-selected="true"]')?.scrollIntoView({ block: "nearest" })}
+          role="listbox"
+          className="absolute left-0 right-0 z-50 mt-1 max-h-64 overflow-y-auto overscroll-contain rounded-lg border border-border bg-popover p-1 shadow-pop animate-[popover_120ms_ease-out]"
+        >
           {options.map((o) => (
             <button
               key={o.value}
               type="button"
+              role="option"
+              aria-selected={o.value === value}
               onClick={() => {
                 onChange(o.value);
                 setOpen(false);

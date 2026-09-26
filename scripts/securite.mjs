@@ -551,6 +551,44 @@ console.log("\n3 quater. Revue du 26/09/2026 : réglages de l'instance, données
     await appel("/helix/data/agents", { method: "PUT", headers: avecSeance, body: JSON.stringify({ value: agentsAvantPhoto }) });
   }
 
+  // Instructions masquées d'un agent partagé (27/09/2026) : pas envoyées aux autres postes, ajoutées par l'instance au Chat.
+  {
+    const agentsAvantMasque = (await (await appel("/helix/data/agents", { headers: avecSeance })).json()).value ?? [];
+    const masque = { id: "agent-masque", name: "Agent masqué", description: "", instructions: "CONSIGNE-SECRETE-5521 : réponds en vers.", visibility: "organisation", hidePrompt: true, ownerId: compte.account?.id, organisationId: "org_default", toolsEnabled: false, createdAt: "", updatedAt: "" };
+    await appel("/helix/data/agents", { method: "PUT", headers: avecSeance, body: JSON.stringify({ value: [...agentsAvantMasque, masque] }) });
+    const vuParA = ((await (await appel("/helix/data/agents", { headers: avecSeance })).json()).value ?? []).find((x) => x.id === "agent-masque");
+    const vuParB = ((await (await appel("/helix/data/agents", { headers: avecSeanceB })).json()).value ?? []).find((x) => x.id === "agent-masque");
+    verifier("agent masqué : son auteur garde ses instructions, la collègue reçoit l'agent sans elles", vuParA?.instructions?.includes("CONSIGNE-SECRETE-5521") && vuParB && !JSON.stringify(vuParB).includes("CONSIGNE-SECRETE") && vuParB.instructionsMasquees === true, JSON.stringify(vuParB ?? null).slice(0, 160));
+    // Le Chat de la collègue : la marque est remplacée par l'instance, pour le modèle seulement (le faux modèle recopie son message système).
+    const modeles = await (await appel("/v1/models", { headers: avecSeanceB })).json().catch(() => ({}));
+    const modeleEssai = (modeles.data ?? []).find((m) => /essai-chat/.test(m.id))?.id;
+    const demande = (agent) => appel("/v1/chat/completions", { method: "POST", headers: avecSeanceB, body: JSON.stringify({ model: modeleEssai, tools: false, stream: true, agent, messages: [{ role: "system", content: "⟦instructions-de-l-agent⟧" }, { role: "user", content: "Bonjour" }] }) });
+    const rempli = await (await demande("agent-masque")).text();
+    const inconnu = await (await demande("agent-qui-n-existe-pas")).text();
+    verifier("agent masqué : l'instance ajoute ses instructions au Chat de qui a le droit de s'en servir", rempli.includes("CONSIGNE-SECRETE-5521") && !rempli.includes("⟦instructions"), rempli.slice(0, 200));
+    verifier("agent masqué : un agent inconnu n'ajoute rien, et la marque ne part pas au modèle", !inconnu.includes("CONSIGNE-SECRETE") && !inconnu.includes("⟦instructions"), inconnu.slice(0, 200));
+    await appel("/helix/data/agents", { method: "PUT", headers: avecSeance, body: JSON.stringify({ value: agentsAvantMasque }) });
+  }
+
+  // Deux postes de la même personne (27/09/2026) : un envoi basé sur une version dépassée n'efface rien.
+  {
+    const lu = await (await appel("/helix/data/tasks", { headers: avecSeance })).json();
+    const tache = (id) => ({ id, title: id, status: "todo", priority: "moyenne", ownerId: compte.account?.id, createdAt: "", updatedAt: new Date().toISOString() });
+    const poste1 = await appel("/helix/data/tasks", { method: "PUT", headers: avecSeance, body: JSON.stringify({ value: [...(lu.value ?? []), tache("tache-poste-1")], base: lu.revision }) });
+    const r1 = await poste1.json().catch(() => ({}));
+    // Le second poste s'appuie encore sur l'ancienne version : sa copie n'a pas la tâche du premier.
+    const poste2 = await appel("/helix/data/tasks", { method: "PUT", headers: avecSeance, body: JSON.stringify({ value: [...(lu.value ?? []), tache("tache-poste-2")], base: lu.revision }) });
+    const apres = (await (await appel("/helix/data/tasks", { headers: avecSeance })).json()).value ?? [];
+    verifier(
+      "deux postes : l'envoi basé sur une version dépassée est refusé (409), la tâche de l'autre poste reste",
+      poste1.status === 200 && poste2.status === 409 && apres.some((x) => x.id === "tache-poste-1") && !apres.some((x) => x.id === "tache-poste-2"),
+      `${poste1.status} ${poste2.status} ${JSON.stringify(apres.map((x) => x.id))}`,
+    );
+    const relu = await appel("/helix/data/tasks", { method: "PUT", headers: avecSeance, body: JSON.stringify({ value: [...apres, tache("tache-poste-2")], base: r1.revision }) });
+    verifier("deux postes : après relecture, le même envoi passe", relu.status === 200, relu.status);
+    await appel("/helix/data/tasks", { method: "PUT", headers: avecSeance, body: JSON.stringify({ value: lu.value ?? [] }) });
+  }
+
   // La page publique de retour OAuth n'affiche pas un texte fourni par l'appelant.
   const retourOauth = await (await appel("/helix/oauth/retour?error=access_denied&error_description=TEXTE-PIRATE-7788")).text();
   verifier("la page publique de retour d'autorisation n'affiche pas le texte de l'appelant", !retourOauth.includes("TEXTE-PIRATE-7788"), retourOauth.slice(0, 120));

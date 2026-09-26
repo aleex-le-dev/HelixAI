@@ -303,7 +303,7 @@ export function push(collection: Collection): Promise<boolean> {
   return envoi;
 }
 
-async function pousser(collection: Collection): Promise<boolean> {
+async function pousser(collection: Collection, reprise = false): Promise<boolean> {
   if (!online) return false;
   if (JAMAIS_POUSSEES.includes(collection)) return false;
   /*
@@ -323,8 +323,21 @@ async function pousser(collection: Collection): Promise<boolean> {
     const res = await apiFetch(`/helix/data/${collection}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ value }),
+      // La version relue en dernier : l'instance refuse si elle a changé depuis (index.ts, `base`).
+      body: JSON.stringify({ value, ...(revisions.has(collection) ? { base: revisions.get(collection) } : {}) }),
     });
+    /*
+     * Un autre poste a écrit entre-temps (27/09/2026) : on relit, ce qui
+     * fusionne ce que ce poste avait en attente, puis on renvoie, une fois.
+     * Sans cela, ce que l'autre poste venait de créer disparaissait.
+     */
+    if (res.status === 409 && !reprise) {
+      noterEnAttente(collection, true);
+      pushing.delete(collection);
+      const relue = await pull(collection);
+      aRepousser.delete(collection);
+      return relue === "tiree" ? pousser(collection, true) : false;
+    }
     if (res.ok) {
       const payload = (await res.json()) as { revision: number };
       revisions.set(collection, payload.revision);

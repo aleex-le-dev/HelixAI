@@ -12,7 +12,7 @@
 
 <p align="center">
   <img alt="License: AGPL-3.0" src="https://img.shields.io/badge/license-AGPL--3.0-blue" />
-  <img alt="Version 2026.9.27" src="https://img.shields.io/badge/version-2026.9.27-informational" />
+  <a href="https://github.com/medhiclb/HelixAI/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/medhiclb/HelixAI?label=release" /></a>
   <img alt="Platforms: macOS, Windows, Linux" src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey" />
   <img alt="Interface: English, French, Chinese" src="https://img.shields.io/badge/interface-EN%20%C2%B7%20FR%20%C2%B7%20ZH-success" />
 </p>
@@ -30,6 +30,14 @@ HelixAI 将 Chat、智能体、编程、知识库和模型微调整合到一个*
 <p align="center">
   <img src="docs/images/chat.png" alt="基于知识库回答的 Chat，回答下方注明来源" width="900" />
 </p>
+
+### 为什么选择 HelixAI
+
+- **数据留在您手中。** 模型在您的电脑或组织的服务器上运行；只有在您自己添加某个在线 AI 服务的 API 密钥时，您的对话才会发送给该服务商。
+- **无需配置。** 安装应用后，其余一切自动安装：模型引擎、适合您硬件的模型，以及按需安装的 Python 和 Node，版本固定、校验值已验证。
+- **一个应用，多种工作。** Chat、可操作您文件和工具的智能体、代码智能体、注明来源的知识库、会议纪要，以及微调您自己的模型。
+- **为团队设计。** 邀请同事加入您的实例，按群组共享知识库，任何会修改内容的操作都需您批准，并保留审计日志。
+- **开源，无需订阅。** AGPL-3.0，无需在我们这里注册账户，无遥测。
 
 ## 安装
 
@@ -67,7 +75,7 @@ curl -fsSL https://raw.githubusercontent.com/medhiclb/HelixAI/main/scripts/insta
 - **开发者 API**：个人 API 密钥，用于实例的 OpenAI 兼容 API（`/v1/models`、`/v1/chat/completions`，含知识库），以您的名义使用且仅限于此：不能访问其他路由，不能让实例执行工具，可随时撤销。
 - **会议**：录制或导入，在本机转写并生成纪要，支持会议机器人。
 - **导入**来自 ChatGPT、Claude、Claude Code、Codex 和 Cursor 的历史记录。
-- **团队**：账户、群组、共享、双重认证、审计日志、GDPR 导出，数据落盘加密。实例可一键推送更新（macOS），且只安装带有发布者签名的版本。
+- **团队**：账户、群组、共享、双重认证、审计日志、GDPR 导出，数据落盘加密。新版本会在应用内提示：macOS 上一键安装，且只安装带有发布者签名的版本；Windows 和 Linux 上提供新安装包。
 - **白标**：产品名称、标志和颜色都来自同一个配置文件。
 
 <table>
@@ -141,6 +149,13 @@ helix code               # 在当前文件夹上使用代码智能体
 - [SECURITE.md](SECURITE.md)：安全模型及每项检查
 - [SCREENS.md](SCREENS.md)：每个界面及其实际功能
 - [PROJET.md](PROJET.md)：目标、决策、现状及待办事项
+
+## 社区
+
+- 问题与想法：[Discussions](https://github.com/medhiclb/HelixAI/discussions)
+- 缺陷与功能请求：[Issues](https://github.com/medhiclb/HelixAI/issues)
+- 安全漏洞：请私下报告，见 [SECURITY.md](SECURITY.md)
+- [行为准则](CODE_OF_CONDUCT.md)
 
 ## 参与贡献
 

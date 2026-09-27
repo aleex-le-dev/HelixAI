@@ -1,56 +1,62 @@
-# Contribuer à HelixAI
+# Contributing to HelixAI
 
-## Avant d'écrire une ligne
+Thank you for considering a contribution. HelixAI is developed in French: the code,
+comments and technical documentation are written in French, and the interface is
+translated into English and Chinese. Issues and pull requests are welcome in English or
+French.
 
-1. Lisez [PROJET.md](PROJET.md). Il dit ce qu'est le produit, pour qui, et ce
-   qui a déjà été tranché. La section « Ce qu'il ne faut pas refaire » vous
-   évitera de reprendre un chemin déjà essayé.
-2. Lisez [ARCHITECTURE.md](ARCHITECTURE.md) pour la décision qui touche votre
-   sujet. Chaque choix structurant y est écrit avec ses raisons.
-3. Ouvrez une discussion avant un gros changement. Un travail de trois jours
-   refusé sur son principe est une perte pour tout le monde.
+## Before writing code
 
-## Les règles du code, non négociables
+1. Read [PROJET.md](PROJET.md). It says what the product is, who it is for, and what has
+   already been decided. Decisions written there are not reopened without a new reason.
+2. Read [ARCHITECTURE.md](ARCHITECTURE.md) for the decision that touches your topic.
+3. For anything larger than a fix, open an issue or a discussion first. Three days of work
+   declined on principle is a loss for everyone.
 
-Elles ne sont pas des préférences de style : chacune corrige un défaut déjà
-constaté dans ce dépôt.
+## Project rules
 
-- **Écrivez en français**, y compris les messages d'erreur, et **enveloppez
-  chaque phrase affichée** dans `t("…")` — ou `tf("… {0} …", valeur)` quand elle
-  contient une valeur. La phrase française est la clé de traduction
-  (`src/lib/i18n.ts`) : une phrase non enveloppée reste en français pour tout le
-  monde, y compris en anglais et en chinois. `npm run i18n` dit ce qui manque au
-  catalogue ; `npm run i18n --ecrire`... plus exactement
-  `node scripts/i18n.mjs --ecrire` y prépare les clés nouvelles.
-- **Aucun nom de produit en dur** dans le code : `branding.name` côté interface,
-  `nomProduit()` / `NomProduit()` côté passerelle. Le logiciel se livre en
-  marque blanche.
-- **Aucune couleur en dur** hors de `src/styles/tokens.css`.
-- **Le logiciel ne ment pas.** Un bouton qui n'agit pas, un état affirmé sans
-  être mesuré, une coche verte qui ne vérifie rien : c'est un défaut, au même
-  titre qu'un plantage. Un logiciel incomplet vaut mieux qu'un logiciel qui
-  ment.
-- **Les commentaires expliquent pourquoi**, pas quoi. Le code dit déjà ce qu'il
-  fait. Un commentaire utile raconte la contrainte, l'erreur mesurée, ou le
-  chemin écarté.
-- **Vérifiez là où l'utilisateur arrive**, pas seulement dans le code. La
-  plupart des défauts trouvés ici l'ont été en se servant de l'application.
+Each rule fixes a defect that has already happened in this repository.
 
-## Avant de proposer
+- **Every string shown on screen goes through `t("…")`**, or `tf("… {0} …", value)` when
+  it contains a value. The French sentence is the translation key (`src/lib/i18n.ts`,
+  `gateway/src/langue.ts`). `node scripts/i18n.mjs --ecrire` and
+  `node scripts/i18n-passerelle.mjs --ecrire` prepare the new keys; then fill in
+  `src/i18n/{en,zh}.json` and `gateway/i18n/{en,zh}.json`. Both catalogues stay at 100 %.
+- **No product name in code**: `branding.name` in the interface, `nomProduit()` in the
+  gateway. The software ships as a white label.
+- **No hard-coded colour** outside `src/styles/tokens.css`.
+- **The software does not lie.** A button that does nothing, a state claimed without being
+  measured, a green tick that checks nothing: that is a bug, like a crash. What has not been
+  tried is said as such, in the code, the docs and the interface.
+- **Downloads are pinned and verified**: a fixed version, a checksum written in the code, and
+  a licence compatible with the project (Apache 2.0 or MIT; exceptions are listed in
+  [PROJET.md](PROJET.md)).
+- **Never write empty data over data that could not be read.**
+- **Comments explain why**, not what: the constraint, the measured error, the path ruled out.
+- **Check where the user arrives**, not only in the code. Most defects found here were found
+  by using the application.
+
+## Before opening a pull request
 
 ```bash
-npm run typecheck          # interface
-npm run typecheck:gateway  # passerelle
-npm run build              # doit passer sans avertissement nouveau
+npm run typecheck                  # interface and gateway
+npm run securite                   # the security suite, against a disposable instance
+node scripts/i18n.mjs              # interface translations: 100 %
+node scripts/i18n-passerelle.mjs   # gateway translations: 100 %
+node scripts/essai-source-github.mjs
 ```
 
-Décrivez dans votre demande **ce que vous avez vérifié, et comment**. « Testé »
-ne veut rien dire ; « ouvert l'écran X, cliqué Y, vu Z dans la requête » se
-relit.
+Describe **what you checked, and how**. "Tested" says nothing; "opened screen X, clicked Y,
+saw Z in the request" can be verified.
 
-## Licence des contributions
+## Security issues
 
-Le projet est sous AGPL-3.0. Toute contribution demande l'accord décrit dans
-[CLA.md](CLA.md) : une ligne à ajouter à la description de votre demande de
-fusion. Sans elle, la contribution ne peut pas être fusionnée, et
-[CLA.md](CLA.md) explique pourquoi.
+Do not open a public issue for a vulnerability. See [SECURITY.md](SECURITY.md).
+
+## Licence of contributions
+
+The project is licensed under AGPL-3.0. Every contribution requires the agreement described
+in [CLA.md](CLA.md) (in French): two lines, already in the pull request template, with your
+name. In short, you remain the author of your work and grant the project a broad licence to
+it, which lets the project stay open source and also sell private licences. Without these
+lines, the contribution cannot be merged; [CLA.md](CLA.md) explains why.

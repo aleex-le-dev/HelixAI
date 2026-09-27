@@ -1,0 +1,47 @@
+name: Bug report
+description: Something does not work as the screen says it should.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug. For a **security vulnerability**, do not open an issue: use [private reporting](https://github.com/medhiclb/HelixAI/security/advisories/new).
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Settings › Preferences › About (for example 2026.9.27).
+    validations:
+      required: true
+  - type: dropdown
+    id: systeme
+    attributes:
+      label: System
+      options:
+        - macOS (Apple silicon)
+        - macOS (Intel)
+        - Windows 11
+        - Windows 10
+        - Ubuntu / Debian (.deb)
+        - Other Linux (AppImage)
+    validations:
+      required: true
+  - type: textarea
+    id: etapes
+    attributes:
+      label: What you did
+      description: The screen you were on, what you clicked or typed.
+      placeholder: "1. Opened Code\n2. Clicked Install OpenCode\n3. …"
+    validations:
+      required: true
+  - type: textarea
+    id: attendu
+    attributes:
+      label: What you expected, and what happened instead
+    validations:
+      required: true
+  - type: textarea
+    id: details
+    attributes:
+      label: Details
+      description: Error message shown on screen, machine memory, model used. Remove any personal data.

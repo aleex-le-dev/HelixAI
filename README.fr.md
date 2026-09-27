@@ -12,7 +12,7 @@
 
 <p align="center">
   <img alt="License: AGPL-3.0" src="https://img.shields.io/badge/license-AGPL--3.0-blue" />
-  <img alt="Version 2026.9.27" src="https://img.shields.io/badge/version-2026.9.27-informational" />
+  <a href="https://github.com/medhiclb/HelixAI/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/medhiclb/HelixAI?label=release" /></a>
   <img alt="Platforms: macOS, Windows, Linux" src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey" />
   <img alt="Interface: English, French, Chinese" src="https://img.shields.io/badge/interface-EN%20%C2%B7%20FR%20%C2%B7%20ZH-success" />
 </p>
@@ -33,6 +33,21 @@ et modèles restent sur ses machines, et rien n'est vendu ni loué.
 <p align="center">
   <img src="docs/images/chat.png" alt="Un Chat qui répond à partir d'une base de connaissances, sources citées sous la réponse" width="900" />
 </p>
+
+### Pourquoi HelixAI
+
+- **Vos données restent chez vous.** Les modèles tournent sur votre machine ou sur le serveur
+  de votre organisation ; vos conversations ne partent chez un fournisseur d'IA en ligne que si
+  vous ajoutez vous-même une clé d'API.
+- **Rien à régler.** Installez l'application, elle installe le reste : le moteur des modèles,
+  le modèle adapté à votre matériel, Python et Node au besoin, versions épinglées et
+  empreintes vérifiées.
+- **Une application, beaucoup de métiers.** Chat, agents qui agissent sur vos fichiers et vos
+  outils, agent de code, bases de connaissances aux sources citées, comptes rendus de
+  réunion, entraînement de votre propre modèle.
+- **Pensé pour les équipes.** Invitez vos collègues sur votre instance, partagez les bases par
+  groupe, approuvez chaque action qui modifie quelque chose, gardez un journal d'audit.
+- **Open source, sans abonnement.** AGPL-3.0, aucun compte chez nous, aucune télémétrie.
 
 ## Installation
 
@@ -106,8 +121,9 @@ Pour construire depuis les sources : `npm install`, `npm run build`, puis `npm r
 - **Réunions** : enregistrement ou import, transcription et compte rendu sur la machine, bot de réunion.
 - **Import** de votre historique depuis ChatGPT, Claude, Claude Code, Codex et Cursor.
 - **Équipes** : comptes, groupes, partage, double authentification, journal d'audit,
-  export RGPD, données chiffrées sur le disque. Mises à jour d'un clic depuis l'instance (macOS),
-  installées seulement si elles portent la signature de l'éditeur.
+  export RGPD, données chiffrées sur le disque. Les nouvelles versions sont annoncées dans
+  l'application : un clic sur macOS, installées seulement si elles portent la signature de
+  l'éditeur ; le nouveau paquet sous Windows et Linux.
 - **Marque blanche** : nom du produit, logo et couleurs viennent d'un seul fichier de configuration.
 
 <table>
@@ -191,6 +207,13 @@ La documentation technique est en français.
 - [SECURITE.md](SECURITE.md) : le modèle de sécurité et chaque contrôle
 - [SCREENS.md](SCREENS.md) : chaque écran et ce qu'il fait vraiment
 - [PROJET.md](PROJET.md) : intentions, décisions, état réel et ce qui reste à faire
+
+## Communauté
+
+- Questions et idées : [Discussions](https://github.com/medhiclb/HelixAI/discussions)
+- Défauts et demandes : [Issues](https://github.com/medhiclb/HelixAI/issues)
+- Failles de sécurité : à signaler en privé, voir [SECURITY.md](SECURITY.md)
+- [Code de conduite](CODE_OF_CONDUCT.md)
 
 ## Contribuer
 

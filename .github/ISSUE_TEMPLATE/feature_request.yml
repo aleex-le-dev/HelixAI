@@ -1,0 +1,20 @@
+name: Feature request
+description: Suggest something HelixAI should do.
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: besoin
+    attributes:
+      label: The need
+      description: What are you trying to do, and what stops you today?
+    validations:
+      required: true
+  - type: textarea
+    id: idee
+    attributes:
+      label: Your idea
+      description: How you imagine it on screen. Alternatives you considered.
+  - type: markdown
+    attributes:
+      value: |
+        Before a large change, please check [PROJET.md](https://github.com/medhiclb/HelixAI/blob/main/PROJET.md): some directions have already been decided or ruled out, with their reasons.

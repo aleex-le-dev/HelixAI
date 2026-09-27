@@ -12,7 +12,7 @@
 
 <p align="center">
   <img alt="License: AGPL-3.0" src="https://img.shields.io/badge/license-AGPL--3.0-blue" />
-  <img alt="Version 2026.9.27" src="https://img.shields.io/badge/version-2026.9.27-informational" />
+  <a href="https://github.com/medhiclb/HelixAI/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/medhiclb/HelixAI?label=release" /></a>
   <img alt="Platforms: macOS, Windows, Linux" src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey" />
   <img alt="Interface: English, French, Chinese" src="https://img.shields.io/badge/interface-EN%20%C2%B7%20FR%20%C2%B7%20ZH-success" />
 </p>
@@ -33,6 +33,18 @@ sold or rented.
 <p align="center">
   <img src="docs/images/chat.png" alt="A Chat answering from a knowledge base, with its sources cited under the answer" width="900" />
 </p>
+
+### Why HelixAI
+
+- **Your data stays with you.** Models run on your machine or your organisation's server;
+  your conversations reach a cloud AI provider only if you add your own API key for one.
+- **Nothing to set up.** Install the app and it installs the rest: the model engine, the model
+  that suits your hardware, Python and Node when needed, all pinned and checksum-verified.
+- **One app, many jobs.** Chat, agents that act on your files and tools, a coding agent,
+  knowledge bases with cited sources, meeting notes, and fine-tuning your own model.
+- **Built for teams.** Invite colleagues to your instance, share knowledge bases by group,
+  approve every action that changes something, and keep an audit log.
+- **Open source, no subscription.** AGPL-3.0, no account with us, no telemetry.
 
 ## Installation
 
@@ -104,8 +116,8 @@ To build from source: `npm install`, `npm run build`, then `npm run package` (ma
 - **Meetings**: record or import, transcription and minutes on the machine, meeting bot.
 - **Import** your history from ChatGPT, Claude, Claude Code, Codex and Cursor.
 - **Teams**: accounts, groups, sharing, two-factor authentication, audit log, GDPR export,
-  data encrypted at rest. One-click updates from the instance (macOS), installed only if they carry
-  the publisher's signature.
+  data encrypted at rest. New versions are announced in the app: one click on macOS, installed
+  only if they carry the publisher's signature; the new package on Windows and Linux.
 - **White label**: the product name, logo and colours come from one configuration file.
 
 <table>
@@ -189,6 +201,13 @@ The technical documentation is written in French.
 - [SECURITE.md](SECURITE.md): security model and every check
 - [SCREENS.md](SCREENS.md): every screen and what it really does
 - [PROJET.md](PROJET.md): intentions, decisions, current state and what is left to do
+
+## Community
+
+- Questions and ideas: [Discussions](https://github.com/medhiclb/HelixAI/discussions)
+- Bugs and feature requests: [Issues](https://github.com/medhiclb/HelixAI/issues)
+- Security vulnerabilities: report them privately, see [SECURITY.md](SECURITY.md)
+- [Code of conduct](CODE_OF_CONDUCT.md)
 
 ## Contributing
 

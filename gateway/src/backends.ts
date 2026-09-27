@@ -8,6 +8,7 @@ import { applicationLmStudio, lmsDeLlmster, moteurAPoser, moteurSansInterface, p
 import { BACKENDS, classifyRoles, isReasoningModel, tousLesBackends } from "./config.ts";
 import type { BackendConfig, BackendStatus, ModelInfo } from "./types.ts";
 import { t, tf } from "./langue.ts";
+import { capacitesDistantes, entetesAvecCle, listerModelesDistants, type ModeleDistant } from "./modelesCloud.ts";
 // Cycle voulu (provision.ts importe ce module) : `detectHardware` n'est appelée qu'au chargement d'un modèle, jamais à l'import.
 import { calculSurProcesseur, detectHardware } from "./provision.ts";
 
@@ -324,6 +325,27 @@ export interface Discovery {
   models: ModelInfo[];
 }
 
+/*
+ * Listes des fournisseurs cloud, gardées dix minutes (voir `discover`). La clé
+ * du cache porte l'adresse et les modèles retenus : changer les modèles d'une
+ * clé, ou en brancher une autre, relit la liste.
+ */
+const DUREE_LISTE_DISTANTE_MS = 10 * 60_000;
+const listesDistantes = new Map<string, { at: number; modeles: ModeleDistant[] }>();
+const cleListe = (b: BackendConfig) => `${b.id}|${b.baseUrl}|${(b.modeles ?? []).join(",")}`;
+
+async function listeDistante(backend: BackendConfig): Promise<ModeleDistant[]> {
+  const cle = cleListe(backend);
+  const garde = listesDistantes.get(cle);
+  if (garde && Date.now() - garde.at < DUREE_LISTE_DISTANTE_MS) return garde.modeles;
+  const modeles = await listerModelesDistants(backend.baseUrl, entetesAvecCle(backend, true), {
+    redirect: redirectionPour(backend),
+    delaiMs: 8000,
+  });
+  listesDistantes.set(cle, { at: Date.now(), modeles });
+  return modeles;
+}
+
 /** Interroge tous les backends activés et agrège leurs modèles. */
 export async function discover(): Promise<Discovery> {
   const enabled = tousLesBackends()
@@ -344,20 +366,23 @@ export async function discover(): Promise<Discovery> {
         const distant = backend.origine === "agence" || backend.origine === "cle";
         const refus = await refusSortie(backend);
         if (refus) throw new Error(refus);
-        const payload = (await fetchJson(
-          `${backend.baseUrl}/models`,
-          backend.apiKey,
-          distant ? 8000 : 4000,
-          backend.entetes,
-          redirectionPour(backend),
-        )) as {
-          data?: { id: string }[];
-        };
         const retenus = backend.modeles ? new Set(backend.modeles) : null;
-        // Google préfixe ses identifiants (« models/gemini-… ») mais les attend sans préfixe.
-        const entries = (payload.data ?? [])
-          .map((m) => ({ ...m, id: m.id.replace(/^models\//, "") }))
-          .filter((m) => !retenus || retenus.has(m.id));
+        /*
+         * Un fournisseur cloud : sa liste lue dans son dialecte, pages
+         * comprises, avec ce qu'elle déclare des modèles (modelesCloud.ts), et
+         * gardée dix minutes. Relue à chaque message (le routeur ne la garde
+         * que cinq secondes), elle coûtait un aller-retour chez le fournisseur
+         * avant chaque réponse, et pesait sur la limite de débit de la clé.
+         */
+        const entries = distant
+          ? (await listeDistante(backend)).filter((m) => !retenus || retenus.has(m.id))
+          : (
+              ((await fetchJson(`${backend.baseUrl}/models`, backend.apiKey, 4000, backend.entetes, redirectionPour(backend))) as {
+                data?: { id: string }[];
+              }).data ?? []
+            )
+              .map((m) => ({ ...m, id: m.id.replace(/^models\//, "") }))
+              .filter((m) => !retenus || retenus.has(m.id));
         /*
          * Ce que l'API de LM Studio liste est **chargé**, par définition : elle
          * ne montre que les modèles en mémoire. On l'écrit donc tel quel, sans
@@ -373,6 +398,7 @@ export async function discover(): Promise<Discovery> {
         const models = entries.map((m) => ({
           ...toModelInfo(m.id, backend, lmMeta),
           ...(backend.kind === "lmstudio" ? { loaded: true } : {}),
+          ...(distant ? capacitesDistantes(m) : {}),
         }));
 
         /*
@@ -410,6 +436,22 @@ export async function discover(): Promise<Discovery> {
           models,
         };
       } catch (err) {
+        /*
+         * Une clé dont la liste ne répond plus (clé révoquée, fournisseur en
+         * panne, réseau coupé) : ses modèles restent proposés, tels que la
+         * personne les a retenus. Avant le 27/09/2026 ils disparaissaient, et
+         * le Chat ouvert sur l'un d'eux répondait « modèle inconnu ou réservé à
+         * la personne qui a branché sa clé » : faux, et sans piste. Le message
+         * part maintenant chez le fournisseur, et c'est son refus (« clé
+         * refusée », « quota épuisé ») que la personne lit (chat.ts).
+         */
+        const gardes =
+          backend.origine === "cle" && backend.modeles?.length
+            ? backend.modeles.map((id) => ({
+                ...toModelInfo(id, backend, lmMeta),
+                ...capacitesDistantes(listesDistantes.get(cleListe(backend))?.modeles.find((m) => m.id === id) ?? { id }),
+              }))
+            : [];
         return {
           status: {
             id: backend.id,
@@ -418,9 +460,9 @@ export async function discover(): Promise<Discovery> {
             baseUrl: backend.baseUrl,
             online: false,
             error: err instanceof Error ? err.message : String(err),
-            modelCount: 0,
+            modelCount: gardes.length,
           },
-          models: [],
+          models: gardes,
         };
       }
     }),

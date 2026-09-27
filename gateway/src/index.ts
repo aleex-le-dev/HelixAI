@@ -180,6 +180,7 @@ import {
   varianteDe,
   refModele,
   idMessage as idMessageCode,
+  cleRelaisValide,
 } from "./opencode.ts";
 import {
   suivreSession as suivreSessionCode,
@@ -470,9 +471,31 @@ async function handleChat(
       ? auteurEmploye(employe)
       : undefined;
 
+  /*
+   * Un appel d'OpenCode pour une session de Helix Code : il joint la clé que la
+   * passerelle lui a remise (`X-Helix-Relais`) et l'identifiant de sa session.
+   * La session a une propriétaire (sessionsCode.ts) ; ses modèles branchés par
+   * clé personnelle lui sont servis, comme dans le Chat. Avant le 27/09/2026,
+   * OpenCode n'avait que le jeton d'instance, et un modèle de clé personnelle
+   * choisi dans Code était refusé à sa propre titulaire.
+   */
+  const relais = req.headers["x-helix-relais"];
+  let titulaireCode: string | undefined;
+  if (!qui && !parEmploye && cleRelaisValide(Array.isArray(relais) ? relais[0] : relais)) {
+    for (const nom of ["x-session-id", "x-session-affinity", "x-parent-session-id"]) {
+      const valeur = req.headers[nom];
+      const id = Array.isArray(valeur) ? valeur[0] : valeur;
+      if (!id || !SESSION_CODE.test(id)) continue;
+      titulaireCode = (await sessionCode(id).catch(() => undefined))?.userId;
+      if (titulaireCode) break;
+    }
+  }
+
   // Un employé a accès aux modèles branchés par la clé personnelle de son propriétaire.
   const titulaire =
-    qui?.userId ?? (parEmploye && typeof employe === "string" ? (await employes.employe(employe))?.ownerId : undefined);
+    qui?.userId ??
+    (parEmploye && typeof employe === "string" ? (await employes.employe(employe))?.ownerId : undefined) ??
+    titulaireCode;
 
   // Le journal doit pouvoir dire au nom de qui l'agent a touché ces fichiers.
   await handleChatRequest(
@@ -2469,7 +2492,7 @@ async function handleCodeSession(
    * (`writeConfig`). Le passer tel quel faisait redémarrer OpenCode sur un
    * modèle « absent », puis refuser la session. D'où la résolution ici.
    */
-  const reglage = await reglageCode(body.model, body.effort);
+  const reglage = await reglageCode(body.model, body.effort, qui.userId);
   if ("erreur" in reglage) return send(res, 503, { error: { message: reglage.erreur } });
   const modele = reglage.modele;
 
@@ -2627,8 +2650,15 @@ const modeleDeSession = new Map<string, { modele: string; variante?: string; dos
 async function reglageCode(
   model: string | undefined,
   effort: string | undefined,
+  /**
+   * La propriétaire de la session : ses modèles branchés par clé personnelle
+   * en font partie. Sans elle (avant le 27/09/2026), choisir dans Code un
+   * modèle de sa propre clé rendait « modèle inconnu ou réservé à la personne
+   * qui a branché sa clé », à cette personne même.
+   */
+  acces: string | undefined,
 ): Promise<{ modele: string; variante?: string } | { erreur: string }> {
-  const choix = await resolve(model ? { model } : { role: "code" });
+  const choix = await resolve(model ? { model, acces } : { role: "code", acces });
   if ("error" in choix) {
     return { erreur: model ? choix.error : "Aucun modèle disponible pour l'écran Code. " + choix.error };
   }
@@ -2735,7 +2765,7 @@ async function handleCodePrompt(
   }
   let connue = modeleDeSession.get(body.sessionID);
   if (!connue || body.model !== undefined || body.effort !== undefined) {
-    const voulu = await reglageCode(body.model, body.effort);
+    const voulu = await reglageCode(body.model, body.effort, notee.userId);
     if ("erreur" in voulu) return send(res, 503, { error: { message: voulu.erreur } });
     if (!connue || voulu.modele !== connue.modele || voulu.variante !== connue.variante) {
       if (!(await assurerModeleCode(voulu.modele))) {

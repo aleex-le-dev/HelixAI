@@ -176,6 +176,17 @@ Elle découvre automatiquement les moteurs disponibles :
 D'autres backends OpenAI-compatibles (cloud européen, second cluster) s'ajoutent
 par `backends` dans `helix.config.json`.
 
+Une personne peut aussi brancher **sa propre clé** (Paramètres, Modèles cloud) : Mistral,
+Scaleway, OVHcloud, IONOS, OpenAI, Anthropic, Google Gemini, OpenRouter, Groq, DeepSeek,
+xAI, Together AI, ou tout service compatible OpenAI par son adresse
+(`gateway/src/fournisseurs.ts`). Tous sont appelés par leur point d'accès compatible
+OpenAI ; leurs différences (liste des modèles paginée ou en tableau nu, capacités
+déclarées, champs refusés, raisonnement dans `reasoning` ou en morceaux `thinking`,
+appels d'outils sans `index`) sont traitées dans `gateway/src/modelesCloud.ts`, et
+vérifiées contre des faux fournisseurs par `scripts/essai-fournisseurs.mjs` (lancé par
+`npm run securite`, sans vraie clé ni appel sortant). Ce qui n'a pas encore été essayé
+avec de vraies clés est tenu dans PROJET.md.
+
 Pour le Chat, il suffit que **LM Studio tourne avec son serveur local activé** et qu'un
 modèle de conversation soit installé. Si le serveur local est éteint, la passerelle
 tente de le démarrer elle-même (`lms server start`) et le referme à la fermeture de

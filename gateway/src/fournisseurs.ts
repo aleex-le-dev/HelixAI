@@ -6,6 +6,7 @@ import { journaliser } from "./audit.ts";
 import type { BackendConfig } from "./types.ts";
 import { t, tf } from "./langue.ts";
 import { adresseSortanteSure } from "./sortieReseau.ts";
+import { converse, entetesAvecCle, ErreurListe, listerModelesDistants } from "./modelesCloud.ts";
 
 /**
  * Modèles cloud branchés par une clé, depuis l'interface.
@@ -17,7 +18,8 @@ import { adresseSortanteSure } from "./sortieReseau.ts";
  *    toute l'équipe si elle le choisit. C'est ce module.
  *
  * Tous les fournisseurs parlent le protocole compatible OpenAI (y compris
- * Anthropic et Google, par leur point d'accès de compatibilité) : un modèle
+ * Anthropic et Google, par leur point d'accès de compatibilité ; leurs
+ * différences de dialecte sont dans modelesCloud.ts) : un modèle
  * cloud passe donc par la même route que les modèles locaux, avec la même
  * mesure de consommation, la même barrière d'approbation et le même journal.
  *
@@ -36,6 +38,8 @@ export interface Fournisseur {
   /** Page où créer une clé. */
   cles: string;
   entetes?: Record<string, string>;
+  /** En-tête qui porte la clé pour lister les modèles, quand ce n'est pas `Authorization` (Anthropic : `x-api-key`). */
+  cleEnTete?: string;
   /** Adresse saisie par la personne (fournisseur « compatible OpenAI »). */
   adresseLibre?: boolean;
 }
@@ -65,6 +69,7 @@ export const CATALOGUE: Fournisseur[] = [
     pays: "États-Unis",
     cles: "https://console.anthropic.com/settings/keys",
     entetes: { "anthropic-version": "2023-06-01" },
+    cleEnTete: "x-api-key",
   },
   {
     id: "google",
@@ -74,6 +79,17 @@ export const CATALOGUE: Fournisseur[] = [
     cles: "https://aistudio.google.com/apikey",
   },
   { id: "openrouter", nom: "OpenRouter", baseUrl: "https://openrouter.ai/api/v1", pays: "États-Unis", cles: "https://openrouter.ai/keys" },
+  /*
+   * Ajoutés le 27/09/2026 : on les branchait déjà par « Autre (compatible
+   * OpenAI) », à condition de connaître leur adresse. Adresses et pays relevés
+   * dans leurs documentations, pas essayés avec une vraie clé. Together rend
+   * sa liste de modèles en tableau nu, que `lireModeles` lit désormais (avant,
+   * « aucun modèle de conversation »).
+   */
+  { id: "groq", nom: "Groq", baseUrl: "https://api.groq.com/openai/v1", pays: "États-Unis", cles: "https://console.groq.com/keys" },
+  { id: "deepseek", nom: "DeepSeek", baseUrl: "https://api.deepseek.com/v1", pays: "Chine", cles: "https://platform.deepseek.com/api_keys" },
+  { id: "xai", nom: "xAI", baseUrl: "https://api.x.ai/v1", pays: "États-Unis", cles: "https://console.x.ai" },
+  { id: "together", nom: "Together AI", baseUrl: "https://api.together.xyz/v1", pays: "États-Unis", cles: "https://api.together.ai/settings/api-keys" },
   { id: "compatible", nom: "Autre (compatible OpenAI)", baseUrl: "", pays: "Non précisé", cles: "", adresseLibre: true },
 ];
 
@@ -141,8 +157,12 @@ brancherBackendsSupplementaires(() =>
       modeles: c.modeles,
       pays: c.pays,
       fournisseur: c.nom,
+      catalogue: c.fournisseur,
       ...(CATALOGUE.find((f) => f.id === c.fournisseur)?.entetes
         ? { entetes: CATALOGUE.find((f) => f.id === c.fournisseur)?.entetes }
+        : {}),
+      ...(CATALOGUE.find((f) => f.id === c.fournisseur)?.cleEnTete
+        ? { cleEnTete: CATALOGUE.find((f) => f.id === c.fournisseur)?.cleEnTete }
         : {}),
     }),
   ),
@@ -167,16 +187,9 @@ export async function listerCles(qui: string): Promise<CleVue[]> {
   return (await charger()).filter((c) => c.portee === "equipe" || c.ownerId === qui).map((c) => vue(c, qui));
 }
 
-/*
- * Un fournisseur rend aussi ses modèles d'images, de voix, de transcription et
- * de plongement : aucun ne converse. On ne propose que ceux qui le peuvent.
- */
-const PAS_DE_CONVERSATION =
-  /embed|tts|whisper|dall-?e|moderation|audio|realtime|transcri|image|imagen|veo|sora|speech|rerank|search-preview|davinci|babbage|computer-use|guard/i;
+// Ce qui converse, et ce qui ne fait que des images, de la voix ou des plongements : `converse`, modelesCloud.ts.
 
 export type Resultat<T> = { ok: true; valeur: T } | { ok: false; statut: number; message: string };
-
-
 
 function adresseDe(fournisseur: string, adresse: unknown): Resultat<Fournisseur> {
   const f = CATALOGUE.find((x) => x.id === fournisseur);
@@ -208,28 +221,38 @@ export async function essayerCle(fournisseur: string, adresse: unknown, cle: unk
   if (!secret) return { ok: false, statut: 400, message: t("Collez la clé du fournisseur.") };
   const sure = await adresseSortanteSure(f.valeur.baseUrl);
   if (!sure.ok) return sure;
-  const entetes = { ...(f.valeur.entetes ?? {}), Authorization: `Bearer ${secret}` };
+  const entetes = entetesAvecCle({ apiKey: secret, entetes: f.valeur.entetes });
   try {
     /*
      * `redirect: "error"` : sans lui, une adresse publique pouvait renvoyer un
      * 302 vers une machine interne, et le contrôle ci-dessus ne portait que sur
      * la première adresse. On ne suit donc aucune redirection.
+     *
+     * Toutes les pages (Anthropic en rend vingt modèles par page), lues dans
+     * chaque dialecte (modelesCloud.ts). La clé part dans l'en-tête que le
+     * fournisseur attend pour sa liste (`x-api-key` chez Anthropic).
      */
-    const r = await fetch(`${f.valeur.baseUrl}/models`, { headers: entetes, redirect: "error", signal: AbortSignal.timeout(10_000) });
-    if (r.status === 401 || r.status === 403) {
-      return { ok: false, statut: 400, message: tf("{0} refuse cette clé. Vérifiez-la, et qu'elle a accès aux modèles.", f.valeur.nom) };
+    let liste;
+    try {
+      liste = await listerModelesDistants(
+        f.valeur.baseUrl,
+        entetesAvecCle({ apiKey: secret, entetes: f.valeur.entetes, cleEnTete: f.valeur.cleEnTete }, true),
+        { redirect: "error", delaiMs: 10_000 },
+      );
+    } catch (err) {
+      if (!(err instanceof ErreurListe)) throw err;
+      if (err.cleRefusee) {
+        return { ok: false, statut: 400, message: tf("{0} refuse cette clé. Vérifiez-la, et qu'elle a accès aux modèles.", f.valeur.nom) };
+      }
+      return { ok: false, statut: 502, message: tf("{0} a répondu {1}.", f.valeur.nom, err.statut) };
     }
-    if (!r.ok) return { ok: false, statut: 502, message: tf("{0} a répondu {1}.", f.valeur.nom, r.status) };
     // OpenRouter liste ses modèles sans clé : on vérifie la clé à part.
     if (f.valeur.id === "openrouter") {
       const k = await fetch(`${f.valeur.baseUrl}/key`, { headers: entetes, redirect: "error", signal: AbortSignal.timeout(10_000) });
+      await k.body?.cancel().catch(() => {});
       if (!k.ok) return { ok: false, statut: 400, message: t("OpenRouter refuse cette clé.") };
     }
-    const corps = (await r.json()) as { data?: { id?: string }[] };
-    const ids = (corps.data ?? [])
-      .map((m) => (typeof m.id === "string" ? m.id.replace(/^models\//, "") : ""))
-      .filter((id) => id && !PAS_DE_CONVERSATION.test(id))
-      .sort((a, b) => a.localeCompare(b));
+    const ids = [...new Set(liste.filter((m) => converse(m, f.valeur.id)).map((m) => m.id))].sort((a, b) => a.localeCompare(b));
     if (ids.length === 0) return { ok: false, statut: 400, message: t("Cette clé n'ouvre aucun modèle de conversation.") };
     return { ok: true, valeur: ids };
   } catch (err) {

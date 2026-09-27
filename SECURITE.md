@@ -1637,6 +1637,28 @@ affiche le pays du service ; brancher un fournisseur hors UE affiche un avertiss
 Clés branchées, modifiées, retirées : au journal, sans la clé. Effacement d'un compte :
 ses clés partent avec lui ; export : fournisseur, modèles, quatre derniers caractères.
 
+**Ajouté le 27/09/2026 (Helix Code sur une clé personnelle).** Medhi ne pouvait pas se
+servir dans Code d'un modèle de sa propre clé OpenAI : l'ouverture de la session résolvait
+le modèle sans dire pour qui, et OpenCode appelle la passerelle au jeton d'instance seul.
+Désormais l'ouverture résout pour la personne connectée (`reglageCode`), et un appel
+d'OpenCode reçoit les modèles de clé personnelle de **la propriétaire de sa session**, à
+deux conditions réunies : la clé que la passerelle remet à OpenCode (`X-Helix-Relais`,
+jamais transmise aux commandes qu'il lance, § 22.4) et un identifiant de session inscrit
+au registre de Helix Code (`X-Session-Id`, ou celui du parent pour un sous-agent). Vérifié
+par `scripts/essai-fournisseurs.mjs` (section J, lancée par la batterie) : la propriétaire
+est servie ; la même demande pour la session d'un collègue, sans la clé de relais, ou pour
+une session inconnue, est refusée (503). Le reste ne change pas : au jeton seul, depuis la
+machine, les clés d'équipe restent servies et les clés personnelles refusées.
+
+La liste des modèles d'Anthropic part avec la clé dans `x-api-key` (son API native),
+la conversation dans `Authorization` (son point d'accès compatible OpenAI). Une liste qui
+ne répond plus (clé révoquée, panne) garde les modèles retenus dans le sélecteur : le
+refus du fournisseur est alors dit au premier message, au lieu de « modèle inconnu ». La
+passerelle rejoue une requête refusée sans le champ que le refus nomme
+(`correctionPour`, modelesCloud.ts) ; elle ne retire jamais `model`, `messages`,
+`stream` ni `tools`, et ne rejoue ni un refus de clé (401, 403), ni un quota (429), ni
+un modèle introuvable (404).
+
 ## 16. Groupes, bibliothèque, réunions (0.16.0)
 
 ### 16.1 Groupes

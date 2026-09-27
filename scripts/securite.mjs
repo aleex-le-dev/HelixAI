@@ -2525,6 +2525,29 @@ rmSync(AUX, { recursive: true, force: true });
 rmSync(PROJET_A, { recursive: true, force: true });
 rmSync(PROJET_B, { recursive: true, force: true });
 
+/*
+ * Modèles branchés par une clé, de bout en bout (27/09/2026) : une seconde
+ * instance jetable, sept faux fournisseurs, aucune sortie (voir l'en-tête de
+ * scripts/essai-fournisseurs.mjs). Lancée à part : elle détourne `fetch` et la
+ * résolution des noms de sa passerelle, ce que cette batterie ne doit pas
+ * subir. Ses contrôles comptent ici comme les autres, dont le cas vu par Medhi
+ * le 27/09/2026 : Helix Code sur un modèle de sa propre clé OpenAI.
+ */
+console.log("\n13. Modèles branchés par une clé : faux fournisseurs, Chat, outils, images, erreurs, Code");
+{
+  const { spawnSync } = await import("node:child_process");
+  const essai = spawnSync(process.execPath, [join(RACINE, "scripts", "essai-fournisseurs.mjs")], { encoding: "utf8", timeout: 5 * 60_000 });
+  const lignes = `${essai.stdout ?? ""}${essai.stderr ?? ""}`.split("\n");
+  for (const ligne of lignes) {
+    const ok = /^\s+✓ (.*)$/.exec(ligne);
+    const ko = /^\s+✗ (.*?)(?:  —  obtenu : .*)?$/.exec(ligne);
+    if (ok) verifier(`clés : ${ok[1]}`, true, "");
+    else if (ko) verifier(`clés : ${ko[1]}`, false, ligne.split("  —  obtenu : ")[1] ?? "");
+    else if (/^[A-K]\. /.test(ligne)) console.log(`  ${ligne}`);
+  }
+  verifier("clés : l'essai des fournisseurs s'est déroulé jusqu'au bout", essai.status === 0 || lignes.some((l) => /vérification\(s\) réussie\(s\)/.test(l)), `${essai.status} ${essai.error?.message ?? ""} ${lignes.slice(-6).join(" ")}`);
+}
+
 console.log(`\n${reussis} vérification(s) réussie(s), ${echecs.length} échec(s).`);
 if (echecs.length) {
   console.log("Échecs :");

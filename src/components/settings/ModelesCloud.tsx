@@ -15,7 +15,7 @@ import {
   type CleModele,
   type Fournisseur,
 } from "@/lib/fournisseurs";
-import { t } from "@/lib/i18n";
+import { t, tf } from "@/lib/i18n";
 
 /**
  * Modèles cloud branchés par une clé : pour soi, ou pour toute l'équipe.
@@ -26,7 +26,13 @@ import { t } from "@/lib/i18n";
  * sélecteur, parce qu'il coûte à quelqu'un.
  */
 
-const UE = new Set([t("France"), "Allemagne", "Pays-Bas", "Belgique", "Italie", "Espagne", "Irlande", "Suède", "Finlande"]);
+/*
+ * Le pays vient du catalogue de la passerelle, en français (« France ») ; celui
+ * d'un fournisseur « compatible » est saisi dans la langue de l'écran. Les deux
+ * comptent : avec `t("France")` seul, un écran chinois avertissait « hors de
+ * l'Union européenne » pour Mistral (relevé le 27/09/2026).
+ */
+const UE = new Set(["France", t("France"), "Allemagne", "Pays-Bas", "Belgique", "Italie", "Espagne", "Irlande", "Suède", "Finlande"]);
 
 const message = (err: unknown) => (err instanceof Error ? err.message : String(err));
 
@@ -310,7 +316,7 @@ function AjoutCle({ catalogue, onFini }: { catalogue: Fournisseur[]; onFini: () 
           <div className="space-y-2">
             <div className="flex items-center justify-between gap-2">
               <p className="text-sm font-medium text-foreground">
-                {t("Modèles à proposer (")}{retenus.length} sur {disponibles.length})
+                {tf("Modèles à proposer ({0} sur {1})", retenus.length, disponibles.length)}
               </p>
               {disponibles.length > 8 && (
                 <Input
@@ -369,7 +375,7 @@ function AjoutCle({ catalogue, onFini }: { catalogue: Fournisseur[]; onFini: () 
           {t("Retour")}
         </Button>
         <Button disabled={occupe || !disponibles || retenus.length === 0} onClick={() => void brancher()}>
-          {occupe && disponibles ? t("Branchement…") : "Brancher"}
+          {occupe && disponibles ? t("Branchement…") : t("Brancher")}
         </Button>
       </div>
     </div>

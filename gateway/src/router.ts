@@ -96,6 +96,21 @@ export async function resolve(opts: {
        */
       const eligible = all.filter((m) => m.roles.includes(role) && m.origine !== "cle" && !m.entraine);
       if (eligible.length === 0) {
+        /*
+         * Des modèles branchés par clé, mais rien d'autre : le mode Auto ne les
+         * prendra jamais (ci-dessus). Le dire, et nommer celui qu'on peut
+         * choisir, plutôt que « aucun modèle » à quelqu'un qui en voit dans son
+         * sélecteur (27/09/2026, parcours d'une personne qui n'a qu'une clé).
+         */
+        const parCle = all.find((m) => m.roles.includes(role) && m.origine === "cle");
+        if (parCle) {
+          return {
+            error: tf(
+              "Le mode Auto ne choisit jamais un modèle branché par une clé : il est facturé à quelqu'un. Choisissez-le dans le sélecteur de modèle (par exemple {0}), ou installez un modèle sur cette machine.",
+              parCle.id,
+            ),
+          };
+        }
         return { error: tf("Aucun modèle disponible pour le rôle « {0} ».", role) };
       }
       candidate = pickBest(eligible);

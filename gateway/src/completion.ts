@@ -3,6 +3,7 @@ import { models, resolve } from "./router.ts";
 import { backendById } from "./backends.ts";
 import * as usage from "./usage.ts";
 import type { ModelInfo } from "./types.ts";
+import { appliquerCorrection, correctionPour, messageDuFournisseur } from "./modelesCloud.ts";
 import { t, tf } from "./langue.ts";
 
 /**
@@ -55,7 +56,8 @@ export async function completer(
     modele?: string;
   },
 ): Promise<Completion> {
-  const choix = options.modele ? await resolve({ model: options.modele }) : await choisir(options.qui);
+  // Le modèle nommé peut venir de la clé personnelle de la personne (Code, 27/09/2026) : il lui est servi.
+  const choix = options.modele ? await resolve({ model: options.modele, acces: options.qui }) : await choisir(options.qui);
   if ("error" in choix) return { ok: false, message: choix.error };
   const { model } = choix;
   const backend = backendById(model.backendId);
@@ -85,9 +87,9 @@ export async function completer(
 
   const refus = await refusSortie(backend);
   if (refus) return { ok: false, message: refus };
-  let reponse: Response;
-  try {
-    reponse = await fetch(`${backend.baseUrl}/chat/completions`, {
+  const limite = AbortSignal.timeout(options.delaiMs ?? 10 * 60_000);
+  const envoyer = (corps: Record<string, unknown>) =>
+    fetch(`${backend.baseUrl}/chat/completions`, {
       method: "POST",
       redirect: redirectionPour(backend),
       headers: {
@@ -95,23 +97,51 @@ export async function completer(
         ...(backend.entetes ?? {}),
         ...(backend.apiKey ? { Authorization: `Bearer ${backend.apiKey}` } : {}),
       },
-      body: JSON.stringify(payload),
-      signal: AbortSignal.timeout(options.delaiMs ?? 10 * 60_000),
+      body: JSON.stringify(corps),
+      signal: limite,
     });
+  let reponse: Response;
+  let texteReponse = "";
+  let envoye = payload;
+  try {
+    reponse = await envoyer(envoye);
+    texteReponse = await reponse.text();
+    /*
+     * Un fournisseur qui refuse un champ (gpt-5 : `max_tokens` et
+     * `temperature` ; Mistral : tout champ inconnu) : on retire ou renomme ce
+     * que son refus nomme, et on rejoue, trois fois au plus (modelesCloud.ts,
+     * 27/09/2026). Le plan de Helix Code passe ici avec le modèle choisi.
+     */
+    for (let essai = 0; essai < 3 && reponse.status >= 400 && reponse.status < 500 && ![401, 403, 404, 408, 429].includes(reponse.status); essai++) {
+      const correction = correctionPour(envoye, texteReponse);
+      if (!correction) break;
+      envoye = appliquerCorrection(envoye, correction);
+      reponse = await envoyer(envoye);
+      texteReponse = await reponse.text();
+    }
   } catch {
     return { ok: false, message: tf("Le modèle {0} n'a pas répondu à temps.", model.id) };
   }
-  const corps = (await reponse.json().catch(() => null)) as {
+  let corps: {
     choices?: { message?: { content?: string } }[];
     error?: { message?: string } | string;
-  } | null;
+  } | null = null;
+  try {
+    corps = JSON.parse(texteReponse);
+  } catch {
+    corps = null;
+  }
   if (!reponse.ok || !corps) {
     const detail = typeof corps?.error === "string" ? corps.error : (corps?.error?.message ?? "");
-    const tropLong = /context|too long|maximum|exceed/i.test(detail);
+    const distant = backend.origine === "cle" || backend.origine === "agence";
+    const parLeFournisseur =
+      distant && reponse.status !== 400 && reponse.status !== 413 ? messageDuFournisseur(reponse.status, texteReponse, model.id, backend.fournisseur ?? backend.label) : null;
+    if (parLeFournisseur) return { ok: false, message: parLeFournisseur };
+    const tropLong = reponse.status !== 429 && /context|too long|maximum|exceed/i.test(detail);
     return {
       ok: false,
       tropLong,
-      message: tropLong ? "Le texte dépasse ce que le modèle peut lire d'un coup." : `Le modèle a refusé la demande (${reponse.status}).`,
+      message: tropLong ? t("Le texte dépasse ce que le modèle peut lire d'un coup.") : tf("Le modèle a refusé la demande ({0}).", reponse.status),
     };
   }
   usage.releverReponse(options.qui, model, payload, corps);

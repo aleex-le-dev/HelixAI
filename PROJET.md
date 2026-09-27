@@ -2545,7 +2545,8 @@ ne restent ici que les points ouverts.*
    et démarré par Helix, puis le modèle, et la valeur de l'autorisation d'écran avant toute
    demande) ; l'installateur Windows, jamais lancé sur un vrai PC ; le `.deb` sur un vrai
    Ubuntu (AppArmor) et l'AppImage sur Fedora (`/tmp` en mémoire) ; `lms get` de llmster sans
-   terminal sur un réseau lent.
+   terminal sur un réseau lent ; une vraie clé de chaque fournisseur cloud (Chat, outil,
+   image, Code), vérifiée jusqu'ici contre des faux seulement (27/09/2026, ci-dessous).
 9. **Passer ce Mac sur Qwen3.5 9B**, le modèle qu'Helix y installerait aujourd'hui (il
    tourne encore sur Qwen3 8B, installé avant la règle) : 6 Go, à télécharger sur accord.
 
@@ -2695,6 +2696,82 @@ du bas, à côté du « + », comme sur Claude, et il est aussi dans Code, dont 
 d'OpenCode passent par la même barrière (`permissionsCode.ts`). Le libellé de « Tout
 approuver » ne dit plus « sans jamais vous demander » : ce qui se confirme toujours
 (supprimer un événement) se confirme aussi à ce niveau.
+
+**Fait le 27/09/2026 : une clé de fournisseur cloud, et tout fonctionne avec ses modèles.**
+Demandé par Medhi (« sois sûr que si quelqu'un met sa clé d'API de LLM tout fonctionne, et
+pareil que les modèles en fonction de la clé d'API fonctionnent »). **Bug vu par Medhi le même
+jour** (2026.927.3, Mac) : dans Code, un modèle de sa propre clé OpenAI (gpt-4.1-nano)
+répondait « Modèle inconnu ou réservé à la personne qui a branché sa clé ». Deux refus à la
+suite : l'ouverture de la session résolvait le modèle sans dire pour qui (`reglageCode`,
+index.ts), puis OpenCode appelait la passerelle au jeton d'instance seul. Corrigé : la
+session est ouverte pour la personne connectée, et l'appel d'OpenCode est servi pour la
+propriétaire de sa session (clé de relais et registre de Code exigés, SECURITE.md § 15).
+Rejoué avant et après la correction contre un faux OpenAI et le faux OpenCode : le même
+message avant, la réponse du modèle après ; un collègue reste refusé.
+
+Tous les fournisseurs passent par leur point d'accès compatible OpenAI, Anthropic et
+Google compris ; Helix n'appelle ni `/v1/messages` ni `generateContent`. Leurs dialectes
+sont dans `gateway/src/modelesCloud.ts` (nouveau). **Ce qui cassait, et ce qui a changé :**
+- *Vision* : les rôles ne venaient que du nom ; gpt-4o, gpt-4.1, gpt-5, Claude, Gemini
+  passaient pour aveugles, et l'image jointe était **retirée** avant l'envoi. Ce que la liste
+  déclare l'emporte (Mistral `capabilities`, OpenRouter `architecture`, Together `type`),
+  le nom sinon.
+- *Champs refusés* : l'écran joint `agent` depuis ce matin, qui partait chez le fournisseur
+  (OpenAI : 400 ; Mistral : 422) : un Chat ouvert sur un agent ne répondait plus. Retiré.
+  `chat_template_kwargs` ne part plus vers une clé. Et la passerelle lit le refus et rejoue
+  sans le champ nommé : `max_tokens` renommé `max_completion_tokens` pour gpt-5 et la série
+  o (OpenCode en demande 32 000), température retirée, `reasoning_effort: none` devenu
+  `minimal`, `stream_options` et `reasoning_effort` retirés chez Mistral, borne de
+  `max_tokens` reprise du refus. Retenu par modèle (et non plus par moteur).
+- *Liste des modèles* : Anthropic en rend vingt par page (les suivants manquaient) et lit
+  sa clé dans `x-api-key` ; Together rend un tableau nu (« aucun modèle ») ; Google répond
+  400 à une clé fausse ; OpenAI liste des modèles qui ne répondent pas à
+  `/chat/completions` (codex, « pro », instruct), maintenant écartés comme ceux d'images,
+  de voix, d'OCR. Liste gardée dix minutes (elle était relue avant chaque message). Une
+  liste en panne garde les modèles retenus : le vrai refus est dit au premier message.
+- *Flux* : raisonnement lu dans `reasoning` (OpenRouter, Groq) et dans les morceaux
+  `thinking` de Magistral ; appels d'outils sans `index` (Google) rangés à part ; erreur
+  envoyée au milieu du flux (OpenRouter) dite, au lieu d'une bulle vide.
+- *Erreurs* : clé refusée (401, 403, 400 de Google), crédit (402), quota épuisé ou débit
+  limité (429, distingués), modèle retiré (404), service surchargé (5xx, 529) : dits avec le
+  nom du fournisseur, sa réponse, et quoi faire. Un quota épuisé passait pour « conversation
+  trop longue » (son texte dit « exceeded »).
+- *Auto* sans modèle local : il ne prend jamais une clé (décision de 0.12.0), et le dit
+  maintenant en nommant le modèle à choisir. *Bases de connaissances* : une clé ne sert pas à
+  indexer (le texte des documents ne part pas), l'écran le dit.
+- *Catalogue* : Groq, DeepSeek (Chine), xAI et Together AI ajoutés, adresses relevées dans
+  leur documentation.
+
+**Vérifié le 27/09/2026** par `scripts/essai-fournisseurs.mjs`, lancé par `npm run securite`
+(102 contrôles, tous réussis ; aucune vraie clé, `fetch` et les noms de la passerelle
+détournés vers sept faux fournisseurs, toute autre sortie refusée) :
+
+| Fonction | OpenAI | Anthropic | Google | Mistral | OpenRouter | DeepSeek | Together |
+|---|---|---|---|---|---|---|---|
+| Clé fausse refusée, liste filtrée | oui | oui (pages, `x-api-key`) | oui (400) | oui (capacités) | oui (`/key`) | oui | oui (tableau nu) |
+| Chat en flux | oui | oui | oui | oui (422 corrigé) | oui | oui | oui |
+| Raisonnement affiché | non rendu par l'API | non rendu (compatibilité) | non essayé | oui (Magistral) | oui (`reasoning`) | oui (reasoner) | non essayé |
+| Appel d'outil complet | oui | oui | oui (2 appels sans index) | oui (id de 9 car.) | oui | oui | oui |
+| Image jointe | oui | oui | oui | oui (Pixtral) | oui | écartée, et dit | non essayé |
+| Erreurs dites | 401, 404, 429 ×2 | 529 | 400 clé | | 402, coupure | | |
+| Relais (OpenCode, script) | oui (gpt-5 corrigé) | | | | | | |
+| Code, clé personnelle | oui (gpt-4.1-nano) | | | | | | |
+
+Aussi vérifié : aucun champ propre à Helix ne part ; les clés personnelles restent à leur
+titulaire (sélecteur, relais, Code) ; une adresse « compatible » qui bascule vers le réseau
+interne est refusée à l'appel suivant ; aucune clé dans la sortie de la passerelle.
+**Non géré** : aucune option du profil ne ferme les clés de fournisseurs (`refusSortie` ne
+juge que l'adresse) ; le raisonnement d'OpenAI et d'Anthropic n'est pas montré (leurs
+points d'accès compatibles ne le rendent pas ; Anthropic le recommande pour des essais, pas
+pour la production : passer à `/v1/messages` serait un chantier à décider) ; les morceaux
+`thinking` de Magistral partent tels quels vers OpenCode (le relais reste octet pour
+octet). Cowork (écran) et les employés OpenClaw passent par les mêmes chemins (boucle
+d'outils de l'écran, relais), sans essai propre ici.
+**Reste à essayer avec de vraies clés** : chaque fournisseur du catalogue, surtout
+Anthropic (liste par `x-api-key`, conversation par `Authorization`), Google (outils en
+flux), Mistral (champs refusés, identifiants d'outils), gpt-5 et la série o (noms exacts des
+refus), Groq, xAI, DeepSeek, Together ; une image et un appel d'outil par fournisseur ;
+Code et un employé sur un modèle de clé ; un vrai 429 de quota.
 
 **Fait le 27/09/2026 : créer une vidéo, comme une image.** Demandé par Medhi (« générer des
 vidéos, avec un modèle en fonction du PC »). Menu « + », « Créer une vidéo » : la même pastille

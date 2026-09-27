@@ -60,6 +60,16 @@ import type { BackendConfig, ChatRequest, ModelInfo } from "./types.ts";
 import { t, tf } from "./langue.ts";
 import { gardesDeFlux, type Degenerescence } from "./gardeBoucle.ts";
 import { echantillonnageLocal } from "./backends.ts";
+import {
+  accumulerAppels,
+  appliquerCorrection,
+  correctionPour,
+  erreurDansFlux,
+  lireDelta,
+  messageDuFournisseur,
+  messageDuRefus,
+  type Correction,
+} from "./modelesCloud.ts";
 
 /**
  * Boucle conversationnelle avec outils (ARCHITECTURE.md, ADR-003/004).
@@ -102,6 +112,8 @@ interface UpstreamResult {
   finishReason: string | null;
   /** Flux coupé par la passerelle : la réponse était partie en boucle (gardeBoucle.ts). */
   degenere?: Degenerescence;
+  /** Erreur envoyée par le fournisseur au milieu du flux. */
+  erreur?: { statut: number; detail: string };
 }
 
 function sse(res: http.ServerResponse, payload: unknown): void {
@@ -139,6 +151,7 @@ async function consumeUpstream(
   // Texte et réflexion suivis à part : une boucle dans l'un ne se dilue pas dans l'autre (gardeBoucle.ts).
   const gardes = gardesDeFlux();
   let degenere: Degenerescence | null = null;
+  let erreur: { statut: number; detail: string } | null = null;
 
   for (;;) {
     /*
@@ -190,9 +203,14 @@ async function consumeUpstream(
          */
         releve?.observer(json);
 
+        // Une erreur au milieu du flux (OpenRouter, fournisseur surchargé) : sans elle, une bulle vide et rien pour le dire.
+        erreur ??= erreurDansFlux(json);
+
         const choice = json.choices?.[0];
         if (!choice) continue;
-        const delta = choice.delta ?? {};
+        // Texte et raisonnement dans le dialecte du fournisseur (`reasoning`, morceaux `thinking`…) : modelesCloud.ts.
+        const lu = lireDelta(choice.delta);
+        const delta = { ...(choice.delta ?? {}), content: lu.texte, reasoning_content: lu.reflexion };
 
         if (typeof delta.content === "string" && delta.content) {
           /*
@@ -214,15 +232,8 @@ async function consumeUpstream(
           degenere ??= gardes.reflexion.ajouter(delta.reasoning_content);
         }
 
-        // Les appels d'outils arrivent par fragments, indexés.
-        for (const call of delta.tool_calls ?? []) {
-          const idx = call.index ?? 0;
-          while (toolCalls.length <= idx) toolCalls.push({ id: "", name: "", args: "" });
-          const slot = toolCalls[idx];
-          if (call.id) slot.id = call.id;
-          if (call.function?.name) slot.name += call.function.name;
-          if (call.function?.arguments) slot.args += call.function.arguments;
-        }
+        // Les appels d'outils arrivent par fragments, indexés (ou non : voir `accumulerAppels`).
+        accumulerAppels(toolCalls, delta.tool_calls);
 
         if (choice.finish_reason) finishReason = choice.finish_reason;
       }
@@ -231,6 +242,7 @@ async function consumeUpstream(
 
   // Coupé en route : les appels d'outils à moitié reçus ne partent pas.
   if (degenere) return { content, toolCalls: [], finishReason: "boucle", degenere };
+  if (erreur) return { content, toolCalls: [], finishReason: "erreur", erreur };
   return { content, toolCalls: toolCalls.filter((t) => t.name), finishReason };
 }
 
@@ -288,56 +300,70 @@ async function callUpstream(
    * sans, et sa consommation sera estimée. Une mesure ne vaut jamais une
    * conversation cassée.
    */
-  const corps = refusRaisonnement.has(backend.id)
-    ? usage.avecMesure(backend.id, sansRaisonnement(payload))
-    : usage.avecMesure(backend.id, payload);
-  let reponse: Response;
-  try {
-    reponse = await envoyer(corps);
-  } catch (err) {
-    /*
-     * Moteur éteint ou injoignable. `fetch` ne dit que « fetch failed », en
-     * anglais, et c'est ce que la personne lisait dans le Chat. On dit quel
-     * moteur, et quoi faire. Un arrêt demandé, lui, remonte tel quel.
-     */
-    if (signal?.aborted) throw err;
-    throw new Error(tf("{0} ne répond pas : vérifiez qu'il est démarré, puis réessayez.", backend.label));
-  }
-  if (!usage.refusPossible(reponse.status)) return reponse;
+  const cle = `${backend.id}|${String(payload.model ?? "")}`;
+  let corps = (correctionsRetenues.get(cle) ?? []).reduce(appliquerCorrection, usage.avecMesure(backend.id, payload));
+  const tenter = async (c: Record<string, unknown>): Promise<Response> => {
+    try {
+      return await envoyer(c);
+    } catch (err) {
+      /*
+       * Moteur éteint ou injoignable. `fetch` ne dit que « fetch failed », en
+       * anglais, et c'est ce que la personne lisait dans le Chat. On dit quel
+       * moteur, et quoi faire. Un arrêt demandé, lui, remonte tel quel. Un
+       * fournisseur cloud n'est pas « démarré » par la personne : c'est la
+       * connexion de la machine qu'il faut regarder.
+       */
+      if (signal?.aborted) throw err;
+      throw new Error(
+        backend.origine === "cle" || backend.origine === "agence"
+          ? tf("{0} est injoignable : vérifiez la connexion à internet de cette machine, puis réessayez.", backend.fournisseur ?? backend.label)
+          : tf("{0} ne répond pas : vérifiez qu'il est démarré, puis réessayez.", backend.label),
+      );
+    }
+  };
+  let reponse = await tenter(corps);
 
   /*
-   * Le moteur a refusé. Deux champs facultatifs peuvent en être la cause : on
-   * retire d'abord ceux du raisonnement, plus récents et moins répandus, puis
-   * la mesure de consommation s'il refuse encore. Les essayer dans cet ordre
-   * plutôt que de tout retirer d'un coup évite d'accuser la mesure d'un refus
-   * qui ne la concerne pas, et donc de perdre le comptage pour rien.
+   * Le moteur a refusé un champ. On lit son refus, on corrige ce qu'il nomme
+   * (modelesCloud.ts : `max_tokens` renommé pour gpt-5, une température
+   * retirée, un champ inconnu de Mistral…) et on rejoue, quatre fois au plus.
+   * Faute de champ nommé, on retire comme avant ceux du raisonnement, puis la
+   * mesure de consommation (`stream_options`, usage.ts) : une mesure ne vaut
+   * jamais une conversation cassée. Ce qui a fait passer la requête est retenu
+   * pour ce modèle de ce moteur, et appliqué d'emblée aux suivantes.
    *
-   * Le niveau de raisonnement garde de toute façon son effet sur le plancher
-   * de jetons, qui, lui, n'est refusé par personne.
+   * Retenu par modèle depuis le 27/09/2026, et non plus par moteur : une clé
+   * OpenAI ouvre gpt-4o, qui refuse `reasoning_effort`, et gpt-5, qui s'en
+   * sert. Un refus du premier coupait le niveau de raisonnement du second.
+   *
+   * Pas de correction pour un modèle introuvable (404) : rien à corriger, le
+   * refus est dit tel quel.
    */
-  let dernier = reponse;
-
-  if (porteDuRaisonnement(corps)) {
-    await dernier.body?.cancel().catch(() => {});
-    dernier = await envoyer(sansRaisonnement(corps));
-    if (dernier.ok) {
-      refusRaisonnement.add(backend.id);
-      console.log(
-        `[chat] ${backend.id} refuse reasoning_effort : le niveau de raisonnement ` +
-          `n'agira plus que sur le budget de jetons.`,
-      );
-      return dernier;
+  const appliquees: Correction[] = [];
+  for (let essai = 0; essai < 4 && usage.refusPossible(reponse.status) && reponse.status !== 404; essai++) {
+    const detail = await reponse.text().catch(() => "");
+    const correction =
+      correctionPour(corps, detail) ??
+      (porteDuRaisonnement(corps)
+        ? ({ type: "retirer", champ: "chat_template_kwargs" in corps ? "chat_template_kwargs" : "reasoning_effort" } as const)
+        : corps.stream_options !== undefined
+          ? ({ type: "retirer", champ: "stream_options" } as const)
+          : null);
+    if (!correction) return new Response(detail, { status: reponse.status, headers: reponse.headers });
+    corps = appliquerCorrection(corps, correction);
+    appliquees.push(correction);
+    reponse = await tenter(corps);
+    if (reponse.ok) {
+      correctionsRetenues.set(cle, [...(correctionsRetenues.get(cle) ?? []), ...appliquees]);
+      if (appliquees.some((c) => c.champ === "stream_options")) usage.noterRefus(backend.id);
+      console.log(`[chat] ${cle} : ${appliquees.map((c) => `${c.type} ${c.champ}`).join(", ")} (refusé par le moteur), retenu pour les requêtes suivantes.`);
     }
-    if (!usage.refusPossible(dernier.status)) return dernier;
   }
-
-  if (corps.stream_options !== undefined) {
-    await dernier.body?.cancel().catch(() => {});
-    dernier = await envoyer(usage.sansMesure(sansRaisonnement(corps)));
-    if (dernier.ok) usage.noterRefus(backend.id);
-  }
-  return dernier;
+  return reponse;
 }
+
+/** Corrections qui ont fait passer une requête, par moteur et par modèle (voir `callUpstream`). */
+const correctionsRetenues = new Map<string, Correction[]>();
 
 /**
  * Ajoute une consigne aux instructions système, sans en créer de seconde.
@@ -382,7 +408,13 @@ function basePayload(
    * `connaissances` est une extension Helix, déjà traduite en consigne : un
    * fournisseur cloud refuse volontiers un champ qu'il ne connaît pas.
    */
-  const { role: _role, effort, messages: _m, tools: _t, connaissances: _k, ...rest } = body as Record<string, unknown> & {
+  /*
+   * `agent` aussi (27/09/2026) : l'écran le joint depuis qu'un agent peut
+   * masquer ses instructions, et il partait chez le moteur. LM Studio
+   * l'ignore ; OpenAI refuse tout champ inconnu (400), Mistral aussi (422) :
+   * un Chat ouvert sur un agent ne répondait plus avec une clé OpenAI.
+   */
+  const { role: _role, effort, messages: _m, tools: _t, connaissances: _k, agent: _a, ...rest } = body as Record<string, unknown> & {
     effort?: string;
   };
   const payload: Record<string, unknown> = { ...rest, model: model.id, messages, stream: true };
@@ -432,7 +464,13 @@ function basePayload(
        * moteur qui le refuse voit la requête rejouée sans (CHAMPS_RAISONNEMENT).
        */
       if (demande > 0) payload.max_tokens = demande;
-      payload.chat_template_kwargs = { enable_thinking: false };
+      /*
+       * Un champ de moteur local (LM Studio, vLLM, llama.cpp) : un fournisseur
+       * branché par clé le refuse (OpenAI, Mistral) ou l'ignore. Le moteur du
+       * prestataire, souvent un vLLM, le garde ; s'il le refuse, `callUpstream`
+       * le retire.
+       */
+      if (model.origine !== "cle") payload.chat_template_kwargs = { enable_thinking: false };
       payload.reasoning_effort = "none";
       if (/qwen3(?![.\d])|qwq/i.test(model.id)) payload.messages = avecSansReflexion(messages);
     }
@@ -572,11 +610,30 @@ function sansImages(messages: unknown[]): unknown[] {
  * recopié tel quel ; la personne ne pouvait pas deviner qu'un nouveau Chat
  * suffisait. Les autres refus restent affichés avec leur détail.
  */
-function erreurDuMoteur(statut: number, detail: string, modele: string): string {
-  if (/context|n_ctx|too long|too many tokens|exceed|greater than the/i.test(detail)) {
+/*
+ * Un fournisseur cloud (27/09/2026) : clé refusée, quota épuisé, débit limité,
+ * modèle retiré, service surchargé sont dits comme tels, avec le nom du
+ * fournisseur et ce qu'il répond (modelesCloud.ts). Avant, la personne lisait
+ * « Erreur du backend (429) : {"error":{…}} » ; et un quota épuisé, dont le
+ * texte dit « exceeded your current quota », passait pour une conversation
+ * trop longue. Le cas du contexte n'est donc cherché qu'après.
+ */
+function erreurDuMoteur(statut: number, detail: string, modele: string, backend?: BackendConfig): string {
+  const distant = backend?.origine === "cle" || backend?.origine === "agence";
+  const parLeFournisseur = distant && statut !== 400 && statut !== 413 && statut !== 422
+    ? messageDuFournisseur(statut, detail, modele, backend?.fournisseur ?? backend?.label ?? "")
+    : null;
+  if (parLeFournisseur) return parLeFournisseur;
+  if (statut !== 429 && /context|n_ctx|too long|too many tokens|exceed|greater than the/i.test(detail)) {
     return tf(
       "La conversation dépasse ce que {0} peut lire d'un coup. Ouvrez un nouveau Chat, ou retirez une pièce jointe ou une partie du texte.",
       modele,
+    );
+  }
+  if (distant) {
+    return (
+      messageDuFournisseur(statut, detail, modele, backend?.fournisseur ?? backend?.label ?? "") ??
+      tf("{0} refuse la demande ({1}) : {2}", backend?.fournisseur ?? backend?.label ?? "", statut, messageDuRefus(detail))
     );
   }
   return tf("Erreur du backend ({0}) : {1}", statut, detail.slice(0, 300));
@@ -602,14 +659,7 @@ function ditImpossible(texte: string): boolean {
 
 const CHAMPS_RAISONNEMENT = ["reasoning_effort", "chat_template_kwargs"] as const;
 
-/** Moteurs qui ont refusé ces champs : on ne les leur renvoie plus. */
-const refusRaisonnement = new Set<string>();
-
-function sansRaisonnement(payload: Record<string, unknown>): Record<string, unknown> {
-  const copie = { ...payload };
-  for (const champ of CHAMPS_RAISONNEMENT) delete copie[champ];
-  return copie;
-}
+// Les moteurs qui refusent ces champs : `correctionsRetenues`, par modèle (voir `callUpstream`).
 
 function porteDuRaisonnement(payload: Record<string, unknown>): boolean {
   return CHAMPS_RAISONNEMENT.some((champ) => champ in payload);
@@ -745,16 +795,11 @@ class ReponseEntiere {
     const choix = j.choices?.[0];
     if (!choix) return;
     const d = choix.delta ?? {};
-    if (typeof d.content === "string") this.texte += d.content;
-    if (typeof d.reasoning_content === "string") this.raisonnement += d.reasoning_content;
-    for (const appel of d.tool_calls ?? []) {
-      const i = appel.index ?? 0;
-      while (this.appels.length <= i) this.appels.push({ id: "", name: "", args: "" });
-      const case_ = this.appels[i]!;
-      if (appel.id) case_.id = appel.id;
-      if (appel.function?.name) case_.name += appel.function.name;
-      if (appel.function?.arguments) case_.args += appel.function.arguments;
-    }
+    // Même lecture que pour l'écran : `reasoning`, morceaux `thinking`, appels sans `index` (modelesCloud.ts).
+    const lu = lireDelta(d);
+    this.texte += lu.texte;
+    this.raisonnement += lu.reflexion;
+    accumulerAppels(this.appels, d.tool_calls);
     if (choix.finish_reason) this.fin = choix.finish_reason;
   }
 
@@ -1199,7 +1244,7 @@ export async function handleChatRequest(
       const upstream = await callUpstream(backend, payload, arret.signal);
       if (!upstream.ok || !upstream.body) {
         const detail = await upstream.text().catch(() => "");
-        signalerErreur(erreurDuMoteur(upstream.status, detail, model.id));
+        signalerErreur(erreurDuMoteur(upstream.status, detail, model.id, backend));
       } else {
         releve = new usage.Releve(qui, model, payload);
         const reponse = nonFlux ? new ReponseEntiere() : null;
@@ -1335,7 +1380,7 @@ export async function handleChatRequest(
 
       if (!upstream.ok || !upstream.body) {
         const detail = await upstream.text().catch(() => "");
-        emitHelix(res, { type: "error", message: erreurDuMoteur(upstream.status, detail, model.id) });
+        emitHelix(res, { type: "error", message: erreurDuMoteur(upstream.status, detail, model.id, backend) });
         return { texte, interrompu: "moteur", modifications, echecs, lectures, derniereErreur, releves, refus };
       }
 
@@ -1356,6 +1401,11 @@ export async function handleChatRequest(
       if (result.degenere) {
         noterBoucle(model.id, result.degenere);
         emitHelix(res, { type: "error", message: messageDeBoucle(model.id, result.degenere) });
+        return { texte, interrompu: "moteur", modifications, echecs, lectures, derniereErreur, releves, refus };
+      }
+      // Le fournisseur a dit une erreur en cours de flux (27/09/2026) : dite, et comptée comme une panne du moteur.
+      if (result.erreur) {
+        emitHelix(res, { type: "error", message: erreurDuMoteur(result.erreur.statut, result.erreur.detail, model.id, backend) });
         return { texte, interrompu: "moteur", modifications, echecs, lectures, derniereErreur, releves, refus };
       }
 

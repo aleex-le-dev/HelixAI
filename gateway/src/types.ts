@@ -35,6 +35,10 @@ export interface BackendConfig {
   fournisseur?: string;
   /** En-têtes propres au fournisseur. */
   entetes?: Record<string, string>;
+  /** Identifiant du fournisseur au catalogue (fournisseurs.ts : « openai », « anthropic »…), pour une clé. */
+  catalogue?: string;
+  /** En-tête qui porte la clé pour lister les modèles, quand ce n'est pas `Authorization` (modelesCloud.ts). */
+  cleEnTete?: string;
 }
 
 export interface BackendStatus {

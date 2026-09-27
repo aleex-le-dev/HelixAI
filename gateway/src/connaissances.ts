@@ -468,9 +468,15 @@ interface ModeleEmbed {
 async function modeleEmbed(acces: string): Promise<ModeleEmbed | { erreur: string }> {
   const r = await resolve({ role: "embed", acces });
   if ("error" in r) {
+    /*
+     * Dit aussi à qui n'a qu'une clé de fournisseur (27/09/2026) pourquoi elle
+     * ne suffit pas : ses modèles d'embeddings ne sont jamais proposés
+     * (modelesCloud.ts), et le routeur ne choisit jamais d'office un modèle
+     * par clé. Le texte des documents ne part donc pas chez le fournisseur.
+     */
     return {
       erreur: t(
-        "Aucun modèle d'embeddings n'est disponible. Chargez-en un dans LM Studio (par exemple text-embedding-nomic-embed-text-v1.5), puis relancez l'indexation.",
+        "Aucun modèle d'embeddings n'est disponible. Chargez-en un dans LM Studio (par exemple text-embedding-nomic-embed-text-v1.5), puis relancez l'indexation. Une clé de fournisseur cloud ne sert pas à indexer : le texte de vos documents ne part pas chez lui.",
       ),
     };
   }
@@ -765,7 +771,8 @@ async function indexer(baseId: string, docId: string): Promise<void> {
   }
   const modele = await modeleEmbed(doc.ajoutePar);
   if ("erreur" in modele) {
-    await echec("Aucun modèle d'embeddings n'est disponible. Chargez-en un dans LM Studio (par exemple text-embedding-nomic-embed-text-v1.5), puis relancez l'indexation.");
+    // Le message de `modeleEmbed`, et non une copie qui en divergeait (27/09/2026).
+    await echec(modele.erreur);
     return;
   }
   const morceaux = decouper(lu.texte, { taille: TAILLE_MORCEAU, recouvrement: RECOUVREMENT });

@@ -3,6 +3,7 @@ import os from "node:os";
 import { faireLaPlace, findLms, optionsDeChargement } from "./backends.ts";
 import { nomProduit } from "./marque.ts";
 import { t, tf } from "./langue.ts";
+import { preparerDossiersLlmster } from "./engine.ts";
 
 /**
  * Provisionnement automatique du modèle local (ARCHITECTURE.md, ADR-009).
@@ -545,7 +546,21 @@ async function provision(
 
     // Pas à côté d'un autre modèle si les deux ne tiennent pas : le Mac se figerait (voir backends.ts).
     await faireLaPlace(lms, choice.key);
+    /*
+     * Le dossier interne du moteur sans interface, juste avant de charger
+     * (27/09/2026) : ce chemin appelait `lms load` sans passer par le
+     * démarrage du moteur, qui seul le recréait, et le chargement échouait
+     * (`ENOENT … .internal/temp`) quand la mise en route arrivait la première.
+     */
+    preparerDossiersLlmster();
     let loaded = await charger();
+    // Échec sans manque de mémoire (moteur encore en train de démarrer) : une seconde tentative, et la vraie réponse au journal.
+    if (!loaded.ok && !isResourceError(loaded.output)) {
+      console.error(`[helix] chargement de ${choice.key} refusé : ${loaded.output.slice(-400)}`);
+      await new Promise((r) => setTimeout(r, 3000));
+      preparerDossiersLlmster();
+      loaded = await charger();
+    }
 
     /*
      * Mémoire refusée alors qu'un autre modèle occupe la place : sur une

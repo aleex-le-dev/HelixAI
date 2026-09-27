@@ -2760,8 +2760,12 @@ contrôles, tous réussis. **Essai refait avec les paquets finaux** dans le mêm
 installé par-dessus l'ancien, application ouverte, Node de Helix posé seul et serveur de
 fichiers démarré (14 outils), dossier du moteur recréé, un Chat (« Rome »). Cette fois, le
 chargement du modèle lancé par Helix a échoué (le modèle s'est chargé à la demande au premier
-message) ; c'était au moment où le disque du Mac se remplissait (images d'essai de Docker) :
-**cause non établie, à revérifier**. Sur macOS, l'application reconstruite, ouverte comme
+message). **Cause trouvée à la relecture du code** (27/09/2026, matin) : le chargement lancé par la
+mise en route appelait `lms load` sans passer par le démarrage du moteur, seul à recréer le
+dossier `~/.lmstudio/.internal/temp` que l'essai venait de retirer ; le Chat, lui, y passait,
+d'où le chargement réussi juste après. Corrigé : le dossier est garanti avant chaque
+chargement, une seconde tentative suit un échec sans manque de mémoire, et la réponse du
+moteur est écrite au journal. Pas réessayé dans un conteneur depuis. Sur macOS, l'application reconstruite, ouverte comme
 depuis le Finder, a son serveur de fichiers (14 outils).
 
 **Fait le 27/09/2026 (nuit) : Python posé par Helix, et le .deb essayé dans un Ubuntu vierge.**

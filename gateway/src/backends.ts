@@ -647,6 +647,8 @@ export async function loadModel(modelKey: string): Promise<{ ok: boolean; messag
     exec(lms, ["load", modelKey, "--yes", "--ttl", TTL_SECONDES, ...optionsDeChargement()], { timeout: 300_000 });
 
   await faireLaPlace(lms, modelKey, enMemoire);
+  // Sans ce dossier, llmster ne charge aucun modèle (engine.ts) : garanti avant chaque chargement, pas seulement au démarrage.
+  preparerDossiersLlmster();
 
   try {
     await charger();

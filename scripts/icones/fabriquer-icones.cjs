@@ -3,12 +3,12 @@
  * (27/09/2026, demandé par Medhi : « le logo d'application » sur les trois
  * systèmes). Lancer : `npx electron scripts/icones/fabriquer-icones.cjs`.
  *
- *  - `build/logo-helice.png` : l'hélice détaillée (noir sur blanc). Elle devient
- *    crème sur le fond sombre de la marque, dans un carré arrondi aux
- *    proportions des icônes de macOS (1024 px, 100 px de marge) ;
- *  - `public/brand/favicon.svg` : la marque simplifiée, lisible à 16 et 32 px
- *    (barre des tâches, zone de notification) où les traits fins de l'hélice
- *    disparaissaient.
+ *  - `build/logo-helice.png` : l'hélice détaillée, noire sur fond blanc comme le
+ *    logo, dans un carré arrondi aux proportions des icônes de macOS (1024 px,
+ *    100 px de marge) ; fond blanc choisi par Medhi (27/09/2026) ;
+ *  - la marque simplifiée de `public/brand/favicon.svg`, en clair (fond blanc,
+ *    hélice sombre et rouge, fin liseré), lisible à 16 et 32 px (barre des
+ *    tâches, zone de notification) où les traits fins de l'hélice disparaissent.
  *
  * Écrit : build/icon.png (1024), build/icons/NxN.png (Linux), build/icon.ico
  * (Windows, entrées PNG), build/tray.png et build/tray@2x.png.
@@ -21,21 +21,22 @@ const RACINE = path.join(__dirname, "..", "..");
 const B = (...p) => path.join(RACINE, "build", ...p);
 
 const page = `<!doctype html><html><body><script>
-const FOND = "#16140F", CREME = "#F2EEE3";
+const ENCRE = "#16140F", LISERE = "#DDD9D0";
 function charger(src) { return new Promise((ok, ko) => { const i = new Image(); i.onload = () => ok(i); i.onerror = ko; i.src = src; }); }
 async function icone(taille, logo) {
   const c = document.createElement("canvas"); c.width = c.height = taille; const g = c.getContext("2d");
   const k = taille / 1024, marge = 100 * k, cote = 824 * k, r = 185 * k;
   g.beginPath(); g.roundRect(marge, marge, cote, cote, r);
-  const dg = g.createLinearGradient(0, marge, 0, marge + cote); dg.addColorStop(0, "#221F18"); dg.addColorStop(1, FOND);
+  const dg = g.createLinearGradient(0, marge, 0, marge + cote); dg.addColorStop(0, "#FFFFFF"); dg.addColorStop(1, "#F3F2EE");
   g.fillStyle = dg; g.fill();
-  // L'hélice : noir sur blanc devient crème sur transparent, recadrée sur son dessin.
+  g.lineWidth = Math.max(1, 3 * k); g.strokeStyle = LISERE; g.stroke();
+  // L'hélice : noir sur blanc devient encre sur transparent, recadrée sur son dessin.
   const s = document.createElement("canvas"); s.width = logo.width; s.height = logo.height; const sg = s.getContext("2d");
   sg.drawImage(logo, 0, 0); const d = sg.getImageData(0, 0, s.width, s.height); const px = d.data;
   let x0 = s.width, y0 = s.height, x1 = 0, y1 = 0;
   for (let y = 0; y < s.height; y++) for (let x = 0; x < s.width; x++) {
     const i = (y * s.width + x) * 4, a = 255 - Math.round(0.299 * px[i] + 0.587 * px[i + 1] + 0.114 * px[i + 2]);
-    px[i] = 0xF2; px[i + 1] = 0xEE; px[i + 2] = 0xE3; px[i + 3] = a;
+    px[i] = 0x16; px[i + 1] = 0x14; px[i + 2] = 0x0F; px[i + 3] = a;
     if (a > 40) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
   }
   sg.putImageData(d, 0, 0);
@@ -60,7 +61,12 @@ app.whenReady().then(async () => {
   const f = new BrowserWindow({ show: false, webPreferences: { offscreen: true, webSecurity: false } });
   await f.loadURL("data:text/html;charset=utf-8," + encodeURIComponent(page));
   const logo = "data:image/png;base64," + fs.readFileSync(B("logo-helice.png")).toString("base64");
-  const svg = "data:image/svg+xml;base64," + fs.readFileSync(path.join(RACINE, "public", "brand", "favicon.svg")).toString("base64");
+  // La marque en clair : fond blanc et fin liseré, le trait crème devenu sombre ; le rouge reste.
+  const clair = fs.readFileSync(path.join(RACINE, "public", "brand", "favicon.svg"), "utf8")
+    .replace('<rect width="32" height="32" rx="6" fill="#16140F"/>', '<rect x="0.5" y="0.5" width="31" height="31" rx="6" fill="#FFFFFF" stroke="#DDD9D0"/>')
+    .replace('stroke="#F2EEE3"', 'stroke="#16140F"');
+  if (!clair.includes('fill="#FFFFFF"')) throw new Error("favicon.svg a changé : adapter la marque claire");
+  const svg = "data:image/svg+xml;base64," + Buffer.from(clair).toString("base64");
   const r = await f.webContents.executeJavaScript(`fabriquer(${JSON.stringify(logo)}, ${JSON.stringify(svg)})`);
   const png = (cle) => Buffer.from(r[cle].split(",")[1], "base64");
   fs.writeFileSync(B("icon.png"), png("icone-1024"));

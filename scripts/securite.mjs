@@ -1818,11 +1818,20 @@ console.log("\n7 ter quater. Employés OpenClaw sur un modèle cloud branché pa
     })).json()).employe;
   const surPerso = await deployer(avecSeance, "Essai nuage perso", uidPerso);
   const surEquipe = await deployer(avecSeanceB, "Essai nuage équipe", uidEquipe);
-  const deBSurPersoA = await deployer(avecSeanceB, "Essai nuage détourné", uidPerso);
+  /*
+   * B qui demande le modèle personnel de A : refusé à la création (400), rien
+   * n'est déployé. Jusqu'au 27/09/2026, un modèle gratuit le remplaçait en
+   * silence ; la règle est maintenant de dire non (section 7 ter ter).
+   */
+  const detourneCreation = await appel("/helix/employes", {
+    method: "POST", headers: avecSeanceB,
+    body: JSON.stringify({ nom: "Essai nuage détourné", poste: "Tu aides.", outils: [], missions: [], liberte: "encadre", visibilite: "personnel", modele: uidPerso }),
+  });
+  const deBSurPersoA = (await detourneCreation.json().catch(() => ({}))).employe;
   verifier(
-    "déployés sur le modèle demandé ; B qui demande le modèle personnel de A ne l'obtient pas",
-    surPerso?.modele === uidPerso && surEquipe?.modele === uidEquipe && deBSurPersoA && deBSurPersoA.modele !== uidPerso,
-    JSON.stringify([surPerso?.modele, surEquipe?.modele, deBSurPersoA?.modele]),
+    "déployés sur le modèle demandé ; B qui demande le modèle personnel de A est refusé, rien n'est déployé",
+    surPerso?.modele === uidPerso && surEquipe?.modele === uidEquipe && detourneCreation.status === 400 && !deBSurPersoA,
+    JSON.stringify([surPerso?.modele, surEquipe?.modele, detourneCreation.status, deBSurPersoA?.modele]),
   );
 
   // La batterie joue OpenClaw : même route, mêmes en-têtes que sa configuration.
@@ -1844,9 +1853,10 @@ console.log("\n7 ter quater. Employés OpenClaw sur un modèle cloud branché pa
   );
   const avant = recues.length;
   const detourne = await commeOpenClaw(surEquipe?.id, uidPerso);
+  // Un appel d'employé est servi avec le modèle enregistré pour lui, quel que soit celui qu'il nomme (7 ter ter).
   verifier(
-    "l'employé de B ne se sert pas du modèle de la clé personnelle de A : refusé, rien n'est parti chez le fournisseur",
-    !detourne.texte.includes("NUAGE-PERSO-A") && recues.length === avant,
+    "l'employé de B qui nomme le modèle de la clé personnelle de A reste sur le sien : rien n'est parti avec la clé de A",
+    !detourne.texte.includes("NUAGE-PERSO-A") && !recues.slice(avant).some((x) => x.cle === "NUAGE-PERSO-A"),
     `${detourne.status} ${detourne.texte.slice(0, 200)}`,
   );
   const reponseEquipe = await commeOpenClaw(surEquipe?.id, uidEquipe);

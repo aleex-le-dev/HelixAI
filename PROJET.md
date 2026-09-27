@@ -10,7 +10,7 @@ refaite à l'envers.
 
 | | |
 |---|---|
-| Version | 2026.9.28 (`package.json`) |
+| Version | 2026.927.3 (`package.json`) |
 | Dernière mise à jour | 27 septembre 2026 |
 | Documents liés | [ARCHITECTURE.md](ARCHITECTURE.md), [SECURITE.md](SECURITE.md), [SCREENS.md](SCREENS.md), [SIGNATURE.md](SIGNATURE.md), [README.md](README.md), [docs/GUIDE.md](docs/GUIDE.md) |
 
@@ -2913,6 +2913,11 @@ seulement sur « Plus tard ».
 compare bien). Limite : une version par jour ; une seconde publication le même jour prendrait la
 date du lendemain (un numéro ne peut pas redescendre). OpenClaw, regardé à la demande de
 Medhi, numérote année.mois.n° ; Medhi a préféré le jour. Ne pas revenir aux 0.x.
+**Précisé par Medhi le 27/09/2026 (troisième version du jour) : année.moisjour.n°.** Deux
+versions étaient déjà sorties le 27 (2026.9.27, puis 2026.9.28 en date du lendemain) ; pour garder
+la vraie date et publier plusieurs fois par jour, le numéro devient **année, mois et jour collés,
+puis le n° de la version du jour** : 2026.927.3 (27 septembre, troisième), demain 2026.928.1,
+en octobre 2026.1001.1. Toujours croissant, y compris après 2026.9.28 (927 > 9).
 Aussi : les liens « Code source » et « Voir les versions publiées » des réglages menaient à
 un ancien dépôt (`helix-agence/helix`) ; ils mènent au dépôt public et à sa dernière
 publication.

@@ -11,11 +11,11 @@
  *    arrondi qui remplit l'icône (sans la marge de macOS, qui la rendait
  *    minuscule dans la barre des tâches). Plus de marque rouge et noire de
  *    l'ancien favicon, nulle part ;
- *  - de 16 à 48 px (barre des tâches, zone de notification, petites icônes du
+ *  - de 16 à 64 px (barre des tâches, zone de notification, icônes du
  *    bureau) : une hélice simplifiée redessinée en vectoriel, trait d'un pixel
  *    calé sur la grille, au lieu de l'image réduite puis épaissie, qui faisait
  *    une tache noire grasse (vu par Medhi sur un PC, 27/09/2026, « encore
- *    grasse »). L'hélice détaillée reste à partir de 64 px.
+ *    grasse »). L'hélice détaillée reste à partir de 128 px.
  *
  * Pour juger le résultat : regarder les tailles réelles et agrandies sans
  * lissage, sur fond clair et sur fond sombre (barre des tâches de Windows).
@@ -71,10 +71,11 @@ function encre(logo) {
   return { s, x0, y0, w: x1 - x0 + 1, h: y1 - y0 + 1 };
 }
 /**
- * Windows et Linux, 64 px et plus : carré arrondi qui remplit l'icône (2 % de
- * marge), hélice détaillée sur 84 % de la hauteur. À 64 px, le trait est à peine
- * épaissi (dilatation : l'hélice redessinée décalée tout autour d'elle) ; en
- * dessous, c'est iconeTrait qui dessine.
+ * Windows et Linux, 128 px et plus : carré arrondi qui remplit l'icône (2 % de
+ * marge), hélice détaillée sur 84 % de la hauteur, trait d'origine. En dessous,
+ * c'est iconeTrait qui dessine. L'épaississement par dilatation qu'on faisait
+ * jusqu'à 64 px est parti avec lui (27/09/2026) : à 48 px, il donnait une tache
+ * noire (« noir foncé bizarre », vu par Medhi), et à 64 px un pointillé.
  */
 function iconePleine(taille, logo) {
   const c = document.createElement("canvas"); c.width = c.height = taille; const g = c.getContext("2d");
@@ -84,30 +85,16 @@ function iconePleine(taille, logo) {
   g.fillStyle = dg; g.fill();
   g.lineWidth = Math.max(1, taille / 256); g.strokeStyle = LISERE; g.stroke();
   const { s, x0, y0, w, h } = encre(logo);
-  const hauteur = cote * 0.84, echelle = hauteur / h, trait = 8 * echelle;
-  /*
-   * Juste assez de trait pour rester visible, pas plus. Plus épais, l'hélice
-   * devenait une tache noire sur le bureau de Windows (48 px ; vu par Medhi le
-   * 27/09/2026, « noir foncé bizarre »), loin du trait fin de l'icône du Mac.
-   */
-  const voulu = taille <= 64 ? 0.55 : 0;
-  const rayon = Math.max(0, (voulu - trait) / 2 / echelle);
-  const e = document.createElement("canvas"); e.width = w + 2 * rayon + 4; e.height = h + 2 * rayon + 4; const eg = e.getContext("2d");
-  const ox = rayon + 2 - x0, oy = rayon + 2 - y0;
-  if (rayon > 0) {
-    for (let k = 0; k < 48; k++) {
-      const a = (k / 48) * Math.PI * 2;
-      for (const f of [1, 0.66, 0.33]) eg.drawImage(s, ox + Math.cos(a) * rayon * f, oy + Math.sin(a) * rayon * f);
-    }
-  }
-  eg.drawImage(s, ox, oy);
+  const hauteur = cote * 0.84, echelle = hauteur / h;
+  const e = document.createElement("canvas"); e.width = w + 4; e.height = h + 4; const eg = e.getContext("2d");
+  eg.drawImage(s, 2 - x0, 2 - y0);
   const lw = e.width * echelle, lh = e.height * echelle;
   g.imageSmoothingQuality = "high";
   g.drawImage(e, taille / 2 - lw / 2, taille / 2 - lh / 2, lw, lh);
   return c.toDataURL("image/png");
 }
 /*
- * Petites tailles (16 à 48 px) : l'hélice redessinée au trait, en vectoriel, au lieu
+ * Petites tailles (16 à 64 px) : l'hélice redessinée au trait, en vectoriel, au lieu
  * de l'image réduite. Réduite puis épaissie, elle faisait une tache noire grasse dans
  * la barre des tâches (vu par Medhi sur un PC, 27/09/2026, « encore grasse »).
  *
@@ -137,6 +124,8 @@ const TRAIT = {
   32: { colonnes: 10, lignes: 26, barreaux: 2 },
   40: { colonnes: 12, lignes: 32, barreaux: 2 },
   48: { colonnes: 14, lignes: 39, barreaux: 3 },
+  // 64 px aussi (27/09/2026) : l'hélice détaillée y paraissait pointillée à côté du 48.
+  64: { colonnes: 18, lignes: 52, barreaux: 4 },
 };
 /*
  * Demi-décalage de phase des deux brins (rad). Sur le logo, la pointe du haut est aux
@@ -185,8 +174,8 @@ function iconeTrait(taille) {
 window.fabriquer = async (logoUrl) => {
   const logo = await charger(logoUrl), r = {};
   for (const t of [1024]) r["icone-" + t] = await icone(t, logo);
-  for (const t of [16, 20, 24, 32, 40, 48]) r["pleine-" + t] = iconeTrait(t);
-  for (const t of [64, 128, 256, 512]) r["pleine-" + t] = iconePleine(t, logo);
+  for (const t of [16, 20, 24, 32, 40, 48, 64]) r["pleine-" + t] = iconeTrait(t);
+  for (const t of [128, 256, 512]) r["pleine-" + t] = iconePleine(t, logo);
   return r;
 };
 </script></body></html>`;

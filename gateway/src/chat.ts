@@ -22,6 +22,7 @@ import * as agenda from "./agenda.ts";
 import * as tachesProgrammees from "./tachesProgrammees.ts";
 import * as drive from "./drive.ts";
 import * as slack from "./slack.ts";
+import * as natifs from "./outilsNatifs.ts";
 import { journaliser } from "./audit.ts";
 import * as approbation from "./approbation.ts";
 import * as usage from "./usage.ts";
@@ -1006,6 +1007,8 @@ export async function handleChatRequest(
   // Vides tant que Google Drive ou Slack ne sont pas branchés : voir drive.ts, slack.ts.
   const outilsDrive = drive.toolsForModel();
   const outilsSlack = slack.toolsForModel();
+  // Sheets, Slides, YouTube et réseaux sociaux (outilsNatifs.ts) : pour une personne identifiée seulement.
+  const outilsNatifs = qui ? natifs.toolsForModel() : [];
 
   // La bibliothèque de l'équipe et les réunions transcrites : ce que la personne y voit, en lecture.
   const outilsBibliotheque = qui ? [...bibliotheque.toolsForModel(), ...reunions.toolsForModel()] : [];
@@ -1021,6 +1024,7 @@ export async function handleChatRequest(
       outilsAgenda.length > 0 ||
       outilsDrive.length > 0 ||
       outilsSlack.length > 0 ||
+      outilsNatifs.length > 0 ||
       outilsBibliotheque.length > 0 ||
       outilsTaches.length > 0);
   // Fichiers, écran, bureautique, courrier et agenda arrivent dans la même
@@ -1038,6 +1042,7 @@ export async function handleChatRequest(
         ...outilsAgenda,
         ...outilsDrive,
         ...outilsSlack,
+        ...outilsNatifs,
         ...outilsBibliotheque,
         ...outilsTaches,
       ]

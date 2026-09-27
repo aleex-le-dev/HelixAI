@@ -3867,3 +3867,79 @@ Le vrai `codex` et un compte ChatGPT ; le vrai OpenClaw (la liste fermée de son
 tourné qu'avec le faux) ; un `apply_patch` produit par un vrai modèle dans le vrai OpenCode (la
 forme de la demande est lue dans son code et rejouée par le faux) ; Windows et Linux ; l'écran de
 réglages vu par un membre (le bouton d'activation lui reste proposé et répond 403).
+
+## 40. Connecteurs réseaux sociaux et Google (28 septembre 2026)
+
+Google Sheets, Google Slides, YouTube, LinkedIn, Facebook (Pages), Instagram (compte
+professionnel) et TikTok, branchés par l'API de chaque service, sans intermédiaire
+(`gateway/src/oauthNatif.ts`, `outilsNatifs.ts`). Contrôles : `npm run securite`, section
+15 bis, dont `scripts/essai-natifs.mjs` (faux serveurs OAuth et fausses API, aucune sortie).
+**Rien n'a été essayé contre les vrais services.**
+
+### 40.1 Ce qui est tenu
+
+- **Aucune commande, aucune adresse venue de la requête.** Les sept services, leurs portées
+  et leurs hôtes sont écrits dans `DEFINITIONS` ; la requête n'apporte qu'un identifiant de
+  service de cette liste, des cases cochées (`ecriture`, `page`) et, pour LinkedIn, Meta et
+  TikTok, l'identifiant et le secret de l'application. `envoyer` refuse tout hôte hors de la
+  liste du service, avant toute connexion. Les sept préfixes d'outils sont réservés : aucun
+  connecteur MCP ne peut les prendre (`IDS_RESERVES`, connecteurs.ts), sinon il hériterait du
+  classement « lecture » de la barrière.
+- **Portées minimales.** Lecture seule sans rien cocher ; l'écriture et la page d'entreprise
+  se cochent. La portée accordée est relue : ce qui manque ou déborde (hors portées
+  implicites documentées : `public_profile` chez Meta) fait révoquer l'accès sans rien
+  garder. Meta ne la rend pas dans l'échange : elle est lue par `/me/permissions`.
+- **`state` et PKCE.** `state` de 32 octets, comparé à durée constante, dix minutes, une
+  seule fois ; un `state` inconnu n'annule pas la demande en cours. PKCE chez Google (S256)
+  et TikTok (S256 en hexadécimal, sa variante). LinkedIn ne l'offre que sur un point
+  d'autorisation qu'il doit ouvrir lui-même pour l'application, Meta ne le documente pas :
+  pour eux, le code ne vaut rien sans le secret, qui ne quitte pas l'instance.
+- **Retour vérifié.** Google et TikTok reviennent sur un port de la boucle locale ouvert le
+  temps de l'accord ; LinkedIn et Meta, sur la route publique `/helix/oauth/retour`, qui
+  aiguille par le préfixe du `state` (`natif.`), comme pour le courrier. Le compte est lu
+  avec le jeton (l'essai) avant tout enregistrement ; un échec révoque.
+- **Qui a le droit.** Lire l'état : une séance. Enregistrer une application, brancher,
+  débrancher : l'administrateur (`reserveeALAdministration`), comme la boîte mail commune.
+  Écrire ou publier : l'administrateur seulement, vérifié par l'outil au moment d'agir, et
+  une carte d'accord à chaque appel (`TOUJOURS_CONFIRMER`, approbation.ts), même au niveau
+  « Tout approuver » ; l'accord ne vaut que pour cet appel, la carte montre les arguments
+  entiers. Ces outils ne sont ni dans les familles des employés OpenClaw ni dans ceux de
+  l'agent de code.
+- **Jetons.** Chiffrés au repos, liés à leur place (`connecteursNatifs#<service>#jetons`),
+  dans une collection interne jamais synchronisée vers les postes ; jamais rendus par une
+  route (l'état n'a que le nom du compte, les cases accordées, les dates) ; jamais au
+  journal (`natif.*` nomme le service et l'outil, pas le texte) ; jamais au modèle (le jeton
+  d'une page Facebook reste dans la passerelle). Chaque appel à Meta porte `appsecret_proof`.
+  Un magasin illisible n'est jamais réécrit par-dessus.
+- **Sorties réseau.** Par le client HTTPS de la passerelle (clientHttps.ts : certificat
+  vérifié, aucune redirection, tailles et délais bornés). L'adresse d'envoi d'une vidéo,
+  rendue par TikTok, n'est suivie que si elle désigne `open-upload.tiktokapis.com` en https.
+  L'image d'Instagram est la seule adresse que le modèle donne : Instagram la télécharge
+  lui-même, l'instance jamais ; une adresse du réseau interne est refusée.
+- **Contenu.** Sheets écrit en `RAW` : `=IMPORTXML(…)` venu d'un mail reste du texte, Google
+  n'appelle rien. Le texte d'un post LinkedIn est échappé (format « little ») : pas de
+  mention `@[…](urn:…)` que la carte n'aurait pas montrée. Une vidéo TikTok vient du dossier
+  de travail seulement (chemin réel, hors zones protégées, 64 Mo au plus). Dix écritures ou
+  publications par heure et par service pour l'instance, un doublon dans la demi-heure
+  refusé.
+
+### 40.2 Limites des fournisseurs relevées (documentation du 28/09/2026)
+
+Sheets : 60 lectures et 60 écritures par minute et par personne, 300 par projet. Slides :
+600 lectures par minute et par personne. YouTube : 10 000 unités par jour, une liste coûte
+1 unité. LinkedIn : 150 publications par personne et par jour, 100 000 requêtes par jour
+pour l'application, jeton de 60 jours sans renouvellement (sauf partenaires). Meta : 4 800
+appels par jour et par personne engagée pour une page ; jeton de 60 jours (Facebook : à
+reconnecter, l'écran dit la date ; Instagram : renouvelable) ; Instagram : 100 publications
+par 24 heures. TikTok : 600 requêtes par minute (profil, vidéos), jeton de 24 heures
+renouvelé par un jeton d'un an.
+
+### 40.3 Pas essayé, ou incertain
+
+Aucun vrai compte, aucune vraie application de développeur : les faux serveurs imitent la
+documentation, pas les services. En particulier : l'adresse de retour http sur 127.0.0.1
+chez LinkedIn et Meta (leur documentation demande https) ; les statistiques de page LinkedIn
+avec `r_organization_admin` ; les métriques Instagram (`views`, `reach`…) sur un vrai compte ;
+l'envoi réel d'une vidéo à TikTok ; la révocation chez LinkedIn et Instagram n'est pas
+documentée pour ces parcours (l'écran dit de retirer l'accès dans les réglages du compte).
+Les phrases des cartes restent en français dans les autres langues (même dette que § 35.4).

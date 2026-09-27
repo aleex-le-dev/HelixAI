@@ -36,7 +36,8 @@ export interface DemandeHttps {
   /** Chemin et paramètres, déjà encodés par `URLSearchParams`. */
   chemin: string;
   entetes?: Record<string, string>;
-  corps?: string;
+  /** Texte (JSON, formulaire), ou octets bruts : l'envoi d'une vidéo à TikTok (outilsNatifs.ts, 28/09/2026). */
+  corps?: string | Buffer;
   /** Octets conservés au plus. */
   limiteOctets: number;
   /**
@@ -99,7 +100,7 @@ function traduire(e: Error, service: string): ErreurTransport {
 /** Un échange complet, sans jamais laisser de connexion ouverte derrière lui. */
 export function requeteHttps(demande: DemandeHttps, service: string): Promise<ReponseHttps> {
   return new Promise<ReponseHttps>((ok, ko) => {
-    const charge = demande.corps !== undefined ? Buffer.from(demande.corps, "utf8") : null;
+    const charge = demande.corps === undefined ? null : Buffer.isBuffer(demande.corps) ? demande.corps : Buffer.from(demande.corps, "utf8");
     let termine = false;
     let minuterieTotale: ReturnType<typeof setTimeout> | undefined;
     const finir = (fn: () => void) => {

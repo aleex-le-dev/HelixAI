@@ -527,6 +527,47 @@ Marketplace », donc limitée à une lecture de 15 messages par minute depuis 20
 alors qu'une application interne garde les limites normales. Branchement réel à
 éprouver chez un premier client (SECURITE.md § 10.3).
 
+**Fait le 28/09/2026 : Google Sheets, Google Slides, YouTube, LinkedIn, Facebook, Instagram
+et TikTok (version 2026.928.2).** Demandé par Medhi : « il manque plein de choses :
+Instagram, TikTok, LinkedIn, Google Sheets, Google Slides, Facebook, YouTube ; pas tout
+Composio, mais les principales ». Aucun de ces services n'a de serveur MCP qui s'inscrit
+seul : on parle à leur API depuis l'instance, sans intermédiaire, comme pour Drive et Slack
+(`gateway/src/oauthNatif.ts` pour la connexion, `outilsNatifs.ts` pour les outils, écran
+`src/components/settings/ConnecteurNatif.tsx`, dans Paramètres, Connecteurs).
+
+| Service | Lecture (sans rien cocher) | En plus, si on le coche | Examen du fournisseur |
+|---|---|---|---|
+| Google Sheets | `spreadsheets.readonly` : lire une feuille | `spreadsheets` : écrire une plage, ajouter des lignes | aucun pour une application interne à un Workspace |
+| Google Slides | `presentations.readonly` : lire le texte des diapositives | (rien) | idem |
+| YouTube | `youtube.readonly` : chaîne, vidéos, statistiques | (rien : pas de publication) | idem |
+| LinkedIn | `openid profile` : le profil | `w_member_social` : publier au nom du profil ; page d'entreprise (`r_organization_social`, `w_organization_social`, `r_organization_admin`) : lire, statistiques, publier | publier au nom du profil : aucun ; page d'entreprise : produit « Community Management API », examiné, sur une application neuve sans autre produit ; lire les posts d'un profil : **impossible** (`r_member_social` fermé par LinkedIn) |
+| Facebook (Pages) | `pages_show_list`, `pages_read_engagement` : pages, posts, réactions | `pages_manage_posts` : publier | aucun pour les personnes qui ont un rôle dans l'application (accès standard) ; revue de Meta et vérification de l'entreprise pour les autres |
+| Instagram (compte pro) | `instagram_business_basic`, `instagram_business_manage_insights` | `instagram_business_content_publish` : publier une photo | idem Facebook (testeur Instagram compris) |
+| TikTok | `user.info.basic`, `user.info.stats`, `video.list` | `video.publish` : publier une vidéo du dossier de travail | bac à sable sans examen (10 comptes) ; **tout ce qui est publié reste privé** tant que l'application n'a pas passé l'audit de TikTok |
+
+Chaque organisation crée son application chez le fournisseur (l'écran dit comment, en
+quelques étapes, et ce qui demande un examen) : Helix ne peut pas en fournir une commune,
+pour la même raison que Drive. Les services Google reprennent l'application Google déjà
+saisie pour Drive et Agenda. **Règles** : brancher, débrancher, enregistrer une application :
+l'administrateur seul (un compte branché vaut pour toute l'instance et parle au nom de
+l'organisation) ; lire : tout Chat ; **écrire une feuille ou publier : une carte d'accord à
+chaque fois, même au niveau « Tout approuver »**, texte entier montré, et seulement pour
+l'administrateur, au moment d'agir ; ni les employés OpenClaw ni l'agent de code n'ont ces
+outils ; dix écritures ou publications par heure et par service au plus, un doublon dans la
+demi-heure refusé ; Sheets écrit en `RAW` (une formule reste du texte). Détail et limites de
+débit relevées dans la documentation officielle : SECURITE.md § 40 et les commentaires
+d'`oauthNatif.ts`.
+
+**Pas encore essayé avec un vrai compte, ni avec une vraie application de développeur**,
+pour aucun des sept : tout est vérifié contre de faux serveurs OAuth et de fausses API
+(`scripts/essai-natifs.mjs`, lancé par `npm run securite`, section 15 bis), écrits d'après la
+documentation lue le 28/09/2026. L'écran le dit. À essayer sur le poste, service par
+service : la connexion, une lecture, une publication. Points incertains à vérifier à ce
+moment-là : LinkedIn et Meta demandent une adresse de retour en https, et l'instance d'un
+poste répond en http sur 127.0.0.1 (peut-être refusée) ; `r_organization_admin` suffit-il
+aux statistiques de page LinkedIn ; la version d'API LinkedIn (`202609`) est à relever
+chaque mois ; Meta liste aussi `pages_manage_engagement` pour publier, pas demandé.
+
 ### 3.6 Découpage des tâches lourdes
 
 Ajouté en septembre 2026, après mesure. Un modèle de 8 milliards de paramètres perd le

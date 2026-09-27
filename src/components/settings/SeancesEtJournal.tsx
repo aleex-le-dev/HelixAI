@@ -91,6 +91,13 @@ const LIBELLES: Record<string, string> = {
   "slack.branche": t("Slack connecté"),
   "slack.debranche": t("Slack déconnecté"),
   "slack.acces_perdu": t("Accès à Slack perdu"),
+  // Sheets, Slides, YouTube, réseaux sociaux (oauthNatif.ts) : le service est dans le détail de l'entrée.
+  "natif.application_enregistree": t("Application d'un service enregistrée"),
+  "natif.application_effacee": t("Application d'un service retirée"),
+  "natif.branche": t("Service connecté"),
+  "natif.debranche": t("Service déconnecté"),
+  "natif.acces_perdu": t("Accès à un service perdu"),
+  "natif.publie": t("Écriture ou publication par un agent"),
   "employe.deploye": t("Agent mis en service"),
   "employe.modifie": t("Agent modifié"),
   "employe.supprime": t("Agent retiré"),

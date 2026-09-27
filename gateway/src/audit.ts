@@ -112,6 +112,18 @@ export type AuditAction =
   | "slack.debranche"
   | "slack.acces_perdu"
   /*
+   * Connexions natives de 2026.928.2 (oauthNatif.ts, outilsNatifs.ts) : qui a
+   * enregistré l'application d'un fournisseur, qui a branché ou débranché un
+   * service, quand le service a refusé l'accès, et qu'une écriture ou une
+   * publication a eu lieu (le service et l'outil, jamais le texte ni les jetons).
+   */
+  | "natif.application_enregistree"
+  | "natif.application_effacee"
+  | "natif.branche"
+  | "natif.debranche"
+  | "natif.acces_perdu"
+  | "natif.publie"
+  /*
    * Dictée. L'installation pose un logiciel et télécharge un modèle : il faut
    * pouvoir dire qui l'a demandée. Une transcription est consignée par sa
    * taille et sa durée, **jamais par son texte** : le journal ne garde pas de

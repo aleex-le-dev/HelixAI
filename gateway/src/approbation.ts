@@ -197,7 +197,41 @@ const ENVOI = new Set(["courrier__envoyer"]);
  * confirmation » ; elle a désormais son propre chemin, que ce choix ne
  * touche pas.
  */
-const TOUJOURS_CONFIRMER = new Set(["agenda__supprimer", "taches__programmer"]);
+/*
+ * Google Sheets, Slides, YouTube, LinkedIn, Facebook, Instagram, TikTok
+ * (outilsNatifs.ts, 28/09/2026). Les lectures, par leur nom exact ; ce qui
+ * écrit une feuille ou publie un post se confirme à chaque fois, à tout
+ * niveau : un post ne se reprend pas, et il parle au nom de l'organisation.
+ * Les listes vivent ici et non dans outilsNatifs.ts : la barrière se charge
+ * seule (batterie de sécurité), sans le dossier de travail que ce module lit.
+ */
+export const LECTURES_NATIVES = new Set([
+  "sheets__lire",
+  "slides__lire",
+  "youtube__chaine",
+  "youtube__videos",
+  "linkedin__profil",
+  "linkedin__pages",
+  "linkedin__publications",
+  "linkedin__statistiques",
+  "facebook__pages",
+  "facebook__publications",
+  "instagram__compte",
+  "instagram__publications",
+  "instagram__statistiques",
+  "tiktok__profil",
+  "tiktok__videos",
+]);
+export const ECRITURES_NATIVES = new Set([
+  "sheets__ecrire",
+  "sheets__ajouter_lignes",
+  "linkedin__publier",
+  "facebook__publier",
+  "instagram__publier",
+  "tiktok__publier_video",
+]);
+
+const TOUJOURS_CONFIRMER = new Set(["agenda__supprimer", "taches__programmer", ...ECRITURES_NATIVES]);
 
 export const demandeToujours = (outil: string) => TOUJOURS_CONFIRMER.has(outil) || (ENVOI.has(outil) && !envoiSansAccord());
 
@@ -229,6 +263,7 @@ export function modifie(outil: string): boolean {
    * sous l'identifiant « slack » apporterait des `slack__…` qui, eux, peuvent
    * écrire, et ne doivent pas hériter du laissez-passer.
    */
+  if (LECTURES_NATIVES.has(outil)) return false;
   if (DRIVE_LECTURE.has(outil) || SLACK_LECTURE.has(outil) || BIBLIOTHEQUE_LECTURE.has(outil) || CONNAISSANCES_LECTURE.has(outil) || CONTROLE_LECTURE.has(outil) || WEB_LECTURE.has(outil)) return false;
   if (outil.startsWith("bureau__")) return !BUREAU_LECTURE.has(outil.slice("bureau__".length));
 
@@ -395,6 +430,9 @@ export function resumerOutil(outil: string, args: Record<string, unknown>): stri
     return `lire les messages du salon Slack${salon || " demandé"}`;
   }
 
+  const natif = resumeNatif(outil, args);
+  if (natif) return natif;
+
   /*
    * Outil d'un connecteur ajouté. On ne sait pas ce qu'il fait, mais on sait
    * d'où il vient, et c'est ce qui compte pour décider : « utiliser l'outil
@@ -443,6 +481,60 @@ export function resumerOutil(outil: string, args: Record<string, unknown>): stri
     default:
       return `utiliser l'outil « ${nom} » sur ${ou}`;
   }
+}
+
+/**
+ * Les cartes des connexions natives (outilsNatifs.ts). Le texte entier part
+ * aussi dans le détail de la carte (`arguments`) : la phrase n'en montre que
+ * le début, la carte le montre tel qu'il sera publié.
+ */
+function resumeNatif(outil: string, args: Record<string, unknown>): string | null {
+  const extrait = (v: unknown, n = 120) => {
+    const s = typeof v === "string" ? v.trim().replace(/\s+/g, " ") : "";
+    return s ? ` « ${s.slice(0, n)}${s.length > n ? " …" : ""} »` : "";
+  };
+  const page = typeof args.page === "string" && args.page.trim() ? ` « ${args.page.trim().slice(0, 80)} »` : "";
+  switch (outil) {
+    case "sheets__lire":
+      return "lire une feuille Google Sheets";
+    case "sheets__ecrire": {
+      const n = Array.isArray(args.valeurs) ? args.valeurs.length : 0;
+      return `écrire ${n} ligne(s) dans la feuille Google Sheets, plage ${typeof args.plage === "string" ? args.plage.slice(0, 80) : "?"}, en remplaçant ce qui s'y trouve`;
+    }
+    case "sheets__ajouter_lignes": {
+      const n = Array.isArray(args.valeurs) ? args.valeurs.length : 0;
+      return `ajouter ${n} ligne(s) à la feuille Google Sheets${typeof args.plage === "string" ? `, onglet ${args.plage.slice(0, 80)}` : ""}`;
+    }
+    case "slides__lire":
+      return "lire une présentation Google Slides";
+    case "youtube__chaine":
+    case "youtube__videos":
+      return "consulter une chaîne YouTube et ses statistiques";
+    case "linkedin__profil":
+    case "linkedin__pages":
+    case "linkedin__publications":
+    case "linkedin__statistiques":
+      return "consulter LinkedIn";
+    case "linkedin__publier":
+      return `publier sur LinkedIn${page ? `, au nom de la page${page}` : ", au nom du profil connecté"}, le post${extrait(args.texte)} (une publication ne se reprend pas)`;
+    case "facebook__pages":
+    case "facebook__publications":
+      return "consulter les pages Facebook";
+    case "facebook__publier":
+      return `publier sur la page Facebook${page} le post${extrait(args.message)}${typeof args.lien === "string" && args.lien ? `, avec le lien ${args.lien.slice(0, 200)}` : ""} (une publication ne se reprend pas)`;
+    case "instagram__compte":
+    case "instagram__publications":
+    case "instagram__statistiques":
+      return "consulter le compte Instagram";
+    case "instagram__publier":
+      return `publier sur Instagram la photo ${typeof args.image === "string" ? args.image.slice(0, 200) : "?"}${args.legende ? `, légende${extrait(args.legende)}` : ""} (une publication ne se reprend pas)`;
+    case "tiktok__profil":
+    case "tiktok__videos":
+      return "consulter le compte TikTok";
+    case "tiktok__publier_video":
+      return `publier sur TikTok la vidéo ${typeof args.fichier === "string" ? abreger(args.fichier).slice(0, 200) : "?"}${extrait(args.titre)}, visibilité ${typeof args.confidentialite === "string" ? args.confidentialite : "SELF_ONLY (moi seul)"}`;
+  }
+  return null;
 }
 
 /* ------------------------------------------------------------------ */

@@ -1569,7 +1569,7 @@ export function EcranSettings() {
 
           <div className="mt-4 flex items-center gap-3">
             <Button icon={Monitor} disabled={occupe} onClick={() => void tester()}>
-              {occupe ? "Essai en cours..." : t("Tester la capture")}
+              {occupe ? t("Essai en cours...") : t("Tester la capture")}
             </Button>
             {essai && (
               <span

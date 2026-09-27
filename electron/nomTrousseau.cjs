@@ -118,8 +118,13 @@ function preparerNom(app, { nomHistorique, nom, dossier }) {
     app.setName(nom);
     return "reprendre";
   }
-  // Un transfert dont la clé est perdue (arrêt entre les deux lancements) : on recommence depuis les originaux, intacts.
-  fs.rmSync(e.transfert, { force: true });
+  /*
+   * Un fichier de transfert sans sa clé (arrêt entre les deux lancements, ou
+   * second lancement pendant le relancement) n'est pas effacé ici : ce code
+   * passe avant le verrou d'instance unique, et l'effacer aurait privé le
+   * vrai relancement de son transfert (revue du 27/09/2026). « lire » le
+   * remplace de toute façon.
+   */
   if (fichiersChiffres(dossier).length === 0) {
     // Rien à transférer (installation neuve) : le nouveau nom tout de suite.
     try {
@@ -206,6 +211,7 @@ function transfererCle(app, safeStorage, etape, { dossier }) {
       app.exit(0);
       return true;
     }
+    let echecs = 0;
     for (const [chemin, texte] of Object.entries(contenus)) {
       if (typeof texte !== "string" || (path.dirname(chemin) !== e.poste && path.dirname(chemin) !== dossier)) continue;
       try {
@@ -217,10 +223,19 @@ function transfererCle(app, safeStorage, etape, { dossier }) {
         }
         ecrireAtomique(chemin, nouveau);
       } catch (err) {
+        echecs++;
         console.error("[helix] rechiffrement impossible :", path.basename(chemin), err instanceof Error ? err.message : err);
       }
     }
     fs.rmSync(e.transfert, { force: true });
+    /*
+     * Un fichier resté sous l'ancienne clé : pas de témoin, le prochain
+     * lancement repart sous l'ancien nom et ne transfère que lui (ceux déjà
+     * rechiffrés ne se lisent plus avec l'ancienne clé, et sont laissés tels
+     * quels). Avant, le témoin était écrit quand même, et ce fichier restait
+     * illisible (revue du 27/09/2026).
+     */
+    if (echecs > 0) return false;
     fs.rmSync(e.essais, { force: true });
     try {
       ecrireAtomique(e.temoin, app.getName());

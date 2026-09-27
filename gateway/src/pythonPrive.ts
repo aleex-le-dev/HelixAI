@@ -61,7 +61,12 @@ function cible(): string | null {
  * premier `tar` venu du PATH.
  */
 export function tarDuSysteme(): string {
-  if (process.platform === "win32") return join(process.env.SystemRoot ?? "C:\\Windows", "System32", "tar.exe");
+  if (process.platform === "win32") {
+    const tar = join(process.env.SystemRoot ?? "C:\\Windows", "System32", "tar.exe");
+    // Livré avec Windows 10 depuis la version 1803 : avant, une erreur claire plutôt qu'un ENOENT (revue du 27/09/2026).
+    if (!existsSync(tar)) throw new Error(t("Windows 10 version 1803 ou plus récent est nécessaire : l'outil tar de Windows est absent."));
+    return tar;
+  }
   return ["/usr/bin/tar", "/bin/tar"].find((c) => existsSync(c)) ?? "tar";
 }
 

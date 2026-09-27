@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { readFile, unlink, mkdtemp } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { configEcran, modeModifiable, type SourceEcran } from "./reglagesEcran.ts";
 import { resolve } from "./router.ts";
@@ -8,7 +8,7 @@ import { journaliser } from "./audit.ts";
 import * as approbation from "./approbation.ts";
 import { nomProduit } from "./marque.ts";
 import { langue, t, tf } from "./langue.ts";
-import { statSync, readFileSync as lireFichier } from "node:fs";
+import { existsSync, statSync, readFileSync as lireFichier, writeFileSync } from "node:fs";
 import { adresseMachine, applicationMachine, applicationsDisponibles, dossierEchange, echangeDansLaMachine, systemeMachine } from "./machine.ts";
 import { relireDocument } from "./relecture.ts";
 
@@ -143,13 +143,69 @@ async function logicalScreen(): Promise<{ largeur: number; hauteur: number } | n
   }
 }
 
+/**
+ * L'autorisation d'enregistrer l'écran, pour l'état affiché : demandée à
+ * l'application (electron/main.cjs), qui la lit sans rien ouvrir. Une vraie
+ * capture la mesurait, et macOS affichait sa demande à chaque lancement, même
+ * sans se servir du contrôle de l'écran (27/09/2026). Pas encore demandée :
+ * utilisable, macOS la demandera à la première action. Sans l'application
+ * (passerelle lancée seule), la capture d'essai, comme avant.
+ */
+let numeroDemande = 0;
+async function autorisationCapture(): Promise<{ ok: true } | { ok: false; error: string }> {
+  const statut = await new Promise<string | null>((resolve) => {
+    if (typeof process.send !== "function" || !process.connected) return resolve(null);
+    const id = ++numeroDemande;
+    const fin = setTimeout(() => {
+      process.off("message", reponse);
+      resolve(null);
+    }, 2000);
+    const reponse = (m: unknown) => {
+      const r = m as { type?: unknown; id?: unknown; statut?: unknown } | null;
+      if (!r || r.type !== "permission-ecran" || r.id !== id) return;
+      clearTimeout(fin);
+      process.off("message", reponse);
+      resolve(typeof r.statut === "string" ? r.statut : null);
+    };
+    process.on("message", reponse);
+    process.send({ type: "permission-ecran", id });
+  });
+  if (statut === "granted" || statut === "not-determined") return { ok: true };
+  /*
+   * Avant toute demande, macOS répond « refusé » (Chromium ne sait pas lire
+   * « pas encore demandé » pour l'écran, revue du 27/09/2026) : tant que Helix
+   * n'a jamais tenté de capture, c'est « pas encore demandé », et la première
+   * action fera ouvrir la demande par macOS.
+   */
+  if (statut === "denied" && !existsSync(temoinDemandeEcran())) return { ok: true };
+  if (statut === "denied" || statut === "restricted") {
+    return {
+      ok: false,
+      error: tf(
+        "Capture d'écran refusée par le système. Autorisez {0} dans Réglages Système > Confidentialité et sécurité > Enregistrement de l'écran, puis relancez l'application.",
+        nomProduit(),
+      ),
+    };
+  }
+  const essai = await captureHost();
+  return essai.ok ? { ok: true } : essai;
+}
+
 /** Dimensions d'un PNG, lues dans son en-tête IHDR. */
 function pngSize(buffer: Buffer): { largeur: number; hauteur: number } | null {
   if (buffer.length < 24 || buffer.readUInt32BE(12) !== 0x49484452) return null;
   return { largeur: buffer.readUInt32BE(16), hauteur: buffer.readUInt32BE(20) };
 }
 
+/** Témoin : Helix a tenté au moins une capture sur cette machine (donc macOS a posé sa question). */
+const temoinDemandeEcran = () => join(process.env.HELIX_DATA_DIR ?? join(homedir(), ".helix", "data"), ".ecran-demande");
+
 async function captureHost(): Promise<{ ok: true; capture: Capture } | { ok: false; error: string }> {
+  try {
+    writeFileSync(temoinDemandeEcran(), "", { flag: "a", mode: 0o600 });
+  } catch {
+    /* dossier des données absent : l'état dira « refusé » plus tôt, rien de plus */
+  }
   const dir = await mkdtemp(join(tmpdir(), "helix-capture-"));
   const file = join(dir, "ecran.png");
   try {
@@ -533,7 +589,7 @@ async function measure(): Promise<Capability> {
 
   // Mode hôte : les deux autorisations macOS sont vérifiées séparément, pour
   // dire précisément laquelle manque.
-  const shot = await captureHost();
+  const shot = await autorisationCapture();
   if (!shot.ok) problemes.unshift(shot.error);
 
   const controle = await mouseScript("pos();");

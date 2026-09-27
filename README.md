@@ -46,8 +46,9 @@ SHA-256 checksums: [`SHA256SUMS.txt`](https://github.com/medhiclb/HelixAI/releas
 | **Ubuntu, Debian** (x64) | [helix-plateforme_0.27.0_amd64.deb](https://github.com/medhiclb/HelixAI/releases/download/v0.27.0/helix-plateforme_0.27.0_amd64.deb) | `sudo apt install ./helix-plateforme_0.27.0_amd64.deb` |
 | **Other Linux** (x64) | [Helix-0.27.0.AppImage](https://github.com/medhiclb/HelixAI/releases/download/v0.27.0/Helix-0.27.0.AppImage) | `chmod +x Helix-0.27.0.AppImage`, then run it. On Ubuntu 24.04, prefer the `.deb` |
 
-On first launch, Helix sets up everything it needs: the [LM Studio](https://lmstudio.ai)
-engine and the model best suited to the machine. Python and Node are installed
+On first launch, Helix sets up everything it needs: [LM Studio](https://lmstudio.ai)'s
+headless engine (pinned version, verified checksum), or the LM Studio app if it is already in
+use on the machine, and the model best suited to the machine. Python and Node are installed
 automatically when missing (pinned versions, verified checksums). On Windows and Linux,
 updates are installed by running the new package over the previous one; your data is kept.
 
@@ -58,6 +59,11 @@ prompt, after checking the disk image against `SHA256SUMS.txt`. Requires the Git
 ```bash
 gh api repos/medhiclb/HelixAI/contents/scripts/installer-macos.sh -H "Accept: application/vnd.github.raw" | sh
 ```
+
+The apps are not signed by Apple or Microsoft yet. On macOS, until the app is notarised,
+macOS asks once after each new version for Helix to access its keychain item ("Helix Safe
+Storage"): choose "Always Allow". On Windows 11, Smart App Control, when active, blocks
+unsigned apps and does not offer to run them anyway.
 
 To build from source: `npm install`, `npm run build`, then `npm run package` (macOS),
 `npx electron-builder --win nsis --x64` (Windows) or
@@ -126,12 +132,13 @@ To build from source: `npm install`, `npm run build`, then `npm run package` (ma
 
 - A development machine on macOS (Apple Silicon), Windows 10/11 or Linux (x64); the Windows
   and Linux packages can also be built from a Mac
-- Node.js 20 or later and npm (only to build: the installed app needs neither Node nor Python)
+- Node.js 22.18 or later and npm (only to build and develop, the gateway runs its TypeScript
+  directly: the installed app needs neither Node nor Python)
 - Optional: [OpenCode](https://opencode.ai) for Helix Code
 
-Nothing else needs to be installed beforehand: on first launch, Helix installs the model
-engine ([LM Studio](https://lmstudio.ai), or uses it if it is already there) and the model
-suited to the machine. 16 GB of memory is recommended; on smaller machines Helix picks a
+Nothing else needs to be installed beforehand: on first launch, Helix installs
+[LM Studio](https://lmstudio.ai)'s headless engine (or uses the LM Studio app if it is already
+in use) and the model suited to the machine. 16 GB of memory is recommended; on smaller machines Helix picks a
 lighter model.
 
 ### Run
@@ -194,9 +201,9 @@ Contributions are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) and sign the
 distributes it, or offers it as an online service, must publish the code of their
 version under the same licence. Details in [COPYRIGHT.md](COPYRIGHT.md).
 
-LM Studio, the default model engine, is closed-source software whose terms reserve it
-for an organisation's internal use: read [PROJET.md § 3.9](PROJET.md) before hosting an
-instance for others.
+LM Studio, the default model engine, is closed-source software whose terms allow personal
+use and an organisation's internal use, not a service provided to others: read
+[PROJET.md § 3.9](PROJET.md) before hosting an instance for others.
 
 ## Acknowledgements
 

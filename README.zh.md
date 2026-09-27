@@ -42,13 +42,15 @@ HelixAI 将 Chat、智能体、编程、知识库和模型微调整合到一个*
 | **Ubuntu、Debian**（x64） | [helix-plateforme_0.27.0_amd64.deb](https://github.com/medhiclb/HelixAI/releases/download/v0.27.0/helix-plateforme_0.27.0_amd64.deb) | `sudo apt install ./helix-plateforme_0.27.0_amd64.deb` |
 | **其他 Linux**（x64） | [Helix-0.27.0.AppImage](https://github.com/medhiclb/HelixAI/releases/download/v0.27.0/Helix-0.27.0.AppImage) | `chmod +x Helix-0.27.0.AppImage`，然后运行。在 Ubuntu 24.04 上建议使用 `.deb` |
 
-首次启动时，Helix 会自动完成所需的安装：[LM Studio](https://lmstudio.ai) 引擎以及最适合本机的模型。若缺少 Python 和 Node，也会自动安装（版本固定，校验值已验证）。在 Windows 和 Linux 上，运行新安装包覆盖旧版本即可更新，数据会保留。
+首次启动时，Helix 会自动完成所需的安装：[LM Studio](https://lmstudio.ai) 的无界面引擎（版本固定，校验值已验证；若本机已在使用 LM Studio 应用，则直接使用该应用）以及最适合本机的模型。若缺少 Python 和 Node，也会自动安装（版本固定，校验值已验证）。在 Windows 和 Linux 上，运行新安装包覆盖旧版本即可更新，数据会保留。
 
 **macOS 一条命令安装**（推荐）：先根据 `SHA256SUMS.txt` 校验磁盘映像，再安装应用，不会出现 Gatekeeper 提示。需要已用有权访问本仓库的账户登录的 GitHub 命令行工具（`gh`）：
 
 ```bash
 gh api repos/medhiclb/HelixAI/contents/scripts/installer-macos.sh -H "Accept: application/vnd.github.raw" | sh
 ```
+
+这些应用尚未获得 Apple 或 Microsoft 的签名。在 macOS 上，应用获得公证之前，每次安装新版本后，macOS 会询问一次是否允许 Helix 访问其钥匙串项目（“Helix Safe Storage”）：请选择“始终允许”。在 Windows 11 上，智能应用控制（Smart App Control）启用时会阻止未签名的应用，且不提供“仍要运行”选项。
 
 从源码构建：`npm install`、`npm run build`，然后运行 `npm run package`（macOS）、`npx electron-builder --win nsis --x64`（Windows）或 `npx electron-builder --linux AppImage deb --x64`（Linux）。
 
@@ -92,10 +94,10 @@ gh api repos/medhiclb/HelixAI/contents/scripts/installer-macos.sh -H "Accept: ap
 ### 前提条件
 
 - 一台开发机器：macOS（Apple 芯片）、Windows 10/11 或 Linux（x64）；Windows 和 Linux 安装包也可以在 Mac 上构建
-- Node.js 20 或更高版本，以及 npm（仅用于构建：安装后的应用既不需要 Node 也不需要 Python）
+- Node.js 22.18 或更高版本，以及 npm（仅用于构建和开发，网关直接运行 TypeScript：安装后的应用既不需要 Node 也不需要 Python）
 - 可选：用于 Helix Code 的 [OpenCode](https://opencode.ai)
 
-无需预先安装其他任何组件：首次启动时，Helix 会安装模型引擎（[LM Studio](https://lmstudio.ai)，若已安装则直接使用）以及适合本机的模型。建议 16 GB 内存；在配置较低的机器上，Helix 会选择更轻量的模型。
+无需预先安装其他任何组件：首次启动时，Helix 会安装 [LM Studio](https://lmstudio.ai) 的无界面引擎（若已在使用 LM Studio 应用则直接使用）以及适合本机的模型。建议 16 GB 内存；在配置较低的机器上，Helix 会选择更轻量的模型。
 
 ### 运行
 
@@ -149,7 +151,7 @@ helix code               # 在当前文件夹上使用代码智能体
 
 [GNU AGPL-3.0](LICENSE)。您可以使用、修改、再分发和销售 HelixAI。分发它或将其作为在线服务提供的人，必须以相同许可证公开其版本的代码。详见 [COPYRIGHT.md](COPYRIGHT.md)。
 
-默认模型引擎 LM Studio 是闭源软件，其条款仅允许组织内部使用：为他人托管实例之前，请阅读 [PROJET.md § 3.9](PROJET.md)。
+默认模型引擎 LM Studio 是闭源软件，其条款允许个人使用和组织内部使用，但不允许向他人提供服务：为他人托管实例之前，请阅读 [PROJET.md § 3.9](PROJET.md)。
 
 ## 致谢
 

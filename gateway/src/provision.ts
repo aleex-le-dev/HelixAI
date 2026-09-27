@@ -1,9 +1,11 @@
 import { execFileSync, spawn } from "node:child_process";
 import os from "node:os";
+import { readdirSync, statSync, type Dirent } from "node:fs";
+import { join } from "node:path";
 import { faireLaPlace, findLms, optionsDeChargement } from "./backends.ts";
 import { nomProduit } from "./marque.ts";
 import { t, tf } from "./langue.ts";
-import { moteurAPoser, preparerDossiersLlmster } from "./engine.ts";
+import { dossierLmStudio, moteurAPoser, preparerDossiersLlmster } from "./engine.ts";
 
 /**
  * Provisionnement automatique du modèle local (ARCHITECTURE.md, ADR-009).
@@ -361,11 +363,47 @@ function run(
   command: string,
   args: string[],
   onLine: (line: string) => void,
-): Promise<{ ok: boolean; output: string }> {
+  silenceMaxMs?: number,
+  activite?: () => number,
+): Promise<{ ok: boolean; output: string; muet?: boolean }> {
   return new Promise((resolve) => {
     const child = spawn(command, args, { stdio: ["ignore", "pipe", "pipe"] });
     let output = "";
+    /*
+     * `silenceMaxMs` : plus rien de la commande pendant ce temps, elle est
+     * arrêtée. Un `lms get` bloqué par une coupure du réseau gardait sinon
+     * l'écran sur le même pourcentage, et toute nouvelle tentative attendait
+     * derrière lui (revue du 27/09/2026).
+     */
+    let muet = false;
+    let garde: NodeJS.Timeout | undefined;
+    const armer = () => {
+      if (!silenceMaxMs) return;
+      clearTimeout(garde);
+      garde = setTimeout(() => {
+        muet = true;
+        child.kill();
+      }, silenceMaxMs);
+    };
+    armer();
+    /*
+     * `activite` : une mesure qui bouge tant que le travail avance (la taille
+     * des fichiers du modèle). Un `lms` qui n'écrit rien sans terminal (celui
+     * de llmster sous Linux, pas vérifié) n'est donc pas coupé tant que le
+     * téléchargement grossit (revue Linux du 27/09/2026).
+     */
+    let derniere = activite?.();
+    const sonde = activite
+      ? setInterval(() => {
+          const v = activite();
+          if (v !== derniere) {
+            derniere = v;
+            armer();
+          }
+        }, 30_000)
+      : undefined;
     const handle = (chunk: Buffer) => {
+      armer();
       const text = chunk.toString();
       output += text;
       for (const line of text.split(/\r?\n|\r/)) {
@@ -375,8 +413,16 @@ function run(
     };
     child.stdout.on("data", handle);
     child.stderr.on("data", handle);
-    child.on("close", (code) => resolve({ ok: code === 0, output }));
-    child.on("error", (err) => resolve({ ok: false, output: String(err) }));
+    child.on("close", (code) => {
+      clearTimeout(garde);
+      clearInterval(sonde);
+      resolve({ ok: code === 0 && !muet, output, muet });
+    });
+    child.on("error", (err) => {
+      clearTimeout(garde);
+      clearInterval(sonde);
+      resolve({ ok: false, output: String(err) });
+    });
   });
 }
 
@@ -426,8 +472,42 @@ async function unloadOthers(lms: string, garder: string): Promise<number> {
  */
 let enCours: Promise<ProvisionState> | null = null;
 
+/** Taille totale, en octets, des modèles et téléchargements en cours du moteur : elle grossit tant qu'un téléchargement avance. */
+function tailleDesModeles(): number {
+  let total = 0;
+  const parcourir = (dossier: string, profondeur: number) => {
+    let entrees: Dirent[] = [];
+    try {
+      entrees = readdirSync(dossier, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const e of entrees) {
+      const chemin = join(dossier, e.name);
+      if (e.isDirectory() && profondeur < 4) parcourir(chemin, profondeur + 1);
+      else if (e.isFile()) {
+        try {
+          total += statSync(chemin).size;
+        } catch {
+          /* disparu entre-temps */
+        }
+      }
+    }
+  };
+  const racine = dossierLmStudio();
+  parcourir(join(racine, "models"), 0);
+  parcourir(join(racine, ".internal", "temp-downloads"), 0);
+  return total;
+}
+
 /** Un `lms get` tourne-t-il déjà pour ce modèle, lancé par une session passée ? */
 async function dejaEnTelechargement(key: string): Promise<boolean> {
+  /*
+   * Pas de `pgrep` sous Windows : un `lms get` y est l'enfant de la passerelle,
+   * et meurt sans doute avec elle (supposé, pas vu sur un vrai PC). On n'y
+   * reprend donc rien (revue Windows du 27/09/2026).
+   */
+  if (process.platform === "win32") return false;
   const { ok } = await run("/usr/bin/pgrep", ["-f", `lms get ${key}`], () => {});
   return ok;
 }
@@ -453,8 +533,7 @@ async function provision(
     setState({
       phase: "error",
       message: t("LM Studio est introuvable sur cette machine."),
-      error:
-        "Installez LM Studio (lmstudio.ai) puis relancez : " + nomProduit() + " s'occupe du reste.",
+      error: tf("Installez le moteur depuis l'écran de mise en route, ou LM Studio depuis lmstudio.ai (ouvrez-le une fois), puis relancez : {0} s'occupe du reste.", nomProduit()),
     });
     return state;
   }
@@ -484,7 +563,22 @@ async function provision(
   // On tente le modèle recommandé, puis les plus légers si la machine refuse.
   const candidates = replis(hw, catalogue, start);
 
+  /*
+   * Après un refus faute de mémoire, seuls les modèles plus légers que celui
+   * refusé : le classement suit la note, pas la taille, et sur un Mac de
+   * 24 Go le « plus léger » après Qwen3.5 4B (3 Go) était gpt-oss 20B (12 Go),
+   * téléchargé pour rien (revue du 27/09/2026).
+   */
+  let plafondGo = Infinity;
+  /*
+   * Le dernier échec autre que la mémoire (téléchargement, chargement refusé) :
+   * le modèle suivant est essayé, comme le promet `replis`, et c'est cet échec
+   * que l'écran montre si aucun ne passe. Avant, seul un manque de mémoire
+   * faisait passer au suivant (revue du 27/09/2026).
+   */
+  let echec: { message: string; error: string } | null = null;
   for (const choice of candidates) {
+    if (choice.downloadGb >= plafondGo) continue;
     setState({ model: choice.key, error: undefined });
 
     if (!installed.output.includes(choice.key)) {
@@ -500,11 +594,14 @@ async function provision(
           percent: undefined,
         });
         /*
-         * On attend sa fin, puis on enchaîne : rendre la main ici laissait
-         * l'écran sur « reprise du suivi » pour toujours, et le modèle, une
-         * fois arrivé, jamais chargé (27/09/2026).
+         * Celui d'un lancement précédent, que personne ne suit plus : il est
+         * arrêté, et un nouveau `lms get` repart avec sa progression à l'écran
+         * (le suivre sans rien voir laissait l'écran sur « reprise du suivi »
+         * pour toujours, 27/09/2026). Que LM Studio reprenne là où l'ancien
+         * s'était arrêté n'a pas été vérifié ; au pire, il recommence.
          */
-        while (await dejaEnTelechargement(choice.key)) await new Promise((r) => setTimeout(r, 5000));
+        await run("/usr/bin/pkill", ["-f", `lms get ${choice.key}`], () => {});
+        await new Promise((r) => setTimeout(r, 2000));
         installed = await run(lms, ["ls"], () => {});
       }
     }
@@ -516,6 +613,7 @@ async function provision(
         percent: 0,
       });
 
+      // Dix minutes sans un mot de `lms` : téléchargement arrêté, dit comme tel.
       const got = await run(lms, ["get", choice.key, "--yes"], (line) => {
         const percent = parsePercent(line);
         if (percent !== undefined) {
@@ -524,15 +622,18 @@ async function provision(
             message: tf("Téléchargement de {0}... {1}%", choice.label, Math.round(percent)),
           });
         }
-      });
+      }, 10 * 60_000, tailleDesModeles);
 
       if (!got.ok) {
-        setState({
-          phase: "error",
-          message: tf("Le téléchargement de {0} a échoué.", choice.label),
-          error: got.output.slice(-400),
-        });
-        return state;
+        const message = tf("Le téléchargement de {0} a échoué.", choice.label);
+        // Réseau muet : un autre modèle n'irait pas mieux, on le dit tout de suite.
+        if (got.muet) {
+          setState({ phase: "error", message, error: t("Plus aucune progression depuis dix minutes : vérifiez la connexion, puis réessayez.") });
+          return state;
+        }
+        console.error(`[helix] téléchargement de ${choice.key} refusé : ${got.output.slice(-400)}`);
+        echec = { message, error: got.output.slice(-400) };
+        continue;
       }
     }
 
@@ -595,7 +696,8 @@ async function provision(
     }
 
     // Mémoire toujours insuffisante : on redescend d'un cran plutôt que d'échouer.
-    if (isResourceError(loaded.output) && choice !== candidates[candidates.length - 1]) {
+    if (isResourceError(loaded.output) && candidates.some((c) => c.downloadGb < choice.downloadGb)) {
+      plafondGo = choice.downloadGb;
       setState({
         phase: "checking",
         message: tf("{0} est trop lourd pour cette machine, essai d'un modèle plus léger...", choice.label),
@@ -603,17 +705,14 @@ async function provision(
       continue;
     }
 
-    setState({
-      phase: "error",
-      message: t("Le chargement du modèle a échoué."),
-      error: loaded.output.slice(-400),
-    });
-    return state;
+    console.error(`[helix] chargement de ${choice.key} refusé : ${loaded.output.slice(-400)}`);
+    echec = { message: t("Le chargement du modèle a échoué."), error: loaded.output.slice(-400) };
   }
 
   setState({
     phase: "error",
-    message: t("Aucun modèle n'a pu être chargé sur cette machine."),
+    message: echec?.message ?? t("Aucun modèle n'a pu être chargé sur cette machine."),
+    error: echec?.error,
   });
   return state;
 }

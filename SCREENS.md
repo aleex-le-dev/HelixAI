@@ -514,7 +514,8 @@ ce que cela implique puis demande le mot de passe (et le code si la double
 authentification est active) ; « Désactiver » sans mot de passe ; ou « réglage
 verrouillé » avec la raison (profil de déploiement, instance partagée). Puis mode en
 vigueur, exigence d'approbation, écran détecté, autorisations macOS manquantes
-nommées en clair, bouton « Tester la capture » avec aperçu, installation du modèle
+nommées en clair (l'autorisation d'enregistrer l'écran lue sans être demandée : jamais
+demandée, elle compte comme utilisable), bouton « Tester la capture » avec aperçu, installation du modèle
 de vision adapté à la machine, et dernières actions. Dans Cowork, le bouton
 « Écran » mène à cette page (« Activer le contrôle de l'écran… », ou « Régler ce
 qui manque… » quand une autorisation manque), comme « Connecter votre messagerie »
@@ -927,10 +928,17 @@ Garde-fous appris en essai réel :
 Rattachement du poste (machine seule, ou adresse et jeton d'une instance
 d'entreprise), puis création du premier compte ou connexion.
 
-**Installation du moteur** (FirstRun, poste sans LM Studio) : le moteur est nommé,
-avec son éditeur, et l'installation exige de cocher « Mon entreprise accepte les
-conditions d'utilisation de LM Studio », avec le lien vers ces conditions. La
-passerelle refuse l'installation sans cet accord, et le consigne au journal.
+**Installation du moteur** (FirstRun, poste sans moteur ; sur Mac à puce Apple, aussi une
+application LM Studio posée mais jamais ouverte) : le moteur est nommé, avec son éditeur,
+et l'installation exige de cocher « J'accepte, pour moi ou au nom de mon organisation, les
+conditions d'utilisation de LM Studio, qui en permettent l'usage personnel et interne, pas
+un service fourni à d'autres », avec le lien vers ces conditions. La passerelle refuse
+l'installation sans cet accord, et le consigne au journal. Un refus (membre non
+administrateur, poste piloté par l'intégrateur) s'affiche en clair. Le téléchargement du
+modèle est suivi ensuite sur le même écran, y compris un téléchargement laissé par un
+lancement précédent, et après une coupure du flux (passerelle redémarrée). « Commencer »
+n'apparaît qu'avec un modèle de Chat disponible ; un modèle conseillé pas encore essayé avec
+Helix le dit. Poste piloté par l'intégrateur : rien à installer, « Vérifier à nouveau ».
 
 L'écran de connexion a quatre étapes possibles : choix du compte (un cadenas
 pour ceux qui ont un mot de passe, « Mot de passe à choisir » pour un compte

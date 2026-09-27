@@ -53,15 +53,15 @@ interface Paquet {
 /** Interroge le catalogue pour connaître la version courante et son empreinte. */
 async function resoudrePaquet(): Promise<Paquet> {
   const res = await fetch(CATALOGUE, { signal: AbortSignal.timeout(20_000) });
-  if (!res.ok) throw new Error(`Catalogue injoignable (HTTP ${res.status}).`);
+  if (!res.ok) throw new Error(tf("Catalogue injoignable (HTTP {0}).", res.status));
 
   const data = (await res.json()) as { version?: string; url?: string; sha256?: string };
   if (!data.url || !data.sha256) {
-    throw new Error("Le catalogue ne fournit ni adresse ni empreinte.");
+    throw new Error(t("Le catalogue ne fournit ni adresse ni empreinte."));
   }
   if (!/^https:\/\/installers\.lmstudio\.ai\//.test(data.url)) {
     // Le paquet doit venir de l'éditeur, pas d'une adresse quelconque.
-    throw new Error(`Adresse de téléchargement inattendue : ${data.url}`);
+    throw new Error(tf("Adresse de téléchargement inattendue : {0}", data.url));
   }
   return { version: data.version ?? "?", url: data.url, sha256: data.sha256 };
 }
@@ -73,8 +73,29 @@ async function telecharger(
   onProgress: (p: EngineProgress) => void,
   algorithme: "sha256" | "sha512" = "sha256",
 ): Promise<string> {
-  const res = await fetch(paquet.url, { signal: AbortSignal.timeout(30 * 60_000) });
-  if (!res.ok || !res.body) throw new Error(tf("Téléchargement impossible (HTTP {0}).", res.status));
+  /*
+   * Arrêté quand plus rien n'arrive depuis deux minutes, pas au bout d'un
+   * temps total : 30 minutes coupaient les 615 Mo du moteur sous 2,8 Mbit/s,
+   * et chaque nouvel essai repartait de zéro (revue du 27/09/2026).
+   */
+  const arret = new AbortController();
+  let silence: NodeJS.Timeout | undefined;
+  const veiller = () => {
+    clearTimeout(silence);
+    silence = setTimeout(() => arret.abort(), 2 * 60_000);
+  };
+  veiller();
+  let res: Response;
+  try {
+    res = await fetch(paquet.url, { signal: arret.signal });
+  } catch {
+    clearTimeout(silence);
+    throw new Error(t("Le serveur du moteur est injoignable : vérifiez l'accès à internet de cette machine, puis réessayez."));
+  }
+  if (!res.ok || !res.body) {
+    clearTimeout(silence);
+    throw new Error(tf("Téléchargement impossible (HTTP {0}).", res.status));
+  }
 
   const total = Number(res.headers.get("content-length") ?? 0);
   const hash = createHash(algorithme);
@@ -83,6 +104,7 @@ async function telecharger(
 
   const source = Readable.fromWeb(res.body as Parameters<typeof Readable.fromWeb>[0]);
   source.on("data", (morceau: Buffer) => {
+    veiller();
     hash.update(morceau);
     recu += morceau.length;
     if (!total) return;
@@ -97,7 +119,13 @@ async function telecharger(
     }
   });
 
-  await pipeline(source, createWriteStream(destination));
+  try {
+    await pipeline(source, createWriteStream(destination));
+  } catch {
+    throw new Error(t("Le téléchargement du moteur s'est interrompu (plus rien reçu depuis deux minutes, ou connexion coupée) : vérifiez la connexion, puis réessayez."));
+  } finally {
+    clearTimeout(silence);
+  }
   return hash.digest("hex");
 }
 
@@ -228,13 +256,10 @@ export async function installerMoteur(
 
     onProgress({ phase: "verification", message: t("Vérification du paquet...") });
     if (empreinte !== paquet.sha256) {
-      throw new Error(
-        "L'empreinte du paquet téléchargé ne correspond pas à celle publiée. " +
-          "Installation interrompue.",
-      );
+      throw new Error(t("L'empreinte du paquet téléchargé ne correspond pas à celle publiée. Installation interrompue."));
     }
 
-    onProgress({ phase: "installation", message: "Installation..." });
+    onProgress({ phase: "installation", message: t("Installation...") });
 
     /*
      * `-nobrowse` évite d'ouvrir une fenêtre du Finder, `-noverify` évite une
@@ -255,7 +280,7 @@ export async function installerMoteur(
     pointDeMontage =
       /<key>mount-point<\/key>\s*<string>([^<]+)<\/string>/.exec(stdout)?.[1] ?? null;
 
-    if (!pointDeMontage) throw new Error("L'image du moteur n'a pas pu être ouverte.");
+    if (!pointDeMontage) throw new Error(t("L'image du moteur n'a pas pu être ouverte."));
 
     const destination = await dossierApplications();
     await exec(
@@ -292,11 +317,12 @@ export async function installerMoteur(
   }
 }
 
-/* ------------------------- Linux et Windows : llmster ------------------------- */
+/* --------------- Windows, Linux et Mac à puce Apple : llmster --------------- */
 
 /*
  * Linux et Windows (27/09/2026, demandé par Medhi : « tout s'installe en
- * automatique » sur les trois systèmes). LM Studio publie pour eux un moteur
+ * automatique » sur les trois systèmes), puis Mac à puce Apple le même jour
+ * (l'application LM Studio jamais ouverte ne démarrait pas). LM Studio publie pour eux un moteur
  * sans interface, llmster, avec le même outil `lms` : c'est lui que Helix
  * installe, comme le fait l'installateur officiel de l'éditeur
  * (lmstudio.ai/install.sh et install.ps1), mais sans exécuter de script
@@ -313,9 +339,10 @@ export async function installerMoteur(
  *
  * Limite dite : l'empreinte a été relevée sur le même serveur que l'archive,
  * mais une fois, le 27/09/2026, et écrite ici : un serveur compromis ensuite
- * ne peut plus faire installer autre chose. Sur macOS, l'empreinte vient d'un
- * catalogue tiers (Homebrew). Essayé dans un Ubuntu 24.04 (conteneur), pas
- * encore sur une vraie machine Windows ni Linux.
+ * ne peut plus faire installer autre chose. Sur Mac Intel seulement (l'application),
+ * l'empreinte vient d'un catalogue tiers (Homebrew). Essayé dans un Ubuntu 24.04
+ * (conteneur) et installé sur macOS à la main ; pas encore sur une vraie machine
+ * Windows ni Linux, ni démarré par Helix sur un Mac.
  */
 
 /*
@@ -436,7 +463,8 @@ function bibliothequesManquantes(): string[] {
     }
   }
   if (!liste) return [];
-  return ["libatomic.so.1"].filter((b) => !liste.includes(b));
+  // `libgomp` aussi : sans lui, le moteur s'installe, puis le premier chargement échoue (AppImage sur un système minimal, revue du 27/09/2026).
+  return ["libatomic.so.1", "libgomp.so.1"].filter((b) => !liste.includes(b));
 }
 
 
@@ -445,28 +473,57 @@ async function installerLlmster(onProgress: (p: EngineProgress) => void): Promis
   if (manquantes.length > 0) {
     throw new Error(
       tf(
-        "Il manque au système une bibliothèque dont le moteur a besoin ({0}). Installez-la, puis réessayez : sudo apt-get install -y libatomic1 (Debian, Ubuntu), ou sudo dnf install -y libatomic (Fedora).",
+        "Il manque au système une bibliothèque dont le moteur a besoin ({0}). Installez-la, puis réessayez : sudo apt-get install -y libatomic1 libgomp1 (Debian, Ubuntu), ou sudo dnf install -y libatomic libgomp (Fedora).",
         manquantes.join(", "),
       ),
     );
   }
 
-  onProgress({ phase: "resolution", message: t("Recherche de la dernière version...") });
+  // Version épinglée : rien n'est cherché en ligne (revue du 27/09/2026).
+  onProgress({ phase: "resolution", message: t("Préparation du téléchargement...") });
   const version = LLMSTER_VERSION;
   const { nom, extension } = nomLlmster(version);
+  /*
+   * Carte NVIDIA : la version CUDA 12 d'abord, puis la version ordinaire si
+   * elle ne passe pas (empreinte de la version CUDA lue chez l'éditeur, jamais
+   * confirmée par un vrai téléchargement ; revue Linux du 27/09/2026).
+   */
+  const noms = nom.endsWith("+cuda12") ? [nom, nom.replace(/\+cuda12$/, "")] : [nom];
   // Sans empreinte écrite ici, rien n'est installé : c'est la règle du projet, sans exception.
-  const attendue = LLMSTER[nom]?.sha512;
-  if (!attendue) throw new Error(tf("Le moteur de LM Studio n'existe pas pour ce processeur ({0}).", process.arch));
+  if (!noms.some((n) => LLMSTER[n]?.sha512)) throw new Error(tf("Le moteur de LM Studio n'existe pas pour ce processeur ({0}).", process.arch));
 
-  const travail = await mkdtemp(join(tmpdir(), "helix-moteur-"));
+  /*
+   * Sur le disque, dans un dossier à soi, pas dans `/tmp` : sous Fedora et
+   * Debian 13, `/tmp` vit en mémoire (la moitié de la RAM), et l'archive plus
+   * son contenu (environ 2 Go) pouvaient ne pas y tenir ; un `/tmp` monté
+   * `noexec` empêchait aussi l'amorce (revue Linux du 27/09/2026).
+   */
+  const racineTravail = process.env.HELIX_DATA_DIR ?? join(homedir(), ".helix", "data");
+  await mkdir(racineTravail, { recursive: true, mode: 0o700 });
+  const travail = await mkdtemp(join(racineTravail, ".moteur-"));
   try {
     const archive = join(travail, `llmster${extension}`);
-    onProgress({ phase: "telechargement", message: t("Téléchargement du moteur..."), percent: 0 });
-    const empreinte = await telecharger({ url: `${DEPOT_LLMSTER}/${nom}${extension}` }, archive, onProgress, "sha512");
-    onProgress({ phase: "verification", message: t("Vérification du paquet...") });
-    if (empreinte !== attendue) {
-      throw new Error(t("L'empreinte du paquet téléchargé ne correspond pas à celle publiée. Installation interrompue."));
+    let dernierEchec: unknown = null;
+    let installe = false;
+    for (const n of noms) {
+      const attendue = LLMSTER[n]?.sha512;
+      if (!attendue) continue;
+      try {
+        onProgress({ phase: "telechargement", message: t("Téléchargement du moteur..."), percent: 0 });
+        const empreinte = await telecharger({ url: `${DEPOT_LLMSTER}/${n}${extension}` }, archive, onProgress, "sha512");
+        onProgress({ phase: "verification", message: t("Vérification du paquet...") });
+        if (empreinte !== attendue) {
+          throw new Error(t("L'empreinte du paquet téléchargé ne correspond pas à celle publiée. Installation interrompue."));
+        }
+        installe = true;
+        break;
+      } catch (err) {
+        dernierEchec = err;
+        await rm(archive, { force: true }).catch(() => {});
+        if (n !== noms[noms.length - 1]) console.warn(`[helix] moteur ${n} refusé, essai de la version ordinaire :`, err instanceof Error ? err.message : err);
+      }
     }
+    if (!installe) throw dernierEchec instanceof Error ? dernierEchec : new Error(String(dernierEchec));
 
     onProgress({ phase: "installation", message: t("Installation...") });
     const dossier = join(travail, "contenu");
@@ -475,12 +532,28 @@ async function installerLlmster(onProgress: (p: EngineProgress) => void): Promis
     const amorce = join(dossier, process.platform === "win32" ? "llmster.exe" : "llmster");
     if (!existsSync(amorce)) throw new Error(t("L'archive du moteur ne contient pas ce qui était attendu. Installation interrompue."));
     // Ce que fait l'installateur officiel, sans toucher au PATH ni aux profils du terminal.
-    await exec(amorce, ["bootstrap"], {
-      timeout: 600_000,
-      env: { ...process.env, LMS_BOOTSTRAP_INSTALL_SH: "1", LMS_NO_MODIFY_PATH: "1" },
-    });
+    try {
+      await exec(amorce, ["bootstrap"], {
+        timeout: 600_000,
+        env: { ...process.env, LMS_BOOTSTRAP_INSTALL_SH: "1", LMS_NO_MODIFY_PATH: "1" },
+      });
+    } catch (err) {
+      /*
+       * `lms` posé malgré l'erreur (délai dépassé parce qu'un service garde la
+       * sortie ouverte, par exemple) : l'installation est faite, on continue
+       * en le notant (revue Windows du 27/09/2026, supposé, pas vu).
+       */
+      if (!existsSync(lmsDeLlmster())) throw err;
+      console.warn("[helix] llmster bootstrap en erreur, mais `lms` est posé :", err instanceof Error ? err.message : err);
+    }
     const lms = lmsDeLlmster();
     if (!existsSync(lms)) throw new Error(t("Le moteur s'est installé, mais son outil `lms` est introuvable. Réessayez, ou installez LM Studio depuis lmstudio.ai."));
+    /*
+     * Mac : `lms` ne trouve le moteur que par sa déclaration
+     * (`llmster-install-location.json`). Absente, Helix redemanderait
+     * l'installation en boucle, 600 Mo à chaque fois (revue du 27/09/2026).
+     */
+    if (moteurAPoser()) throw new Error(t("Le moteur s'est installé, mais LM Studio ne le reconnaît pas. Réessayez ; si cela se répète, installez LM Studio depuis lmstudio.ai et ouvrez-le une fois."));
     preparerDossiersLlmster();
     onProgress({ phase: "pret", message: tf("Moteur installé (version {0}).", version), percent: 100 });
     return lms;

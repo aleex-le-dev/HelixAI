@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { apiFetch } from "@/lib/endpoint";
 import { ouvrirFlux } from "@/lib/flux";
+import { tf } from "@/lib/i18n";
 
 export interface Hardware {
   platform: string;
@@ -17,6 +18,8 @@ export interface CatalogEntry {
   minMemoryGb: number;
   downloadGb: number;
   description: string;
+  /** Essayé avec Helix ? L'écran le dit quand ce n'est pas le cas. */
+  verifie?: boolean;
 }
 
 export type ProvisionPhase =
@@ -42,6 +45,8 @@ interface Status {
   hasChatModel: boolean;
   /** Le moteur d'exécution des modèles est-il présent sur la machine ? */
   moteurInstalle: boolean;
+  /** Déploiement piloté par l'intégrateur : les modèles sont ceux du profil client, rien à installer ici. */
+  managed?: boolean;
   state: ProvisionState;
 }
 
@@ -58,6 +63,20 @@ export function useProvision() {
 
   /** `suivre`, pour `load` (défini après lui). */
   const suivreRef = useRef<() => void>(() => {});
+
+  /*
+   * Une demande refusée (membre non administrateur, installation déjà en
+   * cours, poste piloté par l'intégrateur) se dit à l'écran : le clic ne
+   * faisait sinon rien de visible (revue du 27/09/2026).
+   */
+  const refusDit = useCallback(async (res: Response) => {
+    // 409 : une installation tourne déjà, le flux ouvert la suit.
+    if (res.ok || res.status === 409) return;
+    const corps = (await res.json().catch(() => ({}))) as { error?: { message?: string } };
+    sourceRef.current?.();
+    sourceRef.current = null;
+    setState({ phase: "error", message: corps.error?.message ?? tf("Demande refusée ({0}).", res.status) });
+  }, []);
 
   const load = useCallback(() => {
     apiFetch(`/helix/provision`)
@@ -99,8 +118,19 @@ export function useProvision() {
           /* fragment ignoré */
         }
       },
-      // Pas de reprise : l'installation se relance à la main, pas toute seule.
-      { reprendre: false, onErreur: () => { sourceRef.current = null; } },
+      /*
+       * Pas de reprise du flux lui-même : une fois coupé (passerelle
+       * redémarrée, billet refusé), on relit l'état, qui se rebranche si une
+       * installation tourne encore, ou rend l'écran et son bouton. Sans cela,
+       * l'écran restait sur le dernier pourcentage (revue du 27/09/2026).
+       */
+      {
+        reprendre: false,
+        onErreur: () => {
+          sourceRef.current = null;
+          setTimeout(load, 2500);
+        },
+      },
     );
   }, [load]);
   suivreRef.current = suivre;
@@ -113,7 +143,9 @@ export function useProvision() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ model }),
-      }).catch(() => setUnreachable(true));
+      })
+        .then(refusDit)
+        .catch(() => setUnreachable(true));
     },
     [suivre],
   );
@@ -128,7 +160,9 @@ export function useProvision() {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ conditionsAcceptees: true }),
-    }).catch(() => setUnreachable(true));
+    })
+      .then(refusDit)
+      .catch(() => setUnreachable(true));
   }, [suivre]);
 
   useEffect(() => () => sourceRef.current?.(), []);

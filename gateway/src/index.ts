@@ -31,6 +31,7 @@ import {
   findLms,
   oublierLms,
   ensureLmStudioServer,
+  lmStudioRepond,
 } from "./backends.ts";
 import { models, invalidate, resolve } from "./router.ts";
 import { agentAAppele, handleChatRequest } from "./chat.ts";
@@ -565,6 +566,8 @@ async function handleEngineInstall(
     return send(res, 403, { error: { message: t("Seul l'administrateur de l'instance installe le moteur des modèles.") } });
   }
   if (moteurEnInstallation) return send(res, 409, { error: { message: t("Le moteur est déjà en cours d'installation.") } });
+  // Déploiement piloté par l'intégrateur : les modèles sont ceux du profil client, l'écran ne propose rien (revue du 27/09/2026).
+  if (!autoProvisionEnabled()) return send(res, 403, { error: { message: t("Sur ce poste, les modèles sont préparés par l'intégrateur.") } });
   const body = (await readJson(req).catch(() => ({}))) as { conditionsAcceptees?: unknown };
   // Même règle que partout : seul un `true` explicite vaut accord.
   if (body.conditionsAcceptees !== true) {
@@ -587,7 +590,8 @@ async function handleEngineInstall(
        */
       phase: p.phase === "pret" ? "checking" : p.phase === "erreur" ? "error" : "downloading",
       message: p.message,
-      percent: p.percent,
+      // Moteur posé : la barre pleine ne doit pas rester pendant le démarrage (revue du 27/09/2026).
+      percent: p.phase === "pret" ? undefined : p.percent,
     }),
   )
     .then(async () => {
@@ -598,16 +602,36 @@ async function handleEngineInstall(
       oublierLms();
 
       // Puis on l'allume : `lms load` a besoin du service, pas seulement du binaire.
-      setProvisionState({ phase: "checking", message: t("Démarrage du moteur...") });
+      setProvisionState({ phase: "checking", message: t("Démarrage du moteur..."), percent: undefined });
       await ensureLmStudioServer();
       invalidate();
+      /*
+       * Un moteur posé qui ne démarre pas se dit tel quel : la suite l'aurait
+       * présenté comme « le téléchargement de … a échoué », avec le texte brut
+       * de `lms` (revue du 27/09/2026). Quelques secondes de grâce : il peut
+       * mettre un instant à écouter.
+       */
+      let ecoute = await lmStudioRepond();
+      for (let i = 0; i < 10 && !ecoute; i++) {
+        await new Promise((r) => setTimeout(r, 2000));
+        ecoute = await lmStudioRepond();
+      }
+      if (!ecoute) {
+        setProvisionState({
+          phase: "error",
+          message: t("Le moteur est installé, mais il n'a pas démarré."),
+          error: tf("Quittez {0} puis rouvrez-le : il réessaiera au démarrage. Si cela se répète, redémarrez la machine.", nomProduit()),
+          percent: undefined,
+        });
+        return;
+      }
 
       /*
        * On enchaîne sur le modèle sans rendre la main : du point de vue de
        * l'utilisateur, « installer Helix » est une seule opération, pas deux
        * étapes techniques dont il devrait comprendre l'ordre.
        */
-      setProvisionState({ phase: "checking", message: t("Choix du modèle adapté à votre machine...") });
+      setProvisionState({ phase: "checking", message: t("Choix du modèle adapté à votre machine..."), percent: undefined });
       await ensureLocalModel();
       invalidate();
       dicteeEnFond();

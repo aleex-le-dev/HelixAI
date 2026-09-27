@@ -58,7 +58,7 @@ npx electron-builder --win nsis --x64 --publish never
 npx electron-builder --linux AppImage deb --x64 --publish never
 ```
 
-Ils donnent `release/Helix Setup <version>.exe` (installateur NSIS pour le compte, sans
+Ils donnent `release/Helix-Setup-<version>-x64.exe` (installateur NSIS pour le compte, sans
 droits d'administration, en français, anglais ou chinois selon Windows),
 `release/helix-plateforme_<version>_amd64.deb` et `release/Helix-<version>.AppImage`. La
 chaîne NSIS récente (`toolsets.nsis` 1.2.1) est nécessaire sur un Mac Apple Silicon sans
@@ -82,7 +82,7 @@ machine :
 |---|---|---|
 | Outils fichiers (MCP) | `npx` | Sans lui (ou sous Windows, où c'est un `.cmd`), Helix le lance par un vrai Node : celui du système, sinon son Node officiel, posé au besoin (nodejs.org, empreinte vérifiée). Hors ligne et sans Node : pas d'outils |
 | Écran Code | `opencode` installé (`~/.opencode/bin/opencode` ou dans le `PATH`) | L'écran Code signale que le moteur est absent |
-| Modèles locaux | LM Studio | L'écran de mise en route l'installe, sans intervention : l'application sur macOS, son moteur sans interface (llmster) sur Windows et Linux |
+| Modèles locaux | LM Studio | L'écran de mise en route l'installe, sans intervention : son moteur sans interface (llmster 0.0.25-1, empreinte SHA-512 écrite dans le code) sur Mac à puce Apple, Windows et Linux ; sur un Mac où l'application LM Studio a déjà servi, c'est elle qui sert (Mac Intel : l'application) |
 
 Avec un modèle local, l'écran Code peut attendre une ou deux minutes avant le premier
 mot : le modèle lit d'abord toute la demande, et la relit s'il l'a perdue parce qu'un
@@ -92,16 +92,25 @@ LM Studio sur le poste, le pourcentage lu) et son panneau de suivi montre ce que
 l'agent. Le journal de LM Studio lu pour ce pourcentage est
 `~/.lmstudio/server-logs/` ; sans lui, il n'y a simplement pas de chiffre.
 
-⚠ Le paquet de `npm run package` n'est **pas signé** : macOS affiche un avertissement
-au premier lancement et `spctl` le refuse. Tout est prêt pour la signature et la
+⚠ Le paquet de `npm run package` n'est signé qu'**ad hoc**, pas par Apple : macOS dit
+qu'Apple n'a pas pu le vérifier (« Ouvrir quand même ») et `spctl` le refuse.
+L'installation en une commande (`scripts/installer-macos.sh`) évite l'avertissement : elle
+télécharge l'image disque de la dernière publication par le Terminal, la vérifie contre
+`SHA256SUMS.txt` de la même publication, vérifie la signature de code
+(`codesign --verify --deep --strict`), attend que Helix soit fermé, puis copie
+l'application à côté avant de la mettre en place dans Applications (ou `~/Applications`).
+Limite : l'empreinte vient de la même publication que l'image. Non signée par Apple,
+l'application voit aussi macOS redemander l'accès à sa clé du trousseau (« Helix Safe
+Storage ») une fois à chaque nouvelle version. Tout est prêt pour la signature et la
 notarisation (`npm run package:signe`) ; il manque le certificat Apple, voir
 [`SIGNATURE.md`](../SIGNATURE.md). La mise à jour automatique en dépend aussi : non
 signée, l'application signale seulement qu'une version existe.
 
 ⚠ **LM Studio**, le moteur installé par défaut, est un logiciel fermé dont les
-conditions réservent l'usage aux besoins internes de l'entreprise et interdisent
-l'usage comme service hébergé pour des tiers. L'écran de première installation fait
-accepter ces conditions par l'entreprise. Voir PROJET.md § 3.9 avant d'héberger une
+conditions (version du 23/08/2026) permettent l'usage personnel et les besoins
+internes d'une organisation, et interdisent l'usage comme service hébergé pour des
+tiers. L'écran de première installation fait accepter ces conditions, pour soi ou au
+nom de son organisation. Voir PROJET.md § 3.9 avant d'héberger une
 instance pour un client.
 
 ### Développement web
@@ -187,7 +196,7 @@ Toutes exigent le jeton d'instance, sauf `GET /` et `GET /health`. Celles marqu�
 | `POST /v1/chat/completions` | OpenAI-compatible. Accepte en plus `role`, `effort`, `tools` et `connaissances` ; accepte aussi une clé d'API seule (voir « Clés d'API ») | si `tools: true` |
 | `POST /helix/models/load` | Charge un modèle en mémoire | oui |
 | `GET /helix/provision`, `GET /helix/provision/stream` | État et progression de la mise en route | non |
-| `POST /helix/provision/moteur` | Installe LM Studio (macOS) | oui |
+| `POST /helix/provision/moteur` | Installe le moteur de LM Studio (llmster sur Mac à puce Apple, Windows et Linux ; l'application sur Mac Intel) ; administrateur seul, une installation à la fois, conditions de LM Studio acceptées | oui |
 | `POST /helix/provision/start` | Télécharge et charge un modèle du catalogue | oui |
 | `POST /helix/auth/create`, `POST /helix/auth/verify` | Création de compte, connexion | voir ci-dessous |
 | `POST /helix/auth/premier-mot-de-passe` | Premier mot de passe d'un compte créé avant 0.9.0, une seule fois | non |
@@ -271,7 +280,7 @@ essayé.
 | `HELIX_BUDGET_ETAPE` | Actions accordées à une étape d'un travail découpé, 4 au moins (à défaut : 8, 14 ou 20 selon la taille du modèle) | selon le modèle |
 | `HELIX_CAPTURE_LARGEUR` | Largeur de la capture envoyée au modèle | `1024` |
 | `HELIX_CUA_URL`, `HELIX_CUA_CONTAINER`, `HELIX_CUA_KEY` | Serveur cua du mode `sandbox` | `http://127.0.0.1:8000` |
-| `HELIX_APPS_DIR` | Où installer LM Studio | `/Applications`, sinon `~/Applications` |
+| `HELIX_APPS_DIR` | Où installer l'application LM Studio (Mac Intel seulement : ailleurs, c'est llmster, dans `~/.lmstudio`) | `/Applications`, sinon `~/Applications` |
 | `HELIX_GATEWAY_URL` | Cible du proxy Vite en développement | `http://localhost:8787` |
 | `VITE_GATEWAY_URL` | Instance imposée à la construction de l'interface | aucune |
 
@@ -468,9 +477,8 @@ C'est le cœur de la promesse Helix, et il vaut mieux le dire exactement.
 | Destination | Quand | Pourquoi |
 |---|---|---|
 | `registry.npmjs.org` | `npm install`, puis au premier démarrage du serveur d'outils, lancé par `npx` | Récupérer le code du serveur MCP fichiers, qui n'est pas empaqueté |
-| `formulae.brew.sh` | Bouton « Installer le moteur » | Lire l'adresse et l'empreinte SHA-256 de la version courante de LM Studio |
-| `installers.lmstudio.ai` | Idem | Télécharger LM Studio. L'empreinte du paquet est vérifiée avant ouverture, et l'adresse est refusée si elle ne vient pas de ce domaine |
-| `lmstudio.ai`, puis `llmster.lmstudio.ai` | Idem, sous Windows et Linux | Lire la version courante dans le script d'installation officiel (lu, jamais exécuté), puis télécharger le moteur sans interface et son empreinte SHA-512, vérifiée avant ouverture |
+| `llmster.lmstudio.ai` | Bouton « Installer le moteur » (Mac à puce Apple, Windows, Linux) | Télécharger le moteur sans interface de LM Studio, version épinglée (0.0.25-1) ; l'empreinte SHA-512 écrite dans le code est vérifiée avant ouverture ; rien n'est lu en ligne pour choisir la version |
+| `formulae.brew.sh`, puis `installers.lmstudio.ai` | Idem, Mac Intel seulement (aucun paquet Helix publié pour eux) | Lire l'adresse et l'empreinte SHA-256 de l'application LM Studio, puis la télécharger ; l'empreinte est vérifiée avant ouverture, et l'adresse refusée si elle ne vient pas de ce domaine |
 | `github.com` (python-build-standalone) | Atelier, dictée ou entraînement, sur une machine sans Python qui convienne | CPython 3.12.14 autonome, publication épinglée, empreinte SHA-256 écrite dans le code |
 | `nodejs.org` | Atelier sans npm sur la machine, ou premier serveur d'outils sans `npx` | Le même Node officiel que pour OpenClaw, archive vérifiée par son empreinte |
 | Catalogue de modèles de LM Studio (HuggingFace) | Téléchargement d'un modèle (`lms get`) | Récupérer les poids. Ce trafic est le fait de LM Studio, que Helix pilote en ligne de commande |
@@ -693,7 +701,13 @@ sécurité :
 2. **Accessibilité** — pour la souris et le clavier.
 
 L'état se vérifie dans **Réglages → Contrôle de l'écran**, qui affiche ce qui
-manque et propose un essai de capture.
+manque et propose un essai de capture. L'application lit l'autorisation
+d'enregistrer l'écran sans la demander (`systemPreferences.getMediaAccessStatus`) :
+macOS n'ouvre plus sa demande à chaque lancement (27/09/2026). Tant que Helix n'a
+jamais tenté de capture, elle compte comme « pas encore demandée » (macOS répond
+« refusé » avant toute demande), et macOS la demande à la première capture
+(première action de l'agent, ou essai de capture). Passerelle lancée seule, sans
+l'application : une capture d'essai, comme avant.
 
 ⚠ Le contrôle de l'écran a besoin d'un **modèle capable de lire une image**
 (rôle `gui` ou `vision`). Un modèle de conversation ne voit rien : les outils

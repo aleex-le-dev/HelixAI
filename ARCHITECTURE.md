@@ -648,19 +648,21 @@ garde-fous appris en test réel :
 - un téléchargement laissé en cours par une exécution précédente est détecté et suivi,
   plutôt que relancé en double.
 
-**Installation du moteur, ajoutée depuis.** Helix installe désormais **LM Studio
-lui-même**, sur macOS, sans clic ni fenêtre d'installation : il lit l'adresse et
-l'empreinte SHA-256 de la version courante dans le catalogue Homebrew
-(`formulae.brew.sh`), refuse toute adresse qui ne vienne pas de `installers.lmstudio.ai`,
-télécharge le paquet en calculant son empreinte au fil de l'eau, **vérifie cette
-empreinte avant d'ouvrir l'image**, copie l'application, puis déclare l'outil en ligne de
-commande depuis le paquet. Le tout enchaîne sur le choix et le chargement du modèle : du
-point de vue de l'utilisateur, installer Helix est une seule opération.
+**Installation du moteur, ajoutée depuis.** Helix installe le moteur lui-même, sans clic
+ni fenêtre d'installation. Sur Mac à puce Apple, Windows et Linux (27/09/2026), c'est le
+moteur sans interface de LM Studio, llmster : version épinglée (0.0.25-1) et empreinte
+SHA-512 de chaque archive écrites dans `engine.ts`, archive vérifiée avant ouverture
+(téléchargée dans `~/.helix/data`, pas dans `/tmp`), `llmster bootstrap` qui pose `lms`
+dans `~/.lmstudio/bin`, sans droits d'administration. Sur un Mac, l'application LM Studio
+garde la main si elle a déjà servi (`app-install-location.json`) ; posée mais jamais
+ouverte, elle compte comme absente (`moteurAPoser`) et llmster est posé à côté. Le chemin
+par le catalogue Homebrew et `installers.lmstudio.ai` ne reste que pour les Mac Intel. Le
+tout enchaîne sur le choix et le chargement du modèle, suivis sur le même écran : du point
+de vue de l'utilisateur, installer Helix est une seule opération.
 
-⚠ **Limites connues** : l'installation automatique du moteur n'existe **que sur macOS**.
-Ailleurs, l'écran de mise en route indique que LM Studio est absent et renvoie vers son
-installation. Le moteur d'inférence n'est toujours pas empaqueté dans l'installeur Helix,
-et le paquet téléchargé reste soumis à la licence de LM Studio.
+⚠ **Limites connues** : le moteur n'est pas empaqueté dans l'installeur Helix et reste
+soumis aux conditions de LM Studio. Le démarrage complet de llmster par Helix sur un Mac
+n'a pas été vérifié (PROJET.md, 27/09/2026) ; sous Windows, rien n'a tourné sur un vrai PC.
 
 ---
 

@@ -1,4 +1,4 @@
-const { app, BrowserWindow, dialog, ipcMain, nativeTheme, net, protocol, safeStorage, shell } = require("electron");
+const { app, BrowserWindow, dialog, ipcMain, nativeTheme, net, protocol, safeStorage, shell, systemPreferences } = require("electron");
 const { demarrerMiseAJour } = require("./miseAJour.cjs");
 const coffre = require("./coffre.cjs");
 const grandStockage = require("./grandStockage.cjs");
@@ -204,6 +204,22 @@ async function startGateway() {
   });
   // Un envoi sur un canal déjà fermé émet une erreur : écoutée, elle ne fait pas planter l'application en quittant.
   enfant.on("error", (err) => console.error("[helix] passerelle :", err?.message ?? err));
+  /*
+   * macOS : l'autorisation d'enregistrer l'écran, lue sans la demander. La
+   * passerelle prenait une vraie capture pour la connaître, et macOS ouvrait
+   * sa demande à chaque lancement, même sans se servir du contrôle de
+   * l'écran (vu le 27/09/2026). Seul ce processus sait la lire sans capture.
+   */
+  enfant.on("message", (m) => {
+    if (!m || m.type !== "permission-ecran" || !enfant.connected) return;
+    let statut = "inconnu";
+    try {
+      if (process.platform === "darwin") statut = systemPreferences.getMediaAccessStatus("screen");
+    } catch {
+      /* inconnu : la passerelle fait comme avant */
+    }
+    enfant.send({ type: "permission-ecran", id: m.id, statut }, () => {});
+  });
   gateway = enfant;
 
   enfant.stdout.on("data", (b) => process.stdout.write(`[passerelle] ${b}`));

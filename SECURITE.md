@@ -235,6 +235,7 @@ sans trace finit toujours par revenir.
 | Origine ouverte à tous | N'importe quelle page du navigateur lisait les réponses si elle détenait le jeton | Origine restreinte à `file://`, à la boucle locale et à l'hôte de l'instance |
 | Fuite par un serveur MCP enfant | Un serveur recopiant sa configuration déposait son jeton en clair sur la sortie d'erreur de la passerelle | Secrets masqués dans la sortie d'erreur et dans les messages |
 | **`HELIX_GATEWAY_HOST` vide** (0.27.0) | `listen(port, "")` n'écoute pas « nulle part » mais **partout** ; la passerelle, qui tient "" pour local, ne chiffrait pas. Démontré : joignable en clair par l'adresse réseau du poste | Une valeur vide vaut « absente » : boucle locale. Vérifié par la batterie, qui tente la connexion par l'adresse réseau (`gateway/src/config.ts`) |
+| DELETE refusé par CORS (27/09/2026) | `Access-Control-Allow-Methods` ne permettait pas DELETE : l'application installée (origine `helix://app`) ne pouvait ni retirer une session de Helix Code ni supprimer une tâche programmée ; invisible en développement (même origine, par Vite) | `GET, POST, PUT, DELETE, OPTIONS` ; contrôlé par la batterie (préparation depuis `helix://app`) |
 | En-tête de langue refusé par CORS (0.26.0) | L'en-tête `X-Helix-Langue` manquait à `Access-Control-Allow-Headers` : un poste rattaché voyait **toutes** ses requêtes refusées par son navigateur | Ajouté ; tout nouvel en-tête de l'écran doit y figurer |
 
 Et une faille **de structure**, la plus sournoise : `tsconfig.json` ne couvrait que
@@ -247,7 +248,7 @@ qu'on lui demande **refuse**. Il n'accepte jamais par défaut.
 
 **La batterie de sécurité** (`npm run securite`, 0.27.0). Elle démarre une
 instance jetable et l'attaque de l'extérieur : 66 vérifications à sa création,
-125 le 25/09/2026, 221 le 26/09/2026 avec les clés d'API (toutes réussies ces jours-là), chacune
+125 le 25/09/2026, 221 le 26/09/2026 avec les clés d'API, 433 le 27/09/2026 (toutes réussies ces jours-là), chacune
 disant ce qu'elle attend et ce qu'elle a obtenu — routes sans jeton et sans
 séance, compte ouvert sans invitation, mot de passe trop court, énumération des
 comptes, force brute freinée, mots de passe et jetons absents du disque et du
@@ -770,7 +771,12 @@ En mode `hote`, macOS exige deux autorisations distinctes, accordées à
 l'application Helix dans Réglages Système : **Enregistrement de l'écran** pour
 voir, **Accessibilité** pour la souris et le clavier. Helix ne peut pas se les
 donner à lui-même. Réglages, Contrôle de l'écran affiche ce qui manque et
-propose un essai de capture.
+propose un essai de capture. L'autorisation d'enregistrer l'écran est lue par
+l'application sans être demandée (`systemPreferences.getMediaAccessStatus`, 27/09/2026) :
+une capture d'essai la mesurait, et macOS ouvrait sa demande à chaque lancement,
+contrôle de l'écran utilisé ou non. Tant que Helix n'a jamais tenté de capture
+(témoin `.ecran-demande` dans le dossier des données), le « refusé » que macOS répond
+avant toute demande compte comme « pas encore demandé ».
 
 ---
 
@@ -3123,7 +3129,7 @@ le `.deb` a été installé et lancé dans un Ubuntu 24.04 vierge (conteneur Doc
 | **Dossiers système** acceptés comme dossier de travail (`C:\Windows`, `C:\`, `/etc`, `/root`). | Liste propre à chaque système, séparateur du système, racine de disque reconnue partout. | Relu, pas essayé hors macOS |
 | **Arrêt** : sous Windows, `kill()` tuait net la passerelle, qui laissait OpenCode, OpenClaw, l'entraînement et LM Studio derrière. | Arrêt demandé par un canal, puis `taskkill /T /F` ; le moteur llmster, partagé comme LM Studio sur macOS, reste allumé (seuls les modèles chargés par Helix sont déchargés) ; les processus lancés par la passerelle s'arrêtent avec tout leur arbre ; canal coupé, la passerelle s'arrête aussi. | Relu |
 | **Consoles** : chaque programme lancé ouvrait une fenêtre noire. | `windowsHide` par défaut pour tout le processus (`processus.ts`), `promisify` compris. | Windows simulé : les 5 formes d'appel |
-| **Moteur LM Studio** sous Windows et Linux | Archive officielle de llmster et son empreinte SHA-512 publiée par l'éditeur, vérifiée avant ouverture ; aucun script téléchargé n'est exécuté. **Limite** : l'empreinte vient du même serveur que l'archive (sur macOS, d'un catalogue tiers). | Installé dans un Ubuntu 24.04 vierge (Docker) : empreinte vérifiée, modèle chargé, un Chat ; pas essayé sous Windows |
+| **Moteur LM Studio** sous Windows, Linux et Mac à puce Apple | Archive officielle de llmster et son empreinte SHA-512, vérifiée avant ouverture ; version épinglée ; aucun script téléchargé n'est exécuté ; archive posée dans le dossier des données, pas dans `/tmp`. **Limite** : l'empreinte a été relevée une fois (27/09/2026) sur le même serveur que l'archive, puis écrite dans le code ; sur Mac Intel seulement, elle vient d'un catalogue tiers (Homebrew). | Installé dans un Ubuntu 24.04 vierge (Docker) : empreinte vérifiée, modèle chargé, un Chat ; pas essayé sous Windows |
 | **Python** absent ou sans `venv` (dictée, documents, entraînement fermés) | Helix pose CPython 3.12.14 autonome (`pythonPrive.ts`), décidé par Medhi le 27/09/2026 : publication épinglée, empreintes SHA-256 écrites dans le code, archive effacée sans être ouverte si l'empreinte diffère, Python vérifié (venv, ssl) avant usage. | 2 contrôles ; posé sur ce Mac et dans l'Ubuntu, atelier complet installé avec lui |
 | **`npx` absent** (serveur de fichiers de Cowork), ou `.cmd` sous Windows | `npx` lancé par un vrai Node : celui du système, sinon le Node officiel de Helix, posé au besoin (empreinte vérifiée contre `SHASUMS256.txt`), dossier en tête du PATH ; scripts d'installation toujours refusés. | Ubuntu : Node posé, serveur de fichiers démarré (14 outils) |
 | **Essai dans Ubuntu 24.04** : trois bibliothèques manquaient au `.deb` ; l'application se fermait au démarrage (une fenêtre de service fermée avant la fenêtre principale) ; llmster ne chargeait aucun modèle (dossier `.internal/temp` absent). | Dépendances ajoutées ; on ne quitte qu'une fois la fenêtre principale ouverte ; dossier créé à l'installation et à chaque démarrage du moteur. | Refait dans le même Ubuntu : application ouverte, modèle chargé, Chat |
@@ -3178,3 +3184,49 @@ clé ; `electron/nomTrousseau.cjs` y transfère les fichiers une fois.
   fichier que l'ancienne clé ne lit pas n'est pas touché.
 - Seulement l'application installée sur macOS : Windows (DPAPI, clé rangée dans le profil, qui
   ne bouge pas), Linux et le développement gardent leur nom.
+- Un fichier qui ne se rechiffre pas : pas de témoin, le lancement suivant ne transfère que lui.
+  Le fichier de transfert n'est jamais effacé avant le verrou d'instance unique (un second
+  lancement pendant le relancement ne prive plus le transfert de son fichier).
+- **Vérifié** : transfert de bout en bout et reprise après un fichier de transfert abîmé (noms de
+  clé d'essai), puis sur les vraies données du Mac de développement (coffre, Chats du poste et
+  leurs copies).
+- **Limite** : tant que l'application n'est pas signée par Apple, le trousseau redemande l'accès
+  une fois à chaque nouvelle version (il retient l'empreinte exacte d'une application signée ad
+  hoc ; l'exigence de signature sur l'identifiant n'y suffit pas). Seule la signature Apple le règle.
+
+### 29.5 L'installation en une commande sur macOS (27 septembre 2026)
+
+`scripts/installer-macos.sh` télécharge l'image disque de la dernière publication par le
+Terminal (pas de marque de quarantaine, donc pas d'avertissement de Gatekeeper), vérifie son
+empreinte contre `SHA256SUMS.txt` de la même publication, monte l'image en lecture seule,
+vérifie la signature de code (`codesign --verify --deep --strict`), attend que Helix soit
+fermé (30 s au plus, sinon arrêt sans rien toucher), copie l'application à côté puis la met en
+place. **Limite** : l'empreinte vient de la même publication que l'image ; elle protège d'un
+téléchargement abîmé, pas d'une publication remplacée. Dépôt privé : `gh`, connecté avec un
+compte qui a accès au dépôt, est nécessaire.
+
+### 29.6 Relecture des installations par cinq agents (27 septembre 2026, après-midi)
+
+Demandée par Medhi après les essais sur le MacBook. Cinq relectures en lecture seule (macOS,
+Windows, Linux, écran de mise en route, documentation). Corrigé : l'écran figé si le flux de
+progression se coupe ; « Commencer » sans modèle de Chat ; un refus (membre non administrateur,
+poste piloté par l'intégrateur) qui ne se voyait pas ; un repli « plus léger » qui téléchargeait
+un modèle plus lourd ; un échec de téléchargement ou de chargement qui n'essayait pas le modèle
+suivant ; un moteur posé mais arrêté présenté comme un téléchargement raté ; la simple lecture
+de l'état qui ouvrait une application LM Studio jamais servie avant l'accord aux conditions ;
+le téléchargement du moteur coupé au bout de 30 minutes (désormais : deux minutes sans rien
+recevoir) ; un `lms get` sans limite (désormais : dix minutes sans progression ni fichier qui
+grossit) ; le moteur décompressé dans `/tmp` ; `libgomp` non contrôlée ; pas de repli si
+l'archive CUDA 12 est refusée ; `llmster bootstrap` en erreur alors que `lms` est posé ; la
+déclaration du moteur absente sur Mac (boucle d'installation) ; `tar` absent avant Windows 10
+1803 ; le lien du Node de Helix refait à chaque appel sous Windows ; le script d'installation qui
+pouvait supprimer une application encore ouverte.
+
+Restent, dits comme tels : l'installateur Windows n'est pas signé (Smart App Control, quand il
+est actif, le bloque sans recours) ; la fenêtre sous Windows ne relit pas le jeton si la
+passerelle met plus de 40 essais à répondre au premier lancement ; `tar.exe` et un nom de profil
+hors de la page de code de Windows ; l'environnement de l'AppImage transmis aux programmes
+lancés ; l'icône de la zone de notification invisible sur GNOME sans AppIndicator ; un poste
+rattaché sous Linux sans trousseau lance quand même sa passerelle ; pas d'intégration au bureau
+(liens `helix://`) avec l'AppImage. Rien de cela n'a été essayé sur un vrai PC Windows ni sur un
+vrai Linux.

@@ -11,7 +11,7 @@ refaite à l'envers.
 | | |
 |---|---|
 | Version | 0.27.0 (`package.json`) |
-| Dernière mise à jour | 26 septembre 2026 |
+| Dernière mise à jour | 27 septembre 2026 |
 | Documents liés | [ARCHITECTURE.md](ARCHITECTURE.md), [SECURITE.md](SECURITE.md), [SCREENS.md](SCREENS.md), [SIGNATURE.md](SIGNATURE.md), [README.md](README.md), [docs/GUIDE.md](docs/GUIDE.md) |
 
 ---
@@ -601,7 +601,7 @@ un engagement commercial.
 | OpenCUA 72B | XLANG Lab | MIT sur base Qwen2.5-VL 72B (licence Qwen) | oui, sous 100 M d'utilisateurs par mois | copie de la licence, attribution, droit chinois |
 | Whisper small / large-v3-turbo (dictée) | OpenAI, converti par Systran et Dropbox | MIT | oui | poids ouverts, en local : conforme à la règle (§ 1) |
 | Gemma 3 4B | Google | Gemma Terms of Use | oui, sous conditions | **retiré** pour sa licence (restrictions à répercuter dans chaque contrat client), pas pour son origine |
-| LM Studio (moteur) | Element Labs, Inc. | logiciel fermé, gratuit | usage interne de l'entreprise seulement | ⚠ « application service provider » et « software-as-a-service » interdits |
+| LM Studio (moteur) | Element Labs, Inc. | logiciel fermé, gratuit | usage personnel et besoins internes d'une organisation (conditions du 23/08/2026) | ⚠ « application service provider » et « software-as-a-service » interdits |
 
 **Tranché le 14/09/2026** (la question de Whisper l'était déjà : poids ouverts en
 local, conforme à la règle du § 1) :
@@ -681,7 +681,7 @@ local, conforme à la règle du § 1) :
 |---|---|---|---|---|
 | CPython 3.12.14, construction autonome `python-build-standalone` (publication 20260901) | Python Software Foundation ; construction par Astral | PSF-2.0 (construction : MPL-2.0) | Python de l'atelier, de la dictée et de l'entraînement quand la machine n'en a pas un qui convient (`pythonPrive.ts`) | **accepté par Medhi le 27/09/2026** (« Python doit s'installer ») ; publication épinglée, empreintes SHA-256 écrites dans le code |
 | Node 24 LTS officiel | OpenJS Foundation | MIT (npm : Artistic 2.0) | npm de l'atelier et `npx` des serveurs d'outils (MCP) quand la machine n'en a pas | même Node que celui d'OpenClaw, déjà en place ; empreinte vérifiée contre `SHASUMS256.txt` |
-| llmster (moteur sans interface de LM Studio) | Element Labs | conditions de LM Studio (acceptées par l'entreprise à l'installation) | moteur des modèles sous Windows et Linux | empreinte SHA-512 publiée par l'éditeur, vérifiée |
+| llmster (moteur sans interface de LM Studio) | Element Labs | conditions de LM Studio (acceptées à l'installation, pour soi ou au nom de son organisation) | moteur des modèles sur Mac à puce Apple, Windows et Linux | version 0.0.25-1 épinglée, empreintes SHA-512 écrites dans le code |
 
 Écartés pour le RAG : LanceDB, better-sqlite3 / sqlite-vec et le reclassement par
 onnxruntime-node (modules natifs, § 3.10) ; Orama (licence déclarée « NOASSERTION »
@@ -1192,6 +1192,10 @@ réussis le 26/09/2026**.
   Sécurité ; au-delà, les journées sont effacées de l'instance (la copie
   `journalCopie`, elle, n'est jamais purgée) (SECURITE.md § 4 et § 7.2).
 - **LM Studio** interdit de servir une instance à d'autres organisations (§ 3.9).
+- **Trousseau sur macOS** : tant que l'application n'est pas signée par Apple, macOS redemande
+  l'accès une fois à chaque nouvelle version (27/09/2026).
+- **Windows** : l'installateur n'est pas signé ; Smart App Control, quand il est actif, le
+  bloque sans proposer de le lancer quand même.
 - **Le bot de réunion** entre dans une réunion Google Meet comme invité : un
   participant doit l'admettre, et c'est à la personne qui l'envoie de prévenir les
   autres (l'écran le dit). Sa fenêtre charge Google Meet sans isolation de contexte
@@ -2536,7 +2540,11 @@ ne restent ici que les points ouverts.*
    OpenClaw qui traite un vrai mail (profil restreint, web gardé) et une mission du mois ;
    une tâche programmée partie seule à l'heure dite ; la dictée au micro dans
    l'application ; la vidéo Wan 2.2 sur une machine de 32 Go, et la vidéo sur Windows et
-   Linux.
+   Linux ; le parcours complet de mise en route sur un Mac sans moteur (MacBook : llmster posé
+   et démarré par Helix, puis le modèle, et la valeur de l'autorisation d'écran avant toute
+   demande) ; l'installateur Windows, jamais lancé sur un vrai PC ; le `.deb` sur un vrai
+   Ubuntu (AppArmor) et l'AppImage sur Fedora (`/tmp` en mémoire) ; `lms get` de llmster sans
+   terminal sur un réseau lent.
 9. **Passer ce Mac sur Qwen3.5 9B**, le modèle qu'Helix y installerait aujourd'hui (il
    tourne encore sur Qwen3 8B, installé avant la règle) : 6 Go, à télécharger sur accord.
 
@@ -2756,8 +2764,9 @@ moment du choix (niveau d'approbation, palier « étendu »). Ne pas refaire à 
 - « LM Studio daemon is not running and no valid installation could be found » : l'application
   LM Studio posée par Helix n'avait jamais été ouverte. Désormais, sur un Mac à puce Apple,
   Helix pose le moteur sans interface (llmster, épinglé, empreinte vérifiée), comme sous Windows
-  et Linux ; et si l'application LM Studio est déjà là sans avoir jamais été ouverte, Helix
-  l'ouvre une fois en arrière-plan puis réessaie. **Vérifié sur ce Mac** : installation du
+  et Linux ; une application LM Studio posée mais jamais ouverte ne compte plus comme moteur
+  (point suivant) ; l'ouverture en arrière-plan puis le nouvel essai (`backends.ts`) ne restent
+  que pour une application déclarée qui refuserait de démarrer. **Vérifié sur ce Mac** : installation du
   moteur (43 s, dossier personnel temporaire). **Pas vérifié** : son démarrage sur un Mac (ce
   Mac fait tourner LM Studio pour Eden sur les mêmes ports), ni le rattrapage par ouverture.
 - Même erreur au second essai sur le MacBook : l'application LM Studio posée par une version
@@ -2805,6 +2814,25 @@ moment du choix (niveau d'approbation, palier « étendu »). Ne pas refaire à 
   particulier. Relu le 27/09/2026 (version du 23/08/2026) : elles permettent l'usage personnel
   et les besoins internes d'une organisation, pas un service fourni à d'autres. L'écran dit
   maintenant « J'accepte, pour moi ou au nom de mon organisation ».
+- L'autorisation d'enregistrer l'écran était demandée à chaque lancement : pour dire si le
+  contrôle de l'écran était prêt, la passerelle prenait une vraie capture. Elle demande
+  maintenant l'état à l'application (`systemPreferences.getMediaAccessStatus`, sans rien
+  ouvrir), et macOS ne pose sa question qu'à la première action de l'agent sur l'écran. macOS
+  répond « refusé » avant toute demande : tant que Helix n'a jamais tenté de capture, c'est
+  compté comme « pas encore demandé ». **Pas vérifié** : la valeur réelle sur un Mac neuf.
+
+**Fait le 27/09/2026 (après-midi) : relecture des installations par cinq agents.** Demandée par
+Medhi après les essais sur le MacBook (« être sûr que les installations vont bien
+fonctionner »). Cinq relectures en lecture seule : macOS, Windows, Linux, écran de mise en
+route, documentation. Aucun défaut vérifié qui empêche à coup sûr d'arriver à un Chat ; une
+vingtaine de défauts corrigés, détaillés dans SECURITE.md § 29.6. Les principaux, côté
+personne : l'écran ne se fige plus quand le flux se coupe, « Commencer » n'apparaît qu'avec un
+modèle de Chat, un refus se lit à l'écran, le repli ne télécharge plus un modèle plus lourd,
+un échec essaie le modèle suivant, un moteur arrêté est dit comme tel, le téléchargement du
+moteur n'est plus coupé à 30 minutes sur une connexion lente, et le script d'installation
+n'efface plus une application encore ouverte. Restent, écrits dans SECURITE.md § 29.6, les
+limites de Windows et de Linux qu'on ne peut essayer que sur de vraies machines. `npm run
+securite` : 433 contrôles, tous réussis.
 - Réponses en français à un message en anglais : la consigne française disait « tu réponds en
   français ». Le modèle répond maintenant dans la langue du dernier message, agents compris ;
   la langue de base est l'anglais (interface, passerelle, zone de notification) quand celle du

@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { execFile } from "node:child_process";
 import { createWriteStream, existsSync, mkdirSync, rmSync, symlinkSync, readlinkSync, unlinkSync } from "node:fs";
 import { homedir, release, platform, arch, tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { deployment } from "./deployment.ts";
@@ -250,7 +250,18 @@ async function installerNodeUneFois(pour: "openclaw" | "atelier"): Promise<strin
 /** `<racine>/node` pointe sur la version installée : l'exécutable d'OpenClaw garde un chemin stable. */
 function relier(lien: string, cible: string): void {
   try {
-    if (readlinkSync(lien) === cible) return;
+    const actuel = readlinkSync(lien);
+    /*
+     * Sous Windows, une « junction » se relit en chemin absolu : comparée au
+     * nom relatif, elle paraissait toujours fausse, et était effacée puis
+     * refaite à chaque appel, même sous qui s'en servait (revue Windows du
+     * 27/09/2026).
+     */
+    const memeCible =
+      platform() === "win32"
+        ? resolve(actuel).replace(/[\\/]+$/, "").toLowerCase() === join(racine(), cible).toLowerCase()
+        : actuel === cible;
+    if (memeCible) return;
     unlinkSync(lien);
   } catch {
     /* pas encore de lien */

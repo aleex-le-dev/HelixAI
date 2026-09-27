@@ -4,7 +4,7 @@ import { existsSync } from "node:fs";
 import { promisify } from "node:util";
 import { homedir, totalmem } from "node:os";
 import { join } from "node:path";
-import { applicationLmStudio, lmsDeLlmster, moteurSansInterface, preparerDossiersLlmster } from "./engine.ts";
+import { applicationLmStudio, lmsDeLlmster, moteurAPoser, moteurSansInterface, preparerDossiersLlmster } from "./engine.ts";
 import { BACKENDS, classifyRoles, isReasoningModel, tousLesBackends } from "./config.ts";
 import type { BackendConfig, BackendStatus, ModelInfo } from "./types.ts";
 import { t, tf } from "./langue.ts";
@@ -174,6 +174,9 @@ const LMSTUDIO_URL = BACKENDS.find((b) => b.id === "lmstudio")?.baseUrl ?? "";
 let dernierEssai = 0;
 const DELAI_ENTRE_ESSAIS_MS = 30_000;
 
+/** Le serveur de LM Studio répond-il ? (après un démarrage, pour le dire à l'écran). */
+export const lmStudioRepond = (): Promise<boolean> => (LMSTUDIO_URL ? repond(LMSTUDIO_URL) : Promise.resolve(false));
+
 async function repond(url: string): Promise<boolean> {
   try {
     const res = await fetch(`${url}/models`, { signal: AbortSignal.timeout(1500) });
@@ -192,6 +195,14 @@ export async function ensureLmStudioServer(): Promise<boolean> {
   // Avant tout, même serveur déjà en marche : sans ce dossier, llmster ne charge aucun modèle (engine.ts).
   preparerDossiersLlmster();
   if (await repond(LMSTUDIO_URL)) return true;
+  /*
+   * Mac à puce Apple sans moteur que `lms` sache démarrer (engine.ts) : rien à
+   * allumer, le moteur est à installer. Sans ce garde, la simple lecture de
+   * l'état ouvrait l'application LM Studio jamais servie, et réessayait une
+   * minute, avant même que les conditions de LM Studio soient acceptées (revue
+   * du 27/09/2026).
+   */
+  if (moteurAPoser()) return false;
 
   const maintenant = Date.now();
   if (maintenant - dernierEssai < DELAI_ENTRE_ESSAIS_MS) return false;
@@ -220,12 +231,17 @@ export async function ensureLmStudioServer(): Promise<boolean> {
   }
 
   /*
-   * Linux et Windows : le moteur sans interface (llmster, engine.ts) tourne
-   * comme un service, qu'on allume avant son serveur. Sans effet s'il tourne
-   * déjà. Pas sur macOS : c'est l'application LM Studio, partagée, qui y sert.
+   * Le moteur sans interface (llmster, engine.ts : Windows, Linux, Mac à puce
+   * Apple) tourne comme un service, qu'on allume avant son serveur. Sans
+   * effet s'il tourne déjà. Trois minutes : au premier démarrage, llmster
+   * extrait ses outils et ses modules avant d'écouter (vu sur macOS le
+   * 27/09/2026 : plus de 25 s). Là où l'application LM Studio a servi, c'est
+   * elle, partagée, qui sert.
    */
   if (moteurSansInterface()) {
-    await exec(lms, ["daemon", "up"], { timeout: 60_000 }).catch(() => undefined);
+    await exec(lms, ["daemon", "up"], { timeout: 180_000 }).catch((err) =>
+      console.error("[helix] `lms daemon up` en échec :", String((err as { stderr?: unknown }).stderr ?? (err as Error).message ?? err).slice(-300)),
+    );
   }
   try {
     console.log("[helix] serveur LM Studio arrêté, démarrage...");
@@ -240,6 +256,7 @@ export async function ensureLmStudioServer(): Promise<boolean> {
      */
     const application = applicationLmStudio();
     const detail = `${(err as { stdout?: unknown }).stdout ?? ""}${(err as { stderr?: unknown }).stderr ?? ""}${(err as Error).message ?? ""}`;
+    console.error("[helix] `lms server start` en échec :", detail.slice(-300));
     if (!application || moteurSansInterface() || !/no valid installation|daemon is not running|failed to start or connect/i.test(detail)) return false;
     console.log("[helix] LM Studio jamais ouvert sur ce Mac : premier lancement en arrière-plan...");
     await exec("/usr/bin/open", ["-g", "-j", "-a", application], { timeout: 30_000 }).catch(() => undefined);

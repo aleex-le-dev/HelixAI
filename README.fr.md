@@ -46,8 +46,9 @@ Empreintes SHA-256 : [`SHA256SUMS.txt`](https://github.com/medhiclb/HelixAI/rele
 | **Ubuntu, Debian** (x64) | [helix-plateforme_0.27.0_amd64.deb](https://github.com/medhiclb/HelixAI/releases/download/v0.27.0/helix-plateforme_0.27.0_amd64.deb) | `sudo apt install ./helix-plateforme_0.27.0_amd64.deb` |
 | **Autres Linux** (x64) | [Helix-0.27.0.AppImage](https://github.com/medhiclb/HelixAI/releases/download/v0.27.0/Helix-0.27.0.AppImage) | `chmod +x Helix-0.27.0.AppImage`, puis lancez-le. Sur Ubuntu 24.04, préférez le `.deb` |
 
-Au premier lancement, Helix installe ce dont il a besoin : le moteur
-[LM Studio](https://lmstudio.ai) et le modèle le mieux adapté à la machine. Python et Node
+Au premier lancement, Helix installe ce dont il a besoin : le moteur sans interface de
+[LM Studio](https://lmstudio.ai) (version épinglée, empreinte vérifiée), ou l'application
+LM Studio si elle sert déjà sur la machine, et le modèle le mieux adapté à la machine. Python et Node
 sont installés automatiquement s'ils manquent (versions épinglées, empreintes vérifiées).
 Sur Windows et Linux, une mise à jour s'installe en lançant le nouveau paquet par-dessus
 le précédent ; vos données sont conservées.
@@ -59,6 +60,12 @@ GitHub (`gh`) connecté avec un compte qui a accès au dépôt :
 ```bash
 gh api repos/medhiclb/HelixAI/contents/scripts/installer-macos.sh -H "Accept: application/vnd.github.raw" | sh
 ```
+
+Les applications ne sont pas encore signées par Apple ni par Microsoft. Sur macOS, tant que
+l'application n'est pas certifiée, macOS demande une fois après chaque nouvelle version
+l'accès de Helix à sa clé du trousseau (« Helix Safe Storage ») : choisissez « Toujours
+autoriser ». Sous Windows 11, le contrôle intelligent des applications (Smart App Control),
+quand il est actif, bloque les applications non signées sans proposer de les lancer quand même.
 
 Pour construire depuis les sources : `npm install`, `npm run build`, puis `npm run package`
 (macOS), `npx electron-builder --win nsis --x64` (Windows) ou
@@ -127,13 +134,13 @@ Pour construire depuis les sources : `npm install`, `npm run build`, puis `npm r
 
 - Une machine de développement sous macOS (puce Apple), Windows 10/11 ou Linux (x64) ; les
   paquets Windows et Linux se fabriquent aussi depuis un Mac
-- Node.js 20 ou plus récent, et npm (seulement pour construire : l'application installée ne
-  demande ni Node ni Python)
+- Node.js 22.18 ou plus récent, et npm (seulement pour construire et développer, la passerelle
+  exécute directement son TypeScript : l'application installée ne demande ni Node ni Python)
 - Facultatif : [OpenCode](https://opencode.ai) pour Helix Code
 
-Rien d'autre à installer au préalable : au premier lancement, Helix installe le moteur des
-modèles ([LM Studio](https://lmstudio.ai), ou celui déjà présent) et le modèle adapté à la
-machine. 16 Go de mémoire sont conseillés ; sur une machine plus modeste, Helix choisit un
+Rien d'autre à installer au préalable : au premier lancement, Helix installe le moteur sans
+interface de [LM Studio](https://lmstudio.ai) (ou se sert de l'application LM Studio si elle
+sert déjà) et le modèle adapté à la machine. 16 Go de mémoire sont conseillés ; sur une machine plus modeste, Helix choisit un
 modèle plus léger.
 
 ### Lancer
@@ -196,9 +203,9 @@ signez le [CLA](CLA.md) avant votre première pull request.
 Qui le distribue, ou le propose comme service en ligne, doit publier le code de sa
 version sous la même licence. Détails dans [COPYRIGHT.md](COPYRIGHT.md).
 
-LM Studio, le moteur de modèles par défaut, est un logiciel fermé dont les conditions le
-réservent à l'usage interne d'une organisation : lisez [PROJET.md § 3.9](PROJET.md) avant
-d'héberger une instance pour d'autres.
+LM Studio, le moteur de modèles par défaut, est un logiciel fermé dont les conditions
+permettent l'usage personnel et l'usage interne d'une organisation, pas un service fourni à
+d'autres : lisez [PROJET.md § 3.9](PROJET.md) avant d'héberger une instance pour d'autres.
 
 ## Remerciements
 

@@ -33,6 +33,30 @@ import { renommer } from "./processus.ts";
 /** Version d'OpenClaw sur laquelle la configuration écrite par Helix a été éprouvée. */
 export const VERSION_OPENCLAW_EPROUVEE = "2026.9.4";
 
+/**
+ * Les dépendances que npm résout pour OpenClaw et pour les serveurs d'outils
+ * lancés par `npx` (mcp.ts) : seulement des versions publiées avant cette date
+ * (`--before` de npm, seconde tournée de l'audit, 28/09/2026).
+ *
+ * Aucun de ces paquets ne publie de fichier de verrouillage (`npm-shrinkwrap`,
+ * relu sur le registre) : sans date, chaque installation prend la dernière
+ * version de chaque dépendance, publiée peut-être la veille. C'est la porte
+ * des paquets repris par un tiers, qui publie une version piégée et compte
+ * sur les installations des heures suivantes. Mesuré ce jour-là :
+ * `ansi-regex` 6.4.0, publiée le 27/09/2026 à 03:34 (UTC), entrait sans date
+ * dans les arbres de Firecrawl et de Kubernetes ; avec la date, 6.3.0 (du
+ * 12/08), et aucun autre écart dans les treize arbres. Le registre n'accepte
+ * pas qu'une version publiée soit remplacée : à date fixe, l'arbre est le
+ * même d'une installation à l'autre.
+ *
+ * Ce n'est pas une empreinte écrite dans le code : npm vérifie chaque archive
+ * contre l'empreinte que le registre publie. **Monter la version d'un paquet
+ * du catalogue, ou celle d'OpenClaw, c'est avancer cette date au jour de
+ * l'essai** : une version publiée après elle est refusée (`ETARGET … with a
+ * date before`), et le contrôle 14 bis de `npm run securite` le rappelle.
+ */
+export const DEPENDANCES_NPM_AVANT = "2026-09-27T00:00:00.000Z";
+
 const racine = () =>
   join(process.env.HELIX_DATA_DIR ?? join(homedir(), ".helix", "data"), "openclaw-moteur");
 
@@ -289,6 +313,12 @@ async function installerPaquet(version: string): Promise<string> {
   const [maj = 0, min = 0] = v.sortie.trim().split(".").map(Number);
   if (!v.ok) throw new Error("npm, livré avec Node, ne répond pas.");
   const args = ["install", "-g", `openclaw@${version}`, "--no-fund", "--no-audit", "--loglevel=error"];
+  /*
+   * Ses dépendances à la date de l'essai (DEPENDANCES_NPM_AVANT), pour la
+   * version éprouvée seulement : une version choisie par le profil peut être
+   * plus récente que la date, et serait refusée.
+   */
+  if (version === VERSION_OPENCLAW_EPROUVEE) args.push(`--before=${DEPENDANCES_NPM_AVANT}`);
   // npm 11.16 et suivants bloquent les scripts d'installation non approuvés : on n'approuve qu'OpenClaw.
   if (maj > 11 || (maj === 11 && min >= 16)) args.push("--allow-scripts=openclaw");
   const r = await executer(npm, args, env, 20 * 60_000);

@@ -522,7 +522,7 @@ export function ComparerModeles({
         </div>
       )}
 
-      {/* Attribution exigée par la licence CC BY 4.0 d'Epoch AI : la source, l'auteur, la licence, le lien. */}
+      {/* Attribution exigée par la licence CC BY 4.0 d'Epoch AI : la source, l'auteur, la licence, le lien, et ce qui a été modifié (section 3(a)(1)(B) de la licence ; détail dans THIRD_PARTY_NOTICES.md § 3). */}
       <p className="mt-4 text-xs text-muted-foreground">
         {t("Notes :")}{" "}
         <a
@@ -538,7 +538,7 @@ export function ComparerModeles({
         <a href={SOURCE_NOTES.licenceUrl} target="_blank" rel="noreferrer" className="underline underline-offset-2 hover:text-foreground">
           {SOURCE_NOTES.licence}
         </a>
-        {tf(", relevé le {0}.", formaterDate(`${SOURCE_NOTES.releveLe}T12:00:00`))}{" "}
+        {tf(", relevé le {0} ; extrait (modèles sortis depuis 2024) et rapproché des noms de modèles, notes inchangées.", formaterDate(`${SOURCE_NOTES.releveLe}T12:00:00`))}{" "}
         {tf("Prix : pages de prix des éditeurs, relevées le {0}.", formaterDate(`${SOURCE_NOTES.releveLe}T12:00:00`))}
       </p>
     </Modal>

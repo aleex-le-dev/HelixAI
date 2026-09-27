@@ -72,7 +72,8 @@ export interface LignePrix {
 }
 
 export const FOURNISSEURS_PRIX: FournisseurPrix[] = [
-  { id: "openai", nom: "OpenAI", page: "https://platform.openai.com/docs/pricing", releveLe: "2026-09-27", devise: "USD", hotes: ["api.openai.com"] },
+  // Adresse suivie le 28/09/2026 : platform.openai.com/docs/pricing y renvoie (301).
+  { id: "openai", nom: "OpenAI", page: "https://developers.openai.com/api/docs/pricing", releveLe: "2026-09-27", devise: "USD", hotes: ["api.openai.com"] },
   { id: "anthropic", nom: "Anthropic", page: "https://platform.claude.com/docs/en/about-claude/pricing", releveLe: "2026-09-27", devise: "USD", hotes: ["api.anthropic.com"] },
   { id: "google", nom: "Google", page: "https://ai.google.dev/gemini-api/docs/pricing", releveLe: "2026-09-27", devise: "USD", hotes: ["generativelanguage.googleapis.com"] },
   // La page affiche les deux devises ; Mistral facture en euros, ce sont eux qui comptent pour « Mon usage ».

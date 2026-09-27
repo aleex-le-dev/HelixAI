@@ -5261,7 +5261,7 @@ console.log("\n14. Chaîne d'approvisionnement : versions figées, empreintes é
   const employes = sansCommentaires(src("gateway", "src", "employes.ts"));
   verifier("extensions d'OpenClaw : installées à la version de l'OpenClaw qui tourne, pas à la dernière publiée", /`\$\{paquet\}@\$\{moteur\.version\}`/.test(employes) && /oc\(\["plugins", "install", spec\]/.test(employes), "extension sans version");
 
-  // Licences des modèles proposés : Apache 2.0 ou MIT (CLAUDE.md du projet, PROJET.md § 3.9).
+  // Licences des modèles proposés : Apache 2.0 ou MIT (règle du projet, PROJET.md § 3.9).
   const licences = [src("gateway", "src", "provision.ts"), images].flatMap((s) => [...s.matchAll(/licence: "([^"]+)"/g)].map((m) => m[1]));
   const horsRegle = licences.filter((l) => !["Apache 2.0", "MIT"].includes(l));
   verifier("modèles proposés : licence Apache 2.0 ou MIT seulement", licences.length >= 25 && horsRegle.length === 0, horsRegle.join(", ") || `${licences.length} modèles`);
@@ -5313,6 +5313,161 @@ console.log("\n14. Chaîne d'approvisionnement : versions figées, empreintes é
     verifier("dépôt : aucun fichier suivi ne contient de clé privée, le dossier personnel de ce poste ni l'adresse de l'auteur des commits", traces.length === 0, traces.slice(0, 5).join(", "));
   } else {
     console.log("  (pas de dépôt git ici : contrôles du dépôt public sautés)");
+  }
+}
+
+/* ------------------------------------------------------------------------- */
+console.log("\n14 bis. Seconde tournée de l'audit : dépendances npm à date fixe, mentions des tiers, notes et prix sourcés, dépôt sans trace (28/09/2026)");
+{
+  const src = (...p) => readFileSync(join(RACINE, ...p), "utf8");
+  const sansCommentaires = (s) => s.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+  const { pathToFileURL: versUrl } = await import("node:url");
+
+  /*
+   * Dépendances des serveurs `npx` et d'OpenClaw : aucun de ces paquets ne
+   * publie de verrou (npm-shrinkwrap), npm prenait donc la dernière version de
+   * chaque dépendance. Tenues à une date (SECURITE.md § 39).
+   */
+  const oc = src("gateway", "src", "installationOpenClaw.ts");
+  const date = /export const DEPENDANCES_NPM_AVANT = "([^"]+)";/.exec(oc)?.[1] ?? "";
+  const dateOk = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(date) && !Number.isNaN(Date.parse(date)) && Date.parse(date) <= Date.now();
+  verifier("npm : une date fixe pour les dépendances, au format ISO et déjà passée (DEPENDANCES_NPM_AVANT)", dateOk, date || "absente");
+  const mcp = sansCommentaires(src("gateway", "src", "mcp.ts"));
+  verifier(
+    "serveurs d'outils lancés par npx : npm_config_before à cette date, sauf pour une commande libre",
+    /\.\.\.\(entry\.config\.command === "npx" && !entry\.config\.libre \? \{ npm_config_before: DEPENDANCES_NPM_AVANT \} : \{\}\)/.test(mcp) && /import \{[^}]*DEPENDANCES_NPM_AVANT[^}]*\} from "\.\/installationOpenClaw\.ts"/.test(mcp),
+    "npm_config_before absent",
+  );
+  const conn = sansCommentaires(src("gateway", "src", "connecteurs.ts"));
+  verifier(
+    "connecteurs : seul un connecteur libre est déclaré « libre » au lancement (versConfig et installation)",
+    /env: environnement\(c\),\s*autoStart: true,\s*\.\.\.\(c\.libre === true \? \{ libre: true \} : \{\}\),/.test(conn) && /env: recolte\.secrets,\s*autoStart: true,\s*\.\.\.\(verdict\.libre \? \{ libre: true \} : \{\}\),/.test(conn),
+    "drapeau libre non transmis",
+  );
+  verifier(
+    "OpenClaw : installé avec --before à cette date pour la version éprouvée",
+    /if \(version === VERSION_OPENCLAW_EPROUVEE\) args\.push\(`--before=\$\{DEPENDANCES_NPM_AVANT\}`\)/.test(sansCommentaires(oc)),
+    "--before absent",
+  );
+  // Et ce que fait vraiment le lancement : un faux npx relève son environnement.
+  {
+    const bac = mkdtempSync(join(tmpdir(), "helix-npx-"));
+    const trace = join(bac, "env.json");
+    const faux = join(bac, "npx");
+    const { writeFileSync: ecrire } = await import("node:fs");
+    ecrire(faux, `#!/bin/sh\nnode -e 'require("fs").writeFileSync(process.argv[1], JSON.stringify({before: process.env.npm_config_before || null, scripts: process.env.npm_config_ignore_scripts || null}))' "${trace}"\nexit 1\n`);
+    chmodSync(faux, 0o755);
+    // Un `node` à côté : mcp.ts ne prend le npx du PATH que si le Node de son dossier est assez récent.
+    (await import("node:fs")).symlinkSync(process.execPath, join(bac, "node"));
+    const lancer = (libre) =>
+      new Promise((ok) => {
+        rmSync(trace, { force: true });
+        const code = `
+          const m = await import(${JSON.stringify(versUrl(join(RACINE, "gateway", "src", "mcp.ts")).href)});
+          m.declarer({ id: "essai-npx", label: "essai", description: "", command: "npx", args: ["-y", "paquet-essai@1.0.0"], autoStart: false${libre ? ", libre: true" : ""} });
+          await m.startServer("essai-npx");
+          process.exit(0);`;
+        const p = spawn(process.execPath, ["--input-type=module", "-e", code], {
+          env: { ...process.env, PATH: `${bac}:${process.env.PATH}`, HELIX_DATA_DIR: bac, HELIX_WORKSPACE: bac, HELIX_CONFIG: process.env.HELIX_CONFIG },
+          stdio: "ignore",
+        });
+        const fin = setTimeout(() => p.kill(), 20_000);
+        p.on("exit", () => {
+          clearTimeout(fin);
+          try {
+            ok(JSON.parse(readFileSync(trace, "utf8")));
+          } catch {
+            ok(null);
+          }
+        });
+      });
+    const catalogue = await lancer(false);
+    const libre = await lancer(true);
+    verifier("npx lancé pour un serveur du catalogue : npm_config_before à la date, scripts coupés", catalogue?.before === date && catalogue?.scripts === "true", JSON.stringify(catalogue));
+    verifier("npx lancé pour une commande libre : pas de date imposée, scripts toujours coupés", libre && libre.before === null && libre.scripts === "true", JSON.stringify(libre));
+    rmSync(bac, { recursive: true, force: true });
+  }
+
+  // Mentions des tiers : le fichier, à jour de ce qui est construit, et livré avec l'application.
+  const notices = existsSync(join(RACINE, "THIRD_PARTY_NOTICES.md")) ? src("THIRD_PARTY_NOTICES.md") : "";
+  let aJour = false;
+  let sortieNotices = "";
+  try {
+    sortieNotices = execFileSync(process.execPath, [join(RACINE, "scripts", "notices-tiers.mjs"), "--verifier"], { cwd: RACINE, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+    aJour = true;
+  } catch (e) {
+    sortieNotices = String(e.stdout ?? e.message);
+  }
+  verifier("THIRD_PARTY_NOTICES.md : les paquets fondus dans la passerelle et l'interface, avec leur licence, à jour de ce qui se construit", notices.length > 10_000 && aJour, sortieNotices.trim().slice(0, 200));
+  const pkg = JSON.parse(src("package.json"));
+  const ressources = (pkg.build?.extraResources ?? []).map((r) => `${r.from}>${r.to}`);
+  const ressourcesMac = (pkg.build?.mac?.extraResources ?? []).map((r) => `${r.from}>${r.to}`);
+  verifier("application : THIRD_PARTY_NOTICES.md livré dans ses ressources", ressources.includes("THIRD_PARTY_NOTICES.md>THIRD_PARTY_NOTICES.md"), ressources.join(", "));
+  verifier(
+    "application pour Mac : les mentions d'Electron et de Chromium recopiées (electron-builder les efface du paquet macOS)",
+    ressourcesMac.includes("node_modules/electron/dist/LICENSE>LICENSE.electron.txt") &&
+      ressourcesMac.includes("node_modules/electron/dist/LICENSES.chromium.html>LICENSES.chromium.html") &&
+      existsSync(join(RACINE, "node_modules", "electron", "dist", "LICENSES.chromium.html")),
+    ressourcesMac.join(", ") || "rien",
+  );
+  verifier(
+    "THIRD_PARTY_NOTICES.md : Electron, la police Satoshi, Epoch AI et les téléchargements hors Apache/MIT y sont nommés, avec l'avertissement « pas un avis juridique »",
+    ["Electron 44", "LICENSES.chromium.html", "Satoshi", "ITF Free Font License", "CC BY 4.0", "x264", "MPL-2.0", "MIT-CMU", "LibreOffice", "pas un avis juridique"].every((m) => notices.includes(m)),
+    "mention manquante",
+  );
+
+  // Epoch AI : attribution complète (auteur, titre, lien, licence, modifications), à l'écran et dans le dépôt.
+  const { SOURCE_NOTES } = await import(versUrl(join(RACINE, "gateway", "src", "notesModeles.ts")).href);
+  const comparer = src("src", "components", "chat", "ComparerModeles.tsx");
+  verifier(
+    "Epoch AI : auteur, titre, lien, licence et son adresse, date du relevé",
+    SOURCE_NOTES.nom === "Epoch AI" && SOURCE_NOTES.titre && /^https:\/\/epoch\.ai\//.test(SOURCE_NOTES.page) && SOURCE_NOTES.licence === "CC BY 4.0" && SOURCE_NOTES.licenceUrl === "https://creativecommons.org/licenses/by/4.0/" && /^\d{4}-\d{2}-\d{2}$/.test(SOURCE_NOTES.releveLe),
+    JSON.stringify(SOURCE_NOTES),
+  );
+  verifier(
+    "Epoch AI : « Comparer les modèles » affiche la source, le titre, la licence avec son lien, la date et ce qui a été modifié",
+    ["SOURCE_NOTES.page", "SOURCE_NOTES.nom", "SOURCE_NOTES.titre", "SOURCE_NOTES.licenceUrl", "SOURCE_NOTES.licence", "SOURCE_NOTES.releveLe", "rapproché des noms de modèles, notes inchangées"].every((m) => comparer.includes(m)),
+    "élément d'attribution manquant",
+  );
+  verifier("Epoch AI : THIRD_PARTY_NOTICES.md porte l'attribution et les modifications", /Auteur\*\* : Epoch AI/.test(notices) && /Modifications\*\* :/.test(notices) && notices.includes("https://epoch.ai/benchmarks/use-this-data"), "attribution absente");
+
+  // Prix publiés : chaque ligne rattachée à un fournisseur qui a sa page officielle et sa date.
+  const prix = await import(versUrl(join(RACINE, "gateway", "src", "prixPublies.ts")).href);
+  const pages = new Map(prix.FOURNISSEURS_PRIX.map((f) => [f.id, f]));
+  const sansSource = prix.PRIX_PUBLIES.filter((l) => {
+    const f = pages.get(l.fournisseur);
+    return !f || !/^https:\/\//.test(f.page) || !/^\d{4}-\d{2}-\d{2}$/.test(f.releveLe) || !l.prix.length || l.prix.some((p) => !(p.entree >= 0 && p.sortie >= 0) || !["USD", "EUR"].includes(p.devise));
+  });
+  verifier("prix publiés : chaque ligne a une source officielle (page HTTPS de son fournisseur, date du relevé) et des montants lisibles", prix.PRIX_PUBLIES.length > 100 && sansSource.length === 0, sansSource.slice(0, 3).map((l) => l.noms[0]).join(", ") || `${prix.PRIX_PUBLIES.length} lignes`);
+  verifier("prix publiés : la page d'OpenAI est celle où l'ancienne adresse renvoie", pages.get("openai")?.page === "https://developers.openai.com/api/docs/pricing", pages.get("openai")?.page);
+
+  // Dépôt public : aucune trace d'outil d'IA, ni nom court Windows du poste.
+  let suivis = [];
+  let messages = "";
+  try {
+    suivis = execFileSync("git", ["ls-files", "-z"], { cwd: RACINE, encoding: "utf8" }).split("\0").filter(Boolean);
+    messages = execFileSync("git", ["log", "--format=%B", "HEAD"], { cwd: RACINE, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
+  } catch {
+    /* pas un dépôt git */
+  }
+  if (suivis.length) {
+    verifier("dépôt : aucun fichier de consignes ni dossier de réglages d'un outil d'IA suivi", !suivis.some((f) => /(^|\/)CLAUDE\.md$|(^|\/)\.claude\//.test(f)), suivis.filter((f) => /CLAUDE\.md$|\.claude\//.test(f)).join(", "));
+    verifier("dépôt : aucun message de commit avec « Co-Authored-By » ni « Generated with »", !/co-authored-by|generated with \[/i.test(messages), "trace trouvée");
+    const nomCourt = (process.env.USER ?? "").toUpperCase().slice(0, 6);
+    const traces = [];
+    for (const f of suivis) {
+      let s;
+      try {
+        s = readFileSync(join(RACINE, f), "utf8");
+      } catch {
+        continue;
+      }
+      if (s.includes("\0")) continue;
+      if (/co-authored-by:/i.test(s) && f !== "scripts/securite.mjs") traces.push(`${f} : Co-Authored-By`);
+      if (/CLAUDE\.md du projet/.test(s)) traces.push(`${f} : renvoi au fichier de consignes d'un outil d'IA`);
+      if (nomCourt.length >= 3 && s.includes(`\\Users\\${nomCourt}~1`)) traces.push(`${f} : nom court Windows du poste`);
+    }
+    verifier("dépôt : aucun fichier suivi avec « Co-Authored-By », renvoi au fichier de consignes d'un outil d'IA ni nom court Windows de ce poste", traces.length === 0, traces.slice(0, 5).join(", "));
   }
 }
 

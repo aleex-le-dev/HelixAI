@@ -737,6 +737,7 @@ const versConfig = (brut: ConnecteurEnregistre): McpServerConfig => {
         args: c.args ?? [],
         env: environnement(c),
         autoStart: true,
+        ...(c.libre === true ? { libre: true } : {}),
       };
 };
 
@@ -1122,6 +1123,7 @@ export async function ajouter(brut: unknown, qui: string): Promise<Resultat> {
     args: verdict.args,
     env: recolte.secrets,
     autoStart: true,
+    ...(verdict.libre ? { libre: true } : {}),
   };
 
   declarer(config);

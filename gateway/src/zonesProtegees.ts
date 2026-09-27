@@ -31,7 +31,7 @@ import { basename, dirname, isAbsolute, join, resolve, sep } from "node:path";
 
 /*
  * Sous Windows, le chemin réel « natif » : celui de Node en JavaScript ne
- * développe pas les noms courts (`C:\Users\MEDHI~1`), et un chemin écrit
+ * développe pas les noms courts (`C:\Users\PRENOM~1`), et un chemin écrit
  * ainsi passait à côté de la zone qu'il désigne (audit Windows du 27/09/2026).
  */
 const reel = (p: string): string => (process.platform === "win32" ? realpathSync.native(p) : realpathSync(p));

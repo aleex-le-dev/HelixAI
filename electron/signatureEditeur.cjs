@@ -99,7 +99,7 @@ async function empreinteSansSignatureDeCode(chemin) {
  * en est exclu (il ne peut pas se contenir lui-même), avec la signature de code
  * de macOS (voir plus haut) ; la clé publique, elle, en fait partie.
  */
-async function releve(app) {
+async function releve(app, { droits = null } = {}) {
   const exclu = path.join("Contents", "Resources", FICHIER_SIGNATURE);
   const lignes = [];
   const parcourir = async (rel) => {
@@ -109,6 +109,8 @@ async function releve(app) {
       if (r === exclu || nom === "_CodeSignature") continue;
       const abs = path.join(app, r);
       const st = fs.lstatSync(abs);
+      // Hors du relevé (voir DROITS_INTERDITS) : noté à part, pour la vérification seulement.
+      if (droits && !st.isSymbolicLink() && st.mode & DROITS_INTERDITS) droits.push(r);
       if (st.isSymbolicLink()) lignes.push(`l ${JSON.stringify(r)} ${JSON.stringify(fs.readlinkSync(abs))}`);
       else if (st.isDirectory()) {
         lignes.push(`d ${JSON.stringify(r)}`);
@@ -120,6 +122,46 @@ async function releve(app) {
   };
   await parcourir("");
   return { empreinte: crypto.createHash("sha256").update(lignes.join("\n")).digest("hex"), fichiers: lignes.length };
+}
+
+/*
+ * Ce que le relevé ne couvre pas, et qu'une archive peut changer sans toucher
+ * à la signature (test d'intrusion du 27/09/2026) : les droits d'écriture et
+ * les listes d'accès (ACL). Une instance piratée, ou une publication GitHub
+ * remplacée (l'empreinte de l'archive macOS n'y est pas signée), servait
+ * l'application authentique, mais avec des dossiers en 0777 et une ACL
+ * « everyone » : `ditto` les restitue, la vérification passait, et le script
+ * d'installation déplaçait le tout dans /Applications. N'importe quel autre
+ * compte du Mac (ou un service qui tourne sous un autre utilisateur) pouvait
+ * ensuite remplacer `app.asar`, et son code tournait sous le compte de la
+ * personne, avec les autorisations accordées à Helix (écran, accessibilité,
+ * micro, trousseau).
+ *
+ * Le relevé lui-même ne change pas : le poste qui vérifie n'est pas celui qui
+ * a signé, et un relevé d'une autre forme ferait refuser toutes les versions
+ * suivantes aux postes déjà installés. Les droits sont donc remis d'aplomb
+ * avant la vérification (`assainirDroits`), puis contrôlés à part : écriture
+ * pour le groupe ou pour les autres, setuid, setgid, sticky. L'application
+ * publiée n'en porte aucun (relevé sur Helix-2026.927.4-arm64-mac.zip).
+ */
+const DROITS_INTERDITS = 0o7022;
+
+/**
+ * macOS : retire toute ACL, l'écriture pour le groupe et les autres, setuid et
+ * setgid, dans une application reçue, avant sa vérification. `chmod -R` ne
+ * suit pas les liens symboliques (`-P`, le défaut) : rien hors de
+ * l'application n'est touché. Rend false si l'outil a échoué.
+ */
+function assainirDroits(app) {
+  if (process.platform !== "darwin") return true;
+  const { execFileSync } = require("node:child_process");
+  try {
+    execFileSync("/bin/chmod", ["-R", "-P", "-N", app], { stdio: "ignore" });
+    execFileSync("/bin/chmod", ["-R", "-P", "go-w,ug-s,-t", app], { stdio: "ignore" });
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 const donneesSignees = (identifiant, version, empreinte) => Buffer.from(`${ENTETE}\n${identifiant}\n${version}\n${empreinte}`, "utf8");
@@ -162,6 +204,21 @@ function cleDeLApplication(app) {
  * identifiant et cette version, et que rien n'y a changé depuis.
  */
 async function verifierApplication(app, clePubliquePem, { identifiant, version }) {
+  /*
+   * Un vrai dossier, pas un lien symbolique (test d'intrusion du 27/09/2026) :
+   * une archive dont « Helix.app » n'était qu'un lien vers une application
+   * signée posée ailleurs passait la vérification (le relevé lisait à travers
+   * le lien), puis le script d'installation déplaçait le lien lui-même dans
+   * /Applications. Ce qui s'ouvrait ensuite était ce que la cible du lien
+   * contiendrait ce jour-là, jamais revérifié.
+   */
+  let racine;
+  try {
+    racine = fs.lstatSync(app);
+  } catch {
+    return { ok: false, raison: "elle ne porte pas de signature de l'éditeur" };
+  }
+  if (racine.isSymbolicLink() || !racine.isDirectory()) return { ok: false, raison: "elle n'est pas un dossier d'application" };
   let sig;
   try {
     sig = JSON.parse(fs.readFileSync(path.join(ressources(app), FICHIER_SIGNATURE), "utf8"));
@@ -176,8 +233,10 @@ async function verifierApplication(app, clePubliquePem, { identifiant, version }
   } catch {
     return { ok: false, raison: "la clé de l'application installée est illisible" };
   }
-  const { empreinte } = await releve(app);
+  const droits = racine.mode & DROITS_INTERDITS ? [""] : [];
+  const { empreinte } = await releve(app, { droits });
   if (empreinte !== sig.empreinte) return { ok: false, raison: "son contenu a changé depuis sa signature" };
+  if (droits.length > 0) return { ok: false, raison: "d'autres comptes de ce poste pourraient modifier ses fichiers" };
   const bonne = crypto.verify(null, donneesSignees(identifiant, version, empreinte), publique, Buffer.from(sig.signature, "base64"));
   return bonne ? { ok: true, cle: empreinteCle(clePubliquePem) } : { ok: false, raison: "elle n'est pas signée par l'éditeur de cette application" };
 }
@@ -244,6 +303,7 @@ function cleDesRessources(dossier) {
 module.exports = {
   signerApplication,
   verifierApplication,
+  assainirDroits,
   cleDeLApplication,
   cleDesRessources,
   signerInstallateur,

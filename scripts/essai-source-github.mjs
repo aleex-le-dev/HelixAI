@@ -52,6 +52,13 @@ verifier("Windows : sans clé dans l'application, rien", lireW(avecWin(windows(p
 verifier("Windows : chemin dans le nom, refusé", lireW(avecWin(windows(privee, { fichier: "..\\Helix-Setup-0.27.1-x64.exe" }))) === null);
 verifier("Windows : installateur ARM ou autre extension, refusé", lireW(avecWin(windows(privee, { fichier: "Helix-Setup-0.27.1-arm64.exe" }))) === null && lireW(avecWin(windows(privee, { fichier: "Helix-Setup-0.27.1-x64.msi" }))) === null);
 verifier("Windows : manifeste sans partie Windows, rien", lireW(JSON.stringify(bon)) === null);
+// Taille du manifeste (test d'intrusion du 27/09/2026) : lu entier en mémoire, il ne doit pas pouvoir peser des gigaoctets.
+const m = (size, url = "https://github.com/o/d/releases/download/v1/helix-mise-a-jour.json") => [{ name: "helix-mise-a-jour.json", size, browser_download_url: url }];
+verifier("manifeste de taille normale retenu", s.manifesteDe(m(533))?.size === 533);
+verifier("manifeste de plusieurs gigaoctets écarté avant d'être lu", s.manifesteDe(m(3 * 1024 ** 3)) === null);
+verifier("manifeste sans taille connue écarté", s.manifesteDe(m(undefined)) === null);
+verifier("manifeste hors https écarté", s.manifesteDe(m(533, "http://exemple.test/helix-mise-a-jour.json")) === null);
+verifier("texte de manifeste plus gros qu'un manifeste refusé", s.lireManifeste(JSON.stringify({ ...bon, bourrage: "x".repeat(s.TAILLE_MANIFESTE_MAX) }), "0.27.1") === null && lireW(JSON.stringify({ ...JSON.parse(avecWin(windows(privee))), bourrage: "x".repeat(s.TAILLE_MANIFESTE_MAX) })) === null);
 verifier("dépôt mal formé refusé", s.depotValide("a/b;rm") === null && s.depotValide("medhiclb/HelixAI") === "medhiclb/HelixAI");
 console.log(echecs ? `${echecs} échec(s)` : "tout est bon");
 process.exit(echecs ? 1 : 0);

@@ -31,6 +31,8 @@ const TEXTES = {
     sansInstallateur: "l'annonce ne décrit pas d'installateur vérifiable",
     tailleInstallateur: "l'installateur reçu n'a pas la taille annoncée",
     empreinteInstallateur: "l'empreinte de l'installateur ne correspond pas à l'annonce",
+    tailleArchive: "l'archive reçue n'a pas la taille annoncée",
+    droitsArchive: "les droits des fichiers de l'archive n'ont pas pu être remis d'aplomb",
   },
   en: {
     githubVide: "No release found on GitHub (private repository, or nothing published).",
@@ -54,6 +56,8 @@ const TEXTES = {
     sansInstallateur: "the announcement describes no verifiable installer",
     tailleInstallateur: "the installer received does not have the announced size",
     empreinteInstallateur: "the installer's checksum does not match the announcement",
+    tailleArchive: "the archive received does not have the announced size",
+    droitsArchive: "the permissions of the archive's files could not be reset",
   },
   zh: {
     githubVide: "在 GitHub 上未找到任何发布（私有仓库，或尚未发布）。",
@@ -77,6 +81,8 @@ const TEXTES = {
     sansInstallateur: "该通知未描述可验证的安装程序",
     tailleInstallateur: "收到的安装程序大小与通知不一致",
     empreinteInstallateur: "安装程序的校验值与通知不一致",
+    tailleArchive: "收到的压缩包大小与通知不一致",
+    droitsArchive: "无法重置压缩包中文件的权限",
   },
 };
 
@@ -88,6 +94,8 @@ const RAISONS = {
   "la clé de l'application installée est illisible": { en: "the installed app's key cannot be read", zh: "无法读取已安装应用的密钥" },
   "son contenu a changé depuis sa signature": { en: "its content changed after it was signed", zh: "其内容在签名后已被更改" },
   "elle n'est pas signée par l'éditeur de cette application": { en: "it is not signed by this app's publisher", zh: "它不是由此应用的发行方签名的" },
+  "elle n'est pas un dossier d'application": { en: "it is not an application folder", zh: "它不是应用文件夹" },
+  "d'autres comptes de ce poste pourraient modifier ses fichiers": { en: "other accounts on this computer could modify its files", zh: "此电脑上的其他账户可能修改其文件" },
 };
 
 let langue = "en";

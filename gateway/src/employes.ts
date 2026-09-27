@@ -781,7 +781,17 @@ function extensionInstallee(paquet: string): boolean {
  */
 async function installerExtension(paquet: string): Promise<boolean> {
   if (extensionInstallee(paquet)) return false;
-  const r = await oc(["plugins", "install", paquet], 300_000);
+  /*
+   * À la version de l'OpenClaw qui tourne, pas à la dernière publiée (audit de
+   * la chaîne d'approvisionnement du 27/09/2026) : les extensions officielles
+   * sortent avec OpenClaw, au même numéro, et la dernière peut exiger un
+   * OpenClaw plus récent que celui-ci. OpenClaw installe leurs dépendances
+   * sans scripts et garde leur empreinte npm (docs.openclaw.ai,
+   * cli/plugins/install). Pas encore essayé sur l'instance des employés.
+   */
+  const { moteur } = await detecterMoteur();
+  const spec = moteur?.version && /^\d{4}\.\d+\.\d+$/.test(moteur.version) ? `${paquet}@${moteur.version}` : paquet;
+  const r = await oc(["plugins", "install", spec], 300_000);
   if (!r.ok && !extensionInstallee(paquet)) {
     throw new Error(tf("Installation de {0} impossible : {1}", paquet, (r.erreur || r.sortie).trim().slice(-300)));
   }

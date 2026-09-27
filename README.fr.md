@@ -40,8 +40,11 @@ et modèles restent sur ses machines, et rien n'est vendu ni loué.
   de votre organisation ; vos conversations ne partent chez un fournisseur d'IA en ligne que si
   vous ajoutez vous-même une clé d'API.
 - **Rien à régler.** Installez l'application, elle installe le reste : le moteur des modèles,
-  le modèle adapté à votre matériel, Python et Node au besoin, versions épinglées et
-  empreintes vérifiées.
+  le modèle adapté à votre matériel, Python et Node au besoin. Le moteur, Python, Node,
+  OpenCode, les bibliothèques des documents et de la dictée, les modèles d'images, de vidéo et
+  d'entraînement ont leur version épinglée et leur empreinte vérifiée ; le modèle de
+  conversation vient du catalogue de LM Studio, à la version que LM Studio sert, et la pile
+  d'entraînement NVIDIA n'est épinglée qu'à la version.
 - **Une application, beaucoup de métiers.** Chat, agents qui agissent sur vos fichiers et vos
   outils, agent de code, bases de connaissances aux sources citées, comptes rendus de
   réunion, entraînement de votre propre modèle.

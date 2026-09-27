@@ -25,8 +25,13 @@ const exec = promisify(execFile);
  * Le diagnostic le dit à la personne, et conseille le bureau Linux quand il
  * est possible.
  *
- * Rien n'est pris « à la dernière version » : Lume, l'image et LibreOffice
- * sont épinglés, et leurs archives vérifiées par empreinte avant usage.
+ * Rien n'est pris « à la dernière version » : Lume et LibreOffice sont
+ * épinglés, et leurs archives vérifiées par empreinte avant usage
+ * (revérifiées le 27/09/2026 contre la publication GitHub de Lume et les
+ * fichiers `.sha256` de The Document Foundation). L'image macOS, elle, n'est
+ * épinglée que par son étiquette (`macos-tahoe-cua:26.5.2`, voir `imagePour`) :
+ * aucune empreinte n'est écrite ici, et c'est Lume qui la télécharge du
+ * registre de cua (audit de la chaîne d'approvisionnement du 27/09/2026).
  */
 
 /* ------------------------------------------------------------------ */

@@ -3710,6 +3710,122 @@ console.log("\n13. Modèles branchés par une clé : faux fournisseurs, Chat, ou
   verifier("clés : l'essai des fournisseurs s'est déroulé jusqu'au bout", essai.status === 0 || lignes.some((l) => /vérification\(s\) réussie\(s\)/.test(l)), `${essai.status} ${essai.error?.message ?? ""} ${lignes.slice(-6).join(" ")}`);
 }
 
+/*
+ * Chaîne d'approvisionnement (audit du 27/09/2026) : ce que Helix télécharge
+ * sur les postes a une version figée et une empreinte écrite dans le code, et
+ * le dépôt public ne porte ni clé ni donnée de celui qui le fait tourner. Tout
+ * se lit dans les sources : aucun réseau.
+ */
+console.log("\n14. Chaîne d'approvisionnement : versions figées, empreintes écrites, dépôt public propre");
+{
+  const src = (...p) => readFileSync(join(RACINE, ...p), "utf8");
+  const sansCommentaires = (s) => s.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+  const atelier = src("gateway", "src", "atelier.ts");
+  const figes = JSON.parse(src("gateway", "src", "atelier-paquets.json"));
+  const norm = (n) => n.toLowerCase().replace(/[-_.]+/g, "-");
+
+  // Paquets Python de l'atelier et de la dictée.
+  const lignes = [...figes.bureautique, ...figes.dictee];
+  const malFigees = lignes.filter((l) => !/^[A-Za-z0-9._-]+==[^\s;]+/.test(l) || !/--hash=sha256:[0-9a-f]{64}/.test(l) || /--(extra-)?index-url|https?:|\s-e\s|@\s*file:/.test(l));
+  verifier("atelier et dictée : chaque paquet Python (dépendances comprises) a sa version figée et au moins une empreinte SHA-256, sans autre index", lignes.length > 30 && malFigees.length === 0, malFigees.slice(0, 3).join(" | ") || `${lignes.length} lignes`);
+  const nomsFiges = new Set(figes.bureautique.map((l) => norm(l.split("==")[0])));
+  const nomsAtelier = [...atelier.matchAll(/\{ nom: "([^"]+)", usage:/g)].map((m) => m[1]);
+  const nomsPython = nomsAtelier.filter((n) => !/^(docx|pptxgenjs|@e965\/xlsx|mammoth|pdf-lib|pdfjs-dist)$/.test(n));
+  const oubliesPython = nomsPython.filter((n) => !nomsFiges.has(norm(n)));
+  verifier("atelier : chaque bibliothèque Python annoncée à l'écran est dans la liste figée", nomsPython.length === 10 && oubliesPython.length === 0, oubliesPython.join(", ") || `${nomsPython.length} noms`);
+  verifier("dictée : faster-whisper est figé dans sa liste, et les paquets communs ont la même version que dans l'atelier", figes.dictee.some((l) => /^faster-whisper==1\./.test(l)) && figes.bureautique.every((l) => figes.dictee.includes(l)), "divergence");
+  const appelsPip = [...sansCommentaires(atelier).matchAll(/lancer\(\s*(?:pip|pipVenv\(\)),\s*\[\s*"install"[^\]]*\]/g)].map((m) => m[0]);
+  verifier("atelier et dictée : pip n'installe que la liste figée (--require-hashes, --no-deps, --only-binary), jamais un nom seul", appelsPip.length === 2 && appelsPip.every((a) => a.includes("OPTIONS_PIP_FIGEES") && a.includes('"-r"')) && /OPTIONS_PIP_FIGEES = \["--require-hashes", "--no-deps", "--only-binary=:all:"\]/.test(atelier) && !/"--upgrade"/.test(sansCommentaires(atelier)), appelsPip.join(" / ") || "aucun appel trouvé");
+
+  // Bibliothèques Node de l'atelier.
+  const nomsNode = nomsAtelier.filter((n) => !nomsPython.includes(n));
+  const dep = figes.node?.dependances ?? {};
+  const paquetsVerrou = Object.entries(figes.node?.verrou?.packages ?? {}).filter(([k]) => k);
+  const verrouFaible = paquetsVerrou.filter(([, p]) => !/^sha512-/.test(p.integrity ?? "") || !String(p.resolved ?? "").startsWith("https://registry.npmjs.org/"));
+  verifier("atelier Node : les six bibliothèques à version exacte, chaque dépendance du verrou avec son empreinte SHA-512, depuis le registre npm", nomsNode.length === 6 && nomsNode.every((n) => /^\d+\.\d+\.\d+$/.test(dep[n] ?? "")) && paquetsVerrou.length > nomsNode.length && verrouFaible.length === 0, verrouFaible.map(([k]) => k).slice(0, 3).join(", ") || JSON.stringify(dep));
+  const appelNpm = /lancer\(\s*npm,\s*\[([^\]]*)\]/.exec(sansCommentaires(atelier))?.[1] ?? "";
+  verifier("atelier Node : `npm ci` sur le verrou, sans scripts d'installation ni paquet nommé à la volée", /"ci"/.test(appelNpm) && /"--ignore-scripts"/.test(appelNpm) && !/PAQUETS_NODE/.test(appelNpm) && /package-lock\.json/.test(atelier), appelNpm.replace(/\s+/g, " ").slice(0, 200));
+
+  // Entraînement : seules les roues NVIDIA passent sans empreinte (exception écrite dans PROJET.md § 3.9 et 3.12).
+  const entr = sansCommentaires(src("gateway", "src", "entrainement.ts"));
+  const pipEntr = [...entr.matchAll(/"pip", "install"[^\]]*\]/g)].map((m) => m[0]);
+  verifier("entraînement : chaque `pip install` est figé par empreintes, sauf la pile NVIDIA (exception écrite)", pipEntr.length >= 2 && pipEntr.every((a) => a.includes("--require-hashes") || a.includes("INDEX_TORCH_CUDA")) && pipEntr.some((a) => a.includes("--require-hashes")), pipEntr.join(" / "));
+  const autresPip = readdirSync(join(RACINE, "gateway", "src")).filter((f) => f.endsWith(".ts") && !["atelier.ts", "entrainement.ts"].includes(f) && /"pip",\s*"install"|\bpip\w*(?:\(\))?,\s*\[\s*"install"/.test(sansCommentaires(src("gateway", "src", f))));
+  verifier("aucun autre module de la passerelle ne lance `pip install`", autresPip.length === 0, autresPip.join(", "));
+
+  // Modèles et archives : révision et empreinte écrites.
+  const images = src("gateway", "src", "images.ts");
+  const fichiersImages = [...images.matchAll(/revision: ("[0-9a-f]+"|[A-Z0-9_]+)[,\s]+chemin: "[^"]+",\s*taille: [\d_]+,\s*sha256: "([0-9a-f]*)"/g)];
+  const revisions = [...images.matchAll(/const [A-Z0-9_]+R = "([^"]+)";/g)].map((m) => m[1]);
+  verifier("images et vidéos : chaque fichier de modèle a une révision de 40 caractères et une empreinte SHA-256", fichiersImages.length >= 12 && fichiersImages.every((m) => m[2].length === 64 && (m[1].startsWith('"') ? /^"[0-9a-f]{40}"$/.test(m[1]) : true)) && revisions.every((r) => /^[0-9a-f]{40}$/.test(r)) && (images.match(/ZF\("[^"]+", [\d_]+, "[0-9a-f]{64}"\)/g) ?? []).length === 3 && !/resolve\/main/.test(images), `${fichiersImages.length} fichiers`);
+  const moteursImages = [...images.matchAll(/archive: REL\([^)]*\),\s*sha256: "([0-9a-f]*)"/g)];
+  verifier("moteur d'images : chaque archive de stable-diffusion.cpp a son empreinte SHA-256", moteursImages.length >= 5 && moteursImages.every((m) => m[1].length === 64), `${moteursImages.length} archives`);
+  const entrSrc = src("gateway", "src", "entrainement.ts");
+  verifier("entraînement : modèles de base à révision épinglée, Unsloth et llama.cpp à empreinte écrite", [...entrSrc.matchAll(/depot: "Qwen\/[^"]+",\s*revision: "([0-9a-f]*)"/g)].every((m) => m[1].length === 40) && (entrSrc.match(/sha256: "[0-9a-f]{64}",\s*taille: [\d_]+/g) ?? []).length >= 3, "révision ou empreinte manquante");
+  const whisper = [...atelier.matchAll(/depot: "[^"]+",\s*revision: "([0-9a-f]*)"[\s\S]*?fichiers: \[([\s\S]*?)\],/g)];
+  verifier("dictée : les modèles Whisper sont pris à une révision de 40 caractères, `model.bin` compris dans les empreintes vérifiées après téléchargement", whisper.length === 2 && whisper.every((m) => m[1].length === 40 && /chemin: "model\.bin", sha256: "[0-9a-f]{64}"/.test(m[2])) && /sha256Fichier\(chemin\)\) !== f\.sha256/.test(atelier), "révision ou empreinte manquante");
+  const mac = src("gateway", "src", "machineMacos.ts");
+  verifier("machine macOS : Lume et LibreOffice à version figée et empreinte écrite", /const EMPREINTE_LUME = "[0-9a-f]{64}"/.test(mac) && (mac.match(/sha: "[0-9a-f]{64}"/g) ?? []).length === 2 && /const VERSION_LO = "\d+\.\d+\.\d+\.\d+"/.test(mac), "non épinglé");
+  const moteur = sansCommentaires(src("gateway", "src", "engine.ts"));
+  verifier("moteur des modèles : plus aucun catalogue lu en ligne pour décider quoi installer (Mac Intel refusé, pas d'application LM Studio prise sur Homebrew)", !/formulae\.brew\.sh|installers\.lmstudio\.ai/.test(moteur), "catalogue encore lu");
+  const employes = sansCommentaires(src("gateway", "src", "employes.ts"));
+  verifier("extensions d'OpenClaw : installées à la version de l'OpenClaw qui tourne, pas à la dernière publiée", /`\$\{paquet\}@\$\{moteur\.version\}`/.test(employes) && /oc\(\["plugins", "install", spec\]/.test(employes), "extension sans version");
+
+  // Licences des modèles proposés : Apache 2.0 ou MIT (CLAUDE.md du projet, PROJET.md § 3.9).
+  const licences = [src("gateway", "src", "provision.ts"), images].flatMap((s) => [...s.matchAll(/licence: "([^"]+)"/g)].map((m) => m[1]));
+  const horsRegle = licences.filter((l) => !["Apache 2.0", "MIT"].includes(l));
+  verifier("modèles proposés : licence Apache 2.0 ou MIT seulement", licences.length >= 25 && horsRegle.length === 0, horsRegle.join(", ") || `${licences.length} modèles`);
+
+  // Téléchargements en clair : aucun.
+  const enClair = [];
+  for (const dossier of [["gateway", "src"], ["electron"]]) {
+    for (const f of readdirSync(join(RACINE, ...dossier)).filter((x) => /\.(ts|cjs|mjs)$/.test(x))) {
+      const s = sansCommentaires(src(...dossier, f));
+      for (const m of s.matchAll(/fetch\(\s*[`"']http:\/\/([^/`"'$:]+)/g)) if (!/^(127\.0\.0\.1|localhost|\[::1\])$/.test(m[1])) enClair.push(`${f} → ${m[1]}`);
+      if (/curl[^`"'\n]*\|\s*(ba)?sh/.test(s.replace(/t\("[^"]*"\)/g, ""))) enClair.push(`${f} : curl | sh`);
+    }
+  }
+  verifier("aucun téléchargement en HTTP clair vers une autre machine, aucun script téléchargé exécuté", enClair.length === 0, enClair.join(", "));
+
+  // Dépôt public : ni clé, ni chemin du poste qui le fait tourner, ni son adresse.
+  let suivis = [];
+  try {
+    suivis = execFileSync("git", ["ls-files", "-z"], { cwd: RACINE, encoding: "utf8" }).split("\0").filter(Boolean);
+  } catch {
+    /* pas un dépôt git (archive des sources) : ces contrôles ne s'appliquent pas */
+  }
+  if (suivis.length) {
+    verifier("dépôt : aucun fichier de clé ou de certificat suivi (.pem, .p12, .p8, .key, .env)", !suivis.some((f) => /\.(pem|p12|p8|key)$|(^|\/)\.env(\.|$)/.test(f)), suivis.filter((f) => /\.(pem|p12|p8|key)$|\.env/.test(f)).join(", "));
+    const gitignore = src(".gitignore");
+    verifier("dépôt : .gitignore écarte les clés (*.pem, *.p12, *.key, .helix-editeur/)", ["*.pem", "*.p12", "*.key", ".helix-editeur/"].every((m) => gitignore.split("\n").includes(m)), "motif manquant");
+    const blocCle = new RegExp(["-----BEGIN", "[A-Z ]*PRIVATE", "KEY-----"].join(" ?"));
+    const auteur = (() => {
+      try {
+        return execFileSync("git", ["config", "user.email"], { cwd: RACINE, encoding: "utf8" }).trim();
+      } catch {
+        return "";
+      }
+    })();
+    const maison = (await import("node:os")).homedir();
+    const traces = [];
+    for (const f of suivis) {
+      let s;
+      try {
+        s = readFileSync(join(RACINE, f), "utf8");
+      } catch {
+        continue;
+      }
+      if (s.includes("\0")) continue;
+      if (blocCle.test(s)) traces.push(`${f} : clé privée`);
+      if (maison.length > 6 && /^\/(Users|home)\//.test(maison) && s.includes(`${maison}/`)) traces.push(`${f} : chemin du poste`);
+      if (auteur && s.includes(auteur)) traces.push(`${f} : adresse de l'auteur des commits`);
+    }
+    verifier("dépôt : aucun fichier suivi ne contient de clé privée, le dossier personnel de ce poste ni l'adresse de l'auteur des commits", traces.length === 0, traces.slice(0, 5).join(", "));
+  } else {
+    console.log("  (pas de dépôt git ici : contrôles du dépôt public sautés)");
+  }
+}
+
 console.log(`\n${reussis} vérification(s) réussie(s), ${echecs.length} échec(s).`);
 if (echecs.length) {
   console.log("Échecs :");

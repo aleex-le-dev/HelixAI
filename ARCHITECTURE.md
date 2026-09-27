@@ -656,7 +656,9 @@ SHA-512 de chaque archive écrites dans `engine.ts`, archive vérifiée avant ou
 dans `~/.lmstudio/bin`, sans droits d'administration. Sur un Mac, l'application LM Studio
 garde la main si elle a déjà servi (`app-install-location.json`) ; posée mais jamais
 ouverte, elle compte comme absente (`moteurAPoser`) et llmster est posé à côté. Le chemin
-par le catalogue Homebrew et `installers.lmstudio.ai` ne reste que pour les Mac Intel. Le
+par le catalogue Homebrew et `installers.lmstudio.ai`, qui restait pour les Mac Intel, est
+retiré le 27/09/2026 : ni version ni empreinte écrites dans le code, et une application pour
+puce Apple seulement ; un Mac Intel s'entend dire qu'aucun moteur n'existe pour lui. Le
 tout enchaîne sur le choix et le chargement du modèle, suivis sur le même écran : du point
 de vue de l'utilisateur, installer Helix est une seule opération.
 

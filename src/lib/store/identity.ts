@@ -43,7 +43,7 @@ const FALLBACK: User = {
 /**
  * Le prénom, pour saluer.
  *
- * L'accueil disait « Bonjour, medhi.clabaut » : l'identifiant tiré de
+ * L'accueil disait « Bonjour, prenom.nom » : l'identifiant tiré de
  * l'adresse, qui est un nom de machine, pas un nom de personne. Le premier
  * mot du nom complet est ce qu'on dirait à voix haute ; l'identifiant ne sert
  * que si aucun nom n'a été donné.

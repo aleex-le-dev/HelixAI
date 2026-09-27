@@ -16,6 +16,7 @@ import { cpus, homedir, tmpdir, totalmem } from "node:os";
 import { dirname, join, delimiter } from "node:path";
 import { assurerNodePrive, nodePriveInstallable, npmPrive } from "./installationOpenClaw.ts";
 import { assurerPythonPrive, pythonPrive, pythonPriveInstallable, taillePythonPriveMo } from "./pythonPrive.ts";
+import paquetsFiges from "./atelier-paquets.json" with { type: "json" };
 
 const exec = promisify(execFile);
 
@@ -124,6 +125,28 @@ const pipVenv = () =>
   process.platform === "win32"
     ? join(dossierPython(), "Scripts", "pip.exe")
     : join(dossierPython(), "bin", "pip");
+
+/*
+ * Paquets Python figés, dépendances comprises, avec l'empreinte SHA-256 de
+ * chacune de leurs roues (atelier-paquets.json, refait par
+ * `node scripts/atelier-empreintes.mjs`). Audit de la chaîne
+ * d'approvisionnement du 27/09/2026 : l'atelier installait la dernière version
+ * publiée de dix noms, et de leurs dépendances, au moment du clic, sans rien
+ * vérifier. pip refuse désormais tout fichier absent de la liste ou à
+ * l'empreinte différente (`--require-hashes`), n'ajoute aucune dépendance de
+ * lui-même (`--no-deps`) et ne compile rien (`--only-binary`).
+ *
+ * Résolu pour Python 3.9 à 3.14 : les roues existent pour macOS à puce Apple,
+ * Linux (x64 et arm64) et Windows x64, vérifié par uv pour chaque système et
+ * chaque version ; installé pour de vrai sur ce Mac (Python 3.14). Pas de roue
+ * pour Windows arm64 ni Mac Intel (cryptography), que l'application ne vise pas.
+ */
+const OPTIONS_PIP_FIGEES = ["--require-hashes", "--no-deps", "--only-binary=:all:"];
+async function exigencesFigees(liste: "bureautique" | "dictee"): Promise<string> {
+  const chemin = join(racine(), `exigences-${liste}.txt`);
+  await writeFile(chemin, `${paquetsFiges[liste].join("\n")}\n`, { encoding: "utf8", mode: 0o600 });
+  return chemin;
+}
 
 /**
  * Interpréteur de l'atelier, pour les outils bureautiques (bureau.ts) : eux
@@ -759,7 +782,7 @@ async function executerPreparation(onProgres: (p: Progres) => void): Promise<Bil
     const pip = pipVenv();
     await lancer(
       pip,
-      ["install", "--upgrade", "--no-input", "--disable-pip-version-check", ...PAQUETS_PYTHON.map((p) => p.nom)],
+      ["install", "--no-input", "--disable-pip-version-check", ...OPTIONS_PIP_FIGEES, "-r", await exigencesFigees("bureautique")],
       { timeout: 30 * 60_000, onLigne: suivre },
     );
 
@@ -788,9 +811,17 @@ async function executerPreparation(onProgres: (p: Progres) => void): Promise<Bil
     await mkdir(dossierNode(), { recursive: true });
 
     /*
-     * Un manifeste, même vide, ancre npm ici. Sans lui, npm remonte l'arbre des
-     * dossiers à la recherche d'un `package.json` et pourrait s'installer dans
-     * un projet de l'utilisateur : exactement ce que l'isolement doit empêcher.
+     * Un manifeste ancre npm ici. Sans lui, npm remonte l'arbre des dossiers à
+     * la recherche d'un `package.json` et pourrait s'installer dans un projet
+     * de l'utilisateur : exactement ce que l'isolement doit empêcher.
+     *
+     * Avec lui, le fichier de verrouillage de npm (atelier-paquets.json, refait
+     * par `node scripts/atelier-empreintes.mjs`) : les six bibliothèques à leur
+     * version exacte, et chacune de leurs dépendances avec son empreinte.
+     * `npm ci` n'installe que ce fichier, et refuse une archive dont
+     * l'empreinte diffère ; `--ignore-scripts` : aucun script d'installation
+     * d'un paquet ne tourne (audit du 27/09/2026 ; avant, `npm install` des six
+     * noms, à leur dernière version, scripts compris).
      */
     await writeFile(
       join(dossierNode(), "package.json"),
@@ -800,20 +831,23 @@ async function executerPreparation(onProgres: (p: Progres) => void): Promise<Bil
           version: "1.0.0",
           private: true,
           description: "Bibliothèques bureautiques isolées de l'atelier Cowork.",
+          dependencies: paquetsFiges.node.dependances,
         },
         null,
         2,
       ),
       "utf8",
     );
+    await writeFile(join(dossierNode(), "package-lock.json"), JSON.stringify(paquetsFiges.node.verrou, null, 2), "utf8");
 
     let vues = 0;
     await lancer(
       npm,
       [
-        "install",
+        "ci",
         "--prefix",
         dossierNode(),
+        "--ignore-scripts",
         "--no-audit",
         "--no-fund",
         /*
@@ -826,7 +860,6 @@ async function executerPreparation(onProgres: (p: Progres) => void): Promise<Bil
         "--omit=optional",
         "--loglevel",
         "http",
-        ...PAQUETS_NODE.map((p) => p.nom),
       ],
       {
         timeout: 20 * 60_000,
@@ -1123,12 +1156,13 @@ export async function verifier(): Promise<Verification> {
  * et charge le modèle depuis un dossier local, jamais depuis un nom de dépôt.
  */
 
-/**
- * Spécification pip, figée ici. La borne haute protège l'appel de
- * `WhisperModel` et de `transcribe` (dictee.ts) d'un changement d'interface
- * d'une version majeure à venir.
+/*
+ * Le paquet : faster-whisper 1.x (la borne haute protège l'appel de
+ * `WhisperModel` et de `transcribe`, dictee.ts), figé avec ses dépendances et
+ * leurs empreintes dans atelier-paquets.json (liste « dictee », résolue avec
+ * celle de l'atelier : même environnement, mêmes versions communes). Sur Mac,
+ * ses roues (onnxruntime, av) demandent macOS 14 ou plus récent.
  */
-const PAQUET_DICTEE = "faster-whisper>=1.1,<2";
 
 /**
  * Modèle retenu, choisi en **mesurant** sur un Apple M4 (10 cœurs, calcul sur
@@ -1189,6 +1223,14 @@ export interface ModeleDictee {
   /** Mémoire minimale, en Go, à côté du modèle de conversation. */
   minMemoireGo: number;
   pourquoi: string;
+  /**
+   * Les fichiers que faster-whisper rapatrie, avec leur empreinte SHA-256 à la
+   * révision épinglée (oid LFS publié par Hugging Face pour `model.bin`,
+   * calculée sur le fichier téléchargé pour les autres ; relevé le 27/09/2026,
+   * audit de la chaîne d'approvisionnement). Vérifiés juste après le
+   * téléchargement : un fichier différent fait effacer le modèle.
+   */
+  fichiers: { chemin: string; sha256: string }[];
 }
 
 /** Du plus capable au plus léger : le premier que la machine satisfait est retenu. */
@@ -1202,6 +1244,13 @@ export const CATALOGUE_DICTEE: ModeleDictee[] = [
     minCoeursPerformance: 6,
     minMemoireGo: 24,
     pourquoi: "le plus juste, et meilleur sur les noms propres",
+    fichiers: [
+      { chemin: "config.json", sha256: "b0253ea6c0d3bea6b1e19e91a02acfd3b53f4467362efcb5a3e6b16c9b3a9b7e" },
+      { chemin: "model.bin", sha256: "e76620f83d5f5b69efd3d87e3dc180c1bd21df9fbebacfd4335e5e1efcc018da" },
+      { chemin: "preprocessor_config.json", sha256: "7ccc62c6f2765af1f3b46c00c9b5894426835a05021c8b9c01eecb6dfb542711" },
+      { chemin: "tokenizer.json", sha256: "297b13372ac43916285644fb9687add3cc62ee2a1adb60da3dc25cc94c1871fd" },
+      { chemin: "vocabulary.json", sha256: "c69260f2ab26d659b7c398f9a2b2b48ed0df16c3b47d7326782fd9cba71690c1" },
+    ],
   },
   {
     cle: "small",
@@ -1212,6 +1261,12 @@ export const CATALOGUE_DICTEE: ModeleDictee[] = [
     minCoeursPerformance: 0,
     minMemoireGo: 0,
     pourquoi: "rapide et juste, noms propres parfois approximatifs",
+    fichiers: [
+      { chemin: "config.json", sha256: "b55496ac7940a7ae47d2c01eab40edfd8701feec1229d9cce3b40014383fb828" },
+      { chemin: "model.bin", sha256: "3e305921506d8872816023e4c273e75d2419fb89b24da97b4fe7bce14170d671" },
+      { chemin: "tokenizer.json", sha256: "fb7b63191e9bb045082c79fd742a3106a12c99513ab30df4a0d47fa6cb6fd0ab" },
+      { chemin: "vocabulary.txt", sha256: "34ce3fe1c5041027b3f8d42912270993f986dbc4bb34cf27f951e34a1e453913" },
+    ],
   },
 ];
 
@@ -1421,6 +1476,15 @@ sys.stdout.write("@@HELIX@@" + json.dumps({"ok": True}))
 `;
 import { t, tf } from "./langue.ts";
 
+/** Empreinte SHA-256 d'un fichier, lu par morceaux (un modèle pèse plus d'un Go). */
+async function sha256Fichier(chemin: string): Promise<string> {
+  const { createHash } = await import("node:crypto");
+  const { createReadStream } = await import("node:fs");
+  const h = createHash("sha256");
+  await new Promise<void>((ok, ko) => createReadStream(chemin).on("data", (d) => h.update(d)).on("end", () => ok()).on("error", ko));
+  return h.digest("hex");
+}
+
 /** Taille d'un dossier, sous-dossiers compris. Sert à suivre un téléchargement muet. */
 async function tailleDossier(dossier: string): Promise<number> {
   try {
@@ -1469,7 +1533,7 @@ async function executerDictee(onProgres: (p: ProgresDictee) => void): Promise<Bi
     onProgres({ phase: "python", message: t("Installation du moteur de transcription..."), percent: 8 });
     await lancer(
       pipVenv(),
-      ["install", "--no-input", "--disable-pip-version-check", PAQUET_DICTEE],
+      ["install", "--no-input", "--disable-pip-version-check", ...OPTIONS_PIP_FIGEES, "-r", await exigencesFigees("dictee")],
       {
         timeout: 20 * 60_000,
         onLigne: (ligne) => {
@@ -1545,6 +1609,27 @@ async function executerDictee(onProgres: (p: ProgresDictee) => void): Promise<Bi
     } finally {
       clearInterval(suivi);
     }
+  }
+
+  /*
+   * Chaque fichier du modèle contre son empreinte écrite plus haut, avant tout
+   * usage, qu'il vienne d'être téléchargé ou qu'il ait été laissé là par une
+   * installation précédente : `model.bin` doit être là, les autres, s'ils y
+   * sont, doivent être ceux de la révision épinglée. Sinon le modèle est effacé.
+   */
+  onProgres({ phase: "modele", message: t("Vérification du modèle..."), percent: 91 });
+  const differents: string[] = [];
+  for (const f of choisi.fichiers) {
+    const chemin = join(dossierChoisi, f.chemin);
+    if (!(await existe(chemin))) {
+      if (f.chemin === "model.bin") differents.push(f.chemin);
+      continue;
+    }
+    if ((await sha256Fichier(chemin)) !== f.sha256) differents.push(f.chemin);
+  }
+  if (differents.length) {
+    await rm(dossierChoisi, { recursive: true, force: true });
+    throw new Error(tf("Le modèle téléchargé ne correspond pas à la version attendue ({0}) : il a été effacé. Réessayez.", differents.join(", ")));
   }
 
   /* ------------------------------ essai --------------------------------------- */

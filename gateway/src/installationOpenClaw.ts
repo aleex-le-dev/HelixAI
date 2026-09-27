@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { execFile } from "node:child_process";
-import { createWriteStream, existsSync, mkdirSync, rmSync, symlinkSync, readlinkSync, unlinkSync } from "node:fs";
-import { homedir, release, platform, arch, tmpdir } from "node:os";
+import { createWriteStream, existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, readlinkSync, unlinkSync } from "node:fs";
+import { homedir, release, platform, arch } from "node:os";
 import { join, resolve } from "node:path";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
@@ -198,9 +198,18 @@ async function installerNodeUneFois(pour: "openclaw" | "atelier"): Promise<strin
   }
   if (!attendue) throw new Error(t("Empreinte de l'archive de Node introuvable."));
 
-  const archive = join(tmpdir(), `helix-${nom}-${Date.now()}${p.extension}`);
   const r = await telecharger(`${base}/${nom}${p.extension}`, 10 * 60_000);
   if (!r.ok || !r.body) throw new Error(tf("Téléchargement de Node impossible ({0}).", r.status));
+  /*
+   * Dans un dossier à soi (0700), pas dans le dossier temporaire commun : sous
+   * Linux, `/tmp` est partagé, et un autre compte pouvait y préparer le nom
+   * de l'archive (lien vers un fichier de ce compte) ou la remplacer entre la
+   * vérification de l'empreinte et l'extraction. Même règle que pythonPrive.ts
+   * et opencodePrive.ts (audit de la chaîne d'approvisionnement du 27/09/2026).
+   */
+  mkdirSync(racine(), { recursive: true, mode: 0o700 });
+  const dossierArchive = mkdtempSync(join(racine(), ".telechargement-"));
+  const archive = join(dossierArchive, `${nom}${p.extension}`);
   const total = Number(r.headers.get("content-length") ?? 0);
   const empreinte = createHash("sha256");
   let recu = 0;
@@ -211,13 +220,13 @@ async function installerNodeUneFois(pour: "openclaw" | "atelier"): Promise<strin
     if (total > 0) etat = { ...etat, avancement: Math.round((recu / total) * 100) };
   });
   try {
-    await pipeline(flux, createWriteStream(archive, { mode: 0o600 }));
+    await pipeline(flux, createWriteStream(archive, { mode: 0o600, flags: "wx" }));
   } catch {
-    rmSync(archive, { force: true });
+    rmSync(dossierArchive, { recursive: true, force: true });
     throw new Error(t("Le téléchargement de Node s'est interrompu : vérifiez la connexion, puis réessayez."));
   }
   if (empreinte.digest("hex") !== attendue) {
-    rmSync(archive, { force: true });
+    rmSync(dossierArchive, { recursive: true, force: true });
     throw new Error(t("L'archive de Node ne correspond pas à son empreinte officielle : installation arrêtée."));
   }
 
@@ -227,7 +236,7 @@ async function installerNodeUneFois(pour: "openclaw" | "atelier"): Promise<strin
   // Le `tar` du système : sous Windows, celui de Windows, qui ouvre aussi les .zip (celui de Git ne sait pas lire `C:`).
   const tar = platform() === "win32" ? join(process.env.SystemRoot ?? "C:\\Windows", "System32", "tar.exe") : "/usr/bin/tar";
   const extraction = await executer(tar, [p.extension === ".zip" ? "-xf" : "-xzf", archive, "-C", provisoire], process.env, 5 * 60_000);
-  rmSync(archive, { force: true });
+  rmSync(dossierArchive, { recursive: true, force: true });
   if (!extraction.ok) {
     rmSync(provisoire, { recursive: true, force: true });
     throw new Error(tf("Extraction de Node impossible : {0}", extraction.erreur.slice(-200)));

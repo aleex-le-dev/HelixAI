@@ -2,9 +2,8 @@ import { execFile, execFileSync } from "node:child_process";
 import { promisify } from "node:util";
 import { createHash } from "node:crypto";
 import { createWriteStream, existsSync, mkdirSync, readFileSync, statSync } from "node:fs";
-import { mkdtemp, rm, access, mkdir } from "node:fs/promises";
-import { constants } from "node:fs";
-import { tmpdir, homedir } from "node:os";
+import { mkdtemp, rm, mkdir } from "node:fs/promises";
+import { homedir } from "node:os";
 import { isAbsolute, join, resolve, sep } from "node:path";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
@@ -22,20 +21,19 @@ const exec = promisify(execFile);
  * demander de comprendre une plomberie qui ne le regarde pas — et c'est là que
  * la plupart des installations s'arrêtent.
  *
- * Tout est donc automatique, sans clic ni fenêtre d'installation :
+ * Tout est donc automatique, sans clic ni fenêtre d'installation : le moteur
+ * sans interface de LM Studio (llmster), à une version épinglée, dont
+ * l'archive est vérifiée par son empreinte SHA-512, écrite dans ce fichier,
+ * avant d'être ouverte (plus bas).
  *
- *  1. l'adresse et l'empreinte du paquet viennent du catalogue Homebrew, qui
- *     suit les versions officielles — rien n'est figé dans le code ;
- *  2. le paquet est téléchargé, puis **son empreinte SHA-256 est vérifiée**
- *     avant d'être ouvert : sans cette étape, un paquet altéré en chemin
- *     s'installerait sans que personne ne le voie ;
- *  3. l'image est montée, l'application copiée, l'image démontée ;
- *  4. l'outil en ligne de commande est déclaré depuis le paquet lui-même, ce
- *     qui évite d'ouvrir l'interface graphique.
+ * Les Mac à processeur Intel n'ont pas de moteur : LM Studio n'existe que pour
+ * les Mac à puce Apple. Jusqu'au 27/09/2026, Helix y téléchargeait
+ * l'application LM Studio d'après le catalogue Homebrew, sans version figée ni
+ * empreinte écrite ici ; ce catalogue ne décrit plus que l'application pour
+ * puce Apple (`depends_on arch: arm64`, relevé le 27/09/2026), qu'un Mac Intel
+ * ne peut pas lancer. L'installation y est donc refusée, avec la raison
+ * (audit de la chaîne d'approvisionnement du 27/09/2026).
  */
-
-/** Catalogue Homebrew : source d'adresse et d'empreinte, tenue à jour en amont. */
-const CATALOGUE = "https://formulae.brew.sh/api/cask/lm-studio.json";
 
 export interface EngineProgress {
   phase: "resolution" | "telechargement" | "verification" | "installation" | "pret" | "erreur";
@@ -44,34 +42,11 @@ export interface EngineProgress {
   error?: string;
 }
 
-interface Paquet {
-  version: string;
-  url: string;
-  sha256: string;
-}
-
-/** Interroge le catalogue pour connaître la version courante et son empreinte. */
-async function resoudrePaquet(): Promise<Paquet> {
-  const res = await fetch(CATALOGUE, { signal: AbortSignal.timeout(20_000) });
-  if (!res.ok) throw new Error(tf("Catalogue injoignable (HTTP {0}).", res.status));
-
-  const data = (await res.json()) as { version?: string; url?: string; sha256?: string };
-  if (!data.url || !data.sha256) {
-    throw new Error(t("Le catalogue ne fournit ni adresse ni empreinte."));
-  }
-  if (!/^https:\/\/installers\.lmstudio\.ai\//.test(data.url)) {
-    // Le paquet doit venir de l'éditeur, pas d'une adresse quelconque.
-    throw new Error(tf("Adresse de téléchargement inattendue : {0}", data.url));
-  }
-  return { version: data.version ?? "?", url: data.url, sha256: data.sha256 };
-}
-
-/** Télécharge le paquet en calculant son empreinte au fil de l'eau (SHA-256, ou SHA-512 pour llmster). */
+/** Télécharge le paquet en calculant son empreinte SHA-512 au fil de l'eau. */
 async function telecharger(
-  paquet: Pick<Paquet, "url">,
+  paquet: { url: string },
   destination: string,
   onProgress: (p: EngineProgress) => void,
-  algorithme: "sha256" | "sha512" = "sha256",
 ): Promise<string> {
   /*
    * Arrêté quand plus rien n'arrive depuis deux minutes, pas au bout d'un
@@ -98,7 +73,7 @@ async function telecharger(
   }
 
   const total = Number(res.headers.get("content-length") ?? 0);
-  const hash = createHash(algorithme);
+  const hash = createHash("sha512");
   let recu = 0;
   let dernierPourcent = -1;
 
@@ -138,21 +113,6 @@ function emplacements(): string[] {
   const force = process.env.HELIX_APPS_DIR;
   if (force) return [force];
   return ["/Applications", join(homedir(), "Applications")];
-}
-
-/** Dossier d'applications utilisable : le dossier système, sinon celui du compte. */
-async function dossierApplications(): Promise<string> {
-  const [premier, ...replis] = emplacements();
-  try {
-    await mkdir(premier, { recursive: true });
-    await access(premier, constants.W_OK);
-    return premier;
-  } catch {
-    // Compte sans droits d'administration : on installe pour cet utilisateur.
-    const perso = replis[0] ?? join(homedir(), "Applications");
-    await mkdir(perso, { recursive: true });
-    return perso;
-  }
 }
 
 /** L'application est-elle déjà installée quelque part ? */
@@ -236,85 +196,16 @@ export async function installerMoteur(
    * posée par Helix n'avait jamais été ouverte, et `lms` refusait alors de
    * démarrer son service (« daemon is not running and no valid installation
    * could be found », vu sur un MacBook). Le moteur sans interface démarre
-   * sans elle. Les Mac Intel gardent l'application (pas de llmster pour eux).
+   * sans elle. Les Mac Intel n'ont ni l'un ni l'autre (en-tête du fichier).
    */
   if (process.platform === "win32" || process.platform === "linux" || (process.platform === "darwin" && process.arch === "arm64")) {
     return installerLlmster(onProgress);
   }
-  if (process.platform !== "darwin") throw new Error(t("L'installation automatique du moteur n'existe pas pour ce système."));
-
-  onProgress({ phase: "resolution", message: t("Recherche de la dernière version...") });
-  const paquet = await resoudrePaquet();
-
-  const travail = await mkdtemp(join(tmpdir(), "helix-moteur-"));
-  const image = join(travail, "moteur.dmg");
-  let pointDeMontage: string | null = null;
-
-  try {
-    onProgress({ phase: "telechargement", message: t("Téléchargement du moteur..."), percent: 0 });
-    const empreinte = await telecharger(paquet, image, onProgress);
-
-    onProgress({ phase: "verification", message: t("Vérification du paquet...") });
-    if (empreinte !== paquet.sha256) {
-      throw new Error(t("L'empreinte du paquet téléchargé ne correspond pas à celle publiée. Installation interrompue."));
-    }
-
-    onProgress({ phase: "installation", message: t("Installation...") });
-
-    /*
-     * `-nobrowse` évite d'ouvrir une fenêtre du Finder, `-noverify` évite une
-     * seconde vérification longue et redondante — on vient de contrôler
-     * l'empreinte du fichier entier.
-     *
-     * `-plist` : la sortie tabulée est ambiguë (colonnes vides, chemins avec
-     * espaces) et macOS renvoie le chemin résolu (`/private/var/...`) là où on
-     * avait demandé `/var/...`. La sortie structurée lève les deux pièges.
-     */
-    const { stdout } = await exec(
-      "hdiutil",
-      ["attach", image, "-nobrowse", "-noverify", "-plist", "-mountrandom", travail],
-      { timeout: 180_000 },
-    );
-
-    // Une seule clé nous intéresse : inutile de dérouler tout le plist.
-    pointDeMontage =
-      /<key>mount-point<\/key>\s*<string>([^<]+)<\/string>/.exec(stdout)?.[1] ?? null;
-
-    if (!pointDeMontage) throw new Error(t("L'image du moteur n'a pas pu être ouverte."));
-
-    const destination = await dossierApplications();
-    await exec(
-      "cp",
-      ["-R", join(pointDeMontage, "LM Studio.app"), destination],
-      { timeout: 300_000 },
-    );
-
-    const app = join(destination, "LM Studio.app");
-
-    /*
-     * Déclare l'outil en ligne de commande depuis le paquet : c'est lui que la
-     * passerelle utilise ensuite. Sans cela il faudrait ouvrir l'interface
-     * graphique une première fois.
-     */
-    const cli = join(app, "Contents", "Resources", "app", ".webpack", "lms");
-    try {
-      await exec(cli, ["bootstrap"], { timeout: 120_000 });
-    } catch {
-      // Non bloquant : l'application est installée, le CLI apparaîtra au
-      // premier lancement. On le signale sans faire échouer l'installation.
-      console.warn("[helix] moteur installé, mais l'outil en ligne de commande n'a pas pu être déclaré.");
-    }
-
-    onProgress({ phase: "pret", message: tf("Moteur installé (version {0}).", paquet.version), percent: 100 });
-    return app;
-  } finally {
-    if (pointDeMontage) {
-      await exec("hdiutil", ["detach", pointDeMontage, "-quiet"], { timeout: 60_000 }).catch(
-        () => {},
-      );
-    }
-    await rm(travail, { recursive: true, force: true }).catch(() => {});
-  }
+  throw new Error(
+    process.platform === "darwin"
+      ? t("LM Studio n'existe pas pour les Mac à processeur Intel : aucun moteur ne peut être installé sur ce Mac. Branchez un modèle par une clé d'un fournisseur, ou un autre moteur compatible OpenAI dans le profil de déploiement.")
+      : t("L'installation automatique du moteur n'existe pas pour ce système."),
+  );
 }
 
 /* --------------- Windows, Linux et Mac à puce Apple : llmster --------------- */
@@ -339,8 +230,8 @@ export async function installerMoteur(
  *
  * Limite dite : l'empreinte a été relevée sur le même serveur que l'archive,
  * mais une fois, le 27/09/2026, et écrite ici : un serveur compromis ensuite
- * ne peut plus faire installer autre chose. Sur Mac Intel seulement (l'application),
- * l'empreinte vient d'un catalogue tiers (Homebrew). Essayé dans un Ubuntu 24.04
+ * ne peut plus faire installer autre chose. Sur Mac Intel, rien n'est installé (pas de
+ * moteur LM Studio pour eux). Essayé dans un Ubuntu 24.04
  * (conteneur) et installé sur macOS à la main ; pas encore sur une vraie machine
  * Windows ni Linux, ni démarré par Helix sur un Mac.
  */
@@ -510,7 +401,7 @@ async function installerLlmster(onProgress: (p: EngineProgress) => void): Promis
       if (!attendue) continue;
       try {
         onProgress({ phase: "telechargement", message: t("Téléchargement du moteur..."), percent: 0 });
-        const empreinte = await telecharger({ url: `${DEPOT_LLMSTER}/${n}${extension}` }, archive, onProgress, "sha512");
+        const empreinte = await telecharger({ url: `${DEPOT_LLMSTER}/${n}${extension}` }, archive, onProgress);
         onProgress({ phase: "verification", message: t("Vérification du paquet...") });
         if (empreinte !== attendue) {
           throw new Error(t("L'empreinte du paquet téléchargé ne correspond pas à celle publiée. Installation interrompue."));

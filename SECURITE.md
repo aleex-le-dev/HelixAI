@@ -3151,7 +3151,7 @@ le `.deb` a été installé et lancé dans un Ubuntu 24.04 vierge (conteneur Doc
 | **Dossiers système** acceptés comme dossier de travail (`C:\Windows`, `C:\`, `/etc`, `/root`). | Liste propre à chaque système, séparateur du système, racine de disque reconnue partout. | Relu, pas essayé hors macOS |
 | **Arrêt** : sous Windows, `kill()` tuait net la passerelle, qui laissait OpenCode, OpenClaw, l'entraînement et LM Studio derrière. | Arrêt demandé par un canal, puis `taskkill /T /F` ; le moteur llmster, partagé comme LM Studio sur macOS, reste allumé (seuls les modèles chargés par Helix sont déchargés) ; les processus lancés par la passerelle s'arrêtent avec tout leur arbre ; canal coupé, la passerelle s'arrête aussi. | Relu |
 | **Consoles** : chaque programme lancé ouvrait une fenêtre noire. | `windowsHide` par défaut pour tout le processus (`processus.ts`), `promisify` compris. | Windows simulé : les 5 formes d'appel |
-| **Moteur LM Studio** sous Windows, Linux et Mac à puce Apple | Archive officielle de llmster et son empreinte SHA-512, vérifiée avant ouverture ; version épinglée ; aucun script téléchargé n'est exécuté ; archive posée dans le dossier des données, pas dans `/tmp`. **Limite** : l'empreinte a été relevée une fois (27/09/2026) sur le même serveur que l'archive, puis écrite dans le code ; sur Mac Intel seulement, elle vient d'un catalogue tiers (Homebrew). | Installé dans un Ubuntu 24.04 vierge (Docker) : empreinte vérifiée, modèle chargé, un Chat ; pas essayé sous Windows |
+| **Moteur LM Studio** sous Windows, Linux et Mac à puce Apple | Archive officielle de llmster et son empreinte SHA-512, vérifiée avant ouverture ; version épinglée ; aucun script téléchargé n'est exécuté ; archive posée dans le dossier des données, pas dans `/tmp`. **Limite** : l'empreinte a été relevée une fois (27/09/2026) sur le même serveur que l'archive, puis écrite dans le code ; sur Mac Intel seulement, elle venait d'un catalogue tiers (Homebrew) : chemin retiré le 27/09/2026 (§ 32). | Installé dans un Ubuntu 24.04 vierge (Docker) : empreinte vérifiée, modèle chargé, un Chat ; pas essayé sous Windows |
 | **Python** absent ou sans `venv` (dictée, documents, entraînement fermés) | Helix pose CPython 3.12.14 autonome (`pythonPrive.ts`), décidé par Medhi le 27/09/2026 : publication épinglée, empreintes SHA-256 écrites dans le code, archive effacée sans être ouverte si l'empreinte diffère, Python vérifié (venv, ssl) avant usage. | 2 contrôles ; posé sur ce Mac et dans l'Ubuntu, atelier complet installé avec lui |
 | **`npx` absent** (serveur de fichiers de Cowork), ou `.cmd` sous Windows | `npx` lancé par un vrai Node : celui du système, sinon le Node officiel de Helix, posé au besoin (empreinte vérifiée contre `SHASUMS256.txt`), dossier en tête du PATH ; scripts d'installation toujours refusés. | Ubuntu : Node posé, serveur de fichiers démarré (14 outils) |
 | **Essai dans Ubuntu 24.04** : trois bibliothèques manquaient au `.deb` ; l'application se fermait au démarrage (une fenêtre de service fermée avant la fenêtre principale) ; llmster ne chargeait aucun modèle (dossier `.internal/temp` absent). | Dépendances ajoutées ; on ne quitte qu'une fois la fenêtre principale ouverte ; dossier créé à l'installation et à chaque démarrage du moteur. | Refait dans le même Ubuntu : application ouverte, modèle chargé, Chat |
@@ -3644,3 +3644,70 @@ rejoués contre le code d'avant échouent. `node scripts/essai-source-github.mjs
 - **Pas essayé** : l'application empaquetée elle-même (ouverte chez Medhi pendant le test), un
   vrai Windows, un Mac à plusieurs comptes (le scénario des droits ouverts a été rejoué avec un
   seul).
+
+## 32. Chaîne d'approvisionnement et dépôt public (audit du 27 septembre 2026)
+
+Ce que Helix télécharge sur les postes, les dépendances de l'application, et ce que porte le dépôt
+public. Chaque empreinte écrite dans le code a été **recomparée ce jour-là** à ce que publie la
+source, sans télécharger les gros fichiers : digests des publications GitHub (OpenCode 1.18.32, les
+six Python 3.12.14, Lume 0.5.3, les sept archives de stable-diffusion.cpp), fichiers `.sha512` de
+l'éditeur (les six llmster 0.0.25-1), `SHASUMS256.txt` de nodejs.org (les six Node 24.21.0),
+fichiers `.sha256` de The Document Foundation (LibreOffice 25.8.6.2 et son module français), PyPI
+(Unsloth 2026.9.11, unsloth_zoo 2026.9.7), métadonnées LFS de Hugging Face à la révision épinglée
+(les 49 fichiers de modèles d'images, de vidéo et d'entraînement). Deux petits fichiers ont été
+téléchargés et hachés : le décodeur TAEHV (22 Mo) et les sources de llama.cpp v0.5.0 (37 Mo). Tout
+concorde.
+
+| Trouvé | Corrigé |
+|---|---|
+| L'atelier installait `pip install --upgrade` de dix noms sans version, la dictée `faster-whisper>=1.1,<2`, et `npm install` de six noms, scripts d'installation compris : la dernière publication de chacun et de leurs dépendances, au moment du clic, sans rien vérifier. | Liste Python figée, dépendances comprises, avec l'empreinte SHA-256 de chaque roue (`gateway/src/atelier-paquets.json`, refaite par `node scripts/atelier-empreintes.mjs`, qui s'appuie sur uv) ; pip installe avec `--require-hashes --no-deps --only-binary=:all:`. Côté Node, les six bibliothèques à version exacte et le fichier de verrouillage de npm (57 paquets, chacun avec son empreinte SHA-512), posés par `npm ci --ignore-scripts`. Résolu pour Python 3.9 à 3.14 ; roues présentes pour macOS à puce Apple, Linux x64 et arm64, Windows x64 (vérifié par uv, système par système) ; installé pour de vrai sur ce Mac (Python 3.14, atelier puis dictée, `pip check` sans erreur) ; `npm ci` joué dans un dossier jetable, et refusé avec une empreinte falsifiée (`EINTEGRITY`). |
+| Les modèles Whisper de la dictée étaient pris à une révision épinglée, sans empreinte écrite dans le code. | L'empreinte de chaque fichier (`model.bin` compris, oid LFS de Hugging Face) est écrite dans `CATALOGUE_DICTEE` et vérifiée juste après le téléchargement ; un fichier différent fait effacer le modèle. Pas essayé de bout en bout (le plus petit modèle pèse 464 Mo). |
+| Sur Mac Intel, Helix téléchargeait l'application LM Studio d'après le catalogue Homebrew, sans version ni empreinte écrites dans le code ; ce catalogue ne décrit plus que l'application pour puce Apple, qu'un Mac Intel ne lance pas. | Plus rien n'est téléchargé : l'installation est refusée avec la raison (brancher une clé ou un autre moteur). L'application Helix n'est de toute façon publiée que pour Mac à puce Apple. |
+| Les extensions d'OpenClaw des employés (recherche web, WhatsApp, Discord, Slack, Mattermost) étaient installées sans version, donc à la dernière publiée, qui peut exiger un OpenClaw plus récent. | Installées à la version de l'OpenClaw qui tourne (`@openclaw/…@2026.9.4`, publiées à ce numéro, vérifié sur le registre npm). OpenClaw installe leurs dépendances sans scripts et garde leur empreinte (sa documentation). **Pas essayé** sur l'instance des employés. |
+| L'archive de Node était téléchargée dans le dossier temporaire commun (`/tmp`, partagé sous Linux), sous un nom prévisible. | Dans un dossier à soi (0700) sous `<données>/openclaw-moteur`, ouverte en création exclusive, comme Python et OpenCode. |
+| `machineMacos.ts` disait l'image macOS « épinglée et vérifiée par empreinte ». | Corrigé : elle n'est épinglée que par son étiquette (`macos-tahoe-cua:26.5.2`), sans empreinte écrite ; Lume la télécharge. |
+| Le README (trois langues) disait tout ce qui est installé « épinglé, empreinte vérifiée ». | Il dit maintenant ce qui l'est, et que le modèle de conversation vient du catalogue de LM Studio et la pile NVIDIA n'est figée qu'à la version. |
+| Rien dans `.gitignore` n'écartait une clé posée par erreur dans le dossier du projet. | `*.pem`, `*.p12`, `*.p8`, `*.key`, `.helix-editeur/`, `.env`. La clé de l'éditeur n'a jamais été suivie (historique relu). |
+
+**Contrôles ajoutés** (`npm run securite`, section 14, sans réseau) : chaque ligne des listes Python
+figée et à empreinte, sans autre index ; chaque bibliothèque annoncée à l'écran dans la liste ; les
+appels pip et npm de l'atelier sur ces listes seulement ; le verrou npm entièrement à empreinte et
+depuis le registre ; à l'entraînement, seule la pile NVIDIA sans empreinte ; aucun autre module qui
+lance pip ; révisions et empreintes des modèles d'images, de vidéo, d'entraînement et de la dictée ;
+archives de stable-diffusion.cpp, Lume et LibreOffice ; plus de catalogue Homebrew ; extensions
+d'OpenClaw à version ; licences des modèles proposés (Apache 2.0 ou MIT) ; aucun téléchargement en
+HTTP clair ni script téléchargé exécuté ; dans le dépôt, aucun fichier de clé suivi, `.gitignore`
+qui les écarte, et aucun fichier suivi contenant une clé privée, le dossier personnel du poste qui
+lance la batterie ou l'adresse de l'auteur des commits.
+
+**Licences des modèles proposés, relues à la source** (fiches Hugging Face, API `cardData.license`,
+27/09/2026) : les 25 modèles du catalogue de conversation et d'écran sont sous Apache 2.0 ou MIT
+(DeepSeek V4 Flash et GLM-4.7 Flash : MIT ; Muse Glimmer de Meta : Apache 2.0, dépôt
+`meta-models/Muse-Glimmer-30B`), comme les modèles d'images et de vidéo (Z-Image Turbo, FLUX.2
+klein 4B, Qwen-Image, Qwen2.5-VL 7B, Wan 2.1 et 2.2, UMT5-XXL), les Whisper (MIT) et les Qwen3 de
+l'entraînement. OpenCUA 72B, reconnu s'il est déjà installé mais jamais proposé, dérive de
+Qwen2.5-VL 72B (licence Qwen).
+
+### Restant, dit comme tel
+
+- **Le modèle de conversation** vient du catalogue de LM Studio (`lms get`) : ni révision ni
+  empreinte écrites dans Helix. LM Studio télécharge lui-même, en HTTPS, depuis Hugging Face.
+- **La pile NVIDIA** de l'entraînement (torch, transformers, peft, bitsandbytes… et les dépendances
+  d'Unsloth) : figée à la version, sans empreintes (exception déjà écrite, PROJET.md § 3.12).
+- **Les dépendances d'OpenClaw et des serveurs d'outils lancés par `npx`** : la version du paquet
+  est épinglée (npm vérifie l'empreinte de son archive), pas celles de ses dépendances, résolues
+  par npm à l'installation. Scripts coupés pour `npx`, permis au seul paquet `openclaw`.
+- **L'image de la machine macOS** : étiquette, sans empreinte (ci-dessus).
+- **L'installation en une commande sur macOS** compare l'image disque à `SHA256SUMS.txt` de la même
+  publication : cela protège du fichier abîmé, pas d'une publication remplacée (le fichier
+  d'empreintes vient du même endroit), et `codesign --verify` sur une signature ad hoc ne dit rien
+  de l'auteur. La mise à jour d'un clic, elle, vérifie la signature de l'éditeur (§ 28).
+- **Licences hors de la règle « Apache 2.0 ou MIT »**, permissives mais à décider par Medhi :
+  parmi les paquets Python figés, BSD (numpy, pandas, lxml, pypdf, reportlab…), MIT-CMU (Pillow),
+  PSF (typing-extensions), MPL-2.0 (certifi, et tqdm en partie) ; les roues de PyAV (dictée)
+  embarquent FFmpeg, dont la licence de cette construction (LGPL ou GPL selon les options) n'a pas
+  été vérifiée ; LibreOffice (MPL-2.0) dans les machines virtuelles ; côté Node, BSD (mammoth) et
+  jszip (MIT ou GPL-3.0, au choix). Rien de tout cela n'est nouveau : ces paquets étaient déjà
+  installés, à leur dernière version.
+- **Plateformes sans roues** pour la liste figée : Windows arm64 et Mac Intel (cryptography), que
+  l'application ne vise pas ; sur Mac, la dictée demande macOS 14 (roues d'onnxruntime et de PyAV).

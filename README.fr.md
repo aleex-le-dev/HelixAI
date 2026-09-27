@@ -13,7 +13,7 @@
 <p align="center">
   <img alt="License: AGPL-3.0" src="https://img.shields.io/badge/license-AGPL--3.0-blue" />
   <img alt="Version 0.27.0" src="https://img.shields.io/badge/version-0.27.0-informational" />
-  <img alt="Platform: macOS Apple Silicon" src="https://img.shields.io/badge/platform-macOS%20(Apple%20Silicon)-lightgrey" />
+  <img alt="Platforms: macOS, Windows, Linux" src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey" />
   <img alt="Interface: English, French, Chinese" src="https://img.shields.io/badge/interface-EN%20%C2%B7%20FR%20%C2%B7%20ZH-success" />
 </p>
 
@@ -125,10 +125,16 @@ Pour construire depuis les sources : `npm install`, `npm run build`, puis `npm r
 
 ### Prérequis
 
-- macOS 14 ou plus récent sur puce Apple, 16 Go de mémoire conseillés
-- Node.js 20 ou plus récent, et npm
-- [LM Studio](https://lmstudio.ai) : au premier lancement, Helix installe le modèle adapté à la machine
-- Facultatif : [OpenCode](https://opencode.ai) pour Helix Code. Python et Node ne sont pas demandés : s'ils manquent, Helix pose les siens (version épinglée, empreinte vérifiée)
+- Une machine de développement sous macOS (puce Apple), Windows 10/11 ou Linux (x64) ; les
+  paquets Windows et Linux se fabriquent aussi depuis un Mac
+- Node.js 20 ou plus récent, et npm (seulement pour construire : l'application installée ne
+  demande ni Node ni Python)
+- Facultatif : [OpenCode](https://opencode.ai) pour Helix Code
+
+Rien d'autre à installer au préalable : au premier lancement, Helix installe le moteur des
+modèles ([LM Studio](https://lmstudio.ai), ou celui déjà présent) et le modèle adapté à la
+machine. 16 Go de mémoire sont conseillés ; sur une machine plus modeste, Helix choisit un
+modèle plus léger.
 
 ### Lancer
 
@@ -146,7 +152,9 @@ propre passerelle locale. L'interface web seule se lance avec `npm run gateway` 
 ### Empaqueter et vérifier
 
 ```bash
-npm run package      # .dmg et .zip non signés dans release/
+npm run package      # macOS : .dmg et .zip dans release/
+npx electron-builder --win nsis --x64            # installateur Windows (après npm run build)
+npx electron-builder --linux AppImage deb --x64  # paquets Linux (après npm run build)
 npm run typecheck    # interface et passerelle
 npm run securite     # contrôles de sécurité contre une instance jetable
 ```

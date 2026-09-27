@@ -13,7 +13,7 @@
 <p align="center">
   <img alt="License: AGPL-3.0" src="https://img.shields.io/badge/license-AGPL--3.0-blue" />
   <img alt="Version 0.27.0" src="https://img.shields.io/badge/version-0.27.0-informational" />
-  <img alt="Platform: macOS Apple Silicon" src="https://img.shields.io/badge/platform-macOS%20(Apple%20Silicon)-lightgrey" />
+  <img alt="Platforms: macOS, Windows, Linux" src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey" />
   <img alt="Interface: English, French, Chinese" src="https://img.shields.io/badge/interface-EN%20%C2%B7%20FR%20%C2%B7%20ZH-success" />
 </p>
 
@@ -91,10 +91,11 @@ gh api repos/medhiclb/HelixAI/contents/scripts/installer-macos.sh -H "Accept: ap
 
 ### 前提条件
 
-- Apple 芯片的 macOS 14 或更高版本，建议 16 GB 内存
-- Node.js 20 或更高版本，以及 npm
-- [LM Studio](https://lmstudio.ai)：首次启动时，Helix 会安装适合该机器的模型
-- 可选：用于 Helix Code 的 [OpenCode](https://opencode.ai)。无需预先安装 Python 和 Node：若缺失，Helix 会安装自带的版本（版本固定，校验值已验证）
+- 一台开发机器：macOS（Apple 芯片）、Windows 10/11 或 Linux（x64）；Windows 和 Linux 安装包也可以在 Mac 上构建
+- Node.js 20 或更高版本，以及 npm（仅用于构建：安装后的应用既不需要 Node 也不需要 Python）
+- 可选：用于 Helix Code 的 [OpenCode](https://opencode.ai)
+
+无需预先安装其他任何组件：首次启动时，Helix 会安装模型引擎（[LM Studio](https://lmstudio.ai)，若已安装则直接使用）以及适合本机的模型。建议 16 GB 内存；在配置较低的机器上，Helix 会选择更轻量的模型。
 
 ### 运行
 
@@ -110,7 +111,9 @@ npm run app
 ### 打包与检查
 
 ```bash
-npm run package      # 在 release/ 中生成未签名的 .dmg 和 .zip
+npm run package      # macOS：在 release/ 中生成 .dmg 和 .zip
+npx electron-builder --win nsis --x64            # Windows 安装程序（先运行 npm run build）
+npx electron-builder --linux AppImage deb --x64  # Linux 安装包（先运行 npm run build）
 npm run typecheck    # 界面和网关
 npm run securite     # 针对临时实例的安全检查
 ```

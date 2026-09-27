@@ -13,7 +13,7 @@
 <p align="center">
   <img alt="License: AGPL-3.0" src="https://img.shields.io/badge/license-AGPL--3.0-blue" />
   <img alt="Version 0.27.0" src="https://img.shields.io/badge/version-0.27.0-informational" />
-  <img alt="Platform: macOS Apple Silicon" src="https://img.shields.io/badge/platform-macOS%20(Apple%20Silicon)-lightgrey" />
+  <img alt="Platforms: macOS, Windows, Linux" src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey" />
   <img alt="Interface: English, French, Chinese" src="https://img.shields.io/badge/interface-EN%20%C2%B7%20FR%20%C2%B7%20ZH-success" />
 </p>
 
@@ -124,10 +124,15 @@ To build from source: `npm install`, `npm run build`, then `npm run package` (ma
 
 ### Prerequisites
 
-- macOS 14 or later on Apple Silicon, 16 GB of memory recommended
-- Node.js 20 or later and npm
-- [LM Studio](https://lmstudio.ai): on first launch, Helix installs the model that suits the machine
-- Optional: [OpenCode](https://opencode.ai) for Helix Code. Python and Node are not required: when missing, Helix installs its own (pinned, checksum verified)
+- A development machine on macOS (Apple Silicon), Windows 10/11 or Linux (x64); the Windows
+  and Linux packages can also be built from a Mac
+- Node.js 20 or later and npm (only to build: the installed app needs neither Node nor Python)
+- Optional: [OpenCode](https://opencode.ai) for Helix Code
+
+Nothing else needs to be installed beforehand: on first launch, Helix installs the model
+engine ([LM Studio](https://lmstudio.ai), or uses it if it is already there) and the model
+suited to the machine. 16 GB of memory is recommended; on smaller machines Helix picks a
+lighter model.
 
 ### Run
 
@@ -145,7 +150,9 @@ terminals.
 ### Package and check
 
 ```bash
-npm run package      # unsigned .dmg and .zip in release/
+npm run package      # macOS: .dmg and .zip in release/
+npx electron-builder --win nsis --x64            # Windows installer (after npm run build)
+npx electron-builder --linux AppImage deb --x64  # Linux packages (after npm run build)
 npm run typecheck    # interface and gateway
 npm run securite     # security checks against a throwaway instance
 ```

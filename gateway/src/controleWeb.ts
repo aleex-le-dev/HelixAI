@@ -97,7 +97,7 @@ function creeLId(code: string, id: string): boolean {
   return new RegExp(`\\.id\\s*=\\s*["'\`]${i}["'\`]|setAttribute\\(\\s*["']id["']\\s*,\\s*["'\`]${i}|id\\s*=\\s*\\\\?["']${i}\\\\?["']`).test(code);
 }
 
-function syntaxeJs(code: string, nom: string): string | null {
+export function syntaxeJs(code: string, nom: string): string | null {
   // Un module (import, export) ne se compile pas comme un script : on ne juge pas sa syntaxe ici.
   if (/^\s*(import|export)\b/m.test(code)) return null;
   try {
@@ -110,7 +110,7 @@ function syntaxeJs(code: string, nom: string): string | null {
   }
 }
 
-function accoladesCss(code: string): string | null {
+export function accoladesCss(code: string): string | null {
   const nu = code.replace(/\/\*[\s\S]*?\*\//g, "").replace(/"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'/g, "");
   const ouvrantes = (nu.match(/\{/g) ?? []).length;
   const fermantes = (nu.match(/\}/g) ?? []).length;

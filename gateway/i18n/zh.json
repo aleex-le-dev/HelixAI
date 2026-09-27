@@ -267,6 +267,7 @@
   "Contacts, entreprises et affaires HubSpot.": "HubSpot 的联系人、公司与交易。",
   "Contenu attendu : {0}": "应包含的内容：{0}",
   "Contenu relu dans le fichier :": "从文件中读回的内容：",
+  "Contrôle automatique : {0} a encore une erreur de syntaxe. Le fichier est écrit, mais il ne fonctionnera pas tel quel.": "自动检查：{0} 仍有语法错误。文件已写入，但按现状无法运行。",
   "Contrôle automatique : {0} fichier(s) vérifié(s) et {1} page(s) essayée(s), aucun problème trouvé.": "自动检查：已检查 {0} 个文件并试用 {1} 个页面，未发现问题。",
   "Contrôle automatique : {0} fichier(s) vérifié(s), aucun problème trouvé (pages non essayées : navigateur de l'application indisponible).": "自动检查：已检查 {0} 个文件，未发现问题（未试用页面：应用的浏览器不可用）。",
   "Contrôle automatique : {0} fichier(s) vérifié(s), aucun problème trouvé.": "自动检查：已检查 {0} 个文件，未发现问题。",

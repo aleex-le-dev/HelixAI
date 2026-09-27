@@ -137,6 +137,14 @@ function servirDossier(racine) {
       return refuser();
     }
     if (cible !== reelle && !cible.startsWith(reelle + path.sep)) return refuser();
+    /*
+     * Ni fichier ni dossier caché (test d'intrusion du 27/09/2026) : `.env`,
+     * `.git/config`, `.npmrc` se lisaient par un simple fetch depuis la page à
+     * l'essai, qui est de la même origine, et donc par n'importe quel script
+     * de CDN qu'elle charge. Ouverte à la main depuis le disque, la même page
+     * ne les lit pas. Le chemin résolu compte : un lien `a.txt → .env` aussi.
+     */
+    if (path.relative(reelle, cible).split(path.sep).some((s) => s.startsWith("."))) return refuser();
     let info;
     try {
       info = fs.statSync(cible);
@@ -268,4 +276,4 @@ function demarrerRendu() {
   });
 }
 
-module.exports = { demarrerRendu };
+module.exports = { demarrerRendu, servirDossier };

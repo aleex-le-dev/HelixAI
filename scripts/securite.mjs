@@ -2986,6 +2986,129 @@ console.log("\n11 bis. Mises à jour d'un clic : seulement ce que la clé de l'�
   verifier("mise à jour : une application sans signature est refusée", !(await sig.verifierApplication(recue, installee, id)).ok, "acceptée");
 }
 
+console.log("\n11 bis bis. Application et chaîne de mise à jour (test d'intrusion du 27/09/2026)");
+{
+  const { createRequire } = await import("node:module");
+  const exiger = createRequire(import.meta.url);
+  const sig = exiger(join(RACINE, "electron", "signatureEditeur.cjs"));
+  const { generateKeyPairSync } = await import("node:crypto");
+  const fsm = await import("node:fs");
+  const cle = generateKeyPairSync("ed25519").privateKey.export({ type: "pkcs8", format: "pem" });
+  const id = { identifiant: "fr.helix.plateforme", version: "9.0.1" };
+  const base = join(AUX, "maj-intrusion");
+  const faire = async (dossier) => {
+    const app = join(base, dossier, "Helix.app");
+    for (const d of ["Contents/Resources", "Contents/MacOS"]) fsm.mkdirSync(join(app, d), { recursive: true });
+    fsm.writeFileSync(join(app, "Contents/MacOS/Helix"), "binaire", { mode: 0o755 });
+    fsm.writeFileSync(join(app, "Contents/Resources/app.asar"), "application");
+    await sig.signerApplication(app, cle, id);
+    return app;
+  };
+  const vraie = await faire("vraie");
+  const installee = sig.cleDeLApplication(vraie);
+  verifier("signature de l'éditeur : l'application authentique passe", (await sig.verifierApplication(vraie, installee, id)).ok, "refusée");
+  // Un lien symbolique à la place de l'application : ce qu'il désigne n'est pas ce qui serait installé.
+  fsm.symlinkSync(vraie, join(base, "lien.app"));
+  verifier("signature de l'éditeur : un lien symbolique à la place de l'application est refusé", !(await sig.verifierApplication(join(base, "lien.app"), installee, id)).ok, "accepté");
+  // Des droits d'écriture pour tous, hors de la signature.
+  const ouverte = await faire("ouverte");
+  fsm.chmodSync(join(ouverte, "Contents/Resources"), 0o777);
+  fsm.chmodSync(join(ouverte, "Contents/Resources/app.asar"), 0o666);
+  verifier("signature de l'éditeur : une application modifiable par d'autres comptes est refusée", !(await sig.verifierApplication(ouverte, installee, id)).ok, "acceptée");
+  if (process.platform === "darwin") {
+    execFileSync("/bin/chmod", ["+a", "everyone allow write,add_file,delete", join(ouverte, "Contents/Resources")]);
+    const dehors = join(base, "dehors.txt");
+    fsm.writeFileSync(dehors, "x", { mode: 0o666 });
+    fsm.chmodSync(dehors, 0o666);
+    fsm.symlinkSync(dehors, join(ouverte, "Contents/Resources/vers-dehors"));
+    const assaini = sig.assainirDroits(ouverte);
+    const acl = /^\s*\d+: /m.test(execFileSync("/bin/ls", ["-leR", ouverte], { encoding: "utf8" }));
+    verifier("assainirDroits retire les ACL et l'écriture pour les autres", assaini && !acl && (fsm.statSync(join(ouverte, "Contents/Resources")).mode & 0o022) === 0, `${assaini} acl=${acl}`);
+    verifier("assainirDroits ne suit pas un lien vers l'extérieur de l'application", (fsm.statSync(dehors).mode & 0o777) === 0o666, (fsm.statSync(dehors).mode & 0o777).toString(8));
+  }
+
+  /*
+   * electron/miseAJour.cjs joué de bout en bout contre une fausse publication
+   * GitHub (scripts/doublure-mise-a-jour.cjs : Electron en doublure, rien
+   * n'est lancé ni installé). Chaque scénario dans son propre processus.
+   */
+  const jouer = (scenario) => {
+    const dossier = join(AUX, `doublure-${scenario}`);
+    fsm.mkdirSync(dossier, { recursive: true });
+    const env = { ...process.env, TMPDIR: join(dossier, "tmp"), HELIX_DATA_DIR: join(dossier, "donnees") };
+    delete env.HELIX_SANS_MISE_A_JOUR;
+    try {
+      return JSON.parse(execFileSync(process.execPath, [join(RACINE, "scripts", "doublure-mise-a-jour.cjs"), RACINE, dossier, scenario], { env, encoding: "utf8", timeout: 60_000 }).trim().split("\n").pop());
+    } catch (err) {
+      return { plantage: String(err?.message ?? err).slice(0, 200) };
+    }
+  };
+  const retiree = jouer("win-retiree");
+  verifier("Windows : une version retirée de GitHub ne s'installe plus après une vérification en erreur", retiree.annonce?.unClic === true && retiree.apresRetrait === "a-jour" && retiree.installer === false && retiree.lances?.length === 0, JSON.stringify(retiree).slice(0, 200));
+  const reessai = jouer("win-reessai");
+  verifier("Windows : « Réessayer » après un échec d'installation reste possible", reessai.installer === true && reessai.installerEncore === true && reessai.lances?.length === 0, JSON.stringify(reessai).slice(0, 200));
+  if (process.platform === "darwin") {
+    const authentique = jouer("mac-authentique");
+    verifier("macOS : la mise à jour authentique va jusqu'au remplacement", authentique.phase === "prete" && authentique.lances?.length === 1 && authentique.inscriptible === 0 && authentique.acl === false, JSON.stringify(authentique).slice(0, 200));
+    const lien = jouer("mac-lien");
+    verifier("macOS : une archive dont l'application n'est qu'un lien symbolique n'est pas installée", lien.phase === "erreur" && lien.lances?.length === 0, JSON.stringify(lien).slice(0, 200));
+    const droits = jouer("mac-droits");
+    verifier("macOS : une archive aux droits ouverts (0777, ACL) est installée sans eux", droits.lances?.length === 1 ? droits.inscriptible === 0 && droits.acl === false : droits.phase === "erreur", JSON.stringify(droits).slice(0, 200));
+    const taille = jouer("mac-taille");
+    verifier("macOS : une archive plus longue que la taille annoncée est coupée, et rien ne reste", taille.phase === "erreur" && taille.servi < 2 * 1024 * 1024 && taille.restes === 0 && taille.lances?.length === 0, JSON.stringify(taille).slice(0, 200));
+  }
+
+  // Le banc d'essai des pages (electron/rendu.cjs) : ni fichier ni dossier caché du projet.
+  const Module = exiger("node:module");
+  const charger = Module._load;
+  Module._load = function (demande, ...reste) {
+    return demande === "electron" ? { BrowserWindow: class {}, session: {} } : charger.call(this, demande, ...reste);
+  };
+  let rendu;
+  try {
+    rendu = exiger(join(RACINE, "electron", "rendu.cjs"));
+  } finally {
+    Module._load = charger;
+  }
+  const projet = join(base, "projet");
+  fsm.mkdirSync(join(projet, ".git"), { recursive: true });
+  fsm.writeFileSync(join(projet, "index.html"), "<p>page</p>");
+  fsm.writeFileSync(join(projet, ".env"), "CLE_SECRETE=essai");
+  fsm.writeFileSync(join(projet, ".git", "config"), "[remote]");
+  fsm.symlinkSync(join(projet, ".env"), join(projet, "a.txt"));
+  const service = await rendu.servirDossier(projet);
+  const statut = async (chemin) => (await fetch(`${service.origine}${chemin}`)).status;
+  const [page, env, git, lienEnv] = [await statut("/index.html"), await statut("/.env"), await statut("/.git/config"), await statut("/a.txt")];
+  service.serveur.close();
+  verifier("banc d'essai des pages : la page du projet est servie", page === 200, page);
+  verifier("banc d'essai des pages : .env, .git et un lien vers eux ne sont pas servis", env === 404 && git === 404 && lienEnv === 404, `${env} ${git} ${lienEnv}`);
+
+  /*
+   * scripts/installer-macos.sh, lu par `curl | sh` : coupé à n'importe quelle
+   * ligne, il ne doit rien exécuter. PATH vide : la moindre commande lancée
+   * dirait « not found » ; une fonction coupée n'est qu'une erreur de syntaxe,
+   * sans rien d'exécuté.
+   */
+  const lignes = fsm.readFileSync(join(RACINE, "scripts", "installer-macos.sh"), "utf8").split("\n");
+  const executees = [];
+  for (let n = 1; n < lignes.length - 2; n++) {
+    let sortie = "";
+    try {
+      execFileSync("/bin/sh", [], { input: lignes.slice(0, n).join("\n") + "\n", env: { PATH: "/nonexistent" }, stdio: ["pipe", "pipe", "pipe"] });
+    } catch (err) {
+      sortie = String(err?.stderr ?? "");
+    }
+    if (/not found/i.test(sortie)) executees.push(n);
+  }
+  verifier("installer-macos.sh coupé en route (curl | sh) : rien ne s'exécute", executees.length === 0, `lignes ${executees.slice(0, 5).join(", ")}`);
+  const script = lignes.join("\n");
+  verifier("installer-macos.sh : le nom de l'image disque lu dans SHA256SUMS.txt n'est jamais un chemin", /case "\$NOM" in\s*\n\s*\*\[!A-Za-z0-9._-\]\*/.test(script), "pas de contrôle du nom");
+
+  // Fusibles d'Electron (package.json, build.electronFuses) : NODE_OPTIONS et --inspect fermés dans le paquet.
+  const fusibles = JSON.parse(fsm.readFileSync(join(RACINE, "package.json"), "utf8")).build?.electronFuses ?? {};
+  verifier("paquet : NODE_OPTIONS et --inspect n'ouvrent pas l'application (fusibles)", fusibles.enableNodeOptionsEnvironmentVariable === false && fusibles.enableNodeCliInspectArguments === false, JSON.stringify(fusibles));
+}
+
 console.log("\n11 ter. Une requête mal formée n'arrête pas l'instance (test d'intrusion du 27/09/2026)");
 {
   const { connect } = await import("node:net");

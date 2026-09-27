@@ -3513,3 +3513,134 @@ dans la réponse ; la reprise, une session inconnue ou fabriquée (400), un doss
 (400) ; « tout » et « chaque » ; un `turn.failed` ; une seule tâche à la fois, l'arrêt refusé à un
 membre et fait pour le propriétaire (processus fini) ; le journal sans le texte. **Pas essayé** :
 le vrai `codex`, un vrai compte ChatGPT, Windows.
+
+## 31. Test d'intrusion de l'application et de la chaîne de mise à jour (27 septembre 2026)
+
+Autorisé par Medhi. Périmètre : `electron/` (processus principal, préchargement, canaux
+`helix:*`, fenêtres, permissions, protocole `helix:`), les fusibles d'Electron du paquet, la mise
+à jour (`miseAJour.cjs`, `sourceGithub.cjs`, `signatureEditeur.cjs`, `nomTrousseau.cjs`),
+`scripts/manifeste-mise-a-jour.mjs` et `scripts/installer-macos.sh`. Chaque faille ci-dessous a
+été reproduite avant d'être corrigée, et le contrôle qui l'attrape échoue sur le code d'avant.
+
+L'hypothèse de départ, pour la mise à jour macOS : la source n'est pas digne de confiance.
+L'empreinte de l'archive vient de la même source que l'archive (instance rattachée, ou manifeste
+GitHub, dont la partie `mac` n'est pas signée) ; seule la signature de l'éditeur, vérifiée avec la
+clé de l'application qui tourne, doit décider (§ 28, § 29.7).
+
+### 31.1 Corrigé
+
+- **Une archive dont « Helix.app » n'est qu'un lien symbolique** (gravité moyenne). Le relevé de
+  `verifierApplication` lisait à travers le lien : une application authentique posée ailleurs
+  suffisait, la vérification passait, puis le script d'installation déplaçait **le lien** dans
+  /Applications. Ce qui s'ouvrait ensuite était ce que la cible contiendrait ce jour-là, jamais
+  revérifié. Reproduit de bout en bout (application installée : un lien). Désormais
+  `verifierApplication` exige un vrai dossier (`lstat`), et `installerSansSignature` le refuse
+  avant toute lecture.
+- **Droits et ACL hors de la signature** (gravité moyenne). Le relevé note le bit d'exécution,
+  pas l'écriture pour le groupe ou les autres, ni les ACL. Une archive authentique, mais aux
+  dossiers en 0777 avec une ACL « everyone » : `ditto` les restitue, la vérification passait
+  (reproduit : 4 entrées inscriptibles par tous et l'ACL, dans l'application prête à être mise en
+  place). Un autre compte du Mac, ou un service sous un autre utilisateur, pouvait ensuite changer
+  `app.asar` et faire tourner son code sous le compte de la personne, avec les autorisations de
+  Helix. Le relevé signé ne change pas (les postes déjà installés refuseraient sinon toutes les
+  versions suivantes) : `assainirDroits` retire ACL, écriture pour le groupe et les autres,
+  setuid, setgid et sticky avant la vérification (`chmod -R -P`, sans suivre les liens), puis
+  `verifierApplication` refuse ce qui en resterait. L'application publiée n'en porte aucun
+  (relevé sur `Helix-2026.927.4-arm64-mac.zip`) : rien ne change pour une vraie mise à jour.
+- **Archive macOS sans plafond, et jamais effacée** (faible). Le téléchargement ne s'arrêtait
+  pas à la taille annoncée (8 Mo servis pour 5 Ko annoncés, tout écrit), et une archive refusée
+  restait dans le dossier temporaire avec l'application extraite, à chaque essai. La taille
+  annoncée est exigée, le téléchargement coupé au-delà, écrit en exclusif, et le dossier effacé
+  sur tout refus (comme sous Windows, § 29.11).
+- **Une version Windows retirée de GitHub s'installait encore** (faible). L'annonce Windows
+  n'était pas oubliée quand GitHub ne proposait plus rien de plus récent ; après une vérification
+  suivante en erreur (réseau coupé), « Installer » lançait la version retirée. Elle est oubliée
+  avec l'annonce macOS ; « Réessayer » après un échec d'installation reste possible.
+- **Manifeste lu sans limite** (faible). `helix-mise-a-jour.json` était lu entier en mémoire,
+  quelle que soit sa taille : une publication remplacée par un fichier énorme sous ce nom faisait
+  tomber l'application à chaque vérification. `manifesteDe` ne le retient que si GitHub lui donne
+  une taille de manifeste (64 Kio au plus, le vrai pèse 533 octets) et une adresse `https:` ; un
+  texte plus long est refusé aussi.
+- **NODE_OPTIONS et `--inspect` ouvraient l'application** (moyenne). Lu sur
+  `release/mac-arm64/Helix.app` et `release/win-unpacked/Helix.exe` avec `@electron/fuses read` :
+  aucun fusible posé (RunAsNode, EnableNodeOptionsEnvironmentVariable, EnableNodeCliInspectArguments
+  ouverts ; OnlyLoadAppFromAsar et EnableEmbeddedAsarIntegrityValidation désactivés). Sur une copie du
+  binaire d'Electron 44.4.5 du projet (jamais l'application de Medhi) : sans fusibles, le
+  processus principal ouvre un débogueur sur `--inspect` et exécute un script passé par
+  `NODE_OPTIONS=--require`, c'est-à-dire du code avec l'identité de l'application ; fusibles posés,
+  ni l'un ni l'autre, et le mode Node de la passerelle, `--check` compris, marche toujours.
+  `build.electronFuses` (package.json) les ferme ; electron-builder les pose avant la signature
+  de code, que `signer-mise-a-jour.cjs` refait ensuite.
+- **Le banc d'essai des pages servait les fichiers cachés du projet** (faible). `.env`,
+  `.git/config` se lisaient d'un simple `fetch` depuis la page à l'essai, de même origine, donc
+  par tout script de CDN qu'elle charge ; ouverte à la main depuis le disque, la même page ne les
+  lit pas. `servirDossier` (`electron/rendu.cjs`) refuse tout segment caché du chemin résolu (un
+  lien `a.txt → .env` aussi).
+- **`installer-macos.sh` par `curl | sh`** (faible). Un téléchargement coupé exécutait les lignes
+  déjà reçues (51 points de coupure sur 67 lançaient au moins une commande), par exemple jusqu'à
+  `rm -rf "$CIBLE/Helix.app"` sans la mise en place qui suit. Le script est une fonction appelée
+  à la dernière ligne : coupé, il ne fait rien. Le nom de l'image disque lu dans `SHA256SUMS.txt`
+  ne peut plus être un chemin (`-o "$TRAVAIL/$NOM"`).
+
+**Vérifié** : `npm run securite`, section 11 bis bis (16 contrôles), dont `electron/miseAJour.cjs`
+joué de bout en bout contre une fausse publication GitHub (`scripts/doublure-mise-a-jour.cjs` :
+Electron en doublure, rien de lancé, rien d'installé) pour l'archive authentique, le lien, les
+droits ouverts, l'archive trop longue, la version retirée et « Réessayer » ; les mêmes scénarios
+rejoués contre le code d'avant échouent. `node scripts/essai-source-github.mjs` : 5 cas de plus
+(taille du manifeste). 655 contrôles, 0 échec.
+
+### 31.2 Essayé, et qui tient
+
+- `ditto -x -k` ne sort pas du dossier d'extraction : noms en `../`, chemins absolus, et lien
+  symbolique suivi d'un fichier « à travers » lui (le lien n'est posé qu'en fin d'extraction ;
+  l'extraction échoue). Rien n'est écrit dehors avant la vérification de signature.
+- Rétrogradation : GitHub ne propose qu'une version strictement plus récente (`plusRecente`,
+  numérique) ; electron-updater (instance) refuse une version plus ancienne (`allowDowngrade`
+  faux) ; la signature macOS et la signature Windows portent la version, comparée à celle de la
+  publication et à `CFBundleShortVersionString`. Une version signée plus ancienne, republiée sous
+  un numéro neuf, est refusée.
+- Noms de fichiers du manifeste avec `../` ou `..\\`, empreintes ou tailles mal formées :
+  refusés (déjà couverts par `essai-source-github.mjs`).
+- Canaux `helix:*` : tous ceux de la fenêtre principale vérifient l'expéditeur
+  (`depuisLaFenetre`, `garde` de miseAJour, `depuisHelix` du bot) ; ceux du bot vérifient que
+  l'envoi vient de la fenêtre de ce bot. `helix:langue` n'accepte que fr, en, zh.
+- Fenêtres : `contextIsolation`, `sandbox`, sans `nodeIntegration` pour la fenêtre principale, le
+  banc d'essai et la connexion Google ; `setWindowOpenHandler` refuse tout et ne passe au système
+  que `http(s):` et `mailto:` ; `will-navigate` ne laisse que la page en place ; permissions :
+  le micro seul, pour `helix://app`. `helix:maj-ouvrir-paquet` n'ouvre qu'un `https:` venu de la
+  source.
+- Arguments NSIS : fixes (`--updated /S --force-run`), aucun ne vient de la publication ; le
+  chemin passe sans interpréteur de commandes.
+- Transfert de la clé du trousseau (`nomTrousseau.cjs`) : la clé ne passe que par
+  l'environnement du processus relancé, retirée avant tout lancement de la passerelle ; le
+  fichier `.transfert-cle` est chiffré (AES-256-GCM) et n'écrit que dans le dossier des données.
+  Il n'ouvre rien à qui n'a pas déjà la main sur le compte.
+
+### 31.3 Restant, dit comme tel
+
+- **RunAsNode reste ouvert**, et c'est voulu tant que la passerelle, la ligne de commande
+  (`ligneDeCommande.cjs`) et des outils de la passerelle lancent le binaire de l'application en
+  mode Node. Un programme du même compte peut donc faire tourner du code avec le binaire de Helix.
+  Le fermer demande de lancer la passerelle par `utilityProcess` et de donner un Node à la ligne
+  de commande : pas fait, pas essayé.
+- **OnlyLoadAppFromAsar et EnableEmbeddedAsarIntegrityValidation** restent désactivés : sans intérêt
+  tant que RunAsNode est ouvert, et la validation d'intégrité sous Windows n'a pas été essayée.
+  GrantFileProtocolExtraPrivileges reste ouvert : la reprise de l'ancien stockage charge encore
+  une page `file://`.
+- **Les fusibles posés par `build.electronFuses` n'ont pas été lus sur un paquet fabriqué** : pas
+  de `npm run package` dans ce test. À la prochaine fabrication :
+  `npx @electron/fuses read --app release/mac-arm64/Helix.app` (et `win-unpacked/Helix.exe`), puis
+  lancer l'application, la passerelle et `helix` en ligne de commande.
+- **Soupçons non démontrés** : les dossiers `_CodeSignature` sont écartés du relevé à toute
+  profondeur, pas seulement là où macOS les pose (des fichiers y seraient ajoutés sans casser la
+  signature ; aucun chargeur trouvé qui les lirait) ; la signature de code de chaque programme est
+  retirée avant le relevé, donc ses droits (entitlements) n'y sont pas ; la fenêtre du bot de
+  réunion partage le monde de Google Meet (`contextIsolation: false`), alors
+  qu'Electron 44 offre `contextBridge.executeInMainWorld` (§ 18.5) ; `installer-macos.sh` ne
+  vérifie que l'empreinte publiée à côté de l'image disque et une signature de code ad hoc :
+  une publication remplacée de bout en bout passerait (première installation, pas de clé à
+  laquelle se fier) ; le banc d'essai des pages peut envoyer des requêtes simples aux services de
+  la boucle locale.
+- **Pas essayé** : l'application empaquetée elle-même (ouverte chez Medhi pendant le test), un
+  vrai Windows, un Mac à plusieurs comptes (le scénario des droits ouverts a été rejoué avec un
+  seul).

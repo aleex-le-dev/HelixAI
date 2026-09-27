@@ -184,7 +184,12 @@ async function startGateway() {
   const enfant = spawn(process.execPath, [entry], {
     env: {
       ...process.env,
-      // Permet au binaire Electron de se comporter comme Node pour ce process.
+      /*
+       * Permet au binaire Electron de se comporter comme Node pour ce process.
+       * C'est pourquoi le fusible RunAsNode reste ouvert (package.json,
+       * `build.electronFuses`) ; NODE_OPTIONS et --inspect, eux, sont fermés
+       * depuis le 27/09/2026 (SECURITE.md), et la passerelle n'en a pas besoin.
+       */
       ELECTRON_RUN_AS_NODE: "1",
       HELIX_GATEWAY_PORT: String(GATEWAY_PORT),
       // Marque blanche : les messages de la passerelle disent le nom du produit livré.

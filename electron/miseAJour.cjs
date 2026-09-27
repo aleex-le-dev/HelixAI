@@ -118,6 +118,13 @@ async function verifierGithub() {
     const maintenant = new Date().toISOString();
     if (publication.draft || publication.prerelease || !sourceGithub.plusRecente(version, app.getVersion())) {
       annonce = null;
+      /*
+       * L'installateur Windows annoncé plus tôt aussi (test d'intrusion du
+       * 27/09/2026) : il restait en mémoire, et après une vérification
+       * suivante en erreur (réseau coupé), « Installer » lançait encore une
+       * version que l'éditeur avait retirée de GitHub entre-temps.
+       */
+      annonceWindows = null;
       publier({ phase: "a-jour", versionDisponible: null, derniereVerification: maintenant, unClic: false });
       return;
     }
@@ -125,8 +132,9 @@ async function verifierGithub() {
     const paquet = sourceGithub.choisirPaquet(fichiers, { plateforme: process.platform, arch: process.arch, appImage: Boolean(process.env.APPIMAGE) });
     annonce = null;
     annonceWindows = null;
+    // Le manifeste, s'il a une taille de manifeste (sourceGithub.manifesteDe) : lu entier en mémoire, il ne doit pas pouvoir peser des gigaoctets.
+    const manifeste = sourceGithub.manifesteDe(fichiers);
     if (process.platform === "darwin") {
-      const manifeste = fichiers.find((f) => f.name === "helix-mise-a-jour.json");
       if (manifeste) {
         const lu = await net.fetch(manifeste.browser_download_url, { headers: { "User-Agent": "Helix" } });
         annonce = lu.ok ? sourceGithub.lireManifeste(await lu.text(), version) : null;
@@ -142,7 +150,6 @@ async function verifierGithub() {
      * garde « Télécharger ». Seulement sur x64, le seul installateur publié.
      */
     if (process.platform === "win32" && process.arch === "x64") {
-      const manifeste = fichiers.find((f) => f.name === "helix-mise-a-jour.json");
       const cle = signatureEditeur.cleDesRessources(process.resourcesPath);
       if (manifeste && cle && IDENTIFIANT_WINDOWS) {
         const lu = await net.fetch(manifeste.browser_download_url, { headers: { "User-Agent": "Helix" } });
@@ -423,27 +430,58 @@ async function demarrerMiseAJour(permis) {
  */
 async function installerSansSignature() {
   const zip = (annonce.files ?? []).find((f) => /\.zip$/i.test(f.url));
-  if (!zip || !zip.sha512) throw new Error(tx("sansArchive"));
+  /*
+   * La taille annoncée est exigée (test d'intrusion du 27/09/2026) : sans
+   * plafond, une source qui n'en finit pas remplissait le disque (Windows,
+   * lui, l'avait déjà : `telechargerInstallateur`). Le manifeste GitHub et
+   * `latest-mac.yml` (electron-updater, l'instance) la donnent tous deux.
+   */
+  if (!zip || !zip.sha512 || !Number.isInteger(zip.size) || zip.size <= 0) throw new Error(tx("sansArchive"));
   const url = new URL(zip.url, adresseFlux).toString();
   const dossier = fs.mkdtempSync(path.join(os.tmpdir(), "helix-maj-"));
+  try {
+    await preparerEtLancer(zip, url, dossier);
+  } catch (err) {
+    // Une archive refusée ne reste pas dans le dossier temporaire (130 Mo et l'application extraite, à chaque essai).
+    fs.rmSync(dossier, { recursive: true, force: true });
+    throw err;
+  }
+}
+
+/** Télécharge l'archive dans `dossier` (plafonnée à la taille annoncée), la vérifie, puis lance le remplacement. */
+async function preparerEtLancer(zip, url, dossier) {
   const fichier = path.join(dossier, "maj.zip");
   publier({ phase: "telechargement", pourcent: 0, message: null });
   const reponse = await net.fetch(url, { headers: entetesFlux });
   if (!reponse.ok || !reponse.body) throw new Error(tx("sourceRepond", reponse.status));
-  const total = Number(reponse.headers.get("content-length")) || zip.size || 0;
   const hash = crypto.createHash("sha512");
-  const sortie = fs.createWriteStream(fichier);
+  const sortie = fs.createWriteStream(fichier, { flags: "wx" });
+  const ecrit = new Promise((resolve, reject) => {
+    sortie.on("finish", resolve);
+    sortie.on("error", reject);
+  });
   let recu = 0;
   const lecteur = reponse.body.getReader();
-  for (;;) {
-    const { done, value } = await lecteur.read();
-    if (done) break;
-    hash.update(value);
-    sortie.write(Buffer.from(value));
-    recu += value.length;
-    if (total) publier({ pourcent: Math.min(99, Math.round((recu / total) * 100)) });
+  try {
+    for (;;) {
+      const { done, value } = await lecteur.read();
+      if (done) break;
+      recu += value.length;
+      if (recu > zip.size) throw new Error(tx("tailleArchive"));
+      hash.update(value);
+      if (!sortie.write(Buffer.from(value))) await new Promise((r) => sortie.once("drain", r));
+      publier({ pourcent: Math.min(99, Math.round((recu / zip.size) * 100)) });
+    }
+  } catch (err) {
+    void lecteur.cancel().catch(() => {});
+    const ferme = sortie.closed ? Promise.resolve() : new Promise((r) => sortie.once("close", r));
+    sortie.destroy();
+    await ferme;
+    throw err;
   }
-  await new Promise((r) => sortie.end(r));
+  sortie.end();
+  await ecrit;
+  if (recu !== zip.size) throw new Error(tx("tailleArchive"));
   if (hash.digest("base64") !== zip.sha512) throw new Error(tx("empreinte"));
   const extrait = path.join(dossier, "extrait");
   fs.mkdirSync(extrait);
@@ -451,6 +489,8 @@ async function installerSansSignature() {
   const nomApp = fs.readdirSync(extrait).find((n) => n.endsWith(".app"));
   if (!nomApp) throw new Error(tx("pasDApplication"));
   const nouvelle = path.join(extrait, nomApp);
+  // Un vrai dossier, pas un lien vers ailleurs (signatureEditeur.verifierApplication le redit) : rien n'est lu ni modifié à travers lui.
+  if (!fs.lstatSync(nouvelle).isDirectory()) throw new Error(tx("pasDApplication"));
   const actuelle = path.resolve(path.dirname(process.execPath), "..", "..");
   const lirePlist = (appli, cle) =>
     new Promise((resolve) =>
@@ -471,6 +511,8 @@ async function installerSansSignature() {
   const cle = signatureEditeur.cleDeLApplication(actuelle);
   if (!cle) throw new Error(tx("sansCle"));
   publier({ message: tx("verificationSignature") });
+  // Les droits et les ACL ne sont pas dans la signature : remis d'aplomb d'abord, contrôlés ensuite (signatureEditeur.cjs, 27/09/2026).
+  if (!signatureEditeur.assainirDroits(nouvelle)) throw new Error(tx("droitsArchive"));
   const verdict = await signatureEditeur.verifierApplication(nouvelle, cle, { identifiant, version: annonce.version });
   if (!verdict.ok) throw new Error(tx("refusee", raison(verdict.raison)));
   fs.accessSync(path.dirname(actuelle), fs.constants.W_OK);

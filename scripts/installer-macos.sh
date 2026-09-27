@@ -13,6 +13,10 @@
 #   (dépôt public depuis le 27/09/2026 ; `gh`, s'il est connecté, sert aussi)
 set -eu
 
+# Tout le script est dans une fonction, appelée à la dernière ligne (test d'intrusion du 27/09/2026) :
+# lu par `curl | sh`, un téléchargement coupé en route exécutait les lignes déjà reçues, par exemple
+# jusqu'à `rm -rf "$CIBLE/Helix.app"` sans la mise en place qui suit. Coupé, il ne fait plus rien.
+principal() {
 DEPOT="medhiclb/HelixAI"
 TRAVAIL="$(mktemp -d)"
 trap 'hdiutil detach -quiet "$TRAVAIL/volume" 2>/dev/null || true; rm -rf "$TRAVAIL"' EXIT
@@ -32,6 +36,10 @@ else
   }
   NOM="$(awk '/-arm64\.dmg$/ {print $2}' "$TRAVAIL/SHA256SUMS.txt")"
   [ -n "$NOM" ] || { echo "Aucune image disque pour Mac dans la publication." >&2; exit 1; }
+  # Un seul nom de fichier, sans chemin ni retour à la ligne : sinon `-o "$TRAVAIL/$NOM"` écrivait où la liste le voulait (`../`).
+  case "$NOM" in
+    *[!A-Za-z0-9._-]* | .*) echo "Nom d'image disque inattendu dans SHA256SUMS.txt : installation arrêtée." >&2; exit 1 ;;
+  esac
   curl -fL --progress-bar "$BASE/$NOM" -o "$TRAVAIL/$NOM"
 fi
 
@@ -67,3 +75,6 @@ rm -rf "$CIBLE/Helix.app"
 mv "$CIBLE/.Helix.app.nouveau" "$CIBLE/Helix.app"
 echo "Helix est installé dans $CIBLE."
 [ -n "${HELIX_CIBLE:-}" ] || { echo "Ouverture..."; open "$CIBLE/Helix.app"; }
+}
+
+principal "$@"

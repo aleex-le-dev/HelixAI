@@ -49,6 +49,11 @@
     "appId": "fr.helix.plateforme",
     "afterSign": "scripts/signature/signer-mise-a-jour.cjs",
     "afterPack": "scripts/signature/cle-windows.cjs",
+    "electronFuses": {
+      "runAsNode": true,
+      "enableNodeOptionsEnvironmentVariable": false,
+      "enableNodeCliInspectArguments": false
+    },
     "copyright": "Copyright © 2026 Medhi Clabaut — Helix Agence, SIREN 994 907 145",
     "productName": "Helix",
     "protocols": {

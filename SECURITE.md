@@ -3896,6 +3896,44 @@ tourné qu'avec le faux) ; un `apply_patch` produit par un vrai modèle dans le 
 forme de la demande est lue dans son code et rejouée par le faux) ; Windows et Linux ; l'écran de
 réglages vu par un membre (le bouton d'activation lui reste proposé et répond 403).
 
+## 36. Seconde tournée : passerelle et données (28 septembre 2026)
+
+Deuxième passe d'intrusion sur la passerelle HTTP et les données, sur le code qui part dans la
+version 2026.928.1 (main `6b77c21`). Autorisée par Medhi, contre une instance jetable seulement
+(`"chiffrement": "fichier"`, dossier de données temporaire, LM Studio et exo désactivés, faux
+OpenClaw et faux moteur : ni `security`, ni `lms`, ni le trousseau du poste ne sont sollicités).
+Chaque faille ci-dessous a été reproduite par un vrai essai, corrigée à la racine, et a son
+contrôle dans `npm run securite` (section « 13 bis », 4 contrôles de plus : ils échouent sur le
+code d'avant, réussissent après ; la batterie entière passe, 736 contrôles, 0 échec le 28/09/2026).
+
+### 36.1 Failles corrigées
+
+| Gravité | Route / module | Ce qui se passait | Correctif | Contrôle |
+|---|---|---|---|---|
+| **Moyenne** | `GET /helix/employes` (`index.ts`, `employes.etatDuModele`) | Un employé porte désormais son propre modèle (§ 29, 27/09). La liste rendait, pour **chaque** agent visible, son `modele` (l'identifiant qualifié, qui pour une clé personnelle nomme la clé, « cle-&lt;id&gt;/… ») et un `modeleEtat` complet : nom du modèle, fournisseur, pays. Un agent d'**organisation** étant visible de toute l'équipe, une collègue lisait ainsi le modèle payé par la clé personnelle d'un autre — nom, fournisseur, identifiant de la clé. Démontré (instance jetable, deux comptes) : A branche une clé personnelle et déploie un agent d'organisation dessus ; B recevait `modele: "cle-…/essai-court"` et `modeleEtat: { nom: "essai-court", origine: "cle", fournisseur: "…" }`. La liste `modeles` proposée à la saisie, elle, cachait déjà les clés personnelles d'autrui. | Pour une non-propriétaire, `modele` n'est plus rendu et `modeleEtat` se réduit à `{ disponible }` : de quoi afficher « modèle indisponible » sans nommer le modèle, le fournisseur ni la clé. L'interface (`Employes.tsx`) ne montre le nom du modèle que si elle le reçoit (propriétaire). | 1 (+1 témoin sur la liste `modeles`) |
+| **Moyenne** | `historique.tenirDansLaPlace` (`historique.ts`) | La conversation tenue dans la place du modèle (§ 29, nouvelle dans cette version) recalculait le coût de **tout le fil** à chaque message retiré : un traitement en n². Sur un très long fil — une personne connectée peut envoyer jusqu'à 32 Mo (`CORPS_MAX`) sur la route de Chat de l'interface (`tools` booléen) — la boucle bloquait le fil d'événements de l'instance, donc l'instance pour toute l'équipe. Mesuré : 40 000 messages en 6,5 s, 80 000 en 26 s ; un corps de 32 Mo (près d'un million de messages) aurait figé l'instance de longues minutes. | Le total est tenu au fil des retraits (le coût d'un message est indépendant des autres : `jetonsDunMessage`), jamais recalculé sur tout le fil. Retirer un message soustrait son coût ; abréger un résultat d'outil échange son coût contre celui de la note. Même résultat, en temps linéaire : 60 000 messages en moins de 300 ms (contre ~15 s). | 2 (exactitude du total et des abrègements, temps linéaire) |
+
+### 36.2 Examiné, sans rien trouver
+
+- **Matrice IDOR** (`/helix/connaissances`, `/helix/bibliotheque`, `/helix/reunions`, `/helix/usage`, employés), deux comptes (une administratrice, une collègue), chaque verbe : lire, modifier, supprimer, ajouter un document, réindexer, télécharger le contenu, l'audio, le résumé d'une ressource **privée** d'une autre personne → 404 (introuvable) ou 403, jamais 200. Les écritures sur un agent d'organisation d'une collègue (modèle, suppression, documents) → 403. `/helix/usage` ne prend aucun paramètre de compte : le rapport vient de la séance, jamais d'un identifiant fourni.
+- **Corps multipart / envoi énorme** : le JSON est plafonné à 32 Mo et la lecture s'arrête au dépassement sans continuer à accumuler (`readJson`) ; un envoi de document (`televersement.ts`) plafonne son en-tête à 8 Mo, écrit le fichier au fil de l'eau avec un plafond (`DOCUMENT_MAX`) et vérifie la place disque. La mémoire ne dépend pas de la taille de l'envoi.
+- **Traversée de chemin par un nom de fichier joint** : la Bibliothèque range le contenu sous un identifiant interne (`bib_…`), jamais sous le nom donné ; `nomSur` retire `/`, `\` et les caractères de contrôle. Le dossier de l'équipe (`espace.ts`) résout chaque chemin par `realpath`, refuse `..`, les segments en point, l'absolu et les zones protégées.
+- **Injection d'en-tête dans `Content-Disposition`** : le nom part en `filename*=UTF-8''${encodeURIComponent(nom)}` (Bibliothèque) — l'encodage échappe les retours à la ligne et les guillemets ; le téléchargement de l'application prend le `basename` d'un chemin interne. Aucune valeur brute dans l'en-tête.
+- **Bombes zip dans un document bureautique** : la Bibliothèque et les bases de connaissances ne décompressent **pas** de `.docx`/`.xlsx` côté instance — le texte est extrait sur le poste et envoyé (plafonné à deux millions de caractères) ; l'instance ne lit que les premiers octets (le type réel). La seule décompression côté instance reste celle de `relecture.ts`, déjà bornée à 16 Mo par entrée (§ 34).
+- **`secret.ts`, garde `trousseauPresent`** : `security default-keychain -d user` est consulté avant toute écriture ; sans trousseau par défaut sur le disque, on ne lance pas `add-generic-password` (qui ouvrirait « Trousseau introuvable »), et les données restent en clair plutôt que de risquer une fenêtre chez la personne. La lecture distingue toujours « absente », « illisible » (refus de démarrer) et « trouvée ».
+- **`usage.ts`, tarifs et registre illisibles** : un registre ou une table de tarifs présents mais illisibles restent `null` (jamais `{}`), rien n'est écrit par-dessus, la lecture est retentée à l'appel suivant ; l'écran dit « tarifs illisibles » et ne calcule aucun coût distant. Le prix publié ne passe jamais devant un tarif saisi ; les devises ne se convertissent pas (totaux par devise).
+- **Relais `X-Helix-Relais` et modèles de clés** (`modelesCloud.ts`) : le suivi d'un appel d'OpenCode exige la clé de relais tirée au démarrage (comparaison à durée constante) ; `correctionPour` échappe le nom de champ avant d'en faire une expression régulière (§ 33) ; le modèle d'un employé est celui que l'instance a enregistré, jamais celui que la requête nomme, et un modèle disparu répond 404 « model_not_found », jamais un autre modèle.
+- **`santeModeles.ts`** : le registre des modèles douteux sur la machine est écrit par fichier provisoire puis renommé (0600) ; un registre illisible n'est pas pris pour vide (rien n'est écrit par-dessus) ; l'essai est une courte question sans réflexion, notée une fois.
+
+### 36.3 Soupçons, non démontrés
+
+- **`GET /helix/employes/<id>/documents` et `/memoire`** sur un identifiant **inexistant** répondent 200 avec une liste vide (`sienOuRefus` rend « autorisé » quand l'agent est introuvable, au lieu de 404). Aucune donnée ne fuit (l'agent n'existe pas), mais la distinction 404/200 mériterait d'être alignée. Pour un agent d'organisation **existant** d'une autre personne, ces routes répondent bien 403 (vérifié).
+- **Le poste (description) et les missions d'un agent d'organisation** restent visibles de toute l'équipe : c'est le comportement voulu (chacun peut lui parler), mais le poste peut porter des indications internes. Hors du périmètre de cette passe (comportement antérieur, non modifié).
+
+### 36.4 Pas essayé
+
+Le vrai OpenClaw et un vrai modèle ; l'envoi réel d'un corps de 32 Mo contre l'instance en marche (le coût du n² a été mesuré sur la fonction seule, pas via une requête HTTP réelle) ; Windows et Linux.
+
 ## 37. Seconde tournée : agents et outils (28 septembre 2026)
 
 Demandée par Medhi, sur le code de la version 2026.928.1. Même domaine que le § 35 (ce que les

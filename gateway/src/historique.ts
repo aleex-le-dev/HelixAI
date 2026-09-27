@@ -1,4 +1,4 @@
-import { jetonsDesMessages, margeDeContexte, reservePourLaReponse } from "./documentsJoints.ts";
+import { jetonsDesMessages, jetonsDunMessage, margeDeContexte, reservePourLaReponse } from "./documentsJoints.ts";
 
 /**
  * Une conversation qui tient dans la place du modèle, coupée par Helix et
@@ -67,6 +67,14 @@ export function tenirDansLaPlace(messages: unknown[], budget: number, question =
   const avant = jetonsDesMessages(messages);
   if (avant <= budget || question < 0) return { messages, retires: 0, abreges: 0, avant, apres: avant, budget };
   const copie = [...messages] as Message[];
+  /*
+   * Le total est tenu au fil des retraits, jamais recalculé sur toute la
+   * conversation à chaque tour : sur une conversation énorme, un recalcul par
+   * message retiré était en n² et bloquait la boucle d'événements de l'instance
+   * pour tout le monde (audit du 28/09/2026, § 36 ; 80 000 messages = 26 s).
+   * Le coût d'un message est indépendant des autres (jetonsDunMessage), donc
+   * retirer un message revient à soustraire son coût.
+   */
   let total = avant;
   const debut = copie[0]?.role === "system" ? 1 : 0;
   let q = question;
@@ -77,20 +85,21 @@ export function tenirDansLaPlace(messages: unknown[], budget: number, question =
     let fin = debut + 1;
     while (fin < q && copie[fin]?.role !== "user") fin++;
     const partis = copie.splice(debut, fin - debut);
+    for (const m of partis) total -= jetonsDunMessage(m);
     retires += partis.length;
     q -= partis.length;
-    total = jetonsDesMessages(copie);
   }
 
   // 2. Les résultats d'outils de la demande en cours, du plus ancien au plus récent, sauf le dernier.
   let abreges = 0;
   if (total > budget) {
+    const coutNote = jetonsDunMessage({ role: "tool", content: NOTE_RESULTAT });
     const resultats = copie.map((m, i) => ({ m, i })).filter(({ m, i }) => i > q && m.role === "tool" && typeof m.content === "string" && m.content !== NOTE_RESULTAT);
     for (const { i } of resultats.slice(0, -1)) {
       if (total <= budget) break;
+      total -= jetonsDunMessage(copie[i]) - coutNote;
       copie[i] = { ...copie[i]!, content: NOTE_RESULTAT };
       abreges++;
-      total = jetonsDesMessages(copie);
     }
   }
 

@@ -782,9 +782,7 @@ export async function loadModel(modelKey: string): Promise<{ ok: boolean; messag
       }
       return {
         ok: false,
-        message:
-          `Mémoire insuffisante pour ${modelKey} sur cette machine, même après ` +
-          "libération. Choisissez un modèle plus léger.",
+        message: tf("Mémoire insuffisante pour {0} sur cette machine, même après libération. Choisissez un modèle plus léger.", modelKey),
       };
     }
     return { ok: false, message: detail };

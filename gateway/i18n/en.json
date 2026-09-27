@@ -645,6 +645,7 @@
   "Même service que « Notion », mais par un jeton d'intégration interne, sans passer par le navigateur.": "Same service as “Notion”, but through an internal integration token, without going through the browser.",
   "Mémoire de travail": "Working memory",
   "Mémoire insuffisante : un modèle de LM Studio a été chargé ou sollicité pendant le calcul, par un Chat ou par un autre programme. Attendez qu'il ait fini, puis relancez.": "Not enough memory: an LM Studio model was loaded or used during the computation, by a Chat or another program. Wait until it has finished, then start again.",
+  "Mémoire insuffisante pour {0} sur cette machine, même après libération. Choisissez un modèle plus léger.": "Not enough memory for {0} on this machine, even after freeing some. Choose a lighter model.",
   "mercredi": "Wednesday",
   "Message introuvable.": "Message not found.",
   "Message trop volumineux pour l'instance (limite : {0} Mo). Retirez une pièce jointe ou raccourcissez le texte.": "Message too large for the instance (limit: {0} MB). Remove an attachment or shorten the text.",

@@ -645,6 +645,7 @@
   "Même service que « Notion », mais par un jeton d'intégration interne, sans passer par le navigateur.": "与“Notion”相同的服务，但通过内部集成令牌接入，无需经过浏览器。",
   "Mémoire de travail": "工作记忆",
   "Mémoire insuffisante : un modèle de LM Studio a été chargé ou sollicité pendant le calcul, par un Chat ou par un autre programme. Attendez qu'il ait fini, puis relancez.": "内存不足：计算期间有 Chat 或其他程序加载或调用了 LM Studio 模型。请等待其完成后重新开始。",
+  "Mémoire insuffisante pour {0} sur cette machine, même après libération. Choisissez un modèle plus léger.": "即使释放内存后，本机仍没有足够内存运行 {0}。请选择更轻量的模型。",
   "mercredi": "周三",
   "Message introuvable.": "未找到该消息。",
   "Message trop volumineux pour l'instance (limite : {0} Mo). Retirez une pièce jointe ou raccourcissez le texte.": "消息过大，实例无法处理（上限：{0} MB）。请移除附件或缩短文字。",

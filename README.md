@@ -39,7 +39,10 @@ sold or rented.
 - **Your data stays with you.** Models run on your machine or your organisation's server;
   your conversations reach a cloud AI provider only if you add your own API key for one.
 - **Nothing to set up.** Install the app and it installs the rest: the model engine, the model
-  that suits your hardware, Python and Node when needed, all pinned and checksum-verified.
+  that suits your hardware, Python and Node when needed. The engine, Python, Node, OpenCode,
+  the document and dictation libraries, and the image, video and training models are pinned
+  and checksum-verified; the chat model comes from LM Studio's catalogue, at the version LM
+  Studio serves, and the NVIDIA training stack is pinned by version only.
 - **One app, many jobs.** Chat, agents that act on your files and tools, a coding agent,
   knowledge bases with cited sources, meeting notes, and fine-tuning your own model.
 - **Built for teams.** Invite colleagues to your instance, share knowledge bases by group,

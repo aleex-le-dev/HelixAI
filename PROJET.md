@@ -2506,7 +2506,7 @@ de marque, lu trop tôt, faisait écrire « Livré avec l'application ».
 **Le tour de l'interface** : 23 écrans parcourus, relevé automatique des
 débordements, textes coupés, images cassées et erreurs, en français, anglais
 et chinois. Aucun défaut d'affichage. Corrigé au passage : l'accueil saluait
-par l'identifiant (« Bonjour, medhi.clabaut ») au lieu du prénom.
+par l'identifiant (« Bonjour, prenom.nom ») au lieu du prénom.
 
 ### Fait le 25/09/2026 : bases de connaissances, ligne de commande, entraînement, corrections
 
@@ -3639,6 +3639,33 @@ de textes de 6 000 à 9 000 caractères (adresses de 7 459 à 7 500 caractères)
 autre destination. **Pas vérifié** : l'ouverture réelle dans l'application de bureau (navigateur
 et messagerie du système, `mailto:` sous Windows et Linux), le ticket prérempli vu sur GitHub
 (aucun ticket ouvert), la longueur que chaque messagerie accepte dans un `mailto:`.
+
+**Fait le 27/09/2026 : audit de la chaîne d'approvisionnement et du dépôt public.** Autorisé par
+Medhi. Tout ce que Helix télécharge sur un poste a été relu, et chaque empreinte écrite dans le
+code recomparée à la source (digests GitHub, fichiers d'empreintes des éditeurs, PyPI, métadonnées
+LFS de Hugging Face) : 87 fichiers, tout concorde (SECURITE.md § 31). **Corrigé** : l'atelier et
+la dictée installaient la dernière version de leurs paquets Python et Node, sans empreinte ; ils
+installent maintenant une liste figée, dépendances comprises, avec l'empreinte de chaque fichier
+(`gateway/src/atelier-paquets.json`, refaite par `node scripts/atelier-empreintes.mjs`, qui demande
+uv sur le poste de développement), par `pip --require-hashes` et `npm ci --ignore-scripts` ; les
+modèles Whisper sont vérifiés par empreinte après téléchargement ; le Mac Intel ne télécharge plus
+l'application LM Studio prise sur Homebrew (non figée, et pour puce Apple seulement) : il dit
+qu'aucun moteur n'existe pour lui ; les extensions d'OpenClaw prennent la version de l'OpenClaw qui
+tourne ; l'archive de Node ne passe plus par `/tmp` ; `.gitignore` écarte les clés ; le README ne
+dit plus « tout est épinglé ». Section 14 de `npm run securite` (20 contrôles). **Vérifié** :
+l'atelier puis la dictée installés depuis la liste figée dans un environnement jetable sur ce Mac
+(Python 3.14, `pip check` sans erreur, `faster_whisper` importé) ; roues présentes pour Python 3.9
+à 3.14 sur macOS à puce Apple, Linux x64 et arm64, Windows x64 (uv, système par système) ;
+`npm ci` des bibliothèques Node joué, et refusé avec une empreinte falsifiée. Licences des 25
+modèles proposés relues sur leurs fiches : toutes Apache 2.0 ou MIT. Dépôt : aucun secret dans
+l'arbre ni dans les 150 commits (trois valeurs d'essai factices seulement), la clé de l'éditeur
+jamais suivie, aucune trace d'outil d'IA ; aucune alerte GitHub ouverte (analyse de code, Dependabot,
+secrets). **Pas vérifié** : l'atelier et la dictée sur un vrai Windows ou Linux, avec un Python 3.9
+à 3.13, et le téléchargement d'un modèle Whisper jusqu'au bout ; l'installation d'une extension
+d'OpenClaw à version sur l'instance des employés. **À décider par Medhi** (SECURITE.md § 31,
+« Restant ») : les licences permissives hors de la liste Apache/MIT parmi les dépendances (BSD,
+MPL-2.0 de certifi, FFmpeg embarqué par PyAV pour la dictée), et le modèle de conversation, que
+LM Studio sert sans révision épinglée par Helix.
 
 **Fait le 27/09/2026 : mise à jour d'un clic sous Windows.** Demandé par Medhi après un essai sur
 un vrai PC (« que Windows se mette à jour tout seul, d'un clic, comme le Mac »). Revient sur

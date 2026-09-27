@@ -28,7 +28,7 @@ const require = createRequire(import.meta.url);
 const signatureEditeur = require("../electron/signatureEditeur.cjs");
 const sourceGithub = require("../electron/sourceGithub.cjs");
 
-// fileURLToPath, pas `.pathname` : le chemin du projet a des espaces (« Claude Code »).
+// fileURLToPath, pas `.pathname` : le chemin du projet peut contenir des espaces (encodés en %20 par `.pathname`).
 const racine = fileURLToPath(new URL("..", import.meta.url));
 const pkg = JSON.parse(readFileSync(join(racine, "package.json"), "utf8"));
 const { version } = pkg;

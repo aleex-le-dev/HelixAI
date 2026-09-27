@@ -17,9 +17,9 @@ import { join, dirname, parse, sep } from "node:path";
 import { homedir } from "node:os";
 import { PORT, NIVEAUX_EFFORT } from "./config.ts";
 import { instanceToken } from "./auth.ts";
-import { etatInstallationOpencode, opencodeDeHelix, opencodeInstallable, type EtatInstallationOpencode } from "./opencodePrive.ts";
+import { etatInstallationOpencode, installerOpencode, opencodeDeHelix, opencodeInstallable, type EtatInstallationOpencode } from "./opencodePrive.ts";
 import { models } from "./router.ts";
-import { deployment } from "./deployment.ts";
+import { autoProvisionEnabled, deployment } from "./deployment.ts";
 import { t, tf } from "./langue.ts";
 import { CONSIGNES_CODE } from "./allegementCode.ts";
 import { optionsDeChargement } from "./backends.ts";
@@ -153,6 +153,11 @@ export interface CodeStatus {
   installable: boolean;
   raisonNonInstallable?: string;
   installation: EtatInstallationOpencode;
+  /**
+   * L'installation se fait-elle d'office, sans clic ? Non quand le profil de
+   * déploiement réserve les installations à l'intégrateur (`autoProvision`).
+   */
+  installationAuto: boolean;
 }
 
 /** Après une installation : la prochaine recherche doit trouver le nouvel OpenCode, sans attendre. */
@@ -828,7 +833,44 @@ export async function status(userId?: string): Promise<CodeStatus> {
     installable: raison === null,
     ...(raison ? { raisonNonInstallable: raison } : {}),
     installation: etatInstallationOpencode(),
+    installationAuto: autoProvisionEnabled(),
   };
+}
+
+/** Ce qu'a décidé `opencodeEnFond`, pour le journal et pour la batterie de sécurité. */
+export type VerdictOpencodeEnFond = "profil" | "non-publie" | "en-cours" | "present" | "lancee";
+
+/**
+ * OpenCode posé de lui-même, en arrière-plan, sans clic.
+ *
+ * Demandé par Medhi le 27/09/2026, après l'avoir vu sur un PC Windows : le
+ * bouton « Installer OpenCode » de l'écran Code restait une étape à franchir,
+ * alors que « tout s'installe seul ». Même règle que la dictée (`dicteeEnFond`,
+ * index.ts) : appelé au démarrage de la passerelle et après la mise en route
+ * du modèle ; un échec (hors ligne) ne bloque rien, il reste dans
+ * `etatInstallationOpencode()` et l'écran Code le montre, avec « Réessayer ».
+ *
+ * Rien n'est fait :
+ * - si le profil de déploiement réserve les installations à l'intégrateur
+ *   (`autoProvision: false`) : il fixe son OpenCode par `HELIX_OPENCODE_BIN` ;
+ * - si Helix ne sait pas le poser ici (système sans archive épinglée) ;
+ * - si un OpenCode existe déjà (celui de Helix, celui de la machine, ou celui
+ *   que désigne `HELIX_OPENCODE_BIN`) : on n'en ajoute pas un second.
+ *
+ * Un poste rattaché à une instance distante n'est pas concerné : il ne lance
+ * aucune passerelle locale (electron/main.cjs, `posteRattache`). C'est
+ * l'instance qui pose OpenCode, chez elle.
+ */
+export async function opencodeEnFond(): Promise<VerdictOpencodeEnFond> {
+  if (!autoProvisionEnabled()) return "profil";
+  if (opencodeInstallable() !== null) return "non-publie";
+  if (etatInstallationOpencode().enCours) return "en-cours";
+  if (await locate()) return "present";
+  console.log("[helix] Installation d'OpenCode en arrière-plan.");
+  void installerOpencode()
+    .then(() => oublierOpencode())
+    .catch((err: unknown) => console.warn(`[helix] OpenCode non installé : ${err instanceof Error ? err.message : String(err)}`));
+  return "lancee";
 }
 
 export function stopServer(): void {

@@ -2865,6 +2865,23 @@ route refusée sans séance (`npm run securite`, 435 contrôles). **Pas vérifi�
 Linux (archives relevées, pas lancées), un processeur x64 sans AVX2 (variante « baseline » non
 prise).
 
+**Fait le 27/09/2026 : OpenCode s'installe seul, sans clic.** Vu par Medhi sur un PC Windows :
+le bouton « Installer OpenCode » restait une étape, alors que « tout s'installe seul ». Comme
+la dictée : la passerelle pose OpenCode en arrière-plan à son démarrage et après la mise en
+route du modèle (`opencodeEnFond`, `opencode.ts` ; au journal au nom de l'instance). Rien ne se
+fait si un OpenCode existe déjà (celui de Helix, de la machine, ou `HELIX_OPENCODE_BIN`), si le
+profil dit `"autoProvision": false`, ou si le système n'a pas d'archive épinglée ; un poste
+rattaché ne lance pas de passerelle, donc rien n'y est posé. L'écran Code suit une installation
+en cours ; sinon, ouvert par l'administrateur, il la lance d'office (une fois par ouverture), et
+le bouton ne sert plus qu'à « Réessayer » après un échec, ou à installer quand l'office n'a pas
+lieu (profil, poste rattaché). Un membre lit que l'administrateur doit l'installer. **Vérifié** :
+`npm run securite` (440 contrôles, 5 nouveaux, sans réseau : rien quand le profil l'interdit ou
+qu'un OpenCode existe, adresse épinglée demandée sinon, empreinte fausse refusée, passerelle
+d'essai muette au démarrage, `administrateur` faux sans séance) ; installation réelle par
+`opencodeEnFond` sur ce Mac, données et dossier personnel jetables : posé en 6 s, puis « déjà
+là ». **Pas vérifié** : l'écran lui-même (enchaînement d'office, texte du membre), un vrai PC
+Windows, et un démarrage hors ligne suivi de l'ouverture de l'écran.
+
 **Fait le 27/09/2026 (0.27.2) : icônes de Windows et de Linux.** Vu par Medhi sur un PC :
 « ancien logo pas beau » sur le bureau, et « tout petit » dans la barre des tâches. Les petites
 tailles (16 à 48 px) reprenaient l'ancienne marque rouge et noire du favicon, et la fenêtre

@@ -3264,6 +3264,35 @@ chemin ; l'exécutable doit dire sa version avant d'être mis en place. Il est e
 autres OpenCode de la machine (version connue). **Limite** : l'empreinte vient du même hébergeur
 que l'archive, relevée une fois puis écrite ici.
 
+**Sans clic, depuis le 27/09/2026** (demandé par Medhi, vu sur un PC Windows). Qui installe quoi,
+et quand :
+
+- **La passerelle de l'instance** (`opencodeEnFond`, `gateway/src/opencode.ts`) pose la même
+  version épinglée, par le même chemin (`installerOpencode`), à deux moments : à son démarrage, et
+  après la mise en route du modèle (à côté de la dictée). Au journal, au nom de « instance »
+  (`code.opencode_installe`, `automatique: true`). Elle ne fait rien si le profil de déploiement
+  réserve les installations à l'intégrateur (`autoProvision: false`), si Helix ne publie pas
+  d'archive pour ce système, si une installation est déjà en cours, ou si un OpenCode existe déjà
+  (celui de Helix, celui de la machine, ou `HELIX_OPENCODE_BIN`). Un échec (hors ligne, empreinte)
+  ne bloque rien : il reste dans l'état que lit l'écran Code.
+- **L'écran Code**, ouvert par un **administrateur** sans moteur et sans installation en cours,
+  appelle la route d'office (`{ "ouverture": true }`, au journal avec `automatique: true`), une fois
+  par ouverture ; ensuite, « Réessayer ». La route vérifie toujours la séance et le rôle : `GET
+  /helix/code` dit seulement à l'écran s'il doit essayer (`administrateur`, `installationAuto`).
+  Pas d'installation d'office depuis l'écran si le profil l'interdit, ni sur un poste rattaché
+  (le logiciel irait sur la machine de l'instance : l'administrateur garde le bouton). Un membre
+  lit que l'administrateur doit l'installer ; il ne voit ni la commande manuelle ni le détail des
+  erreurs.
+- **Un poste rattaché** ne lance aucune passerelle (`electron/main.cjs`, `posteRattache`) : rien
+  n'y est posé.
+
+Contrôlé par la batterie sans réseau (`fetch` remplacé, dossier personnel neuf) : rien n'est
+demandé quand le profil l'interdit ou qu'un OpenCode existe ; absent, c'est l'adresse épinglée
+de github.com qui est demandée, et une archive à la mauvaise empreinte n'est pas posée ; la
+passerelle d'essai, qui a un OpenCode, ne lance rien au démarrage ; sans séance, `administrateur`
+vaut `false`. Essayé pour de vrai sur ce Mac (données et dossier personnel jetables) : posé en
+6 s, puis « déjà là ».
+
 ### 29.9 Electron 44 (27 septembre 2026, 0.27.3)
 
 Electron 33.4.11 (fin de maintenance) portait une trentaine de failles publiées, dont, pour ce qui

@@ -1416,6 +1416,7 @@
   "L'accès au micro est refusé. Autorisez {0} dans Réglages Système, Confidentialité et sécurité, Micro, puis réessayez.": "麦克风访问被拒绝。请在“系统设置 → 隐私与安全性 → 麦克风”中允许 {0}，然后重试。",
   "L'accès au micro est refusé. Autorisez les applications de bureau à utiliser le micro (Paramètres de Windows, Confidentialité et sécurité, Microphone), puis relancez {0}.": "麦克风访问被拒绝。请允许桌面应用使用麦克风（Windows 设置 > 隐私和安全性 > 麦克风），然后重新启动 {0}。",
   "L'accès au micro est refusé. Vérifiez qu'un micro est choisi et non coupé dans les réglages du son du système, puis réessayez.": "麦克风访问被拒绝。请在系统声音设置中确认已选择麦克风且未静音，然后重试。",
+  "L'administrateur de l'instance doit installer OpenCode, le moteur de l'écran Code : ce compte ne peut pas le faire.": "OpenCode 是代码界面的引擎，需由实例管理员安装：此账户无法安装。",
   "l'adresse": "地址",
   "l'adresse de retour": "回调地址",
   "L'adresse de retour doit être inscrite à l'identique dans l'application qu'il déclare, sinon": "回调地址必须与他们声明的应用中所填写的完全一致，否则",

@@ -1416,6 +1416,7 @@
   "L'accès au micro est refusé. Autorisez {0} dans Réglages Système, Confidentialité et sécurité, Micro, puis réessayez.": "Access to the microphone is refused. Allow {0} in System Settings, Privacy and Security, Microphone, then try again.",
   "L'accès au micro est refusé. Autorisez les applications de bureau à utiliser le micro (Paramètres de Windows, Confidentialité et sécurité, Microphone), puis relancez {0}.": "Microphone access is denied. Allow desktop apps to use the microphone (Windows Settings, Privacy & security, Microphone), then restart {0}.",
   "L'accès au micro est refusé. Vérifiez qu'un micro est choisi et non coupé dans les réglages du son du système, puis réessayez.": "Microphone access is denied. Check that a microphone is selected and not muted in the system sound settings, then try again.",
+  "L'administrateur de l'instance doit installer OpenCode, le moteur de l'écran Code : ce compte ne peut pas le faire.": "The instance administrator must install OpenCode, the engine behind the Code screen: this account cannot do it.",
   "l'adresse": "the address",
   "l'adresse de retour": "the return address",
   "L'adresse de retour doit être inscrite à l'identique dans l'application qu'il déclare, sinon": "The return address must be written identically in the application they declare, otherwise",

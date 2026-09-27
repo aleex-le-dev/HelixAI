@@ -19,11 +19,22 @@ export interface CodeStatus {
   raisonNonInstallable?: string;
   /** Installation d'OpenCode par Helix (opencodePrive.ts). */
   installation?: { enCours: boolean; pourcent: number | null; erreur: string | null };
+  /** Faux quand le profil de déploiement réserve les installations à l'intégrateur. */
+  installationAuto?: boolean;
+  /** La personne connectée administre-t-elle l'instance ? Elle seule installe. */
+  administrateur?: boolean;
 }
 
-/** Demande à l'instance de poser OpenCode. Rend le message de refus, ou null. */
-export async function installerOpencode(): Promise<string | null> {
-  const res = await apiFetch(`/helix/code/installer`, { method: "POST" });
+/**
+ * Demande à l'instance de poser OpenCode. Rend le message de refus, ou null.
+ * `ouverture` : lancée d'office à l'ouverture de l'écran, pas par un clic (le journal le distingue).
+ */
+export async function installerOpencode(ouverture = false): Promise<string | null> {
+  const res = await apiFetch(`/helix/code/installer`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ouverture }),
+  });
   if (res.ok) return null;
   const corps = (await res.json().catch(() => ({}))) as { error?: { message?: string } };
   return corps.error?.message ?? tf("Demande refusée ({0}).", res.status);

@@ -697,6 +697,14 @@ console.log("\n5. Navigateur et origine");
   // Poser OpenCode installe un logiciel sur la machine : jamais sans séance d'administrateur (27/09/2026).
   const r = await appel("/helix/code/installer", { method: "POST", headers: avecJeton });
   verifier("installer OpenCode sans séance est refusé", r.status === 401 || r.status === 403, r.status);
+  /*
+   * Installation sans clic (27/09/2026) : la passerelle d'essai a un OpenCode
+   * (le faux, par HELIX_OPENCODE_BIN). Au démarrage, elle ne doit donc rien
+   * télécharger ni poser, et l'écran ne se croit pas administrateur sans séance.
+   */
+  verifier("un OpenCode déjà là : la passerelle ne lance pas l'installation au démarrage", !journal.includes("Installation d'OpenCode en arrière-plan") && !existsSync(join(DONNEES, "opencode")), journal.match(/.*OpenCode.*/g)?.join(" | ") ?? "dossier posé");
+  const etatSans = await (await appel("/helix/code", { headers: avecJeton })).json().catch(() => ({}));
+  verifier("GET /helix/code sans séance : pas administrateur (l'écran ne lance rien d'office)", etatSans.administrateur === false, JSON.stringify(etatSans.administrateur));
 }
 
 console.log("\n6. Chemins détournés");
@@ -1860,6 +1868,8 @@ console.log("\n10. Dossier de l'équipe contenant les données de l'instance, in
       HELIX_WORKSPACE: ESPACE,
       HELIX_LMSTUDIO_URL: "http://127.0.0.1:9/v1",
       HELIX_EXO_URL: "http://127.0.0.1:9/v1",
+      // Le faux OpenCode ici aussi : sans lui, elle poserait le vrai au démarrage (27/09/2026, `opencodeEnFond`).
+      HELIX_OPENCODE_BIN: FAUX_OPENCODE,
     },
     stdio: ["ignore", "pipe", "pipe"],
   });
@@ -2354,6 +2364,29 @@ console.log("\n11 quinquies. Windows et Linux : ce qui se vérifie depuis ce pos
   const { outilDe: traduire } = await import(versUrlCode(join(RACINE, "gateway", "src", "permissionsCode.ts")).href);
   const motif = traduire({ id: "g", sessionID: "s", permission: "glob", patterns: ["src/**/*.ts"], metadata: {} }, "/projet");
   verifier("Helix Code : un motif relatif se juge dans le dossier du projet, pas dans celui de la passerelle", motif.args.path === "/projet/src/**/*.ts", String(motif.args.path));
+
+  /*
+   * OpenCode posé sans clic (27/09/2026, `opencodeEnFond`) : rien quand le
+   * profil l'interdit ou qu'un OpenCode existe, et sinon la version épinglée,
+   * refusée si l'empreinte ne correspond pas. Sans réseau : `fetch` est
+   * remplacé, et le dossier personnel est un dossier neuf (jamais ~/.opencode).
+   */
+  const d7 = dossierNeuf(join(tmpdir(), "helix-opencode-auto-"));
+  ecrireF(join(d7, "libre.json"), JSON.stringify({ backends: [{ id: "lmstudio", enabled: false }, { id: "exo", enabled: false }] }));
+  ecrireF(join(d7, "integrateur.json"), JSON.stringify({ autoProvision: false, backends: [{ id: "lmstudio", enabled: false }, { id: "exo", enabled: false }] }));
+  const sondeOpencode = `const appels = []; globalThis.fetch = async (u) => { appels.push(String(u)); return new Response(new Blob([new Uint8Array(4096).fill(7)]).stream(), { status: 200 }); };
+    const o = await import("./gateway/src/opencode.ts"); const p = await import("./gateway/src/opencodePrive.ts"); const fs = await import("node:fs");
+    const verdict = await o.opencodeEnFond();
+    for (let i = 0; i < 200 && p.etatInstallationOpencode().enCours; i++) await new Promise((r) => setTimeout(r, 50));
+    console.log("VERDICT", verdict, "APPELS", appels.filter((u) => u.includes("opencode")).join(" ") || "aucun", "POSE", fs.existsSync(p.opencodeDeHelix()), "ERREUR", p.etatInstallationOpencode().erreur);`;
+  const sansOpencode = (profil, binaire = "") => ({ HOME: d7, USERPROFILE: d7, PATH: "/usr/bin:/bin", HELIX_CONFIG: join(d7, profil), HELIX_DATA_DIR: join(d7, "donnees"), HELIX_OPENCODE_BIN: binaire, HELIX_LMSTUDIO_URL: "http://127.0.0.1:9/v1", HELIX_EXO_URL: "http://127.0.0.1:9/v1" });
+  const parProfil = essai(sondeOpencode, sansOpencode("integrateur.json"));
+  verifier("OpenCode sans clic : rien n'est téléchargé quand le profil réserve les installations à l'intégrateur", parProfil.includes("VERDICT profil APPELS aucun"), parProfil.slice(-200));
+  const dejaLa = essai(sondeOpencode, sansOpencode("libre.json", FAUX_OPENCODE));
+  verifier("OpenCode sans clic : rien n'est téléchargé quand un OpenCode existe déjà sur la machine", dejaLa.includes("VERDICT present APPELS aucun POSE false"), dejaLa.slice(-200));
+  const absent = essai(sondeOpencode, sansOpencode("libre.json"));
+  verifier("OpenCode sans clic : absent, la version épinglée est demandée à github.com, et une archive à la mauvaise empreinte n'est pas posée", /VERDICT lancee APPELS https:\/\/github\.com\/anomalyco\/opencode\/releases\/download\/v1\.18\.32\/\S+ POSE false ERREUR .*(empreinte|checksum)/.test(absent), absent.slice(-240));
+  rmSync(d7, { recursive: true, force: true });
 }
 
 console.log("\n12. Deviner un mot de passe");

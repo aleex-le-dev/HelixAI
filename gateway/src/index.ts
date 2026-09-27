@@ -165,6 +165,7 @@ import * as usage from "./usage.ts";
 import { installerOpencode } from "./opencodePrive.ts";
 import {
   oublierOpencode,
+  opencodeEnFond,
   status as codeStatus,
   api as codeApi,
   enMarche as codeEnMarche,
@@ -637,6 +638,7 @@ async function handleEngineInstall(
       await ensureLocalModel();
       invalidate();
       dicteeEnFond();
+      codeEnFond();
     })
     .catch((err: unknown) =>
       setProvisionState({
@@ -673,6 +675,21 @@ function dicteeEnFond(): void {
     .catch((err: unknown) => console.error("[helix] dictée en arrière-plan", err));
 }
 
+/**
+ * OpenCode, le moteur de l'écran Code, s'installe de lui-même aussi : au
+ * démarrage de la passerelle et après la mise en route du modèle (demandé par
+ * Medhi le 27/09/2026, « tout s'installe seul »). Les cas où rien ne se fait
+ * sont dans `opencodeEnFond` (opencode.ts). Le lancement est au journal, au
+ * nom de l'instance : personne n'a cliqué.
+ */
+function codeEnFond(): void {
+  void opencodeEnFond()
+    .then((verdict) => {
+      if (verdict === "lancee") journaliser("code.opencode_installe", "instance", { automatique: true });
+    })
+    .catch((err: unknown) => console.error("[helix] OpenCode en arrière-plan", err));
+}
+
 function handleProvisionStart(req: http.IncomingMessage, res: http.ServerResponse): void {
   readJson(req)
     .catch(() => ({}))
@@ -685,7 +702,10 @@ function handleProvisionStart(req: http.IncomingMessage, res: http.ServerRespons
       void ensureLocalModel(model, catalogue)
         .then(() => {
           invalidate();
-          if (role !== "gui") dicteeEnFond();
+          if (role !== "gui") {
+            dicteeEnFond();
+            codeEnFond();
+          }
         })
         /*
          * Sans ce filet, un provisionnement qui rejette devient un rejet non
@@ -2356,7 +2376,12 @@ async function handleDataRevisions(res: http.ServerResponse): Promise<void> {
 async function handleCodeStatus(req: http.IncomingMessage, res: http.ServerResponse, url: URL): Promise<void> {
   const qui = await demandeur(req, url);
   if (qui) await dossierCodeDe(qui.userId);
-  send(res, 200, await codeStatus(qui?.userId));
+  /*
+   * `administrateur` : l'écran Code sans moteur lance l'installation d'office
+   * pour l'administrateur, et dit aux autres que c'est à lui de le faire
+   * (27/09/2026). La route d'installation le revérifie, bien sûr.
+   */
+  send(res, 200, { ...(await codeStatus(qui?.userId)), administrateur: qui ? await estAdministrateur(qui.userId) : false });
 }
 
 /**
@@ -5103,7 +5128,9 @@ const traiter = (
         if (!(await estAdministrateur(qui.userId))) {
           return send(res, 403, { error: { message: t("Seul l'administrateur de l'instance installe le moteur de l'écran Code.") } });
         }
-        journaliser("code.opencode_installe", qui.userId, {});
+        // Lancée d'office à l'ouverture de l'écran (27/09/2026) ou par « Réessayer » : le journal distingue les deux.
+        const corps = (await readJson(req).catch(() => ({}))) as { ouverture?: unknown };
+        journaliser("code.opencode_installe", qui.userId, corps.ouverture === true ? { automatique: true } : {});
         void installerOpencode()
           .then(() => oublierOpencode())
           .catch((err: unknown) => console.error("[helix] installation d'OpenCode :", err instanceof Error ? err.message : err));
@@ -5606,6 +5633,8 @@ void preparerMagasin().then(() => server.listen(PORT, HOST, () => {
   void drive.charger().catch(() => {});
   void agendaGoogle.charger().catch(() => {});
   void slack.charger().catch(() => {});
+  // OpenCode manquant : posé en arrière-plan, sans attendre personne (27/09/2026, opencodeEnFond).
+  codeEnFond();
 
   /*
    * Les connecteurs branchés se redéclarent **avant** le démarrage automatique :

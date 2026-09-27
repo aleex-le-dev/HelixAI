@@ -66,6 +66,8 @@ const vecteur = (texte) => {
 };
 /** Réponses en boucle servies par le faux modèle : morceaux envoyés, et coupure par la passerelle. */
 const BOUCLES = [];
+/** Questions d'essai reçues par le faux modèle (section 7 septies). */
+const ESSAIS = [];
 const fauxModele = serveurHttp((req, res) => {
   let corps = "";
   req.on("data", (b) => (corps += b));
@@ -108,6 +110,22 @@ const fauxModele = serveurHttp((req, res) => {
         setImmediate(suite);
       };
       return suite();
+    }
+    /*
+     * L'essai du modèle à la mise en route (santeModeles.ts, section 7 septies,
+     * 27/09/2026) : une question sans flux. Un modèle dont le nom porte
+     * « casse », ou Qwen3.5 4B (le PC de Medhi), répond ce que Medhi a vu ;
+     * tout autre, une vraie phrase.
+     */
+    if (req.url === "/v1/chat/completions" && JSON.parse(corps || "{}").stream === false) {
+      const demande = JSON.parse(corps);
+      ESSAIS.push({ modele: demande.model, question: demande.messages?.at(-1)?.content, max_tokens: demande.max_tokens, reflexion: demande.reasoning_effort });
+      const message = /casse/.test(demande.model)
+        ? { role: "assistant", content: "不 時//////" }
+        : /qwen3\.5-4b/.test(demande.model)
+          ? { role: "assistant", content: "", reasoning_content: `不時${"////".repeat(12)}` }
+          : { role: "assistant", content: "Bonjour !" };
+      return res.end(JSON.stringify({ id: "essai-machine", object: "chat.completion", choices: [{ index: 0, message, finish_reason: "stop" }] }));
     }
     if (req.url === "/v1/embeddings") {
       const entree = JSON.parse(corps || "{}").input ?? [];
@@ -1903,6 +1921,208 @@ console.log("\n7 sexies. Réponse partie en boucle : coupée, et dite (27/09/202
     verifier("Mac à puce Apple : ni --gpu ni échantillonnage imposé (ce qui marche sur le MacBook ne bouge pas)", Array.isArray(mac.options) && !mac.options.includes("--gpu") && Object.keys(mac.qwen35 ?? { x: 1 }).length === 0, JSON.stringify(mac).slice(0, 300));
   }
   rmSync(dossierEssai, { recursive: true, force: true });
+}
+
+/* ------------------------------------------------------------------------- */
+console.log("\n7 septies. Essai du modèle sur cette machine : celui qui répond mal cède la place (27/09/2026)");
+{
+  /*
+   * Vu par Medhi sur un PC Windows sans carte graphique (2026.927.3) : Qwen3.5
+   * 4B, choisi d'office, répond « 不 時////// » ; Ministral 3B, sur le même PC,
+   * répond. Sans vrai modèle ni vrai LM Studio : le faux modèle ci-dessus sert
+   * d'API compatible OpenAI, et un faux `lms` (chargements notés dans un
+   * fichier) tient lieu de moteur. Le poste simulé est un Windows de 16 Go
+   * sans carte NVIDIA ; son dossier personnel et son PATH sont jetables, pour
+   * que le vrai `lms` de ce poste ne soit jamais lancé.
+   */
+  /*
+   * Tout se joue dans un processus à part : importer ici un module de la
+   * passerelle fixerait, pour le reste de la batterie, l'espace de travail et
+   * le profil lus à l'import (mcp.ts, config.ts), et la section 10 en dépend.
+   */
+  const { mkdirSync, writeFileSync, chmodSync, symlinkSync } = await import("node:fs");
+  const ICI = mkdtempSync(join(tmpdir(), "helix-essai-machine-"));
+  const BIN = join(ICI, "bin");
+  mkdirSync(BIN);
+  mkdirSync(join(ICI, "maison"));
+  symlinkSync(process.execPath, join(BIN, "node"));
+  writeFileSync(
+    join(BIN, "lms"),
+    [
+      "#!/usr/bin/env node",
+      'const fs = require("node:fs"), path = require("node:path");',
+      "const dir = process.env.FAUX_LMS_DIR, a = process.argv.slice(2);",
+      'fs.appendFileSync(path.join(dir, "appels.log"), a.join(" ") + "\\n");',
+      'const lire = (n) => { try { return JSON.parse(fs.readFileSync(path.join(dir, n), "utf8")); } catch { return []; } };',
+      "const ecrire = (n, v) => fs.writeFileSync(path.join(dir, n), JSON.stringify(v));",
+      'const charges = lire("charges.json"), installes = lire("installes.json"), json = a.includes("--json");',
+      'const entree = (k) => ({ modelKey: k, path: k, type: "llm", sizeBytes: 1e9 });',
+      'if (a[0] === "version") console.log("lms 0.0.0-essai");',
+      'else if (a[0] === "ps") console.log(json ? JSON.stringify(charges.map(entree)) : charges.join("\\n"));',
+      'else if (a[0] === "ls") console.log(json ? JSON.stringify(installes.map(entree)) : installes.join("\\n"));',
+      'else if (a[0] === "load") { if (!installes.includes(a[1])) process.exit(1); ecrire("charges.json", [...new Set([...charges, a[1]])]); }',
+      'else if (a[0] === "unload") ecrire("charges.json", charges.filter((k) => k !== a[1]));',
+      "else process.exit(1);",
+    ].join("\n"),
+  );
+  chmodSync(join(BIN, "lms"), 0o755);
+  writeFileSync(
+    join(ICI, "essai.mjs"),
+    `
+    import os from "node:os";
+    import { readFileSync, writeFileSync, mkdtempSync } from "node:fs";
+    import { join } from "node:path";
+    import { pathToFileURL } from "node:url";
+    Object.defineProperty(process, "platform", { value: "win32" });
+    Object.defineProperty(process, "arch", { value: "x64" });
+    os.totalmem = () => 16 * 1024 ** 3;
+    const ici = process.env.FAUX_LMS_DIR;
+    const mod = (f) => import(pathToFileURL(join(${JSON.stringify(RACINE)}, "gateway", "src", f)).href);
+    const p = await mod("provision.ts"), s = await mod("santeModeles.ts"), r = await mod("router.ts");
+    const { avecLangueDe } = await mod("langue.ts");
+    const enFr = (f) => avecLangueDe({ "x-helix-langue": "fr" }, new URL("http://essai/"), f);
+    const messages = [];
+    p.onProvisionChange((e) => messages.push(e.phase + "|" + e.message));
+    const poser = (charges, installes) => {
+      writeFileSync(join(ici, "charges.json"), JSON.stringify(charges));
+      writeFileSync(join(ici, "installes.json"), JSON.stringify(installes));
+      writeFileSync(join(ici, "appels.log"), "");
+      messages.length = 0;
+    };
+    const appels = () => readFileSync(join(ici, "appels.log"), "utf8").split("\\n").filter((l) => /^(load|unload|get) /.test(l)).map((l) => l.split(" ").slice(0, 2).join(" "));
+    const charges = () => JSON.parse(readFileSync(join(ici, "charges.json"), "utf8"));
+    const sortie = {};
+    const juge = (texte, reflexion) => s.verdictDeReponse(texte, reflexion);
+    sortie.V = {
+      justes: [juge("Bonjour !"), juge("Bonjour ! Comment puis-je vous aider aujourd'hui ?"), juge("", "La personne veut que je dise bonjour.")].map((v) => v.ok),
+      cassees: [juge("不 時//////"), juge(""), juge("你好"), juge("", "不時" + "////".repeat(12)), juge("bonjour ".repeat(8))].map((v) => v.ok ? "ok" : v.raison),
+    };
+
+    // A. Mise en route : le premier candidat répond mal, le second juste.
+    process.env.HELIX_DATA_DIR = mkdtempSync(join(ici, "a-"));
+    const fiche = (key, label, intelligence, verifie) => ({ key, label, editeur: "Essai", licence: "Apache 2.0", downloadGb: 0.5, intelligence, verifie, description: "" });
+    const cat = [fiche("essai-machine/casse", "Casse 4B", 13, false), fiche("essai-machine/bon", "Bon 3B", 5, true)];
+    poser([], ["essai-machine/casse", "essai-machine/bon"]);
+    const a = await enFr(() => p.ensureLocalModel(undefined, cat));
+    sortie.A = { phase: a.phase, model: a.model, message: a.message, messages: [...messages], appels: appels(), charges: charges(),
+      casse: s.ficheDe("essai-machine/casse"), bon: s.ficheDe("essai-machine/bon"),
+      replis: p.replis(p.detectHardware(), cat, cat[1]).map((e) => e.key) };
+    messages.length = 0;
+    const a2 = await enFr(() => p.ensureLocalModel(undefined, cat));
+    sortie.A2 = { phase: a2.phase, message: a2.message, model: a2.model };
+
+    // B. Poste déjà installé (le PC de Medhi) : Qwen3.5 4B en mémoire, jamais essayé ; essai au démarrage.
+    process.env.HELIX_DATA_DIR = mkdtempSync(join(ici, "b-"));
+    poser(["qwen/qwen3.5-4b"], ["qwen/qwen3.5-4b", "qwen3-8b"]);
+    const hw = p.detectHardware();
+    const avant = p.recommend(hw).key;
+    await enFr(() => p.verifierModeleEnPlace());
+    const b = p.getProvisionState();
+    sortie.B = { avant, apres: p.recommend(hw).key, phase: b.phase, model: b.model, messages: [...messages], appels: appels(), charges: charges(),
+      qwen35: s.ficheDe("qwen/qwen3.5-4b"), qwen3: s.ficheDe("qwen3-8b"),
+      recommandes: p.adaptesALaMachine(hw).filter((e) => e.recommande && e.role === "chat").map((e) => e.key) };
+    messages.length = 0;
+    await enFr(() => p.verifierModeleEnPlace());
+    sortie.B2 = { appels: appels().slice(sortie.B.appels.length), messages: [...messages] };
+
+    // C. En cours d'usage : deux réponses coupées en boucle, en « Auto ».
+    const modele = { id: "essai-chat", uid: "lmstudio/essai-chat", backendId: "lmstudio", backendLabel: "LM Studio", backendKind: "lmstudio", roles: ["chat"] };
+    r.invalidate();
+    const avantC = await r.resolve({ role: "chat" });
+    const c1 = await enFr(() => p.apresCoupure(modele, true));
+    const c2 = await enFr(() => p.apresCoupure(modele, true));
+    r.invalidate();
+    const auto = await r.resolve({ role: "chat" });
+    const main = await r.resolve({ model: "essai-chat" });
+    sortie.C = { avant: avantC.model?.id, c1, c2, fiche: s.ficheDe("essai-chat"), auto: auto.model?.id, main: main.model?.id,
+      nuage: await p.apresCoupure({ ...modele, id: "nuage", backendKind: "openai-compatible" }, true) };
+    console.log(JSON.stringify(sortie));
+    process.exit(0);
+    `,
+  );
+  const lancer = () =>
+    new Promise((ok) => {
+      const enfant = spawn(process.execPath, ["--experimental-strip-types", "--no-warnings", join(ICI, "essai.mjs")], {
+        cwd: ICI,
+        // Rien du poste : ni son PATH (le vrai `lms`), ni son dossier personnel (~/.lmstudio), ni ses réglages.
+        env: {
+          PATH: `${BIN}:/usr/bin:/bin`,
+          HOME: join(ICI, "maison"),
+          TMPDIR: tmpdir(),
+          FAUX_LMS_DIR: ICI,
+          HELIX_CONFIG: join(ICI, "absent.json"),
+          HELIX_DATA_DIR: join(ICI, "donnees"),
+          HELIX_LMSTUDIO_URL: `http://127.0.0.1:${PORT_EMBED}/v1`,
+          HELIX_EXO_URL: "http://127.0.0.1:9/v1",
+        },
+        stdio: ["ignore", "pipe", "pipe"],
+      });
+      let sortie = "";
+      enfant.stdout.on("data", (b) => (sortie += b));
+      enfant.stderr.on("data", (b) => (sortie += b));
+      const minuterie = setTimeout(() => enfant.kill(), 90_000);
+      enfant.on("close", () => {
+        clearTimeout(minuterie);
+        ok(sortie);
+      });
+    });
+  const brut = await lancer();
+  let e = {};
+  try {
+    e = JSON.parse(brut.trim().split("\n").at(-1));
+  } catch {
+    e = { erreur: brut.slice(-600) };
+  }
+  const A = e.A ?? {}, B = e.B ?? {}, C = e.C ?? {};
+  verifier(
+    "verdict : « Bonjour ! », une phrase, une réflexion saine sans texte passent ; « 不 時////// », une réponse vide, « 你好 », des barres et un mot en boucle non",
+    JSON.stringify(e.V?.justes) === "[true,true,true]" && JSON.stringify(e.V?.cassees) === JSON.stringify(["signes", "vide", "alphabet", "boucle", "boucle"]),
+    JSON.stringify(e.V ?? e).slice(0, 400),
+  );
+  verifier(
+    "mise en route : le modèle qui répond « 不 時////// » est essayé, noté défaillant, déchargé ; le suivant est chargé, essayé et retenu",
+    A.phase === "ready" && A.model === "essai-machine/bon" && A.casse?.etat === "defaillant" && A.casse?.raison === "signes" && A.bon?.etat === "valide" &&
+      JSON.stringify(A.appels) === JSON.stringify(["load essai-machine/casse", "unload essai-machine/casse", "load essai-machine/bon"]) &&
+      JSON.stringify(A.charges) === JSON.stringify(["essai-machine/bon"]),
+    JSON.stringify(e.A ?? e).slice(0, 600),
+  );
+  verifier(
+    "mise en route : l'écran dit « … ne répond pas correctement sur cette machine, essai de … », puis « … est prêt »",
+    A.messages?.some((m) => m === "checking|Casse 4B ne répond pas correctement sur cette machine, essai de Bon 3B...") &&
+      A.messages?.some((m) => m.startsWith("loading|Vérification de Casse 4B")) && A.message === "Bon 3B est prêt.",
+    JSON.stringify(A.messages).slice(0, 600),
+  );
+  verifier(
+    "le modèle défaillant n'est plus proposé en repli ni rechoisi ; une seconde mise en route garde le bon, sans nouvel essai",
+    JSON.stringify(A.replis) === JSON.stringify(["essai-machine/bon"]) && e.A2?.phase === "ready" && e.A2?.model === "essai-machine/bon" && e.A2?.message === "Bon 3B est déjà prêt.",
+    JSON.stringify([A.replis, e.A2]),
+  );
+  const essaisCasse = ESSAIS.filter((q) => q.modele === "essai-machine/casse");
+  verifier(
+    "l'essai est une courte question sans réflexion (64 jetons au plus), posée une fois",
+    essaisCasse.length === 1 && essaisCasse[0].max_tokens <= 64 && essaisCasse[0].reflexion === "none" && /bonjour/i.test(essaisCasse[0].question ?? ""),
+    JSON.stringify(essaisCasse),
+  );
+  verifier(
+    "poste déjà installé (Windows 16 Go simulé, Qwen3.5 4B en mémoire) : essai au démarrage, Qwen3.5 4B écarté, Qwen3 8B chargé et retenu, sans réinstaller",
+    B.avant === "qwen/qwen3.5-4b" && B.phase === "ready" && B.model === "qwen3-8b" && B.qwen35?.etat === "defaillant" && B.qwen35?.raison === "boucle" && B.qwen3?.etat === "valide" &&
+      JSON.stringify(B.appels) === JSON.stringify(["unload qwen/qwen3.5-4b", "load qwen3-8b"]) &&
+      B.messages?.some((m) => m.includes("Qwen3.5 4B ne répond pas correctement sur cette machine, essai de Qwen3 8B")),
+    JSON.stringify(e.B ?? e).slice(0, 700),
+  );
+  verifier(
+    "après l'essai, ce poste ne recommande plus Qwen3.5 4B, et le démarrage suivant ne refait rien",
+    B.apres !== "qwen/qwen3.5-4b" && !B.recommandes?.includes("qwen/qwen3.5-4b") && Array.isArray(e.B2?.appels) && e.B2.appels.length === 0 && e.B2.messages.length === 0,
+    JSON.stringify([B.apres, B.recommandes, e.B2]),
+  );
+  verifier(
+    "en cours d'usage : une coupure rend le modèle douteux, la deuxième défaillant ; en « Auto », la réponse suivante va à un autre modèle, et le Chat le dit",
+    C.avant === "essai-chat" && /Si cela se reproduit, essai-chat ne sera plus choisi d'office/.test(C.c1 ?? "") &&
+      /^C'est la deuxième fois sur cette machine\. En « Auto », essai-chat n'est plus choisi sur cette machine : la prochaine réponse viendra de qwen3-8b\.$/.test(C.c2 ?? "") &&
+      C.fiche?.etat === "defaillant" && C.fiche?.coupures === 2 && C.auto === "qwen3-8b" && C.main === "essai-chat" && C.nuage === "",
+    JSON.stringify(e.C ?? e).slice(0, 700),
+  );
+  rmSync(ICI, { recursive: true, force: true });
 }
 
 /* ------------------------------------------------------------------------- */

@@ -9,7 +9,8 @@ import { BACKENDS, classifyRoles, isReasoningModel, tousLesBackends } from "./co
 import type { BackendConfig, BackendStatus, ModelInfo } from "./types.ts";
 import { t, tf } from "./langue.ts";
 // Cycle voulu (provision.ts importe ce module) : `detectHardware` n'est appelée qu'au chargement d'un modèle, jamais à l'import.
-import { calculSurProcesseur, detectHardware } from "./provision.ts";
+import { calculSurProcesseur, detectHardware, relaisApresDefaillance } from "./provision.ts";
+import { aEssayer, essayerModele, noterEssai } from "./santeModeles.ts";
 
 const exec = promisify(execFile);
 
@@ -711,8 +712,34 @@ export async function libererPourImage(octets: number): Promise<number> {
   return unloadOthers(lms, "");
 }
 
-/** Charge un modèle en mémoire via `lms load` (provisionnement transparent). */
-export async function loadModel(modelKey: string): Promise<{ ok: boolean; message: string }> {
+/**
+ * Charge un modèle en mémoire via `lms load` (provisionnement transparent).
+ *
+ * Premier chargement d'un modèle sur cette machine : la même courte question
+ * d'essai que la mise en route (santeModeles.ts, 27/09/2026), avant de lui
+ * confier la vraie demande. C'est là qu'un poste installé avant l'essai passe
+ * le sien, à la première réponse. Un modèle qui répond mal est déchargé, noté,
+ * et la demande échoue en le disant ; en « Auto » (`auto`), la suivante va à
+ * un autre modèle.
+ */
+export async function loadModel(modelKey: string, options: { auto?: boolean } = {}): Promise<{ ok: boolean; message: string }> {
+  const essaye = aEssayer(modelKey) && !/embed|nomic|rerank|bge-|e5-/i.test(modelKey);
+  const r = await chargerModele(modelKey);
+  if (!r.ok || !r.neuf || !essaye) return r;
+  const verdict = await essayerModele(LMSTUDIO_URL, modelKey);
+  noterEssai(modelKey, verdict);
+  if (verdict.ok) return r;
+  const lms = await findLms();
+  if (lms) await exec(lms, ["unload", modelKey], { timeout: 30_000 }).catch(() => {});
+  chargesParHelix.delete(modelKey);
+  const relais = await relaisApresDefaillance(modelKey, options.auto === true);
+  return {
+    ok: false,
+    message: `${tf("{0} ne répond pas correctement sur cette machine (réponse d'essai illisible) : il a été déchargé.", modelKey)} ${relais} ${t("Renvoyez votre message.")}`,
+  };
+}
+
+async function chargerModele(modelKey: string): Promise<{ ok: boolean; message: string; neuf?: boolean }> {
   const lms = await findLms();
   if (!lms) return { ok: false, message: t("LM Studio (lms) introuvable sur cette machine.") };
 
@@ -755,7 +782,7 @@ export async function loadModel(modelKey: string): Promise<{ ok: boolean; messag
   try {
     await charger();
     chargesParHelix.add(modelKey);
-    return { ok: true, message: tf("Modèle {0} chargé.", modelKey) };
+    return { ok: true, message: tf("Modèle {0} chargé.", modelKey), neuf: true };
   } catch (err) {
     const detail = err instanceof Error ? `${err.message}` : String(err);
 
@@ -772,6 +799,7 @@ export async function loadModel(modelKey: string): Promise<{ ok: boolean; messag
           return {
             ok: true,
             message: tf("Modèle {0} chargé (mémoire libérée au préalable).", modelKey),
+            neuf: true,
           };
         } catch (second) {
           return {

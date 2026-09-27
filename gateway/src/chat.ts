@@ -60,6 +60,7 @@ import type { BackendConfig, ChatRequest, ModelInfo } from "./types.ts";
 import { t, tf } from "./langue.ts";
 import { gardesDeFlux, type Degenerescence } from "./gardeBoucle.ts";
 import { echantillonnageLocal } from "./backends.ts";
+import { apresCoupure } from "./provision.ts";
 
 /**
  * Boucle conversationnelle avec outils (ARCHITECTURE.md, ADR-003/004).
@@ -252,11 +253,17 @@ function messageDeBoucle(modele: string, cause: Degenerescence): string {
       );
 }
 
-/** Une ligne au journal, sans le contenu : de quoi reconnaître le défaut sur un poste qu'on n'a pas sous la main. */
-function noterBoucle(modele: string, cause: Degenerescence): void {
+/**
+ * Une ligne au journal, sans le contenu : de quoi reconnaître le défaut sur un poste qu'on n'a pas sous la main.
+ * Et la coupure notée pour cette machine (provision.ts, 27/09/2026) : à la deuxième, le modèle n'est plus
+ * choisi d'office. Rend le message complet pour la personne.
+ */
+async function noterBoucle(model: ModelInfo, cause: Degenerescence, auto: boolean): Promise<string> {
   console.warn(
-    `[chat] réponse de ${modele} coupée : ${cause === "motif" ? "motif répété" : "réflexion sans fin"} (${process.platform} ${process.arch})`,
+    `[chat] réponse de ${model.id} coupée : ${cause === "motif" ? "motif répété" : "réflexion sans fin"} (${process.platform} ${process.arch})`,
   );
+  const suite = await apresCoupure(model, auto).catch(() => "");
+  return suite ? `${messageDeBoucle(model.id, cause)} ${suite}` : messageDeBoucle(model.id, cause);
 }
 
 async function callUpstream(
@@ -1028,7 +1035,7 @@ export async function handleChatRequest(
   if (model.backendKind === "lmstudio" && model.loaded === false) {
     signaler({ type: "statut", message: tf("Chargement de {0} en mémoire...", model.id) });
     attente?.chargement(true);
-    const charge = await loadModel(model.id);
+    const charge = await loadModel(model.id, { auto: !body.model });
     attente?.chargement(false);
     invalidate();
     if (!charge.ok) {
@@ -1231,8 +1238,7 @@ export async function handleChatRequest(
           }
         }
         if (degenere) {
-          noterBoucle(model.id, degenere);
-          signalerErreur(messageDeBoucle(model.id, degenere));
+          signalerErreur(await noterBoucle(model, degenere, !body.model));
         } else if (reponse) {
           const objet = reponse.objet(model.id, sourcesCitees);
           repondreJson("error" in objet ? 502 : 200, objet);
@@ -1354,8 +1360,7 @@ export async function handleChatRequest(
        * s'arrête là au lieu d'enchaîner sur une étape qui n'a rien produit.
        */
       if (result.degenere) {
-        noterBoucle(model.id, result.degenere);
-        emitHelix(res, { type: "error", message: messageDeBoucle(model.id, result.degenere) });
+        emitHelix(res, { type: "error", message: await noterBoucle(model, result.degenere, !body.model) });
         return { texte, interrompu: "moteur", modifications, echecs, lectures, derniereErreur, releves, refus };
       }
 

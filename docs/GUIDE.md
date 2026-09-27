@@ -277,6 +277,7 @@ essayé.
 | `HELIX_CODE_DIR` | Dossier de départ de l'écran Code | `workspace` du profil, sinon `~/Helix` |
 | `HELIX_EXO_URL`, `HELIX_LMSTUDIO_URL` | Adresses des backends | voir tableau ci-dessus |
 | `HELIX_DECHARGEMENT_GPU` | Part du modèle confiée à la carte graphique par `lms load --gpu` : `auto` (LM Studio décide), `off`, `max` ou un nombre entre 0 et 1 | `off` sous Windows et Linux sans carte NVIDIA, sinon LM Studio décide |
+| `HELIX_ESSAI_MODELE_MS` | Délai de la courte question d'essai posée à un modèle local après son chargement (`santeModeles.ts`) ; dépassé, l'essai est « sans conclusion » et le modèle gardé. Le résultat de chaque essai est dans `modeles-sur-cette-machine.json`, dossier des données (l'effacer fait tout réessayer) | `180000` |
 | `HELIX_MAX_ETAPES` | Plafond d'allers-retours d'outils | `30` |
 | `HELIX_BUDGET_ETAPE` | Actions accordées à une étape d'un travail découpé, 4 au moins (à défaut : 8, 14 ou 20 selon la taille du modèle) | selon le modèle |
 | `HELIX_CAPTURE_LARGEUR` | Largeur de la capture envoyée au modèle | `1024` |

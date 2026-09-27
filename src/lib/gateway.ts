@@ -32,6 +32,13 @@ export interface GatewayModel {
   proprietaire?: string;
   /** Entraîné sur la machine de l'instance : choisissable, jamais choisi d'office. */
   entraine?: boolean;
+  /**
+   * A mal répondu sur la machine de l'instance (gateway/src/santeModeles.ts) :
+   * « douteux » après une réponse partie en boucle, « defaillant » après un
+   * essai raté ou deux coupures. Un modèle défaillant n'est plus choisi
+   * d'office ; il reste choisissable à la main.
+   */
+  surCetteMachine?: { etat: "douteux" | "defaillant"; raison?: string; date: string };
 }
 
 export interface BackendStatus {

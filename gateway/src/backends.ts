@@ -240,7 +240,7 @@ export async function ensureLmStudioServer(): Promise<boolean> {
      */
     const application = applicationLmStudio();
     const detail = `${(err as { stdout?: unknown }).stdout ?? ""}${(err as { stderr?: unknown }).stderr ?? ""}${(err as Error).message ?? ""}`;
-    if (!application || !/no valid installation|daemon is not running|failed to start or connect/i.test(detail)) return false;
+    if (!application || moteurSansInterface() || !/no valid installation|daemon is not running|failed to start or connect/i.test(detail)) return false;
     console.log("[helix] LM Studio jamais ouvert sur ce Mac : premier lancement en arrière-plan...");
     await exec("/usr/bin/open", ["-g", "-j", "-a", application], { timeout: 30_000 }).catch(() => undefined);
     let demarre = false;

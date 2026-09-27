@@ -116,7 +116,7 @@ import {
   revokeAll,
 } from "./usersession.ts";
 import { filtrer, fusionner, type Demandeur } from "./authz.ts";
-import { installerMoteur } from "./engine.ts";
+import { installerMoteur, moteurAPoser } from "./engine.ts";
 import {
   diagnostic as atelierDiagnostic,
   preparer as preparerAtelier,
@@ -512,7 +512,7 @@ async function handleProvisionStatus(res: http.ServerResponse): Promise<void> {
      * n'y a rien à télécharger ni à charger : l'écran de mise en route doit le
      * dire et guider, au lieu de proposer une installation qui échouera.
      */
-    moteurInstalle: (await findLms()) !== null,
+    moteurInstalle: (await findLms()) !== null && !moteurAPoser(),
     // Installation pilotée par l'intégrateur : l'écran de mise en route ne
     // propose rien, les modèles sont ceux du profil client.
     managed: !autoProvisionEnabled(),

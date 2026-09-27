@@ -134,9 +134,40 @@ export async function appInstallee(): Promise<string | null> {
     return existsSync(lms) ? lms : null;
   }
   const application = applicationLmStudio();
-  if (application) return application;
-  // Mac à puce Apple : le moteur sans interface, posé par Helix.
+  // Mac Intel : l'application, seule possible (pas de llmster pour eux).
+  if (process.arch !== "arm64") return application;
+  // Mac à puce Apple : l'application si elle a déjà servi, sinon le moteur sans interface.
+  if (application && installationDeclaree("app-install-location.json")) return application;
   return moteurSansInterface() && existsSync(lmsDeLlmster()) ? lmsDeLlmster() : null;
+}
+
+/**
+ * LM Studio a-t-il déclaré cette installation ? `lms` ne trouve son moteur que
+ * par ces fichiers de `.internal` : `app-install-location.json`, écrit au
+ * premier lancement de l'application, et `llmster-install-location.json`, écrit
+ * par `llmster bootstrap` (relevé le 27/09/2026 sur macOS, llmster 0.0.25-1).
+ * Sans l'un ni l'autre, `lms` répond « daemon is not running and no valid
+ * installation could be found », même avec l'application dans Applications.
+ */
+function installationDeclaree(fichier: "app-install-location.json" | "llmster-install-location.json"): boolean {
+  try {
+    const { path } = JSON.parse(readFileSync(join(dossierLmStudio(), ".internal", fichier), "utf8")) as { path?: unknown };
+    return typeof path === "string" && existsSync(path);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Mac à puce Apple où `lms` est là mais sans moteur qu'il sache démarrer :
+ * l'application LM Studio posée par une version précédente de Helix, jamais
+ * ouverte (vu sur un MacBook le 27/09/2026, deux fois). Le moteur y compte
+ * comme absent : l'écran de mise en route propose de l'installer, et c'est le
+ * moteur sans interface qui est posé, à côté de l'application.
+ */
+export function moteurAPoser(): boolean {
+  if (process.platform !== "darwin" || process.arch !== "arm64") return false;
+  return !installationDeclaree("app-install-location.json") && !installationDeclaree("llmster-install-location.json");
 }
 
 /** L'application LM Studio (avec son interface) sur ce Mac, ou null. */
@@ -151,12 +182,14 @@ export function applicationLmStudio(): string | null {
 
 /**
  * Le moteur est-il le moteur sans interface (llmster) ? Sous Windows et Linux,
- * toujours ; sur macOS, quand l'application LM Studio n'est pas là et que
- * llmster l'est (27/09/2026 : posé par Helix sur un Mac à puce Apple).
+ * toujours ; sur macOS, quand llmster est posé (par Helix, sur un Mac à puce
+ * Apple) et que l'application LM Studio n'a jamais servi. Une application qui a
+ * déjà servi garde la main : c'est elle que partagent les autres logiciels de la
+ * machine (un agent personnel, LM Studio lui-même).
  */
 export function moteurSansInterface(): boolean {
   if (process.platform !== "darwin") return true;
-  return !applicationLmStudio() && existsSync(join(dossierLmStudio(), "llmster"));
+  return installationDeclaree("llmster-install-location.json") && !(applicationLmStudio() && installationDeclaree("app-install-location.json"));
 }
 
 /**

@@ -1,4 +1,4 @@
-const { app, BrowserWindow, dialog, ipcMain, nativeTheme, net, protocol, shell } = require("electron");
+const { app, BrowserWindow, dialog, ipcMain, nativeTheme, net, protocol, safeStorage, shell } = require("electron");
 const { demarrerMiseAJour } = require("./miseAJour.cjs");
 const coffre = require("./coffre.cjs");
 const grandStockage = require("./grandStockage.cjs");
@@ -6,6 +6,7 @@ const ligneDeCommande = require("./ligneDeCommande.cjs");
 const { demarrerRendu } = require("./rendu.cjs");
 const { installerBotReunion, arreterTousLesBots, botsActifs } = require("./botReunion.cjs");
 const { installerZoneNotification } = require("./zoneNotification.cjs");
+const { preparerNom, transfererCle } = require("./nomTrousseau.cjs");
 
 /*
  * Profil d'essai : un paquet de test lancé sur la machine d'un intégrateur ne
@@ -74,6 +75,24 @@ protocol.registerSchemesAsPrivileged([
  * `HELIX_INSTANCES_MULTIPLES=1` lève le verrou : c'est ainsi qu'on fait
  * tourner deux postes sur une même machine pour éprouver le rattachement.
  */
+/*
+ * macOS : la clé du trousseau au nom de « Helix », avec le transfert des
+ * données chiffrées sous l'ancien nom (nomTrousseau.cjs). Avant le verrou
+ * d'instance unique : il dépend du dossier du profil, que ceci fixe.
+ */
+const DONNEES_POSTE = process.env.HELIX_DATA_DIR ?? path.join(os.homedir(), ".helix");
+const etapeTrousseau = preparerNom(app, {
+  nomHistorique: "helix-plateforme",
+  nom: (() => {
+    try {
+      return require("../package.json").nomAffiche || "Helix";
+    } catch {
+      return "Helix";
+    }
+  })(),
+  dossier: DONNEES_POSTE,
+});
+
 const instanceUnique =
   isDev || process.env.HELIX_INSTANCES_MULTIPLES === "1" || app.requestSingleInstanceLock();
 if (!instanceUnique) app.quit();
@@ -1123,6 +1142,8 @@ function installerVerificationCertificats() {
 
 app.whenReady().then(async () => {
   if (!instanceUnique) return;
+  // Avant toute lecture du coffre ou des Chats du poste ; rend true quand l'application se relance.
+  if (etapeTrousseau && transfererCle(app, safeStorage, etapeTrousseau, { dossier: DONNEES_POSTE })) return;
   {
     const l = app.getLocale().slice(0, 2);
     if (["fr", "en", "zh"].includes(l) && langueEcran === "en") langueEcran = l;

@@ -2760,6 +2760,33 @@ moment du choix (niveau d'approbation, palier « étendu »). Ne pas refaire à 
   l'ouvre une fois en arrière-plan puis réessaie. **Vérifié sur ce Mac** : installation du
   moteur (43 s, dossier personnel temporaire). **Pas vérifié** : son démarrage sur un Mac (ce
   Mac fait tourner LM Studio pour Eden sur les mêmes ports), ni le rattrapage par ouverture.
+- Même erreur au second essai sur le MacBook : l'application LM Studio posée par une version
+  précédente y était restée, jamais ouverte, et comptait comme moteur installé (Helix ne posait
+  donc pas llmster). `lms` ne trouve son moteur que par `~/.lmstudio/.internal/app-install-location.json`
+  (premier lancement de l'application) ou `llmster-install-location.json` (écrit par
+  `llmster bootstrap`, relevé sur ce Mac). Sans l'un ni l'autre, sur un Mac à puce Apple, le
+  moteur compte maintenant comme absent (`moteurAPoser`, engine.ts) : l'écran de mise en route
+  propose de l'installer, et c'est llmster qui est posé, à côté de l'application. Une
+  application LM Studio qui a déjà servi garde la main (ce Mac, Eden). **Vérifié sur ce Mac** :
+  installation de llmster (12 s) et son premier démarrage à la main ; `lms daemon up` s'y
+  branche sur le port 41343 de LM Studio d'Eden, donc **pas vérifié** : le démarrage complet par
+  Helix, qui ne peut s'essayer que sur un Mac sans LM Studio ouvert (le MacBook).
+- Le trousseau demandait l'accès à « helix-plateforme Safe Storage » : Electron nomme la clé
+  d'après le nom interne de l'application. Sur macOS, l'application installée s'appelle
+  maintenant « Helix » pour le trousseau (`electron/nomTrousseau.cjs`). C'est une autre clé :
+  au premier lancement, le coffre et les Chats du poste (copies comprises) sont lus avec
+  l'ancienne, confiés au lancement suivant (chiffrés par une clé tirée au hasard, transmise par
+  l'environnement, jamais écrite), puis rechiffrés ; chaque original est gardé à côté
+  (`.cle-helix-plateforme`). Un « Refuser » ou deux échecs : l'ancien nom est gardé, rien n'est
+  rendu illisible. Le dossier du profil ne bouge pas. **Vérifié** : transfert de bout en bout
+  et reprise après un fichier de transfert abîmé (noms de clé d'essai, puis retirés du
+  trousseau), puis sur les vraies données de ce Mac (coffre, Chats du poste et leurs trois
+  copies ; sauvegarde gardée dans `~/.helix-sauvegarde-cle-20260927`). La demande du trousseau
+  pour l'ancienne clé apparaît une dernière fois, au transfert. **Limite constatée** : tant que
+  l'application n'est pas signée par Apple, le trousseau demande encore une fois à chaque
+  nouvelle version (« Toujours autoriser ») ; il retient l'empreinte exacte d'une application
+  signée ad hoc, et l'exigence de signature sur l'identifiant (commit précédent) n'y suffit pas
+  (relancement d'une nouvelle construction, 27/09). Seule la signature Apple le règle.
 - Réponses en français à un message en anglais : la consigne française disait « tu réponds en
   français ». Le modèle répond maintenant dans la langue du dernier message, agents compris ;
   la langue de base est l'anglais (interface, passerelle, zone de notification) quand celle du

@@ -3159,3 +3159,22 @@ Restent, dits comme tels : une erreur non rattrapée est notée sans arrêter l'
 fait au test d'intrusion : une requête ne doit pas arrêter l'instance d'une équipe), au prix
 d'un état qui peut rester incomplet jusqu'au redémarrage ; les images et vidéos ne sont pas
 proposées sur un Linux plus ancien qu'Ubuntu 24.04 (le moteur publié y demande la glibc 2.38).
+
+### 29.4 La clé du trousseau au nom de « Helix » (27 septembre 2026)
+
+Sur macOS, Electron nomme la clé qui chiffre le coffre et les Chats du poste d'après le nom
+interne de l'application : le trousseau demandait l'accès à « helix-plateforme Safe Storage ».
+L'application installée s'appelle maintenant « Helix » pour le trousseau, ce qui crée une autre
+clé ; `electron/nomTrousseau.cjs` y transfère les fichiers une fois.
+
+- Le contenu déchiffré ne touche jamais le disque en clair : il passe d'un lancement au suivant
+  dans `~/.helix/poste/.transfert-cle` (0600), chiffré en AES-256-GCM par une clé de 32 octets
+  tirée au hasard, que seul l'environnement du processus relancé reçoit (retirée aussitôt, la
+  passerelle et les outils ne l'héritent pas).
+- Clé perdue (arrêt entre les deux lancements) ou fichier abîmé : le fichier de transfert est
+  effacé, les originaux sont intacts, on recommence sous l'ancien nom. Deux échecs, ou un
+  « Refuser » au trousseau : l'ancien nom est gardé pour de bon.
+- Chaque original est gardé à côté, sous l'ancienne clé (`.cle-helix-plateforme`, 0600) ; un
+  fichier que l'ancienne clé ne lit pas n'est pas touché.
+- Seulement l'application installée sur macOS : Windows (DPAPI, clé rangée dans le profil, qui
+  ne bouge pas), Linux et le développement gardent leur nom.

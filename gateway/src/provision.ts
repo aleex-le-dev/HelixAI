@@ -3,7 +3,7 @@ import os from "node:os";
 import { faireLaPlace, findLms, optionsDeChargement } from "./backends.ts";
 import { nomProduit } from "./marque.ts";
 import { t, tf } from "./langue.ts";
-import { preparerDossiersLlmster } from "./engine.ts";
+import { moteurAPoser, preparerDossiersLlmster } from "./engine.ts";
 
 /**
  * Provisionnement automatique du modèle local (ARCHITECTURE.md, ADR-009).
@@ -448,7 +448,8 @@ async function provision(
   catalogue: CatalogEntry[] = CATALOG,
 ): Promise<ProvisionState> {
   const lms = await findLms();
-  if (!lms) {
+  // `lms` sans moteur qu'il sache démarrer (Mac à puce Apple, engine.ts) : le moteur est à installer.
+  if (!lms || moteurAPoser()) {
     setState({
       phase: "error",
       message: t("LM Studio est introuvable sur cette machine."),

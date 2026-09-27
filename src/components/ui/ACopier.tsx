@@ -3,6 +3,7 @@ import { Check, Copy, TextCursorInput } from "lucide-react";
 import { IconButton } from "@/components/ui/IconButton";
 import { cn } from "@/lib/cn";
 import { t, tf } from "@/lib/i18n";
+import { copierTexte, selectionner, viderSiContient } from "@/lib/pressePapiers";
 
 /**
  * Une ligne qu'on ne recopie pas : on la copie.
@@ -17,6 +18,10 @@ import { t, tf } from "@/lib/i18n";
  * que pas de bouton : on **sélectionne alors la valeur** et on le dit, pour
  * qu'un raccourci clavier termine le geste. La voie manuelle ne disparaît
  * jamais, elle cesse seulement d'être la seule.
+ *
+ * La copie passe par `lib/pressePapiers` (27/09/2026) : dans l'application de
+ * bureau, `navigator.clipboard` était toujours refusé, et ce bouton ne faisait
+ * que sélectionner.
  */
 export function ACopier({
   valeur,
@@ -45,7 +50,7 @@ export function ACopier({
   const minuterie = useRef<number | undefined>(undefined);
 
   const effacement = useRef<number | undefined>(undefined);
-  const [efface, setEfface] = useState<"attente" | "fait" | "impossible" | null>(null);
+  const [efface, setEfface] = useState<"attente" | "fait" | "remplacé" | "impossible" | null>(null);
 
   // Le retour visuel s'efface seul ; le démontage l'emporte avec lui. Le vidage du presse-papiers, lui, reste prévu.
   useEffect(() => () => window.clearTimeout(minuterie.current), []);
@@ -55,12 +60,8 @@ export function ACopier({
     window.clearTimeout(effacement.current);
     setEfface("attente");
     effacement.current = window.setTimeout(async () => {
-      try {
-        if ((await navigator.clipboard.readText()) === valeur) await navigator.clipboard.writeText("");
-        setEfface("fait");
-      } catch {
-        setEfface("impossible");
-      }
+      const issue = await viderSiContient(valeur);
+      setEfface(issue === "vidé" ? "fait" : issue);
     }, effacerApres);
   };
 
@@ -70,21 +71,13 @@ export function ACopier({
   };
 
   const copier = async () => {
-    try {
-      await navigator.clipboard.writeText(valeur);
+    if (await copierTexte(valeur)) {
       setEtat("copié");
       revenirAuRepos();
       prevoirEffacement();
-    } catch {
+    } else {
       // Refusé : on sélectionne, et le raccourci clavier fait le reste.
-      const noeud = valeurRef.current;
-      const selection = window.getSelection();
-      if (noeud && selection) {
-        const plage = document.createRange();
-        plage.selectNodeContents(noeud);
-        selection.removeAllRanges();
-        selection.addRange(plage);
-      }
+      selectionner(valeurRef.current);
       setEtat("sélectionné");
       revenirAuRepos();
     }
@@ -113,7 +106,9 @@ export function ACopier({
                 ? tf("Le presse-papiers sera vidé dans {0} s, s'il la contient encore.", Math.round((effacerApres ?? 0) / 1000))
                 : efface === "fait"
                   ? t("Presse-papiers vidé.")
-                  : efface === "impossible"
+                  : efface === "remplacé"
+                    ? t("Le presse-papiers contient autre chose depuis : il n'a pas été touché.")
+                    : efface === "impossible"
                     ? t("Le presse-papiers n'a pas pu être relu : il n'a pas été vidé. Copiez autre chose par-dessus une fois la clé collée.")
                     : note}
           </span>

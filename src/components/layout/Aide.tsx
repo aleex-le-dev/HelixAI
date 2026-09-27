@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, ClipboardCheck, Copy, ExternalLink, LifeBuoy, Mail } from "lucide-react";
 import { Modal } from "@/components/ui/Modal";
@@ -9,6 +9,7 @@ import { branding } from "@/config/branding";
 import { instance, isDesktopApp } from "@/lib/instance";
 import { chercherArticles, type Article } from "@/lib/aide";
 import { t, tf } from "@/lib/i18n";
+import { copierTexte } from "@/lib/pressePapiers";
 
 /**
  * Aide et support, dans la fenêtre.
@@ -32,24 +33,58 @@ function informationsTechniques(): string {
   ].join("\n");
 }
 
-function BoutonCopier() {
+/**
+ * « Copié » seulement quand c'est vrai. Vu par Medhi le 27/09/2026 sur un PC
+ * Windows : le bouton ne faisait rien. La copie était refusée par
+ * l'application (permission du presse-papiers), et l'échec avalé sans un mot.
+ * Elle passe désormais par `lib/pressePapiers` ; si elle échoue encore, le
+ * texte s'affiche sous les boutons, déjà sélectionné, pour le copier au clavier.
+ */
+function BoutonCopier({ onEchec }: { onEchec: (texte: string | null) => void }) {
   const [copie, setCopie] = useState(false);
+  const minuterie = useRef<number | undefined>(undefined);
+  useEffect(() => () => window.clearTimeout(minuterie.current), []);
   return (
     <Button
       variant="secondary"
       icon={copie ? ClipboardCheck : Copy}
       onClick={() => {
-        void navigator.clipboard
-          .writeText(informationsTechniques())
-          .then(() => {
-            setCopie(true);
-            setTimeout(() => setCopie(false), 2500);
-          })
-          .catch(() => setCopie(false));
+        const texte = informationsTechniques();
+        void copierTexte(texte).then((ok) => {
+          window.clearTimeout(minuterie.current);
+          setCopie(ok);
+          onEchec(ok ? null : texte);
+          if (ok) minuterie.current = window.setTimeout(() => setCopie(false), 2500);
+        });
       }}
     >
       {copie ? t("Copié") : t("Copier les informations techniques")}
     </Button>
+  );
+}
+
+/** Le texte que la copie n'a pas pu poser, sélectionné d'office. */
+function CopieRefusee({ texte }: { texte: string }) {
+  const champ = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => {
+    champ.current?.focus();
+    champ.current?.select();
+  }, [texte]);
+  return (
+    <div className="space-y-1.5">
+      <p className="text-xs font-medium text-foreground" role="status">
+        {t("Copie automatique refusée : le texte est sélectionné, copiez-le au clavier.")}
+      </p>
+      <textarea
+        ref={champ}
+        readOnly
+        value={texte}
+        rows={6}
+        aria-label={t("Informations techniques")}
+        onFocus={(e) => e.currentTarget.select()}
+        className="w-full resize-none rounded-xl border border-border bg-muted/40 p-2.5 font-mono text-[12px] leading-relaxed text-foreground"
+      />
+    </div>
   );
 }
 
@@ -88,6 +123,7 @@ function Lecture({ article, onRetour, onOuvrir }: { article: Article; onRetour: 
 export function Aide({ open, onClose }: { open: boolean; onClose: () => void }) {
   const [terme, setTerme] = useState("");
   const [ouvert, setOuvert] = useState<string | null>(null);
+  const [copieRefusee, setCopieRefusee] = useState<string | null>(null);
   const trouves = useMemo(() => chercherArticles(terme), [terme]);
   const article = ouvert ? trouves.find((a) => a.id === ouvert) ?? null : null;
 
@@ -98,6 +134,7 @@ export function Aide({ open, onClose }: { open: boolean; onClose: () => void }) 
     setTimeout(() => {
       setTerme("");
       setOuvert(null);
+      setCopieRefusee(null);
     }, 200);
   };
 
@@ -168,8 +205,9 @@ export function Aide({ open, onClose }: { open: boolean; onClose: () => void }) 
             <ExternalLink size={15} strokeWidth={1.75} />
             {t("Site du prestataire")}
           </a>
-          <BoutonCopier />
+          <BoutonCopier onEchec={setCopieRefusee} />
         </div>
+        {copieRefusee && <CopieRefusee texte={copieRefusee} />}
         <p className="text-xs leading-relaxed text-muted-foreground">
           {t("Les informations techniques ne contiennent ni vos messages, ni vos documents, ni aucune clé : seulement la version, le cadre d'exécution, l'adresse de l'instance et votre système.")}
         </p>

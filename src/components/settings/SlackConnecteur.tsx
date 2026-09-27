@@ -15,6 +15,7 @@ import { InfoBox } from "@/components/ui/InfoBox";
 import { branding } from "@/config/branding";
 import { formaterDate } from "@/lib/formats";
 import { t, tf } from "@/lib/i18n";
+import { copierTexte } from "@/lib/pressePapiers";
 
 /**
  * Connecteur Slack.
@@ -56,11 +57,12 @@ export function SlackConnecteur({ onChange }: { onChange?: () => void } = {}) {
   const bot = etat?.application || nomDeBot(branding.name);
 
   const copier = async () => {
-    try {
-      await navigator.clipboard.writeText(texteManifeste);
+    // lib/pressePapiers (27/09/2026) : dans l'application de bureau, `navigator.clipboard` était toujours refusé.
+    if (await copierTexte(texteManifeste)) {
       setCopie(true);
       setTimeout(() => setCopie(false), 2500);
-    } catch {
+    } else {
+      setCopie(false);
       setErreur(t("La copie a échoué : sélectionnez le manifeste à la main."));
     }
   };

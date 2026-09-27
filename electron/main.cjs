@@ -1,4 +1,4 @@
-const { app, BrowserWindow, dialog, ipcMain, nativeTheme, net, protocol, safeStorage, shell, systemPreferences } = require("electron");
+const { app, BrowserWindow, clipboard, dialog, ipcMain, nativeTheme, net, protocol, safeStorage, shell, systemPreferences } = require("electron");
 const { demarrerMiseAJour, changerLangue: changerLangueMaj } = require("./miseAJour.cjs");
 const coffre = require("./coffre.cjs");
 const grandStockage = require("./grandStockage.cjs");
@@ -7,6 +7,7 @@ const { demarrerRendu } = require("./rendu.cjs");
 const { installerBotReunion, arreterTousLesBots, botsActifs } = require("./botReunion.cjs");
 const { installerZoneNotification } = require("./zoneNotification.cjs");
 const { preparerNom, transfererCle } = require("./nomTrousseau.cjs");
+const { installerPressePapiers } = require("./pressePapiers.cjs");
 
 /*
  * Profil d'essai : un paquet de test lancé sur la machine d'un intégrateur ne
@@ -399,6 +400,13 @@ function retenirTheme(theme) {
 function depuisLaFenetre(event) {
   return Boolean(mainWindow && !mainWindow.isDestroyed() && event.sender === mainWindow.webContents);
 }
+
+/*
+ * Les boutons « Copier » passent par ici (electron/pressePapiers.cjs) : la
+ * permission du presse-papiers reste refusée à la page, qui ne copiait donc
+ * rien (vu sous Windows le 27/09/2026).
+ */
+installerPressePapiers({ ipcMain, clipboard, depuisLaFenetre });
 
 /* ------------------------- invitation par lien ---------------------------- */
 
@@ -878,7 +886,9 @@ function createWindow() {
   /*
    * Une seule permission navigateur est accordée : le **micro**, pour la
    * dictée. Caméra, géolocalisation, notifications, presse-papiers et le reste
-   * sont refusés d'office.
+   * sont refusés d'office. Copier du texte ne demande donc pas la permission
+   * du presse-papiers : les boutons « Copier » passent par un canal du
+   * processus principal (electron/pressePapiers.cjs, 27/09/2026).
    *
    * Trois conditions, toutes nécessaires :
    *  - la demande vient de la fenêtre de l'application elle-même, pas d'un

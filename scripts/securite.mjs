@@ -2505,6 +2505,78 @@ console.log("\n11 quinquies. Windows et Linux : ce qui se vérifie depuis ce pos
   rmSync(d7, { recursive: true, force: true });
 }
 
+console.log("\n11 sexies. Presse-papiers de l'application de bureau : écrire du texte, rien lire (27/09/2026)");
+{
+  /*
+   * electron/pressePapiers.cjs. Vu par Medhi le 27/09/2026 sur un PC Windows :
+   * « Copier les informations techniques » ne faisait rien, la permission du
+   * presse-papiers étant refusée à la page. Les canaux sont joués ici avec un
+   * faux `ipcMain` et un faux presse-papiers : ni Electron ni le vrai
+   * presse-papiers de la machine.
+   */
+  const { createRequire } = await import("node:module");
+  const exiger = createRequire(import.meta.url);
+  const { installerPressePapiers, TAILLE_MAX } = exiger(join(RACINE, "electron", "pressePapiers.cjs"));
+  // Asynchrone, comme le presse-papiers du processus principal depuis Electron 44.
+  const fabriquer = ({ garde = true } = {}) => {
+    const canaux = {};
+    const pp = { contenu: "avant", garde, readText: async () => pp.contenu, writeText: async (t) => { if (pp.garde) pp.contenu = t; }, clear: () => { pp.contenu = ""; } };
+    const fenetre = { id: "fenetre" };
+    installerPressePapiers({ ipcMain: { handle: (nom, f) => (canaux[nom] = f) }, clipboard: pp, depuisLaFenetre: (e) => e.sender === fenetre });
+    const appeler = async (nom, valeur, sender = fenetre) => {
+      try {
+        return await canaux[nom]({ sender }, valeur);
+      } catch (e) {
+        return { leve: e.message };
+      }
+    };
+    return { canaux, pp, appeler };
+  };
+  const a = fabriquer();
+  verifier("presse-papiers : deux canaux seulement, écrire et vider (aucun pour lire)", Object.keys(a.canaux).sort().join(",") === "helix:presse-papiers-ecrire,helix:presse-papiers-vider", Object.keys(a.canaux).join(","));
+  const etrangere = await a.appeler("helix:presse-papiers-ecrire", "x", { id: "autre" });
+  verifier("presse-papiers : un appel qui ne vient pas de la fenêtre de l'application est refusé", etrangere.leve === "Refusé." && a.pp.contenu === "avant", JSON.stringify(etrangere));
+  const etrangereVider = await a.appeler("helix:presse-papiers-vider", "avant", { id: "autre" });
+  verifier("presse-papiers : vider depuis une autre fenêtre est refusé", etrangereVider.leve === "Refusé." && a.pp.contenu === "avant", JSON.stringify(etrangereVider));
+  const objet = await a.appeler("helix:presse-papiers-ecrire", { html: "<img>" });
+  const long = await a.appeler("helix:presse-papiers-ecrire", "x".repeat(TAILLE_MAX + 1));
+  verifier("presse-papiers : autre chose que du texte, ou plus de deux millions de caractères, n'est pas écrit", !objet.ok && !long.ok && a.pp.contenu === "avant", `${JSON.stringify(objet)} ${long.motif}`);
+  const bon = await a.appeler("helix:presse-papiers-ecrire", "Helix 2026.927.3\nSystème : Windows");
+  verifier("presse-papiers : un texte est écrit, et « copié » seulement après relecture", bon.ok === true && a.pp.contenu === "Helix 2026.927.3\nSystème : Windows", JSON.stringify(bon));
+  const sourd = fabriquer({ garde: false });
+  const perdu = await sourd.appeler("helix:presse-papiers-ecrire", "texte");
+  verifier("presse-papiers : un presse-papiers qui ne garde rien répond « non copié », pas « copié »", perdu.ok === false, JSON.stringify(perdu));
+  const crlf = fabriquer();
+  crlf.pp.writeText = async (t) => { crlf.pp.contenu = t.replace(/\n/g, "\r\n"); };
+  verifier("presse-papiers : les fins de ligne de Windows (\\r\\n) relues comme le même texte", (await crlf.appeler("helix:presse-papiers-ecrire", "a\nb")).ok === true, crlf.pp.contenu);
+  // Vider : seulement la dernière copie de Helix, et seulement si elle y est encore.
+  const v = fabriquer();
+  const devine = await v.appeler("helix:presse-papiers-vider", "avant");
+  verifier("presse-papiers : vider ce que Helix n'a pas copié (deviner le contenu) ne touche à rien", devine.ok === true && devine.vide === false && v.pp.contenu === "avant", JSON.stringify(devine));
+  await v.appeler("helix:presse-papiers-ecrire", "hx-cle-secrete");
+  v.pp.contenu = "copié ailleurs par la personne";
+  const remplace = await v.appeler("helix:presse-papiers-vider", "hx-cle-secrete");
+  verifier("presse-papiers : une clé remplacée depuis par autre chose, rien n'est vidé", remplace.vide === false && v.pp.contenu === "copié ailleurs par la personne", JSON.stringify(remplace));
+  await v.appeler("helix:presse-papiers-ecrire", "hx-cle-secrete");
+  const vide = await v.appeler("helix:presse-papiers-vider", "hx-cle-secrete");
+  verifier("presse-papiers : la clé copiée par Helix, encore là, est vidée", vide.vide === true && v.pp.contenu === "", JSON.stringify(vide));
+  const { readFileSync: lireF, readdirSync: lister, statSync: etat } = await import("node:fs");
+  const pre = lireF(join(RACINE, "electron", "preload.cjs"), "utf8");
+  const principal = lireF(join(RACINE, "electron", "main.cjs"), "utf8");
+  verifier("presse-papiers : le préchargement n'expose aucune lecture, et le processus principal passe la garde de la fenêtre", !/readText|presse-papiers-lire/.test(pre) && /installerPressePapiers\(\{ ipcMain, clipboard, depuisLaFenetre \}\)/.test(principal), "lecture exposée ou garde absente");
+  // Un bouton « Copier » qui repasserait par navigator.clipboard retomberait dans le défaut du 27/09.
+  const fautifs = [];
+  const parcourir = (d) => {
+    for (const n of lister(d)) {
+      const p = join(d, n);
+      if (etat(p).isDirectory()) parcourir(p);
+      else if (/\.tsx?$/.test(n) && !p.endsWith(join("lib", "pressePapiers.ts")) && /navigator\.clipboard\??\s*\.\s*(write|read)\w*\s*\(|execCommand\(\s*["']copy/.test(lireF(p, "utf8"))) fautifs.push(p.slice(RACINE.length + 1));
+    }
+  };
+  parcourir(join(RACINE, "src"));
+  verifier("presse-papiers : toute l'interface copie par lib/pressePapiers, aucun appel direct à navigator.clipboard", fautifs.length === 0, fautifs.join(", "));
+}
+
 console.log("\n12. Deviner un mot de passe");
 {
   let bloque = false;

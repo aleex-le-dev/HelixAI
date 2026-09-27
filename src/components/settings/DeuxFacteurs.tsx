@@ -18,6 +18,7 @@ import {
   type EtatDeuxFacteurs,
 } from "@/lib/deuxFacteurs";
 import { t, tf } from "@/lib/i18n";
+import { copierTexte } from "@/lib/pressePapiers";
 
 /**
  * Authentification à deux facteurs : activation, codes de secours, retrait.
@@ -85,10 +86,11 @@ export function DeuxFacteurs() {
   };
 
   const copier = async (codes: string[]) => {
-    try {
-      await navigator.clipboard.writeText(codes.join("\n"));
+    // lib/pressePapiers (27/09/2026) : dans l'application de bureau, `navigator.clipboard` était toujours refusé.
+    if (await copierTexte(codes.join("\n"))) {
       setCopie(true);
-    } catch {
+    } else {
+      setCopie(false);
       setErreur(t("La copie a échoué : recopiez les codes à la main."));
     }
   };

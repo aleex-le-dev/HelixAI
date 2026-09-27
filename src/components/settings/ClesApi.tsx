@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { Check, Copy, KeyRound, Loader2, Pencil, Plus, ShieldAlert, Trash2, TriangleAlert } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Check, Copy, KeyRound, Loader2, Pencil, Plus, ShieldAlert, TextCursorInput, Trash2, TriangleAlert } from "lucide-react";
 import { Card } from "@/components/settings/SettingsShell";
 import { ACopier } from "@/components/ui/ACopier";
 import { Button } from "@/components/ui/Button";
@@ -21,6 +21,7 @@ import { listerBases, type Base } from "@/lib/connaissances";
 import { fetchModels } from "@/lib/gateway";
 import { formaterDate, formaterMomentCourt, useFormats } from "@/lib/formats";
 import { t, tf } from "@/lib/i18n";
+import { copierTexte, selectionner } from "@/lib/pressePapiers";
 
 /**
  * Paramètres → API développeur (demandé par Medhi le 26/09/2026).
@@ -290,28 +291,46 @@ function LigneCle({ cle, onChange }: { cle: CleApi; onChange: () => void }) {
 
 /** Un bloc de code, recopiable d'un clic. */
 function BlocCode({ code, libelle }: { code: string; libelle: string }) {
-  const [copie, setCopie] = useState(false);
+  /*
+   * L'échec de la copie était avalé (`catch(() => undefined)`) : dans
+   * l'application de bureau, le bouton ne faisait rien (27/09/2026). Refusée,
+   * la copie sélectionne le code et le dit, comme ACopier.
+   */
+  const [etat, setEtat] = useState<"prêt" | "copié" | "sélectionné">("prêt");
+  const bloc = useRef<HTMLPreElement>(null);
+  const minuterie = useRef<number | undefined>(undefined);
+  useEffect(() => () => window.clearTimeout(minuterie.current), []);
   return (
     <div className="relative">
-      <pre className="overflow-x-auto rounded-xl border border-border bg-muted/40 p-3 pr-11 font-mono text-[12.5px] leading-relaxed text-foreground">
+      <pre ref={bloc} className="overflow-x-auto rounded-xl border border-border bg-muted/40 p-3 pr-11 font-mono text-[12.5px] leading-relaxed text-foreground">
         {code}
       </pre>
       <IconButton
-        icon={copie ? Check : Copy}
-        label={copie ? tf("{0} : copié", libelle) : tf("Copier {0}", libelle)}
+        icon={etat === "copié" ? Check : etat === "sélectionné" ? TextCursorInput : Copy}
+        label={
+          etat === "copié"
+            ? tf("{0} : copié", libelle)
+            : etat === "sélectionné"
+              ? tf("{0} : sélectionné, à copier au clavier", libelle)
+              : tf("Copier {0}", libelle)
+        }
         size={30}
         iconSize={15}
         className="absolute right-1.5 top-1.5"
         onClick={() => {
-          void navigator.clipboard
-            .writeText(code)
-            .then(() => {
-              setCopie(true);
-              window.setTimeout(() => setCopie(false), 3000);
-            })
-            .catch(() => undefined);
+          void copierTexte(code).then((ok) => {
+            if (!ok) selectionner(bloc.current);
+            setEtat(ok ? "copié" : "sélectionné");
+            window.clearTimeout(minuterie.current);
+            minuterie.current = window.setTimeout(() => setEtat("prêt"), 3000);
+          });
         }}
       />
+      {etat === "sélectionné" && (
+        <p className="mt-1 text-xs text-muted-foreground" role="status">
+          {t("Copie automatique refusée : le texte est sélectionné, copiez-le au clavier.")}
+        </p>
+      )}
     </div>
   );
 }

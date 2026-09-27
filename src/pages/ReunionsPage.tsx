@@ -71,6 +71,7 @@ import {
   type Visibilite,
 } from "@/lib/reunions";
 import { t, tf } from "@/lib/i18n";
+import { copierTexte } from "@/lib/pressePapiers";
 
 /**
  * Réunions : enregistrer au micro, importer un fichier, ou envoyer le bot à
@@ -951,7 +952,7 @@ function CompteRenduVue({
 
 function TranscriptionVue({ segments }: { segments: Segment[] }) {
   const [terme, setTerme] = useState("");
-  const [copie, setCopie] = useState(false);
+  const [copie, setCopie] = useState<"prêt" | "copiée" | "refusée">("prêt");
   // Renommée : « t » est la fonction de traduction depuis la mise en langues.
   const cherche = terme.trim().toLocaleLowerCase("fr");
   const visibles = useMemo(
@@ -969,17 +970,23 @@ function TranscriptionVue({ segments }: { segments: Segment[] }) {
         <Button
           variant="ghost"
           size="sm"
-          icon={copie ? Check : Copy}
+          icon={copie === "copiée" ? Check : Copy}
           onClick={() => {
-            void navigator.clipboard.writeText(segments.map((s) => `[${horodatage(s.debut)}] ${s.texte}`).join("\n")).then(() => {
-              setCopie(true);
-              setTimeout(() => setCopie(false), 2000);
+            // lib/pressePapiers (27/09/2026) : l'échec était muet, et l'application de bureau refusait toujours `navigator.clipboard`.
+            void copierTexte(segments.map((s) => `[${horodatage(s.debut)}] ${s.texte}`).join("\n")).then((ok) => {
+              setCopie(ok ? "copiée" : "refusée");
+              if (ok) setTimeout(() => setCopie((c) => (c === "copiée" ? "prêt" : c)), 2000);
             });
           }}
         >
-          {copie ? t("Copiée") : t("Copier le texte")}
+          {copie === "copiée" ? t("Copiée") : t("Copier le texte")}
         </Button>
       </div>
+      {copie === "refusée" && (
+        <p className="mt-2 text-xs text-destructive" role="status">
+          {t("La copie a échoué : sélectionnez la transcription à la main.")}
+        </p>
+      )}
       <p className="mt-2 text-xs text-muted-foreground">{t("Transcription automatique, sans distinction des personnes qui parlent.")}</p>
       <ol className="mt-3 space-y-2">
         {visibles.map((s, i) => (

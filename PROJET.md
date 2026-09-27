@@ -3012,6 +3012,26 @@ classique, sans Gated DeltaNet) pour séparer le modèle du moteur. Choisir d'of
 modèle sur les machines sans carte graphique irait contre la règle « la note seule décide »
 (25/09/2026) : à décider par Medhi si l'essai le montre.
 
+**Vu par Medhi le 27/09/2026 sur un PC Windows (2026.927.3) : « Copier les informations
+techniques » ne faisait rien.** Cause : dans l'application de bureau, la page copiait par
+`navigator.clipboard.writeText`, que Chromium soumet à la permission du presse-papiers ; la
+fenêtre refuse toute permission sauf le micro (`main.cjs`), et l'échec était avalé sans un mot.
+Le défaut valait sur les trois systèmes, et pour tous les boutons « Copier » (codes de secours,
+manifeste Slack, blocs de code et clés d'API, adresses et codes d'invitation, transcription d'une
+réunion). Corrigé : un seul utilitaire, `src/lib/pressePapiers.ts`, qui passe dans l'application
+par un canal du processus principal (`electron/pressePapiers.cjs` : du texte seulement, deux
+millions de caractères au plus, relu avant de répondre, depuis la fenêtre de l'application
+seulement ; SECURITE.md § 29.12), dans un navigateur par `navigator.clipboard`, puis par la copie
+par sélection. Chaque bouton ne dit « Copié » que si c'est vrai, et sinon le dit (dans l'aide, le
+texte s'affiche sélectionné, à copier au clavier). À savoir : depuis Electron 44, le presse-papiers
+du processus principal est asynchrone, relevé à l'essai. **Vérifié sur ce Mac** : dans une vraie
+fenêtre Electron 44 avec le vrai préchargement et l'interface de développement (passerelle
+jetable), la copie directe est bien refusée, le canal écrit, et le parcours de Medhi (connexion,
+aide, clic) met les informations au presse-papiers avec « Copié » ; dans le navigateur, copie
+réelle, puis échec simulé (texte affiché et sélectionné) ; `npm run securite`, 459 contrôles
+(12 de plus, section 11 sexies). **Pas vérifié** : un vrai Windows ou Linux, et l'application
+empaquetée ; les autres boutons « Copier » n'ont pas été cliqués un à un (même utilitaire).
+
 **Trouvé le 27/09/2026 au premier vrai essai de mise à jour d'un clic (0.27.0 vers 0.27.1, par
 GitHub, sur ce Mac) : toute mise à jour était refusée.** La fenêtre « Nouvelle version » est bien
 apparue, l'archive s'est téléchargée, puis « la mise à jour a été refusée : son contenu a changé

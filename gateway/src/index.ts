@@ -4868,9 +4868,21 @@ async function handleEmployes(
           for (const l of Object.values(parModele)) jetons += l.entree + l.sortie;
         }
         const estProprietaire = e.ownerId === qui.userId;
+        // Jugé avec les droits du propriétaire (c'est à son nom que l'employé est servi).
+        const etatModele = employes.etatDuModele(e, decouverte);
         return {
           ...e,
           ...(!estProprietaire && e.agentId && masques.has(e.agentId) ? { poste: "" } : {}),
+          /*
+           * Le modèle d'un agent d'organisation ne regarde que son propriétaire
+           * (audit du 28/09/2026, § 36). `modele` porte l'identifiant qualifié,
+           * qui pour une clé personnelle nomme la clé (« cle-<id>/… ») et le
+           * modèle payé par une collègue ; `modeleEtat` en dit le nom, le
+           * fournisseur, le pays. Une collègue n'en garde que la disponibilité,
+           * de quoi afficher « modèle indisponible » sans nommer le modèle ni
+           * révéler la clé personnelle d'autrui (la liste `modeles` la cache déjà).
+           */
+          ...(estProprietaire ? {} : { modele: undefined }),
           // Qui est autorisé sur un canal (numéros, identifiants) ne regarde que son propriétaire.
           canaux: (e.canaux ?? []).map((c) =>
             estProprietaire ? { ...c, nom: employes.CANAUX[c.type].nom } : { type: c.type, nom: employes.CANAUX[c.type].nom },
@@ -4883,10 +4895,10 @@ async function handleEmployes(
                 : Boolean(tache),
           })),
           proprietaire: comptes.find((c) => c.id === e.ownerId)?.fullName ?? t("Un ancien membre"),
-          estProprietaire: e.ownerId === qui.userId,
+          estProprietaire,
           jetons30Jours: jetons,
           // Son modèle, jugé avec les droits de son propriétaire : l'écran le montre, et dit s'il a disparu.
-          modeleEtat: employes.etatDuModele(e, decouverte),
+          modeleEtat: estProprietaire ? etatModele : { nom: "", disponible: etatModele.disponible },
         };
       }),
     );

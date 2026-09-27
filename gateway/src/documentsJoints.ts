@@ -122,19 +122,24 @@ export function jetonsEstimes(texte: string): number {
 /** Une image, telle qu'un encodeur de vision la compte à peu près (une capture de 1 000 à 2 000 jetons). */
 const JETONS_PAR_IMAGE = 1800;
 
+/** Jetons estimés d'un seul message (le coût par message est indépendant des autres). */
+export function jetonsDunMessage(m: unknown): number {
+  const msg = m as { content?: unknown; tool_calls?: unknown };
+  let total = 8;
+  if (typeof msg?.content === "string") total += jetonsEstimes(msg.content);
+  else if (Array.isArray(msg?.content)) {
+    for (const p of msg.content as { type?: string; text?: string }[]) {
+      total += p?.type === "image_url" ? JETONS_PAR_IMAGE : jetonsEstimes(p?.text ?? "");
+    }
+  }
+  if (msg?.tool_calls) total += jetonsEstimes(JSON.stringify(msg.tool_calls));
+  return total;
+}
+
 /** Jetons estimés d'une conversation : textes, appels d'outils, images. */
 export function jetonsDesMessages(messages: unknown[]): number {
   let total = 0;
-  for (const m of messages as { content?: unknown; tool_calls?: unknown }[]) {
-    total += 8;
-    if (typeof m?.content === "string") total += jetonsEstimes(m.content);
-    else if (Array.isArray(m?.content)) {
-      for (const p of m.content as { type?: string; text?: string }[]) {
-        total += p?.type === "image_url" ? JETONS_PAR_IMAGE : jetonsEstimes(p?.text ?? "");
-      }
-    }
-    if (m?.tool_calls) total += jetonsEstimes(JSON.stringify(m.tool_calls));
-  }
+  for (const m of messages) total += jetonsDunMessage(m);
   return total;
 }
 

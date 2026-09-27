@@ -542,6 +542,8 @@ export function ModeleDiscret({ employe }: { employe: Employe }) {
       </span>
     );
   }
+  // Le nom du modèle d'un agent d'organisation ne revient qu'à son propriétaire (§ 36) : vide pour une collègue.
+  if (!etat.nom) return null;
   return (
     <span className="max-w-[12rem] truncate text-[11px] text-muted-foreground" title={tf("Son modèle : {0}", etat.nom)}>
       {nomCourtModele(etat.nom)}
@@ -748,7 +750,7 @@ export function PanneauEmploye({
           </div>
           <p className="text-xs text-muted-foreground">
             {t("Créé par")}{" "}{employe.proprietaire}
-            {employe.modeleEtat?.disponible && tf(" · modèle {0}", nomCourtModele(employe.modeleEtat.nom))}
+            {employe.modeleEtat?.disponible && employe.modeleEtat.nom && tf(" · modèle {0}", nomCourtModele(employe.modeleEtat.nom))}
             {employe.jetons30Jours > 0 &&
               tf(" · {0} jetons sur 30 jours", employe.jetons30Jours.toLocaleString(langue()))}
           </p>

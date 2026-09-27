@@ -3449,6 +3449,98 @@ console.log("\n7 terdecies. Bombe ZIP dans un document bureautique : la relectur
 }
 
 /* ------------------------------------------------------------------------- */
+console.log("\n13 bis. Seconde tournée : passerelle et données (28/09/2026)");
+{
+  /*
+   * a) Le modèle d'un employé d'organisation ne fuit pas vers une collègue.
+   *
+   * Vu à l'audit du 28/09/2026 : GET /helix/employes rendait, pour chaque
+   * agent visible, son `modele` (l'identifiant qualifié, qui pour une clé
+   * personnelle nomme la clé « cle-<id>/… ») et un `modeleEtat` complet (nom du
+   * modèle, fournisseur, pays). Un agent d'organisation étant visible de toute
+   * l'équipe, une collègue lisait ainsi le modèle payé par la clé personnelle
+   * d'un autre. A (administratrice) branche une clé personnelle sur le faux
+   * moteur et déploie un agent d'organisation dessus ; B ne doit en voir que la
+   * disponibilité, jamais le nom du modèle, le fournisseur ni la clé.
+   */
+  // Une collègue fraîche (les séances des sections précédentes ont pu être fermées) : membre ordinaire.
+  const creeD = await appel("/helix/auth/create", { method: "POST", headers: avecSeance, body: JSON.stringify({ fullName: "Denise", email: "denise@example.test", password: "Provisoire2Denise!13" }) });
+  const compteD = (await creeD.json().catch(() => ({}))).account;
+  const connexionD = await (await appel("/helix/auth/mot-de-passe-provisoire", { method: "POST", headers: avecJeton, body: JSON.stringify({ accountId: compteD?.id, password: "Provisoire2Denise!13", nouveau: "Denise2PasseSolide!84" }) })).json().catch(() => ({}));
+  const avecSeanceD = { ...avecJeton, "X-Helix-Session": connexionD.session?.token };
+  const brancherMoi = await appel("/helix/fournisseurs", {
+    method: "POST", headers: avecSeance,
+    body: JSON.stringify({ fournisseur: "compatible", nom: "Cle-Perso-13bis", adresse: `http://127.0.0.1:${PORT_EMBED}/v1`, cle: "cle-13bis-essai-7788", modeles: ["essai-court"], portee: "moi" }),
+  });
+  const cle13 = (await brancherMoi.json().catch(() => ({}))).cle;
+  const uid13 = cle13 ? `cle-${cle13.id}/essai-court` : "";
+  let deploie = null;
+  for (let i = 0; i < 40; i++) {
+    const r = await appel("/helix/employes", {
+      method: "POST", headers: avecSeance,
+      body: JSON.stringify({ nom: "Agent 13bis", poste: "Tri.", outils: [], missions: [], visibilite: "organisation", modele: uid13 }),
+    });
+    const j = await r.json().catch(() => ({}));
+    if (j.employe || !/not ready|pas encore prête/.test(j.error?.message ?? "")) {
+      deploie = j.employe ?? null;
+      break;
+    }
+    await attendre(300);
+  }
+  const vuePar = async (entete) => ((await (await appel("/helix/employes", { headers: entete })).json()).employes ?? []).find((e) => e.id === deploie?.id);
+  const chezA = await vuePar(avecSeance);
+  const chezB = await vuePar(avecSeanceD);
+  verifier(
+    "agent d'organisation sur une clé personnelle : sa propriétaire voit le modèle (nom, identifiant), une collègue non",
+    Boolean(deploie?.id) && chezA?.modele === uid13 && chezA?.modeleEtat?.nom === "essai-court" &&
+      Boolean(chezB) && chezB.modele === undefined && chezB.modeleEtat?.nom === "" && typeof chezB.modeleEtat?.disponible === "boolean" &&
+      !JSON.stringify(chezB.modeleEtat).includes("essai-court") && !JSON.stringify(chezB.modeleEtat).includes(`cle-${cle13?.id}`),
+    JSON.stringify({ a: { modele: chezA?.modele, etat: chezA?.modeleEtat }, b: { modele: chezB?.modele, etat: chezB?.modeleEtat } }).slice(0, 400),
+  );
+  // La liste des modèles proposés ne montre pas non plus la clé personnelle d'une autre.
+  const modelesB = (await (await appel("/helix/employes", { headers: avecSeanceD })).json()).modeles ?? [];
+  verifier("la clé personnelle d'une collègue reste absente des modèles proposés à une autre", modelesB.length > 0 && !modelesB.some((m) => m.uid === uid13), JSON.stringify(modelesB.map((m) => m.uid)).slice(0, 200));
+  if (deploie?.id) await appel(`/helix/employes/${deploie.id}/supprimer`, { method: "POST", headers: avecSeance, body: "{}" });
+  if (cle13?.id) await appel(`/helix/fournisseurs/${cle13.id}/supprimer`, { method: "POST", headers: avecSeance, body: "{}" });
+
+  /*
+   * b) La conversation tenue dans la place du modèle (historique.ts) ne
+   * recalcule plus tout le fil à chaque message retiré : sur un très long fil
+   * (envoi jusqu'à 32 Mo par une personne connectée), le n² bloquait la boucle
+   * d'événements de l'instance pour toute l'équipe. On vérifie l'exactitude du
+   * total (identique à un recalcul) et que 60 000 messages sont traités bien
+   * en deçà du temps que prenait le n² (des dizaines de secondes).
+   */
+  const { pathToFileURL: versUrl } = await import("node:url");
+  const hist = await import(versUrl(join(RACINE, "gateway", "src", "historique.ts")).href);
+  const dj = await import(versUrl(join(RACINE, "gateway", "src", "documentsJoints.ts")).href);
+  const filAvecOutils = [{ role: "system", content: "sys" }, { role: "user", content: "fais le travail" }];
+  for (let i = 0; i < 8; i++) {
+    filAvecOutils.push({ role: "assistant", content: "", tool_calls: [{ id: `t${i}`, function: { name: "lire", arguments: "{}" } }] });
+    filAvecOutils.push({ role: "tool", tool_call_id: `t${i}`, content: "RESULTAT ".repeat(50) });
+  }
+  const abrege = hist.tenirDansLaPlace(filAvecOutils, 400, 1);
+  const dernierOutil = abrege.messages.filter((m) => m.role === "tool").at(-1);
+  verifier(
+    "historique : les vieux résultats d'outils sont abrégés (le dernier gardé), et le total annoncé est exactement celui du fil rendu",
+    abrege.abreges > 0 && abrege.apres === dj.jetonsDesMessages(abrege.messages) && dernierOutil?.content?.startsWith("RESULTAT"),
+    JSON.stringify({ abreges: abrege.abreges, apres: abrege.apres, reel: dj.jetonsDesMessages(abrege.messages) }),
+  );
+  const grand = [{ role: "system", content: "consigne" }];
+  for (let i = 0; i < 60_000; i++) grand.push({ role: i % 2 ? "assistant" : "user", content: "abcde" });
+  grand.push({ role: "user", content: "dernière question" });
+  const t0 = Date.now();
+  const coupe = hist.tenirDansLaPlace(grand, 100);
+  const duree = Date.now() - t0;
+  verifier(
+    "historique : 60 000 messages sont ajustés en temps linéaire (bien moins que le n² d'avant), total exact, consigne et question gardées",
+    duree < 5000 && coupe.apres === dj.jetonsDesMessages(coupe.messages) && coupe.messages[0].role === "system" &&
+      coupe.messages.at(-1).content === "dernière question" && coupe.retires > 0,
+    `${duree} ms, retires=${coupe.retires}, apres=${coupe.apres}`,
+  );
+}
+
+/* ------------------------------------------------------------------------- */
 console.log("\n8. Fin de séance");
 {
   const r1 = await appel("/helix/auth/revoke", { method: "POST", headers: avecSeance, body: JSON.stringify({ toutes: true }) });

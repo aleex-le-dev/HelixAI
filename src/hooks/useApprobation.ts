@@ -64,18 +64,36 @@ function sonder(): Promise<void> {
 
 function ouvrirFlux(): void {
   if (flux) return;
-  flux = subscribeApprobation((evenement) => {
-    if (evenement.type === "approbation_demandee") {
-      const { type: _type, ...demande } = evenement;
-      publier({
-        enAttente: magasin.enAttente.some((d) => d.id === demande.id)
-          ? magasin.enAttente
-          : [...magasin.enAttente, demande],
-      });
-      return;
-    }
-    publier({ enAttente: magasin.enAttente.filter((d) => d.id !== evenement.id) });
-  });
+  /*
+   * Relu à chaque reprise du flux (27/09/2026). Vu en essayant l'écran Code :
+   * la passerelle redémarrée pendant qu'une carte attendait, la carte restait
+   * affichée pour une demande qui n'existait plus ; « Autoriser » n'y faisait
+   * rien, sans le dire. Une coupure ne transmet ni la réponse donnée ailleurs
+   * ni l'oubli : seul l'état relu le dit. La première ouverture suit déjà une
+   * lecture (`sonder`).
+   */
+  let premiere = true;
+  flux = subscribeApprobation(
+    (evenement) => {
+      if (evenement.type === "approbation_demandee") {
+        const { type: _type, ...demande } = evenement;
+        publier({
+          enAttente: magasin.enAttente.some((d) => d.id === demande.id)
+            ? magasin.enAttente
+            : [...magasin.enAttente, demande],
+        });
+        return;
+      }
+      publier({ enAttente: magasin.enAttente.filter((d) => d.id !== evenement.id) });
+    },
+    () => {
+      if (premiere) {
+        premiere = false;
+        return;
+      }
+      void sonder();
+    },
+  );
 }
 
 export function useApprobation() {
@@ -96,7 +114,8 @@ export function useApprobation() {
    */
   const repondre = useCallback(async (id: string, accord: boolean) => {
     publier({ enAttente: magasin.enAttente.filter((d) => d.id !== id) });
-    await repondreApprobation(id, accord);
+    // Réponse perdue (instance injoignable) : la demande attend toujours là-bas, la carte revient si elle y est encore.
+    if (!(await repondreApprobation(id, accord))) await sonder();
   }, []);
 
   /** Rend le message de refus, s'il y en a un (réservé à l'administrateur). */

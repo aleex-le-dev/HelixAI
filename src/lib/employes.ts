@@ -2,6 +2,7 @@ import { apiFetch } from "./endpoint";
 import { decrireRythme as decrireRythmeTache } from "@/lib/tachesProgrammees";
 import { DOCUMENT_MAX, EXTRACTION_MAX, LIBELLE_DOCUMENT_MAX, envoyerEnFlux } from "./televersement";
 import { t, tf } from "@/lib/i18n";
+import { nomDuPays } from "@/lib/fournisseurs";
 
 /**
  * Employés : des agents OpenClaw qui travaillent pour toute l'équipe (voir
@@ -215,8 +216,8 @@ export function libelleModele(m: ModeleEmploye): string {
         ? t("sur la machine, chargé")
         : t("sur la machine")
       : m.origine === "cle"
-        ? tf("cloud, {0}, facturé", m.pays ?? t("pays non précisé"))
-        : tf("cloud, {0}", m.pays ?? t("pays non précisé"));
+        ? tf("cloud, {0}, facturé", m.pays ? nomDuPays(m.pays) : t("pays non précisé"))
+        : tf("cloud, {0}", m.pays ? nomDuPays(m.pays) : t("pays non précisé"));
   return `${m.nom} · ${m.fournisseur ?? ""} (${ou})`;
 }
 

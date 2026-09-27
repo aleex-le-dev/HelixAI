@@ -14,6 +14,7 @@ import {
   retirerCle,
   type CleModele,
   type Fournisseur,
+  nomDuPays,
 } from "@/lib/fournisseurs";
 import { t, tf } from "@/lib/i18n";
 
@@ -108,7 +109,7 @@ function Pays({ pays }: { pays: string }) {
         horsUE ? "bg-warning/15 text-foreground" : "bg-muted text-muted-foreground",
       )}
     >
-      {pays}
+      {nomDuPays(pays)}
     </span>
   );
 }
@@ -278,7 +279,7 @@ function AjoutCle({ catalogue, onFini }: { catalogue: Fournisseur[]; onFini: () 
       </div>
       {horsUE && (
         <InfoBox tone="warning" leading={<TriangleAlert size={15} strokeWidth={1.75} />}>
-          {t("Les messages envoyés à ces modèles partent chez")}{" "}{choix.nom}{t(", hors de l'Union européenne (")}{choix.pays}{t("), et y sont traités selon ses conditions.")}
+          {t("Les messages envoyés à ces modèles partent chez")}{" "}{choix.nom}{t(", hors de l'Union européenne (")}{nomDuPays(choix.pays)}{t("), et y sont traités selon ses conditions.")}
         </InfoBox>
       )}
       {choix.adresseLibre && (

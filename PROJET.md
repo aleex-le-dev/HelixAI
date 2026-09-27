@@ -3775,6 +3775,75 @@ que fait un vrai 3B du contexte rendu.
    journal juste avant, et la sortie de `lms log stream` (ce que le moteur a reçu, au début de
    l'invite).
 
+**Fait le 27/09/2026 : parcours complet de l'interface, contre une instance jetable.** Passerelle
+jetable (dossier de données temporaire, clé des données en fichier, LM Studio éteint), faux
+fournisseur compatible OpenAI (réponses, réflexion, 429, 500, flux coupé, réponse lente), faux
+OpenCode qui déroule un tour de 42 s avec une demande d'autorisation, faux `codex`, faux OpenClaw ;
+interface sous Vite, vue dans le navigateur intégré puis dans une fenêtre Electron hors écran
+(profil jetable). Parcouru : premier lancement, « Poste autonome », création du compte, Chat (PDF,
+Word et texte joints, cartes et durées, question suivante qui garde les documents, 429, 500, flux
+coupé, modèle éteint), changer de modèle, comparer les modèles, clé « compatible » branchée, agent
+créé puis passé sur un modèle cloud, Code (dossier, moteur, connexion Codex, carte d'accord, session
+quittée puis retrouvée en direct, « Nouvelle session » puis réouverture, retrait de la liste), chaque
+page des Paramètres, anglais, chinois, thème sombre, 375 px. Défauts trouvés et corrigés :
+- Cartes d'accord et cloche : une demande disparue (passerelle redémarrée, réponse donnée ailleurs)
+  restait affichée, « Une action attend votre accord » pour toujours. L'état est relu à chaque
+  reprise du flux (`useApprobation.ts`, `notifications.ts`), et les flux d'accord envoient leurs
+  en-têtes tout de suite (`flushHeaders`, index.ts) : sans demande en attente, rien ne partait avant
+  quinze secondes. Une réponse d'accord qui n'arrive pas remet la carte si la demande attend encore.
+- Chat : un refus de la passerelle (modèle éteint, inconnu, « Auto » sans modèle gratuit) était écrit
+  sans en-têtes d'origine ; l'application ne pouvait pas le lire et disait « L'instance ne répond
+  pas ». Et la puce du modèle affichait « Auto » pour un modèle choisi qui n'était plus servi, alors
+  que c'est lui qui partait : elle dit maintenant « … (indisponible) ». Un moteur de la machine
+  déclaré par le profil ne fait plus conseiller de vérifier la connexion à internet (chat.ts).
+- Code : une session retirée de la liste en plein travail disparaissait de l'écran, et l'agent
+  continuait de modifier le projet sans que personne puisse le suivre ni l'arrêter. Le retrait est
+  refusé tant qu'elle travaille (409, index.ts) et la croix n'est plus proposée (SessionsCode.tsx).
+- Synchronisation : avant la connexion, six collections demandées toutes les quatre secondes,
+  refusées (401) ; et, connecté, la liste des Chats restait vide jusqu'à la relève suivante. Plus de
+  demande sans séance, relecture dès la connexion (`sync.ts`, `App.tsx`).
+- Libellé coupé : « Approbation avant modification » à toute largeur de fenêtre dès qu'un modèle au
+  nom un peu long était choisi (Code, Cowork) ; à 375 px, le groupe de droite débordait du champ,
+  bouton d'envoi compris (Composer.tsx : le nom du modèle se raccourcit le premier, ligne en deux
+  dans un champ très étroit). À 375 px, la barre latérale laissait 127 px à l'écran, le panneau de
+  Cowork cachait le champ, et la liste des Paramètres laissait 40 px aux réglages : rail d'office
+  sous 768 px, panneau de Cowork fermé sous 1 024 px (comme le suivi de Code), liste des Paramètres
+  en rangée au-dessus de la page.
+- Traductions : 43 évènements du journal d'activité sans libellé montraient leur clé technique
+  (« code.codex_connexion »), deux autres étaient écrits en dur ; les pays du catalogue des
+  fournisseurs (« États-Unis », « Non précisé ») et « Autre (compatible OpenAI) » restaient en
+  français en anglais et en chinois ; le nom de repli du produit (« l'application », instance de
+  serveur) aussi ; « Version … disponible », « inconnue », « le fournisseur », « sur la machine »,
+  « chez le prestataire », « Un ancien membre » et deux messages de la passerelle ne passaient pas
+  par la traduction ; « 2 modèles … n'a pas de tarif » (Mon usage) ; placement de la précision
+  dans la phrase chinoise de l'administrateur du journal.
+- Batterie : son instance et ses essais lancés sous un dossier personnel jetable ne précisaient pas
+  la clé des données. Sur un Mac, l'instance principale lisait donc la clé de l'installation de
+  Helix dans le trousseau (même service), et les essais sous dossier personnel jetable (section
+  7 septies, OpenCode sans clic) appelaient `security` sans trousseau : fenêtre « Trousseau
+  introuvable » vue par Medhi. Tous les profils de `securite.mjs` et `essai-fournisseurs.mjs`
+  disent désormais `chiffrement: "fichier"`.
+- Employés OpenClaw sur un modèle cloud (question de Medhi) : ça marchait, sans aucun contrôle.
+  Section 7 ter ter : un employé sur la clé personnelle de sa propriétaire reçoit la réponse du
+  fournisseur avec cette clé ; celui d'une autre personne ne s'en sert pas et rien ne part chez le
+  fournisseur ; une clé de l'équipe sert à tous ; l'en-tête d'employé sans sa clé n'ouvre rien ; et
+  l'écran de l'employé (Réglages, « Son modèle ») propose les modèles cloud de la personne, vu dans
+  l'interface. Section 11 octies : libellés du journal, pays, nom du fournisseur « compatible »,
+  refus du Chat lisible, flux d'accord ouverts sans attendre.
+**Vérifié** : `npm run typecheck`, i18n à 100 % des deux côtés, `npm run securite`, 654 contrôles,
+0 échec (15 de plus : 7 ter ter, 11 octies, et le retrait d'une session au travail en 6 ter). **Relevé, pas corrigé** (pas reproduit, ou choix à faire) :
+l'onglet « Discuter » de la fiche d'un agent (vocabulaire « Chat ») ; les tarifs de Mon usage
+montrent l'identifiant technique du modèle (`cle-…/nuage-essai-1`) ; deux outils Fichiers ont le
+même libellé « Lecture d'un fichier » (read_file et read_text_file) ; un employé déployé avec un
+modèle qui ne lui est pas permis part en silence sur un modèle gratuit (le déploiement automatique
+compte sur ce repli) ; `send` de `useChat` ne dépend pas de `options.agent` (masqué en pratique par
+le nom de l'agent, qui change les bases héritées) ; un fichier provisoire reste sur le disque quand
+l'écriture d'une collection échoue (disque plein : pas essayé). **Pas essayé** : l'application de
+bureau empaquetée, un vrai modèle, le vrai OpenCode, le vrai Codex, un disque plein, un modèle qui
+refuse de charger (`lms`), le bot de réunion, la mise à jour d'un clic (le navigateur n'a pas le
+pont Electron). À savoir : le bouton « Copier les informations techniques » a été essayé une fois
+dans la fenêtre Electron d'essai et a écrit dans le presse-papiers du Mac.
+
 **Fait le 27/09/2026 : Codex dans l'écran Code, avec le compte ChatGPT du propriétaire du
 poste.** Décidé par Medhi (« ajoute »). Le détail, les sources et ce qui reste à essayer sont
 au § 3.14 (« Fait ») ; les barrières au § 30 de SECURITE.md. En bref : second moteur au choix

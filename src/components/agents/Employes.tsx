@@ -77,6 +77,7 @@ import { ConfirmationMemoire } from "@/components/agents/ConfirmationMemoire";
 import { ChoixDepuisEspace } from "@/components/agents/ChoixDepuisEspace";
 import { updateAgent } from "@/lib/store/agents";
 import { langue, t, tf, taille } from "@/lib/i18n";
+import { nomDuPays } from "@/lib/fournisseurs";
 
 /**
  * Employés : des agents qui travaillent pour toute l'équipe, jour et nuit, avec
@@ -451,7 +452,7 @@ function ConfirmationIdentite({
 /** Où partent ses messages, et qui paie : dit au moment du choix. */
 function coutDuModele(m: ModeleEmploye): string {
   const chez = m.fournisseur ?? t("le fournisseur");
-  const pays = m.pays ? ` (${m.pays})` : "";
+  const pays = m.pays ? ` (${nomDuPays(m.pays)})` : "";
   if (m.origine === "local") return t("Sur vos machines : rien ne sort, rien n'est facturé. Un modèle chargé répond le plus vite.");
   if (m.origine === "cle" && m.personnel) return tf("Cloud : ses messages partent chez {0}{1}, et chacune de ses réponses est facturée sur votre clé.", chez, pays);
   if (m.origine === "cle") return tf("Cloud : ses messages partent chez {0}{1}, et chacune de ses réponses est facturée à l'équipe, sur la clé de l'instance.", chez, pays);

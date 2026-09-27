@@ -118,11 +118,12 @@ export default {
      * Requêtes de conteneur : une mise en page qui dépend de la place réelle
      * du bloc (barre latérale ouverte ou non, navigation des paramètres), pas
      * de la largeur de la fenêtre. `cq` fait d'un bloc un conteneur ;
-     * `cq-sm:`, `cq-md:`, `cq-lg:` s'appliquent quand le conteneur le plus
-     * proche atteint 28, 36 ou 44 rem.
+     * `cq-xs:`, `cq-sm:`, `cq-md:`, `cq-lg:` s'appliquent quand le conteneur le
+     * plus proche atteint 22, 28, 36 ou 44 rem.
      */
     plugin(({ addUtilities, addVariant }) => {
       addUtilities({ ".cq": { "container-type": "inline-size" } });
+      addVariant("cq-xs", "@container (min-width: 22rem)");
       addVariant("cq-sm", "@container (min-width: 28rem)");
       addVariant("cq-md", "@container (min-width: 36rem)");
       addVariant("cq-lg", "@container (min-width: 44rem)");

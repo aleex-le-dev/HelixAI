@@ -466,9 +466,7 @@ async function handleChat(
   if (body.tools === true && !qui) {
     return send(res, 401, {
       error: {
-        message:
-          "Faire agir l'agent sur vos fichiers ou votre écran demande une " +
-          "séance ouverte. Reconnectez-vous.",
+        message: t("Faire agir l'agent sur vos fichiers ou votre écran demande une séance ouverte. Reconnectez-vous."),
       },
     });
   }
@@ -4275,13 +4273,15 @@ async function handleComputerApprove(
   const known = computer.resolveApproval(body.id, body.accord, qui.userId);
   send(res, known ? 200 : 404, {
     ok: known,
-    message: known ? "Réponse enregistrée." : "Cette demande n'est plus en attente.",
+    message: known ? t("Réponse enregistrée.") : t("Cette demande n'est plus en attente."),
   });
 }
 
 /** Flux des demandes d'approbation et des actions exécutées. */
 function handleComputerStream(req: http.IncomingMessage, res: http.ServerResponse, qui: Demandeur): void {
   res.writeHead(200, entetesFlux(req));
+  // Voir `handleApprobationFlux` : les en-têtes partent sans attendre une première trame.
+  res.flushHeaders();
   const write = (event: unknown) => res.write(`data: ${JSON.stringify(event)}\n\n`);
 
   // Un poste qui se connecte en cours de route doit voir les demandes déjà
@@ -4375,6 +4375,14 @@ async function handleApprobationRepondre(
 /** Flux des demandes d'approbation d'outils. */
 function handleApprobationFlux(req: http.IncomingMessage, res: http.ServerResponse, qui: Demandeur): void {
   res.writeHead(200, entetesFlux(req));
+  /*
+   * En-têtes envoyés tout de suite (27/09/2026). Sans demande en attente, rien
+   * n'était écrit avant le premier signe de vie, quinze secondes plus tard :
+   * l'écran ne savait pas le flux ouvert (`onopen`), et, après un redémarrage
+   * de la passerelle, relisait l'état avec autant de retard ; une carte d'accord
+   * pour une demande disparue restait affichée pendant ce temps.
+   */
+  res.flushHeaders();
   const write = (event: unknown) => res.write(`data: ${JSON.stringify(event)}\n\n`);
 
   // Un poste qui arrive en cours de route doit voir ce qui attend déjà, sinon
@@ -4429,7 +4437,8 @@ async function handleFournisseurs(
 
   if (!id && req.method === "GET") {
     return send(res, 200, {
-      catalogue: fournisseurs.CATALOGUE.map(({ entetes: _e, ...f }) => f),
+      // Le seul nom du catalogue qui soit une phrase : dans la langue de l'écran (relevé en anglais le 27/09/2026).
+      catalogue: fournisseurs.CATALOGUE.map(({ entetes: _e, ...f }) => (f.adresseLibre ? { ...f, nom: t("Autre (compatible OpenAI)") } : f)),
       cles: await fournisseurs.listerCles(qui.userId),
     });
   }
@@ -4873,7 +4882,7 @@ async function handleEmployes(
                 ? boite && employes.famillesEffectives(e).includes("courrier")
                 : Boolean(tache),
           })),
-          proprietaire: comptes.find((c) => c.id === e.ownerId)?.fullName ?? "Un ancien membre",
+          proprietaire: comptes.find((c) => c.id === e.ownerId)?.fullName ?? t("Un ancien membre"),
           estProprietaire: e.ownerId === qui.userId,
           jetons30Jours: jetons,
           // Son modèle, jugé avec les droits de son propriétaire : l'écran le montre, et dit s'il a disparu.
@@ -5355,6 +5364,17 @@ const traiter = (
       if (req.method === "GET") return avecSeance(req, res, url, (qui) => handleCodeSessionHistorique(res, qui.userId, id));
       if (req.method === "DELETE") {
         return avecSeance(req, res, url, async (qui) => {
+          /*
+           * Pas pendant que l'agent y travaille (27/09/2026) : retirée de la
+           * liste en plein travail, la session disparaissait de l'écran et de
+           * la liste, et l'agent continuait de modifier le projet sans que
+           * personne puisse le voir ni l'arrêter. Seulement pour sa
+           * propriétaire : un autre compte n'apprend rien de la session.
+           */
+          const siennes = (await sessionCode(id).catch(() => undefined))?.userId === qui.userId;
+          if (siennes && auTravailCode(id)) {
+            return send(res, 409, { error: { message: t("L'agent travaille encore sur cette session : arrêtez-la avant de la retirer de la liste.") } });
+          }
           const ok = await retirerSessionCode(id, qui.userId).catch(() => false);
           send(res, ok ? 200 : 404, ok ? { ok: true } : { error: { message: t("Session de code inconnue.") } });
         });

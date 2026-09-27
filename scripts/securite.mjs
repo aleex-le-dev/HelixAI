@@ -1174,6 +1174,15 @@ console.log("\n6 ter. Helix Code : la session à sa propriétaire, les outils d'
     (listePendant.sessions ?? []).find((x) => x.id === S3)?.enCours === true,
     JSON.stringify(listePendant.sessions ?? []).slice(0, 200),
   );
+  // Parcours du 27/09/2026 : retirée en plein travail, elle quittait l'écran et l'agent continuait sans personne pour l'arrêter.
+  const retraitPendant = await appel(`/helix/code/sessions/${S3}`, { method: "DELETE", headers: avecSeance });
+  const listeRetrait = await (await appel("/helix/code/sessions", { headers: avecSeance })).json().catch(() => ({}));
+  const retraitAutre = await appel(`/helix/code/sessions/${S3}`, { method: "DELETE", headers: avecSeanceB });
+  verifier(
+    "une session au travail ne se retire pas de la liste (409), et reste ; pour une autre personne, rien ne dit qu'elle travaille (404)",
+    retraitPendant.status === 409 && (listeRetrait.sessions ?? []).some((x) => x.id === S3) && retraitAutre.status === 404,
+    `${retraitPendant.status} ${retraitAutre.status}`,
+  );
   const statutS3 = await demandeS3;
   const apresS3 = await (await appel(`/helix/code/sessions/${S3}`, { headers: avecSeance })).json().catch(() => ({}));
   const listeApres = await (await appel("/helix/code/sessions", { headers: avecSeance })).json().catch(() => ({}));
@@ -1728,6 +1737,141 @@ console.log("\n7 ter. Employés OpenClaw et bases de connaissances : ce qui est 
     const apresSortie = await chercher("Quel est le code budgétaire du groupe compta ?", perso?.id);
     verifier("sortie du groupe, son employé personnel ne lit plus le document de la collègue partagé à ce groupe", sortie.status === 200 && !apresSortie.texte.includes("KIWI"), `${sortie.status} ${apresSortie.texte.slice(0, 80)}`);
   }
+}
+
+/* ------------------------------------------------------------------------- */
+console.log("\n7 ter quater. Employés OpenClaw sur un modèle cloud branché par clé (27/09/2026)");
+/*
+ * Demandé par Medhi : « les agents OpenClaw peuvent être connectés aux modèles
+ * cloud ? ». Le code le permettait (POST /helix/employes accepte un modèle de
+ * clé demandé ; l'appel d'un employé est servi avec les modèles de clé
+ * personnelle de son propriétaire, index.ts), sans aucun contrôle. Un faux
+ * fournisseur compatible OpenAI exige sa clé et dit dans sa réponse laquelle
+ * il a reçue ; la batterie joue OpenClaw (en-têtes X-Helix-Employe et
+ * X-Helix-Cle, comme l'écrit la configuration d'OpenClaw). Le fournisseur est
+ * sur la boucle locale, ce que seul l'administrateur (A) peut brancher : la clé
+ * personnelle « d'un autre » est donc celle de A, et l'employé qui essaie de
+ * s'en servir est celui de B.
+ */
+{
+  const CLES_NUAGE = { "cle-nuage-perso-a-essai": "NUAGE-PERSO-A", "cle-nuage-equipe-essai": "NUAGE-EQUIPE" };
+  const recues = [];
+  const PORT_NUAGE = await portLibre();
+  const nuage = serveurHttp((req, res) => {
+    let corps = "";
+    req.on("data", (b) => (corps += b));
+    req.on("end", () => {
+      res.setHeader("Content-Type", "application/json");
+      const cle = String(req.headers.authorization ?? "").replace(/^Bearer /, "");
+      const nom = CLES_NUAGE[cle];
+      if (!nom) {
+        res.statusCode = 401;
+        return res.end(JSON.stringify({ error: { message: "Incorrect API key provided", code: "invalid_api_key" } }));
+      }
+      if (req.url === "/v1/models") {
+        return res.end(JSON.stringify({ object: "list", data: [{ id: nom === "NUAGE-EQUIPE" ? "nuage-equipe" : "nuage-perso-a", object: "model" }] }));
+      }
+      if (req.url !== "/v1/chat/completions") {
+        res.statusCode = 404;
+        return res.end("{}");
+      }
+      const d = JSON.parse(corps || "{}");
+      recues.push({ cle: nom, modele: d.model });
+      const texte = `Réponse du fournisseur ${nom} (${d.model}).`;
+      if (!d.stream) return res.end(JSON.stringify({ id: "n", object: "chat.completion", choices: [{ index: 0, message: { role: "assistant", content: texte }, finish_reason: "stop" }] }));
+      res.setHeader("Content-Type", "text/event-stream");
+      res.write(`data: ${JSON.stringify({ id: "n", object: "chat.completion.chunk", choices: [{ index: 0, delta: { role: "assistant", content: texte } }] })}\n\n`);
+      res.write(`data: ${JSON.stringify({ id: "n", object: "chat.completion.chunk", choices: [{ index: 0, delta: {}, finish_reason: "stop" }] })}\n\n`);
+      res.end("data: [DONE]\n\n");
+    });
+  });
+  await new Promise((ok) => nuage.listen(PORT_NUAGE, "127.0.0.1", ok));
+  const brancher = (portee, cle, modele) =>
+    appel("/helix/fournisseurs", {
+      method: "POST", headers: avecSeance,
+      body: JSON.stringify({ fournisseur: "compatible", adresse: `http://127.0.0.1:${PORT_NUAGE}/v1`, nom: `Nuage ${portee}`, cle, modeles: [modele], portee }),
+    }).then((r) => r.json());
+  const clePerso = (await brancher("moi", "cle-nuage-perso-a-essai", "nuage-perso-a")).cle;
+  const cleEquipe = (await brancher("equipe", "cle-nuage-equipe-essai", "nuage-equipe")).cle;
+  verifier("deux clés branchées : une personnelle de A, une pour l'équipe", clePerso?.portee === "moi" && cleEquipe?.portee === "equipe", JSON.stringify([clePerso, cleEquipe]).slice(0, 200));
+
+  const modelesDe = async (entete) => ((await (await appel("/helix/employes", { headers: entete })).json()).modeles ?? []);
+  const deA = await modelesDe(avecSeance);
+  const deB = await modelesDe(avecSeanceB);
+  const uidPerso = deA.find((m) => m.nom === "nuage-perso-a")?.uid;
+  const uidEquipe = deA.find((m) => m.nom === "nuage-equipe")?.uid;
+  verifier(
+    "l'écran de l'employé propose à A son modèle personnel et celui de l'équipe, marqués « cloud »",
+    Boolean(uidPerso && uidEquipe) && deA.filter((m) => m.uid === uidPerso || m.uid === uidEquipe).every((m) => m.origine === "cle"),
+    JSON.stringify(deA.map((m) => [m.nom, m.origine])),
+  );
+  verifier(
+    "à B, celui de l'équipe, jamais le modèle personnel de A",
+    deB.some((m) => m.uid === uidEquipe) && !deB.some((m) => m.uid === uidPerso),
+    JSON.stringify(deB.map((m) => m.nom)),
+  );
+
+  const deployer = async (entete, nom, modele) =>
+    (await (await appel("/helix/employes", {
+      method: "POST", headers: entete,
+      body: JSON.stringify({ nom, poste: "Tu aides.", outils: [], missions: [], liberte: "encadre", visibilite: "personnel", modele }),
+    })).json()).employe;
+  const surPerso = await deployer(avecSeance, "Essai nuage perso", uidPerso);
+  const surEquipe = await deployer(avecSeanceB, "Essai nuage équipe", uidEquipe);
+  const deBSurPersoA = await deployer(avecSeanceB, "Essai nuage détourné", uidPerso);
+  verifier(
+    "déployés sur le modèle demandé ; B qui demande le modèle personnel de A ne l'obtient pas",
+    surPerso?.modele === uidPerso && surEquipe?.modele === uidEquipe && deBSurPersoA && deBSurPersoA.modele !== uidPerso,
+    JSON.stringify([surPerso?.modele, surEquipe?.modele, deBSurPersoA?.modele]),
+  );
+
+  // La batterie joue OpenClaw : même route, mêmes en-têtes que sa configuration.
+  const CLE_OC = readFileSync(join(DONNEES, "openclaw", ".cle"), "utf8").trim();
+  const { createHmac } = await import("node:crypto");
+  const commeOpenClaw = async (employeId, modele) => {
+    const r = await appel("/v1/chat/completions", {
+      method: "POST",
+      headers: { ...avecJeton, "X-Helix-Employe": employeId ?? "", "X-Helix-Cle": createHmac("sha256", CLE_OC).update(`employe:${employeId}`).digest("hex") },
+      body: JSON.stringify({ model: modele, stream: true, messages: [{ role: "user", content: "Bonjour" }] }),
+    });
+    return { status: r.status, texte: await r.text() };
+  };
+  const reponsePerso = await commeOpenClaw(surPerso?.id, uidPerso);
+  verifier(
+    "l'employé de A sur la clé personnelle de A reçoit la réponse du fournisseur, avec cette clé",
+    reponsePerso.status === 200 && reponsePerso.texte.includes("Réponse du fournisseur NUAGE-PERSO-A") && recues.some((x) => x.cle === "NUAGE-PERSO-A"),
+    `${reponsePerso.status} ${reponsePerso.texte.slice(0, 200)}`,
+  );
+  const avant = recues.length;
+  const detourne = await commeOpenClaw(surEquipe?.id, uidPerso);
+  verifier(
+    "l'employé de B ne se sert pas du modèle de la clé personnelle de A : refusé, rien n'est parti chez le fournisseur",
+    !detourne.texte.includes("NUAGE-PERSO-A") && recues.length === avant,
+    `${detourne.status} ${detourne.texte.slice(0, 200)}`,
+  );
+  const reponseEquipe = await commeOpenClaw(surEquipe?.id, uidEquipe);
+  verifier(
+    "l'employé de B sur le modèle de la clé de l'équipe reçoit la réponse du fournisseur",
+    reponseEquipe.status === 200 && reponseEquipe.texte.includes("Réponse du fournisseur NUAGE-EQUIPE"),
+    `${reponseEquipe.status} ${reponseEquipe.texte.slice(0, 200)}`,
+  );
+  const sansCle = await appel("/v1/chat/completions", {
+    method: "POST",
+    headers: { ...avecJeton, "X-Helix-Employe": surPerso?.id ?? "" },
+    body: JSON.stringify({ model: uidPerso, stream: true, messages: [{ role: "user", content: "Bonjour" }] }),
+  });
+  const texteSansCle = await sansCle.text();
+  verifier(
+    "l'en-tête d'un employé sans sa clé ne donne pas le modèle personnel de sa propriétaire",
+    !texteSansCle.includes("NUAGE-PERSO-A"),
+    `${sansCle.status} ${texteSansCle.slice(0, 160)}`,
+  );
+  for (const e of [surPerso, surEquipe, deBSurPersoA]) {
+    if (!e?.id) continue;
+    await appel(`/helix/employes/${e.id}/supprimer`, { method: "POST", headers: e === surPerso ? avecSeance : avecSeanceB, body: "{}" });
+  }
+  for (const c of [clePerso, cleEquipe]) if (c?.id) await appel(`/helix/fournisseurs/${c.id}/supprimer`, { method: "POST", headers: avecSeance, body: "{}" });
+  nuage.close();
 }
 
 /* ------------------------------------------------------------------------- */
@@ -4537,6 +4681,79 @@ console.log("\n11 nonies. Barrière : un accord pour un déplacement ne couvre q
     JSON.stringify(vu),
   );
   rmSync(ICI, { recursive: true, force: true });
+}
+
+/* ------------------------------------------------------------------------- */
+console.log("\n11 decies. Ce que l'écran affiche en anglais et en chinois (parcours du 27/09/2026)");
+{
+  /*
+   * Relevé en parcourant l'application en anglais et en chinois contre une
+   * instance jetable : le journal d'activité montrait des clés techniques
+   * (« code.codex_connexion ») pour 43 évènements sans libellé, et les pays du
+   * catalogue des fournisseurs (« États-Unis », « Non précisé ») comme le nom
+   * « Autre (compatible OpenAI) » restaient en français.
+   */
+  // Une séance neuve : celles du début sont fermées (section 8), et la collègue a effacé son compte (7 quater).
+  const connOcties = await (await appel("/helix/auth/verify", { method: "POST", headers: avecJeton, body: JSON.stringify({ accountId: compte.account?.id, password: "Mot2PasseSolide!42" }) })).json().catch(() => ({}));
+  const seanceOcties = { ...avecJeton, "X-Helix-Session": connOcties.session?.token };
+  const audit = readFileSync(join(RACINE, "gateway", "src", "audit.ts"), "utf8");
+  const union = audit.slice(audit.indexOf("export type AuditAction"), audit.indexOf("export interface AuditEntry"));
+  const actions = [...union.matchAll(/\|\s*"([a-z_]+\.[a-z_]+)"/g)].map((m) => m[1]);
+  const journalEcran = readFileSync(join(RACINE, "src", "components", "settings", "SeancesEtJournal.tsx"), "utf8");
+  const libelles = new Map([...journalEcran.matchAll(/^\s*"([a-z_]+\.[a-z_]+)":\s*(.+),$/gm)].map((m) => [m[1], m[2]]));
+  const sansLibelle = actions.filter((a) => !libelles.has(a));
+  const nonTraduits = [...libelles].filter(([, v]) => !/^t\(/.test(v)).map(([k]) => k);
+  verifier(
+    "journal d'activité : chaque évènement de l'instance a un libellé, passé par la traduction",
+    actions.length > 100 && sansLibelle.length === 0 && nonTraduits.length === 0,
+    `sans libellé : ${sansLibelle.join(", ")} ; en dur : ${nonTraduits.join(", ")}`,
+  );
+  const catalogue = readFileSync(join(RACINE, "gateway", "src", "fournisseurs.ts"), "utf8");
+  const paysCatalogue = [...new Set([...catalogue.matchAll(/pays: "([^"]+)"/g)].map((m) => m[1]))];
+  const paysEcran = readFileSync(join(RACINE, "src", "lib", "fournisseurs.ts"), "utf8");
+  const manquants = paysCatalogue.filter((p) => !paysEcran.includes(`${/^[A-Za-zÀ-ÿ]+$/.test(p) && !/[-\s]/.test(p) ? p : `"${p}"`}: t("${p}")`));
+  verifier("chaque pays du catalogue des fournisseurs se traduit à l'écran", paysCatalogue.length >= 4 && manquants.length === 0, manquants.join(", "));
+  const enAnglais = await (await appel("/helix/fournisseurs", { headers: { ...seanceOcties, "X-Helix-Langue": "en" } })).json();
+  verifier(
+    "le fournisseur « compatible » porte un nom dans la langue de l'écran",
+    enAnglais.catalogue?.find((f) => f.adresseLibre)?.nom === "Other (OpenAI compatible)",
+    JSON.stringify(enAnglais.catalogue?.find((f) => f.adresseLibre)?.nom),
+  );
+  /*
+   * Les flux des cartes d'accord s'ouvrent tout de suite : sans demande en
+   * attente, l'instance n'envoyait rien avant quinze secondes, et l'écran,
+   * après un redémarrage de la passerelle, gardait une carte pour une demande
+   * disparue (parcours de l'écran Code, 27/09/2026).
+   */
+  /*
+   * Un refus du Chat (aucun modèle, modèle inconnu) doit rester lisible par
+   * l'application, dont l'origine n'est pas celle de l'instance : écrit sans
+   * en-têtes d'origine, il devenait « L'instance ne répond pas » à l'écran
+   * (relevé le 27/09/2026, moteur de l'instance éteint).
+   */
+  const refusChat = await appel("/v1/chat/completions", {
+    method: "POST",
+    headers: { ...seanceOcties, Origin: "helix://app", "X-Helix-Langue": "fr" },
+    body: JSON.stringify({ model: "modele-inconnu-essai", stream: true, messages: [{ role: "user", content: "Bonjour" }] }),
+  });
+  const corpsRefus = await refusChat.json().catch(() => ({}));
+  verifier(
+    "un refus du Chat (modèle inconnu) porte l'origine de l'application et sa raison",
+    refusChat.status === 503 && refusChat.headers.get("access-control-allow-origin") === "helix://app" && /inconnu/.test(corpsRefus.error?.message ?? ""),
+    `${refusChat.status} ${refusChat.headers.get("access-control-allow-origin")} ${JSON.stringify(corpsRefus).slice(0, 120)}`,
+  );
+  for (const chemin of ["/helix/approbation/evenements", "/helix/computer/events"]) {
+    const b = (await (await appel("/helix/flux/ticket", { method: "POST", headers: seanceOcties })).json()).billet;
+    const arret = new AbortController();
+    const debut = Date.now();
+    const r = await Promise.race([
+      fetch(`${G}${chemin}?flux=${encodeURIComponent(b ?? "")}`, { signal: arret.signal }).catch(() => null),
+      attendre(3000).then(() => null),
+    ]);
+    const delai = Date.now() - debut;
+    arret.abort();
+    verifier(`flux ${chemin} : ouvert (en-têtes reçus) en moins de 3 s, sans attendre une première trame`, r?.status === 200 && delai < 3000, `${r?.status ?? "rien"} en ${delai} ms`);
+  }
 }
 
 /* ------------------------------------------------------------------------- */

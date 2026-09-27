@@ -245,7 +245,15 @@ export function ModelBehaviorPicker({
   }, [open, enCours, refresh]);
 
   const selected = models.find((m) => m.uid === value);
-  const label = selected?.id ?? (loading ? t("Chargement...") : error ? t("Hors ligne") : t("Auto"));
+  /*
+   * Un modèle choisi qui n'est plus servi (moteur éteint, clé retirée) reste
+   * celui qui part avec la question : la puce le dit (27/09/2026). Elle
+   * affichait « Auto », et la réponse revenait refusée pour un autre modèle
+   * que celui qu'on croyait choisi.
+   */
+  const label =
+    selected?.id ??
+    (loading ? t("Chargement...") : error ? t("Hors ligne") : value ? tf("{0} (indisponible)", value.split("/").pop() ?? value) : t("Auto"));
 
   /*
    * Les raccourcis ne proposent jamais un modèle entraîné sur la machine, ni

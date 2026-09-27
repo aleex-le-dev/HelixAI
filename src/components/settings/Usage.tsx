@@ -287,6 +287,7 @@ export function Usage() {
 
       {totaux.sansTarif > 0 && (
         <InfoBox tone="muted" leading={<TriangleAlert size={15} strokeWidth={1.75} />}>
+          {/* Une phrase entière par nombre (27/09/2026) : la fin restait au singulier, « 2 modèles … n'a pas de tarif ». */}
           {totaux.sansTarif === 1
             ? t("Un modèle distant utilisé sur cette période n'a ni tarif saisi ni prix publié connu : son coût n'est pas compté. Renseignez-le plus bas.")
             : tf(

@@ -3242,7 +3242,8 @@ dans son paquet ni instance lit la dernière publication du dépôt (`electron/s
   la clé de l'application déjà installée (§ 29.1) : une publication remplacée par un tiers, ou un
   compte GitHub volé, ne fait rien installer d'autre que ce que la clé privée a signé. Sous Windows
   et Linux, Helix ne télécharge rien : la fenêtre ouvre le paquet dans le navigateur (lien
-  `https:` seulement, pris dans la réponse de GitHub, jamais dans la page).
+  `https:` seulement, pris dans la réponse de GitHub, jamais dans la page). Windows s'installe
+  désormais d'un clic, à la même condition (§ 29.11).
 - Le manifeste est lu champ par champ (version égale à celle de la publication, nom d'archive sans
   chemin, empreinte bien formée, archive présente dans la même publication) ; une préversion ou
   un brouillon n'est jamais proposé.
@@ -3333,3 +3334,62 @@ Classé avec sa raison, sans changement : les messages d'erreur (jamais la pile 
 renvoyés à la personne connectée, voulus pour dire pourquoi une action échoue ; le repli du
 coffre et des Chats dans le stockage du navigateur quand le système n'a pas de trousseau,
 annoncé à l'écran (§ 29.2).
+
+### 29.11 Mise à jour d'un clic sous Windows (27 septembre 2026)
+
+Demandé par Medhi après un essai sur un vrai PC : Windows doit se mettre à jour d'un clic, comme
+le Mac. Revient, pour un poste Windows installé seul, sur « rien ne s'installe seul hors de
+macOS » (§ 29.2 et § 29.7). Un poste rattaché sous Windows suit toujours son prestataire.
+
+- **Ce qui est signé.** À la publication, `scripts/manifeste-mise-a-jour.mjs` ajoute au manifeste
+  `helix-mise-a-jour.json` une partie `windows` : nom de l'installateur NSIS
+  (`Helix-Setup-<version>-x64.exe`), empreinte SHA-512 (base64), taille, et une signature Ed25519
+  de l'éditeur sur `helix-installateur-windows-v1`, l'identifiant (`name` du package.json),
+  la version, le nom, l'empreinte et la taille (`signerInstallateur`, `electron/signatureEditeur.cjs`).
+  Faite avec la clé privée de `~/.helix-editeur/` (ou `HELIX_CLE_EDITEUR`), lue sans être
+  copiée, puis relue aussitôt comme le fera un poste. Sans clé, pas de partie Windows.
+  La signature porte sur l'installateur lui-même, et non sur le contenu de l'application comme
+  sur macOS : sous Windows, c'est ce fichier-là qui s'exécute, tel qu'il a été fabriqué.
+- **La clé qui tranche.** La clé publique est posée dans l'application Windows à la fabrication
+  (`resources\cle-editeur.pem`, étape `afterPack`, `scripts/signature/cle-windows.cjs` ; sans clé
+  privée, la fabrication s'arrête, sauf `HELIX_SANS_CLE_EDITEUR=1`). Le poste la lit dans
+  `process.resourcesPath` de l'application **qui tourne**, jamais dans la publication. Le script
+  du manifeste refuse d'écrire si la clé posée dans `release/win-unpacked` n'est pas celle qui
+  signe.
+- **À la vérification** (toutes les six heures) : partie `windows` lue champ par champ
+  (`lireManifesteWindows`, `electron/sourceGithub.cjs` : version égale à celle de la publication,
+  nom sans chemin qui finit par `-x64.exe`, empreinte bien formée, taille entière), signature
+  vérifiée, installateur présent dans la même publication avec une adresse `https:`. Sinon, ou sur
+  un Windows ARM, ou sans clé dans l'application : l'écran garde « Télécharger ».
+- **Au clic** (`installerWindows`, `electron/miseAJour.cjs`) : téléchargement dans
+  `%APPDATA%\<application>\mise-a-jour` (à Helix, pas le dossier d'installation, où NSIS arrête
+  tout ce qui tourne), écriture exclusive, coupé au-delà de la taille annoncée ; taille exacte,
+  empreinte SHA-512 et signature vérifiées ; renommage réessayé si un antivirus tient le fichier ;
+  empreinte **relue sur le disque** juste avant le lancement. Un fichier refusé est effacé.
+- **Lancement** : l'installateur par son chemin, sans interpréteur de commandes (espaces et
+  accents du nom de profil passent tels quels), détaché, sans console, avec
+  `--updated /S --force-run`, comme le fait electron-updater. `/S` : sans fenêtre, par
+  utilisateur (`nsis.oneClick`, `perMachine: false`, donc pas de droits d'administrateur) ;
+  `--updated` : l'installateur attend que Helix se ferme, puis arrête ce qui tourne encore depuis
+  son dossier d'installation ; `--force-run` : il relance Helix après l'installation (sans lui, un
+  installateur « un clic » lancé en silence ne relance rien : `installSection.nsh`
+  d'electron-builder, lu le 27/09/2026). Helix quitte 0,8 s après le lancement. L'installateur
+  de la fois précédente est effacé au lancement suivant.
+- **Ce que la signature empêche** : une publication remplacée, un compte GitHub volé ou un
+  manifeste réécrit ne font lancer que ce que la clé privée a signé ; un installateur changé d'un
+  octet, tronqué ou allongé, ou signé pour une autre version, n'est pas lancé.
+
+**Vérifié** (sur ce Mac) : `node scripts/essai-source-github.mjs`, 14 cas Windows de plus (bon ;
+autre clé ; signature abîmée ou absente ; empreinte, taille, version, identifiant changés ; nom
+avec chemin, ARM ou autre extension ; sans clé ; sans partie Windows). Le manifeste écrit et signé
+par la vraie clé dans un dossier temporaire, puis relu avec la clé posée par `cle-windows.cjs`.
+Le parcours de `miseAJour.cjs` joué sous Node, Windows simulé (Electron, réseau et lancement
+remplacés, profil avec espace et accent) : installateur bon lancé avec les bons arguments et
+l'application quittée ; installateur altéré ou trop long refusé et effacé, rien de lancé ;
+signature fausse ou clé absente, « Télécharger ». `npm run securite` : 435 contrôles, 0 échec.
+
+**Pas essayé** (aucun vrai Windows ici) : l'installation silencieuse elle-même, la relance par
+`--force-run`, l'arrêt de la passerelle par l'installateur, un antivirus réel, Smart App Control
+(qui, actif, bloque un exécutable non signé même sans marque de téléchargement), un nom de profil
+hors de la page de code de Windows. L'installateur n'est toujours pas signé par un certificat de
+code Windows. Linux garde « Télécharger » : un `.deb` demande les droits d'administrateur.

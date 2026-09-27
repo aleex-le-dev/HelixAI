@@ -182,4 +182,73 @@ async function verifierApplication(app, clePubliquePem, { identifiant, version }
   return bonne ? { ok: true, cle: empreinteCle(clePubliquePem) } : { ok: false, raison: "elle n'est pas signée par l'éditeur de cette application" };
 }
 
-module.exports = { signerApplication, verifierApplication, cleDeLApplication, empreinteCle, FICHIER_SIGNATURE, FICHIER_CLE };
+/*
+ * L'installateur Windows (27/09/2026, demandé par Medhi après un essai sur un
+ * vrai PC : « que Windows se mette à jour tout seul, d'un clic, comme le Mac »).
+ *
+ * Sous Windows, ce qui s'installe est un seul fichier, l'installateur NSIS
+ * (`Helix-Setup-<version>-x64.exe`), et il arrive tel qu'il a été fabriqué :
+ * pas d'instance qui refait une archive. La signature porte donc sur ses
+ * octets (empreinte SHA-512), avec son nom, sa taille, l'identifiant et la
+ * version, et elle est écrite dans le manifeste de la publication
+ * (scripts/manifeste-mise-a-jour.mjs). Le poste la vérifie avec la clé
+ * publique de l'application qui tourne (`resources/cle-editeur.pem`, posée à
+ * la fabrication par scripts/signature/cle-windows.cjs), jamais avec une clé
+ * venue de la publication.
+ */
+const ENTETE_WINDOWS = "helix-installateur-windows-v1";
+
+const donneesInstallateur = ({ identifiant, version, fichier, sha512, octets }) =>
+  Buffer.from(`${ENTETE_WINDOWS}\n${identifiant}\n${version}\n${fichier}\n${sha512}\n${octets}`, "utf8");
+
+/** Signe la description d'un installateur Windows (à la publication) ; rend la signature en base64. */
+function signerInstallateur(clePriveePem, description) {
+  const privee = crypto.createPrivateKey(clePriveePem);
+  if (privee.asymmetricKeyType !== "ed25519") throw new Error("la clé d'éditeur doit être une clé Ed25519");
+  return crypto.sign(null, donneesInstallateur(description), privee).toString("base64");
+}
+
+/** La description d'un installateur est-elle signée par cette clé ? */
+function verifierInstallateur(clePubliquePem, signature, description) {
+  let publique;
+  try {
+    publique = crypto.createPublicKey(clePubliquePem);
+  } catch {
+    return { ok: false, raison: "la clé de l'application installée est illisible" };
+  }
+  if (typeof signature !== "string" || !/^[A-Za-z0-9+/]{86}==$/.test(signature)) return { ok: false, raison: "sa signature est d'un format inconnu" };
+  let bonne = false;
+  try {
+    bonne = crypto.verify(null, donneesInstallateur(description), publique, Buffer.from(signature, "base64"));
+  } catch {
+    bonne = false;
+  }
+  return bonne ? { ok: true, cle: empreinteCle(clePubliquePem) } : { ok: false, raison: "elle n'est pas signée par l'éditeur de cette application" };
+}
+
+/**
+ * La clé publique posée dans un dossier de ressources (`process.resourcesPath`
+ * d'une application empaquetée : `Helix.app/Contents/Resources` sur macOS,
+ * `<dossier d'installation>\resources` sous Windows), ou null.
+ */
+function cleDesRessources(dossier) {
+  try {
+    const pem = fs.readFileSync(path.join(dossier, FICHIER_CLE), "utf8");
+    crypto.createPublicKey(pem);
+    return pem;
+  } catch {
+    return null;
+  }
+}
+
+module.exports = {
+  signerApplication,
+  verifierApplication,
+  cleDeLApplication,
+  cleDesRessources,
+  signerInstallateur,
+  verifierInstallateur,
+  empreinteCle,
+  FICHIER_SIGNATURE,
+  FICHIER_CLE,
+};

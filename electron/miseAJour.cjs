@@ -17,10 +17,10 @@
  * inscrit dans le paquet (`publish.url`, fournisseur `generic`) ; sinon, pour
  * un poste rattaché, son instance (décidé par Medhi le 26/09/2026) ; sinon,
  * pour un poste installé seul, les publications GitHub du dépôt (décidé par
- * Medhi le 27/09/2026, sourceGithub.cjs : sur macOS l'installation d'un clic,
- * signature de l'éditeur vérifiée ; sous Windows et Linux, le paquet proposé
- * au téléchargement). `HELIX_SANS_MISE_A_JOUR=1` : rien n'est contacté. HTTPS
- * exigé, sauf sur la boucle locale (essais).
+ * Medhi le 27/09/2026, sourceGithub.cjs : sur macOS et sous Windows
+ * l'installation d'un clic, signature de l'éditeur vérifiée ; sous Linux, le
+ * paquet proposé au téléchargement). `HELIX_SANS_MISE_A_JOUR=1` : rien n'est
+ * contacté. HTTPS exigé, sauf sur la boucle locale (essais).
  */
 
 const fs = require("node:fs");
@@ -44,6 +44,12 @@ let adresseFlux = null;
 let entetesFlux = {};
 /** Ce que la source a annoncé (fichiers et empreintes), pour l'installation sans signature. */
 let annonce = null;
+/**
+ * Windows : l'installateur décrit par le manifeste de la publication, signature
+ * de l'éditeur déjà vérifiée (sourceGithub.lireManifesteWindows), et son
+ * adresse de téléchargement prise dans la réponse de GitHub.
+ */
+let annonceWindows = null;
 let minuterie = null;
 
 const etat = {
@@ -61,7 +67,7 @@ const etat = {
   plateforme: process.platform,
   /** D'où vient l'annonce : `agence`, `instance`, `github`, ou null. */
   source: null,
-  /** L'installation d'un clic est-elle possible ici (macOS, archive décrite) ? Sinon, le paquet se télécharge. */
+  /** L'installation d'un clic est-elle possible ici (macOS, archive décrite ; Windows, installateur signé) ? Sinon, le paquet se télécharge. */
   unClic: false,
 };
 
@@ -73,6 +79,24 @@ const DEPOT = (() => {
     return null;
   }
 })();
+
+/**
+ * L'identifiant que signe l'éditeur pour l'installateur Windows : le `name` du
+ * package.json, le seul que garde le package.json livré (electron-builder en
+ * retire `build`, donc `appId`). Le même est lu par
+ * scripts/manifeste-mise-a-jour.mjs.
+ */
+const IDENTIFIANT_WINDOWS = (() => {
+  try {
+    const nom = require("../package.json").name;
+    return typeof nom === "string" && nom ? nom : null;
+  } catch {
+    return null;
+  }
+})();
+
+/** Windows : le dossier où l'installateur est téléchargé, à Helix seul (dans son profil, pas le dossier temporaire commun). */
+const dossierInstallateur = () => path.join(app.getPath("userData"), "mise-a-jour");
 
 /**
  * La dernière publication GitHub du dépôt. Sur macOS, l'annonce vient du
@@ -100,6 +124,7 @@ async function verifierGithub() {
     const fichiers = publication.assets ?? [];
     const paquet = sourceGithub.choisirPaquet(fichiers, { plateforme: process.platform, arch: process.arch, appImage: Boolean(process.env.APPIMAGE) });
     annonce = null;
+    annonceWindows = null;
     if (process.platform === "darwin") {
       const manifeste = fichiers.find((f) => f.name === "helix-mise-a-jour.json");
       if (manifeste) {
@@ -110,12 +135,31 @@ async function verifierGithub() {
       }
       adresseFlux = `https://github.com/${DEPOT}/releases/download/${encodeURIComponent(publication.tag_name)}/`;
     }
+    /*
+     * Windows (27/09/2026) : l'installateur, si le manifeste le décrit et que
+     * sa signature est bonne avec la clé de cette application. Sans clé (paquet
+     * fabriqué sans elle), sans partie Windows, ou signature fausse : l'écran
+     * garde « Télécharger ». Seulement sur x64, le seul installateur publié.
+     */
+    if (process.platform === "win32" && process.arch === "x64") {
+      const manifeste = fichiers.find((f) => f.name === "helix-mise-a-jour.json");
+      const cle = signatureEditeur.cleDesRessources(process.resourcesPath);
+      if (manifeste && cle && IDENTIFIANT_WINDOWS) {
+        const lu = await net.fetch(manifeste.browser_download_url, { headers: { "User-Agent": "Helix" } });
+        const decrit = lu.ok ? sourceGithub.lireManifesteWindows(await lu.text(), version, cle, IDENTIFIANT_WINDOWS) : null;
+        // L'installateur décrit doit être dans la même publication, avec une adresse https.
+        const fichier = decrit ? fichiers.find((f) => f.name === decrit.fichier) : null;
+        if (decrit && fichier && typeof fichier.browser_download_url === "string" && /^https:\/\//i.test(fichier.browser_download_url)) {
+          annonceWindows = { ...decrit, url: fichier.browser_download_url };
+        }
+      }
+    }
     publier({
       phase: "disponible",
       versionDisponible: version,
       derniereVerification: maintenant,
       lienPaquet: paquet ? paquet.browser_download_url : (typeof publication.html_url === "string" ? publication.html_url : null),
-      unClic: Boolean(annonce),
+      unClic: Boolean(annonce) || Boolean(annonceWindows),
     });
   } catch (err) {
     publier({ phase: "erreur", message: messageErreur(err) });
@@ -230,6 +274,12 @@ function brancher() {
       setImmediate(() => updater.quitAndInstall());
       return true;
     }
+    // Windows : l'installateur signé par l'éditeur, lancé en silence sur le clic de la personne.
+    // « Réessayer » après un échec : l'annonce reste, et tout est revérifié.
+    if (process.platform === "win32" && (etat.phase === "disponible" || etat.phase === "erreur") && annonceWindows) {
+      void installerWindows().catch((err) => publier({ phase: "erreur", message: tx("installationImpossible", String(err?.message ?? err).slice(0, 200)) }));
+      return true;
+    }
     // Sans signature : Helix l'installe lui-même, sur le clic de la personne.
     if (etat.phase === "disponible" && annonce) {
       void installerSansSignature().catch((err) => publier({ phase: "erreur", message: tx("installationImpossible", String(err?.message ?? err).slice(0, 200)) }));
@@ -269,6 +319,8 @@ async function demarrerMiseAJour(permis) {
   const brancherGithub = () => {
     if (!DEPOT) return false;
     publier({ source: "github", signee: false, automatique: false });
+    // Windows : l'installateur de la mise à jour précédente, s'il en reste un (il ne s'efface pas lui-même).
+    if (process.platform === "win32") setTimeout(() => nettoyerInstallateur(), PREMIERE_VERIFICATION_MS).unref?.();
     setTimeout(() => void verifier(), PREMIERE_VERIFICATION_MS).unref?.();
     minuterie = setInterval(() => void verifier(), INTERVALLE_MS);
     minuterie.unref?.();
@@ -276,10 +328,12 @@ async function demarrerMiseAJour(permis) {
   };
 
   /*
-   * Windows et Linux (audit du 27/09/2026) : l'installation d'un clic ne sait
-   * remplacer qu'une application macOS, et l'instance ne sert que celle-là.
-   * Un poste rattaché suit son prestataire, à la main ; un poste installé
-   * seul voit la nouvelle version annoncée, avec son paquet à télécharger.
+   * Windows et Linux (audit du 27/09/2026) : l'instance ne sert que
+   * l'application macOS. Un poste rattaché suit son prestataire, à la main ;
+   * un poste installé seul voit la nouvelle version annoncée par GitHub :
+   * sous Windows, installée d'un clic si l'installateur est signé par
+   * l'éditeur (27/09/2026, `installerWindows`) ; sous Linux, son paquet à
+   * télécharger (un .deb demande les droits d'administrateur).
    */
   if (process.platform !== "darwin") {
     if (sourceInstance() || !brancherGithub()) publier({ phase: "non-configuree", message: null });
@@ -445,6 +499,144 @@ async function installerSansSignature() {
   publier({ phase: "prete", pourcent: 100, message: tx("fermetureRelance") });
   spawn("/bin/sh", [script], { detached: true, stdio: "ignore" }).unref();
   setTimeout(() => app.quit(), 800);
+}
+
+/** Efface le dossier de l'installateur Windows ; un fichier encore tenu (installateur en cours, antivirus) attendra la fois suivante. */
+function nettoyerInstallateur() {
+  try {
+    fs.rmSync(dossierInstallateur(), { recursive: true, force: true, maxRetries: 3, retryDelay: 200 });
+  } catch {
+    /* tenu : la prochaine fois */
+  }
+}
+
+/**
+ * Renomme, en réessayant sous Windows : un antivirus tient un fichier neuf un
+ * instant pour l'analyser (EPERM, EACCES, EBUSY). Même règle que `renommer`
+ * dans gateway/src/processus.ts, que ce processus ne peut pas importer.
+ */
+async function renommerAvecReprise(de, vers) {
+  for (let essai = 0; ; essai++) {
+    try {
+      fs.renameSync(de, vers);
+      return;
+    } catch (err) {
+      const code = err && err.code;
+      if (process.platform !== "win32" || essai >= 20 || (code !== "EPERM" && code !== "EACCES" && code !== "EBUSY")) throw err;
+      await new Promise((r) => setTimeout(r, 100 * Math.min(essai + 1, 10)));
+    }
+  }
+}
+
+/** SHA-512 (base64) d'un fichier sur le disque, lu par morceaux. */
+function empreinteSurLeDisque(chemin) {
+  return new Promise((resolve, reject) => {
+    const h = crypto.createHash("sha512");
+    fs.createReadStream(chemin)
+      .on("data", (m) => h.update(m))
+      .on("error", reject)
+      .on("end", () => resolve(h.digest("base64")));
+  });
+}
+
+/**
+ * Windows (27/09/2026) : installe la version annoncée par GitHub, d'un clic.
+ *
+ * L'installateur NSIS décrit par le manifeste est téléchargé dans le dossier de
+ * Helix (`userData\mise-a-jour`, jamais le dossier d'installation : NSIS y
+ * arrête tout ce qui tourne), plafonné à la taille annoncée ; puis son
+ * empreinte SHA-512 et la signature de l'éditeur sont vérifiées, avec la clé
+ * de l'application qui tourne ici. L'empreinte est relue sur le disque juste
+ * avant le lancement : c'est ce fichier-là, et pas les octets reçus, qui
+ * s'exécute.
+ *
+ * Le lancement reprend celui d'electron-updater (NsisUpdater) :
+ * `--updated /S --force-run`. `/S` installe sans fenêtre, par utilisateur
+ * (`nsis.oneClick`, `perMachine: false` : pas de droits d'administrateur) ;
+ * `--updated` fait attendre à l'installateur que Helix se ferme (puis il
+ * l'arrête s'il tourne encore) ; `--force-run` le fait relancer Helix une fois
+ * l'installation faite : sans lui, un installateur « un clic » lancé avec `/S`
+ * ne relance rien (modèle installSection.nsh d'electron-builder, lu le
+ * 27/09/2026). Un fichier écrit par Helix lui-même ne porte pas la marque
+ * « téléchargé » (Mark of the Web) : SmartScreen ne devrait pas s'interposer.
+ * Pas essayé sur un vrai PC (27/09/2026), ni avec Smart App Control actif, qui
+ * bloque un exécutable non signé même sans cette marque.
+ */
+async function installerWindows() {
+  const a = annonceWindows;
+  if (!a) throw new Error(tx("sansInstallateur"));
+  const cle = signatureEditeur.cleDesRessources(process.resourcesPath);
+  if (!cle) throw new Error(tx("sansCle"));
+  const description = { identifiant: a.identifiant, version: a.version, fichier: a.fichier, sha512: a.sha512, octets: a.octets };
+  const dossier = dossierInstallateur();
+  nettoyerInstallateur();
+  fs.mkdirSync(dossier, { recursive: true });
+  const partiel = path.join(dossier, `${a.fichier}.partiel`);
+  const final = path.join(dossier, a.fichier);
+  publier({ phase: "telechargement", pourcent: 0, message: null });
+  try {
+    await telechargerInstallateur(a, cle, description, partiel, final);
+  } catch (err) {
+    // Rien de refusé ne reste sur le disque (tenu par l'antivirus : effacé au prochain essai).
+    for (const f of [partiel, final]) {
+      try {
+        fs.rmSync(f, { force: true });
+      } catch {
+        /* tenu */
+      }
+    }
+    throw err;
+  }
+  publier({ phase: "prete", pourcent: 100, message: tx("fermetureRelance") });
+  // Sans interpréteur de commandes : le chemin (espaces, accents du nom de profil) passe tel quel.
+  const enfant = spawn(final, ["--updated", "/S", "--force-run"], { cwd: dossier, detached: true, stdio: "ignore", windowsHide: true });
+  await new Promise((resolve, reject) => {
+    enfant.once("spawn", resolve);
+    enfant.once("error", reject);
+  });
+  enfant.unref();
+  setTimeout(() => app.quit(), 800);
+}
+
+/** Télécharge l'installateur dans `partiel`, le vérifie (taille, empreinte, signature), puis le met à sa place et en relit l'empreinte. */
+async function telechargerInstallateur(a, cle, description, partiel, final) {
+  const reponse = await net.fetch(a.url, { headers: { "User-Agent": "Helix" } });
+  if (!reponse.ok || !reponse.body) throw new Error(tx("sourceRepond", reponse.status));
+  const hash = crypto.createHash("sha512");
+  const sortie = fs.createWriteStream(partiel, { flags: "wx" });
+  const ecrit = new Promise((resolve, reject) => {
+    sortie.on("finish", resolve);
+    sortie.on("error", reject);
+  });
+  let recu = 0;
+  const lecteur = reponse.body.getReader();
+  try {
+    for (;;) {
+      const { done, value } = await lecteur.read();
+      if (done) break;
+      recu += value.length;
+      // Jamais plus que la taille annoncée : une source qui n'en finit pas ne remplit pas le disque.
+      if (recu > a.octets) throw new Error(tx("tailleInstallateur"));
+      hash.update(value);
+      if (!sortie.write(Buffer.from(value))) await new Promise((r) => sortie.once("drain", r));
+      publier({ pourcent: Math.min(99, Math.round((recu / a.octets) * 100)) });
+    }
+  } catch (err) {
+    // Fermé pour de bon avant de rendre la main : sinon le fichier s'ouvrait après avoir été effacé.
+    const ferme = sortie.closed ? Promise.resolve() : new Promise((r) => sortie.once("close", r));
+    sortie.destroy();
+    await ferme;
+    throw err;
+  }
+  sortie.end();
+  await ecrit;
+  if (recu !== a.octets) throw new Error(tx("tailleInstallateur"));
+  if (hash.digest("base64") !== a.sha512) throw new Error(tx("empreinteInstallateur"));
+  publier({ message: tx("verificationSignature") });
+  const verdict = signatureEditeur.verifierInstallateur(cle, a.signature, description);
+  if (!verdict.ok) throw new Error(tx("refusee", raison(verdict.raison)));
+  await renommerAvecReprise(partiel, final);
+  if ((await empreinteSurLeDisque(final)) !== a.sha512) throw new Error(tx("empreinteInstallateur"));
 }
 
 brancher();

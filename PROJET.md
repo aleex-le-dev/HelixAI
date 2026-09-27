@@ -2956,6 +2956,33 @@ README). La 0.27.1 publiée a été refaite avec le correctif.
 - Aide : « Ouvrir l'écran concerné » refermait mal l'aide ; 28 textes restés en français
   passent par la traduction. README : prérequis pour les trois systèmes, LM Studio n'en est plus un.
 
+**Fait le 27/09/2026 : mise à jour d'un clic sous Windows.** Demandé par Medhi après un essai sur
+un vrai PC (« que Windows se mette à jour tout seul, d'un clic, comme le Mac »). Revient sur
+« Télécharger » seulement hors de macOS, pour Windows (décision du même jour, plus haut). Un poste
+Windows installé seul (source GitHub) voit « Installer maintenant » quand le manifeste
+`helix-mise-a-jour.json` décrit l'installateur `Helix-Setup-<version>-x64.exe` **et** que sa
+signature de l'éditeur est bonne avec la clé de l'application installée ; le clic télécharge
+l'installateur dans le profil de Helix, vérifie taille, SHA-512 et signature, relit l'empreinte
+sur le disque, puis lance l'installateur NSIS en silence (`--updated /S --force-run`, comme
+electron-updater) et quitte ; l'installateur remplace l'application et la relance. Où vit la clé
+sous Windows : `resources\cle-editeur.pem` (`process.resourcesPath`), posée à la fabrication par
+une nouvelle étape `afterPack` (`scripts/signature/cle-windows.cjs`) ; `afterSign` ne convenait
+pas (electron-builder ne l'appelle que s'il a signé). À la publication,
+`node scripts/manifeste-mise-a-jour.mjs` signe la partie Windows avec la clé de
+`~/.helix-editeur/` ; sans clé, pas de partie Windows et l'app garde « Télécharger ». Chaque
+partie (mac, windows) n'est écrite que si son paquet est dans `release/`. SECURITE.md § 29.11.
+**Linux garde « Télécharger »** : un `.deb` demande les droits d'administrateur. Une AppImage
+pourrait se remplacer elle-même (`process.env.APPIMAGE` : télécharger à côté, vérifier comme
+sous Windows, renommer par-dessus, relancer), mais ce n'est pas fait : à décider.
+**Vérifié sur ce Mac** : 14 cas Windows dans `scripts/essai-source-github.mjs` (31 en tout) ;
+manifeste signé par la vraie clé dans un dossier temporaire et relu ; parcours de `miseAJour.cjs`
+joué sous Node en Windows simulé (installateur bon lancé, altéré ou trop long refusé et effacé,
+signature fausse ou clé absente : « Télécharger ») ; `npm run securite`, 435 contrôles.
+**Pas vérifié** : rien n'a tourné sur un vrai Windows (installation silencieuse, relance,
+antivirus, Smart App Control, profil aux caractères hors page de code). **À savoir** : les postes
+Windows déjà installés n'ont pas la clé dans leur application ; ils gardent « Télécharger » pour
+la prochaine version, et passent au clic à partir de celle d'après.
+
 **Fait le 27/09/2026 (nuit, suite) : relecture par cinq agents avant publication.** Demandée par
 Medhi (« déploie plusieurs agents, être sûr que tout est bon »). Windows, Linux et paquets,
 sécurité des installations, régressions sur macOS, documentation : tout ce qu'ils ont trouvé
@@ -3107,8 +3134,9 @@ pas de source (c'est lui la source) : il se met à jour en installant le nouveau
    vraie machine ; restent l'icône de la zone de notification (GNOME sans l'extension
    AppIndicator ne la montre pas), l'AppImage, images, dictée, Helix Code, machine de
    l'agent, la vitesse réelle. Pas proposés sous Windows : OpenClaw (il y demande WSL), la
-   ligne de commande ; nulle part hors macOS : mise à jour d'un clic, essais de code en bac
-   à sable.
+   ligne de commande ; nulle part hors macOS : essais de code en bac à sable. Mise à jour
+   d'un clic : macOS, et Windows depuis le 27/09/2026 (écrite, jamais essayée sur un vrai PC) ;
+   pas sous Linux.
 10. **Entraînement sur carte NVIDIA** : installation de PyTorch CUDA, QLoRA, comparaison
     et fusion par peft jamais essayés sur une vraie machine (seule la conversion GGUF
     l'a été, sur le Mac) ; paquets NVIDIA figés à la version mais sans empreintes.

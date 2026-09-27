@@ -3857,7 +3857,9 @@ n'appelle plus `security`). Chaque profil de `scripts/securite.mjs` et de
   tout compte de l'instance peut demander une capture par `/helix/computer/action` (une capture ne
   demande rien). Sur un poste fermé au réseau, ces comptes sont devant la même machine ; pas essayé.
 - **OpenCode** relit encore les réglages globaux de la personne (`~/.config/opencode`, zone protégée
-  pour les agents) et `~/.opencode` : ce sont les siens, pas ceux d'un projet.
+  pour les agents) et `~/.opencode` : ce sont les siens, pas ceux d'un projet. **Démontré et
+  corrigé le 28/09/2026 (§ 37.1)** : ils passaient par-dessus les permissions de Helix, pour tous
+  les comptes.
 - Les phrases des cartes d'accord (`resumerOutil`) ne passent pas par `t()` : elles restent en
   français dans les autres langues (dette antérieure, hors de ce test).
 
@@ -3867,3 +3869,123 @@ Le vrai `codex` et un compte ChatGPT ; le vrai OpenClaw (la liste fermée de son
 tourné qu'avec le faux) ; un `apply_patch` produit par un vrai modèle dans le vrai OpenCode (la
 forme de la demande est lue dans son code et rejouée par le faux) ; Windows et Linux ; l'écran de
 réglages vu par un membre (le bouton d'activation lui reste proposé et répond 403).
+
+## 37. Seconde tournée : agents et outils (28 septembre 2026)
+
+Demandée par Medhi, sur le code de la version 2026.928.1. Même domaine que le § 35 (ce que les
+agents et les modèles peuvent faire faire à l'instance), en partant des soupçons du § 35.4 et du
+code changé depuis. Chaque faille ci-dessous a été reproduite par un essai (le vrai OpenCode
+1.18.32 avec un dossier personnel jetable et aucun modèle, ou la barrière chargée seule),
+corrigée à la racine, et a son contrôle dans `npm run securite`, section 13 ter : les 4 contrôles
+nouveaux échouent sur les sources d'avant le correctif (batterie rejouée sur `opencode.ts` et
+`approbation.ts` d'avant : 732 réussis, 4 échecs, exactement ceux-là), et la batterie entière
+passe après (736 contrôles, 0 échec, le 28/09/2026).
+
+### 37.1 Failles corrigées
+
+| Gravité | Composant | Ce qui se passait | Correctif | Contrôle |
+|---|---|---|---|---|
+| **Élevée** | Helix Code, OpenCode (`opencode.ts`) | `OPENCODE_DISABLE_PROJECT_CONFIG` ferme les réglages du projet, pas ceux du **compte** : OpenCode lit aussi `~/.config/opencode` (`Global.Path.config`, tiré de `XDG_CONFIG_HOME`) et `~/.opencode` (`Global.Path.home`), **avant** le dossier de Helix (lu dans `ConfigPaths.directories` de son code 1.18.32). Essayé avec le vrai OpenCode 1.18.32, dossier personnel jetable, aucun modèle, réglages de Helix recopiés : un `~/.config/opencode/opencode.json` portant `agent.build.permission = { bash: "allow", edit: "allow", external_directory: "allow" }` (une ligne courante chez qui se sert d'OpenCode dans son terminal) ajoutait ces règles **après** celles de Helix dans les permissions de l'agent `build` (`GET /agent`), et la dernière règle qui correspond l'emporte : commandes et écritures sans carte, sortie du dossier du projet permise. Un greffon `~/.opencode/plugin/*.js` s'exécutait à l'ouverture d'une session. Ces réglages sont ceux de la personne qui fait tourner l'instance ; dans Helix Code, ils valaient pour **chaque compte**, membres compris, et défaisaient ce que l'écran promet. | OpenCode reçoit deux dossiers vides, à Helix, sous les données de l'instance : `XDG_CONFIG_HOME` et `OPENCODE_TEST_HOME` (la variable qui remplace `Global.Path.home` dans son code). Même essai : permissions de `build` = celles de Helix, greffon non exécuté, serveur qui répond. Le greffon d'environnement rend aux commandes de l'agent le vrai `XDG_CONFIG_HOME` (celui de la personne, sinon `~/.config`), pour que git, npm ou pip lisent leurs réglages. **Contrepartie** : les réglages personnels d'OpenCode (agents, serveurs MCP, greffons, `AGENTS.md` global) ne valent plus dans Helix Code. `~/.local/share/opencode` (sessions) ne change pas. | 2 |
+| Moyenne | Barrière (`approbation.ts`) | La barrière prenait comme chemin le premier champ rempli, `path` d'abord, quel que soit l'outil. Or `move_file` ne lit que `source` et `destination`, et les outils bureautiques que `chemin` (bureau.ts). Un `path` en plus, que l'outil ignore, décidait donc de la portée de l'accord **et** de la phrase de la carte. Essayé sur la barrière seule, niveau « Demander avant de modifier » : après un renommage accordé dans `Public`, « déplacer `Secret/contrat.pdf` vers `Public` » accompagné d'un `path` dans `Public` passait **sans carte** ; une carte neuve pour le même appel annonçait le déplacement du leurre, pas celui du contrat ; un document Word créé dans `Secret` passait de même sur une écriture accordée dans `Public`. Un modèle détourné par un texte lu (mail, page, document) n'a qu'à ajouter le champ. | Le chemin de la carte est celui du champ que l'outil lit (`source` pour un déplacement, `chemin` pour la bureautique, `path` sinon) ; la portée prend les dossiers de **tous** les champs de chemin, si bien qu'un champ ignoré ne peut qu'ajouter un dossier à la clé, donc faire redemander. La carte porte aussi la destination d'un déplacement (`detail.destination`), que l'écran montre en anglais et en chinois, où il ne lit pas la phrase française. | 2 |
+
+### 37.2 Soupçons du § 35.4, repris
+
+- **Cartes d'accord en anglais et en chinois** : l'écran ne montre pas la phrase française
+  (`resumerOutil`) hors du français ; il la recompose avec le libellé traduit de l'outil et le
+  chemin visé (`ToolApproval.tsx`, `phraseDemande`). Ce qui manquait, et qui compte pour
+  décider : la destination d'un déplacement (ajoutée, § 37.1) ; et, avant le § 37.1, le chemin
+  montré pouvait être le leurre. Reste en français : la ligne de commande (`cli/helix.mjs`
+  affiche `resume`), et les messages de refus lus par le modèle. Dette d'affichage, pas de
+  sécurité.
+- **Codex** (`web_search`, `$TMPDIR` et `/tmp`, serveurs MCP de `~/.codex/config.toml`) :
+  toujours pas essayé, `codex` n'est pas installé sur ce poste et la consigne est de ne jamais
+  lancer le vrai. Rien n'est changé dans les arguments de `codex` : des clés de réglage non
+  vérifiées sur le programme (`web_search`, `sandbox_workspace_write.exclude_tmpdir_env_var`,
+  `exclude_slash_tmp`, `mcp_servers`) pourraient être refusées par une version, ou fusionnées au
+  lieu de remplacer, et casser Codex sans rien fermer. À essayer sur un poste où `codex` est
+  installé, avec un `CODEX_HOME` jetable.
+- **Le compteur « traite un mail »** (`employes.ts`, `mailsEnCours`) : relu, non reproduit. Le
+  profil du courrier et le profil ordinaire appellent la même adresse d'outils, avec la même
+  clé ; ce qui force la carte est le compteur tenu pendant `openclaw agent`, pas l'identité du
+  profil. Si OpenClaw poursuivait un tour après la fin de cet appel (délai de 960 s du processus
+  atteint alors que la passerelle d'OpenClaw continue), les appels suivants du profil du courrier
+  seraient jugés comme ceux du profil ordinaire. La correction à la racine serait un serveur
+  d'outils à part pour le profil du courrier (sa propre clé, ses outils préfixés à part),
+  qui force la carte par son identité ; non faite, parce qu'elle change la configuration
+  d'OpenClaw et ne peut pas être vérifiée ici sans le vrai OpenClaw.
+- **Sorties géantes** : non mesuré. `mcp.ts` recolle toutes les parties d'un résultat avant que
+  `chat.ts` ne coupe à 20 000 caractères ; la route des outils de Code (`outilsCode.ts`) rend le
+  résultat entier à OpenCode, qui garde lui-même les longues sorties dans
+  `~/.local/share/opencode/tool-output` (règle `external_directory` qu'il se donne, lue dans
+  `GET /agent`), zone protégée pour les agents de Helix.
+- **Capture d'écran par `/helix/computer/action` sur un poste à plusieurs comptes** : relu, pas
+  d'essai (il aurait fallu capturer l'écran de ce poste). Sur une instance fermée au réseau, tous
+  les comptes sont des gens devant la même machine (le jeton d'instance est dans le dossier du
+  compte système) ; ouverte aux collègues, seul le profil peut activer le contrôle de l'écran
+  (§ 35.1). **Limite dite** : quand le profil l'active sur une instance partagée, n'importe quel
+  compte connecté peut demander une capture (une capture ne demande rien) et répond lui-même aux
+  cartes de ses propres clics ; en mode « machine de l'agent », il n'y a qu'une machine pour
+  l'instance, et `/helix/machine/ecran` la montre à tout compte connecté, y compris pendant le
+  travail de l'agent d'un autre. C'est un choix de déploiement à dire dans le guide, pas une porte
+  que l'interface ouvre.
+
+### 37.3 Code changé, examiné sans rien trouver
+
+- **Ce qu'OpenCode lit encore** avec les deux dossiers privés (lu dans son code 1.18.32) : le
+  dossier de Helix (`OPENCODE_CONFIG_DIR`, écrit par la passerelle, greffon d'environnement
+  compris) ; `AGENTS.md` : celui du dossier global (désormais vide) et, sans
+  `OPENCODE_DISABLE_PROJECT_CONFIG`, ceux du projet (fermés) ; les `instructions` de la
+  configuration (Helix n'en met pas). `OPENCODE_CONFIG_DIR` ne vient que de la passerelle
+  (liste fermée de variables).
+- **`petitsModeles.ts`** : le nom n'est réparé que vers un outil proposé et un seul ; les
+  arguments réparés sont ceux que reçoivent la barrière et l'outil ; un alias de paramètre ne
+  prend que la place d'une clé du schéma encore absente. Aucune réparation n'élargit un chemin
+  (rien n'est résolu ni raccourci), et un changement d'outil passe par la barrière sous son vrai
+  nom. `verifierEcriture` n'exécute rien du code écrit (`node --check`, `ast.parse` sous
+  `python3 -I -B`). Voir aussi les soupçons plus bas.
+- **Liste fermée de l'environnement d'OpenClaw** : rien de l'hôte hors de la liste (vérifié avec le
+  faux, § 35) ; OpenClaw reçoit son dossier d'état et sa configuration par `OPENCLAW_STATE_DIR`
+  et `OPENCLAW_CONFIG_PATH`, et son Node en tête du PATH. Voir les soupçons pour les jetons des
+  canaux.
+- **`historique.ts` et `plan.ts`** : la consigne système en tête n'est jamais retirée, et la note
+  de ce qui a été coupé y est ajoutée ; ce qui part, ce sont des tours entiers avant la question,
+  puis des résultats d'outils abrégés : rien d'extérieur ne remonte avant la consigne. Une étape
+  de plan repart d'une consigne système neuve, suivie des derniers échanges en texte seul.
+- **`permissionsCode.ts`** : les fichiers d'un `apply_patch` sont pris dans `metadata.files`
+  (chemins absolus, destination comprise), jamais dans `filepath` joint par des virgules ; un nom
+  de fichier qui porte une virgule reste entier ; `isAbsolute` pour les chemins Windows ; chaque
+  chemin passe les zones protégées par son chemin réel.
+
+### 37.4 Soupçons, non démontrés
+
+- **Liens symboliques d'un dépôt cloné, dans Helix Code** : la carte d'une modification montre le
+  chemin dans le projet, pas sa cible réelle. Un dépôt qui porte `notes.md -> ../../.zshrc` et un
+  texte qui pousse le modèle à modifier `notes.md` ferait approuver « modifier …/projet/notes.md »
+  pour une écriture dans `~/.zshrc` (ni `~/.zshrc`, ni `~/.gitconfig`, ni
+  `~/Library/LaunchAgents` ne sont des zones protégées) ; au niveau « Demander avant de
+  modifier », une lecture par un tel lien sort du projet sans carte. Tout dépend de ce que fait
+  OpenCode d'un lien (sa garde `external_directory` compare-t-elle le chemin réel ?), ce qui ne se
+  vérifie qu'en lui faisant exécuter un outil ; pas essayé. Correctif envisagé : refuser sans
+  carte, dans `permissionsCode.ts`, un chemin dont la forme réelle sort du dossier de la session.
+- **Jetons des canaux** : ceux de tous les employés (`OC_<employé>_<canal>_<champ>`) sont dans
+  l'environnement du processus OpenClaw. Si les commandes d'un employé « libre » l'héritent,
+  `env` lui montre le jeton du bot d'un autre employé, peut-être d'une autre personne. Pas essayé
+  avec le vrai OpenClaw.
+- **Appels écrits dans le texte** (`appelsDansLeTexte`, chat.ts) : pour tout modèle, pas
+  seulement les petits, une réponse sans vrai appel dont le texte contient un bloc
+  `<tool_call>…</tool_call>` est exécutée comme un appel. Un modèle qui **cite** un document
+  contenant ce bloc le ferait donc exécuter. La barrière s'applique comme à un vrai appel ; au
+  niveau « Tout approuver », rien ne le distingue. Pas essayé.
+- **Journal** : `cibleDe` (outils.ts) nomme encore le premier champ rempli (`path` d'abord) ; avec
+  un leurre, le journal peut nommer le leurre au lieu du fichier déplacé. La barrière, elle, est
+  corrigée (§ 37.1).
+
+### 37.5 Pas essayé
+
+Le vrai `codex` ; le vrai OpenClaw ; un outil exécuté par le vrai OpenCode (aucun modèle, ni
+faux ni vrai, n'a été branché au vrai OpenCode pendant cette tournée : les essais s'en tiennent à
+ses réglages lus par `GET /config` et `GET /agent`, et au chargement des greffons) ; le serveur de
+fichiers avec un `path` en plus pour `move_file` (son schéma publié ne lit que `source` et
+`destination` ; l'essai porte sur la barrière) ; Windows et Linux (OpenCode y lit
+`XDG_CONFIG_HOME` et `OPENCODE_TEST_HOME` de la même façon, d'après son code ; non essayé hors de
+macOS).

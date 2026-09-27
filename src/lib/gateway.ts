@@ -186,6 +186,8 @@ export interface DemandeApprobation {
   detail: {
     outil?: string;
     cible?: string | null;
+    /** Où un déplacement dépose le fichier : la carte le dit dans toutes les langues. */
+    destination?: string;
     niveau?: NiveauApprobation;
     employe?: string;
     /** D'où vient la demande : le Chat ou Cowork, Helix Code, un employé. */

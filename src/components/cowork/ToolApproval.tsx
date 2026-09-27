@@ -13,9 +13,10 @@ import { libelleOutil } from "@/lib/libellesOutils";
  * ou chinoise. Hors français, on la recompose avec le libellé traduit de l'outil
  * et le chemin visé, qui suffisent à décider.
  */
-function phraseDemande(resume: string, outil?: string, cible?: string | null, employe?: string | null): string {
+function phraseDemande(resume: string, outil?: string, cible?: string | null, employe?: string | null, destination?: string): string {
   if (langue() === "fr" || !outil) return `${employe ?? "L'agent"} veut ${resume}.`;
-  return `${employe ? `${employe} · ` : ""}${libelleOutil(outil)}${cible ? ` · ${cible}` : ""}`;
+  // Un déplacement se juge à ses deux bouts (seconde tournée du 28/09/2026) : sans la destination, la carte anglaise ou chinoise ne disait pas où partait le fichier.
+  return `${employe ? `${employe} · ` : ""}${libelleOutil(outil)}${cible ? ` · ${cible}` : ""}${destination ? ` → ${destination}` : ""}`;
 }
 
 /**
@@ -161,7 +162,7 @@ export function ToolApproval() {
               ? t("L'agent de code demande votre accord")
               : t("L'agent demande votre accord")
       }
-      phrase={phraseDemande(demande.resume, demande.detail?.outil, demande.detail?.url ?? demande.detail?.cible, employe)}
+      phrase={phraseDemande(demande.resume, demande.detail?.outil, demande.detail?.url ?? demande.detail?.cible, employe, demande.detail?.destination)}
       contenu={contenu}
       // Un employé n'a pas de « demande » en cours : chaque accord ne vaut que pour une action. Hors fichiers non plus.
       note={employe || unique ? t("Autoriser vaut pour cette action seulement.") : etendue}

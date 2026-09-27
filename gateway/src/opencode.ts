@@ -583,7 +583,7 @@ async function writeConfig(dir: string): Promise<void> {
 function ecrireGreffonEnvironnement(): void {
   const dossier = join(dossierConfig(), "plugin");
   if (!existsSync(dossier)) mkdirSync(dossier, { recursive: true });
-  const vides = Object.fromEntries(VARIABLES_SECRETES.map((v) => [v, ""]));
+  const vides = { ...Object.fromEntries(VARIABLES_SECRETES.map((v) => [v, ""])), ...variablesRendues() };
   const fichier = join(dossier, "helix-environnement.js");
   writeFileSync(
     fichier,
@@ -673,6 +673,48 @@ export function environnementOpenCode(): Record<string, string> {
      * du projet ne sont plus lus par OpenCode.
      */
     OPENCODE_DISABLE_PROJECT_CONFIG: "true",
+    /*
+     * Ni les réglages globaux du compte (seconde tournée du 28/09/2026). Même
+     * sans ceux du projet, OpenCode lit `~/.config/opencode` (`Global.Path.config`,
+     * tiré de `XDG_CONFIG_HOME`) et `~/.opencode` (`Global.Path.home`, que
+     * `OPENCODE_TEST_HOME` remplace), avant le dossier de Helix : lu dans
+     * `ConfigPaths.directories` de son code 1.18.32. Essayé avec le vrai
+     * OpenCode 1.18.32, dossier personnel jetable, aucun modèle : un
+     * `~/.config/opencode/opencode.json` portant
+     * `agent.build.permission = { bash: "allow", edit: "allow", external_directory: "allow" }`
+     * ajoutait ces règles **après** celles de Helix dans les permissions de
+     * l'agent `build` (`GET /agent`), et la dernière règle qui correspond
+     * l'emporte : commandes et écritures sans carte, sortie du projet permise.
+     * Un greffon `~/.opencode/plugin/*.js` s'exécutait à l'ouverture d'une
+     * session. Ce sont les réglages de la personne pour son propre terminal ;
+     * dans Helix Code, ils valaient pour chaque compte de l'instance, membres
+     * compris, et défaisaient ce que l'écran promet. Deux dossiers vides, à
+     * Helix : même essai, permissions de `build` = celles de Helix, greffon non
+     * exécuté. Les commandes de l'agent retrouvent le vrai `XDG_CONFIG_HOME`
+     * par le greffon d'environnement (`ecrireGreffonEnvironnement`).
+     */
+    XDG_CONFIG_HOME: dossierPrive("global"),
+    OPENCODE_TEST_HOME: dossierPrive("maison"),
+  };
+}
+
+/** Un dossier vide, à Helix, pour ce qu'OpenCode ne doit pas lire chez la personne (voir `environnementOpenCode`). */
+function dossierPrive(nom: string): string {
+  const dossier = join(dossierConfig(), "prive", nom);
+  if (!existsSync(dossier)) mkdirSync(dossier, { recursive: true, mode: 0o700 });
+  return dossier;
+}
+
+/**
+ * Ce que les commandes de l'agent retrouvent à la place des deux dossiers
+ * privés : le `XDG_CONFIG_HOME` de la personne (ou celui que tout programme
+ * prendrait sans lui, `~/.config`), pour que git, npm ou pip lisent leurs
+ * propres réglages comme dans un terminal.
+ */
+function variablesRendues(): Record<string, string> {
+  return {
+    XDG_CONFIG_HOME: process.env.XDG_CONFIG_HOME || join(homedir(), ".config"),
+    OPENCODE_TEST_HOME: "",
   };
 }
 

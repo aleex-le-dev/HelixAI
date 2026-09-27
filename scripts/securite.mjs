@@ -3942,6 +3942,35 @@ console.log("\n11 quinquies. Windows et Linux : ce qui se vérifie depuis ce pos
     );
   }
   rmSync(d8, { recursive: true, force: true });
+
+  /*
+   * LM Studio coupé dans le profil : `lms` ne doit pas être lancé (27/09/2026).
+   * Avant, chaque découverte lançait `lms ls` et `lms ps`, et la batterie
+   * interrogeait ainsi le LM Studio en service sur le poste qui la faisait
+   * tourner. Un faux `lms`, dans un dossier personnel jetable, note ses appels.
+   */
+  const d9 = dossierNeuf(join(tmpdir(), "helix-sans-lms-"));
+  const fauxLms = join(d9, ".lmstudio", "bin", "lms");
+  mkdirSync(dirname(fauxLms), { recursive: true });
+  ecrireF(fauxLms, `#!/bin/sh\necho "$@" >> "${join(d9, "lms.txt")}"\necho "[]"\n`);
+  chmodSync(fauxLms, 0o755);
+  ecrireF(join(d9, "profil.json"), JSON.stringify({ chiffrement: "fichier", backends: [{ id: "lmstudio", enabled: false }, { id: "exo", enabled: false }] }));
+  const decouverte = essai(`const b = await import("./gateway/src/backends.ts"); const d = await b.discover(); console.log("MODELES", d.models.length);`, {
+    HOME: d9,
+    USERPROFILE: d9,
+    PATH: "/usr/bin:/bin",
+    HELIX_CONFIG: join(d9, "profil.json"),
+    HELIX_DATA_DIR: join(d9, "donnees"),
+    HELIX_LMSTUDIO_URL: "http://127.0.0.1:9/v1",
+    HELIX_EXO_URL: "http://127.0.0.1:9/v1",
+  });
+  const appelsLms = existsSync(join(d9, "lms.txt")) ? readFileSync(join(d9, "lms.txt"), "utf8") : "";
+  verifier(
+    "LM Studio coupé dans le profil : la découverte des modèles ne lance ni `lms ls` ni `lms ps`",
+    decouverte.includes("MODELES") && !/^(ls|ps)\b/m.test(appelsLms),
+    `${decouverte.slice(-160)} | appels : ${appelsLms.trim() || "aucun"}`,
+  );
+  rmSync(d9, { recursive: true, force: true });
 }
 
 console.log("\n11 sexies. Presse-papiers de l'application de bureau : écrire du texte, rien lire (27/09/2026)");

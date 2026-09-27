@@ -433,7 +433,16 @@ export async function discover(): Promise<Discovery> {
   // conclure qu'il n'y a aucun modèle.
   if (enabled.some((b) => b.id === "lmstudio")) await ensureLmStudioServer();
 
-  const { meta: lmMeta, enMemoireLu } = await lmStudioMetadata();
+  /*
+   * `lms` seulement si une source LM Studio est activée : ses réponses ne
+   * servent qu'à elles (`toModelInfo`). Avant le 27/09/2026, une instance qui
+   * avait coupé LM Studio lançait quand même `lms ls` et `lms ps` à chaque
+   * découverte, et interrogeait le LM Studio de la machine (vu dans la batterie
+   * de sécurité, qui tournait à côté d'un LM Studio en service).
+   */
+  const { meta: lmMeta, enMemoireLu } = enabled.some((b) => b.kind === "lmstudio")
+    ? await lmStudioMetadata()
+    : { meta: new Map<string, Partial<ModelInfo>>(), enMemoireLu: false };
 
   const results = await Promise.all(
     enabled.map(async (backend): Promise<{ status: BackendStatus; models: ModelInfo[] }> => {

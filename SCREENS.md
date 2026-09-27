@@ -171,6 +171,16 @@ le navigateur le 25/09/2026 (instance jetable, deux dossiers, une session rouver
 après redémarrage de la passerelle, une autre rouverte pendant que l'agent écrivait) ;
 pas vu dans l'application de bureau.
 
+**Quitter une session qui travaille** (27/09/2026, `useCode`, `SessionsCode.tsx`) : passer
+à une autre session, à « Nouvelle session » ou au Chat n'arrête rien et n'efface rien. La
+conversation continue hors de l'écran ; rouverte depuis la liste, elle revient telle
+quelle (message envoyé, réponse, étapes), la suite en direct. Revenir dans Code depuis une
+autre page réaffiche la session qu'on regardait si elle travaille encore (sinon
+l'accueil). Dans la liste, une roue discrète (« En cours ») remplace l'heure d'une session
+où l'agent ou Helix travaille encore, y compris après un rechargement (l'instance le dit).
+Seul « Arrêter » arrête l'agent. Vu dans le navigateur avec un faux OpenCode, pas dans
+l'application de bureau.
+
 **Panneau de suivi** (25/09/2026, `src/components/code/SuiviCode.tsx`) : à droite
 dès qu'une conversation existe, ouvert d'office à partir de 1 024 px, par-dessus
 l'écran en dessous (bouton « Afficher le suivi », croix pour le masquer). Cartes

@@ -980,6 +980,42 @@ console.log("\n6 ter. Helix Code : la session à sa propriétaire, les outils d'
   const p4 = await permission({ permission: "read", patterns: ["lisezmoi.txt"], metadata: { filepath: join(realpathSync(PROJET_A), "lisezmoi.txt") } });
   const r4 = await reponseDe(p4);
   verifier("lire dans le projet, au niveau « Demander avant de modifier » : accordé sans carte", r4?.reply === "once", JSON.stringify(r4));
+
+  /*
+   * L'écran qui quitte une session de Code puis y revient (27/09/2026, vu par
+   * Medhi : « le message se retire »). Pendant que la demande est traitée, la
+   * session rouverte se dit en cours, avec le message envoyé, et la liste le
+   * montre ; une fois la demande finie, elle ne l'est plus. Le faux OpenCode
+   * n'appelle aucun modèle : la passerelle attend l'appel huit secondes,
+   * relance dans une session neuve, puis renonce (502).
+   */
+  const S3 = (await ouvrir(avecSeance, PROJET_A)).corps?.data?.id;
+  const QUESTION = "Que fait ce projet ?";
+  const demandeS3 = appel("/helix/code/prompt", { method: "POST", headers: avecSeance, body: JSON.stringify({ sessionID: S3, text: QUESTION }) })
+    .then(async (r) => (await r.text(), r.status))
+    .catch(() => 0);
+  await attendre(1500);
+  const pendant = await (await appel(`/helix/code/sessions/${S3}`, { headers: avecSeance })).json().catch(() => ({}));
+  const listePendant = await (await appel("/helix/code/sessions", { headers: avecSeance })).json().catch(() => ({}));
+  const demandesVues = (h) => (h.messages ?? []).filter((m) => m.role === "user" && m.texte.trim() === QUESTION).length;
+  verifier(
+    "session de Code au travail, rouverte : enCours, le message envoyé (sans les ajouts de Helix) et le dernier numéro",
+    pendant.enCours === true && demandesVues(pendant) === 1 && typeof pendant.dernier === "number",
+    JSON.stringify(pendant).slice(0, 200),
+  );
+  verifier(
+    "la liste des sessions de Code dit que cette session travaille encore",
+    (listePendant.sessions ?? []).find((x) => x.id === S3)?.enCours === true,
+    JSON.stringify(listePendant.sessions ?? []).slice(0, 200),
+  );
+  const statutS3 = await demandeS3;
+  const apresS3 = await (await appel(`/helix/code/sessions/${S3}`, { headers: avecSeance })).json().catch(() => ({}));
+  const listeApres = await (await appel("/helix/code/sessions", { headers: avecSeance })).json().catch(() => ({}));
+  verifier(
+    "demande finie (ici en échec) : la session n'est plus en cours, son message reste, une seule fois",
+    statutS3 >= 400 && apresS3.enCours === false && demandesVues(apresS3) === 1 && !(listeApres.sessions ?? []).some((x) => x.enCours),
+    `${statutS3} enCours=${apresS3.enCours} demandes=${demandesVues(apresS3)} liste=${(listeApres.sessions ?? []).filter((x) => x.enCours).length}`,
+  );
 }
 
 /* ------------------------------------------------------------------------- */

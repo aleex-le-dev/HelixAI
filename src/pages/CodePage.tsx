@@ -56,17 +56,35 @@ export function CodePage() {
   const demandee = params.get("s");
   const { sessions } = useSessionsCode();
   const { ouvrir, nouvelle, sessionId } = code;
+  /*
+   * Premier passage de cet écran (retour depuis le Chat ou une autre page) :
+   * voir plus bas. Changement d'adresse ensuite : c'est la personne qui a
+   * choisi une session ou « Nouvelle session ».
+   */
+  const premierPassage = useRef(true);
   useEffect(() => {
+    const retour = premierPassage.current;
+    premierPassage.current = false;
     // La liste se relit à chaque passage : une session ouverte ailleurs (ligne de commande, extension) y apparaît.
     signalerSessionsCode();
     if (demandee) {
-      void ouvrir(demandee).then((h) => {
-        if (h) setDossier(h.session.dossier);
+      void ouvrir(demandee).then((d) => {
+        if (d) setDossier(d);
       });
+    } else if (sessionId && retour && code.busy) {
+      /*
+       * Revenir dans Code pendant que l'agent travaille sur la session qu'on
+       * regardait : elle se réaffiche, message et réponse en cours compris
+       * (vu par Medhi le 27/09/2026 : « le message se retire, donc on a
+       * l'impression qu'il ne travaille plus »). Une session au repos, elle,
+       * ne revient pas : ouvrir Code reste l'accueil (décidé le 25/09/2026).
+       */
+      setParams({ s: sessionId }, { replace: true });
     } else if (sessionId) {
+      // Quitter une session pour l'accueil ne l'arrête pas : elle continue hors de l'écran (`nouvelle`).
       nouvelle();
     }
-    // Seule l'adresse décide ; `sessionId` est lu tel qu'il est à ce moment.
+    // Seule l'adresse décide ; `sessionId` et `busy` sont lus tels qu'ils sont à ce moment.
   }, [demandee]);
   /*
    * Une session vient de naître (première demande) ou d'être relancée par

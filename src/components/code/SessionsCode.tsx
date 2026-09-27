@@ -1,8 +1,9 @@
 import { useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { FolderOpen, Terminal, X } from "lucide-react";
+import { FolderOpen, Loader2, Terminal, X } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { parDossier, useSessionsCode } from "@/hooks/useSessionsCode";
+import { sessionCodeEnCours } from "@/hooks/useCode";
 import { dateCourte, nomDossier, type SessionCodeResume } from "@/lib/code";
 import { t, tf } from "@/lib/i18n";
 
@@ -25,6 +26,12 @@ function LigneSessionCode({
 }) {
   const navigate = useNavigate();
   const titre = session.titre || t("Session sans demande");
+  /*
+   * L'agent y travaille encore (27/09/2026) : vu de cet écran (session quittée
+   * en plein travail) ou dit par l'instance (ouverte ailleurs, Helix qui
+   * prépare ou contrôle). Comme la roue d'un Chat qui écrit encore.
+   */
+  const enCours = Boolean(session.enCours) || sessionCodeEnCours(session.id);
   return (
     <li className="group relative">
       <button
@@ -38,7 +45,16 @@ function LigneSessionCode({
         )}
       >
         <span className="min-w-0 flex-1 truncate">{titre}</span>
-        <span className="shrink-0 text-[11px] tabular-nums text-muted-foreground">{dateCourte(session.maj)}</span>
+        {enCours ? (
+          <Loader2
+            size={13}
+            strokeWidth={1.75}
+            className="shrink-0 animate-spin text-primary"
+            aria-label={t("En cours")}
+          />
+        ) : (
+          <span className="shrink-0 text-[11px] tabular-nums text-muted-foreground">{dateCourte(session.maj)}</span>
+        )}
       </button>
       <button
         type="button"

@@ -235,7 +235,7 @@ const AJOUTS = [
 
 
 /** Ce que la personne a écrit, sans ce que Helix y a ajouté pour le modèle (index.ts, useCode.ts). */
-function demandeAffichee(texte: string): string {
+export function demandeAffichee(texte: string): string {
   let fin = texte.length;
   for (const a of AJOUTS) {
     const i = texte.indexOf(a);
@@ -276,6 +276,7 @@ interface MessageOpenCode {
     type?: string;
     text?: string;
     synthetic?: boolean;
+    time?: { end?: number };
     tool?: string;
     callID?: string;
     state?: { status?: string; input?: unknown; output?: unknown; error?: unknown };
@@ -288,7 +289,22 @@ interface MessageOpenCode {
  * étape) : ils sont regroupés en une seule réponse, comme à l'écran pendant le
  * travail.
  */
-export function historiqueDe(messages: MessageOpenCode[]): MessageHistorique[] {
+export function historiqueDe(
+  messages: MessageOpenCode[],
+  /*
+   * Session où l'agent travaille encore (27/09/2026) : l'écran qui la rouvre
+   * reçoit la suite par le flux, à partir du dernier numéro rendu avec cet
+   * historique. Un texte encore en train de s'écrire n'est donc pas repris
+   * ici : il arrive entier par le flux (`text.ended`), et l'écran l'aurait
+   * montré deux fois, moitié puis entier.
+   *
+   * `demandeEnAttente` : la demande que la personne vient d'envoyer, pas
+   * encore arrivée chez OpenCode (Helix prépare l'application ou le plan,
+   * plusieurs minutes avec un petit modèle). Sans elle, l'écran qui revenait
+   * sur la session n'y montrait plus le message envoyé.
+   */
+  options: { enCours?: boolean; demandeEnAttente?: string } = {},
+): MessageHistorique[] {
   const rendu: MessageHistorique[] = [];
   for (const m of messages) {
     const role = m.info?.role === "user" ? "user" : m.info?.role === "assistant" ? "assistant" : undefined;
@@ -297,6 +313,8 @@ export function historiqueDe(messages: MessageOpenCode[]): MessageHistorique[] {
     const raisonnements: string[] = [];
     const outils: MessageHistorique["outils"] = [];
     for (const p of m.parts ?? []) {
+      const enEcriture = options.enCours && role === "assistant" && (p.type === "text" || p.type === "reasoning") && !p.time?.end;
+      if (enEcriture) continue;
       if (p.type === "text" && typeof p.text === "string" && !p.synthetic && p.text.trim()) textes.push(p.text);
       else if (p.type === "reasoning" && typeof p.text === "string" && p.text.trim()) raisonnements.push(p.text);
       else if (p.type === "tool" && typeof p.tool === "string") {
@@ -343,5 +361,7 @@ export function historiqueDe(messages: MessageOpenCode[]): MessageHistorique[] {
       });
     }
   }
+  const attendue = options.demandeEnAttente ? demandeAffichee(options.demandeEnAttente).trim() : "";
+  if (attendue) rendu.push({ role: "user", texte: attendue, outils: [] });
   return rendu;
 }

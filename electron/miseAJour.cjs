@@ -515,6 +515,9 @@ async function preparerEtLancer(zip, url, dossier) {
   if (!signatureEditeur.assainirDroits(nouvelle)) throw new Error(tx("droitsArchive"));
   const verdict = await signatureEditeur.verifierApplication(nouvelle, cle, { identifiant, version: annonce.version });
   if (!verdict.ok) throw new Error(tx("refusee", raison(verdict.raison)));
+  // Les droits et le durcissement de macOS ne sont pas dans la signature de l'éditeur : jamais plus que l'application qui tourne (28/09/2026).
+  const code = await signatureEditeur.controlerSignaturesDeCode(nouvelle, actuelle);
+  if (!code.ok) throw new Error(tx("refusee", raison(code.raison)));
   fs.accessSync(path.dirname(actuelle), fs.constants.W_OK);
   const q = (s) => `'${String(s).replace(/'/g, `'\\''`)}'`;
   const avant = `${actuelle}.avant-maj`;

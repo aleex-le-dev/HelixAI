@@ -17,22 +17,35 @@
  * Partager le monde de la page est ce qui permet de voir ses connexions
  * WebRTC. L'API qui ferait les deux — isolation active *et* exécution d'un
  * correctif dans le monde principal — est `contextBridge.executeInMainWorld`,
- * apparue dans Electron 35 ; nous sommes en 33. Le jour d'une montée de
- * version, ce fichier est le premier à reprendre.
+ * présente depuis Electron 35 (nous sommes en 44). Elle n'a pas été reprise :
+ * voir ce qu'elle apporterait, plus bas.
  *
- * En attendant, le risque réel est nommé et fermé. Il n'était pas l'accès à
- * Node (il n'y en a pas : `nodeIntegration` coupé, `sandbox` actif, rien sur
- * `window`) : c'était qu'un script hostile sur la page **remplace**
- * `MediaRecorder`, `AudioContext` ou `Blob.prototype.arrayBuffer` après le
- * chargement, et fasse ainsi écrire à l'instance un son de son choix — lequel
- * serait transcrit, résumé par un modèle et diffusé dans l'organisation, avec
- * l'apparence d'un compte rendu de réunion.
+ * Ce qui tient : pas d'accès à Node (`nodeIntegration` coupé, `sandbox`
+ * actif, rien sur `window`), et la page ne peut parler au processus principal
+ * que par les deux canaux de ce bot (`helix:bot-morceau`, `helix:bot-fini`),
+ * que botReunion.cjs n'accepte que de la fenêtre de ce bot ; les autres
+ * canaux `helix:*` vérifient qu'ils viennent de la fenêtre principale.
  *
- * La parade est simple et tient parce que ce fichier s'exécute **avant** tout
- * script de la page : on capture ici les fonctions d'origine, et on ne se sert
- * que de ces références. Ce que la page remplacera ensuite ne sera jamais
- * appelé. Chaque morceau est de plus vérifié comme un vrai `Blob` produit par
- * notre propre enregistreur avant de partir.
+ * Ce qui ne tient pas, dit comme tel (seconde tournée du test d'intrusion,
+ * 28/09/2026). Les références d'origine capturées ici ne protègent pas le son
+ * d'une page hostile : ce sont les mêmes objets que ceux de la page, qu'elle
+ * peut modifier (`EventTarget.prototype.addEventListener`, le prototype de
+ * `MediaRecorder`, `Blob[Symbol.hasInstance]`, `Promise.prototype.then`…).
+ * Essayé sur Electron 44.4.5 : une page qui remplace `addEventListener`
+ * récupère notre écouteur de `dataavailable` et lui passe un `Blob` à elle ;
+ * le contrôle `instanceof` le laisse passer, et ce son part à l'instance. De
+ * toute façon, c'est la page qui fournit le son de la réunion : un Google
+ * Meet hostile pourrait aussi bien jouer un faux participant par WebRTC.
+ * Aucune isolation ne rend un compte rendu plus vrai que la page d'où il
+ * vient. L'isolation retirerait seulement à la page la main sur ce fichier et
+ * sur le code interne d'Electron de la fenêtre ; il faudrait, pour la
+ * reprendre, installer l'enregistreur dans le monde de la page et lui exposer
+ * une fonction d'envoi, que la page pourrait appeler tout autant. Non fait :
+ * cela ne s'essaie que sur une vraie réunion.
+ *
+ * On garde donc les références capturées (elles écartent un script de la page
+ * qui remplacerait simplement `MediaRecorder` ou `AudioContext`), sans leur
+ * prêter plus.
  */
 const { ipcRenderer } = require("electron");
 
@@ -108,9 +121,10 @@ const { ipcRenderer } = require("electron");
     enregistreur = new Enregistreur(destination.stream, { mimeType: type, audioBitsPerSecond: 32000 });
     enregistreur.addEventListener("dataavailable", (e) => {
       /*
-       * Un vrai `Blob`, non vide, converti par la méthode d'origine : un
-       * faux événement fabriqué par la page ne passe pas ce contrôle, et sa
-       * charge n'atteint donc jamais l'instance.
+       * Un `Blob` non vide, converti par la méthode d'origine. Ce n'est pas
+       * une garantie contre la page : un `Blob` qu'elle fabrique passe ce
+       * contrôle (voir en tête de fichier) ; il écarte seulement un événement
+       * mal formé.
        */
       const donnees = e && e.data;
       if (!(donnees instanceof BlobOrigine) || donnees.size <= 0) return;

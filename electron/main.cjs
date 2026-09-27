@@ -181,7 +181,17 @@ async function startGateway() {
     ? path.join(__dirname, "..", "dist-gateway", "index.cjs")
     : path.join(process.resourcesPath, "dist-gateway", "index.cjs");
 
-  const enfant = spawn(process.execPath, [entry], {
+  /*
+   * `--disable-sigusr1` (seconde tournée du test d'intrusion, 28/09/2026) : le
+   * fusible EnableNodeCliInspectArguments ne protège que le processus
+   * principal. En mode Node, le binaire de Helix ouvrait encore le débogueur
+   * de Node sur 127.0.0.1:9229 quand on envoyait SIGUSR1 à la passerelle
+   * (essayé sur Electron 44.4.5, fusibles du paquet posés) : un programme du
+   * même compte y faisait tourner son code dans le processus qui tient la clé
+   * des données déchiffrée et toutes les séances. La passerelle n'a pas besoin
+   * de ce débogueur.
+   */
+  const enfant = spawn(process.execPath, ["--disable-sigusr1", entry], {
     env: {
       ...process.env,
       /*
@@ -501,7 +511,9 @@ app.on("second-instance", (_evenement, argv) => {
   else montrerFenetre();
 });
 
-ipcMain.on("helix:langue", (_evenement, code) => {
+ipcMain.on("helix:langue", (evenement, code) => {
+  // Comme les autres canaux : la fenêtre principale seulement, pas celle d'un bot de réunion qui partage le monde de Google Meet (28/09/2026).
+  if (!depuisLaFenetre(evenement)) return;
   if (!["fr", "en", "zh"].includes(code)) return;
   langueEcran = code;
   zone?.changerLangue(code);

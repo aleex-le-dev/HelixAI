@@ -4811,6 +4811,209 @@ console.log("\n13. Modèles branchés par une clé : faux fournisseurs, Chat, ou
 }
 
 /*
+ * Seconde tournée du test d'intrusion de l'application (28/09/2026,
+ * SECURITE.md § 38) : débogueur de la passerelle, banc d'essai des pages,
+ * signature de code hors du relevé signé, canaux de la fenêtre principale.
+ */
+console.log("\n13 quater. Application de bureau et interface : seconde tournée (28/09/2026)");
+{
+  const { createRequire } = await import("node:module");
+  const exiger = createRequire(import.meta.url);
+  const fsm = await import("node:fs");
+  const http = await import("node:http");
+  const net = await import("node:net");
+  const src = (...p) => readFileSync(join(RACINE, ...p), "utf8");
+  const base = join(AUX, "seconde-tournee");
+  mkdirSync(base, { recursive: true });
+
+  // 1. La passerelle, lancée en mode Node par le binaire de l'application, n'ouvre pas le débogueur sur SIGUSR1.
+  const main = src("electron", "main.cjs");
+  verifier("passerelle : lancée avec --disable-sigusr1 (le fusible --inspect ne couvre pas le mode Node)", /spawn\(process\.execPath, \["--disable-sigusr1", entry\]/.test(main), "option absente");
+  let binaire = null;
+  try {
+    binaire = exiger("electron");
+  } catch {
+    binaire = null;
+  }
+  if (process.platform !== "win32" && typeof binaire === "string" && existsSync(binaire)) {
+    const essaiSignal = async (options) => {
+      const enfant = spawn(binaire, [...options, "-e", "setTimeout(() => {}, 5000)"], { env: { ...process.env, ELECTRON_RUN_AS_NODE: "1" }, stdio: ["ignore", "pipe", "pipe"] });
+      let sortie = "";
+      enfant.stdout.on("data", (b) => (sortie += b));
+      enfant.stderr.on("data", (b) => (sortie += b));
+      await new Promise((r) => setTimeout(r, 1000));
+      try {
+        process.kill(enfant.pid, "SIGUSR1");
+      } catch {
+        /* déjà sorti */
+      }
+      await new Promise((r) => setTimeout(r, 1500));
+      const vivant = enfant.exitCode === null;
+      enfant.kill();
+      return { debogueur: /Debugger listening/.test(sortie), vivant };
+    };
+    const sans = await essaiSignal([]);
+    const avec = await essaiSignal(["--disable-sigusr1"]);
+    verifier("témoin : sans l'option, SIGUSR1 ouvre le débogueur du binaire d'Electron en mode Node", sans.debogueur, JSON.stringify(sans));
+    verifier("avec --disable-sigusr1, SIGUSR1 n'ouvre rien et le processus continue", !avec.debogueur && avec.vivant, JSON.stringify(avec));
+  } else {
+    console.log("  · binaire d'Electron absent ou Windows : essai du signal sauté");
+  }
+
+  // 2. Le banc d'essai des pages : Internet, mais ni la machine ni le réseau local.
+  let filtreReseau = null;
+  try {
+    filtreReseau = exiger(join(RACINE, "electron", "filtreReseau.cjs"));
+  } catch {
+    filtreReseau = null;
+  }
+  verifier("banc d'essai : un mandataire filtre le réseau de la page (electron/filtreReseau.cjs)", filtreReseau !== null, "absent");
+  const rendu = src("electron", "rendu.cjs");
+  verifier("banc d'essai : la session de la page passe par lui, boucle locale comprise", /setProxy\(\{[\s\S]{0,200}?<-loopback>/.test(rendu) && /demarrerFiltre\(/.test(rendu) && /setWebRTCIPHandlingPolicy\("disable_non_proxied_udp"\)/.test(rendu), "pas de mandataire");
+  if (filtreReseau) {
+    const interdites = ["127.0.0.1", "127.8.9.1", "0.0.0.0", "10.1.2.3", "172.20.0.1", "192.168.1.10", "169.254.169.254", "100.100.1.1", "224.0.0.1", "::1", "[::1]", "::", "fe80::1", "fd12::1", "::ffff:127.0.0.1", "::ffff:7f00:1", "64:ff9b::7f00:1", "n'importe quoi"];
+    const permises = ["1.1.1.1", "93.184.215.14", "172.32.0.1", "2606:4700::1111"];
+    const malLues = interdites.filter((ip) => !filtreReseau.adresseInterdite(ip));
+    const tropFermees = permises.filter((ip) => filtreReseau.adresseInterdite(ip));
+    verifier("banc d'essai : boucle locale, réseaux privés, lien local, CGNAT, IPv4 dans IPv6 refusés ; Internet admis", malLues.length === 0 && tropFermees.length === 0, `admises à tort : ${malLues.join(" ")} ; refusées à tort : ${tropFermees.join(" ")}`);
+
+    const victime = http.createServer((_req, res) => {
+      res.writeHead(200, { "Access-Control-Allow-Origin": "*" });
+      res.end("SECRET-LOCAL");
+    });
+    await new Promise((r) => victime.listen(0, "127.0.0.1", r));
+    const portVictime = victime.address().port;
+    const page = http.createServer((_req, res) => res.end("PAGE"));
+    await new Promise((r) => page.listen(0, "127.0.0.1", r));
+    const portPage = page.address().port;
+    // Un nom qui pointe vers la machine, ou qui a une adresse publique et une locale (« DNS rebinding ») : résolution simulée.
+    const noms = { "piege.exemple": ["127.0.0.1"], "double.exemple": ["93.184.215.14", "127.0.0.1"] };
+    const filtre = await filtreReseau.demarrerFiltre({ permis: `127.0.0.1:${portPage}`, resoudre: async (h) => (noms[h] ?? []).map((address) => ({ address })) });
+    const parMandataire = (url) =>
+      new Promise((resolve) => {
+        const req = http.request({ host: "127.0.0.1", port: filtre.port, method: "GET", path: url, headers: { Host: new URL(url).host } }, (r) => {
+          let corps = "";
+          r.on("data", (b) => (corps += b));
+          r.on("end", () => resolve({ statut: r.statusCode, corps }));
+        });
+        req.on("error", (e) => resolve({ statut: 0, corps: String(e.message) }));
+        req.end();
+      });
+    const tunnel = (cible) =>
+      new Promise((resolve) => {
+        const s = net.connect(filtre.port, "127.0.0.1", () => s.write(`CONNECT ${cible} HTTP/1.1\r\nHost: ${cible}\r\n\r\n`));
+        let recu = "";
+        s.on("data", (b) => {
+          recu += b;
+          if (recu.includes("\r\n\r\n")) {
+            s.destroy();
+            resolve(recu.split("\r\n")[0]);
+          }
+        });
+        s.on("error", () => resolve("erreur"));
+        s.on("close", () => resolve(recu.split("\r\n")[0] || "fermé"));
+      });
+    const propre = await parMandataire(`http://127.0.0.1:${portPage}/`);
+    const directe = await parMandataire(`http://127.0.0.1:${portVictime}/`);
+    const parNom = await parMandataire(`http://localhost:${portVictime}/`);
+    const piege = await parMandataire(`http://piege.exemple:${portVictime}/`);
+    const double = await parMandataire(`http://double.exemple:${portVictime}/`);
+    const tunnelLocal = await tunnel(`127.0.0.1:${portVictime}`);
+    const tunnelPiege = await tunnel(`piege.exemple:${portVictime}`);
+    filtre.fermer();
+    victime.close();
+    page.close();
+    verifier("banc d'essai : la page elle-même est servie par le mandataire", propre.statut === 200 && propre.corps === "PAGE", JSON.stringify(propre));
+    verifier("banc d'essai : 127.0.0.1 et localhost refusés, rien de lu", directe.statut === 403 && parNom.statut === 403 && !`${directe.corps}${parNom.corps}`.includes("SECRET"), `${directe.statut} ${parNom.statut}`);
+    verifier("banc d'essai : un nom qui pointe vers la machine, même avec une adresse publique à côté, est refusé", piege.statut === 403 && double.statut === 403, `${piege.statut} ${double.statut}`);
+    verifier("banc d'essai : aucun tunnel (HTTPS, WebSocket) vers la machine", /403/.test(tunnelLocal) && /403/.test(tunnelPiege), `${tunnelLocal} | ${tunnelPiege}`);
+    verifier("banc d'essai : les refus sont notés pour le rapport", filtre.refus.includes(`127.0.0.1:${portVictime}`) && filtre.refus.includes(`piege.exemple:${portVictime}`), filtre.refus.join(" "));
+  }
+  // Le vrai Chromium d'Electron passe-t-il par le mandataire ? Seulement là où Electron peut ouvrir une fenêtre cachée.
+  if (process.platform === "darwin" && typeof binaire === "string" && existsSync(binaire)) {
+    const env = { ...process.env };
+    delete env.ELECTRON_RUN_AS_NODE;
+    let bout = null;
+    try {
+      bout = JSON.parse(execFileSync(binaire, [join(RACINE, "scripts", "essai-banc-electron.cjs"), RACINE], { env, encoding: "utf8", timeout: 90_000, stdio: ["ignore", "pipe", "ignore"] }).trim().split("\n").pop());
+    } catch (err) {
+      bout = { plantage: String(err?.message ?? err).slice(0, 200) };
+    }
+    verifier("banc d'essai dans Electron : la page ne lit aucun service de la boucle locale (127.0.0.1, localhost, 0.0.0.0)", bout?.extrait === "R=bbb", JSON.stringify(bout).slice(0, 300));
+  } else {
+    console.log("  · pas de macOS ou pas de binaire d'Electron : banc d'essai dans Electron sauté");
+  }
+
+  // 3. Signature de l'éditeur : `_CodeSignature` seulement là où macOS le pose.
+  const sig = exiger(join(RACINE, "electron", "signatureEditeur.cjs"));
+  const { generateKeyPairSync } = await import("node:crypto");
+  const cle = generateKeyPairSync("ed25519").privateKey.export({ type: "pkcs8", format: "pem" });
+  const id = { identifiant: "fr.helix.plateforme", version: "9.0.2" };
+  const faire = async (dossier) => {
+    const app = join(base, dossier, "Helix.app");
+    for (const d of ["Contents/Resources", "Contents/MacOS"]) fsm.mkdirSync(join(app, d), { recursive: true });
+    fsm.writeFileSync(join(app, "Contents/MacOS/Helix"), "binaire", { mode: 0o755 });
+    fsm.writeFileSync(join(app, "Contents/Resources/app.asar"), "application");
+    await sig.signerApplication(app, cle, id);
+    return app;
+  };
+  const vraie = await faire("vraie");
+  const cleInstallee = sig.cleDeLApplication(vraie);
+  fsm.mkdirSync(join(vraie, "Contents", "_CodeSignature"));
+  fsm.writeFileSync(join(vraie, "Contents", "_CodeSignature", "CodeResources"), "sceau de macOS");
+  verifier("signature de l'éditeur : la signature de code de macOS, à sa place, ne compte pas", (await sig.verifierApplication(vraie, cleInstallee, id)).ok, "refusée");
+  const glissee = await faire("glissee");
+  fsm.mkdirSync(join(glissee, "Contents", "Resources", "_CodeSignature"));
+  fsm.writeFileSync(join(glissee, "Contents", "Resources", "_CodeSignature", "charge.js"), "require('child_process')");
+  verifier("signature de l'éditeur : un fichier glissé dans un « _CodeSignature » ailleurs est vu", !(await sig.verifierApplication(glissee, cleInstallee, id)).ok, "accepté");
+  const leurre = await faire("leurre");
+  fsm.symlinkSync("/tmp", join(leurre, "Contents", "_CodeSignature"));
+  verifier("signature de l'éditeur : un lien nommé « _CodeSignature » est vu", !(await sig.verifierApplication(leurre, cleInstallee, id)).ok, "accepté");
+
+  // 4. Signature de code re-faite par la source : ni durcissement perdu, ni droit en plus.
+  verifier("mise à jour : les droits et le durcissement de macOS sont comparés à l'application qui tourne", typeof sig.controlerSignaturesDeCode === "function" && /controlerSignaturesDeCode\(nouvelle, actuelle\)/.test(src("electron", "miseAJour.cjs")), "absent");
+  if (process.platform === "darwin") {
+    const jouer = (scenario) => {
+      const dossier = join(base, `doublure-${scenario}`);
+      fsm.mkdirSync(join(dossier, "tmp"), { recursive: true });
+      const env = { ...process.env, TMPDIR: join(dossier, "tmp"), HELIX_DATA_DIR: join(dossier, "donnees") };
+      delete env.HELIX_SANS_MISE_A_JOUR;
+      try {
+        return JSON.parse(execFileSync(process.execPath, [join(RACINE, "scripts", "doublure-mise-a-jour.cjs"), RACINE, dossier, scenario], { env, encoding: "utf8", timeout: 90_000 }).trim().split("\n").pop());
+      } catch (err) {
+        return { plantage: String(err?.message ?? err).slice(0, 200) };
+      }
+    };
+    const authentique = jouer("mac-code-authentique");
+    verifier("macOS : un vrai programme signé comme l'installé s'installe", authentique.phase === "prete" && authentique.lances?.length === 1, JSON.stringify(authentique).slice(0, 200));
+    const sansDurci = jouer("mac-code-sans-durci");
+    verifier("macOS : le code authentique re-signé sans durcissement (relevé inchangé) ne s'installe pas", sansDurci.releveInchange === true && sansDurci.phase === "erreur" && sansDurci.lances?.length === 0, JSON.stringify(sansDurci).slice(0, 200));
+    const droit = jouer("mac-code-droit");
+    verifier("macOS : le code authentique re-signé avec get-task-allow ne s'installe pas", droit.releveInchange === true && droit.phase === "erreur" && droit.lances?.length === 0, JSON.stringify(droit).slice(0, 200));
+  }
+
+  // 5. Chaque canal de la fenêtre principale vérifie son expéditeur, celui de la langue compris.
+  const canaux = [...main.matchAll(/ipcMain\.(?:on|handle)\("(helix:[^"]+)",\s*(?:async\s*)?\(([^)]*)\)\s*=>\s*\{([\s\S]{0,240})/g)];
+  const sansControle = canaux.filter(([, , , corps]) => !/depuisLaFenetre\(/.test(corps)).map(([, nom]) => nom);
+  verifier("fenêtre principale : chaque canal helix:* de main.cjs vérifie qu'il vient d'elle", canaux.length >= 10 && sansControle.length === 0, `${canaux.length} canaux, sans contrôle : ${sansControle.join(", ")}`);
+
+  // 6. Le moteur des applications écrites par Helix : une date illisible est échappée avant innerHTML.
+  const moteur = src("gateway", "application", "app.js");
+  const fonction = (nom) => {
+    const debut = moteur.indexOf(`function ${nom}(`);
+    let profondeur = 0;
+    for (let i = moteur.indexOf("{", debut); i < moteur.length; i++) {
+      if (moteur[i] === "{") profondeur++;
+      else if (moteur[i] === "}" && --profondeur === 0) return moteur.slice(debut, i + 1);
+    }
+    return "";
+  };
+  const { runInNewContext } = await import("node:vm");
+  const rendue = runInNewContext(`${fonction("echapper")}\n${fonction("dateFr")}\ndateFr('<img src=x onerror=alert(1)>')`, {});
+  verifier("application écrite par Helix : une date illisible ne passe pas en HTML", typeof rendue === "string" && !rendue.includes("<"), String(rendue));
+}
+
+/*
  * Chaîne d'approvisionnement (audit du 27/09/2026) : ce que Helix télécharge
  * sur les postes a une version figée et une empreinte écrite dans le code, et
  * le dépôt public ne porte ni clé ni donnée de celui qui le fait tourner. Tout

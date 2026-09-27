@@ -64,7 +64,8 @@
   function dateFr(v) {
     if (!v) return "";
     var d = new Date(v + (String(v).length === 10 ? "T00:00:00" : ""));
-    return isNaN(d.getTime()) ? String(v) : d.toLocaleDateString("fr-FR", { day: "2-digit", month: "short", year: "numeric" });
+    // Une date illisible est rendue telle quelle, mais échappée : elle part dans innerHTML (28/09/2026).
+    return isNaN(d.getTime()) ? echapper(v) : d.toLocaleDateString("fr-FR", { day: "2-digit", month: "short", year: "numeric" });
   }
   /** « Montant HT » devient « montant HT » : seule la première lettre, et seulement si le mot suivant n'est pas un sigle. */
   function minuscule(t) {

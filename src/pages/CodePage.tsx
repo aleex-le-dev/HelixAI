@@ -13,6 +13,9 @@ import { MessageList } from "@/components/chat/MessageList";
 import { InfoBox } from "@/components/ui/InfoBox";
 import { InstallerOpencode } from "@/components/code/InstallerOpencode";
 import { useCode } from "@/hooks/useCode";
+import { useCodex } from "@/hooks/useCodex";
+import { AvisCodex, MoteurCode } from "@/components/code/MoteurCode";
+import { moteurRetenu, retenirMoteur, type MoteurCode as Moteur } from "@/lib/codex";
 import { useProfile } from "@/hooks/useProfile";
 import { currentUser, prenom } from "@/lib/store/identity";
 import type { NiveauRaisonnement } from "@/lib/store/profile";
@@ -44,6 +47,17 @@ export function CodePage() {
     model: profile.preferredModelUid,
     effort: profile.preferredEffort ?? "moyen",
   });
+  /*
+   * Codex, second moteur, avec le compte ChatGPT du propriétaire du poste
+   * (27/09/2026, PROJET.md § 3.14). Il ne sert que s'il est choisi, proposé
+   * par l'instance, connecté et permis au niveau d'approbation : sinon,
+   * OpenCode, comme avant. `vue` est le moteur dont l'écran montre le travail.
+   */
+  const [moteurChoisi, setMoteurChoisi] = useState<Moteur>(moteurRetenu);
+  const codex = useCodex(dossier ?? code.status?.projectDir, moteurChoisi === "codex");
+  const codexPret = Boolean(codex.etat?.propose && codex.etat.installe && codex.etat.connecte && codex.etat.bac);
+  const moteur: Moteur = moteurChoisi === "codex" && (codexPret || codex.busy) ? "codex" : "opencode";
+  const vue = moteur === "codex" ? codex : code;
 
   /*
    * L'adresse dit quelle session est affichée : `/code?s=<id>` une session de
@@ -90,10 +104,10 @@ export function CodePage() {
   const submit = () => {
     const text = draft;
     setDraft("");
-    void code.send(text);
+    void vue.send(text);
   };
 
-  const unavailable = code.status && !code.status.available;
+  const unavailable = moteur === "opencode" && code.status && !code.status.available;
 
   const composer = (
     <Composer
@@ -101,8 +115,9 @@ export function CodePage() {
       value={draft}
       onChange={setDraft}
       onSubmit={submit}
-      busy={code.busy}
-      onStop={code.stop}
+      busy={vue.busy}
+      onStop={vue.stop}
+      sansModele={moteur === "codex"}
       modelUid={profile.preferredModelUid}
       onModelChange={(uid) => update({ preferredModelUid: uid })}
       effort={profile.preferredEffort ?? "moyen"}
@@ -114,7 +129,26 @@ export function CodePage() {
        * (permissionsCode.ts) : le même niveau, choisi ici aussi, décide ce qui
        * arrive en carte (écrire, lancer une commande, aller sur le réseau).
        */
-      accessoire={<ApprovalSelector />}
+      accessoire={
+        <>
+          <MoteurCode
+            moteur={moteur}
+            onChange={(m) => {
+              setMoteurChoisi(m);
+              retenirMoteur(m);
+              // Changer de moteur, c'est une conversation neuve.
+              codex.nouvelle();
+              if (sessionId || demandee) navigate("/code");
+            }}
+            etat={codex.etat}
+            onConnecter={() => void codex.connecter()}
+            onAnnulerConnexion={() => void codex.annulerConnexion()}
+            connexionRefus={codex.connexionRefus}
+            occupe={vue.busy}
+          />
+          <ApprovalSelector />
+        </>
+      }
       contextBar={
         <DossierTravailChip
           dossier={dossierAffiche}
@@ -146,8 +180,10 @@ export function CodePage() {
     );
   }
 
+  const avis = moteur === "codex" && <AvisCodex etat={codex.etat} />;
+
   /* --- Session en cours ------------------------------------------------- */
-  if (code.messages.length > 0) {
+  if (vue.messages.length > 0) {
     return (
       <div className="relative flex h-full min-w-0">
         {!suiviOuvert && (
@@ -161,20 +197,23 @@ export function CodePage() {
         <section className="flex min-w-0 flex-1 flex-col bg-dotted">
           <div className="min-h-0 flex-1 overflow-y-auto">
             <div className="mx-auto w-full max-w-[760px] px-6 py-8">
-              <MessageList messages={code.messages} />
-              {code.error && (
+              <MessageList messages={vue.messages} />
+              {vue.error && (
                 <InfoBox
                   tone="warning"
                   className="mt-4"
                   leading={<TriangleAlert size={15} strokeWidth={1.75} />}
                 >
-                  {code.error}
+                  {vue.error}
                 </InfoBox>
               )}
             </div>
           </div>
           <div className="shrink-0 px-6 pb-5">
-            <div className="mx-auto w-full max-w-[760px]">{composer}</div>
+            <div className="mx-auto w-full max-w-[760px]">
+              {composer}
+              {avis}
+            </div>
           </div>
         </section>
         {/*
@@ -185,9 +224,9 @@ export function CodePage() {
         */}
         {suiviOuvert && (
           <SuiviCodePanel
-            suivi={code.suivi}
+            suivi={vue.suivi}
             dossier={dossierAffiche}
-            onArreter={code.arreterAction}
+            onArreter={moteur === "opencode" ? code.arreterAction : undefined}
             onFermer={() => setSuiviOuvert(false)}
             className="fixed inset-y-0 right-0 z-40 shadow-lg lg:static lg:z-auto lg:shadow-none"
           />
@@ -209,14 +248,15 @@ export function CodePage() {
           </div>
 
           {composer}
+          {avis}
 
-          {code.error && (
+          {vue.error && (
             <InfoBox
               tone="warning"
               className="mt-4"
               leading={<TriangleAlert size={15} strokeWidth={1.75} />}
             >
-              {code.error}
+              {vue.error}
             </InfoBox>
           )}
 

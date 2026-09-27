@@ -121,6 +121,13 @@ export type AuditAction =
   /** Installation de LM Studio : qui a accepté ses conditions, et lesquelles. */
   | "moteur.conditions_acceptees"
   | "code.opencode_installe"
+  /*
+   * Codex avec le compte ChatGPT du propriétaire (codex.ts, 27/09/2026) : qui
+   * a lancé la connexion, et chaque tâche (dossier, bac à sable, reprise).
+   * Jamais la demande elle-même : le journal ne garde pas de contenu.
+   */
+  | "code.codex_connexion"
+  | "code.codex_tache"
   | "dictee.transcrite"
   /*
    * Tarif d'un modèle distant. C'est lui qui transforme des jetons en euros sur

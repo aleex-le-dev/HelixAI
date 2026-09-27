@@ -126,6 +126,11 @@ l'architecture : on n'a pas quatre produits, on en a un, présenté de quatre fa
 Retenu en juillet 2026. Licence MIT, indépendant du fournisseur, boucle d'outils,
 sous-agents, serveur pilotable. Réécrire un agent de code n'apportait rien.
 
+**Exception décidée par Medhi le 27/09/2026 (§ 3.14)** : Codex, le programme officiel d'OpenAI,
+peut remplacer OpenCode dans l'écran Code, pour le seul propriétaire du poste et avec son compte
+ChatGPT. OpenCode reste le moteur par défaut et le seul partout ailleurs (Cowork, employés,
+tâches, ligne de commande).
+
 **Écartés :** Eigent (Apache 2.0, capable, mais lourd et très opiniâtre — à revoir
 seulement pour du multi-agents parallèle clé en main) ; AionUi (on avait déjà notre
 interface, on en a repris le motif, pas l'application).
@@ -1018,15 +1023,18 @@ instance ouverte aux collègues, un client tiers (tableur, éditeur).
 
 ### 3.14 Un abonnement ChatGPT (par Codex) ou Claude dans Helix : ce qui est permis
 
-**À décider par Medhi.** Demandé le 27/09/2026 : « si possible, que quelqu'un puisse
+**Décidé par Medhi le 27/09/2026 : Codex, oui (« ajoute »), fait le jour même** selon la voie
+décrite plus bas (voir « Fait » à la fin de cette section). **Claude par abonnement : non**, rien
+n'est écrit. Demandé le 27/09/2026 : « si possible, que quelqu'un puisse
 connecter son compte Codex ou Claude dans Helix, pour avoir le meilleur logiciel avec
 leur compte », c'est-à-dire se servir d'un abonnement ChatGPT Plus/Pro ou Claude
 Pro/Max sans clé d'API payée à l'usage.
 
 Relevé à la source le 27/09/2026, documentation et conditions officielles seulement
-(les articles de presse ne servent qu'à dater). Ce n'est pas un avis juridique. **Aucun
-code écrit** : la voie Claude est fermée, la voie OpenAI est ouverte mais défait le
-§ 3.1 et demande des garde-fous qui sont des choix, pas des détails.
+(les articles de presse ne servent qu'à dater). Ce n'est pas un avis juridique. Au premier
+relevé, aucun code : la voie Claude est fermée, la voie OpenAI est ouverte mais défait le
+§ 3.1 et demande des garde-fous qui sont des choix, pas des détails. Medhi les a faits
+(voir « Fait »).
 
 **Claude (Pro, Max) : interdit pour Helix, sauf accord écrit d'Anthropic.**
 
@@ -1096,7 +1104,8 @@ un Codex modifié (un ingénieur d'OpenAI a refusé de trancher, [discussion
 ChatGPT », lancé le 02/08/2026 avec six partenaires, ne transmet que l'identité (nom,
 adresse, photo) : ce n'est pas un moyen de faire payer les modèles par l'abonnement.
 
-**Pourquoi rien n'est codé le 27/09/2026, même pour Codex :**
+**Pourquoi rien n'était codé au premier relevé, même pour Codex** (les quatre points ont été
+tranchés par la décision de Medhi et par les garde-fous de « Fait ») **:**
 
 1. **Le § 3.1.** Codex est un agent de code complet, avec ses outils, son bac à sable et
    ses approbations. Le brancher, c'est un second moteur d'agent à côté d'OpenCode : le
@@ -1140,6 +1149,67 @@ les deux éditeurs recommandent pour un produit tiers.
 
 Pour Claude, la seule suite possible est une demande d'accord écrite à Anthropic
 (page « contact sales » citée par la page Legal) ; sans elle, rien.
+
+**Fait le 27/09/2026 : Codex dans l'écran Code, pour le propriétaire du poste.** Par la voie
+ci-dessus, avec ce qui a été relu à la source en l'écrivant :
+
+- **Fichiers** : `gateway/src/codexGarde.ts` (qui, quel bac à sable, conversion du flux, sans
+  rien lancer : c'est ce que la batterie vérifie une à une), `gateway/src/codex.ts` (détection,
+  connexion, tâches, routes `/helix/codex*`), `src/lib/codex.ts`, `src/hooks/useCodex.ts`,
+  `src/components/code/MoteurCode.tsx` ; branchés en quelques lignes dans `index.ts`, `audit.ts`,
+  `CodePage.tsx`, `Composer.tsx` (`sansModele`) et `electron/main.cjs` (`HELIX_BUREAU=1`).
+- **Détection** : `HELIX_CODEX_BIN`, puis le PATH, puis Homebrew, `~/.local/bin`, npm global,
+  Volta, Bun, nvm ; sous Windows `codex.exe` (PATH, WinGet) ou le script du paquet npm lancé par
+  `node` (**pas essayé sur un vrai Windows**). Jamais sous `~/.codex`. Version par
+  `codex --version`, connexion par `codex login status` (« exits 0 when credentials present »,
+  page « Developer commands ») ; le mode (ChatGPT ou clé d'API) est lu dans sa première ligne,
+  masquée. Helix ne lit **aucun fichier** pour cela.
+- **Connexion** : « Se connecter avec ChatGPT » lance `codex login` (sortie ignorée, dix minutes
+  au plus, annulable) ; l'écran relit l'état toutes les deux secondes. Codex absent : l'écran donne
+  `npm install -g @openai/codex` (et `brew install --cask codex` sur Mac), relevés dans le README
+  d'openai/codex ; Helix ne l'installe pas.
+- **Exécution** : `codex exec --json --skip-git-repo-check --sandbox <bac> -c sandbox_mode=…
+  -c approval_policy="never" -c sandbox_workspace_write.network_access=false -`, dans le dossier du
+  projet validé comme pour OpenCode, la demande sur l'entrée standard (jamais dans `ps`). Reprise :
+  `codex exec --json … resume -c … <thread_id> -`, seulement pour une session ouverte par cette
+  passerelle et pour la même personne, dans son dossier. `--sandbox` n'est pas accepté par
+  `resume`, et une reprise sans réglage retombait sur `workspace-write` (openai/codex #40149,
+  22/08/2026) : d'où le bac à sable redonné par `-c` à chaque fois. Le flux JSONL (`thread.started`,
+  `item.*` : `agent_message`, `reasoning`, `command_execution`, `file_change`, `mcp_tool_call`,
+  `web_search`, `todo_list`, `collab_tool_call`, `error` ; `turn.completed`, `turn.failed`)
+  devient les évènements de l'écran Code (message, raisonnement, commandes, fichiers écrits ou
+  modifiés, liste de tâches) : même rendu et même panneau de suivi qu'avec OpenCode. Arrêt par le
+  bouton, fermeture de l'écran, ou au bout d'une heure ; une tâche à la fois.
+- **Niveau d'approbation** : `codex exec` ne demande jamais rien (`approval_policy = never`, lu
+  dans `codex-rs/exec/src/lib.rs`). D'où « tout » → `workspace-write` (réseau des commandes
+  coupé), « modifications » → `read-only`, « chaque » → Codex refusé. Jamais
+  `danger-full-access`.
+- **Réservé au propriétaire**, vérifié par la passerelle à chaque route : pas de clé de l'API
+  développeur, pas de jeton dans l'adresse, installation de bureau (`HELIX_BUREAU`), instance non
+  partagée, requête par la boucle locale, compte administrateur. Pour les autres, `GET
+  /helix/codex` répond « non proposé » sans même lancer `codex`. Un employé OpenClaw ou une tâche
+  programmée n'ont ni séance ni accès à ces routes, et Codex n'est un outil nulle part.
+- **À l'écran** : le sélecteur « OpenCode (modèles de …) » / « Codex (votre compte ChatGPT) »,
+  visible du seul propriétaire ; un encadré dit que la demande et les fichiers lus partent chez
+  OpenAI (États-Unis), sous les limites de l'abonnement, hors des approbations de Helix, que
+  Helix ne borne pas ce que Codex lit, et ce que permet le bac à sable au niveau actuel. Le choix
+  du modèle et du niveau de raisonnement disparaît (Codex choisit le sien).
+- **Pas fait** : les sessions de Codex ne sont pas dans la liste des sessions de Code (la
+  conversation continue tant que l'écran est ouvert) ; la consommation que rend
+  `turn.completed` n'est pas affichée ; les limites de l'abonnement ne sont pas lues
+  (`account/rateLimits/read` est dans l'app-server, expérimental).
+
+**Vérifié ici** : `npm run typecheck` ; `npm run securite`, 517 contrôles, 0 échec (42 de plus :
+les routes sans jeton et sans séance, puis la section 7 nonies, avec un faux `codex`,
+`scripts/faux-codex.mjs`) ; i18n à 100 % des deux côtés. **Pas essayé** : le vrai `codex`, un vrai
+compte, l'écran dans l'application.
+
+**À essayer sur le poste de Medhi** : installer Codex (`npm install -g @openai/codex`), puis dans
+Code choisir « Codex », « Se connecter avec ChatGPT » et terminer dans le navigateur ; une demande
+au niveau « Demander avant de modifier » (Codex doit rester en lecture seule), puis au niveau
+« Tout approuver » (une modification dans le projet), la reprise par une deuxième demande,
+l'arrêt en cours de tâche ; enfin la limite d'abonnement atteinte, pour voir le message rendu.
+Vérifier aussi qu'un compte membre et un poste rattaché ne voient pas le sélecteur.
 
 ---
 
@@ -3300,6 +3370,15 @@ parties » ; poser une seconde question sur le même fichier (elle doit être pl
 première : le moteur reprend ce qu'il a lu) ; `lms ps` pour voir la taille de conversation chargée.
 Restent non lus, et dits comme tels : PDF scanné (images de pages ; les faire lire par un modèle de
 vision reste à faire), PDF protégé, anciens .doc/.xls/.ppt, photo HEIC.
+
+**Fait le 27/09/2026 : Codex dans l'écran Code, avec le compte ChatGPT du propriétaire du
+poste.** Décidé par Medhi (« ajoute »). Le détail, les sources et ce qui reste à essayer sont
+au § 3.14 (« Fait ») ; les barrières au § 30 de SECURITE.md. En bref : second moteur au choix
+dans Code, le programme `codex` officiel piloté par `codex exec --json`, connexion par
+`codex login` dans le navigateur, rien lu dans `~/.codex`, bac à sable jamais plus large que le
+niveau d'approbation, réservé à l'administrateur d'une installation de bureau non partagée.
+Vérifié par un faux `codex` (517 contrôles) ; **pas essayé avec le vrai programme ni un vrai
+compte**. Claude par abonnement reste exclu.
 
 **Trouvé le 27/09/2026 au premier vrai essai de mise à jour d'un clic (0.27.0 vers 0.27.1, par
 GitHub, sur ce Mac) : toute mise à jour était refusée.** La fenêtre « Nouvelle version » est bien

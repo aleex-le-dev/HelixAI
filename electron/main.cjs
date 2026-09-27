@@ -189,6 +189,8 @@ async function startGateway() {
       HELIX_GATEWAY_PORT: String(GATEWAY_PORT),
       // Marque blanche : les messages de la passerelle disent le nom du produit livré.
       HELIX_NOM_PRODUIT: NOM_AFFICHE,
+      // Installation de bureau : Codex n'est proposé qu'ici, au propriétaire du poste (gateway/src/codex.ts, 27/09/2026).
+      HELIX_BUREAU: "1",
       // Le banc d'essai des pages : adresse sur la boucle locale et clé, pour la passerelle seule.
       ...(rendu ? { HELIX_RENDU_URL: rendu.url, HELIX_RENDU_CLE: rendu.cle } : {}),
     },

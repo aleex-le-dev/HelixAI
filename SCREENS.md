@@ -208,6 +208,31 @@ l'installer. Une fois posé, l'écran Code s'ouvre sans relancer l'application. 
 n'est pas empaqueté dans l'installeur de Helix. **Pas vu à l'écran** (typecheck seul) :
 l'enchaînement d'office, le texte du membre.
 
+**Moteur : OpenCode ou Codex** (27/09/2026, `src/components/code/MoteurCode.tsx`,
+`useCodex`, `src/lib/codex.ts` ; PROJET.md § 3.14). Pour le **seul propriétaire du
+poste** (administrateur d'une installation de bureau non partagée ; la passerelle
+le décide), une puce « OpenCode » / « Codex » dans la ligne d'outils de la saisie,
+à côté du niveau d'approbation. Le menu propose « OpenCode (modèles de …) », par
+défaut, et « Codex (votre compte ChatGPT) », grisé tant que Codex n'est pas prêt ;
+dessous, l'état : absent (commande officielle à copier, `npm install -g
+@openai/codex`, et `brew install --cask codex` sur Mac ; Helix ne l'installe pas),
+installé mais pas connecté (« Se connecter avec ChatGPT » : le navigateur s'ouvre
+chez OpenAI, « Terminez la connexion dans votre navigateur… », « Annuler »),
+connecté (par l'abonnement ChatGPT, ou par une clé d'API, dit tel quel). Au niveau
+« Demander pour tout », Codex n'est pas proposé, et c'est écrit. Codex choisi : le
+choix du modèle et du niveau de raisonnement disparaît de la saisie, et un encadré
+sous la saisie dit que la demande et les fichiers lus partent chez OpenAI
+(États-Unis), sous les limites de l'abonnement, hors des approbations de Helix, que
+Helix ne borne pas ce que Codex lit, et ce que permet le bac à sable au niveau
+actuel (lecture seule, ou écriture dans le projet sans réseau). Le fil et le
+panneau de suivi sont les mêmes qu'avec OpenCode (message, raisonnement, commandes,
+fichiers écrits ou modifiés, liste de tâches) ; le bouton d'arrêt arrête Codex. La
+conversation continue (reprise de la session Codex) tant que l'écran reste ouvert ;
+les sessions de Codex ne vont pas dans la barre latérale ; quitter l'écran arrête
+une tâche en cours. Le choix du moteur est retenu sur le poste. Un membre, un poste
+rattaché, une instance partagée ne voient pas la puce. **Pas vu à l'écran**
+(typecheck et batterie seuls) : ni dans le navigateur, ni dans l'application.
+
 ### `/projets` Projets
 
 `src/pages/ProjetsPage.tsx`. Captures 10 et 11.

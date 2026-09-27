@@ -2900,6 +2900,18 @@ Aussi : les liens « Code source » et « Voir les versions publiées » des ré
 un ancien dépôt (`helix-agence/helix`) ; ils mènent au dépôt public et à sa dernière
 publication.
 
+**Fait le 27/09/2026 : dépôt public relu comme un projet ouvert.** Page GitHub (demandé par
+Medhi : « aucun défaut, aucune faille ») : politique de sécurité (`SECURITY.md`, signalement
+privé), code de conduite, guide de contribution en anglais, modèles de tickets et de demandes
+de fusion (avec la ligne du CLA), Dependabot, Discussions, sujets, site ; README : « Pourquoi
+HelixAI », « Communauté », badge de version automatique. GitHub note la santé communautaire à
+100 %. Protections du dépôt : détection des secrets et blocage au push, alertes et correctifs
+Dependabot, CodeQL. La première analyse CodeQL a relevé 45 alertes, relues une à une et
+corrigées ou classées avec leur raison (SECURITE.md § 29.10), dont un vrai durcissement : les
+mots de passe à 600 000 itérations, avec la migration des anciens à la connexion. **À faire
+par Medhi** : l'image d'aperçu du dépôt (Settings, Social preview) ne se règle que dans le
+navigateur.
+
 **Trouvé le 27/09/2026 au premier vrai essai de mise à jour d'un clic (0.27.0 vers 0.27.1, par
 GitHub, sur ce Mac) : toute mise à jour était refusée.** La fenêtre « Nouvelle version » est bien
 apparue, l'archive s'est téléchargée, puis « la mise à jour a été refusée : son contenu a changé

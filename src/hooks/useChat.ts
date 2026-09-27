@@ -15,6 +15,7 @@ import {
   type SessionOrigin,
   type StoredMessage,
 } from "@/lib/store/sessions";
+import { aleatoire } from "@/lib/store/storage";
 
 /** Trace d'un outil utilisé par l'agent pendant sa réponse. */
 export interface ToolTrace {
@@ -86,7 +87,7 @@ export interface Message {
   error?: string;
 }
 
-const newId = () => Math.random().toString(36).slice(2);
+const newId = () => aleatoire(11);
 
 /*
  * Réponses en cours, par Chat, hors de l'écran.

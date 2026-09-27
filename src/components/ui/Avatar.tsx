@@ -20,12 +20,22 @@ interface AvatarProps {
  * redessine quand ce compte change de nom : l'avatar de la barre latérale ne
  * se démonte jamais, il aurait sinon gardé les anciennes initiales.
  */
+/**
+ * Seule une image intégrée s'affiche (PNG, JPEG, WebP, GIF, en base64) : la
+ * photo d'un collègue vient de l'instance, et une adresse web ferait appeler
+ * n'importe quel serveur par chaque poste qui l'affiche. L'instance le vérifie
+ * déjà à l'enregistrement (`photoValide`, gateway/src/accounts.ts) ; l'écran le
+ * revérifie, pour une instance plus ancienne ou modifiée (27/09/2026).
+ */
+const IMAGE_INTEGREE = /^data:image\/(png|jpeg|webp|gif);base64,[A-Za-z0-9+/]+={0,2}$/;
+const imageSure = (src: string | undefined): string | undefined => (src && IMAGE_INTEGREE.test(src) ? src : undefined);
+
 export function Avatar({ size = 32, className, initials, photo, nom }: AvatarProps) {
   const utilisateur = useUtilisateurCourant();
   // Sans initiales, c'est l'avatar de la personne connectée ; avec, celui d'une autre.
   const autre = initials !== undefined;
   const label = autre ? initials : utilisateur.initials;
-  const image = autre ? photo : utilisateur.photo;
+  const image = imageSure(autre ? photo : utilisateur.photo);
   const nomLu = autre ? (nom ?? initials) : utilisateur.fullName;
   if (image) {
     return (

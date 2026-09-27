@@ -103,7 +103,7 @@ window.fabriquer = async (logoUrl) => {
 </script></body></html>`;
 
 app.whenReady().then(async () => {
-  const f = new BrowserWindow({ show: false, webPreferences: { offscreen: true, webSecurity: false } });
+  const f = new BrowserWindow({ show: false, webPreferences: { offscreen: true } });
   await f.loadURL("data:text/html;charset=utf-8," + encodeURIComponent(page));
   const logo = "data:image/png;base64," + fs.readFileSync(B("logo-helice.png")).toString("base64");
   const r = await f.webContents.executeJavaScript(`fabriquer(${JSON.stringify(logo)})`);

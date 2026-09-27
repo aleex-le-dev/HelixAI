@@ -1,7 +1,7 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import http from "node:http";
 import { createServer } from "node:net";
-import { randomBytes, timingSafeEqual } from "node:crypto";
+import { randomBytes, randomInt, timingSafeEqual } from "node:crypto";
 import {
   writeFileSync,
   readFileSync,
@@ -964,7 +964,8 @@ export function idMessage(): string {
   const temps = Buffer.alloc(6);
   for (let i = 0; i < 6; i++) temps[i] = Number((valeur >> BigInt(40 - 8 * i)) & 0xffn);
   const signes = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
-  const hasard = [...randomBytes(14)].map((o) => signes[o % 62]).join("");
+  // Sans biais (`randomInt`, pas `octet % 62`).
+  const hasard = Array.from({ length: 14 }, () => signes[randomInt(62)]).join("");
   return `msg_${temps.toString("hex")}${hasard}`;
 }
 

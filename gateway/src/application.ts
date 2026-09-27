@@ -4,6 +4,7 @@ import modele from "../application/modele.json" with { type: "json" };
 import { completer } from "./completion.ts";
 import type { Design } from "./design.ts";
 import { t, tf } from "./langue.ts";
+import { echapperRegex } from "./texteBrut.ts";
 
 /**
  * Les applications de gestion de Helix Code, faites en plusieurs étapes.
@@ -614,7 +615,7 @@ export function problemesMetier(dossier: string, prepareeCeTour: boolean): strin
     const nom = /reduce\s*\($/.test(m[0].replace(/\s*(?:function\s*\([^)]*\)|\([^)]*\)\s*=>|[A-Za-z_$][\w$]*\s*=>)$/, "")) ? params[1] : params[0];
     if (!nom || !/^[A-Za-z_$][\w$]*$/.test(nom)) continue;
     const suite = sansCommentaires.slice(m.index! + m[0].length, m.index! + m[0].length + 300);
-    for (const x of suite.matchAll(new RegExp(`(?<![\\w$.])${nom.replace(/\$/g, "\\$")}\\.([A-Za-z_$][\\w$]*)`, "g"))) {
+    for (const x of suite.matchAll(new RegExp(`(?<![\\w$.])${echapperRegex(nom)}\\.([A-Za-z_$][\\w$]*)`, "g"))) {
       if (!ens.has(x[1]!)) inconnues.add(`champ « ${x[1]} » de ${m[1]}`);
     }
   }

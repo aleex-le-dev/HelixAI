@@ -1033,7 +1033,7 @@ export function corrigerPages(dossier: string): number {
         .replace(/[ \t]*<link[^>]+href=["'][^"']*design\/helix\.css["'][^>]*>\s*\n?/gi, "")
         .replace(/(<body[^>]*class=["'][^"']*)\bvisuel\b/i, "$1");
       const ajouts: string[] = [];
-      if (police && !neuf.includes("fonts.googleapis.com")) {
+      if (police && !/\/\/fonts\.googleapis\.com\//.test(neuf)) {
         ajouts.push('<link rel="preconnect" href="https://fonts.googleapis.com">', '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>', `<link rel="stylesheet" href="${police}">`);
       }
       if (!/<meta[^>]+name=["']viewport/i.test(neuf)) ajouts.unshift('<meta name="viewport" content="width=device-width, initial-scale=1">');

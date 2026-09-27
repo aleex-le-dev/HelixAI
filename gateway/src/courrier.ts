@@ -43,6 +43,7 @@ async function identifiantsSmtp(
 }
 import { journaliser } from "./audit.ts";
 import { t, tf } from "./langue.ts";
+import { jusquaStabilite } from "./texteBrut.ts";
 
 /**
  * Connecteur courrier de Helix, en IMAP.
@@ -1374,13 +1375,16 @@ function depouillerHtml(html: string): string {
     acirc: "â",
     euro: "€",
   };
-  return html
-    .replace(/<!--[\s\S]*?-->/g, "")
-    .replace(/<(script|style)\b[\s\S]*?<\/\1>/gi, "")
-    .replace(/<\/(p|div|tr|h[1-6]|li|blockquote)\s*>/gi, "\n")
-    .replace(/<br\s*\/?>/gi, "\n")
-    .replace(/<li\b[^>]*>/gi, "- ")
-    .replace(/<[^>]+>/g, "")
+  // Jusqu'à ce qu'il ne reste plus rien à retirer (texteBrut.ts) : `<scr<script>ipt>` ne laisse rien.
+  return jusquaStabilite(html, (s) =>
+    s
+      .replace(/<!--[\s\S]*?-->/g, "")
+      .replace(/<(script|style)\b[\s\S]*?<\/\1>/gi, "")
+      .replace(/<\/(p|div|tr|h[1-6]|li|blockquote)\s*>/gi, "\n")
+      .replace(/<br\s*\/?>/gi, "\n")
+      .replace(/<li\b[^>]*>/gi, "- ")
+      .replace(/<[^>]+>/g, ""),
+  )
     .replace(/&#x([0-9a-f]+);/gi, (_t, h: string) => String.fromCodePoint(parseInt(h, 16)))
     .replace(/&#(\d+);/g, (_t, d: string) => String.fromCodePoint(Number(d)))
     .replace(/&([a-z]+);/gi, (t, nom: string) => entites[nom.toLowerCase()] ?? t)

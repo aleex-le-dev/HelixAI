@@ -15,7 +15,14 @@ import { t, tf } from "./langue.ts";
  * tous ses collègues et pourrait les attaquer hors ligne.
  */
 
-const ITERATIONS = 210_000;
+/*
+ * 600 000 itérations de PBKDF2-SHA256, la recommandation actuelle de l'OWASP
+ * (relevée le 27/09/2026, en préparant le dépôt public). Les empreintes d'avant
+ * n'en notaient pas le nombre : elles valent 210 000, et sont refaites à
+ * 600 000 à la connexion suivante, quand le mot de passe est connu.
+ */
+const ITERATIONS = 600_000;
+const ITERATIONS_ANCIENNES = 210_000;
 const KEYLEN = 32;
 const DIGEST = "sha256";
 
@@ -55,6 +62,8 @@ export interface StoredAccount {
   /** Ne sort jamais de l'instance. */
   passwordHash?: string;
   salt?: string;
+  /** Itérations de PBKDF2 de `passwordHash` ; absent : ITERATIONS_ANCIENNES. Ne sort jamais de l'instance. */
+  iterations?: number;
   /** Second facteur actif. Ne sort jamais de l'instance. Voir `gateway/src/totp.ts`. */
   deuxFacteurs?: DeuxFacteurs;
   /**
@@ -80,7 +89,7 @@ export interface DeuxFacteurs {
 export interface PublicAccount
   extends Omit<
     StoredAccount,
-    "passwordHash" | "salt" | "anciennesAdresses" | "deuxFacteurs" | "deuxFacteursEnAttente"
+    "passwordHash" | "salt" | "iterations" | "anciennesAdresses" | "deuxFacteurs" | "deuxFacteursEnAttente"
   > {
   /** Le poste a seulement besoin de savoir s'il faut demander un mot de passe. */
   hasPassword: boolean;
@@ -110,8 +119,34 @@ export function motDePasseRefuse(valeur: unknown): string | null {
   return null;
 }
 
-function derive(password: string, salt: string): string {
-  return pbkdf2Sync(password, salt, ITERATIONS, KEYLEN, DIGEST).toString("hex");
+function derive(password: string, salt: string, iterations = ITERATIONS): string {
+  return pbkdf2Sync(password, salt, iterations, KEYLEN, DIGEST).toString("hex");
+}
+
+/**
+ * Refait l'empreinte d'un mot de passe juste à ITERATIONS, dans la file des
+ * écritures de comptes. Rien si le mot de passe a changé entre-temps ; un échec
+ * n'empêche pas la connexion (on réessaiera à la suivante).
+ */
+function renforcerEmpreinte(accountId: string, ancienne: string, motDePasse: string): Promise<void> {
+  return enFile(async () => {
+    const accounts = await load();
+    const compte = accounts.find((a) => a.id === accountId);
+    if (!compte || compte.passwordHash !== ancienne) return;
+    const salt = randomBytes(16).toString("hex");
+    compte.salt = salt;
+    compte.passwordHash = derive(motDePasse, salt);
+    compte.iterations = ITERATIONS;
+    await save(accounts);
+  }).catch(() => undefined);
+}
+
+/** Le mot de passe donné est-il celui du compte ? Au nombre d'itérations de son empreinte. */
+function motDePasseJuste(compte: StoredAccount, donne: string): boolean {
+  if (!compte.passwordHash || !compte.salt) return false;
+  const attendu = Buffer.from(compte.passwordHash, "hex");
+  const calcule = Buffer.from(derive(donne, compte.salt, compte.iterations ?? ITERATIONS_ANCIENNES), "hex");
+  return attendu.length === calcule.length && timingSafeEqual(attendu, calcule);
 }
 
 async function load(): Promise<StoredAccount[]> {
@@ -285,6 +320,7 @@ async function creerCompte(input: {
     createdAt: new Date().toISOString(),
     salt,
     passwordHash: derive(input.password as string, salt),
+    iterations: ITERATIONS,
     ...(input.provisoire ? { motDePasseProvisoire: true } : {}),
   };
 
@@ -332,6 +368,7 @@ export async function definirMotDePasse(
   const salt = randomBytes(16).toString("hex");
   compte.salt = salt;
   compte.passwordHash = derive(motDePasse, salt);
+  compte.iterations = ITERATIONS;
   await save(accounts);
 
   /*
@@ -386,6 +423,7 @@ export function definirPremierMotDePasse(
     const salt = randomBytes(16).toString("hex");
     compte.salt = salt;
     compte.passwordHash = derive(motDePasse as string, salt);
+    compte.iterations = ITERATIONS;
     await save(accounts);
     journaliser("motdepasse.defini", accountId, {});
     return { ok: true, account: toPublic(compte) };
@@ -409,9 +447,7 @@ export function remplacerMotDePasseProvisoire(
     const compte = accounts.find((a) => a.id === accountId);
     if (!compte || !compte.passwordHash || !compte.salt) return { ok: false, reason: t("Compte introuvable."), statut: 404 };
     if (!compte.motDePasseProvisoire) return { ok: false, reason: t("Ce compte a déjà son propre mot de passe."), statut: 409 };
-    const attendu = Buffer.from(compte.passwordHash, "hex");
-    const donne = Buffer.from(derive(String(provisoire ?? ""), compte.salt), "hex");
-    if (typeof provisoire !== "string" || attendu.length !== donne.length || !timingSafeEqual(attendu, donne)) {
+    if (typeof provisoire !== "string" || !motDePasseJuste(compte, provisoire)) {
       noterEchec(accountId);
       journaliser("connexion.refusee", accountId, { motif: "mot de passe provisoire incorrect" });
       return { ok: false, reason: t("Mot de passe provisoire incorrect."), statut: 401 };
@@ -422,6 +458,7 @@ export function remplacerMotDePasseProvisoire(
     const salt = randomBytes(16).toString("hex");
     compte.salt = salt;
     compte.passwordHash = derive(nouveau as string, salt);
+    compte.iterations = ITERATIONS;
     delete compte.motDePasseProvisoire;
     await save(accounts);
     journaliser("motdepasse.defini", accountId, { remplaceLeProvisoire: true });
@@ -482,15 +519,15 @@ export async function verifyAccount(
     return { ok: false, reason: "Mot de passe requis." };
   }
 
-  const expected = Buffer.from(account.passwordHash, "hex");
-  const given = Buffer.from(derive(password, account.salt), "hex");
-  const valid = expected.length === given.length && timingSafeEqual(expected, given);
+  const valid = motDePasseJuste(account, password);
 
   if (!valid) {
     noterEchec(accountId);
     journaliser("connexion.refusee", accountId, { motif: "mot de passe incorrect" });
     return { ok: false, reason: "Mot de passe incorrect." };
   }
+  // Empreinte d'avant les 600 000 itérations : refaite maintenant que le mot de passe est connu.
+  if ((account.iterations ?? ITERATIONS_ANCIENNES) < ITERATIONS) void renforcerEmpreinte(accountId, account.passwordHash, password);
 
   /*
    * Mot de passe choisi par qui a créé le compte : il est juste, mais il
@@ -705,9 +742,7 @@ async function appliquerProfil(
             reason: "Votre mot de passe actuel est requis pour changer d'adresse.",
           };
         }
-        const attendu = Buffer.from(compte.passwordHash, "hex");
-        const donne = Buffer.from(derive(motDePasse, compte.salt), "hex");
-        if (!(attendu.length === donne.length && timingSafeEqual(attendu, donne))) {
+        if (!motDePasseJuste(compte, motDePasse)) {
           noterEchec(accountId);
           // Le mot de passe essayé ne figure évidemment pas dans la trace.
           journaliser("compte.adresse_refusee", accountId, { motif: "mot de passe incorrect" });
@@ -845,9 +880,7 @@ function controlerMotDePasse(compte: StoredAccount, motDePasse: unknown): Refus 
   if (typeof motDePasse !== "string" || !motDePasse) {
     return { ok: false, statut: 400, reason: "Votre mot de passe est requis." };
   }
-  const attendu = Buffer.from(compte.passwordHash, "hex");
-  const donne = Buffer.from(derive(motDePasse, compte.salt), "hex");
-  if (!(attendu.length === donne.length && timingSafeEqual(attendu, donne))) {
+  if (!motDePasseJuste(compte, motDePasse)) {
     noterEchec(compte.id);
     journaliser("connexion.refusee", compte.id, { motif: "mot de passe incorrect", pour: "second facteur" });
     return { ok: false, statut: 403, reason: "Mot de passe incorrect." };

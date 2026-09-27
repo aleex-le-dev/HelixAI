@@ -22,12 +22,13 @@ import { appliquerSuivi, suiviNeuf, terminerSuivi, type ActionCode, type SuiviCo
 import { ouvrirFlux } from "@/lib/flux";
 import { t } from "@/lib/i18n";
 import { currentUser } from "@/lib/store/identity";
+import { aleatoire } from "@/lib/store/storage";
 
 /** Au-delà de ce silence, l'écran Code le signale. */
 const SILENCE_MAX_MS = 90_000;
 /** Réabonnements tentés quand le flux tombe en plein travail. */
 const REABONNEMENTS_MAX = 3;
-const newId = () => Math.random().toString(36).slice(2);
+const newId = () => aleatoire(11);
 
 /**
  * Une demande en cours, et de quoi reconnaître ce qui lui appartient.

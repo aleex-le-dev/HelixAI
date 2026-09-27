@@ -198,7 +198,7 @@
       case "lien": {
         var cible = moduleDe(champ.lien);
         var f = cible ? ficheDe(cible.cle, v) : null;
-        return f ? '<button type="button" class="lien" data-action="aller" data-module="' + cible.cle + '" data-id="' + f.id + '">' + echapper(titreDe(cible, f)) + "</button>" : '<span class="vide">—</span>';
+        return f ? '<button type="button" class="lien" data-action="aller" data-module="' + echapper(cible.cle) + '" data-id="' + echapper(f.id) + '">' + echapper(titreDe(cible, f)) + "</button>" : '<span class="vide">—</span>';
       }
       default: return echapper(v);
     }
@@ -259,7 +259,7 @@
     var nav = document.getElementById("menu");
     var html = '<button type="button" class="menu__entree' + (etat.vue === "accueil" ? " est-active" : "") + '" data-action="vue" data-vue="accueil">' + icone("accueil") + "<span>Tableau de bord</span></button>";
     PLAN.modules.forEach(function (m) {
-      html += '<button type="button" class="menu__entree' + (etat.vue === m.cle ? " est-active" : "") + '" data-action="vue" data-vue="' + m.cle + '">' + icone(m.icone) + "<span>" + echapper(m.nom) + '</span><span class="menu__compte">' + (donnees[m.cle] || []).length + "</span></button>";
+      html += '<button type="button" class="menu__entree' + (etat.vue === m.cle ? " est-active" : "") + '" data-action="vue" data-vue="' + echapper(m.cle) + '">' + icone(m.icone) + "<span>" + echapper(m.nom) + '</span><span class="menu__compte">' + (donnees[m.cle] || []).length + "</span></button>";
     });
     nav.innerHTML = html;
     document.getElementById("filtres").innerHTML = etat.vue === "accueil" ? "" : rendreFiltres(moduleDe(etat.vue));
@@ -275,7 +275,7 @@
       var options = c.type === "choix"
         ? (c.options || []).map(function (o) { return { v: o, t: o }; })
         : (donnees[c.lien] || []).map(function (f) { return { v: f.id, t: titreDe(moduleDe(c.lien), f) }; });
-      html += '<label class="filtre"><span>' + echapper(c.libelle) + '</span><select data-action="filtre" data-champ="' + c.cle + '"><option value="">Tous</option>';
+      html += '<label class="filtre"><span>' + echapper(c.libelle) + '</span><select data-action="filtre" data-champ="' + echapper(c.cle) + '"><option value="">Tous</option>';
       options.forEach(function (o) {
         html += '<option value="' + echapper(o.v) + '"' + (String(etat.filtres[c.cle]) === String(o.v) ? " selected" : "") + ">" + echapper(o.t) + "</option>";
       });
@@ -292,7 +292,7 @@
   }
 
   function tuile(libelle, val, detail, cle) {
-    return '<button type="button" class="tuile" ' + (cle ? 'data-action="vue" data-vue="' + cle + '"' : "disabled") + '><span class="tuile__libelle">' + echapper(libelle) + '</span><span class="tuile__valeur">' + val + "</span>" + (detail ? '<span class="tuile__detail">' + detail + "</span>" : "") + "</button>";
+    return '<button type="button" class="tuile" ' + (cle ? 'data-action="vue" data-vue="' + echapper(cle) + '"' : "disabled") + '><span class="tuile__libelle">' + echapper(libelle) + '</span><span class="tuile__valeur">' + val + "</span>" + (detail ? '<span class="tuile__detail">' + detail + "</span>" : "") + "</button>";
   }
 
   function rendreAccueil() {
@@ -324,16 +324,16 @@
     var m0 = PLAN.modules[0];
     var derniers = (donnees[m0.cle] || []).slice(-6).reverse();
     var colonnes = colonnesDe(m0).slice(0, 4);
-    recents = '<section class="panneau panneau--large"><header class="panneau__entete"><h2>Derniers ' + echapper(m0.nom.toLowerCase()) + '</h2><button type="button" class="bouton bouton--discret" data-action="vue" data-vue="' + m0.cle + '">Tout voir</button></header>' +
+    recents = '<section class="panneau panneau--large"><header class="panneau__entete"><h2>Derniers ' + echapper(m0.nom.toLowerCase()) + '</h2><button type="button" class="bouton bouton--discret" data-action="vue" data-vue="' + echapper(m0.cle) + '">Tout voir</button></header>' +
       (derniers.length
         ? '<div class="defile"><table class="tableau"><thead><tr>' + colonnes.map(function (c) { return "<th>" + echapper(c.libelle) + "</th>"; }).join("") + "</tr></thead><tbody>" +
-          derniers.map(function (f) { return '<tr data-action="aller" data-module="' + m0.cle + '" data-id="' + f.id + '">' + colonnes.map(function (c) { return '<td class="' + classeCellule(c) + '">' + valeur(c, f[c.cle]) + "</td>"; }).join("") + "</tr>"; }).join("") +
+          derniers.map(function (f) { return '<tr data-action="aller" data-module="' + echapper(m0.cle) + '" data-id="' + echapper(f.id) + '">' + colonnes.map(function (c) { return '<td class="' + classeCellule(c) + '">' + valeur(c, f[c.cle]) + "</td>"; }).join("") + "</tr>"; }).join("") +
           "</tbody></table></div>"
         : '<p class="vide-bloc">Aucun élément pour l\'instant.</p>') + "</section>";
 
     racine.innerHTML =
       '<div class="page-entete"><div><h1>Tableau de bord</h1><p class="attenue">' + echapper(PLAN.sousTitre || "") + "</p></div>" +
-      '<div class="rangee">' + PLAN.modules.slice(0, 3).map(function (m) { return '<button type="button" class="bouton bouton--secondaire" data-action="nouveau" data-module="' + m.cle + '">' + icone("plus") + echapper(m.unite) + "</button>"; }).join("") + "</div></div>" +
+      '<div class="rangee">' + PLAN.modules.slice(0, 3).map(function (m) { return '<button type="button" class="bouton bouton--secondaire" data-action="nouveau" data-module="' + echapper(m.cle) + '">' + icone("plus") + echapper(m.unite) + "</button>"; }).join("") + "</div></div>" +
       '<div class="tuiles">' + tuiles + "</div>" +
       '<div class="grille-accueil">' + recents + repartitions + "</div>";
   }
@@ -360,11 +360,11 @@
 
     var tete = "<tr>" + cols.map(function (c) {
       var fleche = etat.tri === c.cle ? (etat.sens > 0 ? " ▲" : " ▼") : "";
-      return '<th class="' + classeCellule(c) + '"><button type="button" class="tri" data-action="trier" data-champ="' + c.cle + '">' + echapper(c.libelle) + fleche + "</button></th>";
+      return '<th class="' + classeCellule(c) + '"><button type="button" class="tri" data-action="trier" data-champ="' + echapper(c.cle) + '">' + echapper(c.libelle) + fleche + "</button></th>";
     }).join("") + "</tr>";
     var corps = morceau.length
       ? morceau.map(function (f) {
-          return '<tr class="' + (f.id === etat.choisie ? "est-choisie" : "") + '" data-action="choisir" data-id="' + f.id + '">' + cols.map(function (c) { return '<td class="' + classeCellule(c) + '">' + valeur(c, f[c.cle]) + "</td>"; }).join("") + "</tr>";
+          return '<tr class="' + (f.id === etat.choisie ? "est-choisie" : "") + '" data-action="choisir" data-id="' + echapper(f.id) + '">' + cols.map(function (c) { return '<td class="' + classeCellule(c) + '">' + valeur(c, f[c.cle]) + "</td>"; }).join("") + "</tr>";
         }).join("")
       : '<tr><td class="vide-bloc" colspan="' + cols.length + '">' + ((donnees[m.cle] || []).length ? "Aucun résultat pour ces filtres." : "Aucun élément pour l'instant : ajoutez le premier.") + "</td></tr>";
 
@@ -374,7 +374,7 @@
       '<div class="page-entete"><div><h1>' + echapper(m.nom) + '</h1><p class="attenue">' + liste.length + " sur " + (donnees[m.cle] || []).length + "</p></div>" +
       '<div class="rangee"><label class="recherche">' + icone("recherche") + '<input type="search" placeholder="Rechercher" aria-label="Rechercher dans ' + echapper(m.nom.toLowerCase()) + '" data-action="rechercher" value="' + echapper(etat.recherche) + '"></label>' +
       '<button type="button" class="bouton bouton--secondaire" data-action="exporter">' + icone("exporter") + "Exporter</button>" +
-      '<button type="button" class="bouton" data-action="nouveau" data-module="' + m.cle + '">' + icone("plus") + "Nouveau</button></div></div>" +
+      '<button type="button" class="bouton" data-action="nouveau" data-module="' + echapper(m.cle) + '">' + icone("plus") + "Nouveau</button></div></div>" +
       '<div class="espace-travail">' +
       '<section class="panneau panneau--liste"><div class="defile"><table class="tableau tableau--choix"><thead>' + tete + "</thead><tbody>" + corps + "</tbody></table></div>" +
       '<footer class="pagination">' + total + '<span class="pagination__pas"><button type="button" class="bouton bouton--icone" data-action="page" data-pas="-1" aria-label="Page précédente"' + (etat.page === 0 ? " disabled" : "") + '><span class="retourne">' + icone("fleche") + "</span></button><span>Page " + (etat.page + 1) + " / " + pages + '</span><button type="button" class="bouton bouton--icone" data-action="page" data-pas="1" aria-label="Page suivante"' + (etat.page >= pages - 1 ? " disabled" : "") + ">" + icone("fleche") + "</button></span></footer></section>" +
@@ -390,15 +390,15 @@
     var lies = liesA(m).map(function (l) {
       var liste = (donnees[l.module.cle] || []).filter(function (x) { return x[l.champ.cle] === f.id; });
       var cols = colonnesDe(l.module).filter(function (c) { return c.cle !== l.champ.cle; }).slice(0, 3);
-      return '<section class="detail__lies"><header><h3>' + echapper(l.module.nom) + ' <span class="attenue">(' + liste.length + ')</span></h3><button type="button" class="bouton bouton--discret" data-action="nouveau" data-module="' + l.module.cle + '" data-lien="' + l.champ.cle + '" data-id="' + f.id + '">' + icone("plus") + "Ajouter</button></header>" +
+      return '<section class="detail__lies"><header><h3>' + echapper(l.module.nom) + ' <span class="attenue">(' + liste.length + ')</span></h3><button type="button" class="bouton bouton--discret" data-action="nouveau" data-module="' + echapper(l.module.cle) + '" data-lien="' + echapper(l.champ.cle) + '" data-id="' + echapper(f.id) + '">' + icone("plus") + "Ajouter</button></header>" +
         (liste.length
           ? '<div class="defile"><table class="tableau tableau--petit"><thead><tr>' + cols.map(function (c) { return '<th class="' + classeCellule(c) + '">' + echapper(c.libelle) + "</th>"; }).join("") + "</tr></thead><tbody>" +
-            liste.map(function (x) { return '<tr data-action="aller" data-module="' + l.module.cle + '" data-id="' + x.id + '">' + cols.map(function (c) { return '<td class="' + classeCellule(c) + '">' + valeur(c, x[c.cle]) + "</td>"; }).join("") + "</tr>"; }).join("") + "</tbody></table></div>"
+            liste.map(function (x) { return '<tr data-action="aller" data-module="' + echapper(l.module.cle) + '" data-id="' + echapper(x.id) + '">' + cols.map(function (c) { return '<td class="' + classeCellule(c) + '">' + valeur(c, x[c.cle]) + "</td>"; }).join("") + "</tr>"; }).join("") + "</tbody></table></div>"
           : '<p class="attenue petit">Aucun pour l\'instant.</p>') + "</section>";
     }).join("");
     return '<aside class="panneau panneau--detail"><header class="panneau__entete"><h2>' + echapper(titreDe(m, f)) + '</h2><span class="rangee">' +
-      '<button type="button" class="bouton bouton--icone" data-action="modifier" data-id="' + f.id + '" aria-label="Modifier">' + icone("crayon") + "</button>" +
-      '<button type="button" class="bouton bouton--icone bouton--danger" data-action="supprimer" data-id="' + f.id + '" aria-label="Supprimer">' + icone("corbeille") + "</button></span></header>" +
+      '<button type="button" class="bouton bouton--icone" data-action="modifier" data-id="' + echapper(f.id) + '" aria-label="Modifier">' + icone("crayon") + "</button>" +
+      '<button type="button" class="bouton bouton--icone bouton--danger" data-action="supprimer" data-id="' + echapper(f.id) + '" aria-label="Supprimer">' + icone("corbeille") + "</button></span></header>" +
       '<dl class="detail">' + champs + "</dl>" + lies + "</aside>";
   }
 
@@ -411,27 +411,27 @@
     var id = "champ-" + c.cle;
     var requis = c.obligatoire ? " required" : "";
     var entree;
-    if (c.type === "long") entree = '<textarea id="' + id + '" name="' + c.cle + '" rows="3"' + requis + ">" + echapper(v) + "</textarea>";
+    if (c.type === "long") entree = '<textarea id="' + echapper(id) + '" name="' + echapper(c.cle) + '" rows="3"' + requis + ">" + echapper(v) + "</textarea>";
     else if (c.type === "choix") {
-      entree = '<select id="' + id + '" name="' + c.cle + '"' + requis + ">" + (c.options || []).map(function (o, i) {
+      entree = '<select id="' + echapper(id) + '" name="' + echapper(c.cle) + '"' + requis + ">" + (c.options || []).map(function (o, i) {
         return '<option value="' + echapper(o) + '"' + ((v == null ? i === 0 : v === o) ? " selected" : "") + ">" + echapper(o) + "</option>";
       }).join("") + "</select>";
     } else if (c.type === "lien") {
       var cible = moduleDe(c.lien);
       var liste = cible ? donnees[cible.cle] || [] : [];
       var choisi = v == null && c.obligatoire && liste.length ? liste[0].id : v;
-      entree = '<select id="' + id + '" name="' + c.cle + '"' + requis + ">" + (c.obligatoire ? "" : '<option value="">Aucun</option>') + liste.map(function (f) {
-        return '<option value="' + f.id + '"' + (choisi === f.id ? " selected" : "") + ">" + echapper(titreDe(cible, f)) + "</option>";
+      entree = '<select id="' + echapper(id) + '" name="' + echapper(c.cle) + '"' + requis + ">" + (c.obligatoire ? "" : '<option value="">Aucun</option>') + liste.map(function (f) {
+        return '<option value="' + echapper(f.id) + '"' + (choisi === f.id ? " selected" : "") + ">" + echapper(titreDe(cible, f)) + "</option>";
       }).join("") + "</select>";
     } else if (c.type === "oui_non") {
-      entree = '<select id="' + id + '" name="' + c.cle + '"><option value="non">Non</option><option value="oui"' + (v === true || v === "oui" ? " selected" : "") + ">Oui</option></select>";
+      entree = '<select id="' + echapper(id) + '" name="' + echapper(c.cle) + '"><option value="non">Non</option><option value="oui"' + (v === true || v === "oui" ? " selected" : "") + ">Oui</option></select>";
     } else {
       if (v == null && c.type === "date") v = new Date().toISOString().slice(0, 10);
       var type = { montant: "number", nombre: "number", date: "date", courriel: "email", telephone: "tel" }[c.type] || "text";
       var pas = c.type === "montant" ? ' step="0.01" min="0"' : c.type === "nombre" ? ' step="any"' : "";
-      entree = '<input id="' + id + '" name="' + c.cle + '" type="' + type + '"' + pas + requis + ' value="' + echapper(v == null ? "" : v) + '">';
+      entree = '<input id="' + echapper(id) + '" name="' + echapper(c.cle) + '" type="' + type + '"' + pas + requis + ' value="' + echapper(v == null ? "" : v) + '">';
     }
-    return '<div class="champ' + (c.type === "long" ? " champ--large" : "") + '"><label for="' + id + '">' + echapper(c.libelle) + (c.obligatoire ? ' <span class="requis" aria-hidden="true">*</span>' : "") + "</label>" + entree + "</div>";
+    return '<div class="champ' + (c.type === "long" ? " champ--large" : "") + '"><label for="' + echapper(id) + '">' + echapper(c.libelle) + (c.obligatoire ? ' <span class="requis" aria-hidden="true">*</span>' : "") + "</label>" + entree + "</div>";
   }
 
   function ouvrirFormulaire(m, fiche, prerempli) {

@@ -3,6 +3,7 @@ import { dirname, extname, isAbsolute, join, relative, resolve, sep } from "node
 import { Script } from "node:vm";
 import { workspace } from "./mcp.ts";
 import { estProtege } from "./zonesProtegees.ts";
+import { echapperRegex } from "./texteBrut.ts";
 
 /**
  * Contrôle objectif d'un site ou d'une application web (HTML, CSS, JavaScript).
@@ -84,7 +85,7 @@ const lire = (f: string) => {
 
 /** Une fonction est-elle définie dans ce code, sous l'une des formes courantes ? */
 function definit(code: string, nom: string): boolean {
-  const n = nom.replace(/[$]/g, "\\$");
+  const n = echapperRegex(nom);
   return new RegExp(
     `function\\s+${n}\\s*\\(|(?:const|let|var)\\s+${n}\\s*=|\\b${n}\\s*[:=]\\s*(?:async\\s*)?(?:function\\b|\\(|[A-Za-z_$][\\w$]*\\s*=>)|window\\.${n}\\s*=|\\b${n}\\s*\\([^)]*\\)\\s*\\{`,
   ).test(code);

@@ -3273,3 +3273,34 @@ déclare `corsEnabled`, mais le correctif est dans le moteur), injection d'optio
 commande par `webPreferences`, plusieurs « use-after-free ». Passage à Electron 44.4.5, version
 épinglée (`--save-exact`) ; `npm audit` : 0 faille. La batterie (435 contrôles) passe sur la
 nouvelle version ; l'application a été lancée et un Chat a répondu sur macOS.
+
+### 29.10 Analyse de code CodeQL (27 septembre 2026)
+
+Activée à l'ouverture du dépôt public (analyse par défaut de GitHub, avec la détection des secrets,
+le blocage des secrets au push, Dependabot et le signalement privé des failles). Première
+analyse : 45 alertes, toutes relues une à une.
+
+Corrigé dans le code :
+- **Mots de passe** : PBKDF2-SHA256 passe de 210 000 à 600 000 itérations (recommandation
+  actuelle de l'OWASP). Le nombre d'itérations est désormais noté avec chaque empreinte ; les
+  anciennes sont vérifiées à 210 000 puis refaites à 600 000, avec un sel neuf, à la connexion
+  suivante (essayé : ancienne empreinte acceptée puis refaite, connexion suivante acceptée,
+  mauvais mot de passe refusé). Aucun mot de passe n'était journalisé (l'alerte venait des noms
+  d'actions du journal).
+- **Codes d'invitation** : tirés par `randomInt`, sans le léger biais de `octet % 30`.
+- **Identifiants** de l'interface : `crypto.getRandomValues` au lieu de `Math.random`.
+- **Photos** : l'écran n'affiche qu'une image intégrée (PNG, JPEG, WebP, GIF), en plus du
+  contrôle de l'instance à l'enregistrement : une adresse web aurait fait appeler un serveur
+  quelconque par chaque poste.
+- **Moteur des applications de l'atelier** (`gateway/application/app.js`) : toutes les clés et
+  tous les identifiants insérés dans les attributs sont échappés (31 endroits).
+- **HTML vers texte** (courrier, recherche web, agenda) : nettoyage répété jusqu'à ce qu'il ne
+  reste plus de balise (`texteBrut.ts`) ; décodage des entités dans le bon ordre.
+- **Recherche web** : seul `duckduckgo.com` ou ses sous-domaines, pas tout domaine qui finit
+  par ces lettres.
+- **Motifs construits à partir d'un nom** : tous les caractères spéciaux échappés.
+
+Classé avec sa raison, sans changement : les messages d'erreur (jamais la pile d'appels)
+renvoyés à la personne connectée, voulus pour dire pourquoi une action échoue ; le repli du
+coffre et des Chats dans le stockage du navigateur quand le système n'a pas de trousseau,
+annoncé à l'écran (§ 29.2).

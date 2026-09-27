@@ -7,6 +7,7 @@ import { clientGoogle } from "./clientGoogle.ts";
 import { requeteHttps, ErreurTransport, type ReponseHttps } from "./clientHttps.ts";
 import type { Calendrier, Evenement } from "./agenda.ts";
 import { t, tf } from "./langue.ts";
+import { sansBalises } from "./texteBrut.ts";
 
 /**
  * Google Agenda par la connexion Google (OAuth), en lecture seule.
@@ -258,15 +259,14 @@ async function api(
 
 const texteSimple = (v: unknown, max = 2000) =>
   typeof v === "string"
-    ? v
-        .replace(/<br\s*\/?>/gi, "\n")
-        .replace(/<[^>]+>/g, "")
+    ? sansBalises(v.replace(/<br\s*\/?>/gi, "\n"))
         .replace(/&nbsp;/g, " ")
-        .replace(/&amp;/g, "&")
         .replace(/&lt;/g, "<")
         .replace(/&gt;/g, ">")
         .replace(/&quot;/g, '"')
         .replace(/&#39;/g, "'")
+        // En dernier : `&amp;lt;` doit donner « &lt; », pas « < » (double décodage, CodeQL).
+        .replace(/&amp;/g, "&")
         .trim()
         .slice(0, max)
     : "";

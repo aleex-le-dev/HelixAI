@@ -1,4 +1,4 @@
-import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
+import { createHash, randomInt, timingSafeEqual } from "node:crypto";
 import { db } from "./db.ts";
 import { journaliser } from "./audit.ts";
 import { nomProduit, NomProduit } from "./marque.ts";
@@ -76,8 +76,12 @@ export const normaliserCode = (code: string): string =>
   code.toUpperCase().replace(/[^A-Z0-9]/g, "");
 
 function tirerCode(): string {
-  const octets = randomBytes(GROUPES * PAR_GROUPE);
-  const lettres = [...octets].map((o) => ALPHABET[o % ALPHABET.length]).join("");
+  /*
+   * `randomInt`, pas `octet % 30` : 256 n'étant pas un multiple de 30, seize
+   * lettres sortaient un peu plus souvent que les autres (relevé par CodeQL le
+   * 27/09/2026 ; biais minime, mais un code d'invitation se tire sans biais).
+   */
+  const lettres = Array.from({ length: GROUPES * PAR_GROUPE }, () => ALPHABET[randomInt(ALPHABET.length)]).join("");
   return Array.from({ length: GROUPES }, (_, i) =>
     lettres.slice(i * PAR_GROUPE, (i + 1) * PAR_GROUPE),
   ).join("-");

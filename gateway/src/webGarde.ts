@@ -1,5 +1,6 @@
 import { adresseSortanteSure } from "./sortieReseau.ts";
 import { t, tf } from "./langue.ts";
+import { sansBalises } from "./texteBrut.ts";
 
 /**
  * Le web des employés, gardé contre l'injection de consignes.
@@ -233,7 +234,7 @@ export async function callTool(nom: string, args: Record<string, unknown>, emplo
         if (r.reponse.status !== 200) continue;
         const html = await lireBorne(r.reponse);
         titres = [...html.matchAll(motifTitre)];
-        extraits = [...html.matchAll(motifExtrait)].map((m) => decoder(m[1]!.replace(/<[^>]+>/g, "")).replace(/\s+/g, " ").trim());
+        extraits = [...html.matchAll(motifExtrait)].map((m) => decoder(sansBalises(m[1]!)).replace(/\s+/g, " ").trim());
         if (titres.length > 0 || !/anomaly|captcha|challenge/i.test(html)) break;
       }
       const resultats = titres.slice(0, 8).flatMap((m, i) => {
@@ -242,12 +243,14 @@ export async function callTool(nom: string, args: Record<string, unknown>, emplo
         if (adresse.startsWith("//")) adresse = `https:${adresse}`;
         try {
           const u = new URL(adresse);
-          if (u.hostname.endsWith("duckduckgo.com") && u.searchParams.get("uddg")) adresse = u.searchParams.get("uddg")!;
+          // Le domaine lui-même ou l'un de ses sous-domaines, pas « …duckduckgo.com » (CodeQL, 27/09/2026).
+          const ddg = u.hostname === "duckduckgo.com" || u.hostname.endsWith(".duckduckgo.com");
+          if (ddg && u.searchParams.get("uddg")) adresse = u.searchParams.get("uddg")!;
         } catch {
           return [];
         }
         const n = normaliser(adresse);
-        return n ? [{ titre: decoder(m[2]!.replace(/<[^>]+>/g, "")).trim(), adresse: n, extrait: extraits[i] ?? "" }] : [];
+        return n ? [{ titre: decoder(sansBalises(m[2]!)).trim(), adresse: n, extrait: extraits[i] ?? "" }] : [];
       });
       if (resultats.length === 0 && titres.length === 0 && extraits.length === 0) {
         return { ok: false, content: t("La recherche ne répond pas pour l'instant (DuckDuckGo freine les recherches trop rapprochées) : réessaie dans quelques minutes, ou ouvre une adresse déjà vue.") };

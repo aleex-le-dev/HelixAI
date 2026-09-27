@@ -113,6 +113,17 @@ export const storage = {
   },
 };
 
+/**
+ * Suite aléatoire en base 32 (5 bits par octet, sans biais), tirée par `crypto.getRandomValues` : disponible
+ * aussi hors contexte sécurisé (instance jointe en HTTP sur le réseau local),
+ * contrairement à `randomUUID`. `Math.random` suffisait pour des identifiants
+ * qui ne protègent rien, mais l'analyse de code (CodeQL, 27/09/2026) ne sait pas
+ * le distinguer d'un secret : un tirage sûr ne coûte rien.
+ */
+export function aleatoire(caracteres = 12): string {
+  const octets = crypto.getRandomValues(new Uint8Array(caracteres));
+  return Array.from(octets, (o) => (o & 31).toString(32)).join("");
+}
+
 /** Identifiant court, suffisant pour des enregistrements locaux. */
-export const newId = (): string =>
-  `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
+export const newId = (): string => `${Date.now().toString(36)}${aleatoire(6)}`;

@@ -216,7 +216,8 @@ function verifier(nom, condition, obtenu) {
     console.log(`  ✓ ${nom}`);
   } else {
     echecs.push(nom);
-    console.log(`  ✗ ${nom}  —  obtenu : ${obtenu}`);
+    // Ce qui ressemble à un secret est masqué : un contrôle raté ne doit pas le recopier dans la sortie (CodeQL, 27/09/2026).
+    console.log(`  ✗ ${nom}  —  obtenu : ${String(obtenu).replace(/[A-Za-z0-9_\-+/=.]{24,}/g, "[masqué]")}`);
   }
 }
 
@@ -395,7 +396,7 @@ console.log("\n3 bis. Application Google et Google Agenda : le secret ne ressort
   verifier("application Google : la réponse d'enregistrement ne rend pas le secret", !corpsBon.includes(SECRET), corpsBon.slice(0, 200));
   for (const [nom, entetes] of [["administrateur", avecSeance], ["autre compte", avecSeanceB]]) {
     const etatG = await (await appel("/helix/google/client", { headers: entetes })).text();
-    verifier(`application Google : l'état (${nom}) ne contient pas le secret`, !etatG.includes(SECRET) && etatG.includes(ID), etatG.slice(0, 200));
+    verifier(`application Google : l'état (${nom}) ne contient pas le secret`, !etatG.includes(SECRET) && JSON.stringify(JSON.parse(etatG)).split('"').includes(ID), etatG.slice(0, 200));
     const etatA = await (await appel("/helix/agenda/google", { headers: entetes })).text();
     verifier(`Google Agenda : l'état (${nom}) ne contient ni secret ni jeton`, !etatA.includes(SECRET) && !/refresh_token|access_token/.test(etatA), etatA.slice(0, 200));
   }

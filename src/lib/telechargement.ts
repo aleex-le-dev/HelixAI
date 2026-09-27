@@ -49,6 +49,8 @@ export async function preparerMac(): Promise<{ ok: boolean; message?: string }> 
  * porte un billet d'une minute, pas un jeton.
  */
 export async function telecharger(plateforme: Plateforme): Promise<boolean> {
+  // Seulement les trois paquets connus : l'adresse ouverte ne se compose pas d'autre chose.
+  if (!["macos", "windows", "linux"].includes(plateforme)) return false;
   const b = await billet();
   if (!b) return false;
   window.open(

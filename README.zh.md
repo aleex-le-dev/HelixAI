@@ -1,7 +1,16 @@
-# HelixAI：属于您自己的 AI 工作空间，运行在您自己的机器上
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/images/logo-dark.png" />
+    <img src="docs/images/logo-light.png" alt="Helix AI 标志" height="120" />
+  </picture>
+</p>
+
+<h1 align="center">Helix AI</h1>
 
 <p align="center">
-  <img src="src/assets/helix-logo.png" alt="HelixAI" width="360" />
+  <strong>属于您自己的 AI 工作空间，运行在您自己的机器上。</strong><br />
+  Chat、智能体、编程、知识库和模型微调，集成在一个开源桌面应用中，
+  面向希望把文档和对话留在自己手中的团队和组织。
 </p>
 
 <p align="center">
@@ -11,46 +20,119 @@
 </p>
 
 <p align="center">
-  <img alt="License: AGPL-3.0" src="https://img.shields.io/badge/license-AGPL--3.0-blue" />
-  <a href="https://github.com/medhiclb/HelixAI/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/medhiclb/HelixAI?label=release" /></a>
-  <img alt="Platforms: macOS, Windows, Linux" src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey" />
-  <img alt="Interface: English, French, Chinese" src="https://img.shields.io/badge/interface-EN%20%C2%B7%20FR%20%C2%B7%20ZH-success" />
+  <a href="LICENSE"><img alt="许可证：AGPL-3.0" src="https://img.shields.io/badge/license-AGPL--3.0-blue" /></a>
+  <a href="https://github.com/medhiclb/HelixAI/releases/latest"><img alt="最新版本" src="https://img.shields.io/github/v/release/medhiclb/HelixAI?label=release" /></a>
+  <img alt="平台：macOS、Windows、Linux" src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey" />
+  <img alt="界面：英语、法语、中文" src="https://img.shields.io/badge/interface-EN%20%C2%B7%20FR%20%C2%B7%20ZH-success" />
+  <a href="https://github.com/medhiclb/HelixAI/discussions"><img alt="讨论区" src="https://img.shields.io/badge/discussions-welcome-8a63d2" /></a>
+</p>
+
+<p align="center">
+  <a href="https://github.com/medhiclb/HelixAI/releases/download/v2026.928.1/Helix-2026.928.1-arm64.dmg"><img alt="下载 macOS 版（Apple 芯片）" src="https://img.shields.io/badge/macOS-Apple%20Silicon-111111?style=for-the-badge&logo=apple&logoColor=white" /></a>
+  <a href="https://github.com/medhiclb/HelixAI/releases/download/v2026.928.1/Helix-Setup-2026.928.1-x64.exe"><img alt="下载 Windows 版（x64）" src="https://img.shields.io/badge/Windows-x64-0a5fb4?style=for-the-badge&logo=windows&logoColor=white" /></a>
+  <a href="https://github.com/medhiclb/HelixAI/releases/download/v2026.928.1/helix-plateforme_2026.928.1_amd64.deb"><img alt="下载 Ubuntu 和 Debian 版（.deb）" src="https://img.shields.io/badge/Ubuntu%20%2F%20Debian-.deb-c2410c?style=for-the-badge&logo=ubuntu&logoColor=white" /></a>
+  <a href="https://github.com/medhiclb/HelixAI/releases/download/v2026.928.1/Helix-2026.928.1.AppImage"><img alt="下载 Linux 版（AppImage）" src="https://img.shields.io/badge/Linux-AppImage-3f3f46?style=for-the-badge&logo=linux&logoColor=white" /></a>
 </p>
 
 <p align="center">
   <a href="#安装">安装</a>
+  · <a href="#截图">截图</a>
+  · <a href="#已验证的部分与尚未尝试的部分">已验证的部分</a>
   · <a href="#功能">功能</a>
   · <a href="#从源码构建">从源码构建</a>
-  · <a href="#文档">文档</a>
   · <a href="#参与贡献">参与贡献</a>
 </p>
 
-HelixAI 将 Chat、智能体、编程、知识库和模型微调整合到一个**运行在您自己硬件上**的桌面应用中。每个组织安装自己的实例：对话、文档和模型都留在自己的机器上，不出售也不出租任何东西。
-
 <p align="center">
-  <img src="docs/images/chat.png" alt="基于知识库回答的 Chat，回答下方注明来源" width="900" />
+  <img src="docs/images/zh/demo.gif" alt="在 Chat 中附上一份供应商报价并提问；回答随即给出，并引用公司手册中的相关段落" width="900" />
 </p>
 
-### 为什么选择 HelixAI
+<p align="center"><sub>针对附件中的供应商报价提问，回答依据公司知识库给出，并注明来源。</sub></p>
 
-- **数据留在您手中。** 模型在您的电脑或组织的服务器上运行；只有在您自己添加某个在线 AI 服务的 API 密钥时，您的对话才会发送给该服务商。
-- **无需配置。** 安装应用后，其余一切自动安装：模型引擎、适合您硬件的模型，以及按需安装的 Python 和 Node。引擎、Python、Node、OpenCode、文档与听写所用的库，以及图像、视频和训练模型，均固定版本并验证校验值；对话模型来自 LM Studio 的目录，版本由 LM Studio 提供；NVIDIA 训练组件仅固定版本。
-- **一个应用，多种工作。** Chat、可操作您文件和工具的智能体、代码智能体、注明来源的知识库、会议纪要，以及微调您自己的模型。
-- **为团队设计。** 邀请同事加入您的实例，按群组共享知识库，任何会修改内容的操作都需您批准，并保留审计日志。
-- **开源，无需订阅。** AGPL-3.0，无需在我们这里注册账户，无遥测。
+## 为什么选择 Helix AI
+
+- **默认在本地运行。** 模型通过 [LM Studio](https://lmstudio.ai) 的引擎在您的电脑或组织的服务器上运行，Helix AI 会一并安装与机器内存相匹配的模型。系统绝不会替您选择云端模型。
+- **不接入密钥，就不会外传。** 只有当您添加某个云端服务商的 API 密钥并选择其模型时，对话才会发送给该服务商；模型选择器会标明每个模型的运行位置。除您自行连接的服务（云端密钥、邮箱、Drive、Slack 等）之外，应用联网只为下载它要安装的内容（引擎、模型、工具）以及查询新版本（在 GitHub 上查询 Helix AI，在 npm 上查询 OpenClaw）。
+- **开源，无需购买。** AGPL-3.0，无需在我们这里注册账户，无遥测。每个组织自行安装并运行自己的实例。
+- **macOS、Windows 和 Linux。** 三个系统使用同一个应用，界面提供英语、法语和中文。它每天在 macOS 上构建和使用；Windows 和 Linux 安装包刚推出，试用得少得多（见[下文](#已验证的部分与尚未尝试的部分)）。
+- **持续工作的智能体。** 智能体拥有各自的知识库和定时任务，窗口关闭后照常运行，每次运行都会留下报告；任何会修改内容的操作都要等待人工批准，除非您另作决定。
+- **在应用中微调模型。** 用问答示例让小型开源模型学习贵公司的信息，与原始模型对比，然后在 Chat 中使用（Apple 芯片上使用 MLX）。
+- **为团队设计。** 账户、群组、按群组共享的知识库、双重认证、审计日志，数据落盘加密。
+
+## 截图
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/images/zh/chat.png" alt="基于知识库回答的 Chat，附有一个文件，回答下方注明来源" /></td>
+    <td width="50%"><img src="docs/images/zh/home.png" alt="首页，显示最近的对话和本机模型" /></td>
+  </tr>
+  <tr>
+    <td align="center">带知识库、附件和来源的 Chat</td>
+    <td align="center">首页</td>
+  </tr>
+  <tr>
+    <td><img src="docs/images/zh/code.png" alt="工作中的 Helix Code：任务列表、读取和修改的文件、正在运行的测试命令" /></td>
+    <td><img src="docs/images/zh/agents.png" alt="一个全天候智能体及其定时任务的报告" /></td>
+  </tr>
+  <tr>
+    <td align="center">工作中的 Helix Code</td>
+    <td align="center">全天候智能体及其任务报告</td>
+  </tr>
+  <tr>
+    <td><img src="docs/images/zh/compare.png" alt="模型比较：Epoch AI 能力评分与发布方价格对照" /></td>
+    <td><img src="docs/images/zh/usage.png" alt="我的用量：按模型统计的请求、令牌和费用，本地模型没有 API 费用" /></td>
+  </tr>
+  <tr>
+    <td align="center">模型比较（评分与价格）</td>
+    <td align="center">我的用量</td>
+  </tr>
+  <tr>
+    <td><img src="docs/images/zh/knowledge.png" alt="一个知识库及其已建立索引的文档" /></td>
+    <td><img src="docs/images/zh/training.png" alt="训练模型：问答示例" /></td>
+  </tr>
+  <tr>
+    <td align="center">知识库</td>
+    <td align="center">训练模型</td>
+  </tr>
+</table>
+
+<sub>截图和动画于 2026 年 9 月 28 日在一个一次性演示实例上拍摄：公司（Maple & Rye，一家烘焙店）、员工和文档均为虚构，模型引擎和 Mistral 密钥是模拟的，模型的回答和任务报告都是预先写好的。界面是应用的当前版本；Qwen3.5 9B 是 Helix AI 会安装的模型之一，“模型比较”中的评分和价格是真实公布的数据。</sub>
+
+## 已验证的部分与尚未尝试的部分
+
+Helix AI 在界面上只说明已经验证过的内容，本页也是如此。完整且注明日期的清单见 [PROJET.md](PROJET.md)（法语）。
+
+**已试用并测量**
+
+- **Apple 芯片上的 macOS** 是 Helix AI 开发和试用的平台：使用本地模型的 Chat、注明来源的知识库、附件、Helix Code 和会议功能都已在其上运行过。
+- **全天候智能体**（基于 [OpenClaw](https://github.com/openclaw/openclaw) 2026.9.4），端到端：部署、按人隔离的对话、定时任务、注明智能体名称的审批请求、报告、删除。
+- **会议**：一段 29 秒的录音在 18 到 36 秒内完成导入、转写和总结。
+- **我的用量**：令牌数与引擎返回的数值完全一致。
+- **在 Mac 上微调**（MLX）：在一次测量中，Qwen3 1.7B 学会了 15 个事实中的 15 个。
+- **安全**：`npm run securite` 从外部攻击一个一次性实例，包含 400 多项检查，每个版本发布前都会运行（[SECURITE.md](SECURITE.md)）。
+- **Linux**：`.deb` 已在 Ubuntu 24.04 容器中安装并使用（引擎、模型、Chat）。
+
+**尚未尝试**
+
+- **Windows**：安装程序尚未在真实 PC 上运行过（安装、SmartScreen、首次启动、引擎、Chat）。Windows 上的一键更新已编写，尚未试用。
+- **真实机器上的 Linux**（目前只在容器中试过）、AppImage、GNOME 上的托盘图标。
+- **在 NVIDIA 显卡上微调**（Unsloth、PyTorch CUDA）：依据文档编写，从未运行过。
+- **使用真实密钥的云端服务商**：已针对七家服务商 API 的模拟实现做过端到端测试，尚未对每家都用真实密钥试过。
+- **真实账户**：会议机器人加入真实的 Google Meet 会议，智能体回复真实邮件或即时消息（Telegram、WhatsApp、Discord、Slack），在连接到实例的机器上于两个版本之间一键更新。
+- **签名**：这些应用尚未获得 Apple 或 Microsoft 的签名（[SIGNATURE.md](SIGNATURE.md)）。
+
+Windows 上暂不提供：全天候智能体（OpenClaw 在 Windows 上需要 WSL）以及 `helix` 命令行。
 
 ## 安装
 
-请在[最新发布页](https://github.com/medhiclb/HelixAI/releases/tag/v2026.927.4)下载适合您系统的安装包。SHA-256 校验值：[`SHA256SUMS.txt`](https://github.com/medhiclb/HelixAI/releases/download/v2026.927.4/SHA256SUMS.txt)。
+请在 [v2026.928.1 发布页](https://github.com/medhiclb/HelixAI/releases/tag/v2026.928.1)下载适合您系统的安装包。SHA-256 校验值：[`SHA256SUMS.txt`](https://github.com/medhiclb/HelixAI/releases/download/v2026.928.1/SHA256SUMS.txt)。
 
 | 系统 | 下载 | 安装方法 |
 |---|---|---|
-| **macOS**（Apple 芯片） | [Helix-2026.927.4-arm64.dmg](https://github.com/medhiclb/HelixAI/releases/download/v2026.927.4/Helix-2026.927.4-arm64.dmg) | 打开磁盘映像，将 Helix 拖入“应用程序”。首次启动时：系统设置 › 隐私与安全性 › “仍要打开” |
-| **Windows 10/11**（x64） | [Helix-Setup-2026.927.4-x64.exe](https://github.com/medhiclb/HelixAI/releases/download/v2026.927.4/Helix-Setup-2026.927.4-x64.exe) | 运行安装程序（无需管理员权限）。如出现 SmartScreen：“更多信息” › “仍要运行” |
-| **Ubuntu、Debian**（x64） | [helix-plateforme_2026.927.4_amd64.deb](https://github.com/medhiclb/HelixAI/releases/download/v2026.927.4/helix-plateforme_2026.927.4_amd64.deb) | `sudo apt install ./helix-plateforme_2026.927.4_amd64.deb` |
-| **其他 Linux**（x64） | [Helix-2026.927.4.AppImage](https://github.com/medhiclb/HelixAI/releases/download/v2026.927.4/Helix-2026.927.4.AppImage) | `chmod +x Helix-2026.927.4.AppImage`，然后运行。在 Ubuntu 24.04 上建议使用 `.deb` |
-
-首次启动时，Helix 会自动完成所需的安装：[LM Studio](https://lmstudio.ai) 的无界面引擎（版本固定，校验值已验证；若本机已在使用 LM Studio 应用，则直接使用该应用）以及最适合本机的模型。若缺少 Python、Node 以及 Helix Code 所需的 [OpenCode](https://github.com/anomalyco/opencode)，可一键安装（版本固定，校验值已验证）。新版本会在应用内提示：macOS 上一键安装；在 Windows 和 Linux 上，会提供新安装包，覆盖旧版本安装即可，数据会保留。
+| **macOS**（Apple 芯片） | [Helix-2026.928.1-arm64.dmg](https://github.com/medhiclb/HelixAI/releases/download/v2026.928.1/Helix-2026.928.1-arm64.dmg) | 打开磁盘映像，将 Helix 拖入“应用程序”。首次启动时：系统设置 › 隐私与安全性 › “仍要打开” |
+| **Windows 10/11**（x64） | [Helix-Setup-2026.928.1-x64.exe](https://github.com/medhiclb/HelixAI/releases/download/v2026.928.1/Helix-Setup-2026.928.1-x64.exe) | 运行安装程序（无需管理员权限）。如出现 SmartScreen：“更多信息” › “仍要运行” |
+| **Ubuntu、Debian**（x64） | [helix-plateforme_2026.928.1_amd64.deb](https://github.com/medhiclb/HelixAI/releases/download/v2026.928.1/helix-plateforme_2026.928.1_amd64.deb) | `sudo apt install ./helix-plateforme_2026.928.1_amd64.deb` |
+| **其他 Linux**（x64） | [Helix-2026.928.1.AppImage](https://github.com/medhiclb/HelixAI/releases/download/v2026.928.1/Helix-2026.928.1.AppImage) | `chmod +x Helix-2026.928.1.AppImage`，然后运行。在 Ubuntu 24.04 上建议使用 `.deb` |
 
 **macOS 一条命令安装**（推荐）：先根据 `SHA256SUMS.txt` 校验磁盘映像及其代码签名，再安装应用，不会出现 Gatekeeper 提示：
 
@@ -58,55 +140,31 @@ HelixAI 将 Chat、智能体、编程、知识库和模型微调整合到一个*
 curl -fsSL https://raw.githubusercontent.com/medhiclb/HelixAI/main/scripts/installer-macos.sh | sh
 ```
 
-这些应用尚未获得 Apple 或 Microsoft 的签名。在 macOS 上，应用获得公证之前，每次安装新版本后，macOS 会询问一次是否允许 Helix 访问其钥匙串项目（“Helix Safe Storage”）：请选择“始终允许”。在 Windows 11 上，智能应用控制（Smart App Control）启用时会阻止未签名的应用，且不提供“仍要运行”选项。
+首次启动时，Helix AI 会安装所需的一切：LM Studio 的无界面引擎（版本固定，校验值已验证；若本机已在使用 LM Studio 应用，则直接使用该应用）以及最适合本机的模型。建议内存为 16 GB；内存较小的机器会选用更轻量的模型。若缺少 Python、Node 以及 Helix Code 所需的 [OpenCode](https://github.com/anomalyco/opencode)，可一键安装（版本固定，校验值已验证）；对话模型来自 LM Studio 的目录，版本由 LM Studio 提供。
 
-从源码构建：`npm install`、`npm run build`，然后运行 `npm run package`（macOS）、`npx electron-builder --win nsis --x64`（Windows）或 `npx electron-builder --linux AppImage deb --x64`（Linux）。
+新版本会在应用内提示：macOS 上一键安装；在 Windows 和 Linux 上，会提供新安装包，覆盖旧版本安装即可，数据会保留。在应用获得公证之前，每次安装新版本后，macOS 会询问一次是否允许 Helix 访问其钥匙串项目（“Helix Safe Storage”）：请选择“始终允许”。在 Windows 11 上，智能应用控制（Smart App Control）启用时会阻止未签名的应用，且不提供“仍要运行”选项。
 
 ## 功能
 
-- **Chat**：使用**按每台机器挑选**的本地模型：Helix 会安装能装入该机器内存、评分最高的开源模型（Apache 2.0 或 MIT），从小型笔记本到工作站都适用，并推荐该机器能运行的其他模型。模型目录涵盖 Qwen、Mistral（Magistral、Ministral）、OpenAI gpt-oss、Z.ai GLM、IBM Granite、Ai2 OLMo、Meta 和 DeepSeek。云端模型可用您自己的 API 密钥。支持附件、语音输入（Whisper，本机运行）、图像生成（Z-Image Turbo、FLUX.2 klein）以及短**视频**生成（Wan 2.1 和 2.2），同样在本机运行。
+- **Chat**：使用**按每台机器挑选**的本地模型：Helix AI 会安装能装入该机器内存、评分最高的开源模型（Apache 2.0 或 MIT），从小型笔记本到工作站都适用，并推荐该机器能运行的其他模型。模型目录涵盖 Qwen、Mistral（Magistral、Ministral）、OpenAI gpt-oss、Z.ai GLM、IBM Granite、Ai2 OLMo、Meta 和 DeepSeek。云端模型可用您自己的 API 密钥。支持附件、语音输入（Whisper，本机运行）、图像生成（Z-Image Turbo、FLUX.2 klein）以及短视频生成（Wan 2.1 和 2.2），同样在本机运行。
+- **模型比较**：您可以使用的每个模型都按能力评分与其发布方的价格排布，本地模型和云端模型可以在同一张图上权衡。
 - **知识库（RAG）**：汇集文档，实例在本机为其建立索引，回答会引用所用的段落。每个人只能找到自己有权查看的文档。
 - **Cowork**：在您的文件上工作的智能体，经您同意后还可在虚拟桌面（LibreOffice、浏览器）上操作，生成 Word、Excel、PowerPoint 和 PDF 文档。
-- **Helix Code**：作用于项目文件夹的代码智能体（基于 OpenCode），也可在 **VS Code**（附带扩展）和终端中通过 **`helix` 命令行**使用。
+- **Helix Code**：作用于项目文件夹的代码智能体（基于 OpenCode），配有实时面板，显示其任务、命令和修改的文件；也可在 **VS Code**（附带扩展）和终端中通过 **`helix` 命令行**使用。
 - **连接器**：邮件、Google 日历（读写）、Google Drive、Slack、Notion 和 MCP 服务器，均受**审批机制**保护：任何修改操作都须经您同意。
-- **定时任务**：一条指令加一个频率（每天、周一至周五、每周或每月某天），用您的工具执行，即使窗口关闭也会运行，可指定执行的智能体；在“任务”中创建，或在 Chat 中直接提出。
+- **定时任务**：一条指令加一个频率（每天、周一至周五、每周或每月某天），用您的工具执行，即使窗口关闭也会运行，可指定执行的智能体。
 - **全天候智能体**：定时任务、回复收到的邮件和即时消息，并可使用各自的知识库和头像。处理收到的邮件时权限受限：上网时只打开已见过的地址。
-- **训练模型**：用示例让小型开源模型学习贵公司的信息，与原始模型对比，然后安装到 LM Studio（Apple 芯片上使用 MLX；NVIDIA 显卡上使用 Unsloth）。
-- **开发者 API**：个人 API 密钥，用于实例的 OpenAI 兼容 API（`/v1/models`、`/v1/chat/completions`，含知识库），以您的名义使用且仅限于此：不能访问其他路由，不能让实例执行工具，可随时撤销。
+- **训练模型**：示例、训练、与原始模型对比，然后安装到 LM Studio（Apple 芯片上使用 MLX；NVIDIA 显卡上使用 Unsloth，尚未试用）。
+- **我的用量**：按模型统计的请求和令牌，读取自每个引擎的响应；本地模型没有 API 费用，云端模型按您填写的费率或服务商公布的价格计费，并注明日期。
+- **开发者 API**：个人 API 密钥，用于实例的 OpenAI 兼容 API（`/v1/models`、`/v1/chat/completions`，含知识库），以您的名义使用且仅限于此，可随时撤销。
 - **会议**：录制或导入，在本机转写并生成纪要，支持会议机器人。
 - **导入**来自 ChatGPT、Claude、Claude Code、Codex 和 Cursor 的历史记录。
-- **团队**：账户、群组、共享、双重认证、审计日志、GDPR 导出，数据落盘加密。新版本会在应用内提示：macOS 上一键安装，且只安装带有发布者签名的版本；Windows 和 Linux 上提供新安装包。
+- **团队**：账户、群组、共享、双重认证、审计日志、GDPR 导出，数据落盘加密。
 - **白标**：产品名称、标志和颜色都来自同一个配置文件。
-
-<table>
-  <tr>
-    <td><img src="docs/images/knowledge.png" alt="“文件”中的知识库" /></td>
-    <td><img src="docs/images/training.png" alt="训练模型：示例" /></td>
-  </tr>
-  <tr>
-    <td align="center">知识库</td>
-    <td align="center">训练模型</td>
-  </tr>
-  <tr>
-    <td><img src="docs/images/home.png" alt="首页" /></td>
-    <td><img src="docs/images/code.png" alt="Helix Code" /></td>
-  </tr>
-  <tr>
-    <td align="center">首页</td>
-    <td align="center">Helix Code</td>
-  </tr>
-</table>
 
 ## 从源码构建
 
-### 前提条件
-
-- 一台开发机器：macOS（Apple 芯片）、Windows 10/11 或 Linux（x64）；Windows 和 Linux 安装包也可以在 Mac 上构建
-- Node.js 22.18 或更高版本，以及 npm（仅用于构建和开发，网关直接运行 TypeScript：安装后的应用既不需要 Node 也不需要 Python）
-
-无需预先安装其他任何组件：首次启动时，Helix 会安装 [LM Studio](https://lmstudio.ai) 的无界面引擎（若已在使用 LM Studio 应用则直接使用）以及适合本机的模型。建议 16 GB 内存；在配置较低的机器上，Helix 会选择更轻量的模型。
-
-### 运行
+前提条件：macOS（Apple 芯片）、Windows 10/11 或 Linux（x64），Node.js 22.18 或更高版本以及 npm。Node 仅用于构建和开发：网关直接运行其 TypeScript，安装后的应用既不需要 Node，也不需要 Python。
 
 ```bash
 git clone https://github.com/medhiclb/HelixAI
@@ -115,70 +173,63 @@ npm install
 npm run app
 ```
 
-`npm run app` 会编译网关并打开桌面应用，应用会启动自己的本地网关。若只运行网页界面，请在两个终端中分别执行 `npm run gateway` 和 `npm run dev`。
-
-### 打包与检查
+`npm run app` 会构建网关并打开桌面应用，由应用启动自己的本地网关。若只运行 Web 界面，请在两个终端中分别执行 `npm run gateway` 和 `npm run dev`。
 
 ```bash
 npm run package      # macOS：在 release/ 中生成 .dmg 和 .zip
-npx electron-builder --win nsis --x64            # Windows 安装程序（先运行 npm run build）
-npx electron-builder --linux AppImage deb --x64  # Linux 安装包（先运行 npm run build）
+npx electron-builder --win nsis --x64            # Windows 安装程序（先执行 npm run build）
+npx electron-builder --linux AppImage deb --x64  # Linux 安装包（先执行 npm run build）
 npm run typecheck    # 界面和网关
-npm run securite     # 针对临时实例的安全检查
+npm run securite     # 针对一次性实例的安全检查
 ```
 
-签名和公证已准备就绪，只差 Apple 证书：见 [SIGNATURE.md](SIGNATURE.md)。
+签名和公证已准备就绪，只待 Apple 证书：参见 [SIGNATURE.md](SIGNATURE.md)。
 
-## 命令行
+### 命令行
 
-桌面应用自带 `helix` 命令。在 **设置 > 安装应用 > CLI** 中完成设置，然后：
+桌面应用附带 `helix` 命令。在 **设置 › 安装应用 › CLI** 中完成设置，然后：
 
 ```bash
 helix connexion          # 使用实例账户登录一次
 helix chat               # 在终端中使用 Chat
-helix chat --outils      # 使用连接器，受审批机制保护
-helix code               # 在当前文件夹上使用代码智能体
+helix chat --outils      # 使用您的连接器，受审批机制保护
+helix code               # 在当前文件夹上运行代码智能体
 ```
 
-## 文档
+### 文档
 
-技术文档使用法语编写。
-
-- [docs/GUIDE.md](docs/GUIDE.md)：完整技术指南（网关、路由、连接器、部署、更换品牌）
-- [ARCHITECTURE.md](ARCHITECTURE.md)：架构与决策记录
-- [SECURITE.md](SECURITE.md)：安全模型及每项检查
-- [SCREENS.md](SCREENS.md)：每个界面及其实际功能
-- [PROJET.md](PROJET.md)：目标、决策、现状及待办事项
-
-## 社区
-
-- 问题与想法：[Discussions](https://github.com/medhiclb/HelixAI/discussions)
-- 缺陷与功能请求：[Issues](https://github.com/medhiclb/HelixAI/issues)
-- 在应用内报告缺陷：设置 › 报告问题（或帮助），预先填好问题单或邮件，由您查看后亲自发送
-- 安全漏洞：请私下报告，见 [SECURITY.md](SECURITY.md)
-- [行为准则](CODE_OF_CONDUCT.md)
+技术文档以法语撰写：[docs/GUIDE.md](docs/GUIDE.md)（网关、路由、连接器、部署、更换品牌）、[ARCHITECTURE.md](ARCHITECTURE.md)、[SECURITE.md](SECURITE.md)、[SCREENS.md](SCREENS.md)（每个界面及其实际功能）和 [PROJET.md](PROJET.md)（意图、决策、现状）。
 
 ## 参与贡献
 
-欢迎贡献。提交第一个 pull request 之前，请阅读 [CONTRIBUTING.md](CONTRIBUTING.md) 并签署 [CLA](CLA.md)。
+欢迎任何贡献，从修正错别字到新的连接器。
+
+- 请阅读 [CONTRIBUTING.md](CONTRIBUTING.md)，并在首次提交 pull request 前签署 [CLA](CLA.md)。
+- 问题和想法：[Discussions](https://github.com/medhiclb/HelixAI/discussions)。
+- 缺陷和功能请求：[Issues](https://github.com/medhiclb/HelixAI/issues)，或在应用中：设置 › 报告问题，会生成一个预填好的 issue 或邮件，由您检查后自行发送。
+- 安全漏洞：请私下报告，参见 [SECURITY.md](SECURITY.md)。
+- [行为准则](CODE_OF_CONDUCT.md)。
 
 ## 许可证
 
-[GNU AGPL-3.0](LICENSE)。您可以使用、修改、再分发和销售 HelixAI。分发它或将其作为在线服务提供的人，必须以相同许可证公开其版本的代码。详见 [COPYRIGHT.md](COPYRIGHT.md)。
+[GNU AGPL-3.0](LICENSE)。您可以使用、修改、再分发和出售 Helix AI。任何分发它或将其作为在线服务提供的人，都必须以相同许可证公开其版本的代码。详情见 [COPYRIGHT.md](COPYRIGHT.md)。
 
-默认模型引擎 LM Studio 是闭源软件，其条款允许个人使用和组织内部使用，但不允许向他人提供服务：为他人托管实例之前，请阅读 [PROJET.md § 3.9](PROJET.md)。
+默认模型引擎 LM Studio 是闭源软件，其条款允许个人使用和组织内部使用，但不允许向他人提供服务：在为他人托管实例之前，请阅读 [PROJET.md § 3.9](PROJET.md)。
 
 ## 致谢
 
+“模型比较”中的模型评分来自 **Epoch AI** 的 [Capabilities & benchmarking](https://epoch.ai/benchmarks/use-this-data)（Epoch Capabilities Index，ECI 指数），采用 [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) 许可，获取于 2026 年 9 月 27 日。价格来自各发布方的官方价格页面，记录于同一天。
+
 本项目基于众多开源成果构建，其中包括：
-[OpenCode](https://github.com/anomalyco/opencode),
-[OpenClaw](https://github.com/openclaw/openclaw),
-[stable-diffusion.cpp](https://github.com/leejet/stable-diffusion.cpp),
-[MLX](https://github.com/ml-explore/mlx),
-[Unsloth](https://github.com/unslothai/unsloth),
-[Whisper](https://github.com/openai/whisper),
-[Qwen](https://github.com/QwenLM),
-[LangChain.js](https://github.com/langchain-ai/langchainjs) （文本切分）,
-[AnythingLLM](https://github.com/Mintplex-Labs/anything-llm) （知识库设计）, [UI UX Pro Max](https://github.com/nextlevelbuilder/ui-ux-pro-max-skill),
-[Lume](https://github.com/trycua/cua), [Electron](https://www.electronjs.org),
-[React](https://react.dev)、[Vite](https://vite.dev)。
+[OpenCode](https://github.com/anomalyco/opencode)、
+[OpenClaw](https://github.com/openclaw/openclaw)、
+[stable-diffusion.cpp](https://github.com/leejet/stable-diffusion.cpp)、
+[MLX](https://github.com/ml-explore/mlx)、
+[Unsloth](https://github.com/unslothai/unsloth)、
+[Whisper](https://github.com/openai/whisper)、
+[Qwen](https://github.com/QwenLM)、
+[LangChain.js](https://github.com/langchain-ai/langchainjs)（文本切分）、
+[AnythingLLM](https://github.com/Mintplex-Labs/anything-llm)（知识库设计）、
+[UI UX Pro Max](https://github.com/nextlevelbuilder/ui-ux-pro-max-skill)、
+[Lume](https://github.com/trycua/cua)、[Electron](https://www.electronjs.org)、
+[React](https://react.dev) 和 [Vite](https://vite.dev)。

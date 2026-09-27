@@ -1,6 +1,17 @@
 import { inflateRawSync } from "node:zlib";
 
 /**
+ * Borne de décompression par entrée, contre les bombes ZIP (test d'intrusion du
+ * 27/09/2026). Un .docx de 400 Ko dont `word/document.xml` est un long run
+ * d'un même octet gonflait à des centaines de Mo (ratio ~1000:1) : `inflateRawSync`
+ * allouait tout avant qu'on ne coupe à 1 000 caractères, de quoi épuiser la
+ * mémoire de la passerelle. On ne lit de toute façon que le début du document ;
+ * 16 Mo laissent passer un vrai document volumineux, et une entrée qui dépasse
+ * fait lever `inflateRawSync` (rattrapé plus bas : l'entrée est alors ignorée).
+ */
+const DECOMPRESSION_MAX = 16 * 1024 * 1024;
+
+/**
  * Relit un document bureautique enregistré par l'agent, sur le poste même :
  * le texte d'un .docx, les cellules d'un .xlsx (« A1=valeur », formule
  * comprise). Même sortie que le script de relecture du bureau Linux
@@ -37,7 +48,7 @@ function lireZip(buf: Buffer, voulus: string[]): Map<string, string> {
     const debut = local + 30 + buf.readUInt16LE(local + 26) + buf.readUInt16LE(local + 28);
     const donnees = buf.subarray(debut, debut + taille);
     try {
-      sortie.set(nom, (methode === 8 ? inflateRawSync(donnees) : donnees).toString("utf8"));
+      sortie.set(nom, (methode === 8 ? inflateRawSync(donnees, { maxOutputLength: DECOMPRESSION_MAX }) : donnees.subarray(0, DECOMPRESSION_MAX)).toString("utf8"));
     } catch {
       /* entrée illisible : ignorée */
     }

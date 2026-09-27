@@ -6,6 +6,7 @@ import {
   renameSync,
   chmodSync,
   readdirSync,
+  unlinkSync,
 } from "node:fs";
 import { randomBytes } from "node:crypto";
 import { join, dirname } from "node:path";
@@ -256,22 +257,38 @@ class JsonStore implements Store {
     const temp = `${file}.${process.pid}.${randomBytes(4).toString("hex")}.tmp`;
     const envelope: Envelope = { value: chiffrer(value, collection), revision: Date.now() };
     mkdirSync(dirname(file), { recursive: true, mode: 0o700 });
-    // 600 dès l'écriture : ces fichiers ne regardent que le compte hôte.
-    writeFileSync(temp, JSON.stringify(envelope), { encoding: "utf8", mode: 0o600 });
     /*
-     * Sous Windows, un antivirus ou l'indexation tiennent parfois le fichier
-     * un instant : le renommage échoue (EPERM, EBUSY), puis passe. Quelques
-     * essais rapprochés, puis l'erreur, telle quelle (audit du 27/09/2026).
+     * Une écriture ratée ne laisse rien derrière elle (28/09/2026) : disque
+     * plein au milieu de l'écriture, ou renommage refusé, le fichier
+     * provisoire restait dans le dossier des données, une copie de plus de la
+     * collection (chiffrée, mais à chaque échec un nom neuf, jamais repris).
+     * L'erreur remonte telle quelle ; l'ancienne version reste en place.
      */
-    for (let essai = 0; ; essai++) {
-      try {
-        renameSync(temp, file);
-        return;
-      } catch (err) {
-        const code = (err as NodeJS.ErrnoException).code;
-        if (process.platform !== "win32" || essai >= 8 || (code !== "EPERM" && code !== "EBUSY" && code !== "EACCES")) throw err;
-        await new Promise((r) => setTimeout(r, 50 * (essai + 1)));
+    try {
+      // 600 dès l'écriture : ces fichiers ne regardent que le compte hôte.
+      writeFileSync(temp, JSON.stringify(envelope), { encoding: "utf8", mode: 0o600 });
+      /*
+       * Sous Windows, un antivirus ou l'indexation tiennent parfois le fichier
+       * un instant : le renommage échoue (EPERM, EBUSY), puis passe. Quelques
+       * essais rapprochés, puis l'erreur, telle quelle (audit du 27/09/2026).
+       */
+      for (let essai = 0; ; essai++) {
+        try {
+          renameSync(temp, file);
+          return;
+        } catch (err) {
+          const code = (err as NodeJS.ErrnoException).code;
+          if (process.platform !== "win32" || essai >= 8 || (code !== "EPERM" && code !== "EBUSY" && code !== "EACCES")) throw err;
+          await new Promise((r) => setTimeout(r, 50 * (essai + 1)));
+        }
       }
+    } catch (err) {
+      try {
+        unlinkSync(temp);
+      } catch {
+        /* jamais créé, ou déjà parti */
+      }
+      throw err;
     }
   }
 

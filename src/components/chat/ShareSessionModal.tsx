@@ -109,7 +109,7 @@ export function ShareSessionModal({
                   placeholder={t("Choisir un groupe")}
                   options={groupesProposes.map((g) => ({
                     value: g.id,
-                    label: `${g.nom} (${g.membres.length} membre${g.membres.length > 1 ? "s" : ""})`,
+                    label: `${g.nom} (${(g.membres.length === 1 ? t("1 membre") : tf("{0} membres", g.membres.length))})`,
                   }))}
                 />
                 <Button
@@ -164,7 +164,7 @@ export function ShareSessionModal({
                 {g.nom}
                 <span className="text-muted-foreground">
                   {" "}
-                  · {g.membres.length} membre{g.membres.length > 1 ? "s" : ""}
+                  · {(g.membres.length === 1 ? t("1 membre") : tf("{0} membres", g.membres.length))}
                 </span>
               </span>
               {isOwner && (

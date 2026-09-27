@@ -3844,6 +3844,72 @@ refuse de charger (`lms`), le bot de réunion, la mise à jour d'un clic (le nav
 pont Electron). À savoir : le bouton « Copier les informations techniques » a été essayé une fois
 dans la fenêtre Electron d'essai et a écrit dans le presse-papiers du Mac.
 
+**Fait le 28/09/2026 : seconde tournée, les régressions entre fusions.** Sur le code fusionné le
+27/09 au soir (6b77c21), contre une instance jetable (clé des données en fichier, dossier de données,
+dossier personnel et PATH jetables, faux `security`, aucun `lms`, LM Studio et exo coupés), un faux
+modèle local, un faux fournisseur OpenAI, faux OpenClaw, OpenCode et `codex` ; l'écran sous Vite,
+dans une fenêtre Electron cachée à profil jetable (presse-papiers neutralisé), en français, anglais et
+chinois, à 375 et 1 280 pixels. Trouvé et corrigé :
+- **Document joint perdu à cause de la coupe** (documentsJoints.ts, historique.ts, chat.ts) : la place
+  d'un document se mesurait avec tout l'historique, que `tenirDansLaPlace` retirait juste après. Mesuré
+  sur 8 192 jetons : un document de 2 200 jetons joint à la neuvième question était lu en une partie
+  sur plusieurs (le reste perdu), puis dix messages anciens partaient quand même. Quand la coupe suit
+  (écran de Helix, taille connue), le document de la question ne cède plus la place aux anciens
+  échanges ; les documents d'avant ne sont repris que si tout l'historique tient. Sans coupe ensuite
+  (relais d'un client), rien ne change.
+- **`lms` lancé avec LM Studio coupé** : l'écran de mise en route (`GET /helix/provision`) lançait
+  `lms version` à chaque ouverture, et « Installer » cherchait `lms` puis `lms get`. Coupé par le
+  profil : aucun `lms`, l'écran dit qu'il n'y a rien à installer d'ici (comme un poste piloté), la
+  demande d'installation le dit sans rien tenter (index.ts, provision.ts).
+- **Mise en service automatique d'un agent bloquée pour toujours** : son modèle choisi à la création
+  disparu avant la mise en service (désinstallé, clé retirée), l'instance le refuse (400, sans repli,
+  c'est voulu) et « Réessayer » redemandait le même. La carte le dit et propose d'en choisir un autre
+  (proposition du poste, puis « Mettre en service ») ; le refus porte le code `modele_indisponible`.
+  L'ancien `modelUid` (modèle du Chat) n'est plus envoyé comme modèle d'employé s'il n'est plus servi.
+  Le « Réessayer » de la carte n'est plus un bouton dans un bouton (useMiseEnService.ts, AgentsPage.tsx).
+- **Modèles proposés qui ne tiennent pas en mémoire avec 32 768 jetons** (provision.ts, `tientSur`) :
+  les 30 % comptés pour la conversation valaient pour Qwen3.5 (un quart des couches à cache), pas pour
+  un modèle dense. Cache relu sur les `config.json` publiés : Qwen3 4B 4,5 Gio, Ministral 3 3B
+  3,25 Gio, Qwen3 1.7B 3,5 Gio, Qwen3 8B 4,5 Gio, Granite 4.1 8B 5 Gio, OLMo 3 7B 4 Gio, Qwen3.5 4B
+  et 9B 1 Gio, Qwen3.5 2B 0,4 Gio (f16, couches à attention pleine × têtes K/V × taille de tête). Sur
+  8 Go (PC sans carte ou Mac), Qwen3.5 4B tient (conseillé, inchangé), mais ses replis Qwen3 4B et
+  Ministral 3B demandaient 7 à 7,5 Go : ils ne sont plus proposés ni essayés ; le relais est Qwen3.5 2B,
+  puis Qwen3 1.7B (le plus léger vérifié, gardé en dernier recours). Sur 16 Go sans carte, Qwen3 8B
+  tient (10 Go pour 11,2) et reste conseillé. Avec une carte NVIDIA, l'ancienne règle. 0,5 Go de
+  tampons de calcul est une estimation, pas une mesure. **À décider** : sur un PC de 8 Go sans carte
+  où la famille Qwen3.5 répond mal (le défaut vu sur le PC de Medhi), il ne reste que Qwen3 1.7B ;
+  Ministral 3B y tiendrait avec 16 384 jetons, mais Code en demande 32 768 (backends.ts, 24/09).
+- **Mon usage** : le nom du modèle et le service qui le sert (« gpt-4o-mini, OpenAI »), l'identifiant
+  `cle-…/…` au survol ; « dont … de réflexion » était écrit en dur ; les nombres suivent la langue ; un
+  tarif retiré rend la devise du prix publié (usage.ts, Usage.tsx). Vérifié : prix publié en dollars,
+  tarif saisi en euros qui l'emporte, totaux par devise.
+- **Code à 375 pixels** : le choix du moteur (360 pixels de large) s'ouvrait sous la barre latérale et
+  y était coupé ; un panneau qui ne tient d'aucun côté est ramené dans sa zone et rétréci
+  (Popover.tsx, vaut pour tous les menus). En session Codex, l'avis prenait la moitié de l'écran à
+  chaque tour : une ligne sous la saisie, le détail d'un clic, l'avis entier reste à l'accueil.
+- **Approbations** : une lecture ratée au démarrage (instance pas encore prête) n'était jamais refaite,
+  et le flux ne s'ouvrait pas ; relue ensuite, de plus en plus espacée. Une lecture en route écrasait
+  ce que le flux venait de dire (carte arrivée entre-temps effacée, carte tranchée remise), pour les
+  cartes comme pour la cloche (useApprobation.ts, notifications.ts).
+- **Relevés au premier passage** : l'onglet « Discuter » d'un agent s'appelle « Chat » ; `read_file`
+  (« Lecture d'un fichier (ancien outil) ») et `read_text_file` (« Lecture d'un fichier texte »), et
+  `list_directory_with_sizes`, ont chacun leur libellé ; une écriture de collection ratée efface son
+  fichier provisoire (db.ts, essayé en faisant échouer le renommage, pas avec un disque plein).
+- **Écran étroit et traductions** : Tâches à 375 pixels laissait 62 pixels au tableau (la colonne des
+  rubriques passe en rangée au-dessus, comme les Paramètres) ; les onglets des Agents faisaient défiler
+  la page de côté ; un long chemin d'espace de travail débordait (Connecteurs). Pluriels écrits en
+  français hors traduction : « 3 项任务s », « membre(s) », « chat(s) », « document(s) choisi(s) »,
+  « projet(s) », le résumé de l'export, « Recherche… », « sur » (Tâches, Groupes, Projets, partage,
+  Bibliothèque, Confidentialité).
+**Vérifié** : `npm run typecheck`, i18n à 100 % des deux côtés, `npm run securite` (section 13
+quinquies, 17 contrôles de plus, 749 en tout, aucun échec ; le contrôle « Windows 8 Go simulé » de la section 7 septies suit la
+nouvelle règle : Qwen3.5 2B prend le relais, Qwen3 4B n'est plus essayé). **Relevé, pas corrigé** : un
+service déclaré par le profil sur la machine même (Ollama en boucle locale) est présenté comme
+« cloud … facturé » dans les choix de modèle (origine « agence ») ; la liste d'un tel service est gardée
+dix minutes comme celle d'un fournisseur cloud. **Pas essayé** : l'application empaquetée, un vrai
+LM Studio (la mémoire réelle d'un chargement de 32 768 jetons, ses garde-fous de chargement), un vrai
+modèle, le vrai Codex, un disque plein.
+
 **Fait le 27/09/2026 : Codex dans l'écran Code, avec le compte ChatGPT du propriétaire du
 poste.** Décidé par Medhi (« ajoute »). Le détail, les sources et ce qui reste à essayer sont
 au § 3.14 (« Fait ») ; les barrières au § 30 de SECURITE.md. En bref : second moteur au choix

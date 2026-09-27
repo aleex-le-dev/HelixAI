@@ -694,15 +694,21 @@ function ProjectsPanel({
 }) {
   const entree = (actif: boolean) =>
     cn(
-      "flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm transition-colors",
+      "flex shrink-0 items-center gap-2.5 whitespace-nowrap rounded-lg px-2.5 py-2 text-sm transition-colors md:w-full",
       actif
         ? "bg-muted font-medium text-foreground"
         : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
     );
 
   return (
-    <aside className="flex w-[236px] shrink-0 flex-col overflow-y-auto border-r border-border">
-      <nav className="space-y-0.5 px-2 pt-5">
+    /*
+     * Sous 768 pixels, une rangée au-dessus des tâches, comme la liste des
+     * Paramètres (28/09/2026) : à 375 pixels, la colonne de 236 pixels ne
+     * laissait que 62 pixels au tableau, et « Aucune tâche » s'écrivait une
+     * lettre par ligne.
+     */
+    <aside className="flex shrink-0 gap-1 overflow-x-auto border-b border-border px-2 py-2 md:w-[236px] md:flex-col md:overflow-y-auto md:overflow-x-hidden md:border-b-0 md:border-r md:p-0">
+      <nav className="flex gap-1 md:block md:space-y-0.5 md:px-2 md:pt-5">
         {RUBRIQUES.map((r) => {
           const Icon = r.icon;
           const n = compteurs.get(r.id) ?? 0;
@@ -733,8 +739,8 @@ function ProjectsPanel({
 
       {features.projets && (
         <>
-          <div className="flex items-center justify-between px-4 pb-2 pt-6">
-            <span className="text-sm font-semibold text-foreground">{t("Projets")}</span>
+          <div className="flex shrink-0 items-center md:justify-between md:px-4 md:pb-2 md:pt-6">
+            <span className="hidden text-sm font-semibold text-foreground md:inline">{t("Projets")}</span>
             <IconButton
               icon={Plus}
               label={t("Nouveau projet")}
@@ -744,7 +750,7 @@ function ProjectsPanel({
             />
           </div>
           {projets.length === 0 ? (
-            <div className="mt-2 flex flex-col items-center gap-3 px-4 text-center">
+            <div className="mt-2 hidden flex-col items-center gap-3 px-4 text-center md:flex">
               <Folder size={26} strokeWidth={1.25} className="text-muted-foreground" />
               <p className="text-xs text-muted-foreground">
                 {t("Créez un projet pour organiser vos tâches")}
@@ -754,7 +760,7 @@ function ProjectsPanel({
               </Button>
             </div>
           ) : (
-            <nav className="space-y-0.5 px-2">
+            <nav className="flex gap-1 md:block md:space-y-0.5 md:px-2">
               {projets.map((p) => {
                 const id = `${PREFIXE_PROJET}${p.id}`;
                 const n = compteurs.get(id) ?? 0;
@@ -778,7 +784,7 @@ function ProjectsPanel({
             Dit ce que le classement fait et ne fait pas : un projet partagé
             laisse croire que tout ce qu'on y range se partage avec lui.
           */}
-          <p className="mt-auto px-4 pb-4 pt-6 text-[11px] leading-relaxed text-muted-foreground">
+          <p className="mt-auto hidden px-4 pb-4 pt-6 text-[11px] leading-relaxed text-muted-foreground md:block">
             {t("Vos tâches restent personnelles, même rangées dans un projet partagé.")}
           </p>
         </>
@@ -1180,8 +1186,9 @@ function CalendarView({
       */}
       {sansEcheance > 0 && (
         <p className="mb-2 text-xs text-muted-foreground">
-          {sansEcheance}{" "}{t("tâche")}{sansEcheance > 1 ? "s" : ""}{" "}{t("sans échéance")}{" "}
-          {sansEcheance > 1 ? "ne figurent" : "ne figure"}{" "}{t("pas dans le calendrier.")}
+          {sansEcheance === 1
+            ? t("1 tâche sans échéance ne figure pas dans le calendrier.")
+            : tf("{0} tâches sans échéance ne figurent pas dans le calendrier.", sansEcheance)}
         </p>
       )}
 
@@ -1483,7 +1490,7 @@ export function TachesPage() {
 
   if (rubrique === RUBRIQUE_PROGRAMMEES) {
     return (
-      <div className="flex h-full min-w-0">
+      <div className="flex h-full min-w-0 flex-col md:flex-row">
         <ProjectsPanel
           rubrique={rubrique}
           onRubrique={(id) => regler({ rubrique: id })}
@@ -1497,7 +1504,7 @@ export function TachesPage() {
   }
 
   return (
-    <div className="flex h-full min-w-0">
+    <div className="flex h-full min-w-0 flex-col md:flex-row">
       <ProjectsPanel
         rubrique={rubrique}
         onRubrique={(id) => regler({ rubrique: id })}
@@ -1513,11 +1520,14 @@ export function TachesPage() {
               {titreRubrique}
             </h1>
             <p className="text-sm text-muted-foreground">
+              {/* Une phrase par nombre (28/09/2026) : le « s » ajouté en français donnait « 3 项任务s », et « sur » restait en français. */}
               {visibles.length === 0
                 ? t("Aucune tâche")
-                : tf("{0} tâche{1}", visibles.length, visibles.length > 1 ? "s" : "")}
-              {visibles.length !== dansRubriqueCourante.length &&
-                ` sur ${dansRubriqueCourante.length}`}
+                : visibles.length !== dansRubriqueCourante.length
+                  ? tf("{0} sur {1}", visibles.length === 1 ? t("1 tâche") : tf("{0} tâches", visibles.length), dansRubriqueCourante.length)
+                  : visibles.length === 1
+                    ? t("1 tâche")
+                    : tf("{0} tâches", visibles.length)}
               {enRetard > 0 && (
                 <span className="text-destructive">
                   {" "}

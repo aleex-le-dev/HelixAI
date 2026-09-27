@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Agent } from "@/lib/store/agents";
 import {
+  RefusInstance,
   assurerOpenClaw,
   deployerEmploye,
   envoyerDocument,
@@ -25,6 +26,13 @@ import { t, tf } from "@/lib/i18n";
 export interface EtatMiseEnService {
   etape: "attente" | "installation" | "deploiement" | "erreur";
   message: string;
+  /**
+   * Le modèle choisi à la création n'est plus servi à cette personne
+   * (28/09/2026) : l'instance le refuse (400) sans en prendre un autre, et
+   * « Réessayer » redemandait le même, sans fin. La carte propose alors d'en
+   * choisir un autre.
+   */
+  modeleIndisponible?: string;
 }
 
 /** Fiche de poste tirée de l'agent : ses instructions, à défaut sa description. */
@@ -44,8 +52,26 @@ export function useMiseEnService(
   const echecs = useRef(new Set<string>());
 
   const deployer = useCallback(
-    async (agent: Agent) => {
+    async (agent: Agent, modeles: EtatEmployes["modeles"]) => {
       const maj = (e: EtatMiseEnService) => setEtats((s) => ({ ...s, [agent.id]: e }));
+      /*
+       * Son modèle, tel que l'instance le sert à cette personne. Choisi à la
+       * création et disparu depuis (désinstallé, clé retirée) : on ne le
+       * redemande pas, on le dit. `modelUid` (le modèle du Chat, gardé par
+       * d'anciens agents) n'est pas un choix pour l'employé : il ne part que
+       * s'il est encore servi, sinon l'instance propose le sien.
+       */
+      const servi = (uid: string | undefined) => Boolean(uid && modeles.some((m) => m.uid === uid));
+      if (agent.modeleEmploye && !servi(agent.modeleEmploye)) {
+        echecs.current.add(agent.id);
+        maj({
+          etape: "erreur",
+          message: tf("son modèle ({0}) n'est plus disponible pour vous. Choisissez-en un autre.", agent.modeleEmploye.split("/").slice(1).join("/") || agent.modeleEmploye),
+          modeleIndisponible: agent.modeleEmploye,
+        });
+        return;
+      }
+      const modele = agent.modeleEmploye ?? (servi(agent.modelUid) ? agent.modelUid : undefined);
       try {
         maj({ etape: "installation", message: t("Préparation…") });
         await assurerOpenClaw((i) =>
@@ -69,7 +95,7 @@ export function useMiseEnService(
           ...(agent.visibility === "groupes" ? { groupes: agent.groupIds ?? [] } : {}),
           connaissances: agent.connaissances ?? [],
           // Le modèle choisi à la création ; l'instance refuse un modèle qu'elle ne sert pas à cette personne, sans en prendre un autre.
-          ...((agent.modeleEmploye ?? agent.modelUid) ? { modele: agent.modeleEmploye ?? agent.modelUid } : {}),
+          ...(modele ? { modele } : {}),
         });
         // Les documents choisis à la création partent maintenant que son espace existe.
         const fichiers = prendreFichiers(agent.id);
@@ -84,7 +110,13 @@ export function useMiseEnService(
         await recharger();
       } catch (err) {
         echecs.current.add(agent.id);
-        maj({ etape: "erreur", message: err instanceof Error ? err.message : String(err) });
+        // Disparu entre la dernière liste et la mise en service : même issue que ci-dessus.
+        const indisponible = err instanceof RefusInstance && err.code === "modele_indisponible" && modele;
+        maj({
+          etape: "erreur",
+          message: err instanceof Error ? err.message : String(err),
+          ...(indisponible ? { modeleIndisponible: modele } : {}),
+        });
       }
     },
     [recharger],
@@ -97,7 +129,7 @@ export function useMiseEnService(
     const suivant = agents.find((a) => a.ownerId === moi && !lies.has(a.id) && !echecs.current.has(a.id));
     if (!suivant) return;
     enCours.current = true;
-    void deployer(suivant).finally(() => {
+    void deployer(suivant, etat.modeles).finally(() => {
       enCours.current = false;
       // Le rechargement relance cet effet pour l'agent suivant.
       void recharger();

@@ -1098,7 +1098,7 @@ function McpServers() {
         </p>
         {state.workspace && (
           <p className="mt-2 text-xs text-muted-foreground">
-            {t("Espace de travail :")}{" "}<code className="text-foreground">{state.workspace}</code>
+            {t("Espace de travail :")}{" "}<code className="break-all text-foreground">{state.workspace}</code>
           </p>
         )}
 
@@ -1330,11 +1330,15 @@ export function ConfidentialiteSettings() {
           </Button>
           {exportResume && (
             <p className="mt-3 text-sm text-muted-foreground">
-              {t("Fichier prêt (")}{Math.max(1, Math.round(exportResume.octets / 1024))}{" "}{t("Ko) :")}{" "}
-              {exportResume.conversations} conversation{exportResume.conversations > 1 ? "s" : ""},{" "}
-              {exportResume.projets} projet{exportResume.projets > 1 ? "s" : ""},{" "}
-              {exportResume.taches}{" "}{t("tâche")}{exportResume.taches > 1 ? "s" : ""},{" "}
-              {exportResume.entreesDeJournal}{" "}{t("entrée")}{exportResume.entreesDeJournal > 1 ? "s" : ""}{" "}{t("de journal.")}
+              {/* Une phrase entière, traduite (28/09/2026) : « conversation », « projet » et le « s » du pluriel restaient en français. */}
+              {tf(
+                "Fichier prêt ({0} Ko) : {1}, {2}, {3}, {4}.",
+                Math.max(1, Math.round(exportResume.octets / 1024)),
+                exportResume.conversations === 1 ? t("1 conversation") : tf("{0} conversations", exportResume.conversations),
+                exportResume.projets === 1 ? t("1 projet") : tf("{0} projets", exportResume.projets),
+                exportResume.taches === 1 ? t("1 tâche") : tf("{0} tâches", exportResume.taches),
+                exportResume.entreesDeJournal === 1 ? t("1 entrée de journal") : tf("{0} entrées de journal", exportResume.entreesDeJournal),
+              )}
             </p>
           )}
           {exportErreur && (

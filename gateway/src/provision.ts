@@ -107,6 +107,13 @@ export interface CatalogEntry {
   eci?: number;
   /** Architecture à experts : seule une petite partie des poids calcule, donc rapide même sans carte graphique. */
   moe?: boolean;
+  /**
+   * Mémoire du cache de conversation à 32 768 jetons (en Gio, f16), calculée
+   * sur le `config.json` publié du modèle (couches à attention pleine × têtes
+   * K/V × taille de tête × 2 × 2 octets), relevé le 28/09/2026. Absente :
+   * pas mesurée, et l'ancienne règle (30 % des poids) s'applique.
+   */
+  kvGo?: number;
   /** Lit les images (captures, photos, documents scannés). */
   vision?: boolean;
   /**
@@ -154,22 +161,22 @@ const FICHES: Fiche[] = [
   { key: "qwen/qwen3.5-35b-a3b", label: "Qwen3.5 35B A3B", editeur: "Alibaba (Qwen)", licence: "Apache 2.0", downloadGb: 20, moe: true, vision: true, verifie: false },
   { key: "zai-org/glm-4.7-flash", label: "GLM-4.7 Flash", editeur: "Zhipu (Z.ai)", licence: "MIT", downloadGb: 16, moe: true, verifie: false },
   { key: "meta/muse-glimmer", label: "Muse Glimmer", editeur: "Meta", licence: "Apache 2.0", downloadGb: 25, vision: true, verifie: false },
-  { key: "qwen/qwen3.5-9b", label: "Qwen3.5 9B", editeur: "Alibaba (Qwen)", licence: "Apache 2.0", downloadGb: 6, vision: true, verifie: true },
-  { key: "qwen/qwen3.5-4b", label: "Qwen3.5 4B", editeur: "Alibaba (Qwen)", licence: "Apache 2.0", downloadGb: 3, vision: true, verifie: false },
+  { key: "qwen/qwen3.5-9b", label: "Qwen3.5 9B", editeur: "Alibaba (Qwen)", licence: "Apache 2.0", downloadGb: 6, vision: true, kvGo: 1.0, verifie: true },
+  { key: "qwen/qwen3.5-4b", label: "Qwen3.5 4B", editeur: "Alibaba (Qwen)", licence: "Apache 2.0", downloadGb: 3, vision: true, kvGo: 1.0, verifie: false },
   { key: "openai/gpt-oss-20b", label: "gpt-oss 20B", editeur: "OpenAI", licence: "Apache 2.0", downloadGb: 12, moe: true, verifie: false },
   { key: "mistralai/magistral-small-2509", label: "Magistral Small", editeur: "Mistral AI", licence: "Apache 2.0", downloadGb: 14, vision: true, verifie: false },
   { key: "qwen/qwen3-32b", label: "Qwen3 32B", editeur: "Alibaba (Qwen)", licence: "Apache 2.0", downloadGb: 19, verifie: true },
   { key: "qwen/qwen3-14b", label: "Qwen3 14B", editeur: "Alibaba (Qwen)", licence: "Apache 2.0", downloadGb: 9, verifie: true },
   { key: "qwen/qwen3-30b-a3b", label: "Qwen3 30B A3B", editeur: "Alibaba (Qwen)", licence: "Apache 2.0", downloadGb: 18, moe: true, verifie: true },
-  { key: "qwen3-8b", label: "Qwen3 8B", editeur: "Alibaba (Qwen)", licence: "Apache 2.0", downloadGb: 5, verifie: true },
-  { key: "qwen3-4b", label: "Qwen3 4B", editeur: "Alibaba (Qwen)", licence: "Apache 2.0", downloadGb: 2.5, verifie: true },
-  { key: "qwen/qwen3.5-2b", label: "Qwen3.5 2B", editeur: "Alibaba (Qwen)", licence: "Apache 2.0", downloadGb: 1.6, vision: true, verifie: false },
-  { key: "ibm/granite-4.1-8b", label: "Granite 4.1 8B", editeur: "IBM", licence: "Apache 2.0", downloadGb: 5, verifie: false },
+  { key: "qwen3-8b", label: "Qwen3 8B", editeur: "Alibaba (Qwen)", licence: "Apache 2.0", downloadGb: 5, kvGo: 4.5, verifie: true },
+  { key: "qwen3-4b", label: "Qwen3 4B", editeur: "Alibaba (Qwen)", licence: "Apache 2.0", downloadGb: 2.5, kvGo: 4.5, verifie: true },
+  { key: "qwen/qwen3.5-2b", label: "Qwen3.5 2B", editeur: "Alibaba (Qwen)", licence: "Apache 2.0", downloadGb: 1.6, vision: true, kvGo: 0.38, verifie: false },
+  { key: "ibm/granite-4.1-8b", label: "Granite 4.1 8B", editeur: "IBM", licence: "Apache 2.0", downloadGb: 5, kvGo: 5.0, verifie: false },
   { key: "mistralai/ministral-3-14b-reasoning", label: "Ministral 3 14B", editeur: "Mistral AI", licence: "Apache 2.0", downloadGb: 9, vision: true, verifie: false },
-  { key: "qwen3-1.7b", label: "Qwen3 1.7B", editeur: "Alibaba (Qwen)", licence: "Apache 2.0", downloadGb: 1.2, verifie: true },
-  { key: "mistralai/ministral-3-8b", label: "Ministral 3 8B", editeur: "Mistral AI", licence: "Apache 2.0", downloadGb: 5.5, vision: true, verifie: false },
-  { key: "allenai/olmo-3-7b-think", label: "OLMo 3 7B Think", editeur: "Ai2", licence: "Apache 2.0", downloadGb: 4.5, verifie: false },
-  { key: "mistralai/ministral-3-3b", label: "Ministral 3 3B", editeur: "Mistral AI", licence: "Apache 2.0", downloadGb: 2.5, vision: true, verifie: false },
+  { key: "qwen3-1.7b", label: "Qwen3 1.7B", editeur: "Alibaba (Qwen)", licence: "Apache 2.0", downloadGb: 1.2, kvGo: 3.5, verifie: true },
+  { key: "mistralai/ministral-3-8b", label: "Ministral 3 8B", editeur: "Mistral AI", licence: "Apache 2.0", downloadGb: 5.5, vision: true, kvGo: 4.25, verifie: false },
+  { key: "allenai/olmo-3-7b-think", label: "OLMo 3 7B Think", editeur: "Ai2", licence: "Apache 2.0", downloadGb: 4.5, kvGo: 4.0, verifie: false },
+  { key: "mistralai/ministral-3-3b", label: "Ministral 3 3B", editeur: "Mistral AI", licence: "Apache 2.0", downloadGb: 2.5, vision: true, kvGo: 3.25, verifie: false },
 ];
 
 /**
@@ -229,11 +236,25 @@ export const VISION_CATALOG: CatalogEntry[] = FICHES_ECRAN.map((f) => decrire(f,
  *  - PC sans carte graphique : le processeur calcule, lentement. Seuls les
  *    petits modèles et ceux à experts restent utilisables.
  */
-export function tientSur(hw: Hardware, f: { downloadGb: number; moe?: boolean }): boolean {
-  const besoin = f.downloadGb * 1.3;
+export function tientSur(hw: Hardware, f: { downloadGb: number; moe?: boolean; kvGo?: number }): boolean {
+  const vram = hw.gpuVramGb ?? 0;
+  /*
+   * Le cache de conversation, compté pour ce qu'il pèse (28/09/2026). Sur
+   * 36 Go ou moins, Helix charge toujours avec 32 768 jetons
+   * (`optionsDeChargement`, backends.ts) ; au processeur et sur un Mac, ce
+   * cache prend la même mémoire que les poids. Les 30 % comptés jusqu'ici
+   * valaient pour Qwen3.5 (1 Gio pour 3 Go de poids : trois couches sur
+   * quatre sans cache), pas pour un modèle dense : Qwen3 4B en demande 4,5
+   * Gio pour 2,5 Go de poids, Ministral 3 3B 3,25 Gio. Sur un PC ou un Mac de
+   * 8 Go, les deux passaient pour tenir, et étaient les replis de Qwen3.5 4B.
+   * 0,5 Go de plus pour les tampons de calcul (estimation, pas une mesure).
+   * Avec une carte NVIDIA, rien ne change : LM Studio répartit lui-même.
+   */
+  const memeMemoire = hw.appleSilicon || vram < 6;
+  const besoin =
+    f.kvGo !== undefined && memeMemoire && hw.totalMemoryGb <= 36 ? f.downloadGb + f.kvGo + 0.5 : f.downloadGb * 1.3;
   const reserve = Math.min(8, Math.max(3, hw.totalMemoryGb * 0.3));
   if (hw.appleSilicon) return besoin + reserve <= hw.totalMemoryGb;
-  const vram = hw.gpuVramGb ?? 0;
   if (vram >= 6) {
     if (f.moe) return besoin + reserve <= vram + hw.totalMemoryGb;
     return besoin <= vram;
@@ -678,6 +699,20 @@ async function provision(
   requested?: string,
   catalogue: CatalogEntry[] = CATALOG,
 ): Promise<ProvisionState> {
+  /*
+   * LM Studio coupé par le profil (28/09/2026) : rien à installer, et `lms`
+   * n'est pas lancé. Avant, une demande de mise en route cherchait quand même
+   * le `lms` de la machine (`lms version`, puis `lms get`), comme la
+   * découverte jusqu'au 27/09 (backends.ts).
+   */
+  if (!backendById("lmstudio")?.enabled) {
+    setState({
+      phase: "error",
+      message: t("LM Studio est coupé sur cette instance : aucun modèle local n'y est installé."),
+      error: t("Les modèles sont ceux que le profil de l'instance déclare."),
+    });
+    return state;
+  }
   const lms = await findLms();
   // `lms` sans moteur qu'il sache démarrer (Mac à puce Apple, engine.ts) : le moteur est à installer.
   if (!lms || moteurAPoser()) {

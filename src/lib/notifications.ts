@@ -214,19 +214,33 @@ function suivreApprobations(): void {
    * action attend votre accord » (vu en essayant l'écran Code). Une lecture
    * ratée ne retire rien : on ne sait pas.
    */
-  const synchroniser = () =>
+  /*
+   * Ce que le flux a dit pendant la lecture (28/09/2026) : l'état lu est celui
+   * d'avant sa réponse, et une demande arrivée entre-temps en était retirée
+   * aussitôt posée ; une demande tranchée entre-temps, reposée.
+   */
+  let pendant: { posees: Set<string>; tranchees: Set<string> } | null = null;
+  const synchroniser = () => {
+    const notes = { posees: new Set<string>(), tranchees: new Set<string>() };
+    pendant = notes;
     void fetchApprobation()
       .then((etat) => {
         const enAttente = new Set(etat.enAttente.map((d) => `approbation:${d.id}`));
-        for (const n of lire()) if (n.genre === "approbation" && !enAttente.has(n.id)) retirer(n.id);
-        etat.enAttente.forEach(poser);
+        for (const n of lire()) if (n.genre === "approbation" && !enAttente.has(n.id) && !notes.posees.has(n.id)) retirer(n.id);
+        etat.enAttente.filter((d) => !notes.tranchees.has(`approbation:${d.id}`)).forEach(poser);
       })
-      .catch(() => undefined);
+      .catch(() => undefined)
+      .finally(() => {
+        if (pendant === notes) pendant = null;
+      });
+  };
   subscribeApprobation((evenement) => {
     if (evenement.type === "approbation_demandee") {
       const { type: _type, ...demande } = evenement;
+      pendant?.posees.add(`approbation:${demande.id}`);
       poser(demande);
     } else {
+      pendant?.tranchees.add(`approbation:${evenement.id}`);
       retirer(`approbation:${evenement.id}`);
     }
   }, synchroniser);

@@ -112,7 +112,8 @@ export function AgentsPage() {
         }
       />
 
-      <div className="mt-6">
+      {/* Les onglets défilent seuls à 375 pixels (28/09/2026) : ils faisaient défiler toute la page de côté. */}
+      <div className="mt-6 max-w-full overflow-x-auto">
         <SegmentedTabs options={tabs} value={tab} onChange={setTab} />
       </div>
 
@@ -148,6 +149,10 @@ export function AgentsPage() {
               canDelete={agent.ownerId === me.id}
               onOuvrir={(id) => setOuvert(id)}
               onReessayer={() => reessayer(agent.id)}
+              onChoisirModele={(uid) => {
+                update(agent.id, { modeleEmploye: uid });
+                reessayer(agent.id);
+              }}
               onConnaissances={(ids) => update(agent.id, { connaissances: ids })}
               onPhoto={(photo) => update(agent.id, { photo: photo ?? undefined })}
               onMasquer={(masquer) => update(agent.id, { hidePrompt: masquer })}
@@ -215,14 +220,17 @@ function LigneService({
   onReessayer: () => void;
 }) {
   if (miseEnService?.etape === "erreur") {
+    const sansReessai = Boolean(miseEnService.modeleIndisponible);
     return (
       <span className="flex items-start gap-1.5 text-xs text-muted-foreground">
         <TriangleAlert size={13} strokeWidth={1.75} className="mt-0.5 shrink-0 text-warning" />
         <span className="min-w-0">
           {t("Pas encore en service :")}{" "}{miseEnService.message}{" "}
-          <button type="button" onClick={onReessayer} className="inline-flex items-center gap-1 underline underline-offset-2">
-            <RefreshCw size={11} strokeWidth={2} />{" "}{t("Réessayer")}
-          </button>
+          {!sansReessai && (
+            <button type="button" onClick={onReessayer} className="inline-flex items-center gap-1 underline underline-offset-2">
+              <RefreshCw size={11} strokeWidth={2} />{" "}{t("Réessayer")}
+            </button>
+          )}
         </span>
       </span>
     );
@@ -238,6 +246,28 @@ function LigneService({
   return null;
 }
 
+/** Un autre modèle pour un agent dont le modèle a disparu avant sa mise en service (28/09/2026). */
+function AutreModele({ agent, etat, onChoisir }: { agent: Agent; etat: EtatEmployes; onChoisir: (uid: string) => void }) {
+  const proposition = useMemo(
+    () =>
+      proposerModele(etat.modeles, {
+        outils: (agent.toolsEnabled && etat.familles.some((f) => f.disponible)) || (agent.connaissances?.length ?? 0) > 0,
+        longueurPoste: (agent.instructions.trim() || agent.description.trim()).length,
+      }),
+    [etat, agent],
+  );
+  const [choisi, setChoisi] = useState<string | null>(null);
+  const valeur = choisi ?? proposition?.uid ?? "";
+  return (
+    <div className="space-y-2 rounded-xl border border-border p-3">
+      <ChoixModele modeles={etat.modeles} valeur={valeur} onChange={setChoisi} proposition={proposition} />
+      <Button size="sm" disabled={!valeur} onClick={() => onChoisir(valeur)}>
+        {t("Mettre en service")}
+      </Button>
+    </div>
+  );
+}
+
 function AgentCard({
   agent,
   employe,
@@ -247,6 +277,7 @@ function AgentCard({
   canDelete,
   onOuvrir,
   onReessayer,
+  onChoisirModele,
   onConnaissances,
   onPhoto,
   onMasquer,
@@ -260,6 +291,8 @@ function AgentCard({
   canDelete: boolean;
   onOuvrir: (employeId: string) => void;
   onReessayer: () => void;
+  /** Son modèle a disparu avant sa mise en service : un autre, choisi par la personne. */
+  onChoisirModele: (uid: string) => void;
   onConnaissances: (ids: string[]) => void;
   /** Sa photo, changée par son propriétaire (null : retirée). */
   onPhoto: (photo: string | null) => void;
@@ -292,7 +325,7 @@ function AgentCard({
         </div>
         {agent.description && <p className="line-clamp-2 text-sm text-muted-foreground">{agent.description}</p>}
         <div className="mt-auto flex flex-wrap items-center gap-2">
-          <LigneService employe={employe} etat={etat} miseEnService={miseEnService} onReessayer={onReessayer} />
+          {miseEnService?.etape !== "erreur" && <LigneService employe={employe} etat={etat} miseEnService={miseEnService} onReessayer={onReessayer} />}
           {employe && !miseEnService && <ModeleDiscret employe={employe} />}
           {agent.toolsEnabled && (
             <span className="inline-flex w-fit items-center gap-1.5 rounded-full bg-accent/12 px-2 py-0.5 text-[11px] font-medium text-accent">
@@ -304,6 +337,21 @@ function AgentCard({
           )}
         </div>
       </button>
+      {/*
+        * L'échec de la mise en service, hors du bouton de la carte (28/09/2026) :
+        * son « Réessayer » y était un bouton dans un bouton. Et quand son
+        * modèle a disparu, la personne en choisit un autre ici : l'instance
+        * refuse le disparu sans en prendre un autre, et « Réessayer » seul le
+        * redemandait sans fin.
+        */}
+      {miseEnService?.etape === "erreur" && (
+        <div className="space-y-2">
+          <LigneService employe={employe} etat={etat} miseEnService={miseEnService} onReessayer={onReessayer} />
+          {miseEnService.modeleIndisponible && etat && canDelete && (
+            <AutreModele agent={agent} etat={etat} onChoisir={onChoisirModele} />
+          )}
+        </div>
+      )}
       <div className="absolute left-4 top-4">
         {canDelete ? <ChoixPhotoAgent photo={agent.photo} nom={agent.name} onChange={onPhoto} /> : <AvatarAgent photo={agent.photo} nom={agent.name} />}
       </div>

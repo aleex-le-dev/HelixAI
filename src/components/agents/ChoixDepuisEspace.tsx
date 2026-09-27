@@ -150,7 +150,7 @@ export function ChoixDepuisEspace({ onChoisis, onFermer }: { onChoisis: (f: File
       <div className="mt-4 flex items-center justify-end gap-2">
         {choisis.length > 0 && (
           <span className="mr-auto text-xs text-muted-foreground">
-            {choisis.length} document{choisis.length > 1 ? "s" : ""} choisi{choisis.length > 1 ? "s" : ""}
+            {choisis.length === 1 ? t("1 document choisi") : tf("{0} documents choisis", choisis.length)}
           </span>
         )}
         <Button variant="ghost" disabled={occupe} onClick={onFermer}>

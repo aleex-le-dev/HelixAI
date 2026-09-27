@@ -5,15 +5,20 @@ import { t } from "@/lib/i18n";
  * garde son nom, faute de mieux.
  */
 const LIBELLES_OUTILS: Record<string, string> = {
-  read_file: t("Lecture d'un fichier"),
-  read_text_file: t("Lecture d'un fichier"),
+  /*
+   * Deux libellés, pas un (28/09/2026) : le serveur de fichiers propose les
+   * deux outils, et la liste des outils de Cowork montrait deux fois « Lecture
+   * d'un fichier ». `read_file` est l'ancien nom de `read_text_file`.
+   */
+  read_file: t("Lecture d'un fichier (ancien outil)"),
+  read_text_file: t("Lecture d'un fichier texte"),
   read_media_file: t("Ouverture d'une image"),
   read_multiple_files: t("Lecture de fichiers"),
   write_file: t("Écriture d'un fichier"),
   edit_file: t("Modification d'un fichier"),
   create_directory: t("Création d'un dossier"),
   list_directory: t("Contenu d'un dossier"),
-  list_directory_with_sizes: t("Contenu d'un dossier"),
+  list_directory_with_sizes: t("Contenu d'un dossier, avec les tailles"),
   directory_tree: t("Arborescence"),
   move_file: t("Déplacement d'un fichier"),
   search_files: t("Recherche de fichiers"),

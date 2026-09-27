@@ -186,7 +186,8 @@ function EtatCodexDetail({
  * que Codex est le moteur choisi (règle du projet : l'écran ne promet que ce
  * qui est vérifié, et dit où part ce qu'on lui confie).
  */
-export function AvisCodex({ etat }: { etat: EtatCodex | null }) {
+export function AvisCodex({ etat, compact = false }: { etat: EtatCodex | null; compact?: boolean }) {
+  const [deplie, setDeplie] = useState(false);
   if (!etat?.propose) return null;
   const bac =
     etat.bac === "workspace-write"
@@ -194,6 +195,22 @@ export function AvisCodex({ etat }: { etat: EtatCodex | null }) {
       : etat.bac === "read-only"
         ? t("Au niveau d'approbation actuel, Codex travaille en lecture seule : il ne peut ni modifier de fichier ni écrire sur le disque.")
         : t("Au niveau « Demander pour tout », Codex n'est pas proposé.");
+  /*
+   * Sous la barre de saisie d'une session (28/09/2026) : l'avis entier y
+   * prenait la moitié d'un écran de 375 pixels à chaque tour, et la
+   * conversation n'en avait plus que 200. Une ligne qui dit l'essentiel, le
+   * reste d'un clic ; l'avis entier reste à l'accueil de Code.
+   */
+  if (compact && !deplie) {
+    return (
+      <InfoBox tone="warning" className="mt-3" leading={<TriangleAlert size={15} strokeWidth={1.75} />}>
+        {tf("Avec Codex, votre demande part chez OpenAI, et ce que Codex fait ne passe pas par les approbations de {0}.", branding.name)}{" "}
+        <button type="button" onClick={() => setDeplie(true)} className="underline underline-offset-2 hover:text-foreground">
+          {t("Détails")}
+        </button>
+      </InfoBox>
+    );
+  }
   return (
     <InfoBox tone="warning" className="mt-3" leading={<TriangleAlert size={15} strokeWidth={1.75} />}>
       <span className="block">

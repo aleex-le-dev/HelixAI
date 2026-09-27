@@ -32,6 +32,7 @@ import {
   oublierLms,
   ensureLmStudioServer,
   lmStudioRepond,
+  backendById,
 } from "./backends.ts";
 import { models, invalidate, resolve } from "./router.ts";
 import { agentAAppele, handleChatRequest } from "./chat.ts";
@@ -572,6 +573,13 @@ async function handleProvisionStatus(res: http.ServerResponse): Promise<void> {
   const hardware = detectHardware();
   const { models: available } = await discover();
   const chatModels = available.filter((m) => m.roles.includes("chat"));
+  /*
+   * LM Studio coupé par le profil (28/09/2026) : pas de `lms` à chercher. Cet
+   * écran lançait `lms version` sur la machine à chaque ouverture, comme la
+   * découverte avant le 27/09 (backends.ts). Rien à installer d'ici : l'écran
+   * de mise en route le dit comme pour un poste piloté par l'intégrateur.
+   */
+  const lmStudioActif = backendById("lmstudio")?.enabled === true;
   send(res, 200, {
     hardware,
     recommended: recommend(hardware),
@@ -582,10 +590,10 @@ async function handleProvisionStatus(res: http.ServerResponse): Promise<void> {
      * n'y a rien à télécharger ni à charger : l'écran de mise en route doit le
      * dire et guider, au lieu de proposer une installation qui échouera.
      */
-    moteurInstalle: (await findLms()) !== null && !moteurAPoser(),
+    moteurInstalle: lmStudioActif && (await findLms()) !== null && !moteurAPoser(),
     // Installation pilotée par l'intégrateur : l'écran de mise en route ne
     // propose rien, les modèles sont ceux du profil client.
-    managed: !autoProvisionEnabled(),
+    managed: !autoProvisionEnabled() || !lmStudioActif,
     client: deployment().client ?? null,
     state: getProvisionState(),
     /*
@@ -4951,7 +4959,7 @@ async function handleEmployes(
      * sur un modèle que personne n'avait choisi.
      */
     if (typeof b.modele === "string" && b.modele && !chat.some((m) => m.uid === b.modele)) {
-      return send(res, 400, { error: { message: t("Ce modèle n'est pas disponible pour vous.") } });
+      return send(res, 400, { error: { message: t("Ce modèle n'est pas disponible pour vous."), code: "modele_indisponible" } });
     }
     // Sans modèle demandé : un modèle cloud branché par clé jamais, il coûte à quelqu'un ; ni un modèle entraîné ici.
     const gratuits = chat.filter((m) => m.origine !== "cle" && !m.entraine);
@@ -4994,7 +5002,7 @@ async function handleEmployes(
       const m = (await models(true)).find(
         (x) => x.uid === b.modele && x.roles.includes("chat") && (!x.proprietaire || x.proprietaire === qui.userId),
       );
-      if (!m) return send(res, 400, { error: { message: t("Ce modèle n'est pas disponible pour vous.") } });
+      if (!m) return send(res, 400, { error: { message: t("Ce modèle n'est pas disponible pour vous."), code: "modele_indisponible" } });
     }
     return repondre(await employes.modifier(id, b, qui.userId), (e) => ({ employe: e }));
   }

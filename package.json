@@ -64,7 +64,9 @@
       "dist/**/*",
       "dist-gateway/**/*",
       "electron/**/*",
-      "build/icon.png"
+      "build/icon.png",
+      "build/tray.png",
+      "build/tray@2x.png"
     ],
     "extraResources": [
       {
@@ -91,12 +93,14 @@
         "NSAppleEventsUsageDescription": "Helix pilote le clavier de votre Mac pour réaliser les actions que vous approuvez dans Cowork.",
         "NSSystemAdministrationUsageDescription": "Helix a besoin de l'Accessibilité pour déplacer la souris et saisir au clavier, uniquement pour les actions que vous approuvez.",
         "NSMicrophoneUsageDescription": "Helix utilise le micro pour la dictée et l'enregistrement des réunions. Le son est transcrit par votre instance, sans service extérieur."
-      }
+      },
+      "icon": "build/icon.png"
     },
     "win": {
       "target": [
         "nsis"
-      ]
+      ],
+      "icon": "build/icon.ico"
     },
     "linux": {
       "target": [

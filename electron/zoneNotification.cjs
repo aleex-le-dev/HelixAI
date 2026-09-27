@@ -94,8 +94,8 @@ function installerZoneNotification({ nom, icone, langue, montrer, quitter }) {
   let courante = TEXTES[langue] ? langue : "fr";
   const txt = (cle) => remplir(TEXTES[courante][cle], nom);
   try {
-    // L'icône de 1024 pixels, réduite : Windows l'affiche en 16, Linux en 22 à 24.
-    const image = nativeImage.createFromPath(icone).resize({ width: 32, height: 32, quality: "best" });
+    // La marque simplifiée (`build/tray.png`, et `tray@2x.png` pour les écrans denses) : l'hélice détaillée ne se lit pas à 16 pixels.
+    const image = nativeImage.createFromPath(icone);
     tray = new Tray(image);
   } catch (err) {
     console.error("[helix] icône de la zone de notification impossible :", err?.message ?? err);

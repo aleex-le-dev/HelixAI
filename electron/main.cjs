@@ -1155,7 +1155,7 @@ app.whenReady().then(async () => {
   if (process.platform !== "darwin") {
     zone = installerZoneNotification({
       nom: NOM_AFFICHE,
-      icone: path.join(__dirname, "..", "build", "icon.png"),
+      icone: path.join(__dirname, "..", "build", "tray.png"),
       langue: langueEcran,
       montrer: montrerFenetre,
       quitter: () => {

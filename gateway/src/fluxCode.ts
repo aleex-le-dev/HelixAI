@@ -84,6 +84,13 @@ interface Suivi {
    */
   natures: Map<string, string>;
   vu: number;
+  /**
+   * Un tour de l'agent est ouvert : une demande est partie (`prompted`) et
+   * aucune fin n'est encore venue. Voir `auTravail`.
+   */
+  tourOuvert: boolean;
+  /** Quand le tour s'est ouvert : un OpenCode qui ne s'est pas encore dit occupé n'est pas cru tout de suite. */
+  ouvertLe: number;
 }
 
 const sessions = new Map<string, Suivi>();
@@ -141,6 +148,8 @@ export function suivreSession(sessionID: string, dossier: string): void {
     dernierSigne: 0,
     natures: new Map(),
     vu: Date.now(),
+    tourOuvert: false,
+    ouvertLe: 0,
   });
 }
 
@@ -227,6 +236,72 @@ function traduireEnfant(
 }
 
 export const sessionSuivie = (sessionID: string): boolean => sessions.has(sessionID);
+
+/*
+ * Une session de Code travaille-t-elle encore ? (27/09/2026)
+ *
+ * Vu par Medhi : « quand on quitte la conversation, le message se retire, donc
+ * on a l'impression qu'il ne travaille plus ». L'écran qui revient sur une
+ * session demande à l'instance si l'agent y travaille, et la liste des
+ * sessions le montre. Demander seulement à OpenCode (`/session/status`) ne
+ * suffit pas : pendant que Helix prépare une application ou un plan, contrôle
+ * le code écrit ou attend que la demande atteigne le modèle, OpenCode est au
+ * repos, et c'est pourtant du travail de cette session (plusieurs minutes avec
+ * un petit modèle). La passerelle tient donc les deux : le travail de Helix
+ * (`travailHelix`, compté, rendu par qui l'a pris) et le tour ouvert chez
+ * OpenCode, vu passer dans le flux (`tourOuvert`).
+ */
+const travauxHelix = new Map<string, number>();
+/** Au-delà de ce silence, un tour qu'on croit ouvert ne compte plus : une fin a pu se perdre (OpenCode redémarré). */
+const TOUR_MUET_MAX_MS = 15 * 60_000;
+
+/** Helix travaille pour cette session (préparation, contrôle, envoi) : rend de quoi dire qu'il a fini, une seule fois. */
+export function travailHelix(sessionID: string): () => void {
+  travauxHelix.set(sessionID, (travauxHelix.get(sessionID) ?? 0) + 1);
+  let rendu = false;
+  return () => {
+    if (rendu) return;
+    rendu = true;
+    const reste = (travauxHelix.get(sessionID) ?? 1) - 1;
+    if (reste > 0) travauxHelix.set(sessionID, reste);
+    else travauxHelix.delete(sessionID);
+  };
+}
+
+/** Une demande vient de partir chez OpenCode : le tour est ouvert avant même que son `prompted` revienne. */
+export function ouvrirTour(sessionID: string): void {
+  const suivi = sessions.get(sessionID);
+  if (!suivi) return;
+  suivi.tourOuvert = true;
+  suivi.ouvertLe = Date.now();
+  suivi.vu = Date.now();
+}
+
+/** La demande n'a jamais atteint le modèle (session perdue, voir index.ts) : aucun tour n'y travaille. */
+export function fermerTour(sessionID: string): void {
+  const suivi = sessions.get(sessionID);
+  if (suivi) suivi.tourOuvert = false;
+}
+
+/**
+ * OpenCode dit la session au repos : le tour qu'on croyait ouvert est fermé
+ * (sa fin s'est perdue). Pas dans les cinq secondes qui suivent l'envoi, où
+ * OpenCode peut ne pas s'être encore dit occupé.
+ */
+export function reposConfirme(sessionID: string): void {
+  const suivi = sessions.get(sessionID);
+  if (suivi?.tourOuvert && Date.now() - suivi.ouvertLe > 5000) suivi.tourOuvert = false;
+}
+
+/** L'agent ou Helix travaille encore pour cette session. */
+export function auTravail(sessionID: string): boolean {
+  if ((travauxHelix.get(sessionID) ?? 0) > 0) return true;
+  const suivi = sessions.get(sessionID);
+  return Boolean(suivi?.tourOuvert && Date.now() - suivi.vu < TOUR_MUET_MAX_MS);
+}
+
+/** Helix lui-même travaille pour cette session (sans compter OpenCode). */
+export const helixAuTravail = (sessionID: string): boolean => (travauxHelix.get(sessionID) ?? 0) > 0;
 
 /** Dernier numéro publié pour cette session (0 s'il n'y en a pas) : pour la suivre sans rien rejouer. */
 export function dernierNumero(sessionID: string): number {
@@ -325,6 +400,8 @@ export function traduire(brut: { type?: string; properties?: Record<string, unkn
       const info = p.info as { id?: string; role?: string } | undefined;
       if (info?.role === "user" && typeof info.id === "string" && !suivi.demandes.has(info.id)) {
         suivi.demandes.add(info.id);
+        suivi.tourOuvert = true;
+        suivi.ouvertLe = Date.now();
         suivi.echecDit = false;
         suivi.natures.clear();
         publier(sessionID, suivi, "session.next.prompted", { messageID: info.id, ...(relancesHelix.has(info.id) ? { relanceHelix: true } : {}) });
@@ -421,6 +498,8 @@ export function traduire(brut: { type?: string; properties?: Record<string, unkn
             assistantMessageID: part.messageID,
             finish: part.reason ?? "unknown",
           });
+          // « tool-calls » laisse travailler l'outil : l'étape suivante reprend. Toute autre fin ferme le tour.
+          if (part.reason !== "tool-calls" && part.reason !== "tool_calls") suivi.tourOuvert = false;
           if (part.reason === "stop" && surFin) {
             const dossier = suivi.dossier;
             setTimeout(() => surFin?.(sessionID, dossier), 0);
@@ -434,14 +513,23 @@ export function traduire(brut: { type?: string; properties?: Record<string, unkn
       }
       return;
     }
+    case "session.idle":
+      suivi.tourOuvert = false;
+      return;
     case "session.status": {
       const statut = p.status as { type?: string; message?: string; attempt?: number } | undefined;
+      if (statut?.type === "idle") suivi.tourOuvert = false;
+      else if (statut?.type === "busy" && !suivi.tourOuvert) {
+        suivi.tourOuvert = true;
+        suivi.ouvertLe = Date.now();
+      }
       if (statut?.type === "retry") {
         publier(sessionID, suivi, "session.next.retried", { attempt: statut.attempt, error: { message: statut.message ?? "" } });
       }
       return;
     }
     case "session.error": {
+      suivi.tourOuvert = false;
       if (suivi.echecDit) return;
       suivi.echecDit = true;
       const erreur = p.error as { name?: string } | undefined;

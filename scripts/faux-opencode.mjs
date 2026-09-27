@@ -36,6 +36,8 @@ const id = (prefixe) => `${prefixe}_${randomBytes(12).toString("hex")}`;
 const flux = new Map();
 const dossiers = new Map();
 const reponses = [];
+/** Demandes reçues par session, rendues par `/session/<id>/message` comme le vrai (au format de l'ancienne API). */
+const messages = new Map();
 const emettre = (evenement, dossier) => {
   for (const [res, d] of flux) if (dossier === undefined || d === dossier) res.write(`data: ${JSON.stringify(evenement)}\n\n`);
 };
@@ -111,10 +113,15 @@ const serveur = http.createServer((req, res) => {
     const session = chemin.match(/^\/session\/(ses_[A-Za-z0-9]+)(\/[a-z_]+)?$/);
     if (session) {
       if (session[2] === "/prompt_async") {
+        const d = JSON.parse(corps || "{}");
+        const texte = (d.parts ?? []).filter((p) => p.type === "text").map((p) => p.text).join("\n\n");
+        const liste = messages.get(session[1]) ?? [];
+        liste.push({ info: { id: d.messageID ?? id("msg"), role: "user" }, parts: [{ type: "text", text: texte }] });
+        messages.set(session[1], liste);
         res.writeHead(204);
         return res.end();
       }
-      if (session[2] === "/message") return json([]);
+      if (session[2] === "/message") return json(messages.get(session[1]) ?? []);
       return json({ id: session[1] });
     }
     json({ error: "inconnu" }, 404);

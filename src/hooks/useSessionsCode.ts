@@ -6,6 +6,10 @@ import {
   SESSIONS_CODE_CHANGEES,
   type SessionCodeResume,
 } from "@/lib/code";
+import { CODE_EN_COURS } from "./useCode";
+
+/** Tant qu'une session travaille, la liste se relit à ce rythme : l'indicateur « en cours » s'éteint quand elle a fini. */
+const RELECTURE_EN_COURS_MS = 5000;
 
 /**
  * Les sessions de Helix Code de la personne connectée, séparées des Chats
@@ -34,8 +38,25 @@ export function useSessionsCode(actif = true) {
     if (!actif) return;
     relire();
     window.addEventListener(SESSIONS_CODE_CHANGEES, relire);
-    return () => window.removeEventListener(SESSIONS_CODE_CHANGEES, relire);
+    // Une session de cet écran commence ou finit de travailler : l'instance le dit aussi, on relit.
+    window.addEventListener(CODE_EN_COURS, relire);
+    return () => {
+      window.removeEventListener(SESSIONS_CODE_CHANGEES, relire);
+      window.removeEventListener(CODE_EN_COURS, relire);
+    };
   }, [actif, relire]);
+
+  /*
+   * Une session travaille (d'après l'instance : l'agent, ou Helix qui prépare
+   * ou contrôle) : on relit la liste de temps en temps, jusqu'à ce qu'elle ait
+   * fini. Rien ne tourne quand aucune ne travaille.
+   */
+  const uneEnCours = sessions.some((s) => s.enCours);
+  useEffect(() => {
+    if (!actif || !uneEnCours) return;
+    const minuterie = setInterval(relire, RELECTURE_EN_COURS_MS);
+    return () => clearInterval(minuterie);
+  }, [actif, uneEnCours, relire]);
 
   const retirer = useCallback(async (id: string) => {
     const ok = await retirerSessionCode(id);

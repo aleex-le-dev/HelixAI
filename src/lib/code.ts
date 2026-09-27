@@ -106,6 +106,8 @@ export interface SessionCodeResume {
   dossier: string;
   creee: string;
   maj: string;
+  /** L'agent ou Helix y travaille encore, d'après l'instance (27/09/2026). */
+  enCours?: boolean;
 }
 
 /** Une session rouverte : son historique, relu chez OpenCode par l'instance. */

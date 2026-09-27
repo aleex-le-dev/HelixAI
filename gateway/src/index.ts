@@ -193,6 +193,12 @@ import {
   surFinDeTour as surFinDeTourCode,
   noterRelanceHelix,
   publierStatut as publierStatutCode,
+  travailHelix as travailHelixCode,
+  ouvrirTour as ouvrirTourCode,
+  fermerTour as fermerTourCode,
+  reposConfirme as reposConfirmeCode,
+  auTravail as auTravailCode,
+  helixAuTravail as helixAuTravailCode,
   type EvenementCode,
 } from "./fluxCode.ts";
 import {
@@ -2572,7 +2578,8 @@ async function handleCodeSessions(res: http.ServerResponse, userId: string): Pro
   try {
     const liste = await sessionsDe(userId);
     send(res, 200, {
-      sessions: liste.map((s) => ({ id: s.id, titre: s.titre, dossier: s.dossier, creee: s.creee, maj: s.maj })),
+      // `enCours` : l'agent ou Helix y travaille encore (fluxCode.ts), pour l'indicateur de la liste.
+      sessions: liste.map((s) => ({ id: s.id, titre: s.titre, dossier: s.dossier, creee: s.creee, maj: s.maj, enCours: auTravailCode(s.id) })),
     });
   } catch (err) {
     send(res, 500, { error: { message: err instanceof Error ? err.message : String(err) } });
@@ -2590,6 +2597,12 @@ async function handleCodeSessionHistorique(res: http.ServerResponse, userId: str
   if (!s || s.userId !== userId) return send(res, 404, { error: { message: t("Session de code inconnue.") } });
   try {
     const d = encodeURIComponent(s.dossier);
+    /*
+     * Le dernier numéro est lu AVANT l'historique : ce qui arrive entre les
+     * deux est rejoué par le flux plutôt que perdu (27/09/2026). Lu après, un
+     * texte fini pendant la lecture n'était ni dans l'historique ni rejoué.
+     */
+    const dernier = dernierNumeroCode(id);
     const [messages, etat] = await Promise.all([
       codeApi(`/session/${id}/message?directory=${d}`),
       codeApi(`/session/status?directory=${d}`).catch(() => undefined),
@@ -2604,11 +2617,23 @@ async function handleCodeSessionHistorique(res: http.ServerResponse, userId: str
     if (!modeleDeSession.has(id)) modeleDeSession.set(id, { modele: s.modele, variante: s.variante, dossier: s.dossier });
     if (!sessionCodeSuivie(id)) suivreSessionCode(id, s.dossier);
     await ecouterDossierCode(s.dossier).catch(() => {});
+    /*
+     * En cours : OpenCode le dit, ou la passerelle le sait (Helix prépare,
+     * contrôle ou envoie ; tour ouvert vu dans le flux). OpenCode au repos et
+     * Helix sans travail : un tour qu'on croyait ouvert a perdu sa fin.
+     */
+    const occupeChezOpenCode = Boolean(statuts[id] && statuts[id]!.type !== "idle");
+    if (etat?.ok && !occupeChezOpenCode && !helixAuTravailCode(id)) reposConfirmeCode(id);
+    const enCours = occupeChezOpenCode || auTravailCode(id);
+    const attente = demandesCodeEnCours.get(id);
     send(res, 200, {
       session: { id: s.id, titre: s.titre, dossier: s.dossier, creee: s.creee, maj: s.maj },
-      messages: historiqueCode(Array.isArray(brut) ? brut : []),
-      enCours: Boolean(statuts[id] && statuts[id]!.type !== "idle"),
-      dernier: dernierNumeroCode(id),
+      messages: historiqueCode(Array.isArray(brut) ? brut : [], {
+        enCours,
+        demandeEnAttente: attente && !attente.envoyee ? attente.texte : undefined,
+      }),
+      enCours,
+      dernier,
     });
   } catch (err) {
     send(res, 502, { error: { message: err instanceof Error ? err.message : String(err) } });
@@ -2710,6 +2735,8 @@ const SESSION_CODE = /^[A-Za-z0-9_-]{1,64}$/;
  * tour (`relanceHelix`, fluxCode.ts).
  */
 surFinDeTourCode((sessionID, dossier) => {
+  // Le contrôle est du travail de la session : l'écran qui y revient la voit en cours (fluxCode.ts).
+  const fin = travailHelixCode(sessionID);
   void apresTourCode(
     sessionID,
     dossier,
@@ -2725,18 +2752,61 @@ surFinDeTourCode((sessionID, dossier) => {
           body: JSON.stringify({ messageID, ...refModele(reglage.modele, reglage.variante), parts: [{ type: "text", text: texte }] }),
         });
         await reponse.text().catch(() => "");
+        if (reponse.ok) ouvrirTourCode(sessionID);
         return reponse.ok;
       } catch {
         return false;
       }
     },
     (message) => publierStatutCode(sessionID, { etat: "controle", message }),
-  ).catch((err) => console.error("[code] contrôle automatique :", err instanceof Error ? err.message : err));
+  )
+    .catch((err) => console.error("[code] contrôle automatique :", err instanceof Error ? err.message : err))
+    .finally(fin);
 });
 
-async function handleCodePrompt(
+/**
+ * La demande de la personne, par session, tant que `POST /helix/code/prompt`
+ * la traite (27/09/2026). `envoyee` : partie chez OpenCode, qui la rend
+ * désormais dans l'historique. Avant, pendant que Helix prépare une
+ * application ou un plan, OpenCode ne l'a pas : l'historique relu pour
+ * l'écran qui revient sur la session l'ajoute (sessionsCode.ts).
+ */
+const demandesCodeEnCours = new Map<string, { texte: string; envoyee: boolean }>();
+
+/** La demande est prise en charge : la session est « en cours » jusqu'à la réponse de la route. */
+function prendreDemandeCode(sessionID: string, texte: string): { envoyee: () => void; fin: () => void } {
+  const finTravail = travailHelixCode(sessionID);
+  const demande = { texte, envoyee: false };
+  demandesCodeEnCours.set(sessionID, demande);
+  return {
+    envoyee: () => {
+      demande.envoyee = true;
+    },
+    fin: () => {
+      finTravail();
+      if (demandesCodeEnCours.get(sessionID) === demande) demandesCodeEnCours.delete(sessionID);
+    },
+  };
+}
+
+async function handleCodePrompt(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
+  // Rendues quoi qu'il arrive : une session ne reste pas « en cours » pour une demande qui a échoué.
+  const prises: { envoyee: () => void; fin: () => void }[] = [];
+  try {
+    await traiterCodePrompt(req, res, (sessionID, texte) => {
+      const prise = prendreDemandeCode(sessionID, texte);
+      prises.push(prise);
+      return prise;
+    });
+  } finally {
+    for (const prise of prises) prise.fin();
+  }
+}
+
+async function traiterCodePrompt(
   req: http.IncomingMessage,
   res: http.ServerResponse,
+  prendre: (sessionID: string, texte: string) => { envoyee: () => void },
 ): Promise<void> {
   const body = (await readJson(req).catch(() => ({}))) as {
     sessionID?: string;
@@ -2762,6 +2832,8 @@ async function handleCodePrompt(
   const acces = await refusSessionCode(body.sessionID, envoyeur?.userId);
   if ("statut" in acces) return send(res, acces.statut, { error: { message: acces.message } });
   const notee = acces.session;
+  // Dès ici, la session travaille : l'écran qui la quitte puis y revient la retrouve, message compris.
+  const prise = prendre(body.sessionID, body.text);
   /*
    * Session inconnue de la mémoire (ouverte avant un redémarrage de la
    * passerelle) : son dossier et son modèle viennent du registre. Le dossier
@@ -2929,6 +3001,7 @@ async function handleCodePrompt(
 
   let envoi = Date.now();
   const upstream = await envoyer(body.sessionID, reglageEnvoi);
+  if (upstream.ok) prise.envoyee();
 
   /*
    * La demande a-t-elle atteint le modèle ?
@@ -2951,6 +3024,8 @@ async function handleCodePrompt(
      * Le modèle de la session perdue ; à défaut — session ouverte avant un
      * redémarrage de la passerelle —, celui qu'elle choisirait pour le code.
      */
+    // Perdue : rien n'y travaille, même si OpenCode y a noté la demande.
+    fermerTourCode(body.sessionID);
     const perdue = modeleDeSession.get(body.sessionID);
     let modele = perdue?.modele;
     if (!modele) {
@@ -2981,10 +3056,14 @@ async function handleCodePrompt(
         void toucherSessionCode(nouvelle, body.text).catch(() => {});
         void retirerSessionCode(body.sessionID, notee.userId).catch(() => {});
         envoi = Date.now();
+        const priseNouvelle = prendre(nouvelle, body.text);
         const second = await envoyer(nouvelle, { modele, variante: perdue?.variante, dossier });
+        if (second.ok) priseNouvelle.envoyee();
         if (second.ok && (await attendreAppel(body.text, envoi))) {
+          ouvrirTourCode(nouvelle);
           return send(res, 200, { data: { id: second.messageID }, helixRelance: { sessionID: nouvelle } });
         }
+        fermerTourCode(nouvelle);
       }
     }
     return send(res, 502, {
@@ -3000,6 +3079,8 @@ async function handleCodePrompt(
       error: { message: t("La demande n'a pas été acceptée par l'agent de code.") },
     });
   }
+  // Le modèle a reçu la demande : le tour est ouvert, jusqu'à sa fin vue dans le flux (fluxCode.ts).
+  ouvrirTourCode(body.sessionID);
   // Même forme de réponse qu'avec la nouvelle API : `data.id`, l'identifiant du message.
   send(res, 200, { data: { id: upstream.messageID } });
 }

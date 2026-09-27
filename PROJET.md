@@ -2691,6 +2691,37 @@ Chat ouvert, roue visible, Chat rouvert en direct (plan qui avance), réponse fi
 pendant qu'un autre Chat était affiché, et enregistrée. Limite : une page rechargée
 ou l'application fermée coupe la réponse (rien n'est gardé avant sa fin).
 
+**Fait le 27/09/2026 : le travail de Helix Code reste à l'écran quand on quitte sa session.**
+Vu par Medhi : « quand on quitte la conversation, le message se retire, donc on a
+l'impression qu'il ne travaille plus ». Causes : l'écran Code n'avait qu'une conversation,
+vidée (flux fermé) dès qu'on passait à une autre session ou à « Nouvelle session », et
+revenir dans Code depuis le Chat ouvrait l'accueil ; la session rouverte relisait son
+historique chez OpenCode, qui n'a pas encore la demande pendant que Helix prépare
+l'application ou le plan, et se dit au repos pendant que Helix contrôle le code écrit ou
+attend que la demande atteigne le modèle (`enCours: false`, message absent). Corrigé comme
+le Chat du 26/09 : une conversation qui travaille vit hors de l'écran (`enFond`,
+`src/hooks/useCode.ts`), flux ouvert, et continue de se remplir ; y revenir la reprend
+telle quelle, sans relecture ni rejeu ; finie hors de l'écran, elle s'oublie et se relit
+en entier chez OpenCode. Revenir dans Code depuis une autre page réaffiche la session
+qu'on regardait **si elle travaille encore** ; au repos, Code s'ouvre sur l'accueil
+(décision du 25/09 inchangée). La passerelle sait qu'une session travaille
+(`auTravail`, `gateway/src/fluxCode.ts`) : travail de Helix compté (demande en cours de
+traitement, contrôle automatique) et tour ouvert chez OpenCode vu dans le flux ;
+`GET /helix/code/sessions` rend `enCours` par session (roue discrète dans la liste, relue
+toutes les 5 s tant qu'une session travaille), et l'historique ajoute la demande pas
+encore partie chez OpenCode, lit le dernier numéro avant les messages (plus de trou entre
+les deux) et laisse au flux un texte encore en train de s'écrire (plus de moitié puis
+entier). Seul « Arrêter » arrête l'agent. Vérifié : `npm run securite` (3 contrôles de plus,
+le faux OpenCode rend désormais les demandes reçues) ; dans le navigateur (passerelle
+jetable, faux OpenCode qui déroule un tour de 45 s) : demande envoyée, Chat ouvert puis
+retour dans Code (session réaffichée, en direct), « Nouvelle session » puis réouverture
+depuis la liste (suite arrivée pendant l'absence, rien en double), page rechargée en plein
+tour (roue dans la liste, historique relu puis suite en direct jusqu'à « Terminé »), arrêt
+explicite. Pas essayé : la demande affichée pendant une vraie préparation d'application
+(plusieurs minutes avec un vrai modèle), l'application de bureau, le vrai OpenCode. Limite :
+le panneau de suivi d'une session rouverte après rechargement repart vide (seule la suite
+s'y inscrit).
+
 **Fait le 26/09/2026 : revue de sécurité du poste de travail, corrigée** (SECURITE.md
 § 24). Extension VS Code 0.2.4 (adresse et jeton de portée machine, https hors du poste,
 jeton du poste seulement pour le port de l'application `instance-port`, séance par

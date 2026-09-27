@@ -66,9 +66,49 @@ export interface Employe {
   createdAt: string;
   updatedAt?: string;
   modele: string;
+  /** Son modèle tel que l'instance le trouve, avec les droits de son propriétaire (absent : instance plus ancienne). */
+  modeleEtat?: EtatModele;
   proprietaire: string;
   estProprietaire: boolean;
   jetons30Jours: number;
+}
+
+/**
+ * Pourquoi son modèle ne répond plus (gateway/src/employes.ts, `etatDuModele`) :
+ * désinstallé ou plus retenu par sa clé, clé retirée, service qui ne répond
+ * pas, clé devenue personnelle à quelqu'un d'autre. Il ne bascule jamais sur
+ * un autre modèle : l'écran le dit.
+ */
+export type RaisonModele = "retire" | "cle-retiree" | "hors-ligne" | "reserve";
+
+export interface EtatModele {
+  nom: string;
+  disponible: boolean;
+  raison?: RaisonModele;
+  origine?: "local" | "agence" | "cle";
+  fournisseur?: string;
+  pays?: string;
+}
+
+/** Un modèle qu'on peut donner à un employé, tel que `GET /helix/employes` le liste. */
+export interface ModeleEmploye {
+  uid: string;
+  nom: string;
+  charge: boolean;
+  origine: "local" | "agence" | "cle";
+  pays?: string;
+  fournisseur?: string;
+  /** Déclaré par LM Studio : sait appeler des outils (absent : on ne sait pas). */
+  outils?: boolean;
+  /** Taille sur disque, en octets. */
+  taille?: number;
+  params?: string;
+  /** Entraîné sur cette machine : jamais proposé d'office. */
+  entraine?: boolean;
+  /** A mal répondu sur cette machine (essai de mise en route) : jamais proposé d'office. */
+  defaillant?: boolean;
+  /** Clé personnelle de la personne qui regarde : facturée sur sa clé. */
+  personnel?: boolean;
 }
 
 export interface EtatEmployes {
@@ -88,14 +128,7 @@ export interface EtatEmployes {
   };
   employes: Employe[];
   familles: { id: Famille; disponible: boolean }[];
-  modeles: {
-    uid: string;
-    nom: string;
-    charge: boolean;
-    origine: "local" | "agence" | "cle";
-    pays?: string;
-    fournisseur?: string;
-  }[];
+  modeles: ModeleEmploye[];
 }
 
 export interface EtatInstallation {
@@ -174,10 +207,102 @@ export const LIBELLE_RYTHME: Record<Rythme, string> = {
   "a-chaque-mail": t("À chaque mail reçu"),
 };
 
-/** « qwen3-8b · LM Studio (chargé) », « mistral-large · Mistral AI · France ». */
-export function libelleModele(m: EtatEmployes["modeles"][number]): string {
-  const ou = m.origine === "local" ? (m.charge ? t("sur la machine, chargé") : "sur la machine") : `cloud, ${m.pays ?? t("pays non précisé")}`;
+/** « qwen3-8b · LM Studio (sur la machine, chargé) », « mistral-large · Mistral AI (cloud, France, facturé) ». */
+export function libelleModele(m: ModeleEmploye): string {
+  const ou =
+    m.origine === "local"
+      ? m.charge
+        ? t("sur la machine, chargé")
+        : t("sur la machine")
+      : m.origine === "cle"
+        ? tf("cloud, {0}, facturé", m.pays ?? t("pays non précisé"))
+        : tf("cloud, {0}", m.pays ?? t("pays non précisé"));
   return `${m.nom} · ${m.fournisseur ?? ""} (${ou})`;
+}
+
+/** Le nom court d'un modèle, pour la liste : « qwen/qwen3-8b » devient « qwen3-8b ». */
+export const nomCourtModele = (nom: string) => nom.split("/").pop() || nom;
+
+/* ---- Le modèle proposé pour un poste ------------------------------------ */
+
+/** Ce que le poste demande à son modèle. */
+export interface BesoinDuPoste {
+  /** Il se sert d'outils : services branchés, bases de connaissances, documents de référence. */
+  outils: boolean;
+  /** Longueur de sa fiche de poste, en caractères. */
+  longueurPoste: number;
+}
+
+/** En dessous : un poste court, tâche simple et répétitive (trier, relever, reformuler). */
+const POSTE_COURT = 600;
+
+export interface Proposition {
+  uid: string;
+  /** Pourquoi celui-là, en une ligne. */
+  raison: string;
+}
+
+/**
+ * Le modèle proposé à la création d'un agent, et rappelé dans ses réglages
+ * (27/09/2026, demandé par Medhi : « on doit choisir le modèle selon l'agent
+ * aussi, pas tous le même »). La personne décide ; la proposition dit pourquoi.
+ *
+ *  - Jamais un modèle de clé d'office : il est facturé à quelqu'un (même
+ *    règle que le mode Auto, gateway/src/router.ts). Ni un modèle entraîné
+ *    ici, ni un modèle qui a mal répondu sur cette machine.
+ *  - Un poste qui se sert d'outils : un modèle qui déclare savoir les appeler.
+ *    Celui qui est déjà chargé d'abord (pas de second modèle en mémoire),
+ *    sinon le plus gros : un petit modèle se perd plus vite entre deux outils.
+ *  - Un poste court, sans outils : le plus léger, qui répond vite et laisse
+ *    la mémoire aux autres.
+ *  - Sinon : celui qui est déjà chargé, qui répond sans temps de chargement.
+ *
+ * `null` : aucun modèle gratuit, il faut en choisir un (facturé) ou en installer un.
+ */
+export function proposerModele(modeles: ModeleEmploye[], besoin: BesoinDuPoste): Proposition | null {
+  const gratuits = modeles.filter((m) => m.origine !== "cle" && !m.entraine && !m.defaillant);
+  // Les modèles de la machine d'abord ; ceux de l'intégrateur (profil de l'instance) seulement s'il n'y en a pas.
+  const locaux = gratuits.filter((m) => m.origine === "local");
+  const base = locaux.length > 0 ? locaux : gratuits;
+  if (base.length === 0) return null;
+  const charge = (liste: ModeleEmploye[]) => liste.find((m) => m.charge);
+  if (besoin.outils) {
+    const capables = base.filter((m) => m.outils === true);
+    if (capables.length > 0) {
+      const deja = charge(capables);
+      if (deja) return { uid: deja.uid, raison: t("il sait appeler des outils, dont son poste se sert, et il est déjà chargé") };
+      const plusGros = [...capables].sort((a, b) => (b.taille ?? 0) - (a.taille ?? 0))[0]!;
+      return { uid: plusGros.uid, raison: t("il sait appeler des outils, dont son poste se sert") };
+    }
+    const repli = charge(base.filter((m) => m.outils !== false)) ?? base.find((m) => m.outils !== false) ?? base[0]!;
+    return { uid: repli.uid, raison: t("aucun des modèles de l'instance ne déclare savoir appeler des outils, dont son poste se sert : relisez ses premières réponses") };
+  }
+  if (besoin.longueurPoste <= POSTE_COURT) {
+    const peses = base.filter((m) => m.taille);
+    if (peses.length > 0) {
+      const leger = [...peses].sort((a, b) => (a.taille ?? 0) - (b.taille ?? 0))[0]!;
+      return { uid: leger.uid, raison: t("le plus léger de l'instance : son poste est court et ne se sert d'aucun outil") };
+    }
+  }
+  const deja = charge(base);
+  if (deja) return { uid: deja.uid, raison: t("il est déjà chargé : il répond sans temps de chargement") };
+  return { uid: base[0]!.uid, raison: t("le modèle de conversation de l'instance") };
+}
+
+/** Ce que l'écran dit quand son modèle ne répond plus. */
+export function texteModeleIndisponible(etat: EtatModele, estProprietaire: boolean): string {
+  const quoi =
+    etat.raison === "cle-retiree"
+      ? tf("La clé qui donnait accès à son modèle ({0}) a été retirée.", etat.nom)
+      : etat.raison === "hors-ligne"
+        ? tf("Le service qui fait tourner son modèle ({0}) ne répond pas.", etat.nom)
+        : etat.raison === "reserve"
+          ? tf("Son modèle ({0}) est maintenant réservé à la personne qui a branché sa clé.", etat.nom)
+          : tf("Son modèle ({0}) n'est plus sur l'instance.", etat.nom);
+  const suite = estProprietaire
+    ? t("Il ne prend pas un autre modèle de lui-même : choisissez-en un dans ses réglages.")
+    : t("Il ne prend pas un autre modèle de lui-même : seule la personne qui l'a créé peut lui en choisir un.");
+  return `${quoi} ${suite}`;
 }
 
 /** « Chaque jour ouvré à 8 h 30 » : l'heure n'a pas de sens pour « chaque heure ». */

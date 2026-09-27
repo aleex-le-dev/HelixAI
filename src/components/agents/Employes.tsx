@@ -54,6 +54,12 @@ import {
   retirerDocument,
   installerOpenClaw,
   libelleModele,
+  nomCourtModele,
+  proposerModele,
+  texteModeleIndisponible,
+  type EtatModele,
+  type ModeleEmploye,
+  type Proposition,
   PALIERS,
   estRefusMemoire,
   lireCopiesMemoire,
@@ -442,21 +448,104 @@ function ConfirmationIdentite({
   );
 }
 
-function ChoixModele({ etat, valeur, onChange }: { etat: EtatEmployes; valeur: string; onChange: (v: string) => void }) {
-  const choisi = etat.modeles.find((m) => m.uid === valeur);
+/** Où partent ses messages, et qui paie : dit au moment du choix. */
+function coutDuModele(m: ModeleEmploye): string {
+  const chez = m.fournisseur ?? t("le fournisseur");
+  const pays = m.pays ? ` (${m.pays})` : "";
+  if (m.origine === "local") return t("Sur vos machines : rien ne sort, rien n'est facturé. Un modèle chargé répond le plus vite.");
+  if (m.origine === "cle" && m.personnel) return tf("Cloud : ses messages partent chez {0}{1}, et chacune de ses réponses est facturée sur votre clé.", chez, pays);
+  if (m.origine === "cle") return tf("Cloud : ses messages partent chez {0}{1}, et chacune de ses réponses est facturée à l'équipe, sur la clé de l'instance.", chez, pays);
+  return tf("Cloud : ses messages partent chez {0}{1}, et sa consommation est facturée.", chez, pays);
+}
+
+/** Les modèles de la machine d'abord, puis ceux de l'intégrateur, puis ceux d'une clé (facturés). */
+const RANG_ORIGINE: Record<ModeleEmploye["origine"], number> = { local: 0, agence: 1, cle: 2 };
+
+/**
+ * Le modèle d'un agent toujours actif (27/09/2026, demandé par Medhi : « pas
+ * tous le même »), à la création comme dans ses réglages. La proposition dit
+ * pourquoi en une ligne ; la personne décide. Un modèle qui a disparu reste
+ * affiché comme tel, avec la raison : l'écran ne montre jamais un autre
+ * modèle à sa place.
+ */
+export function ChoixModele({
+  modeles,
+  valeur,
+  onChange,
+  proposition,
+  manquant,
+}: {
+  modeles: ModeleEmploye[];
+  valeur: string;
+  onChange: (v: string) => void;
+  /** Le modèle proposé pour ce poste, et pourquoi. */
+  proposition?: Proposition | null;
+  /** Son modèle enregistré, quand il ne répond plus. */
+  manquant?: { uid: string; etat: EtatModele; estProprietaire: boolean };
+}) {
+  const choisi = modeles.find((m) => m.uid === valeur);
+  const options = [...modeles]
+    .sort((a, b) => RANG_ORIGINE[a.origine] - RANG_ORIGINE[b.origine])
+    .map((m) => ({ value: m.uid, label: libelleModele(m) }));
+  if (manquant && !modeles.some((m) => m.uid === manquant.uid)) {
+    options.unshift({ value: manquant.uid, label: tf("{0} (indisponible)", nomCourtModele(manquant.etat.nom)) });
+  }
+  const propose = proposition ? modeles.find((m) => m.uid === proposition.uid) : undefined;
   return (
-    <Field
-      label={t("Son modèle")}
-      hint={
-        !choisi
-          ? t("Son modèle n'est plus disponible : choisissez-en un autre.")
-          : choisi.origine === "local"
-            ? t("Sur vos machines : rien ne sort. Un modèle chargé répond le plus vite.")
-            : tf("Cloud : ses messages partent chez {0}{1}, et sa consommation est facturée.", choisi.fournisseur ?? "le fournisseur", choisi.pays ? ` (${choisi.pays})` : "")
-      }
-    >
-      <Select value={valeur} onChange={onChange} options={etat.modeles.map((m) => ({ value: m.uid, label: libelleModele(m) }))} />
-    </Field>
+    <div className="space-y-1.5">
+      <span className="block text-sm font-medium text-foreground">{t("Son modèle")}</span>
+      <Select value={valeur} onChange={onChange} options={options} />
+      {manquant && valeur === manquant.uid && (
+        <InfoBox tone="warning" leading={<TriangleAlert size={15} strokeWidth={1.75} />}>
+          {texteModeleIndisponible(manquant.etat, manquant.estProprietaire)}
+        </InfoBox>
+      )}
+      {choisi && <p className="text-xs text-muted-foreground">{coutDuModele(choisi)}</p>}
+      {propose && proposition && (
+        <p className="text-xs text-muted-foreground">
+          {tf("Proposé pour ce poste : {0}, {1}.", nomCourtModele(propose.nom), proposition.raison)}
+          {valeur !== proposition.uid && (
+            <>
+              {" "}
+              <button type="button" className="underline underline-offset-2 hover:text-foreground" onClick={() => onChange(proposition.uid)}>
+                {t("Le prendre")}
+              </button>
+            </>
+          )}
+        </p>
+      )}
+      {!proposition && modeles.length > 0 && !choisi && (
+        <p className="text-xs text-muted-foreground">
+          {t("Aucun modèle sur la machine de l'instance : choisissez-en un, facturé, ou installez un modèle.")}
+        </p>
+      )}
+      {modeles.length === 0 && !manquant && (
+        <p className="text-xs text-muted-foreground">{t("Aucun modèle de conversation n'est disponible pour l'instant.")}</p>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Son modèle, en petit, dans la liste des agents : son nom, ou « modèle
+ * indisponible » (la raison au survol), sans rien choisir à sa place.
+ */
+export function ModeleDiscret({ employe }: { employe: Employe }) {
+  const etat = employe.modeleEtat;
+  if (!etat) return null;
+  if (!etat.disponible) {
+    return (
+      <span className="inline-flex items-center gap-1 text-[11px] text-warning" title={texteModeleIndisponible(etat, employe.estProprietaire)}>
+        <TriangleAlert size={11} strokeWidth={2} />
+        {t("Modèle indisponible")}
+      </span>
+    );
+  }
+  return (
+    <span className="max-w-[12rem] truncate text-[11px] text-muted-foreground" title={tf("Son modèle : {0}", etat.nom)}>
+      {nomCourtModele(etat.nom)}
+      {etat.origine === "cle" && ` · ${t("cloud")}`}
+    </span>
   );
 }
 
@@ -658,11 +747,18 @@ export function PanneauEmploye({
           </div>
           <p className="text-xs text-muted-foreground">
             {t("Créé par")}{" "}{employe.proprietaire}
+            {employe.modeleEtat?.disponible && tf(" · modèle {0}", nomCourtModele(employe.modeleEtat.nom))}
             {employe.jetons30Jours > 0 &&
               tf(" · {0} jetons sur 30 jours", employe.jetons30Jours.toLocaleString(langue()))}
           </p>
         </div>
       </div>
+      {/* Son modèle a disparu : dit en tête de sa fiche, sans qu'un autre réponde à sa place. */}
+      {employe.modeleEtat && !employe.modeleEtat.disponible && (
+        <InfoBox tone="warning" className="mt-3" leading={<TriangleAlert size={15} strokeWidth={1.75} />}>
+          {texteModeleIndisponible(employe.modeleEtat, employe.estProprietaire)}
+        </InfoBox>
+      )}
       <SegmentedTabs className="mt-4" size="sm" options={onglets} value={onglet} onChange={setOnglet} />
       <div className="mt-4 min-h-[340px]">
         {onglet === "discuter" && <Conversation employe={employe} />}
@@ -1176,7 +1272,8 @@ function Reglages({
           toutesLesFamilles: toutes,
           missions,
           autonome,
-          modele,
+          // Seulement s'il change : son modèle disparu, le reste de ses réglages s'enregistre quand même.
+          ...(modele !== employe.modele ? { modele } : {}),
           liberte,
           ...(visibiliteChangee ? { visibilite, ...(visibilite === "groupes" ? { groupes: vis.g } : {}) } : {}),
           ...(aConfirmer ? { motDePasse, code: code.trim() || undefined } : {}),
@@ -1190,9 +1287,10 @@ function Reglages({
          * accès au courrier, instance injoignable, mémoire à vider) laissait
          * le Chat et l'agent 24/7 obéir à deux réglages différents.
          */
-        if (employe.agentId && (poste !== employe.poste || visibiliteChangee)) {
+        if (employe.agentId && (poste !== employe.poste || visibiliteChangee || modele !== employe.modele)) {
           updateAgent(employe.agentId, {
             ...(poste !== employe.poste ? { instructions: r.employe.poste } : {}),
+            ...(modele !== employe.modele ? { modeleEmploye: r.employe.modele } : {}),
             ...(visibiliteChangee
               ? {
                   visibility: r.employe.visibilite ?? "organisation",
@@ -1267,7 +1365,18 @@ function Reglages({
         }}
       />
       <DocumentsAgent employe={employe} />
-      <ChoixModele etat={etat} valeur={modele} onChange={setModele} />
+      <ChoixModele
+        modeles={etat.modeles}
+        valeur={modele}
+        onChange={setModele}
+        proposition={proposerModele(etat.modeles, {
+          outils:
+            (toutes ? etat.familles.some((f) => f.disponible) : outils.some((o) => etat.familles.find((f) => f.id === o)?.disponible)) ||
+            (employe.connaissances?.length ?? 0) > 0,
+          longueurPoste: poste.trim().length,
+        })}
+        manquant={employe.modeleEtat && !employe.modeleEtat.disponible ? { uid: employe.modele, etat: employe.modeleEtat, estProprietaire: true } : undefined}
+      />
       <ChoixAutonomie valeur={autonome} onChange={setAutonome} />
       <ChoixLiberte valeur={liberte} onChange={setLiberte} />
       {aConfirmer && (

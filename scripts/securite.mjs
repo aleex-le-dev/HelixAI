@@ -1846,6 +1846,211 @@ const CLES_EN_CLAIR = [];
 }
 
 /* ------------------------------------------------------------------------- */
+console.log("\n7 ter ter. Un modèle par employé : le sien, changé à chaud, jamais celui d'un autre (27/09/2026)");
+{
+  /*
+   * Demandé par Medhi le 27/09/2026 : « OpenClaw, on doit choisir le modèle
+   * selon l'agent aussi, pas tous le même ». Deux employés sur deux modèles du
+   * faux moteur (essai-chat, essai-court). La batterie tient le rôle
+   * d'OpenClaw : elle lit la configuration que la passerelle a écrite pour
+   * lui, et appelle la passerelle comme il le fait, avec le fournisseur de
+   * chaque employé (adresse, jeton, en-têtes X-Helix-Employe et X-Helix-Cle)
+   * et le modèle que nomme son agent. Le faux moteur note le champ `model`
+   * qu'il reçoit. Le vrai OpenClaw n'est pas lancé ici.
+   */
+  const [maj, min] = process.versions.node.split(".").map(Number);
+  if (maj < 24 || (maj === 24 && min < 16)) {
+    console.log(`  · Node ${process.versions.node} : il faut 24.16 pour le faux OpenClaw, section sautée`);
+  } else {
+    const RECUS = [];
+    const MARQUE = "MODELE-ESSAI-4417";
+    const noter = (req) => {
+      if (req.url !== "/v1/chat/completions") return;
+      let c = "";
+      req.on("data", (b) => (c += b));
+      req.on("end", () => {
+        try {
+          const d = JSON.parse(c || "{}");
+          if (JSON.stringify(d.messages ?? []).includes(MARQUE)) RECUS.push(d.model);
+        } catch {
+          /* pas du JSON : pas un appel d'essai */
+        }
+      });
+    };
+    fauxModele.on("request", noter);
+    const configOc = () => JSON.parse(readFileSync(join(DONNEES, "openclaw", "openclaw.json"), "utf8"));
+    /** Comme OpenClaw : le fournisseur et le modèle de son agent, tels que la configuration les écrit. `nomme` : un autre modèle dans la requête. */
+    const commeOpenClaw = async (id, nomme) => {
+      const cfg = configOc();
+      const f = cfg.models?.providers?.[`helix-${id}`];
+      const agent = cfg.agents?.entries?.[`helix-${id}`];
+      if (!f || !agent) return { status: 0, recu: [], texte: "fournisseur ou agent absent de la configuration" };
+      const avant = RECUS.length;
+      const r = await fetch(`${f.baseUrl}/chat/completions`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${f.apiKey}`, ...f.headers },
+        body: JSON.stringify({
+          model: nomme ?? String(agent.model).slice(`helix-${id}/`.length),
+          stream: true,
+          messages: [{ role: "user", content: `${MARQUE} bonjour` }],
+        }),
+      });
+      const texte = await r.text();
+      return { status: r.status, recu: RECUS.slice(avant), texte };
+    };
+    const pidOpenClaw = () => {
+      try {
+        const bin = join(AUX, "openclaw", "bin", "openclaw");
+        const ligne = execFileSync("ps", ["-Ao", "pid=,command="], { encoding: "utf8" }).split("\n").find((l) => l.includes(bin) && l.includes("gateway run"));
+        return ligne?.trim().split(/\s+/)[0] ?? null;
+      } catch {
+        return null;
+      }
+    };
+    const lireEquipe = async (entete = avecSeance) => (await (await appel("/helix/employes", { headers: entete })).json()).employes ?? [];
+
+    const vue = await (await appel("/helix/employes", { headers: avecSeance })).json();
+    const uidChat = vue.modeles?.find((m) => m.nom === "essai-chat")?.uid;
+    const uidCourt = vue.modeles?.find((m) => m.nom === "essai-court")?.uid;
+    verifier("les deux modèles du faux moteur sont proposés aux employés", Boolean(uidChat && uidCourt), JSON.stringify(vue.modeles?.map((m) => m.uid)));
+
+    const deployer = async (entete, nom, modele) => {
+      const r = await appel("/helix/employes", {
+        method: "POST", headers: entete,
+        body: JSON.stringify({ nom, poste: "Tu tries les demandes de l'équipe.", outils: [], missions: [], visibilite: "organisation", ...(modele ? { modele } : {}) }),
+      });
+      return { status: r.status, corps: await r.json().catch(() => ({})) };
+    };
+    const a = (await deployer(avecSeance, "Essai modele A", uidChat)).corps.employe;
+    const b = (await deployer(avecSeance, "Essai modele B", uidCourt)).corps.employe;
+    verifier("deux employés se déploient, chacun sur le modèle choisi", a?.modele === uidChat && b?.modele === uidCourt, `${a?.modele} ${b?.modele}`);
+
+    const cfg1 = configOc();
+    const fA = cfg1.models?.providers?.[`helix-${a?.id}`];
+    const fB = cfg1.models?.providers?.[`helix-${b?.id}`];
+    const entrees1 = cfg1.agents?.entries ?? {};
+    verifier(
+      "configuration d'OpenClaw : chacun son fournisseur (son en-tête X-Helix-Employe, son modèle), son agent et son profil du courrier sur son modèle",
+      fA?.headers?.["X-Helix-Employe"] === a?.id && fB?.headers?.["X-Helix-Employe"] === b?.id &&
+        fA?.models?.map((m) => m.id).join() === uidChat && fB?.models?.map((m) => m.id).join() === uidCourt &&
+        entrees1[`helix-${a?.id}`]?.model === `helix-${a?.id}/${uidChat}` && entrees1[`helix-${a?.id}-courrier`]?.model === `helix-${a?.id}/${uidChat}` &&
+        entrees1[`helix-${b?.id}`]?.model === `helix-${b?.id}/${uidCourt}` && entrees1[`helix-${b?.id}-courrier`]?.model === `helix-${b?.id}/${uidCourt}`,
+      JSON.stringify({ a: fA?.models, b: fB?.models, ma: entrees1[`helix-${a?.id}`]?.model, mb: entrees1[`helix-${b?.id}`]?.model }),
+    );
+
+    const appelA = await commeOpenClaw(a?.id);
+    const appelB = await commeOpenClaw(b?.id);
+    verifier(
+      "la passerelle sert à chacun son modèle : le faux moteur reçoit essai-chat pour A, essai-court pour B",
+      appelA.status === 200 && appelB.status === 200 && appelA.recu.join() === "essai-chat" && appelB.recu.join() === "essai-court",
+      `${appelA.status} ${appelA.recu} | ${appelB.status} ${appelB.recu}`,
+    );
+    // Le mode Auto prendrait essai-chat (premier modèle de conversation du faux moteur) : B ne le reçoit jamais.
+    const sansModele = await commeOpenClaw(b?.id, "");
+    const autreModele = await commeOpenClaw(a?.id, uidCourt);
+    verifier(
+      "une requête d'employé sans modèle, ou qui en nomme un autre (configuration pas encore relue), reçoit le sien, jamais celui par défaut",
+      sansModele.recu.join() === "essai-court" && autreModele.recu.join() === "essai-chat",
+      `${sansModele.status} ${sansModele.recu} | ${autreModele.status} ${autreModele.recu}`,
+    );
+    // Le modèle de A change : la configuration est réécrite, celle de B ne bouge pas, OpenClaw n'est pas relancé.
+    const pidAvant = pidOpenClaw();
+    const blocB = JSON.stringify({ f: fB, e: entrees1[`helix-${b?.id}`], c: entrees1[`helix-${b?.id}-courrier`] });
+    const change = await appel(`/helix/employes/${a?.id}`, { method: "POST", headers: avecSeance, body: JSON.stringify({ modele: uidCourt }) });
+    const aChange = (await change.json().catch(() => ({}))).employe;
+    const cfg2 = configOc();
+    const entrees2 = cfg2.agents?.entries ?? {};
+    verifier(
+      "modification du modèle : la configuration de A est réécrite (fournisseur, agent, profil du courrier)",
+      change.status === 200 && aChange?.modele === uidCourt &&
+        cfg2.models?.providers?.[`helix-${a?.id}`]?.models?.map((m) => m.id).join() === uidCourt &&
+        entrees2[`helix-${a?.id}`]?.model === `helix-${a?.id}/${uidCourt}` && entrees2[`helix-${a?.id}-courrier`]?.model === `helix-${a?.id}/${uidCourt}`,
+      `${change.status} ${aChange?.modele} ${entrees2[`helix-${a?.id}`]?.model}`,
+    );
+    const pidApres = pidOpenClaw();
+    verifier(
+      "celle de B ne bouge pas d'un octet, et l'instance OpenClaw n'est pas relancée (rechargement à chaud)",
+      JSON.stringify({ f: cfg2.models?.providers?.[`helix-${b?.id}`], e: entrees2[`helix-${b?.id}`], c: entrees2[`helix-${b?.id}-courrier`] }) === blocB &&
+        Boolean(pidAvant) && pidAvant === pidApres,
+      `pid ${pidAvant} → ${pidApres}`,
+    );
+    const apresA = await commeOpenClaw(a?.id);
+    const apresB = await commeOpenClaw(b?.id);
+    verifier(
+      "après le changement, A reçoit son nouveau modèle et B toujours le sien",
+      apresA.recu.join() === "essai-court" && apresB.recu.join() === "essai-court" && apresB.status === 200,
+      `${apresA.status} ${apresA.recu} | ${apresB.status} ${apresB.recu}`,
+    );
+    const equipe = await lireEquipe();
+    const vueA = equipe.find((e) => e.id === a?.id);
+    verifier("la liste des agents dit le modèle de chacun", vueA?.modeleEtat?.disponible === true && vueA?.modeleEtat?.nom === "essai-court", JSON.stringify(vueA?.modeleEtat));
+
+    // Le modèle personnel d'une autre personne : refusé, jamais remplacé en silence.
+    const ajoutCle = await appel("/helix/fournisseurs", {
+      method: "POST", headers: avecSeance,
+      body: JSON.stringify({ fournisseur: "compatible", nom: "Cle-Perso-Essai", adresse: `http://127.0.0.1:${PORT_EMBED}/v1`, cle: "cle-perso-essai-5521", modeles: ["essai-chat", "essai-court"], portee: "moi" }),
+    });
+    const cleA = (await ajoutCle.json().catch(() => ({}))).cle;
+    const uidPerso = cleA ? `cle-${cleA.id}/essai-chat` : "";
+    verifier("une clé personnelle est branchée par la propriétaire (moteur de la machine, administratrice)", ajoutCle.status === 200 && Boolean(cleA?.id), ajoutCle.status);
+    const vole = await deployer(avecSeanceB, "Essai modele vole", uidPerso);
+    const equipeB = await lireEquipe(avecSeanceB);
+    verifier(
+      "une collègue ne met pas un agent en service sur le modèle de la clé personnelle d'une autre : refus, pas un autre modèle à la place",
+      vole.status === 400 && !vole.corps.employe && !equipeB.some((e) => e.nom === "Essai modele vole"),
+      `${vole.status} ${vole.corps.employe?.modele}`,
+    );
+    const siens = (await deployer(avecSeanceB, "Essai modele C", uidChat)).corps.employe;
+    const volEnModif = await appel(`/helix/employes/${siens?.id}`, { method: "POST", headers: avecSeanceB, body: JSON.stringify({ modele: uidPerso }) });
+    const siensApres = (await lireEquipe(avecSeanceB)).find((e) => e.id === siens?.id);
+    verifier(
+      "ni le lui donner en le modifiant : refus, et son modèle reste le sien",
+      Boolean(siens?.id) && volEnModif.status === 400 && siensApres?.modele === uidChat && configOc().agents?.entries?.[`helix-${siens?.id}`]?.model === `helix-${siens?.id}/${uidChat}`,
+      `${volEnModif.status} ${siensApres?.modele}`,
+    );
+
+    // Son modèle disparaît : l'écran le dit, la passerelle refuse, aucun autre ne répond à sa place.
+    const surCle = await appel(`/helix/employes/${a?.id}`, { method: "POST", headers: avecSeance, body: JSON.stringify({ modele: uidPerso }) });
+    const surCleAppel = await commeOpenClaw(a?.id);
+    verifier("sa propriétaire lui donne le modèle de sa propre clé : il y répond", surCle.status === 200 && surCleAppel.recu.join() === "essai-chat", `${surCle.status} ${surCleAppel.status} ${surCleAppel.recu}`);
+    await appel(`/helix/fournisseurs/${cleA?.id}`, { method: "POST", headers: avecSeance, body: JSON.stringify({ modeles: ["essai-court"] }) });
+    const retire = (await lireEquipe()).find((e) => e.id === a?.id)?.modeleEtat;
+    const retireAppel = await commeOpenClaw(a?.id);
+    verifier(
+      "modèle retiré de sa clé : la liste le dit (« retire »), la passerelle refuse pour de bon (404 « model_not_found », pas un 503 qu'OpenClaw réessaierait) et rien n'arrive au moteur",
+      retire?.disponible === false && retire?.raison === "retire" && retireAppel.status === 404 && retireAppel.texte.includes("model_not_found") && retireAppel.recu.length === 0 && retireAppel.texte.includes("essai-chat"),
+      `${JSON.stringify(retire)} ${retireAppel.status} ${retireAppel.recu} ${retireAppel.texte.slice(0, 120)}`,
+    );
+    await appel(`/helix/fournisseurs/${cleA?.id}/supprimer`, { method: "POST", headers: avecSeance, body: "{}" });
+    const cleRetiree = (await lireEquipe()).find((e) => e.id === a?.id)?.modeleEtat;
+    const cleRetireeAppel = await commeOpenClaw(a?.id);
+    verifier(
+      "clé retirée : la liste le dit (« cle-retiree »), la passerelle refuse en le disant (en anglais : OpenClaw n'envoie pas de langue), rien n'arrive au moteur",
+      cleRetiree?.disponible === false && cleRetiree?.raison === "cle-retiree" && cleRetireeAppel.status === 404 && cleRetireeAppel.recu.length === 0 && /key that gave access/.test(cleRetireeAppel.texte),
+      `${JSON.stringify(cleRetiree)} ${cleRetireeAppel.status} ${cleRetireeAppel.texte.slice(0, 120)}`,
+    );
+    const parle = await (await appel(`/helix/employes/${a?.id}/message`, { method: "POST", headers: { ...avecSeance, "X-Helix-Langue": "fr" }, body: JSON.stringify({ texte: `${MARQUE} bonjour` }) })).json().catch(() => ({}));
+    let reponse = null;
+    for (let i = 0; i < 40 && parle.travail; i++) {
+      await attendre(250);
+      const suivi = await (await appel(`/helix/employes/${a?.id}/message/${parle.travail}`, { headers: avecSeance })).json().catch(() => ({}));
+      if (suivi.etat && suivi.etat !== "en-cours") {
+        reponse = suivi.reponse;
+        break;
+      }
+    }
+    verifier("lui parler : sa réponse dit, dans la langue de la personne, que la clé de son modèle a été retirée, pas « vérifiez que le modèle est chargé »", typeof reponse === "string" && /clé/.test(reponse) && reponse.includes("essai-chat"), reponse);
+    const pause = await appel(`/helix/employes/${a?.id}`, { method: "POST", headers: avecSeance, body: JSON.stringify({ enPause: true, modele: uidPerso }) });
+    verifier("son modèle disparu, sa propriétaire peut encore le mettre en pause (son modèle, inchangé, ne bloque pas)", pause.status === 200, pause.status);
+
+    fauxModele.off("request", noter);
+    for (const [e, entete] of [[a, avecSeance], [b, avecSeance], [siens, avecSeanceB]]) {
+      if (e?.id) await appel(`/helix/employes/${e.id}/supprimer`, { method: "POST", headers: entete, body: "{}" });
+    }
+  }
+}
+
+/* ------------------------------------------------------------------------- */
 console.log("\n7 quater. Export RGPD et effacement : bases, images, entraînement");
 {
   /*

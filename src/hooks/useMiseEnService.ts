@@ -68,7 +68,8 @@ export function useMiseEnService(
           visibilite: agent.visibility,
           ...(agent.visibility === "groupes" ? { groupes: agent.groupIds ?? [] } : {}),
           connaissances: agent.connaissances ?? [],
-          ...(agent.modelUid ? { modele: agent.modelUid } : {}),
+          // Le modèle choisi à la création ; l'instance refuse un modèle qu'elle ne sert pas à cette personne, sans en prendre un autre.
+          ...((agent.modeleEmploye ?? agent.modelUid) ? { modele: agent.modeleEmploye ?? agent.modelUid } : {}),
         });
         // Les documents choisis à la création partent maintenant que son espace existe.
         const fichiers = prendreFichiers(agent.id);

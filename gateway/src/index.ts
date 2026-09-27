@@ -57,7 +57,7 @@ import {
   onProvisionChange,
   verifierModeleEnPlace,
 } from "./provision.ts";
-import { etatSurCetteMachine } from "./santeModeles.ts";
+import { estDefaillant, etatSurCetteMachine } from "./santeModeles.ts";
 import { deployment, autoProvisionEnabled } from "./deployment.ts";
 import { db, isCollection, COLLECTIONS, migrerChiffrement, type Collection } from "./db.ts";
 import { exporterDonnees } from "./export.ts";
@@ -506,11 +506,41 @@ async function handleChat(
     }
   }
 
+  const fiche = parEmploye && typeof employe === "string" ? await employes.employe(employe) : undefined;
+  /*
+   * Le modèle d'un employé est celui que Helix a enregistré pour lui
+   * (27/09/2026, demandé par Medhi : « pas tous le même »), et non celui que
+   * la requête nomme. La configuration d'OpenClaw le nomme déjà (un
+   * fournisseur par employé, employes.ts) ; la passerelle le tient en plus,
+   * pour deux raisons : un changement de modèle vaut dès l'appel suivant,
+   * même si l'instance OpenClaw n'a pas encore relu sa configuration ; et un
+   * employé ne répond jamais avec un autre modèle que le sien. Si le sien a
+   * disparu, le refus le dit, et aucun autre ne répond à sa place.
+   */
+  if (fiche) {
+    body.model = fiche.modele;
+    const essai = await resolve({ model: fiche.modele, acces: fiche.ownerId });
+    if ("error" in essai) {
+      const etat = employes.etatDuModele(fiche, await discover().catch(() => ({ backends: [], models: [] })));
+      /*
+       * 404 « model_not_found », comme OpenAI, quand le modèle a disparu :
+       * vu le 27/09/2026 avec OpenClaw 2026.9.4, un 503 est pris pour une
+       * panne passagère et réessayé huit fois (plus de deux minutes) avant
+       * que l'employé ne réponde. Seul un service qui ne répond pas reste en
+       * 503 : il peut revenir, et l'attente a un sens.
+       */
+      const passager = etat.disponible || etat.raison === "hors-ligne";
+      return send(res, passager ? 503 : 404, {
+        error: {
+          message: etat.disponible ? essai.error : employes.messageModeleIndisponible(fiche, etat),
+          ...(passager ? {} : { type: "invalid_request_error", code: "model_not_found" }),
+        },
+      });
+    }
+  }
+
   // Un employé a accès aux modèles branchés par la clé personnelle de son propriétaire.
-  const titulaire =
-    qui?.userId ??
-    (parEmploye && typeof employe === "string" ? (await employes.employe(employe))?.ownerId : undefined) ??
-    titulaireCode;
+  const titulaire = qui?.userId ?? fiche?.ownerId ?? titulaireCode;
 
   // Le journal doit pouvoir dire au nom de qui l'agent a touché ces fichiers.
   await handleChatRequest(
@@ -4798,8 +4828,10 @@ async function handleEmployes(
   if (!id && req.method === "GET") {
     const comptes = await publicAccounts();
     const liste = (await employes.listerEmployes()).filter((e) => employes.visiblePar(e, qui.userId, qui.groupes ?? []));
+    // Une seule découverte : la liste proposée et l'état du modèle de chaque employé.
+    const decouverte = await discover();
     // Les modèles que cette personne peut donner à un employé : les siens, ceux de l'équipe et de la machine.
-    const modeles = (await models(true)).filter(
+    const modeles = decouverte.models.filter(
       (m) => m.roles.includes("chat") && (!m.proprietaire || m.proprietaire === qui.userId),
     );
     const depuis = new Date(Date.now() - 30 * 86_400_000).toISOString().slice(0, 10);
@@ -4834,6 +4866,8 @@ async function handleEmployes(
           proprietaire: comptes.find((c) => c.id === e.ownerId)?.fullName ?? "Un ancien membre",
           estProprietaire: e.ownerId === qui.userId,
           jetons30Jours: jetons,
+          // Son modèle, jugé avec les droits de son propriétaire : l'écran le montre, et dit s'il a disparu.
+          modeleEtat: employes.etatDuModele(e, decouverte),
         };
       }),
     );
@@ -4851,6 +4885,14 @@ async function handleEmployes(
         origine: m.origine ?? "local",
         pays: m.pays,
         fournisseur: m.fournisseur ?? m.backendLabel,
+        // De quoi proposer un modèle adapté au poste (src/lib/employes.ts, `proposerModele`).
+        ...(typeof m.outils === "boolean" ? { outils: m.outils } : {}),
+        ...(m.sizeBytes ? { taille: m.sizeBytes } : {}),
+        ...(m.params ? { params: m.params } : {}),
+        ...(m.entraine ? { entraine: true } : {}),
+        ...(m.backendKind === "lmstudio" && estDefaillant(m.id) ? { defaillant: true } : {}),
+        // Une clé personnelle : la sienne (la route ne montre jamais celle d'une autre personne).
+        ...(m.proprietaire ? { personnel: true } : {}),
       })),
     });
   }
@@ -4883,10 +4925,29 @@ async function handleEmployes(
     const chat = (await models(true)).filter(
       (m) => m.roles.includes("chat") && (!m.proprietaire || m.proprietaire === qui.userId),
     );
-    // Un modèle cloud branché par clé seulement s'il est demandé : il coûte à quelqu'un.
-    const gratuits = chat.filter((m) => m.origine !== "cle");
+    /*
+     * Le modèle demandé, ou un refus : jusqu'au 27/09/2026, un modèle absent
+     * ou réservé à quelqu'un d'autre (la clé personnelle d'une collègue) était
+     * remplacé en silence par un modèle de la machine, et l'agent démarrait
+     * sur un modèle que personne n'avait choisi.
+     */
+    if (typeof b.modele === "string" && b.modele && !chat.some((m) => m.uid === b.modele)) {
+      return send(res, 400, { error: { message: t("Ce modèle n'est pas disponible pour vous.") } });
+    }
+    // Sans modèle demandé : un modèle cloud branché par clé jamais, il coûte à quelqu'un ; ni un modèle entraîné ici.
+    const gratuits = chat.filter((m) => m.origine !== "cle" && !m.entraine);
+    // Un poste qui se sert d'outils (services branchés, bases de connaissances) : d'abord un modèle qui sait les appeler.
+    const avecOutils =
+      b.toutesLesFamilles === true ||
+      (Array.isArray(b.outils) && b.outils.length > 0) ||
+      (Array.isArray(b.connaissances) && b.connaissances.length > 0);
+    const capables = avecOutils ? gratuits.filter((m) => m.outils === true) : [];
     const choisi =
-      chat.find((m) => m.uid === b.modele) ?? gratuits.find((m) => m.loaded) ?? gratuits[0];
+      chat.find((m) => m.uid === b.modele) ??
+      capables.find((m) => m.loaded) ??
+      capables[0] ??
+      gratuits.find((m) => m.loaded) ??
+      gratuits[0];
     if (!choisi) {
       return send(res, 409, {
         error: { message: t("Aucun modèle de conversation n'est disponible : installez-en un avant de mettre un agent en service.") },
@@ -4904,7 +4965,13 @@ async function handleEmployes(
       const refus = await confirmerReglageSensible(b, actuel);
       if (refus) return send(res, refus.statut, { error: { message: refus.reason } });
     }
-    if (typeof b.modele === "string") {
+    /*
+     * Un modèle choisi doit être servi à cette personne (la route n'accepte
+     * pas la clé personnelle d'une autre). Le même que l'actuel ne se
+     * revérifie pas : son modèle disparu, son propriétaire doit encore
+     * pouvoir le mettre en pause ou changer son poste.
+     */
+    if (typeof b.modele === "string" && b.modele !== actuel?.modele) {
       const m = (await models(true)).find(
         (x) => x.uid === b.modele && x.roles.includes("chat") && (!x.proprietaire || x.proprietaire === qui.userId),
       );

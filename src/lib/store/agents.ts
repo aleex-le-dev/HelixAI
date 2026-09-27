@@ -40,6 +40,14 @@ export interface Agent {
   /** Modèle imposé (uid passerelle) ; sinon celui de l'utilisateur. */
   modelUid?: string;
   /**
+   * Modèle de son employé toujours actif (sa fiche, ses missions, ses
+   * messageries), choisi à la création (27/09/2026, demandé par Medhi : « pas
+   * tous le même »). Distinct de `modelUid` : dans le Chat et les tâches,
+   * c'est toujours le modèle choisi par la personne qui s'en sert, et un
+   * modèle de clé personnelle n'y serait pas servi à ses collègues.
+   */
+  modeleEmploye?: string;
+  /**
    * Bases de connaissances où l'agent cherche avant de répondre, dans le Chat.
    * Chacun n'y lit que ce qu'il voit : l'instance le vérifie à chaque question.
    */
@@ -85,7 +93,7 @@ export function getAgent(id: string): Agent | undefined {
 export function createAgent(
   owner: User,
   data: Pick<Agent, "name" | "description" | "instructions" | "visibility" | "hidePrompt"> &
-    Partial<Pick<Agent, "toolsEnabled" | "modelUid" | "connaissances" | "groupIds" | "photo">>,
+    Partial<Pick<Agent, "toolsEnabled" | "modelUid" | "modeleEmploye" | "connaissances" | "groupIds" | "photo">>,
 ): Agent {
   const now = new Date().toISOString();
   const agent: Agent = {
@@ -100,6 +108,7 @@ export function createAgent(
     organisationId: owner.organisationId,
     toolsEnabled: data.toolsEnabled ?? true,
     modelUid: data.modelUid,
+    ...(data.modeleEmploye ? { modeleEmploye: data.modeleEmploye } : {}),
     ...(data.connaissances && data.connaissances.length > 0 ? { connaissances: data.connaissances } : {}),
     ...(data.photo ? { photo: data.photo } : {}),
     createdAt: now,

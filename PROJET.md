@@ -2745,7 +2745,10 @@ ne restent ici que les points ouverts.*
    demande) ; l'installateur Windows, jamais lancé sur un vrai PC ; le `.deb` sur un vrai
    Ubuntu (AppArmor) et l'AppImage sur Fedora (`/tmp` en mémoire) ; `lms get` de llmster sans
    terminal sur un réseau lent ; une vraie clé de chaque fournisseur cloud (Chat, outil,
-   image, Code), vérifiée jusqu'ici contre des faux seulement (27/09/2026, ci-dessous).
+   image, Code), vérifiée jusqu'ici contre des faux seulement (27/09/2026, ci-dessous) ;
+   le modèle proposé à la création d'un agent sur une machine où LM Studio déclare outils
+   et tailles, et une mission d'employé sur un modèle changé ou disparu (27/09/2026, « un
+   modèle par employé », plus bas).
 9. **Passer ce Mac sur Qwen3.5 9B**, le modèle qu'Helix y installerait aujourd'hui (il
    tourne encore sur Qwen3 8B, installé avant la règle) : 6 Go, à télécharger sur accord.
 10. **Abonnement ChatGPT ou Claude dans Helix** (27/09/2026, § 3.14) : Claude interdit
@@ -3747,6 +3750,70 @@ qu'ils tiennent (SECURITE.md § 29.2, audit Windows et Linux du même jour) :
 Vérifié : `npm run securite`, 423 contrôles (5 de plus, section 11 quinquies, dont un Windows
 simulé pour les consoles et une connexion TLS réelle sans openssl), typecheck, traductions à
 100 %, et l'application Mac reconstruite (listes de choix, barre de titre).
+
+**Fait le 27/09/2026 : un modèle par employé.** Demandé par Medhi (« OpenClaw, on doit
+choisir le modèle selon l'agent aussi, pas tous le même »). La configuration d'OpenClaw
+donnait déjà un fournisseur et un modèle à chaque employé ; ce qui manquait, c'était de le
+choisir, et de ne jamais en servir un autre.
+- **À la création d'un agent**, un champ « Son modèle », qui n'existait pas : la mise en
+  service passait `agent.modelUid`, que rien ne remplissait, et la passerelle prenait le
+  modèle chargé de la machine. Le modèle proposé suit le poste (`proposerModele`,
+  `src/lib/employes.ts`), et une ligne dit pourquoi : un poste qui se sert d'outils (services
+  branchés, bases, documents) reçoit un modèle qui déclare savoir les appeler (LM Studio,
+  `trainedForToolUse`), le déjà chargé d'abord, sinon le plus gros ; un poste court sans
+  outils, le plus léger ; sinon le déjà chargé. Jamais d'office un modèle de clé, un modèle
+  entraîné ici ou un modèle qui a mal répondu sur la machine. Un modèle de clé se choisit à la
+  main, et l'écran dit qui paie (« facturée sur votre clé », « à l'équipe, sur la clé de
+  l'instance »). Le choix est gardé à part (`Agent.modeleEmploye`), pas dans `modelUid` : le
+  Chat et les tâches gardent le modèle choisi par la personne qui s'en sert (un modèle de clé
+  personnelle n'y serait pas servi à ses collègues), et la fenêtre le dit.
+- **La passerelle refuse** (400) un modèle qu'elle ne sert pas à cette personne, à la création
+  comme à la modification. Jusqu'ici, à la création, il était remplacé en silence par un
+  modèle de la machine, clé personnelle d'une collègue comprise. Sans modèle demandé (API),
+  elle prend d'abord un modèle qui sait appeler des outils quand le poste en a.
+- **Chaque appel d'un employé** (`X-Helix-Employe` et sa clé) est servi avec le modèle
+  enregistré pour lui, quel que soit celui que la requête nomme (index.ts) : un changement vaut
+  dès l'appel suivant, et un employé ne répond jamais avec un autre modèle que le sien. Son
+  modèle disparu : 404 `model_not_found` avec la raison, rien ne part au moteur. Un 503
+  seulement si le service ne répond pas : vu avec le vrai OpenClaw, un 503 est pris pour une
+  panne passagère et réessayé huit fois, plus de deux minutes, avant la réponse.
+- **Liste des agents** : le nom de son modèle, en petit, près de son état (« · cloud » pour un
+  modèle de clé), ou « Modèle indisponible », la raison au survol (`etatDuModele`,
+  employes.ts, jugé avec les droits de son propriétaire : désinstallé ou plus retenu par sa
+  clé, clé retirée, service qui ne répond pas, clé devenue personnelle à quelqu'un d'autre). Sa
+  fiche le dit en tête, ses réglages le montrent « (indisponible) » avec la proposition, et
+  lui parler rend cette raison au lieu de « vérifiez que le modèle est bien chargé ». Son
+  modèle disparu, le reste de ses réglages s'enregistre encore (le modèle n'est renvoyé que
+  s'il change).
+- Au passage, la batterie (`securite.mjs`, `essai-fournisseurs.mjs`) garde la clé des données
+  dans un fichier de son dossier jetable (`"chiffrement": "fichier"`) : sur macOS, elle lisait
+  l'entrée du trousseau de la vraie instance du poste.
+**Vérifié** : `npm run securite` (656 contrôles, aucun échec), dont la section 7 ter ter
+(17 contrôles) : deux employés sur deux
+modèles, chacun le sien dans la configuration d'OpenClaw (fournisseur, agent, profil du
+courrier) et au faux moteur ; une requête sans modèle, ou qui en nomme un autre, reçoit le
+sien ; changement du modèle de l'un : sa configuration réécrite, celle de l'autre intacte à
+l'octet, OpenClaw pas relancé ; modèle de la clé personnelle d'une autre personne refusé à la
+création comme à la modification ; modèle retiré de sa clé, puis clé retirée : dit par la
+liste, refusé par la passerelle sans rien envoyer, dit dans la réponse. **Avec le vrai
+OpenClaw 2026.9.4** (le binaire du poste, lancé avec des données, un dossier personnel et un
+port jetables ; ni `~/.openclaw`, ni l'instance de Helix en service, ni `lms`) : deux employés
+répondent chacun avec son modèle ; le modèle de l'un changé, OpenClaw recharge à chaud la
+seule partie de cet employé (« config hot reload applied (models.providers.helix-alpha.models,
+agents.entries.helix-alpha.model, agents.entries.helix-alpha-courrier.model) »), demande lui-même
+le nouveau modèle à la passerelle, et l'autre continue sur le sien ; clé retirée : réponse en
+1 s qui le dit. L'écran, dans l'interface de développement sur une passerelle jetable : champ
+et proposition à la création, modèle facturé choisi, carte « qwen3-8b-essai · cloud », puis
+« Modèle indisponible » après le retrait de la clé, nouveau modèle pris dans ses réglages, et
+sa réponse. **Pas vérifié** : la proposition sur une machine où LM Studio déclare outils et
+tailles (le faux moteur n'en déclare aucun : la ligne disait « aucun des modèles de l'instance
+ne déclare savoir appeler des outils ») ; un vrai modèle cloud sur un employé ; une mission
+(automatisation d'OpenClaw) sur un modèle changé ou disparu, dont le compte rendu garderait le
+texte anglais d'OpenClaw ; le cas « service qui ne répond pas » avec le vrai OpenClaw.
+**Relevé, pas corrigé** : la passerelle cherche `lms` dans `~/.lmstudio/bin` et le PATH même
+quand le profil éteint LM Studio (`lmStudioMetadata`, backends.ts) ; la batterie lance donc
+`lms version`, `lms ls` et `lms ps` du poste (lecture seule, mais `lms ps` interroge le
+LM Studio en marche).
 
 **Fait le 27/09/2026 : relecture des correctifs et test d'intrusion.** Demandé par Medhi
 (« refait un tour sur les potentielles bugs … une fois le code sûr à 100 % … fais la version

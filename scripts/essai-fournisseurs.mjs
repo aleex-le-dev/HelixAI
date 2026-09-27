@@ -386,7 +386,8 @@ globalThis.fetch = (entree, options) => {
 };
 `,
 );
-writeFileSync(join(AUX, "profil.json"), JSON.stringify({ backends: [{ id: "lmstudio", enabled: false }, { id: "exo", enabled: false }] }));
+// Clé des données dans un fichier du dossier jetable : jamais le trousseau du poste (27/09/2026).
+writeFileSync(join(AUX, "profil.json"), JSON.stringify({ chiffrement: "fichier", backends: [{ id: "lmstudio", enabled: false }, { id: "exo", enabled: false }] }));
 // Le faux OpenCode de la batterie : Helix Code sans le vrai, ni aucun modèle.
 const FAUX_OPENCODE = join(AUX, "opencode");
 writeFileSync(FAUX_OPENCODE, `#!/bin/sh\nexec "${process.execPath}" "${join(RACINE, "scripts", "faux-opencode.mjs")}" "$@"\n`);

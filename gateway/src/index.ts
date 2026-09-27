@@ -522,7 +522,20 @@ async function handleChat(
     const essai = await resolve({ model: fiche.modele, acces: fiche.ownerId });
     if ("error" in essai) {
       const etat = employes.etatDuModele(fiche, await discover().catch(() => ({ backends: [], models: [] })));
-      return send(res, 503, { error: { message: etat.disponible ? essai.error : employes.messageModeleIndisponible(fiche, etat) } });
+      /*
+       * 404 « model_not_found », comme OpenAI, quand le modèle a disparu :
+       * vu le 27/09/2026 avec OpenClaw 2026.9.4, un 503 est pris pour une
+       * panne passagère et réessayé huit fois (plus de deux minutes) avant
+       * que l'employé ne réponde. Seul un service qui ne répond pas reste en
+       * 503 : il peut revenir, et l'attente a un sens.
+       */
+      const passager = etat.disponible || etat.raison === "hors-ligne";
+      return send(res, passager ? 503 : 404, {
+        error: {
+          message: etat.disponible ? essai.error : employes.messageModeleIndisponible(fiche, etat),
+          ...(passager ? {} : { type: "invalid_request_error", code: "model_not_found" }),
+        },
+      });
     }
   }
 

@@ -275,18 +275,18 @@ export function proposerModele(modeles: ModeleEmploye[], besoin: BesoinDuPoste):
       return { uid: plusGros.uid, raison: t("il sait appeler des outils, dont son poste se sert") };
     }
     const repli = charge(base.filter((m) => m.outils !== false)) ?? base.find((m) => m.outils !== false) ?? base[0]!;
-    return { uid: repli.uid, raison: t("aucun modèle de la machine ne déclare savoir appeler des outils, dont son poste se sert : relisez ses premières réponses") };
+    return { uid: repli.uid, raison: t("aucun des modèles de l'instance ne déclare savoir appeler des outils, dont son poste se sert : relisez ses premières réponses") };
   }
   if (besoin.longueurPoste <= POSTE_COURT) {
     const peses = base.filter((m) => m.taille);
     if (peses.length > 0) {
       const leger = [...peses].sort((a, b) => (a.taille ?? 0) - (b.taille ?? 0))[0]!;
-      return { uid: leger.uid, raison: t("le plus léger de la machine : son poste est court et ne se sert d'aucun outil") };
+      return { uid: leger.uid, raison: t("le plus léger de l'instance : son poste est court et ne se sert d'aucun outil") };
     }
   }
   const deja = charge(base);
   if (deja) return { uid: deja.uid, raison: t("il est déjà chargé : il répond sans temps de chargement") };
-  return { uid: base[0]!.uid, raison: t("le modèle de conversation de la machine") };
+  return { uid: base[0]!.uid, raison: t("le modèle de conversation de l'instance") };
 }
 
 /** Ce que l'écran dit quand son modèle ne répond plus. */

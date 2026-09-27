@@ -281,6 +281,15 @@ agent partagé, « Masquer ses instructions » (à la création, ou sur la carte
 reçoivent l'agent sans elles, et l'instance les ajoute au Chat ; la carte le dit
 (« instructions masquées »).
 
+**Son modèle** (27/09/2026) : à la création, « Son modèle » propose un modèle selon le poste,
+avec une ligne qui dit pourquoi (sait appeler des outils quand le poste en a, le plus léger
+pour un poste court sans outils, le déjà chargé sinon ; jamais d'office un modèle de clé) ;
+un modèle de clé se choisit à la main, et l'écran dit qui paie. Il vaut pour sa fiche, ses
+missions et ses messageries, pas pour le Chat. La carte montre son nom en petit (« · cloud »
+pour un modèle de clé), ou « Modèle indisponible » s'il a disparu ; la fiche le dit en tête,
+avec la raison, et ses Réglages le changent (« (indisponible) », proposition, « Le prendre »).
+Vu dans le navigateur sur une passerelle jetable et le vrai OpenClaw.
+
 **Missions** (27/09/2026) : l'onglet Missions de la fiche d'un employé les ajoute et les
 modifie directement (« Ajouter une mission », « Modifier les missions »), avec le même
 choix que les tâches programmées : chaque jour, du lundi au vendredi, chaque semaine et son

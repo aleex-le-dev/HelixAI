@@ -222,6 +222,15 @@ await new Promise((ok) => fauxModele.listen(PORT_EMBED, "127.0.0.1", ok));
   writeFileSync(
     join(AUX, "profil.json"),
     JSON.stringify({
+      /*
+       * Clé des données dans un fichier du dossier jetable (27/09/2026) : sur
+       * macOS, le défaut est le trousseau de la session, et la batterie lisait
+       * (ou créait) l'entrée « fr.helix.instance » de la vraie instance du
+       * poste. Les essais lancés sans profil à eux en héritent (section 11
+       * quinquies) : aucun n'appelle `security`, même sous un autre dossier
+       * personnel.
+       */
+      chiffrement: "fichier",
       openclaw: { chemin: join(AUX, "openclaw", "bin", "openclaw"), port: PORT_OPENCLAW },
       backends: [
         { id: "lmstudio", enabled: false },
@@ -2001,19 +2010,19 @@ console.log("\n7 ter ter. Un modèle par employé : le sien, changé à chaud, j
     const retire = (await lireEquipe()).find((e) => e.id === a?.id)?.modeleEtat;
     const retireAppel = await commeOpenClaw(a?.id);
     verifier(
-      "modèle retiré de sa clé : la liste le dit (« retire »), la passerelle refuse (503) et rien n'arrive au moteur",
-      retire?.disponible === false && retire?.raison === "retire" && retireAppel.status === 503 && retireAppel.recu.length === 0 && retireAppel.texte.includes("essai-chat"),
+      "modèle retiré de sa clé : la liste le dit (« retire »), la passerelle refuse pour de bon (404 « model_not_found », pas un 503 qu'OpenClaw réessaierait) et rien n'arrive au moteur",
+      retire?.disponible === false && retire?.raison === "retire" && retireAppel.status === 404 && retireAppel.texte.includes("model_not_found") && retireAppel.recu.length === 0 && retireAppel.texte.includes("essai-chat"),
       `${JSON.stringify(retire)} ${retireAppel.status} ${retireAppel.recu} ${retireAppel.texte.slice(0, 120)}`,
     );
     await appel(`/helix/fournisseurs/${cleA?.id}/supprimer`, { method: "POST", headers: avecSeance, body: "{}" });
     const cleRetiree = (await lireEquipe()).find((e) => e.id === a?.id)?.modeleEtat;
     const cleRetireeAppel = await commeOpenClaw(a?.id);
     verifier(
-      "clé retirée : la liste le dit (« cle-retiree »), la passerelle refuse en le disant, rien n'arrive au moteur",
-      cleRetiree?.disponible === false && cleRetiree?.raison === "cle-retiree" && cleRetireeAppel.status === 503 && cleRetireeAppel.recu.length === 0 && /clé/.test(cleRetireeAppel.texte),
+      "clé retirée : la liste le dit (« cle-retiree »), la passerelle refuse en le disant (en anglais : OpenClaw n'envoie pas de langue), rien n'arrive au moteur",
+      cleRetiree?.disponible === false && cleRetiree?.raison === "cle-retiree" && cleRetireeAppel.status === 404 && cleRetireeAppel.recu.length === 0 && /key that gave access/.test(cleRetireeAppel.texte),
       `${JSON.stringify(cleRetiree)} ${cleRetireeAppel.status} ${cleRetireeAppel.texte.slice(0, 120)}`,
     );
-    const parle = await (await appel(`/helix/employes/${a?.id}/message`, { method: "POST", headers: avecSeance, body: JSON.stringify({ texte: `${MARQUE} bonjour` }) })).json().catch(() => ({}));
+    const parle = await (await appel(`/helix/employes/${a?.id}/message`, { method: "POST", headers: { ...avecSeance, "X-Helix-Langue": "fr" }, body: JSON.stringify({ texte: `${MARQUE} bonjour` }) })).json().catch(() => ({}));
     let reponse = null;
     for (let i = 0; i < 40 && parle.travail; i++) {
       await attendre(250);
@@ -2023,7 +2032,7 @@ console.log("\n7 ter ter. Un modèle par employé : le sien, changé à chaud, j
         break;
       }
     }
-    verifier("lui parler : sa réponse dit que la clé de son modèle a été retirée, pas « vérifiez que le modèle est chargé »", typeof reponse === "string" && /clé/.test(reponse) && reponse.includes("essai-chat"), reponse);
+    verifier("lui parler : sa réponse dit, dans la langue de la personne, que la clé de son modèle a été retirée, pas « vérifiez que le modèle est chargé »", typeof reponse === "string" && /clé/.test(reponse) && reponse.includes("essai-chat"), reponse);
     const pause = await appel(`/helix/employes/${a?.id}`, { method: "POST", headers: avecSeance, body: JSON.stringify({ enPause: true, modele: uidPerso }) });
     verifier("son modèle disparu, sa propriétaire peut encore le mettre en pause (son modèle, inchangé, ne bloque pas)", pause.status === 200, pause.status);
 

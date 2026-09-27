@@ -49,8 +49,12 @@ interface Tour {
   messageID?: string;
   /** Notre `prompted` est passé : les événements suivants sont les nôtres. */
   actif: boolean;
-  /** Événements arrivés avant de connaître `messageID`, rejoués ensuite. */
-  enAttente: CodeEvent[];
+  /**
+   * Événements arrivés avant de connaître `messageID`, rejoués ensuite, avec
+   * leur heure d'arrivée : la durée d'un outil se compte depuis là, pas
+   * depuis le rejeu (27/09/2026).
+   */
+  enAttente: { event: CodeEvent; recu: number }[];
   /** Le tour s'est terminé (normalement ou non). */
   fini: boolean;
   /** Quand il s'est terminé : une relance du contrôle automatique peut encore le rouvrir un moment. */
@@ -227,6 +231,14 @@ export function useCode(dossier?: string, reglages: ReglagesCode = {}) {
           trace.running ? { ...trace, running: false, ok: false, preview: trace.preview ?? note } : trace,
         );
         const changes: Partial<Message> = { streaming: false, statut: undefined, tools };
+        /*
+         * La durée de la demande entière (27/09/2026), de l'envoi à la fin
+         * normale du tour. Une réponse rouverte en cours de route n'a pas
+         * d'heure d'envoi connue : pas de durée plutôt qu'une durée fausse.
+         */
+        if (!note && current.durees?.debut !== undefined) {
+          changes.durees = { ...current.durees, reponse: tour.finiLe - current.durees.debut };
+        }
         if (note) {
           if (current.content) changes.content = `${current.content}\n\n*${note}*`;
           else changes.error = note;
@@ -243,7 +255,8 @@ export function useCode(dossier?: string, reglages: ReglagesCode = {}) {
 
   /** Applique à l'écran un événement du tour en cours. */
   const appliquer = useCallback(
-    (tour: Tour, event: CodeEvent) => {
+    /** `recu` : l'heure d'arrivée de l'évènement sur cet écran, pour les durées. */
+    (tour: Tour, event: CodeEvent, recu = Date.now()) => {
       if (event.kind === "demande") {
         /*
          * Une relance du contrôle automatique de Helix est la suite de notre
@@ -322,7 +335,7 @@ export function useCode(dossier?: string, reglages: ReglagesCode = {}) {
           const { libelle, cible } = actionOutil(event.tool, event.input, dossierRef.current);
           const traces: ToolTrace[] = [
             ...(current.tools ?? []),
-            { name: nomOutil(event.tool), args: argumentsOutil(event.input), running: true, libelle, cible },
+            { name: nomOutil(event.tool), args: argumentsOutil(event.input), running: true, libelle, cible, debut: recu },
           ];
           tour.outils.set(event.callID, traces.length - 1);
           patch(tour.replyId, { tools: traces });
@@ -332,7 +345,15 @@ export function useCode(dossier?: string, reglages: ReglagesCode = {}) {
           const position = tour.outils.get(event.callID);
           if (position === undefined) break;
           const traces = (current.tools ?? []).map((trace, i) =>
-            i === position ? { ...trace, running: false, ok: event.ok, preview: event.preview } : trace,
+            i === position
+              ? {
+                  ...trace,
+                  running: false,
+                  ok: event.ok,
+                  preview: event.preview,
+                  ...(trace.debut !== undefined ? { duree: Math.max(0, recu - trace.debut) } : {}),
+                }
+              : trace,
           );
           patch(tour.replyId, { tools: traces });
           break;
@@ -405,7 +426,7 @@ export function useCode(dossier?: string, reglages: ReglagesCode = {}) {
           }
           // L'envoi n'a pas encore dit quel est notre message : on garde pour plus tard.
           if (tour.messageID === undefined && !tour.actif) {
-            tour.enAttente.push(event);
+            tour.enAttente.push({ event, recu: Date.now() });
             return;
           }
           appliquer(tour, event);
@@ -497,6 +518,7 @@ export function useCode(dossier?: string, reglages: ReglagesCode = {}) {
           content: "",
           streaming: true,
           statut: sessionRef.current ? undefined : t("Démarrage de l'agent de code..."),
+          durees: { debut: Date.now() },
         },
       ]);
       memoire.suivi.current = suiviNeuf();
@@ -576,7 +598,7 @@ export function useCode(dossier?: string, reglages: ReglagesCode = {}) {
         tour.messageID = messageID;
         const enAttente = tour.enAttente;
         tour.enAttente = [];
-        for (const event of enAttente) appliquer(tour, event);
+        for (const { event, recu } of enAttente) appliquer(tour, event, recu);
       } catch (err) {
         if (generationRef.current !== generation) return;
         terminer(tour, err instanceof Error ? err.message : String(err));

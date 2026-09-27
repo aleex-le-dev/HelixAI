@@ -7,6 +7,7 @@
 import { apiFetch } from "@/lib/endpoint";
 import { locale, t, tf } from "@/lib/i18n";
 import { libelleOutil } from "@/lib/libellesOutils";
+import { dureeCourte } from "@/lib/durees";
 
 export interface CodeStatus {
   available: boolean;
@@ -416,14 +417,8 @@ export function dateCourte(iso: string, maintenant = new Date()): string {
 /** Dernier élément d'un chemin : le nom du dossier du projet. */
 export const nomDossier = (chemin: string) => chemin.replace(/\/+$/, "").split("/").pop() || chemin;
 
-/** « 45 s », « 2 min 05 s », « 1 h 03 min ». */
-export function dureeCourte(ms: number): string {
-  const s = Math.max(0, Math.floor(ms / 1000));
-  if (s < 60) return tf("{0} s", s);
-  const m = Math.floor(s / 60);
-  if (m < 60) return tf("{0} min {1} s", m, String(s % 60).padStart(2, "0"));
-  return tf("{0} h {1} min", Math.floor(m / 60), String(m % 60).padStart(2, "0"));
-}
+/* « 45 s », « 2 min 05 s » : la façon commune d'écrire une durée (lib/durees.ts, depuis le 27/09/2026). */
+export { dureeCourte };
 
 /** « 18 000 » : une taille de demande arrondie, pour dire un ordre de grandeur. */
 const environ = (jetons: number) => (jetons >= 1000 ? Math.round(jetons / 1000) * 1000 : Math.round(jetons / 100) * 100).toLocaleString(locale());

@@ -35,6 +35,19 @@ export interface StoredMessage {
    * voit le texte.
    */
   sources?: { n: number; base: string; document: string; documentId: string; extrait: string; debut: number; fin: number; similarite: number }[];
+  /**
+   * Ce que la réponse a pris de temps, en millisecondes, mesuré à l'écran qui
+   * l'a reçue (hooks/useChat.ts, `DureesReponse`), depuis le 27/09/2026.
+   * Absent sur une réponse plus ancienne, ou qui n'a pas été mesurée : rien
+   * ne s'affiche, rien n'est reconstitué.
+   */
+  durees?: { premierMot?: number; reflexion?: number; reponse?: number };
+  /**
+   * Étapes d'outils de la réponse, telles qu'elles s'affichent (nom, cible,
+   * issue, durée en ms). Ni les arguments ni l'aperçu du résultat : ils
+   * peuvent porter un document entier. Depuis le 27/09/2026.
+   */
+  outils?: { name: string; libelle?: string; cible?: string; ok: boolean; duree?: number }[];
   createdAt: string;
 }
 

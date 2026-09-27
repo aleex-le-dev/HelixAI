@@ -91,6 +91,7 @@ export const BACKENDS: BackendConfig[] = (() => {
       pays: extra.pays,
       fournisseur: extra.fournisseur ?? extra.label ?? extra.id,
       ...(extra.modeles ? { modeles: extra.modeles } : {}),
+      ...(typeof extra.contexte === "number" && extra.contexte >= 1024 ? { contexte: Math.floor(extra.contexte) } : {}),
     });
   }
   return merged;

@@ -42,6 +42,8 @@ interface ComposerProps {
   onEffortChange?: (effort: string) => void;
   /** Pièces jointes en attente d'envoi, et leur gestion. */
   pieces?: Attachment[];
+  /** Fichiers dont le texte est en cours d'extraction : l'envoi attend qu'ils soient lus. */
+  piecesEnLecture?: string[];
   onAjouterFichiers?: (fichiers: File[]) => void;
   onRetirerPiece?: (index: number) => void;
   /** Menu « + » : « Créer une image ». Absent : pas d'entrée image dans le menu. */
@@ -70,6 +72,7 @@ export function Composer({
   effort,
   onEffortChange,
   pieces = [],
+  piecesEnLecture = [],
   onAjouterFichiers,
   onRetirerPiece,
   onCreerImage,
@@ -81,7 +84,13 @@ export function Composer({
   const fichierRef = useRef<HTMLInputElement>(null);
   const controlled = value !== undefined;
   // Un document joint se suffit à lui-même : « résume ça » peut rester implicite.
-  const canSend = controlled && (value.trim().length > 0 || pieces.length > 0) && !busy;
+  /*
+   * Pas d'envoi pendant qu'un fichier est lu (27/09/2026) : la lecture d'un
+   * PDF prend plusieurs secondes sur un PC modeste, et la question partait
+   * sans lui si l'on appuyait sur Entrée entre-temps. Le modèle répondait
+   * alors qu'il ne voyait aucun document.
+   */
+  const canSend = controlled && (value.trim().length > 0 || pieces.length > 0) && !busy && piecesEnLecture.length === 0;
 
   /*
    * La transcription prend quelques secondes, pendant lesquelles on peut avoir
@@ -211,8 +220,18 @@ export function Composer({
             survol && "border-accent",
           )}
         >
-          {pieces.length > 0 && (
+          {(pieces.length > 0 || piecesEnLecture.length > 0) && (
             <ul className="flex flex-wrap gap-1.5 px-3 pt-3">
+              {piecesEnLecture.map((nom, i) => (
+                <li
+                  key={`lecture-${nom}-${i}`}
+                  className="inline-flex max-w-[220px] items-center gap-1.5 rounded-lg bg-muted px-2 py-1 text-xs text-muted-foreground"
+                  title={t("Lecture du fichier sur ce poste : l'envoi attend qu'elle soit finie.")}
+                >
+                  <Loader2 size={13} strokeWidth={1.75} className="shrink-0 animate-spin" />
+                  <span className="truncate">{tf("Lecture de {0}...", nom)}</span>
+                </li>
+              ))}
               {pieces.map((piece, i) => (
                 <li
                   key={`${piece.nom}-${i}`}
@@ -234,7 +253,7 @@ export function Composer({
                   )}
                   <button
                     type="button"
-                    aria-label={`Retirer ${piece.nom}`}
+                    aria-label={tf("Retirer {0}", piece.nom)}
                     onClick={() => onRetirerPiece?.(i)}
                     className="-mr-0.5 shrink-0 rounded p-0.5 text-muted-foreground transition-colors hover:text-foreground"
                   >

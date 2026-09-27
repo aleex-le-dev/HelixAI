@@ -27,6 +27,8 @@ export interface BackendOverride {
   fournisseur?: string;
   /** Modèles retenus parmi ceux du fournisseur ; absent, tous. */
   modeles?: string[];
+  /** Taille de conversation de ses modèles, en jetons, quand le service ne la publie pas (documentsJoints.ts). */
+  contexte?: number;
 }
 
 export interface ComputerUseConfig {

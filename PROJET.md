@@ -1442,8 +1442,9 @@ acceptent PDF, Word, Excel, PowerPoint et OpenDocument : le texte est extrait su
 poste (pdf.js, Apache-2.0 ; lecteur ZIP écrit à la main pour les formats Office), un
 PDF scanné ou protégé est signalé plutôt que lu à vide (`src/lib/documents.ts`).
 Ce qui borne une pièce jointe n'est pas le poids du fichier mais ce que le modèle peut
-lire d'un coup : environ 200 000 caractères par fichier (moins pour un petit modèle
-local, dont la fenêtre est plus courte). Depuis la 0.18.0, un fichier texte se joint
+lire d'un coup : environ 200 000 caractères par fichier, puis, depuis le 27/09/2026,
+l'instance mesure la place du modèle chargé et lit en parties annoncées ce qui ne tient
+pas (`gateway/src/documentsJoints.ts`, voir plus bas). Depuis la 0.18.0, un fichier texte se joint
 quelle que soit sa taille (seul son début est lu, et la puce le dit : « (début) ») ;
 une photo ou une capture jusqu'à 50 Mo est réduite à 2048 pixels de côté au lieu
 d'être refusée (la limite était de 2 Mo) ; un PDF ou un document Office jusqu'à
@@ -3218,6 +3219,87 @@ mise en route) dans l'application. **Reste ouvert** : un modèle noté défailla
 même si le moteur se corrige plus tard (sauf à le redemander nommément à la mise en route,
 ou à effacer le fichier) ; l'essai est fait sans réflexion, une panne qui ne toucherait que
 la réflexion n'est prise que par le garde-fou, en cours d'usage.
+
+**Vu par Medhi le 27/09/2026 sur le même PC Windows (2026.927.3, Ministral 3B) : « il est incapable
+de lire et traiter un document », quel que soit le fichier.** Demandé : que tout document courant
+soit lu et traité, par tout modèle et sur toute machine, en « double sécurité » même après un essai
+qui a fini par marcher (lent). Chemin d'une pièce jointe relu de bout en bout (composeur,
+`attachments.ts`, `documents.ts`, `useChat.ts`, `chat.ts`, `plan.ts`, chargement du modèle).
+**Causes trouvées à la relecture** (vraies sur Mac comme sur Windows, pour tout modèle local de moins
+de 45 milliards de paramètres ; aucune n'a été vue sur le PC même) :
+1. **Le découpage des tâches perdait le document.** Le texte du fichier était collé devant la
+   question : « résume-le » devenait une longue demande, que le tri du modèle découpait volontiers
+   (« lire le document », « résumer ») ; chaque étape repart d'une reformulation de 4 000 caractères
+   au plus, sans le fichier. Le modèle répondait sur un document qu'il ne voyait plus, ou cherchait à
+   l'ouvrir avec un outil. Probablement la cause principale.
+2. **La place n'était pas mesurée.** Jusqu'à 200 000 caractères par fichier partaient quelle que soit
+   la taille de conversation chargée (32 768 jetons sur un poste de 16 Go ; 4 096 chez LM Studio pour
+   un modèle chargé sans taille) : refus du moteur, ou coupure silencieuse par le moteur. PROJET.md
+   annonçait « moins pour un petit modèle local » : ce n'était pas fait.
+3. **La question suivante partait sans le fichier** (« et la page 3 ? »).
+4. **L'envoi n'attendait pas la lecture** : un PDF se lit en plusieurs secondes sur un PC modeste, et
+   une question envoyée entre-temps partait sans lui, sans rien à l'écran.
+5. **Encodages de Windows** : tout fichier texte était lu en UTF-8. Un fichier UTF-16 (Bloc-notes
+   « Unicode », PowerShell) arrivait illisible, un CSV d'Excel en Windows-1252 perdait ses accents.
+   Une extension inconnue (.srt, .ps1, .tex…) était refusée même quand c'est du texte.
+6. Word : le texte rangé dans des contrôles de contenu (`w:sdt`, documents faits d'un modèle)
+   manquait ; Excel : les cellules vides décalaient les colonnes (un montant passait dans la
+   mauvaise) ; plus de 300 pages ou 5 000 lignes étaient coupées sans que la puce le dise.
+7. Pas un défaut : Ministral 3B est déclaré « vision » par LM Studio ; une image part donc vers lui.
+   Pour un modèle sans vision, l'image est déjà remplacée par une note et l'écran le dit (contrôlé).
+
+**Corrigé** :
+- **Documents balisés, mesurés, lus en parties si besoin** (`gateway/src/documentsJoints.ts`, neuf).
+  L'écran enveloppe chaque fichier dans `<document nom="…" caracteres="…">` (longueur écrite : un
+  fichier qui contient « </document> » ne trompe pas la lecture ; une instance plus ancienne
+  transmet la balise telle quelle, lisible). L'instance mesure la place contre la taille réellement
+  chargée (`contexteDuModele`, backends.ts : `lms ps`, sinon la taille publiée par le service
+  (`context_length`, `max_context_length`, `max_model_len`), le champ `contexte` d'un backend du
+  profil, sinon 32 768 pour LM Studio chargé par Helix, 8 192 pour un autre serveur de la machine,
+  32 768 pour un service distant) ; les jetons sont estimés (3 caractères, 1 par idéogramme), la
+  réponse garde un cinquième de la place. S'il tient : en entier, avec son nom, la consigne de le
+  lire directement (pas d'outil pour l'ouvrir), puis la question et la langue de la réponse. Sinon :
+  **lu en parties** (coupées aux pages, feuilles, paragraphes), une demande par partie qui relève ce
+  qui sert à la question, et la réponse s'appuie sur les notes ; au-delà de 24 parties, la suite
+  n'est pas lue. Dans tous les cas l'écran le dit, en tête de la réponse et gardé avec elle (« lu en
+  5 parties… », « seules les 24 premières… »), et suit la lecture (« partie 2 sur 5 »). Des outils
+  qui prendraient la place du document sont retirés pour cette réponse, et c'est dit.
+- **Jamais de découpage en étapes** quand la conversation porte un document (`chat.ts`).
+- **La question suivante garde ses documents** tant que le Chat est ouvert (`useChat.ts`), au même
+  endroit et avec le même texte à chaque tour, pour que le moteur réutilise ce qu'il a déjà lu (la
+  lenteur vue par Medhi est d'abord la lecture du document par le processeur) ; un document lu en
+  parties repart avec ses notes, sans être relu (seize gardés en mémoire). Le texte n'est pas
+  enregistré avec le Chat (poids du stockage et de la synchronisation) : rouvert, le modèle sait
+  qu'un fichier était joint et demande de le rejoindre.
+- **Pièces jointes visibles dans le message** (demandé par Medhi) : une carte par fichier, icône du
+  type, nom, poids, « lu en entier » ou « début seulement » (`PiecesJointesMessage.tsx`), gardée avec
+  le Chat (`sessions.ts`, champ `pieces`, sans contenu). Le composeur montre « Lecture de … » et
+  n'envoie qu'une fois les fichiers lus.
+- **Extraction** : décodage UTF-8, UTF-16 avec ou sans marque, Windows-1252 (`src/lib/decodage.ts`) ;
+  extension inconnue lue si ses octets sont du texte ; RTF, sous-titres, scripts Windows ajoutés ;
+  Word à toute profondeur ; Excel à sa colonne ; lecture arrêtée dite « début seulement » ; image
+  reconnue par son extension quand Windows ne donne pas de type ; raisons de refus traduites.
+
+**Vérifié ici** : `npm run typecheck` ; `npm run securite`, 455 contrôles, 0 échec (8 de plus,
+section 7 septies : un texte en entier, balisé et en une seule demande ; PDF, Excel, chinois et un
+HTML qui contient « </document> » intacts ; un document de 52 000 caractères lu en parties à 8 192
+et à 4 096 jetons, chaque partie tenant dans la conversation et chaque repère revenant au modèle par
+les notes ; l'annonce et le suivi à l'écran ; la question suivante avec le document, et les notes
+reprises sans relecture ; les outils retirés sur un petit contexte ; l'image refusée à un modèle
+sans vision ; les encodages). Un premier passage de la batterie s'est arrêté en section 7 ter
+(connexion fermée pendant les employés, sans lien avec les documents), le suivant est passé en
+entier. Vu dans le navigateur contre une instance jetable et un faux modèle : cartes des pièces
+jointes, CSV en UTF-16 lu juste, Chat rouvert avec ses cartes, lecture en 5 parties annoncée.
+i18n à 100 % des deux côtés. **Pas vérifié** : un vrai modèle, pdf.js dans l'application Windows,
+la vitesse sur le PC.
+
+**À essayer sur le PC de Medhi** : joindre un PDF, un Word fait d'un modèle, un Excel, un CSV
+enregistré par Excel et un .txt du Bloc-notes, avec Ministral 3B puis Qwen3.5 4B ; relever si la
+réponse cite le contenu, le temps avant le premier mot, et, pour un long PDF, l'annonce « lu en N
+parties » ; poser une seconde question sur le même fichier (elle doit être plus rapide que la
+première : le moteur reprend ce qu'il a lu) ; `lms ps` pour voir la taille de conversation chargée.
+Restent non lus, et dits comme tels : PDF scanné (images de pages ; les faire lire par un modèle de
+vision reste à faire), PDF protégé, anciens .doc/.xls/.ppt, photo HEIC.
 
 **Trouvé le 27/09/2026 au premier vrai essai de mise à jour d'un clic (0.27.0 vers 0.27.1, par
 GitHub, sur ce Mac) : toute mise à jour était refusée.** La fenêtre « Nouvelle version » est bien

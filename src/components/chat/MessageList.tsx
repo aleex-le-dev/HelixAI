@@ -17,6 +17,7 @@ import { dureeCourte, dureeMesuree, useMaintenant } from "@/lib/durees";
 import type { Citation } from "@/lib/connaissances";
 import { LogoMark } from "@/components/ui/Logo";
 import { Avatar } from "@/components/ui/Avatar";
+import { PiecesJointesMessage } from "./PiecesJointesMessage";
 import { cn } from "@/lib/cn";
 import type { DureesReponse, EtapePlan, Message, ToolTrace } from "@/hooks/useChat";
 import { TexteRiche } from "@/components/ui/TexteRiche";
@@ -378,10 +379,18 @@ function Bubble({ message }: { message: Message }) {
   const isUser = message.role === "user";
 
   if (isUser) {
+    // Les pièces jointes en cartes au-dessus du texte ; sans texte tapé, les cartes seules (27/09/2026).
+    const pieces = message.pieces ?? [];
+    const texte = pieces.length > 0 && message.content === `(${pieces.map((p) => p.nom).join(", ")})` ? "" : message.content;
     return (
       <div className="flex justify-end gap-3">
-        <div className="max-w-[80%] rounded-2xl rounded-br-md bg-muted px-4 py-2.5 text-[15px] leading-relaxed text-foreground">
-          <p className="whitespace-pre-wrap">{message.content}</p>
+        <div className="flex max-w-[80%] flex-col items-end gap-2">
+          <PiecesJointesMessage pieces={pieces} />
+          {texte && (
+            <div className="max-w-full rounded-2xl rounded-br-md bg-muted px-4 py-2.5 text-[15px] leading-relaxed text-foreground">
+              <p className="whitespace-pre-wrap">{texte}</p>
+            </div>
+          )}
         </div>
         <Avatar size={28} className="mt-0.5 shrink-0" />
       </div>

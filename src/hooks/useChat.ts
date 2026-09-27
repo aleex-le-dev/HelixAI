@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { streamChat, type ChatTurn } from "@/lib/gateway";
 import { notifySessionsChanged } from "./useSessions";
-import { contexteTexte, images, type Attachment } from "@/lib/attachments";
+import { contexteTexte, documentsDe, images, type Attachment, type DocumentEnvoye } from "@/lib/attachments";
 import { currentUser } from "@/lib/store/identity";
 import { t, tf } from "@/lib/i18n";
 import { creerImage as creerSurLaMachine, creerVideo as creerVideoSurLaMachine, type Format, type ImageCreee } from "@/lib/images";
@@ -104,8 +104,20 @@ export interface Message {
   streaming?: boolean;
   /** Ce qui se passe avant la réponse : « Chargement de qwen3-vl-4b en mémoire... ». */
   statut?: string;
-  /** Pièces jointes à la question : on garde le nom, pas le contenu. */
-  pieces?: { nom: string; type: "texte" | "image" }[];
+  /**
+   * Pièces jointes à la question, telles que le message les montre : nom,
+   * poids, et si le fichier a été lu en entier. Gardées avec le Chat ; leur
+   * contenu, non (voir `documents`).
+   */
+  pieces?: PieceMontree[];
+  /**
+   * Texte des documents joints, gardé tant que le Chat est ouvert (27/09/2026) :
+   * il repart avec chaque question suivante, pour qu'« et la page 3 ? »
+   * s'adresse encore au fichier. Il n'est pas enregistré avec le Chat : 200 000
+   * caractères par fichier gonfleraient d'autant le stockage et la
+   * synchronisation de tous les Chats.
+   */
+  documents?: DocumentEnvoye[];
   /** Image créée en réponse (bouton « Image » du composeur). */
   image?: ImageCreee;
   /**
@@ -142,6 +154,33 @@ function etapeGardee(trace: ToolTrace): NonNullable<StoredMessage["outils"]>[num
     ok: !trace.running && trace.ok === true,
     ...(trace.duree !== undefined ? { duree: trace.duree } : {}),
   };
+}
+
+/** Une pièce jointe dans le message de la personne (PiecesJointesMessage.tsx). */
+export interface PieceMontree {
+  nom: string;
+  type: "texte" | "image";
+  /** Poids du fichier, en octets. */
+  taille?: number;
+  /** Seul le début du fichier a été lu (trop long pour l'écran). */
+  tronque?: boolean;
+}
+
+/** Le texte que le message affiche quand la personne n'a rien écrit : les noms des pièces. */
+const etiquetteDes = (pieces: { nom: string }[]) => `(${pieces.map((p) => p.nom).join(", ")})`;
+
+/**
+ * Ce que le modèle reçoit d'un message de la personne : ses documents dans
+ * leur balise (attachments.ts, `enveloppe`), puis ce qu'elle a écrit. Un Chat
+ * rouvert n'a plus le texte des fichiers : le modèle le sait, au lieu de
+ * croire qu'on ne lui a rien joint.
+ */
+function contenuPourLeModele(m: Message): string {
+  const question = m.pieces && m.content === etiquetteDes(m.pieces) ? "" : m.content;
+  if (m.documents && m.documents.length > 0) return [contexteTexte(m.documents), question].filter(Boolean).join("\n\n");
+  const textes = (m.pieces ?? []).filter((p) => p.type === "texte").map((p) => `« ${p.nom} »`);
+  if (textes.length === 0) return m.content;
+  return [`[Document joint à ce message : ${textes.join(", ")}. Son contenu n'est plus disponible dans ce Chat rouvert : s'il faut le relire, demande à la personne de le joindre de nouveau.]`, question].filter(Boolean).join("\n\n");
 }
 
 /*
@@ -230,6 +269,8 @@ export function useChat(options: Options) {
         content: m.content,
         reasoning: m.reasoning,
         ...(m.image ? { image: m.image } : {}),
+        // Les pièces jointes restent visibles quand on rouvre le Chat : nom, poids, lu en entier ou non (pas le contenu).
+        ...(m.pieces && m.pieces.length > 0 ? { pieces: m.pieces } : {}),
         // Les citations restent avec la réponse : rouvert, le Chat dit encore d'où elle venait.
         ...(m.sources && m.sources.citations.length > 0 ? { sources: m.sources.citations } : {}),
         /*
@@ -307,15 +348,18 @@ export function useChat(options: Options) {
        * pas la conversation affichée : on garde à l'écran ce que la personne a
        * écrit, plus le nom des pièces.
        */
-      const documents = contexteTexte(pieces);
+      const documents = documentsDe(pieces);
       const vues = images(pieces);
-      const etiquettes = pieces.map((p) => p.nom).join(", ");
 
       const userMsg: Message = {
         id: newId(),
         role: "user",
-        content: prompt || (etiquettes ? `(${etiquettes})` : ""),
-        pieces: pieces.length > 0 ? pieces.map((p) => ({ nom: p.nom, type: p.type })) : undefined,
+        content: prompt || (pieces.length > 0 ? etiquetteDes(pieces) : ""),
+        pieces:
+          pieces.length > 0
+            ? pieces.map((p) => ({ nom: p.nom, type: p.type, taille: p.taille, ...(p.type === "texte" && p.tronque ? { tronque: true } : {}) }))
+            : undefined,
+        ...(documents.length > 0 ? { documents } : {}),
       };
       const replyId = newId();
 
@@ -342,27 +386,22 @@ export function useChat(options: Options) {
          * questions de suite, c'est la dernière qui compte.
          */
         .filter((m, i, liste) => !(m.role === "user" && liste[i + 1]?.role === "user"))
-        .map((m) => ({ role: m.role, content: m.content }));
+        // Chaque question garde ses documents, tant que le Chat est ouvert : l'instance mesure la place et décide (documentsJoints.ts).
+        .map((m) => ({ role: m.role, content: m.role === "user" ? contenuPourLeModele(m) : m.content }));
 
-      // Le dernier tour porte les pièces jointes de cette question.
-      if (turns.length > 0 && (documents || vues.length > 0)) {
+      // Le dernier tour porte les images de cette question.
+      if (turns.length > 0 && vues.length > 0) {
         const dernier = turns[turns.length - 1];
-        const texte = [documents, typeof dernier.content === "string" ? dernier.content : ""]
-          .filter(Boolean)
-          .join("\n\n");
-
+        const texte = typeof dernier.content === "string" ? dernier.content : "";
         turns[turns.length - 1] = {
           role: "user",
-          content:
-            vues.length > 0
-              ? [
-                  { type: "text" as const, text: texte },
-                  ...vues.map((v) => ({
-                    type: "image_url" as const,
-                    image_url: { url: v.dataUrl },
-                  })),
-                ]
-              : texte,
+          content: [
+            ...(texte.trim() ? [{ type: "text" as const, text: texte }] : []),
+            ...vues.map((v) => ({
+              type: "image_url" as const,
+              image_url: { url: v.dataUrl },
+            })),
+          ],
         };
       }
 
@@ -637,6 +676,7 @@ export function useChat(options: Options) {
           content: m.content,
           reasoning: m.reasoning,
           image: m.image,
+          ...(Array.isArray(m.pieces) && m.pieces.length > 0 ? { pieces: m.pieces } : {}),
           ...(m.sources && m.sources.length > 0 ? { sources: { citations: m.sources } } : {}),
           ...(m.durees ? { durees: { ...m.durees } } : {}),
           ...(m.outils && m.outils.length > 0

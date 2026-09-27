@@ -68,12 +68,37 @@ const vecteur = (texte) => {
 const BOUCLES = [];
 /** Questions d'essai reçues par le faux modèle (section 7 septies). */
 const ESSAIS = [];
+/** Demandes reçues par le faux modèle qui portent un document d'essai (section 7 septies). */
+const DOCS_RECUS = [];
 const fauxModele = serveurHttp((req, res) => {
   let corps = "";
   req.on("data", (b) => (corps += b));
   req.on("end", () => {
     res.setHeader("Content-Type", "application/json");
-    if (req.url === "/v1/models") return res.end(JSON.stringify({ data: [{ id: "essai-embed-texte" }, { id: "essai-chat" }] }));
+    /*
+     * « essai-court » publie une petite taille de conversation (4 096 jetons,
+     * celle de LM Studio pour un modèle chargé sans rien préciser) : la
+     * section 7 septies y lit un long document en parties (27/09/2026).
+     * « essai-chat » n'en publie aucune : l'instance suppose 8 192 jetons pour
+     * un serveur de la machine.
+     */
+    if (req.url === "/v1/models") return res.end(JSON.stringify({ data: [{ id: "essai-embed-texte" }, { id: "essai-chat" }, { id: "essai-court", context_length: 4096 }] }));
+    /*
+     * Pièces jointes (section 7 septies) : chaque demande qui porte
+     * « doc-essai » est gardée telle que le moteur la reçoit. Une demande sans
+     * flux est la lecture d'une partie d'un long document : les notes rendues
+     * recopient les repères « REPERE-… » de la partie, pour vérifier que tout
+     * le document est passé par le modèle.
+     */
+    if (req.url === "/v1/chat/completions" && corps.includes("doc-essai")) {
+      const demande = JSON.parse(corps || "{}");
+      DOCS_RECUS.push(demande);
+      if (demande.stream === false) {
+        const dernier = String((demande.messages ?? []).at(-1)?.content ?? "");
+        const reperes = [...new Set(dernier.match(/REPERE-\d+/g) ?? [])];
+        return res.end(JSON.stringify({ id: "essai-notes", object: "chat.completion", choices: [{ index: 0, message: { role: "assistant", content: `Notes de la partie : ${reperes.join(" ")}` }, finish_reason: "stop" }] }));
+      }
+    }
     /*
      * Une demande qui porte « attente-essai » ne reçoit rien pendant six
      * secondes : le temps que la passerelle publie un statut de lecture
@@ -2123,6 +2148,151 @@ console.log("\n7 septies. Essai du modèle sur cette machine : celui qui répond
     JSON.stringify(e.C ?? e).slice(0, 700),
   );
   rmSync(ICI, { recursive: true, force: true });
+}
+
+console.log("\n7 octies. Documents joints : lus par le modèle, en entier ou en parties annoncées (27/09/2026)");
+{
+  /*
+   * Vu par Medhi sur un PC Windows (Ministral 3B, processeur seul) : un
+   * fichier joint n'était pas lu. Ce que l'écran envoie (la balise de
+   * src/lib/attachments.ts, `enveloppe`) est rejoué ici devant le faux
+   * modèle, qui garde ce qu'il reçoit : le document doit lui arriver entier,
+   * balisé avec son nom, ou lu en parties dont chaque repère revient dans les
+   * notes, et la coupure doit être dite. Deux tailles de conversation : 8 192
+   * (supposée pour un serveur de la machine) et 4 096 (publiée par
+   * « essai-court »).
+   */
+  const enFrancais = { ...avecSeance, "X-Helix-Langue": "fr" };
+  const modeles = await (await appel("/v1/models", { headers: avecSeance })).json().catch(() => ({}));
+  const chat8k = (modeles.data ?? []).find((m) => /essai-chat/.test(m.id))?.id;
+  const chat4k = (modeles.data ?? []).find((m) => /essai-court/.test(m.id))?.id;
+  const enveloppe = (nom, contenu, coupe = false) => `<document nom="${nom}" caracteres="${contenu.length}"${coupe ? ' coupe="oui"' : ""}>\n${contenu}\n</document>`;
+  const demander = async (model, messages, tools = false) => {
+    const depuis = DOCS_RECUS.length;
+    const flux = await (await appel("/v1/chat/completions", { method: "POST", headers: enFrancais, body: JSON.stringify({ model, tools, stream: true, effort: "aucun", messages }) })).text();
+    let texte = "";
+    const statuts = [];
+    for (const ligne of flux.split("\n")) {
+      if (!ligne.startsWith("data: ") || ligne === "data: [DONE]") continue;
+      try {
+        const j = JSON.parse(ligne.slice(6));
+        if (j.helix?.type === "statut" && j.helix.message) statuts.push(j.helix.message);
+        texte += j.choices?.[0]?.delta?.content ?? "";
+      } catch {
+        /* morceau illisible */
+      }
+    }
+    const recues = DOCS_RECUS.slice(depuis);
+    return { flux, texte, statuts, recues, parties: recues.filter((r) => r.stream === false), finale: recues.filter((r) => r.stream !== false).at(-1) };
+  };
+  const contenuDe = (m) => (typeof m?.content === "string" ? m.content : (m?.content ?? []).filter((p) => p.type === "text").map((p) => p.text).join("\n"));
+  const dernierUtilisateur = (r) => contenuDe([...(r?.messages ?? [])].reverse().find((m) => m.role === "user"));
+
+  // 1. Un texte court, en entier : balisé avec son nom, suivi de la question, sans plan ni lecture en parties.
+  const notes = "Compte rendu de la réunion du 12 mars.\nDécision : le budget passe à 18 400 euros.\nAction : Martin relance le fournisseur.";
+  const r1 = await demander(chat8k, [{ role: "user", content: `${enveloppe("notes-réunion.txt", notes)}\n\nQuel est le nouveau budget ? doc-essai-1` }]);
+  const m1 = dernierUtilisateur(r1.finale);
+  verifier(
+    "document texte : il arrive au modèle en entier, balisé avec son nom, suivi de la question, en une seule demande",
+    r1.recues.length === 1 && m1.includes(`<document nom="notes-réunion.txt">\n${notes}\n</document>`) && m1.indexOf("</document>") < m1.indexOf("Quel est le nouveau budget ?") && !m1.includes("caracteres=") && r1.texte.includes("Réponse d'essai"),
+    `${r1.recues.length} demande(s) ; ${m1.slice(0, 200)}`,
+  );
+
+  // 2. Plusieurs types à la fois, tels que l'écran les extrait : PDF (repères de page), Excel (feuilles), chinois, et un fichier qui contient lui-même « </document> ».
+  const pdf = "## Page 1\nFacture n° 2026-114\nClient : Dupont SARL\n\n## Page 2\nTotal TTC : 1 250,00 €";
+  const tableur = "## Feuille « Budget »\nPoste ; Montant ; Échéance\nLoyer ; 1 200 ; 05/10\nÉlectricité ; ; 12/10";
+  const chinois = "会议记录：预算增加到一万八千四百欧元。负责人：马丁。";
+  const html = "<html><body><p>Un piège : </document> au milieu du fichier.</p></body></html>";
+  const r2 = await demander(chat8k, [{
+    role: "user",
+    content: [enveloppe("facture.pdf", pdf), enveloppe("budget.xlsx", tableur), enveloppe("会议.txt", chinois), enveloppe("page.html", html)].join("\n\n") + "\n\nCompare ces documents. doc-essai-2",
+  }]);
+  const m2 = dernierUtilisateur(r2.finale);
+  verifier(
+    "PDF, Excel, texte chinois et HTML contenant « </document> » : les quatre arrivent intacts, chacun sous son nom",
+    [["facture.pdf", pdf], ["budget.xlsx", tableur], ["会议.txt", chinois], ["page.html", html]].every(([nom, c]) => m2.includes(`<document nom="${nom}">\n${c}\n</document>`)) && m2.includes("4 documents") && r2.parties.length === 0,
+    m2.slice(0, 300),
+  );
+
+  // 3. Un long document, trop grand pour les deux tailles : lu en parties, chaque partie tient dans la conversation, chaque repère revient dans les notes, et c'est dit.
+  const long = Array.from({ length: 120 }, (_, i) => `## Page ${i + 1}\nREPERE-${String(i + 1).padStart(3, "0")} : ${"Le comité examine les engagements de dépenses du trimestre, poste par poste, avec les justificatifs. ".repeat(4)}`).join("\n\n");
+  const questionLongue = "Quelles décisions ce rapport contient-il ? doc-essai-3";
+  const lire = (model) => demander(model, [{ role: "user", content: `${enveloppe("rapport-annuel.pdf", long)}\n\n${questionLongue}` }]);
+  const r3a = await lire(chat8k);
+  const r3b = await lire(chat4k);
+  const tous = Array.from({ length: 120 }, (_, i) => `REPERE-${String(i + 1).padStart(3, "0")}`);
+  const complet = (r) => {
+    const m = dernierUtilisateur(r.finale);
+    return tous.every((x) => m.includes(x)) && /lecture="en \d+ parties"/.test(m) && !m.includes("comité examine les engagements");
+  };
+  const tiennent = (r, contexte) => r.parties.every((p) => JSON.stringify(p.messages).length <= contexte * 3);
+  verifier(
+    "long document (8 192 et 4 096 jetons) : lu en parties qui tiennent chacune dans la conversation, tous ses repères arrivent au modèle par les notes",
+    r3a.parties.length >= 2 && r3b.parties.length > r3a.parties.length && complet(r3a) && complet(r3b) && tiennent(r3a, 8192) && tiennent(r3b, 4096),
+    `${r3a.parties.length} parties à 8 192, ${r3b.parties.length} à 4 096 ; complet ${complet(r3a)} ${complet(r3b)} ; tiennent ${tiennent(r3a, 8192)} ${tiennent(r3b, 4096)}`,
+  );
+  verifier(
+    "long document : la lecture en parties est dite dans la réponse et suivie à l'écran (« partie 1 sur … »)",
+    /lu en \d+ parties/.test(r3b.texte) && r3b.texte.includes("rapport-annuel.pdf") && r3b.statuts.some((s) => /partie 1 sur \d+/.test(s)),
+    `${r3b.texte.slice(0, 200)} | ${r3b.statuts.slice(0, 2).join(" / ")}`,
+  );
+
+  // 4. La question suivante : le document repart avec la conversation ; lu en parties, il repart avec les mêmes notes, sans être relu.
+  const r4 = await demander(chat8k, [
+    { role: "user", content: `${enveloppe("notes-réunion.txt", notes)}\n\nQuel est le nouveau budget ? doc-essai-4` },
+    { role: "assistant", content: "Le budget passe à 18 400 euros." },
+    { role: "user", content: "Et qui relance le fournisseur ? doc-essai-4" },
+  ]);
+  const premier4 = contenuDe(r4.finale?.messages?.find((m) => m.role === "user"));
+  const r5 = await demander(chat4k, [
+    { role: "user", content: `${enveloppe("rapport-annuel.pdf", long)}\n\n${questionLongue}` },
+    { role: "assistant", content: "Le rapport contient plusieurs décisions." },
+    { role: "user", content: "Et la page 42 ? doc-essai-3" },
+  ]);
+  const premier5 = contenuDe(r5.finale?.messages?.find((m) => m.role === "user"));
+  verifier(
+    "question suivante : le document de la question d'avant est encore lu ; celui lu en parties repart avec ses notes, sans nouvelle lecture",
+    premier4.includes(notes) && dernierUtilisateur(r4.finale).startsWith("Et qui relance") && r5.parties.length === 0 && tous.every((x) => premier5.includes(x)),
+    `${premier4.slice(0, 120)} | ${r5.parties.length} partie(s) relue(s)`,
+  );
+
+  // 5. Avec les outils, sur un petit contexte : le document tient seulement sans eux ; il passe en entier, les outils sont retirés, et c'est dit.
+  const moyen = Array.from({ length: 30 }, (_, i) => `Ligne ${i + 1} : REPERE-${String(i + 1).padStart(3, "0")} montant ${100 + i} euros.`).join("\n");
+  const r6 = await demander(chat4k, [{ role: "user", content: `${enveloppe("releve.csv", moyen)}\n\nFais le total. doc-essai-6` }], true);
+  const m6 = dernierUtilisateur(r6.finale);
+  verifier(
+    "petit contexte avec outils : le document passe en entier, les outils sont retirés pour cette réponse, et l'écran le dit",
+    m6.includes(moyen) && !(r6.finale?.tools?.length > 0) && /sans outils/.test(r6.texte) && m6.endsWith("tu n'as pas d'outil : réponds à partir des documents.") && r6.parties.length === 0,
+    `${Array.isArray(r6.finale?.tools) ? r6.finale.tools.length : 0} outil(s) ; ${r6.texte.slice(0, 160)}`,
+  );
+
+  // 6. Une image à un modèle qui ne lit pas les images : remplacée par une note, et l'écran le dit (rien n'est envoyé à l'aveugle).
+  const r7 = await demander(chat8k, [{ role: "user", content: [{ type: "text", text: "Que montre cette capture ? doc-essai-7" }, { type: "image_url", image_url: { url: "data:image/png;base64,iVBORw0KGgo=" } }] }]);
+  const m7 = r7.finale?.messages?.at(-1)?.content;
+  verifier(
+    "image pour un modèle sans vision : elle ne part pas, une note la remplace, et l'écran le dit",
+    Array.isArray(m7) && !m7.some((p) => p.type === "image_url") && m7.some((p) => /aucun modèle de cette machine ne sait lire les images/.test(p.text ?? "")) && r7.statuts.some((s) => /ne sait pas lire les images/.test(s)),
+    `${JSON.stringify(m7).slice(0, 200)} | ${r7.statuts.join(" / ")}`,
+  );
+
+  // 7. Encodages de Windows : UTF-16 (avec et sans marque), Windows-1252, UTF-8 coupé au milieu d'une lettre ; un binaire n'est pas pris pour du texte.
+  const { pathToFileURL: versUrlDecodage } = await import("node:url");
+  const d = await import(versUrlDecodage(join(RACINE, "src", "lib", "decodage.ts")).href);
+  const phrase = "Référence ; Montant ; Échéance\nFacture 12 ; 1 250,00 € ; 05/10";
+  const utf16 = Buffer.from(phrase, "utf16le");
+  const cp1252 = Uint8Array.from([...phrase].map((c) => ({ "é": 0xe9, "É": 0xc9, "€": 0x80 })[c] ?? c.charCodeAt(0)));
+  const utf8 = Buffer.from(phrase, "utf8");
+  const coupeAuMilieu = utf8.subarray(0, utf8.indexOf(Buffer.from("é")) + 1);
+  const png = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0x0d, 0x49, 0x48, 0x44, 0x52, 0, 0, 1, 0, 0, 0, 1, 0, 8, 6, 0, 0, 0, 0x5c, 0x72, 0xa8, 0x66, 0, 0, 0, 1, 0x73, 0x52, 0x47, 0x42, 0, 0xae, 0xce, 0x1c, 0xe9]);
+  verifier(
+    "encodages : UTF-16 avec et sans marque, Windows-1252 et UTF-8 coupé se lisent juste ; un PNG n'est pas pris pour du texte",
+    d.decoderTexte(Uint8Array.from([0xff, 0xfe, ...utf16])) === phrase &&
+      d.decoderTexte(Uint8Array.from(utf16)) === phrase &&
+      d.decoderTexte(cp1252) === phrase &&
+      d.decoderTexte(Uint8Array.from(coupeAuMilieu), true) === "R" &&
+      d.ressembleATexte(Uint8Array.from(utf16)) && d.ressembleATexte(cp1252) && !d.ressembleATexte(png),
+    JSON.stringify([d.decoderTexte(Uint8Array.from(utf16)).slice(0, 20), d.decoderTexte(cp1252).slice(0, 20), d.decoderTexte(Uint8Array.from(coupeAuMilieu), true), d.ressembleATexte(png)]),
+  );
 }
 
 /* ------------------------------------------------------------------------- */

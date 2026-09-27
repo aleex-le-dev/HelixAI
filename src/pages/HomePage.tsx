@@ -314,6 +314,7 @@ export function HomePage() {
       busy={chat.busy}
       onStop={chat.stop}
       pieces={jointes.pieces}
+      piecesEnLecture={jointes.enLecture}
       onAjouterFichiers={(f) => void jointes.ajouter(f)}
       onRetirerPiece={jointes.retirer}
       onCreerImage={() => {

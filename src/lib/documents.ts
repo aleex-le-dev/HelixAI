@@ -35,14 +35,29 @@ export const ANCIENS_FORMATS: Record<string, string> = {
 export class DocumentIllisible extends Error {}
 
 export async function extraireTexte(fichier: File, ext: string): Promise<string> {
+  return (await extraireTexteDetaille(fichier, ext)).texte;
+}
+
+/**
+ * Le texte, et si la lecture s'est arrêtée avant la fin (plus de 300 pages,
+ * plus de 5 000 lignes par feuille) : la pièce jointe le montre alors comme
+ * « début seulement » au lieu de « lu en entier » (27/09/2026).
+ */
+export async function extraireTexteDetaille(fichier: File, ext: string): Promise<{ texte: string; coupe: boolean }> {
+  const etat = { coupe: false };
+  const texte = await lireSelonFormat(fichier, ext, etat);
+  return { texte, coupe: etat.coupe };
+}
+
+async function lireSelonFormat(fichier: File, ext: string, etat: { coupe: boolean }): Promise<string> {
   const octets = new Uint8Array(await fichier.arrayBuffer());
   switch (ext) {
     case "pdf":
-      return lirePdf(octets);
+      return lirePdf(octets, etat);
     case "docx":
       return lireDocx(await ouvrirZip(octets));
     case "xlsx":
-      return lireXlsx(await ouvrirZip(octets));
+      return lireXlsx(await ouvrirZip(octets), etat);
     case "pptx":
       return lirePptx(await ouvrirZip(octets));
     case "odt":
@@ -50,7 +65,7 @@ export async function extraireTexte(fichier: File, ext: string): Promise<string>
     case "odp":
       return lireOpenDocument(await ouvrirZip(octets));
     default:
-      throw new DocumentIllisible("format non pris en charge");
+      throw new DocumentIllisible(t("format non pris en charge"));
   }
 }
 
@@ -58,7 +73,7 @@ export async function extraireTexte(fichier: File, ext: string): Promise<string>
 /* PDF                                                                 */
 /* ------------------------------------------------------------------ */
 
-async function lirePdf(octets: Uint8Array): Promise<string> {
+async function lirePdf(octets: Uint8Array, etat: { coupe: boolean }): Promise<string> {
   const pdfjs = await import("pdfjs-dist");
   /*
    * Sans Worker : pdf.js se rabat sur un traitement dans la page s'il trouve
@@ -106,6 +121,7 @@ async function lirePdf(octets: Uint8Array): Promise<string> {
     );
   }
   if (nombrePages > PAGES_PDF_MAX) {
+    etat.coupe = true;
     pages.push(tf("(Lecture arrêtée à la page {0} sur {1}.)", PAGES_PDF_MAX, nombrePages));
   }
   return pages.join("\n\n");
@@ -152,7 +168,7 @@ async function ouvrirZip(octets: Uint8Array): Promise<Zip> {
       const debut = decalageLocal + 30 + nomLocal + extraLocal;
       const donnees = octets.subarray(debut, debut + tailleCompressee);
       if (methode === 0) return decodeur.decode(donnees);
-      if (methode !== 8) throw new DocumentIllisible("compression non prise en charge");
+      if (methode !== 8) throw new DocumentIllisible(t("compression non prise en charge"));
       return decodeur.decode(await inflate(donnees));
     });
   }
@@ -219,23 +235,35 @@ async function lireDocx(zip: Zip): Promise<string> {
     return t;
   };
 
-  for (const bloc of Array.from(corps.children)) {
-    if (bloc.localName === "p") lignes.push(texteParagraphe(bloc));
-    else if (bloc.localName === "tbl") {
-      for (const ligne of parNom(bloc, "tr")) {
-        const cellules = parNom(ligne, "tc").map((c) => parNom(c, "p").map(texteParagraphe).join(" ").trim());
-        lignes.push(cellules.join(" | "));
-      }
+  /*
+   * Les blocs, à toute profondeur (27/09/2026) : un document fait d'un modèle
+   * range souvent son contenu dans des contrôles (`w:sdt`, page de garde,
+   * table des matières, formulaires) ou des balises personnalisées. Seuls les
+   * enfants directs du corps étaient lus : leur texte manquait, et un devis
+   * fait d'un modèle pouvait arriver presque vide.
+   */
+  const lireBlocs = (parent: Element) => {
+    for (const bloc of Array.from(parent.children)) {
+      if (bloc.localName === "p") lignes.push(texteParagraphe(bloc));
+      else if (bloc.localName === "tbl") {
+        for (const ligne of parNom(bloc, "tr")) {
+          const cellules = parNom(ligne, "tc").map((c) => parNom(c, "p").map(texteParagraphe).join(" ").trim());
+          lignes.push(cellules.join(" | "));
+        }
+      } else if (bloc.localName !== "sectPr") lireBlocs(bloc);
     }
-  }
-  return lignes.join("\n").replace(/\n{3,}/g, "\n\n").trim();
+  };
+  lireBlocs(corps);
+  const texte = lignes.join("\n").replace(/\n{3,}/g, "\n\n").trim();
+  if (!texte) throw new DocumentIllisible(t("ce fichier Word ne contient pas de texte lisible"));
+  return texte;
 }
 
 /* ------------------------------------------------------------------ */
 /* Excel                                                               */
 /* ------------------------------------------------------------------ */
 
-async function lireXlsx(zip: Zip): Promise<string> {
+async function lireXlsx(zip: Zip, etat: { coupe: boolean }): Promise<string> {
   const partages: string[] = [];
   const ss = await lireXml(zip, "xl/sharedStrings.xml");
   if (ss) for (const si of parNom(ss, "si")) partages.push(parNom(si, "t").map((t) => t.textContent ?? "").join(""));
@@ -262,15 +290,34 @@ async function lireXlsx(zip: Zip): Promise<string> {
     const doc = await lireXml(zip, feuille.chemin);
     if (!doc) continue;
     const lignes: string[] = [];
-    for (const ligne of parNom(doc, "row").slice(0, LIGNES_TABLEUR_MAX)) {
-      const valeurs = parNom(ligne, "c").map((c) => {
+    const toutes = parNom(doc, "row");
+    for (const ligne of toutes.slice(0, LIGNES_TABLEUR_MAX)) {
+      /*
+       * Chaque valeur à sa colonne (27/09/2026) : Excel n'écrit pas les
+       * cellules vides, et les valeurs se tassaient à gauche. Une ligne
+       * « Dupont ; ; 1 200 » devenait « Dupont ; 1 200 », le montant passait
+       * dans la mauvaise colonne. La référence de la cellule (« C5 ») dit où
+       * elle est.
+       */
+      const valeurs: string[] = [];
+      for (const c of parNom(ligne, "c")) {
         const type = c.getAttribute("t");
-        if (type === "s") return partages[Number(parNom(c, "v")[0]?.textContent ?? -1)] ?? "";
-        if (type === "inlineStr") return parNom(c, "t").map((t) => t.textContent ?? "").join("");
-        return parNom(c, "v")[0]?.textContent ?? "";
-      });
+        const valeur =
+          type === "s"
+            ? (partages[Number(parNom(c, "v")[0]?.textContent ?? -1)] ?? "")
+            : type === "inlineStr"
+              ? parNom(c, "t").map((t) => t.textContent ?? "").join("")
+              : (parNom(c, "v")[0]?.textContent ?? "");
+        const lettres = /^([A-Z]+)\d*$/.exec(c.getAttribute("r") ?? "")?.[1];
+        const colonne = lettres ? [...lettres].reduce((n, l) => n * 26 + l.charCodeAt(0) - 64, 0) - 1 : valeurs.length;
+        if (colonne > 16_384) continue;
+        while (valeurs.length < colonne) valeurs.push("");
+        valeurs[colonne] = valeur;
+      }
       if (valeurs.some((v) => v !== "")) lignes.push(valeurs.join(" ; "));
     }
+    if (toutes.length > LIGNES_TABLEUR_MAX) etat.coupe = true;
+    if (toutes.length > LIGNES_TABLEUR_MAX) lignes.push(tf("(Lecture arrêtée à la ligne {0} sur {1}.)", LIGNES_TABLEUR_MAX, toutes.length));
     sorties.push(`## Feuille « ${feuille.nom} »\n${lignes.join("\n")}`);
   }
   if (sorties.length === 0) throw new DocumentIllisible(t("ce classeur Excel ne contient pas de feuille lisible"));
@@ -305,7 +352,7 @@ async function lirePptx(zip: Zip): Promise<string> {
 
 async function lireOpenDocument(zip: Zip): Promise<string> {
   const doc = await lireXml(zip, "content.xml");
-  if (!doc) throw new DocumentIllisible("ce document ne contient pas de texte lisible");
+  if (!doc) throw new DocumentIllisible(t("ce document ne contient pas de texte lisible"));
   const lignes: string[] = [];
   const tableaux = parNom(doc, "table");
   if (tableaux.length > 0 && parNom(doc, "spreadsheet").length > 0) {
@@ -324,6 +371,6 @@ async function lireOpenDocument(zip: Zip): Promise<string> {
     }
   }
   const texte = lignes.join("\n").trim();
-  if (!texte) throw new DocumentIllisible("ce document ne contient pas de texte lisible");
+  if (!texte) throw new DocumentIllisible(t("ce document ne contient pas de texte lisible"));
   return texte;
 }

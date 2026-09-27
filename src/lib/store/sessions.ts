@@ -29,6 +29,11 @@ export interface StoredMessage {
   /** Image créée sur la machine (images.ts) : on garde sa référence, pas ses octets. */
   image?: { id: string; largeur: number; hauteur: number; description: string };
   /**
+   * Pièces jointes à la question (27/09/2026) : nom, type, poids, et si seul
+   * le début a été lu. Ce que le message montre ; le contenu n'est pas gardé.
+   */
+  pieces?: { nom: string; type: "texte" | "image"; taille?: number; tronque?: boolean }[];
+  /**
    * Passages des bases de connaissances cités sous la réponse (nom du
    * document, extrait de 600 caractères au plus). Gardés avec le Chat : qui le
    * rouvre, ou à qui on le partage, voit d'où venait la réponse, comme il en

@@ -407,6 +407,7 @@ export function CoworkPage() {
       busy={chat.busy}
       onStop={arreter}
       pieces={jointes.pieces}
+      piecesEnLecture={jointes.enLecture}
       onAjouterFichiers={(f) => void jointes.ajouter(f)}
       onRetirerPiece={jointes.retirer}
       modelUid={modelUid}

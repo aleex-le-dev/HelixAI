@@ -162,7 +162,9 @@ import { conservationJours, journaliser, lire as lireAudit, verifier as verifier
 import * as computer from "./computer.ts";
 import * as approbation from "./approbation.ts";
 import * as usage from "./usage.ts";
+import { installerOpencode } from "./opencodePrive.ts";
 import {
+  oublierOpencode,
   status as codeStatus,
   api as codeApi,
   enMarche as codeEnMarche,
@@ -5091,6 +5093,23 @@ const traiter = (
       return handleCodeSession(req, res);
     if (req.method === "POST" && path === "/helix/code/prompt")
       return handleCodePrompt(req, res);
+    /*
+     * Pose OpenCode, le moteur de l'écran Code (opencodePrive.ts) : un logiciel
+     * installé sur la machine de l'instance, donc l'administrateur, comme le
+     * moteur des modèles. En arrière-plan ; l'écran suit `GET /helix/code`.
+     */
+    if (req.method === "POST" && path === "/helix/code/installer") {
+      return avecSeance(req, res, url, async (qui) => {
+        if (!(await estAdministrateur(qui.userId))) {
+          return send(res, 403, { error: { message: t("Seul l'administrateur de l'instance installe le moteur de l'écran Code.") } });
+        }
+        journaliser("code.opencode_installe", qui.userId, {});
+        void installerOpencode()
+          .then(() => oublierOpencode())
+          .catch((err: unknown) => console.error("[helix] installation d'OpenCode :", err instanceof Error ? err.message : err));
+        send(res, 202, { started: true });
+      });
+    }
     if (req.method === "POST" && path === "/helix/code/interrupt")
       return handleCodeInterrupt(req, res);
     /*

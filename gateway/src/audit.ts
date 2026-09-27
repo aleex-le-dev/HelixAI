@@ -120,6 +120,7 @@ export type AuditAction =
   | "dictee.installee"
   /** Installation de LM Studio : qui a accepté ses conditions, et lesquelles. */
   | "moteur.conditions_acceptees"
+  | "code.opencode_installe"
   | "dictee.transcrite"
   /*
    * Tarif d'un modèle distant. C'est lui qui transforme des jetons en euros sur

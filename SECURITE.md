@@ -3251,3 +3251,15 @@ dans son paquet ni instance lit la dernière publication du dépôt (`electron/s
   son instance.
 - Avant de rendre le dépôt public : historique git relu (aucune clé privée, aucun jeton ; la clé de
   l'éditeur vit dans `~/.helix-editeur`, hors du dépôt).
+
+### 29.8 OpenCode posé par Helix (27 septembre 2026, 0.27.2)
+
+`gateway/src/opencodePrive.ts`, route `POST /helix/code/installer` : administrateur seul (403
+sinon, 401 sans séance, contrôlé par la batterie), consigné au journal (`code.opencode_installe`).
+Version épinglée (1.18.32), empreinte SHA-256 de chaque archive écrite dans le code (relevée dans
+les empreintes que GitHub publie pour la version, recalculée sur l'archive du Mac), téléchargement
+plafonné à la taille attendue, dans un dossier à soi (0700) ; archive effacée sans être ouverte si
+l'empreinte ne correspond pas (essayé avec une empreinte falsifiée) ; `tar` du système par son
+chemin ; l'exécutable doit dire sa version avant d'être mis en place. Il est ensuite préféré aux
+autres OpenCode de la machine (version connue). **Limite** : l'empreinte vient du même hébergeur
+que l'archive, relevée une fois puis écrite ici.

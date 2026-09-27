@@ -781,7 +781,17 @@ function createWindow() {
     minHeight: 600,
     show: false,
     backgroundColor: FOND_FENETRE[theme],
-    icon: path.join(__dirname, "..", "build", "icon.png"),
+    /*
+     * L'icône de la fenêtre est celle de la barre des tâches sous Windows et
+     * Linux : l'image de macOS, avec sa marge, y paraissait minuscule (vu sur
+     * un PC le 27/09/2026). Chacun la sienne (scripts/icones).
+     */
+    icon: path.join(
+      __dirname,
+      "..",
+      "build",
+      process.platform === "win32" ? "icon.ico" : process.platform === "linux" ? path.join("icons", "512x512.png") : "icon.png",
+    ),
     // Barre de titre native discrète : les commandes de fenêtre restent celles
     // du système, l'interface Helix occupe toute la surface.
     titleBarStyle: process.platform === "darwin" ? "hiddenInset" : "default",

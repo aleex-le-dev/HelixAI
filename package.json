@@ -3,7 +3,7 @@
   "nomAffiche": "Helix",
   "depotMisesAJour": "medhiclb/HelixAI",
   "private": true,
-  "version": "0.27.1",
+  "version": "0.27.2",
   "license": "AGPL-3.0-only",
   "description": "Plateforme d'IA souveraine, locale et open source",
   "desktopName": "helix-plateforme.desktop",
@@ -66,6 +66,8 @@
       "dist-gateway/**/*",
       "electron/**/*",
       "build/icon.png",
+      "build/icon.ico",
+      "build/icons/512x512.png",
       "build/tray.png",
       "build/tray@2x.png"
     ],

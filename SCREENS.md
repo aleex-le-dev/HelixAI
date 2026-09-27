@@ -186,9 +186,11 @@ chaque outil (« Sous-tâche : … », « Écriture · index.html ») et, pendan
 l'annonce de panne. Vu dans le navigateur le 25/09/2026 (instance jetable, Qwen3 8B),
 à 1 400 px et à 375 px ; pas vu dans l'application de bureau.
 
-⚠ **OpenCode n'est pas empaqueté.** Le binaire doit être présent sur la machine
-(`~/.opencode/bin/opencode` ou dans le `PATH`). Sinon l'écran annonce que le
-moteur est absent.
+**OpenCode absent** : l'écran annonce que le moteur est absent et propose
+« Installer OpenCode » (administrateur ; 1.18.32, empreinte vérifiée, environ 60 Mo,
+progression affichée, refus dit en clair), avec la commande manuelle en rappel. Une
+fois posé, l'écran Code s'ouvre sans relancer l'application. OpenCode n'est pas
+empaqueté dans l'installeur de Helix.
 
 ### `/projets` Projets
 

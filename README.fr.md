@@ -12,7 +12,7 @@
 
 <p align="center">
   <img alt="License: AGPL-3.0" src="https://img.shields.io/badge/license-AGPL--3.0-blue" />
-  <img alt="Version 0.27.1" src="https://img.shields.io/badge/version-0.27.1-informational" />
+  <img alt="Version 0.27.2" src="https://img.shields.io/badge/version-0.27.2-informational" />
   <img alt="Platforms: macOS, Windows, Linux" src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey" />
   <img alt="Interface: English, French, Chinese" src="https://img.shields.io/badge/interface-EN%20%C2%B7%20FR%20%C2%B7%20ZH-success" />
 </p>
@@ -36,22 +36,23 @@ et modèles restent sur ses machines, et rien n'est vendu ni loué.
 
 ## Installation
 
-Téléchargez le paquet de votre système dans la [dernière publication](https://github.com/medhiclb/HelixAI/releases/tag/v0.27.1).
-Empreintes SHA-256 : [`SHA256SUMS.txt`](https://github.com/medhiclb/HelixAI/releases/download/v0.27.1/SHA256SUMS.txt).
+Téléchargez le paquet de votre système dans la [dernière publication](https://github.com/medhiclb/HelixAI/releases/tag/v0.27.2).
+Empreintes SHA-256 : [`SHA256SUMS.txt`](https://github.com/medhiclb/HelixAI/releases/download/v0.27.2/SHA256SUMS.txt).
 
 | Système | Téléchargement | Installation |
 |---|---|---|
-| **macOS** (Apple Silicon) | [Helix-0.27.1-arm64.dmg](https://github.com/medhiclb/HelixAI/releases/download/v0.27.1/Helix-0.27.1-arm64.dmg) | Ouvrez l'image disque et glissez Helix dans Applications. Au premier lancement : Réglages Système › Confidentialité et sécurité › « Ouvrir quand même » |
-| **Windows 10/11** (x64) | [Helix-Setup-0.27.1-x64.exe](https://github.com/medhiclb/HelixAI/releases/download/v0.27.1/Helix-Setup-0.27.1-x64.exe) | Lancez l'installateur (aucun droit d'administration nécessaire). Si SmartScreen s'affiche : « Informations complémentaires » › « Exécuter quand même » |
-| **Ubuntu, Debian** (x64) | [helix-plateforme_0.27.1_amd64.deb](https://github.com/medhiclb/HelixAI/releases/download/v0.27.1/helix-plateforme_0.27.1_amd64.deb) | `sudo apt install ./helix-plateforme_0.27.1_amd64.deb` |
-| **Autres Linux** (x64) | [Helix-0.27.1.AppImage](https://github.com/medhiclb/HelixAI/releases/download/v0.27.1/Helix-0.27.1.AppImage) | `chmod +x Helix-0.27.1.AppImage`, puis lancez-le. Sur Ubuntu 24.04, préférez le `.deb` |
+| **macOS** (Apple Silicon) | [Helix-0.27.2-arm64.dmg](https://github.com/medhiclb/HelixAI/releases/download/v0.27.2/Helix-0.27.2-arm64.dmg) | Ouvrez l'image disque et glissez Helix dans Applications. Au premier lancement : Réglages Système › Confidentialité et sécurité › « Ouvrir quand même » |
+| **Windows 10/11** (x64) | [Helix-Setup-0.27.2-x64.exe](https://github.com/medhiclb/HelixAI/releases/download/v0.27.2/Helix-Setup-0.27.2-x64.exe) | Lancez l'installateur (aucun droit d'administration nécessaire). Si SmartScreen s'affiche : « Informations complémentaires » › « Exécuter quand même » |
+| **Ubuntu, Debian** (x64) | [helix-plateforme_0.27.2_amd64.deb](https://github.com/medhiclb/HelixAI/releases/download/v0.27.2/helix-plateforme_0.27.2_amd64.deb) | `sudo apt install ./helix-plateforme_0.27.2_amd64.deb` |
+| **Autres Linux** (x64) | [Helix-0.27.2.AppImage](https://github.com/medhiclb/HelixAI/releases/download/v0.27.2/Helix-0.27.2.AppImage) | `chmod +x Helix-0.27.2.AppImage`, puis lancez-le. Sur Ubuntu 24.04, préférez le `.deb` |
 
 Au premier lancement, Helix installe ce dont il a besoin : le moteur sans interface de
 [LM Studio](https://lmstudio.ai) (version épinglée, empreinte vérifiée), ou l'application
-LM Studio si elle sert déjà sur la machine, et le modèle le mieux adapté à la machine. Python et Node
-sont installés automatiquement s'ils manquent (versions épinglées, empreintes vérifiées).
-Sur Windows et Linux, une mise à jour s'installe en lançant le nouveau paquet par-dessus
-le précédent ; vos données sont conservées.
+LM Studio si elle sert déjà sur la machine, et le modèle le mieux adapté à la machine. Python,
+Node et, pour Helix Code, [OpenCode](https://github.com/anomalyco/opencode) s'installent d'un
+clic s'ils manquent (versions épinglées, empreintes vérifiées). Les nouvelles versions sont
+annoncées dans l'application : un clic sur macOS ; sur Windows et Linux, le nouveau paquet est
+proposé et s'installe par-dessus le précédent, vos données sont conservées.
 
 **macOS, en une commande** (recommandé) : l'application s'installe sans l'avertissement de
 Gatekeeper, après vérification de l'image disque contre `SHA256SUMS.txt` et de sa signature
@@ -136,7 +137,6 @@ Pour construire depuis les sources : `npm install`, `npm run build`, puis `npm r
   paquets Windows et Linux se fabriquent aussi depuis un Mac
 - Node.js 22.18 ou plus récent, et npm (seulement pour construire et développer, la passerelle
   exécute directement son TypeScript : l'application installée ne demande ni Node ni Python)
-- Facultatif : [OpenCode](https://opencode.ai) pour Helix Code
 
 Rien d'autre à installer au préalable : au premier lancement, Helix installe le moteur sans
 interface de [LM Studio](https://lmstudio.ai) (ou se sert de l'application LM Studio si elle

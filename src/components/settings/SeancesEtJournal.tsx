@@ -74,6 +74,7 @@ const LIBELLES: Record<string, string> = {
   "deuxfacteurs.codes_regeneres": t("Nouveaux codes de secours"),
   "connexion.second_facteur_a_activer": t("Double authentification à activer"),
   "moteur.conditions_acceptees": t("Conditions de LM Studio acceptées"),
+  "code.opencode_installe": t("OpenCode installé (écran Code)"),
   "donnees.exportees": t("Données exportées"),
   "ecran.mode_modifie": t("Contrôle de l'écran activé ou désactivé"),
   "drive.branche": t("Google Drive connecté"),

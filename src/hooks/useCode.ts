@@ -774,5 +774,8 @@ export function useCode(dossier?: string, reglages: ReglagesCode = {}) {
     [nouvelle, commit, marquerOccupe, listen],
   );
 
-  return { status, messages, busy, error, send, stop, arreterAction, reset, suivi, sessionId, nouvelle, ouvrir };
+  /** Relit l'état du moteur de code (après son installation par Helix). */
+  const rafraichirStatut = useCallback(() => fetchCodeStatus().then(setStatus), []);
+
+  return { status, messages, busy, error, send, stop, arreterAction, reset, suivi, sessionId, nouvelle, ouvrir, rafraichirStatut };
 }

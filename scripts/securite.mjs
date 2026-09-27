@@ -692,6 +692,11 @@ console.log("\n5. Navigateur et origine");
   const source = readFileSync(new URL("../electron/signatureEditeur.cjs", import.meta.url), "utf8");
   verifier("la signature de l'éditeur est relevée sans la vue asar d'Electron (original-fs)", /require\("original-fs"\)/.test(source), "require(\"original-fs\") absent");
 }
+{
+  // Poser OpenCode installe un logiciel sur la machine : jamais sans séance d'administrateur (27/09/2026).
+  const r = await appel("/helix/code/installer", { method: "POST", headers: avecJeton });
+  verifier("installer OpenCode sans séance est refusé", r.status === 401 || r.status === 403, r.status);
+}
 
 console.log("\n6. Chemins détournés");
 for (const chemin of ["../../../../etc/passwd", "/etc/passwd", "..%2F..%2Fetc%2Fpasswd", "~/.ssh/id_rsa"]) {

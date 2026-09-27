@@ -11,12 +11,12 @@ import { DossierTravailChip } from "@/components/chat/DossierTravailChip";
 import { ApprovalSelector } from "@/components/chat/CoworkSelectors";
 import { MessageList } from "@/components/chat/MessageList";
 import { InfoBox } from "@/components/ui/InfoBox";
+import { InstallerOpencode } from "@/components/code/InstallerOpencode";
 import { useCode } from "@/hooks/useCode";
 import { useProfile } from "@/hooks/useProfile";
 import { currentUser, prenom } from "@/lib/store/identity";
 import type { NiveauRaisonnement } from "@/lib/store/profile";
 import { t } from "@/lib/i18n";
-import { plateformePoste } from "@/lib/plateforme";
 
 /** Ecran Code (capture 9), adossé au moteur OpenCode via la passerelle. */
 export function CodePage() {
@@ -141,10 +141,7 @@ export function CodePage() {
         <p className="max-w-md text-sm text-muted-foreground">
           {t("L'écran Code s'appuie sur un moteur d'agent installé sur cette machine. Il n'a pas été trouvé.")}
         </p>
-        <code className="rounded-lg bg-muted px-3 py-1.5 text-xs text-foreground">
-          {/* Sous Windows, ni curl ni bash dans l'invite habituelle : l'installation par npm. */}
-          {plateformePoste() === "win32" ? t("npm install -g opencode-ai") : t("curl -fsSL https://opencode.ai/install | bash")}
-        </code>
+        {code.status && <InstallerOpencode status={code.status} onPret={() => void code.rafraichirStatut()} />}
       </div>
     );
   }

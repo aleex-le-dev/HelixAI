@@ -81,7 +81,7 @@ machine :
 | Capacité | Ce qu'elle exige | Sans cela |
 |---|---|---|
 | Outils fichiers (MCP) | `npx` | Sans lui (ou sous Windows, où c'est un `.cmd`), Helix le lance par un vrai Node : celui du système, sinon son Node officiel, posé au besoin (nodejs.org, empreinte vérifiée). Hors ligne et sans Node : pas d'outils |
-| Écran Code | `opencode` installé (`~/.opencode/bin/opencode` ou dans le `PATH`) | L'écran Code signale que le moteur est absent |
+| Écran Code | OpenCode : celui que Helix pose d'un clic depuis l'écran Code (1.18.32, empreinte SHA-256 écrite dans le code, `<données>/opencode/`), sinon `~/.opencode/bin/opencode` ou le `PATH` | L'écran Code propose « Installer OpenCode » (administrateur), et rappelle la commande manuelle |
 | Modèles locaux | LM Studio | L'écran de mise en route l'installe, sans intervention : son moteur sans interface (llmster 0.0.25-1, empreinte SHA-512 écrite dans le code) sur Mac à puce Apple, Windows et Linux ; sur un Mac où l'application LM Studio a déjà servi, c'est elle qui sert (Mac Intel : l'application) |
 
 Avec un modèle local, l'écran Code peut attendre une ou deux minutes avant le premier
@@ -480,6 +480,7 @@ C'est le cœur de la promesse Helix, et il vaut mieux le dire exactement.
 | `llmster.lmstudio.ai` | Bouton « Installer le moteur » (Mac à puce Apple, Windows, Linux) | Télécharger le moteur sans interface de LM Studio, version épinglée (0.0.25-1) ; l'empreinte SHA-512 écrite dans le code est vérifiée avant ouverture ; rien n'est lu en ligne pour choisir la version |
 | `formulae.brew.sh`, puis `installers.lmstudio.ai` | Idem, Mac Intel seulement (aucun paquet Helix publié pour eux) | Lire l'adresse et l'empreinte SHA-256 de l'application LM Studio, puis la télécharger ; l'empreinte est vérifiée avant ouverture, et l'adresse refusée si elle ne vient pas de ce domaine |
 | `api.github.com`, puis `github.com` (publications du dépôt, `depotMisesAJour` dans `package.json`) | Poste installé seul (ni serveur de l'agence dans le paquet, ni instance) : peu après le lancement, puis toutes les six heures ; `HELIX_SANS_MISE_A_JOUR=1` l'arrête | Savoir si une version plus récente est publiée. Sur macOS, sur le clic de la personne, télécharger l'archive décrite par `helix-mise-a-jour.json` (empreinte SHA-512, puis signature de l'éditeur vérifiée avec la clé de l'application installée) ; sous Windows et Linux, rien n'est téléchargé par Helix : la fenêtre ouvre le paquet dans le navigateur |
+| `github.com` (anomalyco/opencode) | « Installer OpenCode » sur l'écran Code | OpenCode 1.18.32, archive vérifiée par son empreinte SHA-256 écrite dans le code, avant ouverture |
 | `github.com` (python-build-standalone) | Atelier, dictée ou entraînement, sur une machine sans Python qui convienne | CPython 3.12.14 autonome, publication épinglée, empreinte SHA-256 écrite dans le code |
 | `nodejs.org` | Atelier sans npm sur la machine, ou premier serveur d'outils sans `npx` | Le même Node officiel que pour OpenClaw, archive vérifiée par son empreinte |
 | Catalogue de modèles de LM Studio (HuggingFace) | Téléchargement d'un modèle (`lms get`) | Récupérer les poids. Ce trafic est le fait de LM Studio, que Helix pilote en ligne de commande |

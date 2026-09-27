@@ -10,7 +10,7 @@ refaite à l'envers.
 
 | | |
 |---|---|
-| Version | 0.27.1 (`package.json`) |
+| Version | 0.27.2 (`package.json`) |
 | Dernière mise à jour | 27 septembre 2026 |
 | Documents liés | [ARCHITECTURE.md](ARCHITECTURE.md), [SECURITE.md](SECURITE.md), [SCREENS.md](SCREENS.md), [SIGNATURE.md](SIGNATURE.md), [README.md](README.md), [docs/GUIDE.md](docs/GUIDE.md) |
 
@@ -680,6 +680,7 @@ local, conforme à la règle du § 1) :
 | Brique | Éditeur | Licence | Usage | Remarque |
 |---|---|---|---|---|
 | CPython 3.12.14, construction autonome `python-build-standalone` (publication 20260901) | Python Software Foundation ; construction par Astral | PSF-2.0 (construction : MPL-2.0) | Python de l'atelier, de la dictée et de l'entraînement quand la machine n'en a pas un qui convient (`pythonPrive.ts`) | **accepté par Medhi le 27/09/2026** (« Python doit s'installer ») ; publication épinglée, empreintes SHA-256 écrites dans le code |
+| OpenCode 1.18.32 (moteur de l'écran Code) | Anomaly (ex-SST) | MIT | posé d'un clic par Helix quand la machine n'en a pas (`opencodePrive.ts`) | version épinglée, empreintes SHA-256 écrites dans le code (27/09/2026) |
 | Node 24 LTS officiel | OpenJS Foundation | MIT (npm : Artistic 2.0) | npm de l'atelier et `npx` des serveurs d'outils (MCP) quand la machine n'en a pas | même Node que celui d'OpenClaw, déjà en place ; empreinte vérifiée contre `SHASUMS256.txt` |
 | llmster (moteur sans interface de LM Studio) | Element Labs | conditions de LM Studio (acceptées à l'installation, pour soi ou au nom de son organisation) | moteur des modèles sur Mac à puce Apple, Windows et Linux | version 0.0.25-1 épinglée, empreintes SHA-512 écrites dans le code |
 
@@ -2853,9 +2854,25 @@ historique relu (aucune clé, aucun jeton ; la clé privée de l'éditeur vit ho
 de Medhi, rendue neutre. Logique vérifiée sans réseau (`scripts/essai-source-github.mjs`,
 17 cas).
 
-**À faire (demandé par Medhi le 27/09/2026) : OpenCode installé par Helix.** L'écran Code
-affiche aujourd'hui la commande à lancer ; OpenCode est sous licence MIT, il peut s'installer
-comme le moteur (version épinglée, empreinte écrite dans le code).
+**Fait le 27/09/2026 (0.27.2) : OpenCode installé par Helix.** Demandé par Medhi (« tout
+s'installe seul non ? »). L'écran Code, sans moteur, propose « Installer OpenCode »
+(administrateur seul, au journal) : OpenCode 1.18.32 (MIT, celui avec lequel Helix Code
+tourne ici), empreintes SHA-256 des six archives écrites dans `opencodePrive.ts`, posé dans
+`<données>/opencode/1.18.32/`, essayé (`--version`) avant d'être mis en place, et préféré aux
+autres OpenCode de la machine. La commande manuelle reste dite. **Vérifié sur ce Mac** :
+installation réelle en 7 s, OpenCode démarre ; empreinte falsifiée refusée, rien de posé ;
+route refusée sans séance (`npm run securite`, 435 contrôles). **Pas vérifié** : Windows et
+Linux (archives relevées, pas lancées), un processeur x64 sans AVX2 (variante « baseline » non
+prise).
+
+**Fait le 27/09/2026 (0.27.2) : icônes de Windows et de Linux.** Vu par Medhi sur un PC :
+« ancien logo pas beau » sur le bureau, et « tout petit » dans la barre des tâches. Les petites
+tailles (16 à 48 px) reprenaient l'ancienne marque rouge et noire du favicon, et la fenêtre
+imposait l'image de macOS, avec sa marge. Désormais (`scripts/icones/fabriquer-icones.cjs`),
+Windows et Linux ont l'hélice dans un carré arrondi qui remplit l'icône, au trait épaissi aux
+petites tailles (neuf tailles dans le `.ico`, de 16 à 256 px), et la fenêtre prend l'icône de
+son système. macOS ne change pas. **Pas vérifié sur un vrai PC** : Windows garde parfois
+l'ancienne icône en cache après une mise à jour (redémarrer l'explorateur la rafraîchit).
 
 **Trouvé le 27/09/2026 au premier vrai essai de mise à jour d'un clic (0.27.0 vers 0.27.1, par
 GitHub, sur ce Mac) : toute mise à jour était refusée.** La fenêtre « Nouvelle version » est bien

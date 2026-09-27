@@ -14,6 +14,19 @@ export interface CodeStatus {
   /** Dossier proposé pour une nouvelle session : celui de la personne connectée. */
   projectDir: string;
   error?: string;
+  /** Helix sait-il poser OpenCode sur cette machine ? */
+  installable?: boolean;
+  raisonNonInstallable?: string;
+  /** Installation d'OpenCode par Helix (opencodePrive.ts). */
+  installation?: { enCours: boolean; pourcent: number | null; erreur: string | null };
+}
+
+/** Demande à l'instance de poser OpenCode. Rend le message de refus, ou null. */
+export async function installerOpencode(): Promise<string | null> {
+  const res = await apiFetch(`/helix/code/installer`, { method: "POST" });
+  if (res.ok) return null;
+  const corps = (await res.json().catch(() => ({}))) as { error?: { message?: string } };
+  return corps.error?.message ?? tf("Demande refusée ({0}).", res.status);
 }
 
 export async function fetchCodeStatus(): Promise<CodeStatus> {

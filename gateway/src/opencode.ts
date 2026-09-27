@@ -17,6 +17,7 @@ import { join, dirname, parse, sep } from "node:path";
 import { homedir } from "node:os";
 import { PORT, NIVEAUX_EFFORT } from "./config.ts";
 import { instanceToken } from "./auth.ts";
+import { etatInstallationOpencode, opencodeDeHelix, opencodeInstallable, type EtatInstallationOpencode } from "./opencodePrive.ts";
 import { models } from "./router.ts";
 import { deployment } from "./deployment.ts";
 import { t, tf } from "./langue.ts";
@@ -48,10 +49,15 @@ import { arreterArbre } from "./processus.ts";
  * disposition relevée dans le paquet `opencode-ai`, pas essayée sur un vrai
  * Windows).
  */
+/*
+ * L'OpenCode posé par Helix (opencodePrive.ts) passe avant ceux de la
+ * machine : c'est la version épinglée, avec laquelle Helix Code a été essayé.
+ */
 const CANDIDATES =
   process.platform === "win32"
     ? [
         ...(process.env.HELIX_OPENCODE_BIN ? [process.env.HELIX_OPENCODE_BIN] : []),
+        opencodeDeHelix(),
         join(homedir(), ".opencode", "bin", "opencode.exe"),
         join(homedir(), "scoop", "shims", "opencode.exe"),
         ...(process.env.APPDATA
@@ -62,7 +68,7 @@ const CANDIDATES =
           : []),
         "opencode.exe",
       ]
-    : [...(process.env.HELIX_OPENCODE_BIN ? [process.env.HELIX_OPENCODE_BIN] : []), `${homedir()}/.opencode/bin/opencode`, "opencode"];
+    : [...(process.env.HELIX_OPENCODE_BIN ? [process.env.HELIX_OPENCODE_BIN] : []), opencodeDeHelix(), `${homedir()}/.opencode/bin/opencode`, "opencode"];
 
 /**
  * Mot de passe du serveur OpenCode, tiré à chaque démarrage de la passerelle.
@@ -143,6 +149,16 @@ export interface CodeStatus {
   running: boolean;
   projectDir: string;
   error?: string;
+  /** Helix sait-il poser OpenCode ici ? Sinon, la raison. */
+  installable: boolean;
+  raisonNonInstallable?: string;
+  installation: EtatInstallationOpencode;
+}
+
+/** Après une installation : la prochaine recherche doit trouver le nouvel OpenCode, sans attendre. */
+export function oublierOpencode(): void {
+  binaireConnu = null;
+  dernierEchec = 0;
 }
 
 /**
@@ -803,11 +819,15 @@ export const portEnCours = (): number | null => (enMarche() ? port : null);
 /** `userId` : le dossier rendu est celui de cette personne (séance présentée), sinon celui de l'instance. */
 export async function status(userId?: string): Promise<CodeStatus> {
   const binary = await locate();
+  const raison = opencodeInstallable();
   return {
     available: Boolean(binary),
     running: Boolean(port && child && !child.killed),
     projectDir: projectDir(userId),
     error: lastError,
+    installable: raison === null,
+    ...(raison ? { raisonNonInstallable: raison } : {}),
+    installation: etatInstallationOpencode(),
   };
 }
 

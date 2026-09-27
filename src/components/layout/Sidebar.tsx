@@ -149,7 +149,7 @@ function LigneSession({
         )}
         <button
           type="button"
-          aria-label={tf(archivee ? "Désarchiver {0}" : "Archiver {0}", session.title)}
+          aria-label={archivee ? tf("Désarchiver {0}", session.title) : tf("Archiver {0}", session.title)}
           title={archivee ? t("Remettre dans la liste") : t("Archiver")}
           onClick={onArchiver}
           className="rounded p-1 text-muted-foreground transition-colors hover:text-foreground"

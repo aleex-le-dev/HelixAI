@@ -117,10 +117,17 @@ export function buildSystemPrompt(
     parts.push(agentInstructions.trim());
   } else {
     parts.push(
-      tf("Tu es {0}, l'assistant IA de l'entreprise. Tu réponds en français, ", productName) +
+      tf("Tu es {0}, l'assistant IA de l'entreprise. Tu réponds ", productName) +
         t("de façon claire et utile, sans jargon inutile."),
     );
   }
+  /*
+   * La langue de la réponse : celle de la personne, pas celle de l'écran
+   * (27/09/2026, vu par Medhi : « hi how are you » recevait « Bonjour ! » parce
+   * que la consigne française disait « tu réponds en français »). Pour les
+   * agents aussi, dont les instructions sont souvent écrites en français.
+   */
+  parts.push(t("Réponds toujours dans la langue du dernier message de la personne, quelle que soit la langue de ces consignes."));
 
   /*
    * Quand se servir des outils, et quand ne pas le faire.

@@ -91,7 +91,7 @@ const remplir = (texte, nom) => texte.replaceAll("{0}", nom);
  */
 function installerZoneNotification({ nom, icone, langue, montrer, quitter }) {
   let tray;
-  let courante = TEXTES[langue] ? langue : "fr";
+  let courante = TEXTES[langue] ? langue : "en";
   const txt = (cle) => remplir(TEXTES[courante][cle], nom);
   try {
     // La marque simplifiée (`build/tray.png`, et `tray@2x.png` pour les écrans denses) : l'hélice détaillée ne se lit pas à 16 pixels.

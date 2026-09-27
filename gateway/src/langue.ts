@@ -42,7 +42,8 @@ const contexte = new AsyncLocalStorage<Langue>();
 
 function normaliser(brut: string | undefined): Langue {
   const base = (brut ?? "").trim().toLowerCase().split(/[-_,;]/)[0];
-  return base === "en" || base === "zh" || base === "fr" ? (base as Langue) : "fr";
+  // Langue inconnue ou absente : l'anglais, langue de base du produit (27/09/2026, décidé par Medhi).
+  return base === "en" || base === "zh" || base === "fr" ? (base as Langue) : "en";
 }
 
 /**
@@ -64,9 +65,9 @@ export function avecLangueDe<T>(
   return contexte.run(normaliser(brut ?? undefined), travail);
 }
 
-/** La langue de la requête en cours, français hors requête. */
+/** La langue de la requête en cours, anglais hors requête (langue de base du produit). */
 export function langue(): Langue {
-  return contexte.getStore() ?? "fr";
+  return contexte.getStore() ?? "en";
 }
 
 /** Traduit une phrase française. Sans traduction, la rend telle quelle. */

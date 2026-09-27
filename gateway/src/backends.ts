@@ -4,7 +4,7 @@ import { existsSync } from "node:fs";
 import { promisify } from "node:util";
 import { homedir, totalmem } from "node:os";
 import { join } from "node:path";
-import { lmsDeLlmster, preparerDossiersLlmster } from "./engine.ts";
+import { applicationLmStudio, lmsDeLlmster, moteurSansInterface, preparerDossiersLlmster } from "./engine.ts";
 import { BACKENDS, classifyRoles, isReasoningModel, tousLesBackends } from "./config.ts";
 import type { BackendConfig, BackendStatus, ModelInfo } from "./types.ts";
 import { t, tf } from "./langue.ts";
@@ -224,15 +224,31 @@ export async function ensureLmStudioServer(): Promise<boolean> {
    * comme un service, qu'on allume avant son serveur. Sans effet s'il tourne
    * déjà. Pas sur macOS : c'est l'application LM Studio, partagée, qui y sert.
    */
-  if (process.platform !== "darwin") {
+  if (moteurSansInterface()) {
     await exec(lms, ["daemon", "up"], { timeout: 60_000 }).catch(() => undefined);
   }
   try {
     console.log("[helix] serveur LM Studio arrêté, démarrage...");
     await exec(lms, ["server", "start"], { timeout: 60_000 });
-  } catch {
-    // Peut échouer si LM Studio n'est pas installé ou pas encore initialisé.
-    return false;
+  } catch (err) {
+    /*
+     * macOS : l'application LM Studio posée mais jamais ouverte (vu sur un
+     * MacBook le 27/09/2026 : « daemon is not running and no valid
+     * installation could be found »). `lms` ne sait où elle est qu'après son
+     * premier lancement : on l'ouvre une fois, en arrière-plan et sans lui
+     * donner la main, puis on réessaie.
+     */
+    const application = applicationLmStudio();
+    const detail = `${(err as { stdout?: unknown }).stdout ?? ""}${(err as { stderr?: unknown }).stderr ?? ""}${(err as Error).message ?? ""}`;
+    if (!application || !/no valid installation|daemon is not running|failed to start or connect/i.test(detail)) return false;
+    console.log("[helix] LM Studio jamais ouvert sur ce Mac : premier lancement en arrière-plan...");
+    await exec("/usr/bin/open", ["-g", "-j", "-a", application], { timeout: 30_000 }).catch(() => undefined);
+    let demarre = false;
+    for (let i = 0; i < 12 && !demarre; i++) {
+      await new Promise((r) => setTimeout(r, 5000));
+      demarre = await exec(lms, ["server", "start"], { timeout: 60_000 }).then(() => true, () => false);
+    }
+    if (!demarre) return false;
   }
 
   // Le serveur met un instant à écouter : on lui laisse le temps.

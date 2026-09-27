@@ -88,7 +88,7 @@ let fenetrePrincipaleOuverte = false;
 let quitterVraiment = false;
 /** Langue de l'écran, que l'interface donne au démarrage : pour les quelques textes de ce processus. */
 // Relue une fois l'application prête (sous Windows, `getLocale` n'est fiable qu'ensuite), puis donnée par l'interface.
-let langueEcran = "fr";
+let langueEcran = "en";
 /*
  * Le nom affiché : `app.getName()` vaut « helix-plateforme » sous Windows et
  * Linux (le nom du paquet npm ; sur macOS, celui du paquet de l'application).
@@ -1125,7 +1125,7 @@ app.whenReady().then(async () => {
   if (!instanceUnique) return;
   {
     const l = app.getLocale().slice(0, 2);
-    if (["fr", "en", "zh"].includes(l) && langueEcran === "fr") langueEcran = l;
+    if (["fr", "en", "zh"].includes(l) && langueEcran === "en") langueEcran = l;
   }
   /*
    * Windows : le même identifiant que les raccourcis posés par l'installateur,

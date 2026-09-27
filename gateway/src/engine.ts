@@ -133,16 +133,30 @@ export async function appInstallee(): Promise<string | null> {
     const lms = lmsDeLlmster();
     return existsSync(lms) ? lms : null;
   }
+  const application = applicationLmStudio();
+  if (application) return application;
+  // Mac à puce Apple : le moteur sans interface, posé par Helix.
+  return moteurSansInterface() && existsSync(lmsDeLlmster()) ? lmsDeLlmster() : null;
+}
+
+/** L'application LM Studio (avec son interface) sur ce Mac, ou null. */
+export function applicationLmStudio(): string | null {
+  if (process.platform !== "darwin") return null;
   for (const base of emplacements()) {
     const chemin = join(base, "LM Studio.app");
-    try {
-      await access(chemin, constants.R_OK);
-      return chemin;
-    } catch {
-      /* emplacement suivant */
-    }
+    if (existsSync(chemin)) return chemin;
   }
   return null;
+}
+
+/**
+ * Le moteur est-il le moteur sans interface (llmster) ? Sous Windows et Linux,
+ * toujours ; sur macOS, quand l'application LM Studio n'est pas là et que
+ * llmster l'est (27/09/2026 : posé par Helix sur un Mac à puce Apple).
+ */
+export function moteurSansInterface(): boolean {
+  if (process.platform !== "darwin") return true;
+  return !applicationLmStudio() && existsSync(join(dossierLmStudio(), "llmster"));
 }
 
 /**
@@ -156,7 +170,16 @@ export async function installerMoteur(
 ): Promise<string> {
   const dejaLa = await appInstallee();
   if (dejaLa) return dejaLa;
-  if (process.platform === "win32" || process.platform === "linux") return installerLlmster(onProgress);
+  /*
+   * Mac à puce Apple aussi, depuis le 27/09/2026 : l'application LM Studio
+   * posée par Helix n'avait jamais été ouverte, et `lms` refusait alors de
+   * démarrer son service (« daemon is not running and no valid installation
+   * could be found », vu sur un MacBook). Le moteur sans interface démarre
+   * sans elle. Les Mac Intel gardent l'application (pas de llmster pour eux).
+   */
+  if (process.platform === "win32" || process.platform === "linux" || (process.platform === "darwin" && process.arch === "arm64")) {
+    return installerLlmster(onProgress);
+  }
   if (process.platform !== "darwin") throw new Error(t("L'installation automatique du moteur n'existe pas pour ce système."));
 
   onProgress({ phase: "resolution", message: t("Recherche de la dernière version...") });
@@ -277,6 +300,7 @@ const LLMSTER: Record<string, { sha512: string; octets: number }> = {
   "0.0.25-1-linux-x64.full+cuda12": { sha512: "179e05cee62c1e1f61f1c6480179b1e21df63af64ffa3a949a94f026afc4552d7a36db7208345e65f21f040d864c1603bf6cd1c0292e4751d696bee5679db007", octets: 1_105_623_572 },
   "0.0.25-1-linux-arm64.full": { sha512: "9743cfce0fd1e2b76f4fcbef6fbe4ed68f4e953781c0eba5c5db33308209f007939f3f946995618f22f8c4bb977919408c23a5cbbb369f530e2c92738f6891bc", octets: 1_257_501_655 },
   "0.0.25-1-win32-x64.full": { sha512: "a17bfd052ea7a63182c4cd39b0619982e8027d19f6b00d0207207c8fa308540e502251662886a8ce8191a2bd0eb9132a48ee4991e784ebb5474d62ed3103fffe", octets: 868_484_756 },
+  "0.0.25-1-darwin-arm64.full": { sha512: "edf1fb01f49b6ea101b3bd7027b4516eb73261d7b0df871c4286fac7011eb4f12633f7f03c9c6a66322659231c248989b7d235528b41bd2f30d87ce085c13b32", octets: 615_370_329 },
   "0.0.25-1-win32-arm64.full": { sha512: "fde8717b0ec91758a5dbd3e2ef15d7d8cbe26d4190fedde258c9c38846fc7c79e320c75bf3e0793c53163a3460f5259f3036016929ea38098f7abeedb7e5e15b", octets: 279_979_911 },
 };
 const DEPOT_LLMSTER = "https://llmster.lmstudio.ai/download";
@@ -322,7 +346,7 @@ export const lmsDeLlmster = (): string => join(dossierLmStudio(), "bin", process
  * du moteur pour les installations déjà faites. Sans effet s'il existe.
  */
 export function preparerDossiersLlmster(): void {
-  if (process.platform === "darwin") return;
+  if (!moteurSansInterface()) return;
   const racine = dossierLmStudio();
   if (!existsSync(racine)) return;
   try {
@@ -358,6 +382,7 @@ function nomLlmster(version: string): { nom: string; extension: string } {
   const arch = process.arch === "arm64" ? "arm64" : process.arch === "x64" ? "x64" : null;
   if (!arch) throw new Error(tf("Le moteur de LM Studio n'existe pas pour ce processeur ({0}).", process.arch));
   if (process.platform === "win32") return { nom: `${version}-win32-${arch}.full`, extension: ".zip" };
+  if (process.platform === "darwin") return { nom: `${version}-darwin-${arch}.full`, extension: ".tar.gz" };
   return { nom: `${version}-linux-${arch}.full${arch === "x64" && cuda12() ? "+cuda12" : ""}`, extension: ".tar.gz" };
 }
 

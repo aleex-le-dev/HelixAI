@@ -604,7 +604,7 @@ console.log("\n3 quater. Revue du 26/09/2026 : réglages de l'instance, données
     web.fermerSurveillance("emp-essai");
     for (const [nom, adresse] of [["la boucle locale", "http://127.0.0.1:8787/health"], ["le réseau interne", "http://10.0.0.5/"], ["les métadonnées d'hébergeur", "http://169.254.169.254/latest/meta-data/"]]) {
       const r = await web.callTool("web__lire", { adresse }, "hors-mail");
-      verifier(`web des employés : ${nom} est refusé(e)`, !r.ok && /Refusé/.test(r.content), r.content.slice(0, 120));
+      verifier(`web des employés : ${nom} est refusé(e)`, !r.ok && /Refusé|Refused/.test(r.content), r.content.slice(0, 120));
     }
     const { modifie: modifie2 } = await import(versUrl2(join(RACINE, "gateway", "src", "approbation.ts")).href);
     verifier("web des employés : chercher et lire une page sont des lectures (pas de carte forcée pendant un mail)", !modifie2("web__chercher") && !modifie2("web__lire"), "traités comme modification");
@@ -2301,7 +2301,7 @@ console.log("\n11 quinquies. Windows et Linux : ce qui se vérifie depuis ce pos
   const piegee = essai(`globalThis.fetch = async () => new Response(new Blob([new Uint8Array(4096).fill(7)]).stream(), { status: 200 });
     const m = await import("./gateway/src/pythonPrive.ts");
     try { await m.assurerPythonPrive(); console.log("ACCEPTEE"); } catch (e) { console.log("REFUS", e.message.slice(0, 60), m.pythonPrive() === null); }`, { HELIX_DATA_DIR: d4 });
-  verifier("Python posé par Helix : une archive à la mauvaise empreinte est refusée, rien n'est installé", /REFUS .*empreinte.* true/.test(piegee), piegee.slice(0, 200));
+  verifier("Python posé par Helix : une archive à la mauvaise empreinte est refusée, rien n'est installé", /REFUS .*(empreinte|checksum).* true/.test(piegee), piegee.slice(0, 200));
 
   // Revue de sécurité du 27/09/2026 (nuit) : ce qu'un membre ne doit plus pouvoir faire, et les installations épinglées.
   const d5 = dossierNeuf(join(tmpdir(), "helix-pointeur-"));
@@ -2320,7 +2320,7 @@ console.log("\n11 quinquies. Windows et Linux : ce qui se vérifie depuis ce pos
   verifier("clé de données : un lien vers un disque absent fait refuser le démarrage (ni boucle, ni écriture en clair)", cleLien.includes("REFUS propre"), cleLien.slice(0, 160));
   const sourceMoteur = readFileSync(join(RACINE, "gateway", "src", "engine.ts"), "utf8");
   const sourceNode = readFileSync(join(RACINE, "gateway", "src", "installationOpenClaw.ts"), "utf8");
-  verifier("moteur llmster : version épinglée, une empreinte SHA-512 écrite par archive, rien lu en ligne pour choisir", /const LLMSTER_VERSION = "[\d.]+-\d+"/.test(sourceMoteur) && (sourceMoteur.match(/sha512: "[0-9a-f]{128}"/g) ?? []).length === 5 && !/install\.sh/.test(sourceMoteur.replace(/\/\*[\s\S]*?\*\//g, "")), "non épinglé");
+  verifier("moteur llmster : version épinglée, une empreinte SHA-512 écrite par archive, rien lu en ligne pour choisir", /const LLMSTER_VERSION = "[\d.]+-\d+"/.test(sourceMoteur) && (sourceMoteur.match(/sha512: "[0-9a-f]{128}"/g) ?? []).length === 6 && !/install\.sh/.test(sourceMoteur.replace(/\/\*[\s\S]*?\*\//g, "")), "non épinglé");
   verifier("Node de Helix : version épinglée, une empreinte SHA-256 par archive", /const NODE_EPINGLE = "\d+\.\d+\.\d+"/.test(sourceNode) && (sourceNode.match(/"node-v[\d.]+-[a-z0-9-]+\.(tar\.gz|zip)": "[0-9a-f]{64}"/g) ?? []).length === 6, "non épinglé");
   const { pathToFileURL: versUrlCode } = await import("node:url");
   const { outilDe: traduire } = await import(versUrlCode(join(RACINE, "gateway", "src", "permissionsCode.ts")).href);

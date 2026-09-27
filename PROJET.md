@@ -2746,6 +2746,27 @@ Seuls restent toujours confirmés : envoyer un mail, supprimer un événement, p
 tâche ; et un employé qui traite un mail reçu n'a jamais le web. L'écran dit ce risque au
 moment du choix (niveau d'approbation, palier « étendu »). Ne pas refaire à l'envers.
 
+**Fait le 27/09/2026 (matin) : ce que Medhi a vu en installant sur son MacBook.**
+- « Helix est endommagé » : la signature de code de l'application était fausse (celle
+  d'Electron, rendue invalide par la fabrication). L'application est maintenant signée ad
+  hoc en fin de fabrication, vérifiée ; macOS dit alors seulement qu'Apple n'a pas pu la
+  vérifier (« Ouvrir quand même »). Installation en une commande (`scripts/installer-macos.sh`,
+  empreinte et signature vérifiées) : pas d'avertissement du tout. Le seul vrai remède reste
+  la signature Apple (compte Apple Developer).
+- « LM Studio daemon is not running and no valid installation could be found » : l'application
+  LM Studio posée par Helix n'avait jamais été ouverte. Désormais, sur un Mac à puce Apple,
+  Helix pose le moteur sans interface (llmster, épinglé, empreinte vérifiée), comme sous Windows
+  et Linux ; et si l'application LM Studio est déjà là sans avoir jamais été ouverte, Helix
+  l'ouvre une fois en arrière-plan puis réessaie. **Vérifié sur ce Mac** : installation du
+  moteur (43 s, dossier personnel temporaire). **Pas vérifié** : son démarrage sur un Mac (ce
+  Mac fait tourner LM Studio pour Eden sur les mêmes ports), ni le rattrapage par ouverture.
+- Réponses en français à un message en anglais : la consigne française disait « tu réponds en
+  français ». Le modèle répond maintenant dans la langue du dernier message, agents compris ;
+  la langue de base est l'anglais (interface, passerelle, zone de notification) quand celle du
+  système n'est ni le français ni le chinois.
+- Aide : « Ouvrir l'écran concerné » refermait mal l'aide ; 28 textes restés en français
+  passent par la traduction. README : prérequis pour les trois systèmes, LM Studio n'en est plus un.
+
 **Fait le 27/09/2026 (nuit, suite) : relecture par cinq agents avant publication.** Demandée par
 Medhi (« déploie plusieurs agents, être sûr que tout est bon »). Windows, Linux et paquets,
 sécurité des installations, régressions sur macOS, documentation : tout ce qu'ils ont trouvé

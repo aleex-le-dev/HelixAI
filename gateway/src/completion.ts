@@ -1,6 +1,6 @@
 import { redirectionPour, refusSortie } from "./sortieReseau.ts";
 import { models, resolve } from "./router.ts";
-import { backendById } from "./backends.ts";
+import { backendById, loadModel } from "./backends.ts";
 import * as usage from "./usage.ts";
 import type { ModelInfo } from "./types.ts";
 import { appliquerCorrection, correctionPour, messageDuFournisseur } from "./modelesCloud.ts";
@@ -62,6 +62,15 @@ export async function completer(
   const { model } = choix;
   const backend = backendById(model.backendId);
   if (!backend) return { ok: false, message: tf("Moteur introuvable pour {0}.", model.id) };
+  /*
+   * Un modèle téléchargé mais pas en mémoire : Helix le charge avec ses
+   * réglages (backends.ts, `optionsDeChargement`), comme le Chat, au lieu de
+   * laisser LM Studio le charger seul avec les siens (27/09/2026).
+   */
+  if (model.backendKind === "lmstudio" && model.loaded === false) {
+    const charge = await loadModel(model.id);
+    if (!charge.ok) return { ok: false, message: charge.message };
+  }
 
   /*
    * Les modèles Qwen3 raisonnent avant de répondre, longuement : pour un

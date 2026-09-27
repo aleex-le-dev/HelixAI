@@ -180,6 +180,7 @@
   "Catalogue injoignable (HTTP {0}).": "Catalogue unreachable (HTTP {0}).",
   "Catalogue, commandes et paiements Square.": "Square catalogue, orders and payments.",
   "Ce bot a fini.": "This bot has finished.",
+  "Ce Chat est long : les {0} premiers messages n'ont pas été relus par {1}, faute de place (conversation de {2} jetons).": "This Chat is long: the first {0} messages were not reread by {1}, for lack of room (conversation of {2} tokens).",
   "Ce chemin n'est pas un dossier.": "This path is not a folder.",
   "Ce code a déjà servi. Demandez-en un nouveau.": "This code has already been used. Ask for a new one.",
   "Ce code a expiré. Demandez-en un nouveau.": "This code has expired. Ask for a new one.",

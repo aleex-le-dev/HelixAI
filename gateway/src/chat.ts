@@ -31,6 +31,7 @@ import {
   ETAPES_TOTALES_MAX,
   PROFONDEUR_MAX,
   SOUS_ETAPES_MAX,
+  avecDemande,
   consigneDeComplement,
   consigneDePartie,
   consigneDePlan,
@@ -62,6 +63,7 @@ import { gardesDeFlux, type Degenerescence } from "./gardeBoucle.ts";
 import { contexteDuModele, echantillonnageLocal } from "./backends.ts";
 import { apresCoupure } from "./provision.ts";
 import { integrerDocuments, jetonsEstimes, messagesAvecDocuments } from "./documentsJoints.ts";
+import { derniersEchanges, indexDeLaQuestion, placeDeLaConversation, tenirDansLaPlace } from "./historique.ts";
 import {
   accumulerAppels,
   appliquerCorrection,
@@ -1374,6 +1376,38 @@ export async function handleChatRequest(
   }
 
   /*
+   * La conversation entière mesurée contre la taille chargée (historique.ts,
+   * 27/09/2026) : au-delà, Helix retire lui-même les plus anciens échanges, en
+   * gardant toujours la consigne système et la question, au lieu de laisser le
+   * moteur couper au hasard ; et il le dit. Seulement quand la taille est
+   * sue : LM Studio (celle du chargement, relue par `lms ps`), ou un service
+   * dont la taille est publiée ou écrite dans le profil. Un modèle servi
+   * ailleurs sans taille connue (cluster exo, grand modèle distant) n'est pas
+   * raccourci sur une supposition.
+   */
+  const reflechit = Boolean(model.reasoning) && niveauEffort(body.effort).raisonner;
+  const tailleConnue = model.backendKind === "lmstudio" || Boolean(backend.contexte) || Boolean(model.contextePublie);
+  const contexteConversation = tailleConnue ? await contexteDuModele(model, backend) : 0;
+  const budgetConversation = contexteConversation
+    ? placeDeLaConversation(contexteConversation, reflechit, tools && tools.length > 0 ? jetonsEstimes(JSON.stringify(tools)) : 0)
+    : Number.POSITIVE_INFINITY;
+  {
+    const ajuste = tenirDansLaPlace(messages, budgetConversation);
+    if (ajuste.retires > 0 || ajuste.apres > budgetConversation) {
+      console.log(
+        `[chat] conversation de ~${ajuste.avant} jetons pour ${budgetConversation} de place (${model.id}, contexte ${contexteConversation}) : ${ajuste.retires} message(s) ancien(s) retiré(s), ~${ajuste.apres} jetons envoyés`,
+      );
+    }
+    if (ajuste.retires > 0) {
+      messages = ajuste.messages;
+      annoncesDocuments = [
+        ...annoncesDocuments,
+        tf("Ce Chat est long : les {0} premiers messages n'ont pas été relus par {1}, faute de place (conversation de {2} jetons).", ajuste.retires, model.id, contexteConversation),
+      ];
+    }
+  }
+
+  /*
    * Mémoire des approbations, le temps de cette demande.
    *
    * Une réponse donnée à l'étape 2 d'un plan vaut encore à l'étape 7, pour les
@@ -1448,6 +1482,17 @@ export async function handleChatRequest(
 
     for (let iteration = 0; iteration < budget; iteration++) {
       siArrete();
+      /*
+       * Les résultats d'outils s'accumulent dans le fil (jusqu'à 20 000
+       * caractères chacun) : au-delà de la place, les plus anciens sont
+       * abrégés, le dernier reste entier, et rien avant n'est retiré
+       * (historique.ts). Le moteur n'a ainsi jamais à couper lui-même.
+       */
+      const ajuste = tenirDansLaPlace(fil, budgetConversation, (fil[0] as { role?: string } | undefined)?.role === "system" ? 1 : 0);
+      if (ajuste.abreges > 0) {
+        fil.splice(0, fil.length, ...ajuste.messages);
+        console.log(`[chat] ${ajuste.abreges} résultat(s) d'outil ancien(s) abrégé(s) : ~${ajuste.apres} jetons pour ${budgetConversation} de place (${model.id})`);
+      }
       const payload = basePayload(body, model, fil);
       if (tools && tools.length > 0) {
         // Mêmes précautions que pour les outils d'un appelant : un serveur MCP
@@ -1890,8 +1935,24 @@ export async function handleChatRequest(
      * les RH » alors que la base contenait la réponse, que chaque étape ne
      * recevait pas.
      */
-    const fondation = (): unknown[] =>
-      messages[0] && (messages[0] as { role?: string }).role === "system" ? [messages[0]] : [];
+    /*
+     * Avec les derniers échanges de la conversation (27/09/2026). Chaque étape
+     * ne recevait que la consigne système et une reformulation de la demande
+     * par le tri : « développe le deuxième point » partait sans le premier
+     * message, et un petit modèle écrivait sur un « deuxième point » de son
+     * invention. Mesuré contre un faux LM Studio : la demande et l'échange qui
+     * la précède manquaient à chacune des trois parties rédigées. Un quart de
+     * la place au plus, six messages au plus.
+     */
+    const recents = derniersEchanges(
+      messages,
+      indexDeLaQuestion(messages),
+      Number.isFinite(budgetConversation) ? Math.max(0, Math.floor(budgetConversation / 4)) : 6000,
+    );
+    const fondation = (): unknown[] => [
+      ...(messages[0] && (messages[0] as { role?: string }).role === "system" ? [messages[0]] : []),
+      ...recents,
+    ];
 
     /**
      * Une question d'organisation au modèle, sans outils, qui attend du JSON.
@@ -1904,14 +1965,22 @@ export async function handleChatRequest(
         { role: "system", content: "Tu organises un travail. Tu réponds uniquement en JSON." },
         { role: "user", content: consigne },
       ];
+      /*
+       * Effort « aucun », quel que soit celui de la conversation : ce tri
+       * précède **chaque** demande. Lui laisser hériter du niveau choisi,
+       * c'était payer seize mille jetons de réflexion pour décider s'il faut
+       * découper un travail — et contredire le `/no_think` juste au-dessus.
+       */
+      const base = basePayload({ ...body, effort: "aucun" }, model, fil);
       const brut = await callUpstream(backend, {
+        ...base,
         /*
-         * Effort « aucun », quel que soit celui de la conversation : ce tri
-         * précède **chaque** demande. Lui laisser hériter du niveau choisi,
-         * c'était payer seize mille jetons de réflexion pour décider s'il faut
-         * découper un travail — et contredire le `/no_think` juste au-dessus.
+         * Une température basse (0,2 au plus, comme completion.ts) : sans
+         * elle, le moteur prenait la sienne, et la même demande recevait tantôt
+         * un plan, tantôt aucun (27/09/2026). Un plan décide de toute la
+         * réponse ; il ne se tire pas au sort.
          */
-        ...basePayload({ ...body, effort: "aucun" }, model, fil),
+        temperature: Math.min(0.2, typeof base.temperature === "number" ? base.temperature : 0.2),
         // Pas d'outils ici : organiser, ce n'est pas encore agir.
         tools: undefined,
         tool_choice: undefined,
@@ -1964,6 +2033,8 @@ export async function handleChatRequest(
         ),
         demande,
       );
+      // Les mots de la personne restent sous les yeux de chaque étape, à côté de la reformulation du tri (plan.ts).
+      plan.objectif = avecDemande(plan.objectif, demande);
       // Un fichier s'écrit d'un seul jet : un plan qui le crée vide puis le reprend est regroupé (plan.ts).
       if (avecOutils) plan.etapes = regrouperParFichier(plan.etapes);
       // Un plan d'une seule étape n'apporte rien : on repart en direct.

@@ -87,29 +87,34 @@ interface LmsModelEntry {
   /** `lms ls` : plus grande taille de conversation acceptée ; `lms ps` : celle du chargement en cours. */
   maxContextLength?: number;
   contextLength?: number;
+  /** `lms ps` : le nom sous lequel le serveur sert ce chargement (« qwen3-8b:2 » pour une seconde copie). */
+  identifier?: string;
 }
 
 /**
  * Métadonnées enrichies des modèles LM Studio (taille, paramètres, archi, chargé).
  * Utilise `lms ls --json` et `lms ps --json`. Échec silencieux : la passerelle
- * fonctionne sans, avec moins d'informations.
+ * fonctionne sans, avec moins d'informations. `enMemoireLu` dit si `lms ps` a
+ * répondu : c'est lui, et non la liste du serveur, qui dit ce qui est chargé
+ * (voir `discover`).
  */
-async function lmStudioMetadata(): Promise<Map<string, Partial<ModelInfo>>> {
+async function lmStudioMetadata(): Promise<{ meta: Map<string, Partial<ModelInfo>>; enMemoireLu: boolean }> {
   const meta = new Map<string, Partial<ModelInfo>>();
   const lms = await findLms();
-  if (!lms) return meta;
+  if (!lms) return { meta, enMemoireLu: false };
 
-  const parse = async (args: string[]): Promise<LmsModelEntry[]> => {
+  /** `null` : la commande n'a pas répondu, ce qui ne dit rien de la mémoire. */
+  const parse = async (args: string[]): Promise<LmsModelEntry[] | null> => {
     try {
       const { stdout } = await exec(lms, args, { timeout: 8000, maxBuffer: 4 * 1024 * 1024 });
       const parsed = JSON.parse(stdout);
-      return Array.isArray(parsed) ? parsed : [];
+      return Array.isArray(parsed) ? parsed : null;
     } catch {
-      return [];
+      return null;
     }
   };
 
-  for (const entry of await parse(["ls", "--json"])) {
+  for (const entry of (await parse(["ls", "--json"])) ?? []) {
     const key = entry.modelKey ?? entry.path;
     if (!key) continue;
     meta.set(key, {
@@ -126,17 +131,21 @@ async function lmStudioMetadata(): Promise<Map<string, Partial<ModelInfo>>> {
     });
   }
 
-  for (const entry of await parse(["ps", "--json"])) {
+  const enMemoire = await parse(["ps", "--json"]);
+  for (const entry of enMemoire ?? []) {
     const key = entry.modelKey ?? entry.path;
     if (!key) continue;
-    meta.set(key, {
+    const charge = {
       ...(meta.get(key) ?? {}),
       loaded: true,
       ...(typeof entry.contextLength === "number" ? { contexteCharge: entry.contextLength } : {}),
-    });
+    };
+    meta.set(key, charge);
+    // Une seconde copie (« qwen3-8b:2 ») est servie sous son propre nom : elle est chargée elle aussi.
+    if (entry.identifier && entry.identifier !== key) meta.set(entry.identifier, charge);
   }
 
-  return meta;
+  return { meta, enMemoireLu: enMemoire !== null };
 }
 
 async function fetchJson(
@@ -423,7 +432,7 @@ export async function discover(): Promise<Discovery> {
   // conclure qu'il n'y a aucun modèle.
   if (enabled.some((b) => b.id === "lmstudio")) await ensureLmStudioServer();
 
-  const lmMeta = await lmStudioMetadata();
+  const { meta: lmMeta, enMemoireLu } = await lmStudioMetadata();
 
   const results = await Promise.all(
     enabled.map(async (backend): Promise<{ status: BackendStatus; models: ModelInfo[] }> => {
@@ -452,24 +461,42 @@ export async function discover(): Promise<Discovery> {
               .map((m) => ({ ...m, id: m.id.replace(/^models\//, "") }))
               .filter((m) => !retenus || retenus.has(m.id));
         /*
-         * Ce que l'API de LM Studio liste est **chargé**, par définition : elle
-         * ne montre que les modèles en mémoire. On l'écrit donc tel quel, sans
+         * Ce que l'API de LM Studio liste passait pour **chargé**, sans
          * s'en remettre à `lms ps`.
          *
-         * Pourquoi c'est important : `lms ps` a un délai de huit secondes, et
-         * un LM Studio occupé à répondre le dépasse. La commande échouait
-         * alors en silence, tous les modèles passaient pour « non chargés »,
-         * et la passerelle rechargeait celui qui tournait déjà — LM Studio en
-         * ouvrait une seconde copie (« qwen3-8b:2 », 5 Go de plus) et la
-         * machine saturait. Observé chez le client le 23/09/2026.
+         * Pourquoi : `lms ps` a un délai de huit secondes, et un LM Studio
+         * occupé à répondre le dépasse. La commande échouait alors en silence,
+         * tous les modèles passaient pour « non chargés », et la passerelle
+         * rechargeait celui qui tournait déjà — LM Studio en ouvrait une
+         * seconde copie (« qwen3-8b:2 », 5 Go de plus) et la machine saturait.
+         * Observé chez le client le 23/09/2026. Cela reste vrai quand `lms ps`
+         * ne répond pas.
+         *
+         * Mais quand il répond, c'est lui qui dit ce qui est en mémoire
+         * (27/09/2026, « le modèle répond des fois un truc qui n'a rien à
+         * voir », PC Windows de Medhi). Le chargement à la demande de LM
+         * Studio (JIT) est actif par défaut, et sa documentation prévient que
+         * `/v1/models` peut alors lister **tous** les modèles téléchargés
+         * (lmstudio.ai/docs/developer/openai-compat/models). Pris pour
+         * chargés, ils n'étaient jamais chargés par Helix : LM Studio les
+         * chargeait seul à la première question, avec ses propres réglages
+         * (sa taille de conversation par défaut, quatre réponses en parallèle,
+         * la puce graphique à sa guise, et une heure avant de libérer la
+         * mémoire), au lieu de ceux de `optionsDeChargement` et de l'essai de
+         * santeModeles.ts ; et `contexteDuModele` supposait 32 768 jetons que
+         * le moteur n'avait pas. Mesuré le 27/09/2026 contre un faux LM Studio
+         * qui liste ainsi : huit questions, aucun `lms load`. Un nom servi qui
+         * n'est pas un modèle téléchargé (une seconde copie « …:2 ») reste
+         * chargé : seul le serveur le connaît.
          */
+        const charge = (id: string) => !enMemoireLu || lmMeta.get(id)?.loaded === true || !lmMeta.has(id);
         const models = entries.map((m, i) => {
           // Un fournisseur cloud : ce que sa liste déclare, lu dans son dialecte (modelesCloud.ts).
           const capacites = distant ? capacitesDistantes(distants[i]!) : null;
           const publie = capacites ? capacites.contexteMax : contexteDeLaListe(m);
           return {
             ...toModelInfo(m.id, backend, lmMeta),
-            ...(backend.kind === "lmstudio" ? { loaded: true } : {}),
+            ...(backend.kind === "lmstudio" ? { loaded: charge(m.id) } : {}),
             ...(capacites ?? {}),
             ...(publie && publie >= 1024 ? { contextePublie: Math.floor(publie) } : {}),
           };
@@ -619,12 +646,23 @@ const TTL_SECONDES = "1200";
  * pouvait plus rien faire sur un Mac de 16 Go. La mémoire se gagne par la
  * requête unique, pas par un contexte trop court.
  */
+/*
+ * Au processeur seul (Windows ou Linux sans carte NVIDIA, 27/09/2026) : une
+ * seule réponse à la fois, quelle que soit la mémoire. Deux réponses en
+ * parallèle s'y partagent les mêmes cœurs, chacune deux fois plus lente, et
+ * chaque emplacement garde sa part de mémoire ; sur un PC de 32 Go sans carte
+ * graphique, `--parallel 2` n'apportait que cela. Sans `--parallel`, LM Studio
+ * en ouvre quatre (« Max Concurrent Predictions », 4 par défaut,
+ * lmstudio.ai/docs/app/advanced/parallel-requests). Les requêtes suivantes
+ * attendent leur tour dans le moteur, sans rien mêler.
+ */
 export function optionsDeChargement(): string[] {
   const go = totalmem() / 1024 ** 3;
   const gpu = optionGpu();
+  const processeur = calculSurProcesseur(detectHardware());
   if (go <= 18) return ["--context-length", "32768", "--parallel", "1", ...gpu];
-  if (go <= 36) return ["--context-length", "32768", "--parallel", "2", ...gpu];
-  return gpu;
+  if (go <= 36) return ["--context-length", "32768", "--parallel", processeur ? "1" : "2", ...gpu];
+  return processeur ? ["--parallel", "1", ...gpu] : gpu;
 }
 
 /*
@@ -686,6 +724,17 @@ function optionGpu(): string[] {
  * pas une mesure.
  */
 export function echantillonnageLocal(modele: string, raisonner: boolean): Record<string, number> {
+  /*
+   * Ministral 3 (3B, 8B, 14B, version « instruct ») : Mistral conseille une
+   * température de 0,1 (« We recommend starting with a Temperature of 0.1 for
+   * most use cases », carte de mistralai/Ministral-3-3B-Instruct-2512, relue
+   * le 27/09/2026 ; « below 0.1 » en production). Helix n'envoyait rien : le
+   * moteur appliquait sa propre température, plus haute, et un 3B tiré au
+   * hasard s'écarte plus volontiers de la question (« des fois un truc qui
+   * n'a rien à voir », Medhi, PC Windows, Ministral 3B). Le conseil vaut
+   * pour tout moteur, Mac compris. La version « reasoning » garde le sien.
+   */
+  if (/ministral-?3(?![\d.])/i.test(modele) && !/reason/i.test(modele)) return { temperature: 0.1 };
   if (process.platform === "darwin" && process.arch === "arm64") return {};
   if (!/qwen3\.(?:[5-9]|\d{2,})/i.test(modele)) return {};
   return raisonner
@@ -897,6 +946,8 @@ async function chargerModele(modelKey: string): Promise<{ ok: boolean; message: 
   try {
     await charger();
     chargesParHelix.add(modelKey);
+    // Au journal, avec ses options : sur un poste, c'est ce qui dit que le modèle a été chargé par Helix, et comment (27/09/2026).
+    console.log(`[helix] ${modelKey} chargé par Helix : ${optionsDeChargement().join(" ")}`);
     return { ok: true, message: tf("Modèle {0} chargé.", modelKey), neuf: true };
   } catch (err) {
     const detail = err instanceof Error ? `${err.message}` : String(err);

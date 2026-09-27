@@ -149,6 +149,8 @@ export function reservePourLaReponse(contexte: number, reflechit: boolean): numb
 
 /** Marge pour ce que l'estimation ne voit pas (gabarit du modèle, consignes ajoutées en route). */
 const marge = (contexte: number) => 256 + Math.floor(contexte * 0.05);
+/** La même marge, pour la conversation entière (historique.ts). */
+export const margeDeContexte = marge;
 
 /** Au-delà, un document est trop grand pour être lu en parties : la suite n'est pas lue, et c'est dit. */
 export const PARTIES_MAX = 24;

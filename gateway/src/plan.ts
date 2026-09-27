@@ -297,6 +297,21 @@ export function consigneDeComplement(objectif: string, constatRevue: string, rap
 }
 
 /**
+ * L'objectif d'un plan, avec les mots mêmes de la personne (27/09/2026).
+ *
+ * Le tri rend un « objectif », sa reformulation de la demande, et chaque étape
+ * ne voyait que lui. Un petit modèle reformule mal (« rédiger un texte sur le
+ * deuxième point ») : tout le travail partait alors sur autre chose que ce qui
+ * était demandé, sans que rien ne le rattrape. La demande exacte suit donc
+ * toujours la reformulation.
+ */
+export function avecDemande(objectif: string, demande: string): string {
+  const d = demande.trim();
+  if (!d || objectif.includes(d)) return objectif;
+  return `${objectif}\n(Demande de la personne, mot pour mot : « ${d.slice(0, 4000)} »)`;
+}
+
+/**
  * Extrait le plan d'une réponse de modèle.
  *
  * Les petits modèles encadrent volontiers leur JSON de texte ou de balises de

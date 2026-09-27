@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { randomBytes, createCipheriv, createDecipheriv } from "node:crypto";
-import { closeSync, fsyncSync, linkSync, lstatSync, mkdirSync, openSync, readFileSync, renameSync, unlinkSync, writeSync } from "node:fs";
+import { closeSync, existsSync, fsyncSync, linkSync, lstatSync, mkdirSync, openSync, readFileSync, renameSync, unlinkSync, writeSync } from "node:fs";
 import { open, rename, rm } from "node:fs/promises";
 import { join, dirname } from "node:path";
 import { homedir } from "node:os";
@@ -73,7 +73,33 @@ function lireTrousseau(): LectureTrousseau {
   }
 }
 
+/*
+ * Le compte a-t-il un trousseau par défaut, bien présent sur le disque ?
+ *
+ * Vu le 27/09/2026 : une passerelle lancée avec un dossier personnel sans
+ * trousseau (essai, compte de service) appelait `add-generic-password`, et
+ * macOS ouvrait « Trousseau introuvable » avec un bouton « Rétablir les
+ * valeurs par défaut ». Ce bouton remplace le trousseau de session par un
+ * trousseau vide : les mots de passe de la personne ne sont plus accessibles
+ * directement. `security default-keychain` répond sans aucune fenêtre (mesuré
+ * le même jour, avec et sans trousseau) : on le consulte avant d'écrire.
+ */
+function trousseauPresent(): boolean {
+  try {
+    const sortie = execFileSync("security", ["default-keychain", "-d", "user"], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    });
+    const chemin = /"([^"]+)"/.exec(sortie)?.[1];
+    return Boolean(chemin && existsSync(chemin));
+  } catch {
+    return false;
+  }
+}
+
 function ecrireTrousseau(cle: Buffer): boolean {
+  // Sans trousseau, `security` ouvrirait une fenêtre qui invite à « rétablir » celui de la session.
+  if (!trousseauPresent()) return false;
   try {
     execFileSync(
       "security",

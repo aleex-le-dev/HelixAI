@@ -17,7 +17,7 @@
  * chaque porte ne les rate pas, et se rejoue à chaque version.
  */
 import { execFileSync, spawn } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -2122,6 +2122,7 @@ console.log("\n7 septies. Essai du modèle sur cette machine : celui qui répond
     process.exit(0);
     `,
   );
+  writeFileSync(join(ICI, "essai-fichier.json"), JSON.stringify({ chiffrement: "fichier" }));
   const lancer = () =>
     new Promise((ok) => {
       const enfant = spawn(process.execPath, ["--experimental-strip-types", "--no-warnings", join(ICI, "essai.mjs")], {
@@ -2132,7 +2133,8 @@ console.log("\n7 septies. Essai du modèle sur cette machine : celui qui répond
           HOME: join(ICI, "maison"),
           TMPDIR: tmpdir(),
           FAUX_LMS_DIR: ICI,
-          HELIX_CONFIG: join(ICI, "absent.json"),
+          // Dossier personnel sans trousseau : chiffrement par fichier, sinon macOS ouvre « Trousseau introuvable ».
+          HELIX_CONFIG: join(ICI, "essai-fichier.json"),
           HELIX_DATA_DIR: join(ICI, "donnees"),
           HELIX_LMSTUDIO_URL: `http://127.0.0.1:${PORT_EMBED}/v1`,
           HELIX_EXO_URL: "http://127.0.0.1:9/v1",
@@ -3270,13 +3272,14 @@ console.log("\n11 quinquies. Windows et Linux : ce qui se vérifie depuis ce pos
 
   // Revue de sécurité du 27/09/2026 (nuit) : ce qu'un membre ne doit plus pouvoir faire, et les installations épinglées.
   const d5 = dossierNeuf(join(tmpdir(), "helix-pointeur-"));
+  ecrireF(join(d5, "essai-fichier.json"), JSON.stringify({ chiffrement: "fichier" }));
   const pointeur = essai(`const fs = await import("node:fs"); const os = await import("node:os");
     const e = await import("./gateway/src/engine.ts"); const z = await import("./gateway/src/zonesProtegees.ts");
     const p = os.homedir() + "/.lmstudio-home-pointer";
     fs.mkdirSync(os.homedir() + "/ailleurs"); fs.writeFileSync(p, "//serveur/partage"); const unc = e.dossierLmStudio();
     fs.writeFileSync(p, "relatif/bin"); const rel = e.dossierLmStudio();
     fs.writeFileSync(p, os.homedir() + "/ailleurs"); const ok = e.dossierLmStudio();
-    console.log([unc.endsWith("/.lmstudio"), rel.endsWith("/.lmstudio"), ok.endsWith("/ailleurs"), z.estProtege(p), z.estProtege(os.homedir() + "/.lmstudio/bin/lms"), z.estProtege(os.homedir() + "/snap/firefox/common/.mozilla")].join(","));`, { HOME: d5, HELIX_DATA_DIR: join(d5, "donnees") });
+    console.log([unc.endsWith("/.lmstudio"), rel.endsWith("/.lmstudio"), ok.endsWith("/ailleurs"), z.estProtege(p), z.estProtege(os.homedir() + "/.lmstudio/bin/lms"), z.estProtege(os.homedir() + "/snap/firefox/common/.mozilla")].join(","));`, { HOME: d5, HELIX_DATA_DIR: join(d5, "donnees"), HELIX_CONFIG: join(d5, "essai-fichier.json") });
   verifier("pointeur de LM Studio : ni partage réseau ni chemin relatif ; le pointeur, `lms` et les profils snap sont des zones protégées", pointeur.trim().endsWith("true,true,true,true,true,true"), pointeur.slice(-200));
   const d6 = dossierNeuf(join(tmpdir(), "helix-cle-lien-"));
   ecrireF(join(d6, "c.json"), JSON.stringify({ chiffrement: "fichier" }));
@@ -3299,8 +3302,8 @@ console.log("\n11 quinquies. Windows et Linux : ce qui se vérifie depuis ce pos
    * remplacé, et le dossier personnel est un dossier neuf (jamais ~/.opencode).
    */
   const d7 = dossierNeuf(join(tmpdir(), "helix-opencode-auto-"));
-  ecrireF(join(d7, "libre.json"), JSON.stringify({ backends: [{ id: "lmstudio", enabled: false }, { id: "exo", enabled: false }] }));
-  ecrireF(join(d7, "integrateur.json"), JSON.stringify({ autoProvision: false, backends: [{ id: "lmstudio", enabled: false }, { id: "exo", enabled: false }] }));
+  ecrireF(join(d7, "libre.json"), JSON.stringify({ chiffrement: "fichier", backends: [{ id: "lmstudio", enabled: false }, { id: "exo", enabled: false }] }));
+  ecrireF(join(d7, "integrateur.json"), JSON.stringify({ chiffrement: "fichier", autoProvision: false, backends: [{ id: "lmstudio", enabled: false }, { id: "exo", enabled: false }] }));
   const sondeOpencode = `const appels = []; globalThis.fetch = async (u) => { appels.push(String(u)); return new Response(new Blob([new Uint8Array(4096).fill(7)]).stream(), { status: 200 }); };
     const o = await import("./gateway/src/opencode.ts"); const p = await import("./gateway/src/opencodePrive.ts"); const fs = await import("node:fs");
     const verdict = await o.opencodeEnFond();
@@ -3314,6 +3317,34 @@ console.log("\n11 quinquies. Windows et Linux : ce qui se vérifie depuis ce pos
   const absent = essai(sondeOpencode, sansOpencode("libre.json"));
   verifier("OpenCode sans clic : absent, la version épinglée est demandée à github.com, et une archive à la mauvaise empreinte n'est pas posée", /VERDICT lancee APPELS https:\/\/github\.com\/anomalyco\/opencode\/releases\/download\/v1\.18\.32\/\S+ POSE false ERREUR .*(empreinte|checksum)/.test(absent), absent.slice(-240));
   rmSync(d7, { recursive: true, force: true });
+
+  /*
+   * Vu le 27/09/2026 : une passerelle d'essai, lancée dans un dossier personnel
+   * sans trousseau, a ouvert chez Medhi « Trousseau introuvable » avec
+   * « Rétablir les valeurs par défaut », qui remplace le trousseau de session
+   * par un trousseau vide. Un faux `security` note ses appels (aucune fenêtre
+   * possible, même si la garde cédait) : sans trousseau, rien n'est écrit.
+   */
+  const d8 = dossierNeuf(join(tmpdir(), "helix-sans-trousseau-"));
+  const fauxSecurity = join(d8, "bin", "security");
+  mkdirSync(join(d8, "bin"));
+  ecrireF(fauxSecurity, `#!/bin/sh\necho "$@" >> "${join(d8, "appels.txt")}"\ncase "$1" in\n  find-generic-password) echo "security: SecKeychainSearchCopyNext: The specified item could not be found in the keychain." >&2; exit 44;;\n  default-keychain) echo "security: SecKeychainCopyDomainDefault user: A default keychain could not be found." >&2; exit 1;;\n  *) exit 0;;\nesac\n`);
+  chmodSync(fauxSecurity, 0o755);
+  const sansTrousseau = essai(`const s = await import("./gateway/src/secret.ts"); console.log("CLE", s.cleDonnees() === null ? "aucune" : "posee");`, {
+    HOME: d8,
+    PATH: `${join(d8, "bin")}:/usr/bin:/bin`,
+    HELIX_CONFIG: join(d8, "absent.json"),
+    HELIX_DATA_DIR: join(d8, "donnees"),
+  });
+  const appelsSecurity = existsSync(join(d8, "appels.txt")) ? readFileSync(join(d8, "appels.txt"), "utf8") : "";
+  if (process.platform === "darwin") {
+    verifier(
+      "trousseau absent du dossier personnel : aucune écriture tentée (pas de fenêtre « Trousseau introuvable » qui invite à rétablir celui de la session)",
+      sansTrousseau.includes("CLE aucune") && appelsSecurity.includes("default-keychain") && !appelsSecurity.includes("add-generic-password"),
+      `${sansTrousseau.slice(-160)} | appels : ${appelsSecurity.replace(/-w \S+/g, "-w …").trim()}`,
+    );
+  }
+  rmSync(d8, { recursive: true, force: true });
 }
 
 console.log("\n11 sexies. Presse-papiers de l'application de bureau : écrire du texte, rien lire (27/09/2026)");

@@ -580,8 +580,12 @@ async function handleEngineInstall(
   moteurEnInstallation = true;
   void installerMoteur((p) =>
     setProvisionState({
-      phase:
-        p.phase === "pret" ? "ready" : p.phase === "erreur" ? "error" : "downloading",
+      /*
+       * Moteur posé : pas encore « prêt » pour l'écran, la suite (démarrage,
+       * modèle) enchaîne. « ready » fermait le suivi de l'écran, qui restait
+       * figé pendant le téléchargement du modèle (MacBook, 27/09/2026).
+       */
+      phase: p.phase === "pret" ? "checking" : p.phase === "erreur" ? "error" : "downloading",
       message: p.message,
       percent: p.percent,
     }),

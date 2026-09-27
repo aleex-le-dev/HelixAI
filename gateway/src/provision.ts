@@ -479,7 +479,7 @@ async function provision(
     return state;
   }
 
-  const installed = await run(lms, ["ls"], () => {});
+  let installed = await run(lms, ["ls"], () => {});
 
   // On tente le modèle recommandé, puis les plus légers si la machine refuse.
   const candidates = replis(hw, catalogue, start);
@@ -499,9 +499,17 @@ async function provision(
           message: tf("Téléchargement de {0} déjà en cours, reprise du suivi...", choice.label),
           percent: undefined,
         });
-        return state;
+        /*
+         * On attend sa fin, puis on enchaîne : rendre la main ici laissait
+         * l'écran sur « reprise du suivi » pour toujours, et le modèle, une
+         * fois arrivé, jamais chargé (27/09/2026).
+         */
+        while (await dejaEnTelechargement(choice.key)) await new Promise((r) => setTimeout(r, 5000));
+        installed = await run(lms, ["ls"], () => {});
       }
+    }
 
+    if (!installed.output.includes(choice.key)) {
       setState({
         phase: "downloading",
         message: tf("Téléchargement de {0} (~{1} Go)...", choice.label, choice.downloadGb),

@@ -56,6 +56,9 @@ export function useProvision() {
   /** Fermeture du flux ouvert, s'il y en a un (lib/flux.ts). */
   const sourceRef = useRef<(() => void) | null>(null);
 
+  /** `suivre`, pour `load` (défini après lui). */
+  const suivreRef = useRef<() => void>(() => {});
+
   const load = useCallback(() => {
     apiFetch(`/helix/provision`)
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
@@ -63,6 +66,12 @@ export function useProvision() {
         setStatus(data);
         setState(data.state);
         setUnreachable(false);
+        /*
+         * Une installation en cours (écran rouvert pendant un téléchargement,
+         * ou modèle enchaîné après le moteur) : on suit sa progression, sans
+         * quoi l'écran reste figé sur cette photo (MacBook, 27/09/2026).
+         */
+        if (["checking", "downloading", "loading"].includes(data.state.phase) && !sourceRef.current) suivreRef.current();
       })
       .catch(() => setUnreachable(true));
   }, []);
@@ -94,6 +103,7 @@ export function useProvision() {
       { reprendre: false, onErreur: () => { sourceRef.current = null; } },
     );
   }, [load]);
+  suivreRef.current = suivre;
 
   /** Lance le téléchargement d'un modèle et suit la progression. */
   const start = useCallback(
@@ -109,8 +119,8 @@ export function useProvision() {
   );
 
   /**
-   * Installe le moteur d'exécution des modèles (LM Studio). L'entreprise en
-   * accepte les conditions d'utilisation : la passerelle refuse sans cet accord.
+   * Installe le moteur d'exécution des modèles (LM Studio). La personne, ou
+   * son organisation, en accepte les conditions : la passerelle refuse sans cet accord.
    */
   const installerMoteur = useCallback(() => {
     suivre();

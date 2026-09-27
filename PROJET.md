@@ -2792,6 +2792,19 @@ moment du choix (niveau d'approbation, palier « étendu »). Ne pas refaire à 
   autre origine : le navigateur refusait sans rien envoyer. En développement, tout passe par le
   serveur de Vite (même origine), d'où un défaut invisible jusque-là. Même cause pour « supprimer
   une tâche programmée ». DELETE est permis, et `npm run securite` le contrôle (433 contrôles).
+- MacBook, après le moteur : l'écran du modèle affichait « environ 6 Go » et ne bougeait plus.
+  Le moteur posé était annoncé « prêt », ce qui fermait le suivi de la progression, alors que
+  la passerelle enchaînait sur le modèle : l'écran restait sur sa première photo. Le moteur
+  posé est maintenant une étape (`checking`), et l'écran se rebranche sur toute installation en
+  cours qu'il trouve (écran rouvert pendant un téléchargement). Aussi : un téléchargement
+  laissé par un lancement précédent n'était plus suivi (« reprise du suivi » pour toujours, et
+  le modèle jamais chargé) ; Helix attend maintenant sa fin, puis charge. **Vérifié ici** : sans
+  terminal, `lms get` (LM Studio 0.4.25) donne bien sa progression en pourcentage.
+  **Pas vérifié** : le parcours complet sur un Mac sans moteur (le MacBook).
+- Acceptation des conditions de LM Studio : « Mon entreprise accepte » ne convenait pas à un
+  particulier. Relu le 27/09/2026 (version du 23/08/2026) : elles permettent l'usage personnel
+  et les besoins internes d'une organisation, pas un service fourni à d'autres. L'écran dit
+  maintenant « J'accepte, pour moi ou au nom de mon organisation ».
 - Réponses en français à un message en anglais : la consigne française disait « tu réponds en
   français ». Le modèle répond maintenant dans la langue du dernier message, agents compris ;
   la langue de base est l'anglais (interface, passerelle, zone de notification) quand celle du

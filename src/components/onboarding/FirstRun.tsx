@@ -123,7 +123,7 @@ export function FirstRun({ onReady }: { onReady: () => void }) {
                 onChange={(e) => setConditions(e.target.checked)}
               />
               <span>
-                {t("Mon entreprise accepte les")}{" "}
+                {t("J'accepte, pour moi ou au nom de mon organisation, les")}{" "}
                 <a
                   href="https://lmstudio.ai/app-terms"
                   target="_blank"
@@ -132,7 +132,7 @@ export function FirstRun({ onReady }: { onReady: () => void }) {
                 >
                   {t("conditions d'utilisation de LM Studio")}
                 </a>
-                {t(", qui en réservent l'usage aux besoins internes de l'entreprise.")}
+                {t(", qui en permettent l'usage personnel et interne, pas un service fourni à d'autres.")}
               </span>
             </label>
             <Button icon={Download} disabled={!conditions} onClick={() => void installerMoteur()}>

@@ -2,6 +2,7 @@ import { db } from "./db.ts";
 import { deployment, champImpose, type ComputerUseConfig } from "./deployment.ts";
 import { journaliser } from "./audit.ts";
 import { t } from "./langue.ts";
+import { surLeReseau } from "./config.ts";
 
 /**
  * D'où vient le mode du contrôle de l'écran, et qui peut le changer.
@@ -41,12 +42,28 @@ export async function chargerReglagesEcran(): Promise<void> {
   }
 }
 
+/**
+ * L'instance est-elle ouverte aux collègues ? `share` du profil, **ou** une
+ * écoute sur le réseau (`HELIX_GATEWAY_HOST`, ou l'interrupteur « ouvrir aux
+ * collègues » de l'écran, reseau.ts), comme `instancePartagee` d'index.ts.
+ *
+ * Test d'intrusion du 27/09/2026 : seul `share` était regardé. Une instance
+ * de bureau ouverte par l'interrupteur de l'écran n'a pas `share` : un
+ * collègue connecté par le réseau pouvait activer lui-même le contrôle de
+ * l'écran de la machine (son propre mot de passe suffisait) puis approuver ses
+ * propres clics ; et un choix fait avant l'ouverture restait actif après,
+ * captures sans carte comprises. Ce n'est plus « la personne devant l'écran
+ * piloté ».
+ */
+export const ouverteAuxCollegues = (): boolean => deployment().share === true || surLeReseau();
+
 export function configEcran(): ComputerUseConfig & { source: SourceEcran } {
   if (champImpose("computerUse")) {
     const imposee = deployment().computerUse ?? { mode: "desactive" as const, requireApproval: true };
     return { ...imposee, source: "profil" };
   }
-  if (choix) return { mode: choix.mode, requireApproval: true, source: "interface" };
+  // Un choix fait depuis l'écran ne vaut que sur un poste fermé au réseau : ouvert, seul le profil peut l'activer.
+  if (choix && !ouverteAuxCollegues()) return { mode: choix.mode, requireApproval: true, source: "interface" };
   return { mode: "desactive", requireApproval: true, source: "defaut" };
 }
 
@@ -55,7 +72,7 @@ export function modeModifiable(mode?: ModeInterface): { ok: true } | { ok: false
   if (champImpose("computerUse")) {
     return { ok: false, raison: t("Réglé par votre prestataire dans le profil de déploiement.") };
   }
-  if (deployment().share === true) {
+  if (ouverteAuxCollegues()) {
     return {
       ok: false,
       raison:

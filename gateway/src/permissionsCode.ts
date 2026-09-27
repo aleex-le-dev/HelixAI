@@ -2,7 +2,8 @@ import { annuler, fermerDemande, modifie, ouvrirDemande, verifierOutil } from ".
 import { journaliser } from "./audit.ts";
 import { sessionCode } from "./sessionsCode.ts";
 import { t, tf } from "./langue.ts";
-import { isAbsolute, join, resolve } from "node:path";
+import { existsSync } from "node:fs";
+import { dirname, isAbsolute, join, parse, resolve } from "node:path";
 import { cheminReel, estProtege } from "./zonesProtegees.ts";
 
 /**
@@ -90,6 +91,63 @@ const texte = (v: unknown, max = 4000): string => (typeof v === "string" ? v.sli
 export const COMMANDE_MAX = 20_000;
 
 /**
+ * La racine qu'OpenCode prend pour le projet (`worktree`) : le dépôt Git qui
+ * contient le dossier, sinon la racine du disque (lu dans son code 1.18.32 :
+ * un projet sans Git a `worktree: "/"`). Ses motifs d'écriture y sont relatifs,
+ * pas au dossier de la session.
+ */
+function racineDuProjet(dossier: string): string {
+  let d = resolve(dossier);
+  for (;;) {
+    if (existsSync(join(d, ".git"))) return d;
+    const parent = dirname(d);
+    if (parent === d) return parse(d).root;
+    d = parent;
+  }
+}
+
+/**
+ * Les fichiers qu'une modification d'OpenCode touche, en chemins absolus.
+ *
+ * Test d'intrusion du 27/09/2026 : pour `apply_patch` (proposé aux modèles
+ * « gpt-… », les modèles branchés par une clé), OpenCode 1.18.32 demande
+ * `edit` avec `patterns` = les fichiers relatifs à la racine du dépôt, et
+ * `metadata.filepath` = ces noms **joints par des virgules** ; les chemins
+ * absolus, destination d'un « Move to » comprise, ne sont que dans
+ * `metadata.files` (lu dans son code). Helix lisait `filepath` : un seul
+ * « chemin » fait de tous les noms, qui ne tombait jamais dans une zone
+ * protégée ; le deuxième fichier d'un correctif, ou la destination d'un
+ * déplacement par un lien du projet, passait donc le refus des zones, et au
+ * niveau « Tout approuver » sans aucune carte.
+ */
+export function cheminsModifies(d: DemandeOpenCode, dossier: string): string[] {
+  const m = d.metadata ?? {};
+  const liste: string[] = [];
+  const racine = racineDuProjet(dossier);
+  // `isAbsolute`, pas `startsWith("/")` (audit Windows du 27/09/2026) : `C:\\projet\\app.ts` devenait `C:\\projet/C:\\projet\\app.ts`.
+  const ajouter = (v: unknown, base: string) => {
+    const c = texte(v);
+    if (c) liste.push(isAbsolute(c) ? c : join(base, c));
+  };
+  if (Array.isArray(m.files)) {
+    for (const f of m.files.slice(0, 500)) {
+      if (!f || typeof f !== "object") continue;
+      const fichier = f as Record<string, unknown>;
+      ajouter(fichier.filePath, dossier);
+      ajouter(fichier.movePath, dossier);
+    }
+  }
+  if (liste.length === 0) {
+    const motifs = (d.patterns ?? []).filter((p) => typeof p === "string" && p);
+    const un = texte(m.filepath) || texte(m.filePath);
+    // Un seul fichier (outils `edit` et `write`) : `filepath` est son chemin absolu. Plusieurs : les motifs, relatifs à la racine du dépôt.
+    if (un && motifs.length <= 1) ajouter(un, dossier);
+    else for (const p of motifs.slice(0, 500)) ajouter(p, racine);
+  }
+  return [...new Set(liste)];
+}
+
+/**
  * Traduit une demande d'OpenCode en appel d'outil pour la barrière :
  * `code__bash` + `{ commande }`, `code__edit` + `{ path }`, etc. Le chemin
  * visé passe par `path`, que la barrière sait lire (portée par dossier).
@@ -105,9 +163,9 @@ export function outilDe(d: DemandeOpenCode, dossier: string): { outil: string; a
     case "edit":
     case "write":
     case "apply_patch": {
-      const chemin = texte(m.filepath) || texte(m.filePath) || texte(motif);
-      // `isAbsolute`, pas `startsWith("/")` (audit Windows du 27/09/2026) : `C:\\projet\\app.ts` devenait `C:\\projet/C:\\projet\\app.ts`, refusé comme zone protégée.
-      return { outil, args: { path: chemin && !isAbsolute(chemin) ? join(dossier, chemin) : chemin } };
+      // Tous les fichiers touchés, destinations d'un déplacement comprises : la carte, la portée et les zones protégées portent sur chacun.
+      const liste = cheminsModifies(d, dossier);
+      return { outil, args: liste.length > 1 ? { paths: liste } : { path: liste[0] ?? "" } };
     }
     case "webfetch":
       return { outil, args: { url: texte(m.url) || texte(motif) } };
@@ -159,9 +217,14 @@ export async function traiterPermissionCode(
    * le projet vers `~/.ssh` est refusé comme sa cible. Une commande (`bash`)
    * ne se borne pas par des chemins : sa carte la montre entière.
    */
-  if (typeof args.path === "string" && args.path) {
-    const sansMotif = args.path.split(/[*?[{]/)[0]!;
-    if (estProtege(cheminReel(sansMotif ? resolve(dossier, sansMotif) : args.path))) {
+  const vises = Array.isArray(args.paths) ? (args.paths as string[]) : typeof args.path === "string" && args.path ? [args.path] : [];
+  // Une modification dont on ne sait pas quel fichier elle touche ne se soumet pas : la carte ne saurait pas le dire, ni les zones le refuser.
+  if (vises.length === 0 && ["edit", "write", "apply_patch"].includes(d.permission)) {
+    return refuser("chemin-inconnu", t("Refusé par l'instance : elle ne sait pas quel fichier cette modification toucherait."), proprietaire);
+  }
+  for (const vise of vises) {
+    const sansMotif = vise.split(/[*?[{]/)[0]!;
+    if (estProtege(cheminReel(sansMotif ? resolve(dossier, sansMotif) : vise))) {
       return refuser("zone-protegee", t("Refusé par l'instance : ce chemin est dans une zone protégée (données de l'instance, clés, réglages d'autres logiciels). Aucun accord ne l'ouvre."), proprietaire);
     }
   }

@@ -84,6 +84,15 @@ function calculerZones(): string[] {
     join(maison, ".claude.json"),
     join(maison, ".codex"),
     join(maison, ".cursor"),
+    /*
+     * OpenCode (test d'intrusion du 27/09/2026) : `~/.opencode` est relu à
+     * chaque démarrage de l'agent de code de Helix, greffons compris (un
+     * fichier `plugin/*.js` écrit par un agent y serait exécuté) ;
+     * `~/.local/share/opencode` porte `auth.json`, les clés de fournisseurs de
+     * la personne, et ses sessions.
+     */
+    join(maison, ".opencode"),
+    join(maison, ".local", "share", "opencode"),
     // Trousseaux du système.
     join(maison, "Library", "Keychains"),
     // Profil de l'application de bureau (séance ouverte dans son stockage local).

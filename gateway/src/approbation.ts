@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, isAbsolute, join, resolve } from "node:path";
 import { journaliser } from "./audit.ts";
 import { apercuEnvoi, envoiSansAccord, presenterMessage } from "./courrier.ts";
 
@@ -287,8 +287,11 @@ export function resumerOutil(outil: string, args: Record<string, unknown>): stri
         return `lancer la commande « ${commande.split("\n")[0]!.slice(0, 200)}${commande.includes("\n") || commande.length > 200 ? " …" : ""} » dans ${texteOu(args.dossier, "le dossier du projet")}`;
       case "edit":
       case "write":
-      case "apply_patch":
-        return `modifier ${ou}`;
+      case "apply_patch": {
+        // Un correctif de plusieurs fichiers le dit : la liste entière part dans le détail de la carte (`cibles`).
+        const combien = Array.isArray(args.paths) ? args.paths.length : 0;
+        return combien > 1 ? `modifier ${combien} fichiers, dont ${ou}` : `modifier ${ou}`;
+      }
       case "webfetch":
         return `ouvrir l'adresse ${typeof args.url === "string" ? args.url.slice(0, 200) : "demandée"}`;
       case "websearch":
@@ -688,6 +691,34 @@ function chemins(args: Record<string, unknown>): string[] {
   return un ? [un] : [];
 }
 
+/**
+ * Le dossier où un déplacement dépose vraiment le fichier. Un `move_file`
+ * vers un dossier existant y range le fichier (`adapterFichiers`, outils.ts) :
+ * c'est ce dossier qui le reçoit, pas son parent. Test d'intrusion du
+ * 27/09/2026 : la clé prenait le parent de « Archive » (le dossier de
+ * travail), si bien qu'un accord pour « déplacer vers Archive » couvrait,
+ * sans carte, un déplacement vers « Public » depuis le même dossier.
+ */
+/*
+ * Le dossier de travail, donné par outils.ts (qui le tient de mcp.ts). Pas
+ * d'import de mcp.ts ici : il fixe son dossier au chargement, et la barrière
+ * est chargée seule par d'autres modules et par la batterie de sécurité.
+ */
+let espaceDeTravail: () => string = () => process.cwd();
+export function definirEspaceDeTravail(fn: () => string): void {
+  espaceDeTravail = fn;
+}
+
+function dossierDArrivee(destination: string): string {
+  try {
+    const cible = isAbsolute(destination) ? destination : resolve(espaceDeTravail(), destination);
+    if (statSync(cible).isDirectory()) return cible;
+  } catch {
+    /* destination absente : un vrai renommage, son dossier est celui du chemin */
+  }
+  return dirname(destination);
+}
+
 /** Clé de portée : ce que couvre une réponse déjà donnée. */
 function portee(outil: string, args: Record<string, unknown>, courant: Niveau): string {
   const cible = chemin(args);
@@ -716,7 +747,7 @@ function portee(outil: string, args: Record<string, unknown>, courant: Niveau): 
    */
   const vers =
     typeof args.destination === "string" && args.destination
-      ? `>${dirname(args.destination)}`
+      ? `>${dossierDArrivee(args.destination)}`
       : "";
 
   /*

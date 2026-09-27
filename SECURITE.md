@@ -10,7 +10,8 @@ sont au § 17 ; ce qui a été fermé depuis, au § 18 ; la surface ajoutée par
 travail, au § 20. Les surfaces ajoutées le 24/09/2026 sont au § 21, celles du
 25/09/2026 (images des Chats partagés, bases de connaissances, entraînement,
 ligne de commande et outils de Code) au § 22. Les clés d'API personnelles du
-26/09/2026 sont au § 23.
+26/09/2026 sont au § 23. Le test d'intrusion de ce que font les agents et les
+modèles (27/09/2026) est au § 31.
 
 ---
 
@@ -691,9 +692,14 @@ dans cet ordre de priorité :
    prestataire ») ;
 2. **l'interface** (depuis 0.10.0) : Paramètres, Contrôle de l'écran, « Activer sur
    ce Mac », ou le raccourci du bouton « Écran » de Cowork. Conditions :
-   - **instance non partagée** seulement (`share` absent ou `false`) : la personne
-     connectée est devant l'écran piloté. Sur une instance partagée, n'importe quel
-     collègue ferait sinon piloter l'écran du serveur ;
+   - **instance non partagée** seulement (`share` absent ou `false`, **et** aucune
+     écoute sur le réseau, ni par `HELIX_GATEWAY_HOST` ni par l'interrupteur « ouvrir
+     aux collègues », depuis le 27/09/2026, § 31) : la personne connectée est devant
+     l'écran piloté. Sur une instance partagée, n'importe quel collègue ferait sinon
+     piloter l'écran du serveur. Un choix fait avant l'ouverture au réseau ne vaut plus
+     après ;
+   - **l'administrateur seul** (27/09/2026, § 31) : un membre reçoit 403 avant même
+     que son mot de passe soit lu ;
    - **mot de passe redemandé**, et code si la double authentification est active ;
      désactiver ne demande rien, resserrer est toujours permis ;
    - seul le mode `hote` est proposé, **toujours avec approbation** : l'interface ne
@@ -842,7 +848,8 @@ des noms qui y sont. La liste (`gateway/src/zonesProtegees.ts`) : `HELIX_DATA_DI
 (dont `openclaw/` et `openclaw-moteur/`), `~/.helix`, `~/.openclaw`, `~/.ssh`,
 `~/.gnupg`, `~/.aws`, `~/.azure`, `~/.kube`, `~/.docker`, `~/.password-store`,
 `~/.netrc`, `~/.npmrc`, `~/.git-credentials`, `~/.config`, `~/.claude`,
-`~/.claude.json`, `~/.codex`, `~/.cursor`, `~/Library/Keychains`, et le profil de
+`~/.claude.json`, `~/.codex`, `~/.cursor`, `~/.opencode` et `~/.local/share/opencode`
+(27/09/2026, § 31), `~/Library/Keychains`, et le profil de
 l'application de bureau (`~/Library/Application Support/Helix`). Ces dossiers ne
 peuvent pas non plus être choisis comme dossier de l'équipe (400). Ce n'est pas une
 liste de tout ce qui est secret : un fichier sensible rangé ailleurs par la personne
@@ -3513,3 +3520,90 @@ dans la réponse ; la reprise, une session inconnue ou fabriquée (400), un doss
 (400) ; « tout » et « chaque » ; un `turn.failed` ; une seule tâche à la fois, l'arrêt refusé à un
 membre et fait pour le propriétaire (processus fini) ; le journal sans le texte. **Pas essayé** :
 le vrai `codex`, un vrai compte ChatGPT, Windows.
+
+## 31. Test d'intrusion : ce que font les agents et les modèles (27 septembre 2026)
+
+Demandé par Medhi. Un agent a attaqué ce que les agents et les modèles peuvent faire faire
+à l'instance : l'écran Code (OpenCode, ses permissions, la réparation des appels d'outils),
+Codex, Cowork et la barrière d'approbation, le contrôle de l'écran, les employés OpenClaw, le
+serveur de fichiers, les documents joints, la garde anti-boucle. Chaque faille ci-dessous a été
+reproduite par un essai (faux modèle, faux moteur, ou le vrai OpenCode sans modèle), corrigée
+à la racine, et a son contrôle dans `npm run securite` : les 8 contrôles nouveaux échouent sur
+le code d'avant (vérifié en rejouant la batterie sur les sources d'avant le correctif), et la
+batterie entière passe après (649 contrôles, 0 échec, le 27/09/2026).
+
+### 31.1 Failles corrigées
+
+| Gravité | Composant | Ce qui se passait | Correctif | Contrôle |
+|---|---|---|---|---|
+| **Critique** | Helix Code, OpenCode (`opencode.ts`) | OpenCode lit les réglages **du projet** : les `opencode.json` du dossier (jusqu'à la racine du dépôt) et ses dossiers `.opencode` (greffons `plugin/*.js`, agents, commandes, serveurs MCP). Lu dans son code 1.18.32 (`ConfigPaths.directories`), puis **essayé avec le vrai OpenCode 1.18.32**, dossier personnel jetable, aucun modèle : un projet portant `.opencode/plugin/preuve.js` a fait exécuter ce fichier dès l'ouverture d'une session (`POST /session?directory=…`, ce que fait Helix Code), sans aucune carte ; son `opencode.json` donnait `"*": "allow"` à l'agent `build` (lu dans `GET /config`), par-dessus les permissions de Helix. Ouvrir un dépôt cloné dans Helix Code suffisait, sans qu'aucun modèle soit appelé. | `OPENCODE_DISABLE_PROJECT_CONFIG=true` dans l'environnement d'OpenCode. Même essai : greffon non exécuté, permissions de `build` vides. **Contrepartie** : les `AGENTS.md` du projet ne sont plus lus par OpenCode. | 1 |
+| Élevée | Helix Code, barrière (`permissionsCode.ts`) | Pour `apply_patch` (proposé par OpenCode aux modèles dont le nom contient « gpt- », c'est-à-dire les modèles branchés par une clé), OpenCode demande `edit` avec `patterns` relatifs à la racine du dépôt, `metadata.filepath` = les noms **joints par des virgules**, et les chemins absolus, destination d'un « Move to » comprise, dans `metadata.files` (forme lue dans son code 1.18.32). Helix jugeait `filepath` comme un seul chemin : le refus des zones protégées ne voyait que ce faux chemin. Essayé avec le faux OpenCode : un correctif de deux fichiers, dont un déplacé par un lien du projet vers les données de l'instance, arrivait en carte « modifier … a.txt, b.txt », et passait **sans carte** au niveau « Tout approuver ». | Tous les fichiers de `metadata.files` (source et destination), sinon chaque motif rattaché à la racine du dépôt ; chacun passe le refus des zones ; la carte dit « modifier N fichiers » et les nomme (`cibles`) ; la portée de l'accord couvre leurs dossiers. Une modification dont aucun fichier n'est lisible est refusée sans carte. | 3 |
+| Élevée | Contrôle de l'écran (`reglagesEcran.ts`, `index.ts`) | Seul `share` du profil fermait le réglage depuis l'interface. Une instance de bureau ouverte par l'interrupteur « ouvrir aux collègues » (ou `HELIX_GATEWAY_HOST`) écoute sur le réseau **sans** `share` : un collègue connecté par le réseau pouvait activer lui-même le contrôle de l'écran de la machine (son mot de passe suffisait) et approuver ses propres clics ; un choix fait avant l'ouverture restait actif, captures de l'écran sans carte comprises. Essayé : chargé « sur le réseau », le module gardait le mode choisi avant et se laissait encore activer ; un membre passait jusqu'au contrôle de son mot de passe (essai fait avec un mot de passe faux, pour ne rien activer ni capturer sur ce poste). | Instance ouverte aux collègues = `share` **ou** écoute sur le réseau : le choix de l'interface ne vaut plus, seul le profil peut activer. Activer est réservé à l'administrateur (403 `ecran_administrateur`, avant le mot de passe). | 2 (+1 témoin) |
+| Moyenne | Employés, OpenClaw (`employes.ts`) | OpenClaw recevait tout l'environnement de la passerelle, moins les `HELIX_*` et `ELECTRON_*`. Essayé avec le faux OpenClaw : une clé de l'hôte (`AWS_SECRET_ACCESS_KEY`) lui arrivait. C'est l'environnement des commandes d'un employé « libre » (sortie lue par le modèle) et celui où OpenClaw peut chercher des clés de fournisseurs. OpenCode, Codex et les serveurs MCP avaient déjà une liste fermée. | Liste fermée, comme OpenCode et Codex (chemins, compte, langue, dossier temporaire, mandataire réseau et certificats, variables de Windows), plus les réglages d'OpenClaw et les jetons des canaux. **Pas essayé avec le vrai OpenClaw.** | 1 |
+| Moyenne | Zones protégées (`zonesProtegees.ts`) | `~/.opencode` (greffons et réglages relus par l'OpenCode de Helix à chaque démarrage) et `~/.local/share/opencode` (`auth.json`, les clés de fournisseurs de la personne, et ses sessions) n'étaient pas protégés : un agent de Cowork sur « Tout mon poste » les lisait sans carte au niveau « Demander avant de modifier », et pouvait y écrire avec un accord. | Ajoutés aux zones : aucun accord ne les ouvre. | 1 |
+| Faible | Barrière (`approbation.ts`) | Un `move_file` vers un dossier existant y range le fichier (outils.ts), mais la portée de l'accord prenait le parent de la destination : « déplacer a.pdf vers Archive », accordé, couvrait « déplacer b.pdf vers Public » sans carte (essayé sur la barrière seule). | La portée prend le dossier où le fichier arrive vraiment, calculé comme l'exécution (le dossier de travail est donné à la barrière par outils.ts). | 1 |
+
+### 31.2 La batterie ne touche plus au trousseau
+
+Sur macOS, le chiffrement par défaut est le trousseau, sous le nom de l'instance de la personne
+(`fr.helix.instance`, `cle-donnees`, secret.ts). Le profil de la passerelle d'essai principale ne
+disait rien : la batterie passait par le trousseau de la personne, sous le même nom que sa vraie
+instance, et plusieurs essais lancés avec un dossier personnel jetable (`HOME`) et un profil sans
+réglage pouvaient appeler `security`. Une fenêtre « Trousseau introuvable » s'est ouverte chez
+Medhi pendant ce test d'intrusion ; c'en est la cause probable (non reproduit exprès : on
+n'appelle plus `security`). Chaque profil de `scripts/securite.mjs` et de
+`scripts/essai-fournisseurs.mjs` porte désormais `"chiffrement": "fichier"`, et la batterie fixe
+`HELIX_CONFIG` et `HELIX_DATA_DIR` pour elle-même avant de charger un module de la passerelle.
+
+### 31.3 Examiné sans rien trouver
+
+- **Réparation des appels d'outils** (`petitsModeles.ts`) : le nom n'est réparé que vers un outil
+  proposé, et seulement s'il n'y en a qu'un ; la barrière reçoit le nom réparé et les arguments
+  adaptés, ceux-là mêmes qui partent à l'outil ; une clé en double est lue une fois (la dernière,
+  pour la barrière comme pour l'outil) ; une chaîne jamais refermée reste refusée ; un renommage
+  de paramètre ne se fait que vers une clé du schéma encore absente.
+- **Commandes composées** : une commande de l'agent de code est montrée et accordée mot pour mot
+  (`;`, `&&`, `$( )`, accents graves, `sh -c`, `python -c`, `npx` compris) ; il n'y a pas
+  d'accord par préfixe à détourner. Au niveau « Tout approuver », une commande part sans carte :
+  c'est ce que ce niveau dit (§ 11).
+- **Codex** (`codexGarde.ts`, `codex.ts`) : barrières dans l'ordre dit au § 30, bac à sable jamais
+  plus large que le niveau, réglages repassés à la reprise, liste fermée de variables ; `codex`
+  jamais lancé pour un membre ni une instance partagée ou rattachée (contrôles existants).
+- **Zones protégées** : chemin réel (liens résolus), casse et forme Unicode repliées, `~`
+  développé, formes Windows douteuses refusées ; `..` est résolu comme le fait le serveur de
+  fichiers (sur le texte, avant les liens).
+- **Serveurs MCP** : environnement réduit à celui du SDK (`getDefaultEnvironment`) plus les
+  secrets du connecteur.
+- **Garde anti-boucle** (`gardeBoucle.ts`) : coût borné (fenêtre de 5 064 caractères, relue tous
+  les 32) ; **documents joints** : balise à longueur annoncée, un `</document>` dans le fichier ne
+  la ferme pas.
+
+### 31.4 Soupçons, non démontrés
+
+- **Codex** : `web_search` n'est pas coupé ; en lecture seule, une injection pourrait faire partir
+  des recherches composées par le modèle (chez OpenAI). En `workspace-write`, Codex écrit aussi,
+  par défaut, dans `$TMPDIR` et `/tmp` (documentation d'OpenAI), un peu plus large que le dossier du
+  projet. Les serveurs MCP déclarés dans le `~/.codex/config.toml` de la personne tournent hors de
+  la barrière. Rien de cela n'a pu être essayé sans le vrai `codex`.
+- **Mails reçus par un employé** : le profil du courrier et le profil ordinaire appellent la même
+  adresse d'outils ; « traite un mail » se lit à un compteur tenu pendant l'appel à OpenClaw, pas à
+  l'identité de l'appelant. Si OpenClaw poursuivait un traitement après la fin de cet appel (délai,
+  coupure), ses appels suivants seraient jugés comme ceux du profil ordinaire (sans carte pour un
+  employé autonome). Pas reproduit avec le faux OpenClaw.
+- **Sorties géantes** : un `read_text_file` d'un très gros fichier est lu en entier par le serveur
+  de fichiers puis par la passerelle avant la coupe à 20 000 caractères (chat.ts) ; la route des
+  outils de Code rend le résultat d'un connecteur sans coupe à OpenCode. Pas mesuré.
+- **Contrôle de l'écran sur un poste à plusieurs comptes** : une fois activé par l'administrateur,
+  tout compte de l'instance peut demander une capture par `/helix/computer/action` (une capture ne
+  demande rien). Sur un poste fermé au réseau, ces comptes sont devant la même machine ; pas essayé.
+- **OpenCode** relit encore les réglages globaux de la personne (`~/.config/opencode`, zone protégée
+  pour les agents) et `~/.opencode` : ce sont les siens, pas ceux d'un projet.
+- Les phrases des cartes d'accord (`resumerOutil`) ne passent pas par `t()` : elles restent en
+  français dans les autres langues (dette antérieure, hors de ce test).
+
+### 31.5 Pas essayé
+
+Le vrai `codex` et un compte ChatGPT ; le vrai OpenClaw (la liste fermée de son environnement n'a
+tourné qu'avec le faux) ; un `apply_patch` produit par un vrai modèle dans le vrai OpenCode (la
+forme de la demande est lue dans son code et rejouée par le faux) ; Windows et Linux ; l'écran de
+réglages vu par un membre (le bouton d'activation lui reste proposé et répond 403).

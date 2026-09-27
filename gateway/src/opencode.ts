@@ -659,6 +659,20 @@ export function environnementOpenCode(): Record<string, string> {
     OPENCODE_DISABLE_LSP_DOWNLOAD: "true",
     OPENCODE_DISABLE_CLAUDE_CODE: "true",
     OPENCODE_DISABLE_EXTERNAL_SKILLS: "true",
+    /*
+     * Aucun réglage venu du projet (test d'intrusion du 27/09/2026). Sans
+     * cette variable, OpenCode lit les `opencode.json` du dossier du projet
+     * (jusqu'à la racine du dépôt) et ses dossiers `.opencode` : greffons
+     * `plugin/*.js`, agents, commandes, serveurs MCP. Lu dans son code
+     * 1.18.32 (`ConfigPaths.directories`) et essayé avec le vrai OpenCode,
+     * dossier personnel jetable, aucun modèle : un dépôt cloné qui porte
+     * `.opencode/plugin/x.js` faisait exécuter ce fichier dès l'ouverture
+     * d'une session dans le projet, sans carte ; son `opencode.json` donnait
+     * `"*": "allow"` à l'agent `build`, par-dessus la barrière de Helix. Avec
+     * elle, ni l'un ni l'autre (même essai). Contrepartie : les `AGENTS.md`
+     * du projet ne sont plus lus par OpenCode.
+     */
+    OPENCODE_DISABLE_PROJECT_CONFIG: "true",
   };
 }
 

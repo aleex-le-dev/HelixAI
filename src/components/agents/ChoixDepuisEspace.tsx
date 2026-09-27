@@ -7,7 +7,7 @@ import { apiFetch } from "@/lib/endpoint";
 import { ACCEPT_DOCUMENTS } from "@/lib/employes";
 import { branding } from "@/config/branding";
 import { listerBibliotheque, recupererDocument } from "@/lib/bibliotheque";
-import { t } from "@/lib/i18n";
+import { t, tf } from "@/lib/i18n";
 
 /**
  * « Depuis Helix » : confier à un agent un document que l'instance a déjà,
@@ -172,7 +172,7 @@ export function ChoixDepuisEspace({ onChoisis, onFermer }: { onChoisis: (f: File
               });
           }}
         >
-          {occupe ? "Récupération…" : choisis.length > 1 ? `Ajouter ${choisis.length} documents` : t("Ajouter")}
+          {occupe ? t("Récupération…") : choisis.length > 1 ? tf("Ajouter {0} documents", choisis.length) : t("Ajouter")}
         </Button>
       </div>
     </Modal>

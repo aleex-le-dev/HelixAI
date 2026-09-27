@@ -269,7 +269,7 @@ export function InstanceSetupPage({
               disabled={busy || !url.trim() || !token.trim()}
               onClick={join}
             >
-              {busy ? "Vérification..." : "Rejoindre"}
+              {busy ? t("Vérification...") : t("Rejoindre")}
             </Button>
 
             {error && (

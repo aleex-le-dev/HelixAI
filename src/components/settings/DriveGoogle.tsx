@@ -208,7 +208,7 @@ export function DriveGoogle({ onChange }: { onChange?: () => void } = {}) {
               {etat.nom ? `${etat.nom}, ` : ""}
               {depuis && !Number.isNaN(depuis.getTime())
                 ? tf("connecté le {0}", formaterDate(depuis))
-                : "connecté"}
+                : t("connecté")}
             </p>
           </div>
           <span className="shrink-0 rounded-full bg-success/15 px-2.5 py-1 text-xs font-medium text-success">
@@ -233,7 +233,7 @@ export function DriveGoogle({ onChange }: { onChange?: () => void } = {}) {
             disabled={retrait}
             onClick={() => void debrancher()}
           >
-            {retrait ? "Débranchement…" : t("Débrancher Google Drive")}
+            {retrait ? t("Débranchement…") : t("Débrancher Google Drive")}
           </Button>
         </div>
       </div>
@@ -281,7 +281,7 @@ export function DriveGoogle({ onChange }: { onChange?: () => void } = {}) {
                 onClick={() => void lancer()}
               >
                 {enCours
-                  ? "Préparation…"
+                  ? t("Préparation…")
                   : etat.aReconnecter
                     ? "Reconnecter Google Drive"
                     : t("Se connecter avec Google")}

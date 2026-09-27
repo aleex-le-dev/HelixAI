@@ -1670,7 +1670,7 @@ export function TachesPage() {
                   <ArrowDown size={15} strokeWidth={1.75} />
                 )}
                 <span className="flex-1">
-                  {s === "asc" ? "Croissant" : "Décroissant"}
+                  {s === "asc" ? t("Croissant") : t("Décroissant")}
                   <span className="block text-xs text-muted-foreground">
                     {s === "asc" ? champTri.asc : champTri.desc}
                   </span>

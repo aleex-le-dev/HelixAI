@@ -24,11 +24,11 @@ function informationsTechniques(): string {
   const i = instance();
   return [
     `${branding.name} ${branding.version}`,
-    `Cadre : ${isDesktopApp() ? "application de bureau" : "navigateur"}`,
-    `Instance : ${i.remote ? i.url : "poste seul"}`,
+    tf("Cadre : {0}", isDesktopApp() ? t("application de bureau") : t("navigateur")),
+    tf("Instance : {0}", i.remote ? i.url : t("poste seul")),
     tf("Système : {0}", navigator.userAgent),
-    `Langue : ${navigator.language}`,
-    `Date : ${new Date().toISOString()}`,
+    tf("Langue : {0}", navigator.language),
+    tf("Date : {0}", new Date().toISOString()),
   ].join("\n");
 }
 
@@ -48,12 +48,12 @@ function BoutonCopier() {
           .catch(() => setCopie(false));
       }}
     >
-      {copie ? "Copié" : t("Copier les informations techniques")}
+      {copie ? t("Copié") : t("Copier les informations techniques")}
     </Button>
   );
 }
 
-function Lecture({ article, onRetour }: { article: Article; onRetour: () => void }) {
+function Lecture({ article, onRetour, onOuvrir }: { article: Article; onRetour: () => void; onOuvrir: () => void }) {
   const navigate = useNavigate();
   return (
     <div>
@@ -69,7 +69,14 @@ function Lecture({ article, onRetour }: { article: Article; onRetour: () => void
       <TexteRiche texte={article.corps} className="mt-3 text-sm leading-relaxed text-muted-foreground" />
       {article.lien && (
         <div className="mt-4">
-          <Button variant="secondary" onClick={() => navigate(article.lien!)}>
+          <Button
+            variant="secondary"
+            onClick={() => {
+              // L'aide se referme : ouverte par-dessus, elle cachait l'écran qu'on venait d'ouvrir, et le bouton semblait sans effet.
+              onOuvrir();
+              navigate(article.lien!);
+            }}
+          >
             {t("Ouvrir l'écran concerné")}
           </Button>
         </div>
@@ -109,7 +116,7 @@ export function Aide({ open, onClose }: { open: boolean; onClose: () => void }) 
       </div>
 
       {article ? (
-        <Lecture article={article} onRetour={() => setOuvert(null)} />
+        <Lecture article={article} onRetour={() => setOuvert(null)} onOuvrir={fermer} />
       ) : (
         <>
           <SearchInput
@@ -145,7 +152,7 @@ export function Aide({ open, onClose }: { open: boolean; onClose: () => void }) 
         <div className="flex flex-wrap items-center gap-2">
           <a
             href={`mailto:${branding.urls.supportEmail}?subject=${encodeURIComponent(
-              `${branding.name} ${branding.version} : demande d'aide`,
+              tf("{0} {1} : demande d'aide", branding.name, branding.version),
             )}`}
             className="inline-flex items-center gap-2 rounded-xl border border-border px-3 py-2 text-sm text-foreground transition-colors hover:bg-muted"
           >

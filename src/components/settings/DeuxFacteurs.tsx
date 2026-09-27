@@ -173,7 +173,7 @@ export function DeuxFacteurs() {
             icon={copie ? Check : Copy}
             onClick={() => void copier(etape.codes)}
           >
-            {copie ? "Copiés" : t("Copier les codes")}
+            {copie ? t("Copiés") : t("Copier les codes")}
           </Button>
           <Button
             icon={Check}

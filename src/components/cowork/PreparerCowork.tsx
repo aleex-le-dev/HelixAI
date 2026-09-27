@@ -119,7 +119,7 @@ export function PreparerCowork() {
     setEtape("installation");
     setEchec(null);
     setIssue(null);
-    setProgres({ phase: "verification", message: "Démarrage...", percent: 0 });
+    setProgres({ phase: "verification", message: t("Démarrage..."), percent: 0 });
     try {
       const resultat = await lancerPreparation(setProgres);
       setBilan(resultat);
@@ -414,7 +414,7 @@ export function PreparerCowork() {
                 disabled={verifieEnCours}
                 onClick={() => void verifier()}
               >
-                {verifieEnCours ? "Vérification..." : t("Vérifier l'atelier")}
+                {verifieEnCours ? t("Vérification...") : t("Vérifier l'atelier")}
               </Button>
               {verification && (
                 <>

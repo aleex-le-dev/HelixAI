@@ -581,7 +581,7 @@ export function LoginPage({ onSignedIn }: { onSignedIn: () => void }) {
               ))}
             </ul>
             <Button variant="secondary" icon={copie ? Check : Copy} block onClick={() => void copierCodes()}>
-              {copie ? "Copiés" : t("Copier les codes")}
+              {copie ? t("Copiés") : t("Copier les codes")}
             </Button>
             <Button icon={LogIn} block onClick={() => ouvrir(compteOuvert)}>
               {t("J'ai mis mes codes à l'abri")}

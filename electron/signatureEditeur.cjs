@@ -48,10 +48,50 @@ function empreinteFichier(chemin) {
   });
 }
 
+/*
+ * La signature de code de macOS ne compte pas dans le relevé (27/09/2026) :
+ * l'application doit être signée (au moins « ad hoc ») après que la signature
+ * de l'éditeur y a été posée, sinon macOS la dit « endommagée » une fois
+ * téléchargée. Les dossiers `_CodeSignature` sont écartés, et chaque programme
+ * (Mach-O) est relevé sans sa signature de code (copie, `codesign
+ * --remove-signature`) : le relevé porte sur le code lui-même, identique avant
+ * et après la signature de macOS.
+ */
+const MACH_O = new Set(["feedfacf", "cffaedfe", "cafebabe", "bebafeca", "feedface", "cefaedfe"]);
+
+function estMachO(chemin) {
+  try {
+    const fd = fs.openSync(chemin, "r");
+    const tete = Buffer.alloc(4);
+    fs.readSync(fd, tete, 0, 4, 0);
+    fs.closeSync(fd);
+    return MACH_O.has(tete.toString("hex"));
+  } catch {
+    return false;
+  }
+}
+
+async function empreinteSansSignatureDeCode(chemin) {
+  if (process.platform !== "darwin" || !estMachO(chemin)) return empreinteFichier(chemin);
+  const dossier = fs.mkdtempSync(path.join(require("node:os").tmpdir(), "helix-releve-"));
+  const copie = path.join(dossier, "programme");
+  try {
+    fs.copyFileSync(chemin, copie);
+    try {
+      require("node:child_process").execFileSync("/usr/bin/codesign", ["--remove-signature", copie], { stdio: "ignore" });
+    } catch {
+      /* pas de signature à retirer */
+    }
+    return await empreinteFichier(copie);
+  } finally {
+    fs.rmSync(dossier, { recursive: true, force: true });
+  }
+}
+
 /**
  * Le relevé de l'application, dans un ordre fixe. Seul le fichier de signature
- * en est exclu (il ne peut pas se contenir lui-même) ; la clé publique, elle,
- * en fait partie.
+ * en est exclu (il ne peut pas se contenir lui-même), avec la signature de code
+ * de macOS (voir plus haut) ; la clé publique, elle, en fait partie.
  */
 async function releve(app) {
   const exclu = path.join("Contents", "Resources", FICHIER_SIGNATURE);
@@ -60,14 +100,14 @@ async function releve(app) {
     const noms = fs.readdirSync(path.join(app, rel)).sort();
     for (const nom of noms) {
       const r = rel ? path.join(rel, nom) : nom;
-      if (r === exclu) continue;
+      if (r === exclu || nom === "_CodeSignature") continue;
       const abs = path.join(app, r);
       const st = fs.lstatSync(abs);
       if (st.isSymbolicLink()) lignes.push(`l ${JSON.stringify(r)} ${JSON.stringify(fs.readlinkSync(abs))}`);
       else if (st.isDirectory()) {
         lignes.push(`d ${JSON.stringify(r)}`);
         await parcourir(r);
-      } else if (st.isFile()) lignes.push(`f ${JSON.stringify(r)} ${st.mode & 0o111 ? "x" : "-"} ${await empreinteFichier(abs)}`);
+      } else if (st.isFile()) lignes.push(`f ${JSON.stringify(r)} ${st.mode & 0o111 ? "x" : "-"} ${await empreinteSansSignatureDeCode(abs)}`);
       // Ni fichier, ni dossier, ni lien : rien à faire dans une application.
       else lignes.push(`? ${JSON.stringify(r)}`);
     }

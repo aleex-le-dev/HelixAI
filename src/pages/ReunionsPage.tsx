@@ -535,7 +535,7 @@ function InstallationTranscription({ onFaite }: { onFaite: () => Promise<void> }
             size="sm"
             onClick={() => {
               setErreur(null);
-              setProgres({ phase: "verification", message: "Préparation…", percent: 0 });
+              setProgres({ phase: "verification", message: t("Préparation…"), percent: 0 });
               void installerTranscription(setProgres)
                 .then(onFaite)
                 .catch((err) => {
@@ -678,7 +678,7 @@ function DetailReunion({ id, onRetour }: { id: string; onRetour: () => void }) {
               {[
                 formaterDateHeure(r.createdAt),
                 dureePlaisante(r.dureeSecondes),
-                r.source === "bot" ? t("Bot de réunion") : r.source === "import" ? "Importée" : "Micro",
+                r.source === "bot" ? t("Bot de réunion") : r.source === "import" ? t("Importée") : t("Micro"),
               ]
                 .filter(Boolean)
                 .join(" · ")}
@@ -977,7 +977,7 @@ function TranscriptionVue({ segments }: { segments: Segment[] }) {
             });
           }}
         >
-          {copie ? "Copiée" : t("Copier le texte")}
+          {copie ? t("Copiée") : t("Copier le texte")}
         </Button>
       </div>
       <p className="mt-2 text-xs text-muted-foreground">{t("Transcription automatique, sans distinction des personnes qui parlent.")}</p>

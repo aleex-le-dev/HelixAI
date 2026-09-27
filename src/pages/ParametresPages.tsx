@@ -446,7 +446,7 @@ function CarteInstance() {
           {t("Annuler")}
         </Button>
         <Button disabled={!modifiee || occupe} onClick={() => void enregistrer()}>
-          {occupe ? "Vérification..." : t("Enregistrer")}
+          {occupe ? t("Vérification...") : t("Enregistrer")}
         </Button>
       </div>
     </Card>
@@ -839,7 +839,7 @@ export function BotRecorderSettings() {
                         .catch((err) => setErreur(err instanceof Error ? err.message : String(err)))
                     }
                   >
-                    {compteGoogle ? "Déconnecter" : t("Connecter un compte")}
+                    {compteGoogle ? t("Déconnecter") : t("Connecter un compte")}
                   </Button>
                 </div>
               )}
@@ -1325,7 +1325,7 @@ export function ConfidentialiteSettings() {
             disabled={exportEnCours}
             onClick={() => void exporter()}
           >
-            {exportEnCours ? "Préparation…" : t("Télécharger mes données")}
+            {exportEnCours ? t("Préparation…") : t("Télécharger mes données")}
           </Button>
           {exportResume && (
             <p className="mt-3 text-sm text-muted-foreground">
@@ -1629,7 +1629,7 @@ function Autorisation({ ok, titre, manque }: { ok: boolean; titre: string; manqu
       <span className="min-w-0">
         <span className="block text-sm font-medium text-foreground">{titre}</span>
         <span className="block text-sm text-muted-foreground">
-          {ok ? "Accordée." : manque}
+          {ok ? t("Accordée.") : manque}
         </span>
       </span>
     </div>

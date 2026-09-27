@@ -300,7 +300,7 @@ function AjoutCle({ catalogue, onFini }: { catalogue: Fournisseur[]; onFini: () 
             }}
           />
           <Button variant="secondary" disabled={occupe || !cle.trim() || (choix.adresseLibre && !adresse.trim())} onClick={() => void essayer()}>
-            {occupe && !disponibles ? "Vérification…" : t("Vérifier")}
+            {occupe && !disponibles ? t("Vérification…") : t("Vérifier")}
           </Button>
         </div>
       </Field>

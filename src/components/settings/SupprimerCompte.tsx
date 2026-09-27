@@ -85,8 +85,8 @@ export function SupprimerCompte() {
           <p className="font-medium text-foreground">{t("Seront supprimés définitivement :")}</p>
           <ul className="space-y-0.5">
             <li>
-              • {pluriel(apercu.conversations, "conversation", "conversations")},{" "}
-              {pluriel(apercu.taches, t("tâche"), "tâches")}, {pluriel(apercu.agents, "agent", "agents")}
+              • {pluriel(apercu.conversations, t("conversation"), t("conversations"))},{" "}
+              {pluriel(apercu.taches, t("tâche"), t("tâches"))}, {pluriel(apercu.agents, t("agent"), t("agents"))}
             </li>
             <li>{t("• votre profil : instructions et mémoire personnelles")}</li>
             <li>{t("• votre consommation des modèles et vos postes connectés")}</li>

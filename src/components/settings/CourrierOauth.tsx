@@ -144,7 +144,7 @@ export function CourrierOauth({
           disabled={occupe || !clientId.trim() || !adresse.includes("@")}
           onClick={() => void lancer()}
         >
-          {occupe ? "Préparation..." : tf("Se connecter avec {0}", nom)}
+          {occupe ? t("Préparation...") : tf("Se connecter avec {0}", nom)}
         </Button>
         {attente && (
           <Button variant="ghost" onClick={onBranche}>

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react
 import { createPortal } from "react-dom";
 import { ChevronDown, Check } from "lucide-react";
 import { cn } from "@/lib/cn";
+import { t } from "@/lib/i18n";
 
 export interface SelectOption {
   value: string;
@@ -36,7 +37,7 @@ export function Select({
   value,
   onChange,
   options,
-  placeholder = "Sélectionner...",
+  placeholder = t("Sélectionner..."),
   className,
   disabled,
   title,

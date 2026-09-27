@@ -157,7 +157,7 @@ export function SlackConnecteur({ onChange }: { onChange?: () => void } = {}) {
             disabled={retrait}
             onClick={() => void debrancher()}
           >
-            {retrait ? "Débranchement…" : t("Débrancher Slack")}
+            {retrait ? t("Débranchement…") : t("Débrancher Slack")}
           </Button>
         </div>
       </div>
@@ -212,7 +212,7 @@ export function SlackConnecteur({ onChange }: { onChange?: () => void } = {}) {
             className="absolute right-2 top-2"
             onClick={() => void copier()}
           >
-            {copie ? "Copié" : t("Copier le manifeste")}
+            {copie ? t("Copié") : t("Copier le manifeste")}
           </Button>
         </div>
         <InfoBox tone="muted" leading={<Info size={15} strokeWidth={1.75} />}>
@@ -257,7 +257,7 @@ export function SlackConnecteur({ onChange }: { onChange?: () => void } = {}) {
               disabled={enCours || !jeton.trim() || !etat.chiffrementDonnees}
               onClick={() => void soumettre()}
             >
-              {enCours ? "Vérification…" : "Connecter Slack"}
+              {enCours ? t("Vérification…") : t("Connecter Slack")}
             </Button>
           </div>
         </div>

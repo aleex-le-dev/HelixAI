@@ -312,7 +312,7 @@ function CreationGroupe({
             {t("Annuler")}
           </Button>
           <Button type="submit" disabled={!nom.trim() || occupe}>
-            {occupe ? "Création…" : t("Créer le groupe")}
+            {occupe ? t("Création…") : t("Créer le groupe")}
           </Button>
         </div>
       </form>

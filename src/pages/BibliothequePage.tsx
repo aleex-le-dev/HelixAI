@@ -360,7 +360,7 @@ export function BibliothequePage() {
           onFermer={() => setAImporter(null)}
           onFait={async (n) => {
             setAImporter(null);
-            setInfo(`${n} document${n > 1 ? t("s importés") : " importé"}.`);
+            setInfo(n > 1 ? tf("{0} documents importés.", n) : tf("{0} document importé.", n));
             await charger();
           }}
         />
@@ -646,7 +646,7 @@ function DossierModal({
             {t("Annuler")}
           </Button>
           <Button type="submit" disabled={!nom.trim() || occupe || (vis.v === "groupes" && vis.g.length === 0)}>
-            {occupe ? "Création…" : t("Créer")}
+            {occupe ? t("Création…") : t("Créer")}
           </Button>
         </div>
       </form>

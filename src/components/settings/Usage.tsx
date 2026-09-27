@@ -42,7 +42,7 @@ function libelleCout(cout: Cout): { texte: string; aide?: string; atenue?: boole
     };
   }
   return {
-    texte: euros(cout.montant) + (cout.estime ? " (estimé)" : ""),
+    texte: euros(cout.montant) + (cout.estime ? ` ${t("(estimé)")}` : ""),
     aide: cout.estime ? t("Une partie des jetons a été estimée : le moteur ne les a pas rapportés.") : undefined,
   };
 }

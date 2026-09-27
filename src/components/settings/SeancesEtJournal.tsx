@@ -244,8 +244,8 @@ export function SeancesEtJournal() {
         <p className="mb-3 text-sm text-muted-foreground">
           {administrateur
             ? tf("Vous administrez cette instance {0} : vous voyez l'activité de tout le monde.", administrateur === "profil"
-                  ? "(désigné dans le profil de déploiement)"
-                  : "(premier compte créé)")
+                  ? t("(désigné dans le profil de déploiement)")
+                  : t("(premier compte créé)"))
             : t("Vous voyez vos propres actions, et celles de l'instance elle-même. Celles de vos collègues ne vous regardent pas.")}
         </p>
 

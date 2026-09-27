@@ -85,3 +85,17 @@ export function libelleOutil(name: string): string {
     tool.replace(/_/g, " ")
   );
 }
+
+/**
+ * Argument le plus parlant d'un appel d'outil (chemin, requête...), celui que
+ * le Chat montre à côté du libellé. Partagé depuis le 27/09/2026 : les étapes
+ * gardées avec une réponse (hooks/useChat.ts) doivent se relire comme elles
+ * s'affichaient.
+ */
+export function cibleAffichee(args: Record<string, unknown>): string | undefined {
+  for (const key of ["path", "query", "url", "pattern", "source"]) {
+    const value = args[key];
+    if (typeof value === "string" && value) return value;
+  }
+  return undefined;
+}

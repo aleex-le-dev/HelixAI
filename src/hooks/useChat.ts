@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { streamChat, type ChatTurn } from "@/lib/gateway";
 import { notifySessionsChanged } from "./useSessions";
-import { contexteTexte, images, type Attachment } from "@/lib/attachments";
+import { contexteTexte, documentsDe, images, type Attachment, type DocumentEnvoye } from "@/lib/attachments";
 import { currentUser } from "@/lib/store/identity";
 import { t, tf } from "@/lib/i18n";
 import { creerImage as creerSurLaMachine, creerVideo as creerVideoSurLaMachine, type Format, type ImageCreee } from "@/lib/images";
@@ -16,6 +16,7 @@ import {
   type StoredMessage,
 } from "@/lib/store/sessions";
 import { aleatoire } from "@/lib/store/storage";
+import { cibleAffichee } from "@/lib/libellesOutils";
 
 /** Trace d'un outil utilisé par l'agent pendant sa réponse. */
 export interface ToolTrace {
@@ -31,6 +32,35 @@ export interface ToolTrace {
    */
   libelle?: string;
   cible?: string;
+  /**
+   * Quand l'outil a commencé (horloge de cet écran, en ms), pour montrer le
+   * temps qu'il tourne ; puis ce qu'il a duré, une fois fini. Mesuré à la
+   * réception des évènements `tool_start` et `tool_end` du flux, jamais
+   * estimé. Absents sur une trace d'avant le 27/09/2026 : rien ne s'affiche.
+   */
+  debut?: number;
+  duree?: number;
+}
+
+/**
+ * Ce qu'une réponse a pris de temps (demandé par Medhi le 27/09/2026), en ms.
+ *
+ * Mesuré ici, à la réception du flux : la passerelle n'horodate pas ses
+ * évènements (gateway/src/chat.ts), mais elle les relaie au fil de l'eau, si
+ * bien que l'heure d'arrivée est celle du moteur, au réseau près. Ce qui n'a
+ * pas été mesuré reste absent : une réponse ancienne n'affiche rien.
+ */
+export interface DureesReponse {
+  /** Envoi de la question : l'origine des autres mesures (réponse en cours seulement). */
+  debut?: number;
+  /** De l'envoi au premier mot de la réponse : ce qui pèse sur un processeur lent. */
+  premierMot?: number;
+  /** Réflexion du modèle, toutes ses phases additionnées (il peut réfléchir avant chaque outil). */
+  reflexion?: number;
+  /** Phase de réflexion en cours : son début, pour le compteur (réponse en cours seulement). */
+  reflexionDepuis?: number;
+  /** De l'envoi à la fin de la réponse, seulement si elle est allée à son terme. */
+  reponse?: number;
 }
 
 /** Une étape du plan suivi par l'agent, et où il en est. */
@@ -74,8 +104,20 @@ export interface Message {
   streaming?: boolean;
   /** Ce qui se passe avant la réponse : « Chargement de qwen3-vl-4b en mémoire... ». */
   statut?: string;
-  /** Pièces jointes à la question : on garde le nom, pas le contenu. */
-  pieces?: { nom: string; type: "texte" | "image" }[];
+  /**
+   * Pièces jointes à la question, telles que le message les montre : nom,
+   * poids, et si le fichier a été lu en entier. Gardées avec le Chat ; leur
+   * contenu, non (voir `documents`).
+   */
+  pieces?: PieceMontree[];
+  /**
+   * Texte des documents joints, gardé tant que le Chat est ouvert (27/09/2026) :
+   * il repart avec chaque question suivante, pour qu'« et la page 3 ? »
+   * s'adresse encore au fichier. Il n'est pas enregistré avec le Chat : 200 000
+   * caractères par fichier gonfleraient d'autant le stockage et la
+   * synchronisation de tous les Chats.
+   */
+  documents?: DocumentEnvoye[];
   /** Image créée en réponse (bouton « Image » du composeur). */
   image?: ImageCreee;
   /**
@@ -84,10 +126,62 @@ export interface Message {
    * écartées) ; `erreur` : les bases n'ont pas pu être consultées.
    */
   sources?: { citations: Citation[]; ignorees?: number; aReindexer?: number; erreur?: string };
+  /** Durées mesurées de la réponse (réflexion, premier mot, réponse entière). */
+  durees?: DureesReponse;
   error?: string;
 }
 
 const newId = () => aleatoire(11);
+
+/** Les durées qui valent d'être gardées : les mesures finies, pas les repères de la réponse en cours. */
+function dureesGardees(d: DureesReponse | undefined): StoredMessage["durees"] {
+  if (!d) return undefined;
+  const garde: NonNullable<StoredMessage["durees"]> = {};
+  if (d.premierMot !== undefined) garde.premierMot = d.premierMot;
+  if (d.reflexion !== undefined) garde.reflexion = d.reflexion;
+  if (d.reponse !== undefined) garde.reponse = d.reponse;
+  return Object.keys(garde).length > 0 ? garde : undefined;
+}
+
+/** Une étape telle qu'elle s'affiche, sans ses arguments ni son aperçu. */
+function etapeGardee(trace: ToolTrace): NonNullable<StoredMessage["outils"]>[number] {
+  // La cible calculée comme à l'écran (MessageList) : rouverte, l'étape se lit pareil.
+  const cible = trace.cible ?? (trace.libelle ? undefined : cibleAffichee(trace.args));
+  return {
+    name: trace.name,
+    ...(trace.libelle ? { libelle: trace.libelle } : {}),
+    ...(cible ? { cible: cible.slice(0, 300) } : {}),
+    ok: !trace.running && trace.ok === true,
+    ...(trace.duree !== undefined ? { duree: trace.duree } : {}),
+  };
+}
+
+/** Une pièce jointe dans le message de la personne (PiecesJointesMessage.tsx). */
+export interface PieceMontree {
+  nom: string;
+  type: "texte" | "image";
+  /** Poids du fichier, en octets. */
+  taille?: number;
+  /** Seul le début du fichier a été lu (trop long pour l'écran). */
+  tronque?: boolean;
+}
+
+/** Le texte que le message affiche quand la personne n'a rien écrit : les noms des pièces. */
+const etiquetteDes = (pieces: { nom: string }[]) => `(${pieces.map((p) => p.nom).join(", ")})`;
+
+/**
+ * Ce que le modèle reçoit d'un message de la personne : ses documents dans
+ * leur balise (attachments.ts, `enveloppe`), puis ce qu'elle a écrit. Un Chat
+ * rouvert n'a plus le texte des fichiers : le modèle le sait, au lieu de
+ * croire qu'on ne lui a rien joint.
+ */
+function contenuPourLeModele(m: Message): string {
+  const question = m.pieces && m.content === etiquetteDes(m.pieces) ? "" : m.content;
+  if (m.documents && m.documents.length > 0) return [contexteTexte(m.documents), question].filter(Boolean).join("\n\n");
+  const textes = (m.pieces ?? []).filter((p) => p.type === "texte").map((p) => `« ${p.nom} »`);
+  if (textes.length === 0) return m.content;
+  return [`[Document joint à ce message : ${textes.join(", ")}. Son contenu n'est plus disponible dans ce Chat rouvert : s'il faut le relire, demande à la personne de le joindre de nouveau.]`, question].filter(Boolean).join("\n\n");
+}
 
 /*
  * Réponses en cours, par Chat, hors de l'écran.
@@ -175,8 +269,19 @@ export function useChat(options: Options) {
         content: m.content,
         reasoning: m.reasoning,
         ...(m.image ? { image: m.image } : {}),
+        // Les pièces jointes restent visibles quand on rouvre le Chat : nom, poids, lu en entier ou non (pas le contenu).
+        ...(m.pieces && m.pieces.length > 0 ? { pieces: m.pieces } : {}),
         // Les citations restent avec la réponse : rouvert, le Chat dit encore d'où elle venait.
         ...(m.sources && m.sources.citations.length > 0 ? { sources: m.sources.citations } : {}),
+        /*
+         * Les durées et les étapes restent avec la réponse (27/09/2026) : rouvert,
+         * ou relu sur un autre poste après synchronisation, le Chat dit encore
+         * combien de temps chaque chose a pris. Des étapes, on garde ce qui
+         * s'affiche (nom, cible, issue, durée), pas les arguments ni l'aperçu :
+         * un fichier écrit par l'agent n'a pas à se recopier dans le Chat.
+         */
+        ...(dureesGardees(m.durees) ? { durees: dureesGardees(m.durees) } : {}),
+        ...(m.tools && m.tools.length > 0 ? { outils: m.tools.map(etapeGardee) } : {}),
         createdAt: new Date().toISOString(),
       }));
     updateSession(session.id, { messages: stored, modelUid: options.model });
@@ -243,15 +348,18 @@ export function useChat(options: Options) {
        * pas la conversation affichée : on garde à l'écran ce que la personne a
        * écrit, plus le nom des pièces.
        */
-      const documents = contexteTexte(pieces);
+      const documents = documentsDe(pieces);
       const vues = images(pieces);
-      const etiquettes = pieces.map((p) => p.nom).join(", ");
 
       const userMsg: Message = {
         id: newId(),
         role: "user",
-        content: prompt || (etiquettes ? `(${etiquettes})` : ""),
-        pieces: pieces.length > 0 ? pieces.map((p) => ({ nom: p.nom, type: p.type })) : undefined,
+        content: prompt || (pieces.length > 0 ? etiquetteDes(pieces) : ""),
+        pieces:
+          pieces.length > 0
+            ? pieces.map((p) => ({ nom: p.nom, type: p.type, taille: p.taille, ...(p.type === "texte" && p.tronque ? { tronque: true } : {}) }))
+            : undefined,
+        ...(documents.length > 0 ? { documents } : {}),
       };
       const replyId = newId();
 
@@ -278,27 +386,22 @@ export function useChat(options: Options) {
          * questions de suite, c'est la dernière qui compte.
          */
         .filter((m, i, liste) => !(m.role === "user" && liste[i + 1]?.role === "user"))
-        .map((m) => ({ role: m.role, content: m.content }));
+        // Chaque question garde ses documents, tant que le Chat est ouvert : l'instance mesure la place et décide (documentsJoints.ts).
+        .map((m) => ({ role: m.role, content: m.role === "user" ? contenuPourLeModele(m) : m.content }));
 
-      // Le dernier tour porte les pièces jointes de cette question.
-      if (turns.length > 0 && (documents || vues.length > 0)) {
+      // Le dernier tour porte les images de cette question.
+      if (turns.length > 0 && vues.length > 0) {
         const dernier = turns[turns.length - 1];
-        const texte = [documents, typeof dernier.content === "string" ? dernier.content : ""]
-          .filter(Boolean)
-          .join("\n\n");
-
+        const texte = typeof dernier.content === "string" ? dernier.content : "";
         turns[turns.length - 1] = {
           role: "user",
-          content:
-            vues.length > 0
-              ? [
-                  { type: "text" as const, text: texte },
-                  ...vues.map((v) => ({
-                    type: "image_url" as const,
-                    image_url: { url: v.dataUrl },
-                  })),
-                ]
-              : texte,
+          content: [
+            ...(texte.trim() ? [{ type: "text" as const, text: texte }] : []),
+            ...vues.map((v) => ({
+              type: "image_url" as const,
+              image_url: { url: v.dataUrl },
+            })),
+          ],
         };
       }
 
@@ -328,6 +431,24 @@ export function useChat(options: Options) {
       const traces: ToolTrace[] = [];
       let plan: EtapePlan[] = [];
 
+      /*
+       * Durées de la réponse (27/09/2026), prises à l'arrivée de chaque
+       * morceau du flux. La réflexion se compte par phases : un modèle à
+       * outils réfléchit avant chaque appel, et le texte ou l'outil qui suit
+       * clôt la phase. Sa fin est le dernier morceau de réflexion reçu, pas
+       * l'arrivée de ce qui suit : l'écriture des arguments d'un outil, qui ne
+       * se voit pas, n'est pas de la réflexion.
+       */
+      const debut = Date.now();
+      const durees: DureesReponse = { debut };
+      let dernierMorceauReflexion = debut;
+      const finirReflexion = () => {
+        if (durees.reflexionDepuis === undefined) return;
+        durees.reflexion = (durees.reflexion ?? 0) + Math.max(0, dernierMorceauReflexion - durees.reflexionDepuis);
+        durees.reflexionDepuis = undefined;
+      };
+      patch(replyId, { durees: { ...durees } });
+
       try {
         await streamChat(
           {
@@ -342,11 +463,23 @@ export function useChat(options: Options) {
           {
             onContent: (chunk) => {
               content += chunk;
-              patch(replyId, { content });
+              finirReflexion();
+              /*
+               * Le premier mot, pas le premier morceau : la passerelle glisse
+               * des sauts de ligne entre deux étapes, et un moteur qui ne
+               * sépare pas la réflexion la livre entre balises dans le texte
+               * (retirée à l'affichage, voir MessageList).
+               */
+              if (durees.premierMot === undefined && content.replace(/<think>[\s\S]*?(?:<\/think>|$)/g, "").trim()) {
+                durees.premierMot = Date.now() - debut;
+              }
+              patch(replyId, { content, durees: { ...durees } });
             },
             onReasoning: (chunk) => {
               reasoning += chunk;
-              patch(replyId, { reasoning });
+              dernierMorceauReflexion = Date.now();
+              durees.reflexionDepuis ??= dernierMorceauReflexion;
+              patch(replyId, { reasoning, durees: { ...durees } });
             },
             onEvent: (event) => {
               if (event.type === "plan") {
@@ -392,16 +525,18 @@ export function useChat(options: Options) {
                 if (e) e.etat = event.ok ? "fait" : "echec";
                 patch(replyId, { plan: [...plan] });
               } else if (event.type === "tool_start") {
-                traces.push({ name: event.name, args: event.args, running: true });
-                patch(replyId, { tools: [...traces] });
+                finirReflexion();
+                traces.push({ name: event.name, args: event.args, running: true, debut: Date.now() });
+                patch(replyId, { tools: [...traces], durees: { ...durees } });
               } else if (event.type === "tool_end") {
                 const last = [...traces].reverse().find((t) => t.name === event.name && t.running);
                 if (last) {
                   last.running = false;
                   last.ok = event.ok;
                   last.preview = event.preview;
+                  if (last.debut !== undefined) last.duree = Date.now() - last.debut;
                 }
-                patch(replyId, { tools: [...traces] });
+                patch(replyId, { tools: traces.map((trace) => ({ ...trace })) });
               } else if (event.type === "sources") {
                 patch(replyId, {
                   sources: { citations: event.sources ?? [], ignorees: event.ignorees, aReindexer: event.aReindexer, erreur: event.erreur },
@@ -421,19 +556,29 @@ export function useChat(options: Options) {
          * reste d'autres, et aucune ne doit laisser une bulle blanche. On le
          * dit, avec ce qu'on peut y faire.
          */
+        finirReflexion();
         patch(replyId, (actuel) =>
           !actuel.content.trim() && !actuel.error && !(actuel.plan && actuel.plan.length > 0)
             ? {
                 streaming: false,
                 statut: undefined,
+                durees: { ...durees },
                 error: t(
                   "Le modèle n'a rien répondu. Réessayez ; si cela recommence, baissez le niveau de raisonnement ou choisissez un autre modèle.",
                 ),
               }
-            : { streaming: false, statut: undefined },
+            : {
+                streaming: false,
+                statut: undefined,
+                // La durée de la réponse entière, seulement pour une réponse allée à son terme.
+                durees: actuel.error ? { ...durees } : { ...durees, reponse: Date.now() - debut },
+              },
         );
         persist();
       } catch (err) {
+        // Coupée : la réflexion déjà faite est une mesure réelle ; la réponse entière, elle, n'a pas de durée.
+        finirReflexion();
+        patch(replyId, { durees: { ...durees } });
         if (controller.signal.aborted) {
           /*
            * Arrêtée avant le premier mot : la bulle restait blanche, sans
@@ -531,7 +676,22 @@ export function useChat(options: Options) {
           content: m.content,
           reasoning: m.reasoning,
           image: m.image,
+          ...(Array.isArray(m.pieces) && m.pieces.length > 0 ? { pieces: m.pieces } : {}),
           ...(m.sources && m.sources.length > 0 ? { sources: { citations: m.sources } } : {}),
+          ...(m.durees ? { durees: { ...m.durees } } : {}),
+          ...(m.outils && m.outils.length > 0
+            ? {
+                tools: m.outils.map((o) => ({
+                  name: o.name,
+                  args: {},
+                  running: false,
+                  ok: o.ok,
+                  ...(o.libelle ? { libelle: o.libelle } : {}),
+                  ...(o.cible ? { cible: o.cible } : {}),
+                  ...(o.duree !== undefined ? { duree: o.duree } : {}),
+                })),
+              }
+            : {}),
         })),
       );
     },
@@ -579,10 +739,18 @@ export function useChat(options: Options) {
         { id: replyId, role: "assistant", content: "", streaming: true, statut: t("Préparation de la description...") },
       ]);
       abortRef.current = controller;
+      // Le temps de la création, de la demande à l'image reçue (27/09/2026) : sur un processeur, c'est long, et bon à savoir.
+      const debut = Date.now();
       try {
         const creer = video ? creerVideoSurLaMachine : creerSurLaMachine;
         const image = await creer(texte, format, (tr) => patch(replyId, { statut: tr.message }), controller.signal, sessionRef.current?.id);
-        patch(replyId, { content: video ? tf("Vidéo créée : « {0} »", texte) : tf("Image créée : « {0} »", texte), image, streaming: false, statut: undefined });
+        patch(replyId, {
+          content: video ? tf("Vidéo créée : « {0} »", texte) : tf("Image créée : « {0} »", texte),
+          image,
+          streaming: false,
+          statut: undefined,
+          durees: { reponse: Date.now() - debut },
+        });
         persist();
       } catch (err) {
         if (controller.signal.aborted) {

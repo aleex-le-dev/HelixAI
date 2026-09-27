@@ -10,7 +10,8 @@ import type { BackendConfig, BackendStatus, ModelInfo } from "./types.ts";
 import { t, tf } from "./langue.ts";
 import { capacitesDistantes, entetesAvecCle, listerModelesDistants, type ModeleDistant } from "./modelesCloud.ts";
 // Cycle voulu (provision.ts importe ce module) : `detectHardware` n'est appelée qu'au chargement d'un modèle, jamais à l'import.
-import { calculSurProcesseur, detectHardware } from "./provision.ts";
+import { calculSurProcesseur, detectHardware, relaisApresDefaillance } from "./provision.ts";
+import { aEssayer, essayerModele, noterEssai } from "./santeModeles.ts";
 
 const exec = promisify(execFile);
 
@@ -286,6 +287,72 @@ export async function ensureLmStudioServer(): Promise<boolean> {
 const chargesParHelix = new Set<string>();
 
 /**
+ * La taille de conversation qu'un service publie dans sa liste de modèles,
+ * sous l'un des noms en usage : `context_length` (OpenRouter et d'autres),
+ * `max_context_length` (Mistral, API de LM Studio), `max_model_len` (vLLM).
+ */
+function contexteDeLaListe(entree: Record<string, unknown>): number | undefined {
+  for (const champ of ["context_length", "max_context_length", "max_model_len", "context_window"]) {
+    const v = entree[champ];
+    if (typeof v === "number" && Number.isFinite(v) && v >= 1024) return Math.floor(v);
+  }
+  return undefined;
+}
+
+/**
+ * Taille de conversation d'un modèle, en jetons : ce qu'un document joint
+ * peut occuper en dépend (documentsJoints.ts, 27/09/2026).
+ *
+ * Ce qui est su l'emporte sur ce qui est supposé :
+ *  1. LM Studio, modèle en mémoire : la taille du chargement en cours, relue
+ *     par `lms ps` au besoin (le modèle vient peut-être d'être chargé, ou l'a
+ *     été par un autre programme avec une taille plus petite) ;
+ *  2. ce que le profil de déploiement dit du service, puis ce que le service
+ *     publie ;
+ *  3. à défaut : pour LM Studio, la taille que Helix pose lui-même à chaque
+ *     chargement (32 768 sur un poste de 36 Go ou moins), sinon 4 096, le
+ *     défaut de LM Studio quand rien n'est précisé ;
+ *     un autre serveur de la machine (Ollama, llama.cpp), 8 192 : Ollama
+ *     coupe en silence au-delà de sa taille, qu'il ne publie pas ; un service
+ *     distant, 32 768, ce que tiennent tous les modèles de conversation
+ *     actuels. Un chiffre bas ne perd rien : le document est alors lu en
+ *     parties au lieu d'être refusé ou coupé par le moteur.
+ */
+export async function contexteDuModele(model: ModelInfo, backend: BackendConfig): Promise<number> {
+  const borne = (n: number) => (model.contexteMax ? Math.min(n, model.contexteMax) : n);
+  if (model.backendKind === "lmstudio") {
+    if (model.contexteCharge) return model.contexteCharge;
+    const lms = await findLms();
+    if (lms) {
+      try {
+        const { stdout } = await exec(lms, ["ps", "--json"], { timeout: 8000, maxBuffer: 4 * 1024 * 1024 });
+        const lu = JSON.parse(stdout) as LmsModelEntry[];
+        const entree = Array.isArray(lu) ? lu.find((e) => (e.modelKey ?? e.path) === model.id) : undefined;
+        if (typeof entree?.contextLength === "number" && entree.contextLength >= 512) return entree.contextLength;
+      } catch {
+        /* LM Studio occupé : on se rabat sur ce qu'on sait */
+      }
+    }
+    if (backend.contexte) return borne(backend.contexte);
+    const options = optionsDeChargement();
+    const i = options.indexOf("--context-length");
+    const parHelix = i >= 0 ? Number(options[i + 1]) : NaN;
+    // Helix charge toujours avec sa taille (loadModel, provision.ts) ; `chargesParHelix` ne survit pas à un redémarrage.
+    if (Number.isFinite(parHelix)) return borne(parHelix);
+    return borne(4096);
+  }
+  if (backend.contexte) return backend.contexte;
+  if (model.contextePublie) return model.contextePublie;
+  let local = false;
+  try {
+    local = ["localhost", "127.0.0.1", "[::1]", "::1"].includes(new URL(backend.baseUrl).hostname);
+  } catch {
+    local = false;
+  }
+  return local ? 8192 : 32_768;
+}
+
+/**
  * À la fermeture : rendre la mémoire, sans casser le travail des autres.
  *
  * On arrêtait le serveur LM Studio s'il avait été démarré par Helix. Mais il
@@ -374,11 +441,12 @@ export async function discover(): Promise<Discovery> {
          * que cinq secondes), elle coûtait un aller-retour chez le fournisseur
          * avant chaque réponse, et pesait sur la limite de débit de la clé.
          */
-        const entries = distant
-          ? (await listeDistante(backend)).filter((m) => !retenus || retenus.has(m.id))
+        const distants = distant ? (await listeDistante(backend)).filter((m) => !retenus || retenus.has(m.id)) : [];
+        const entries: ({ id: string } & Record<string, unknown>)[] = distant
+          ? distants.map((m) => ({ id: m.id }))
           : (
               ((await fetchJson(`${backend.baseUrl}/models`, backend.apiKey, 4000, backend.entetes, redirectionPour(backend))) as {
-                data?: { id: string }[];
+                data?: ({ id: string } & Record<string, unknown>)[];
               }).data ?? []
             )
               .map((m) => ({ ...m, id: m.id.replace(/^models\//, "") }))
@@ -395,11 +463,17 @@ export async function discover(): Promise<Discovery> {
          * ouvrait une seconde copie (« qwen3-8b:2 », 5 Go de plus) et la
          * machine saturait. Observé chez le client le 23/09/2026.
          */
-        const models = entries.map((m) => ({
-          ...toModelInfo(m.id, backend, lmMeta),
-          ...(backend.kind === "lmstudio" ? { loaded: true } : {}),
-          ...(distant ? capacitesDistantes(m) : {}),
-        }));
+        const models = entries.map((m, i) => {
+          // Un fournisseur cloud : ce que sa liste déclare, lu dans son dialecte (modelesCloud.ts).
+          const capacites = distant ? capacitesDistantes(distants[i]!) : null;
+          const publie = capacites ? capacites.contexteMax : contexteDeLaListe(m);
+          return {
+            ...toModelInfo(m.id, backend, lmMeta),
+            ...(backend.kind === "lmstudio" ? { loaded: true } : {}),
+            ...(capacites ?? {}),
+            ...(publie && publie >= 1024 ? { contextePublie: Math.floor(publie) } : {}),
+          };
+        });
 
         /*
          * LM Studio ne liste par son API que les modèles **chargés** en
@@ -753,8 +827,34 @@ export async function libererPourImage(octets: number): Promise<number> {
   return unloadOthers(lms, "");
 }
 
-/** Charge un modèle en mémoire via `lms load` (provisionnement transparent). */
-export async function loadModel(modelKey: string): Promise<{ ok: boolean; message: string }> {
+/**
+ * Charge un modèle en mémoire via `lms load` (provisionnement transparent).
+ *
+ * Premier chargement d'un modèle sur cette machine : la même courte question
+ * d'essai que la mise en route (santeModeles.ts, 27/09/2026), avant de lui
+ * confier la vraie demande. C'est là qu'un poste installé avant l'essai passe
+ * le sien, à la première réponse. Un modèle qui répond mal est déchargé, noté,
+ * et la demande échoue en le disant ; en « Auto » (`auto`), la suivante va à
+ * un autre modèle.
+ */
+export async function loadModel(modelKey: string, options: { auto?: boolean } = {}): Promise<{ ok: boolean; message: string }> {
+  const essaye = aEssayer(modelKey) && !/embed|nomic|rerank|bge-|e5-/i.test(modelKey);
+  const r = await chargerModele(modelKey);
+  if (!r.ok || !r.neuf || !essaye) return r;
+  const verdict = await essayerModele(LMSTUDIO_URL, modelKey);
+  noterEssai(modelKey, verdict);
+  if (verdict.ok) return r;
+  const lms = await findLms();
+  if (lms) await exec(lms, ["unload", modelKey], { timeout: 30_000 }).catch(() => {});
+  chargesParHelix.delete(modelKey);
+  const relais = await relaisApresDefaillance(modelKey, options.auto === true);
+  return {
+    ok: false,
+    message: `${tf("{0} ne répond pas correctement sur cette machine (réponse d'essai illisible) : il a été déchargé.", modelKey)} ${relais} ${t("Renvoyez votre message.")}`,
+  };
+}
+
+async function chargerModele(modelKey: string): Promise<{ ok: boolean; message: string; neuf?: boolean }> {
   const lms = await findLms();
   if (!lms) return { ok: false, message: t("LM Studio (lms) introuvable sur cette machine.") };
 
@@ -797,7 +897,7 @@ export async function loadModel(modelKey: string): Promise<{ ok: boolean; messag
   try {
     await charger();
     chargesParHelix.add(modelKey);
-    return { ok: true, message: tf("Modèle {0} chargé.", modelKey) };
+    return { ok: true, message: tf("Modèle {0} chargé.", modelKey), neuf: true };
   } catch (err) {
     const detail = err instanceof Error ? `${err.message}` : String(err);
 
@@ -814,6 +914,7 @@ export async function loadModel(modelKey: string): Promise<{ ok: boolean; messag
           return {
             ok: true,
             message: tf("Modèle {0} chargé (mémoire libérée au préalable).", modelKey),
+            neuf: true,
           };
         } catch (second) {
           return {

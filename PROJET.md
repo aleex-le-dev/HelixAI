@@ -1016,6 +1016,131 @@ sur la boucle locale (`tls: true`, port 8914) : l'adresse de base annoncée pass
 **Pas essayé** : le paquet `openai` lui-même, un appel depuis une autre machine d'une
 instance ouverte aux collègues, un client tiers (tableur, éditeur).
 
+### 3.14 Un abonnement ChatGPT (par Codex) ou Claude dans Helix : ce qui est permis
+
+**À décider par Medhi.** Demandé le 27/09/2026 : « si possible, que quelqu'un puisse
+connecter son compte Codex ou Claude dans Helix, pour avoir le meilleur logiciel avec
+leur compte », c'est-à-dire se servir d'un abonnement ChatGPT Plus/Pro ou Claude
+Pro/Max sans clé d'API payée à l'usage.
+
+Relevé à la source le 27/09/2026, documentation et conditions officielles seulement
+(les articles de presse ne servent qu'à dater). Ce n'est pas un avis juridique. **Aucun
+code écrit** : la voie Claude est fermée, la voie OpenAI est ouverte mais défait le
+§ 3.1 et demande des garde-fous qui sont des choix, pas des détails.
+
+**Claude (Pro, Max) : interdit pour Helix, sauf accord écrit d'Anthropic.**
+
+- [Claude Code, Legal and compliance](https://code.claude.com/docs/en/legal-and-compliance),
+  « Authentication and credential use » : la connexion par compte (OAuth) est réservée
+  à l'usage ordinaire de Claude Code et des applications d'Anthropic ; un développeur
+  tiers ne peut ni offrir la connexion Claude.ai dans son application, ni faire passer
+  des requêtes par les identifiants d'un abonnement « on behalf of their users », ni
+  recueillir ou relayer les jetons. Anthropic se réserve de sévir sans préavis : c'est le
+  compte de la personne qui est exposé.
+- [Agent SDK overview](https://code.claude.com/docs/en/agent-sdk/overview), encadré :
+  sauf accord préalable, pas de connexion claude.ai ni des limites d'abonnement dans le
+  produit d'un tiers, « including agents built on the Claude Agent SDK ». Or
+  [la page du mode non interactif](https://code.claude.com/docs/en/headless) présente
+  `claude -p` comme l'Agent SDK en ligne de commande : piloter le `claude` installé par
+  la personne, comme moteur d'Helix, tombe sous cette phrase.
+- La même page Legal ne retient qu'une exception : une personne peut se connecter avec
+  son abonnement au binaire Claude Code **non modifié**, même quand une plateforme
+  l'héberge, à condition que l'éditeur de la plateforme accepte les Commercial Terms et
+  ne paie ni ne revende l'usage. Cela vise le fait de donner Claude Code lui-même à la
+  personne, pas d'en faire le moteur d'un autre produit ; et ne pas écrire « Claude
+  Code » dans le nom d'une fonction d'Helix.
+- [Consumer Terms](https://www.anthropic.com/legal/consumer-terms) (en vigueur le
+  08/10/2025) : pas d'accès automatisé hors clé d'API ou permission explicite ; pas de
+  compte mis à la disposition d'autrui.
+- À ne pas mal lire : [l'article d'aide sur l'Agent SDK et les abonnements](https://support.claude.com/en/articles/15036540-use-the-claude-agent-sdk-with-your-claude-plan)
+  cite les « third-party apps » qui passent par l'abonnement, mais pour décrire un crédit
+  mensuel **suspendu le 15/06/2026** (« no longer taking effect ») ; il ne lève pas la
+  règle faite aux développeurs.
+
+**ChatGPT (Plus, Pro) par Codex : permis sous une forme étroite.** Piloter le programme
+`codex` officiel, installé par la personne et connecté par elle, par le parcours
+d'OpenAI, pour son propre usage.
+
+- [Codex SDK](https://learn.chatgpt.com/docs/codex-sdk) : parmi les usages prévus,
+  « Integrate Codex within your own application ».
+- [Codex app-server](https://learn.chatgpt.com/docs/app-server) : l'interface des clients
+  riches (l'extension VS Code ; [l'article d'OpenAI sur l'app-server](https://openai.com/index/unlocking-the-codex-harness/)
+  cite aussi JetBrains et Xcode, page refusée à l'outil et lue par extrait), à prendre
+  « inside your own product » pour la connexion, l'historique et les approbations. En
+  mode « ChatGPT managed », c'est Codex qui mène la connexion, garde et renouvelle les
+  jetons ; `account/rateLimits/read` rend les limites de l'abonnement à l'application
+  hôte. La même page dit la commande `app-server` et son transport WebSocket
+  expérimentaux, non pris en charge en production. Pour un client destiné aux
+  entreprises, OpenAI demande qu'on le contacte pour être ajouté à sa liste de clients
+  connus (`clientInfo.name`).
+- [Mode non interactif](https://learn.chatgpt.com/docs/non-interactive-mode) : `codex exec`
+  reprend par défaut la connexion enregistrée ; la connexion par compte ChatGPT en
+  automatisation est décrite pour qui veut les limites de l'abonnement plutôt que la
+  facturation de l'API, sur des machines de confiance. La clé d'API reste le choix
+  recommandé pour l'automatisation, et [l'authentification](https://learn.chatgpt.com/docs/auth)
+  déconseille d'exposer Codex dans un environnement non fiable ou public.
+- [Terms of Use](https://openai.com/policies/row-terms-of-use/) (et la version
+  européenne) : ne pas mettre son compte à la disposition d'autrui, ne pas contourner les
+  limites, pas d'extraction automatisée hors de l'API. **Page refusée à l'outil de
+  lecture (403) le 27/09/2026** : ces clauses n'ont été lues que par extraits dans un
+  moteur de recherche, à relire en entier.
+
+**Écarté, parce qu'OpenAI ne le couvre nulle part pour un tiers :** reprendre ou copier
+des jetons (le fichier `~/.codex/auth.json`, que la documentation demande de traiter
+comme un mot de passe et qui reste dans les zones protégées, `zonesProtegees.ts`) ; le
+mode `chatgptAuthTokens` de l'app-server, prévu pour une application qui possède déjà la
+connexion ChatGPT de la personne ; la connexion ChatGPT qu'OpenCode fait lui-même
+(`/connect`, annoncée par ses auteurs le 11/01/2026, sans page d'OpenAI qui la valide) ;
+un Codex modifié (un ingénieur d'OpenAI a refusé de trancher, [discussion
+#8338](https://github.com/openai/codex/discussions/8338), 19/12/2025). « Sign in with
+ChatGPT », lancé le 02/08/2026 avec six partenaires, ne transmet que l'identité (nom,
+adresse, photo) : ce n'est pas un moyen de faire payer les modèles par l'abonnement.
+
+**Pourquoi rien n'est codé le 27/09/2026, même pour Codex :**
+
+1. **Le § 3.1.** Codex est un agent de code complet, avec ses outils, son bac à sable et
+   ses approbations. Le brancher, c'est un second moteur d'agent à côté d'OpenCode : le
+   « seul moteur » se défait, et c'est à Medhi de le dire.
+2. **Pour la personne seule.** La connexion de `codex` appartient au compte système qui
+   fait tourner la passerelle. Sur une instance ouverte aux collègues, par une clé de
+   l'API développeur (§ 3.13), par un employé OpenClaw ou une tâche programmée, d'autres
+   se serviraient de l'abonnement de cette personne, ce que les conditions interdisent.
+3. **Ce qui part chez OpenAI** : la demande, et tout ce que Codex lit dans son dossier de
+   travail, aux États-Unis, en dehors de la barrière d'approbation d'Helix (Codex décide
+   dans son propre bac à sable). La règle « chaque modèle dit où il tourne » s'applique.
+4. **Rien d'essayable dans cette session** : s'y connecter à un compte était exclu, tout
+   aurait été livré « pas essayé ».
+
+**Ce qu'Helix propose aujourd'hui, sans rien changer :** la clé d'API du fournisseur,
+OpenAI ou Anthropic, dans Paramètres → Modèles cloud (`fournisseurs.ts`), pour soi ou
+pour l'équipe, pays affiché, facturée à l'usage à la titulaire. C'est la seule voie que
+les deux éditeurs recommandent pour un produit tiers.
+
+**Si Medhi dit oui pour Codex, la voie la plus simple et la plus sûre :**
+
+- Écran Code seulement (pas le Chat : Codex répond en agent de code), moteur au choix
+  « Codex, avec votre abonnement ChatGPT » à côté d'OpenCode.
+- Détection : `codex` trouvé sur la machine, sa version, et l'état de connexion demandé
+  au programme lui-même (`codex login status`) ; Helix n'ouvre jamais `~/.codex`.
+- Connexion : un bouton lance `codex login`, la personne termine chez OpenAI dans son
+  navigateur ; Helix ne voit passer aucun jeton.
+- Exécution : `codex exec --json --sandbox workspace-write` dans le dossier du projet,
+  son flux JSONL (`item.*`, `turn.completed` avec la consommation) converti dans le flux
+  de Code existant (`fluxCode.ts`). `codex app-server` relaierait mieux les demandes
+  d'approbation vers la barrière d'Helix et les limites de l'abonnement, mais OpenAI le
+  dit expérimental : à reprendre quand il ne le sera plus.
+- Garde : réservé au compte propriétaire de l'installation de bureau ; refusé sans
+  séance, par clé d'API, pour un employé, une tâche programmée, et sur une instance
+  ouverte aux collègues. Contrôles dans `npm run securite` avec un faux `codex` sans
+  réseau.
+- À l'écran : « OpenAI, États-Unis », « limites de votre abonnement ChatGPT », et ce que
+  Codex peut lire.
+- À essayer sur le poste : Medhi se connecte lui-même par `codex login`, une vraie tâche
+  de Code, puis la limite d'abonnement atteinte.
+
+Pour Claude, la seule suite possible est une demande d'accord écrite à Anthropic
+(page « contact sales » citée par la page Legal) ; sans elle, rien.
+
 ---
 
 ## 4. Sécurité
@@ -1317,8 +1442,9 @@ acceptent PDF, Word, Excel, PowerPoint et OpenDocument : le texte est extrait su
 poste (pdf.js, Apache-2.0 ; lecteur ZIP écrit à la main pour les formats Office), un
 PDF scanné ou protégé est signalé plutôt que lu à vide (`src/lib/documents.ts`).
 Ce qui borne une pièce jointe n'est pas le poids du fichier mais ce que le modèle peut
-lire d'un coup : environ 200 000 caractères par fichier (moins pour un petit modèle
-local, dont la fenêtre est plus courte). Depuis la 0.18.0, un fichier texte se joint
+lire d'un coup : environ 200 000 caractères par fichier, puis, depuis le 27/09/2026,
+l'instance mesure la place du modèle chargé et lit en parties annoncées ce qui ne tient
+pas (`gateway/src/documentsJoints.ts`, voir plus bas). Depuis la 0.18.0, un fichier texte se joint
 quelle que soit sa taille (seul son début est lu, et la puce le dit : « (début) ») ;
 une photo ou une capture jusqu'à 50 Mo est réduite à 2048 pixels de côté au lieu
 d'être refusée (la limite était de 2 Mo) ; un PDF ou un document Office jusqu'à
@@ -2549,6 +2675,10 @@ ne restent ici que les points ouverts.*
    image, Code), vérifiée jusqu'ici contre des faux seulement (27/09/2026, ci-dessous).
 9. **Passer ce Mac sur Qwen3.5 9B**, le modèle qu'Helix y installerait aujourd'hui (il
    tourne encore sur Qwen3 8B, installé avant la règle) : 6 Go, à télécharger sur accord.
+10. **Abonnement ChatGPT ou Claude dans Helix** (27/09/2026, § 3.14) : Claude interdit
+    sans accord écrit d'Anthropic ; Codex permis en pilotant le programme officiel,
+    mais c'est un second moteur d'agent (§ 3.1). À décider : oui ou non pour Codex dans
+    l'écran Code, réservé à la personne qui l'a connecté.
 
 **Fait le 26/09/2026 : une réponse du Chat continue quand on quitte son Chat.**
 Signalé par Medhi : ouvrir un autre Chat ou en commencer un nouveau arrêtait la
@@ -2968,6 +3098,15 @@ petites tailles (neuf tailles dans le `.ico`, de 16 à 256 px), et la fenêtre p
 son système. macOS ne change pas. **Pas vérifié sur un vrai PC** : Windows garde parfois
 l'ancienne icône en cache après une mise à jour (redémarrer l'explorateur la rafraîchit).
 
+**Fait le 27/09/2026 : petites icônes de Windows et de Linux au trait fin.** Vu par Medhi sur
+un PC : l'icône de la barre des tâches restait « encore grasse ». L'image détaillée réduite
+puis épaissie faisait une tache noire de 16 à 32 px. De 16 à 64 px, l'hélice est désormais
+redessinée en vectoriel (deux brins qui se croisent deux fois, pointes en haut à droite et en
+bas à gauche comme le logo, barreaux à partir de 32 px), trait d'un pixel calé sur la grille ;
+l'hélice détaillée reste à partir de 128 px (à 64, elle paraissait pointillée), et l'icône du Mac ne change pas (même fichier,
+octet pour octet). **Vérifié** : planche avant / après, tailles réelles et agrandies, fond
+clair et fond sombre. **Pas vérifié sur un vrai PC** (cache d'icônes de Windows, voir plus haut).
+
 **Fait le 27/09/2026 (0.27.3) : Electron 44.4.5, au lieu de 33.4.11.** Relevé par `npm audit` en
 préparant le dépôt public : Electron 33 n'est plus maintenu, et une trentaine de failles
 publiées le touchent, dont plusieurs graves qui concernent Helix (contournement de
@@ -3088,6 +3227,156 @@ sortie reste cassée au processeur : essayer le niveau « Aucun », puis Qwen3 4
 classique, sans Gated DeltaNet) pour séparer le modèle du moteur. Choisir d'office un autre
 modèle sur les machines sans carte graphique irait contre la règle « la note seule décide »
 (25/09/2026) : à décider par Medhi si l'essai le montre.
+
+**Vu par Medhi le 27/09/2026 sur un PC Windows (2026.927.3) : « Copier les informations
+techniques » ne faisait rien.** Cause : dans l'application de bureau, la page copiait par
+`navigator.clipboard.writeText`, que Chromium soumet à la permission du presse-papiers ; la
+fenêtre refuse toute permission sauf le micro (`main.cjs`), et l'échec était avalé sans un mot.
+Le défaut valait sur les trois systèmes, et pour tous les boutons « Copier » (codes de secours,
+manifeste Slack, blocs de code et clés d'API, adresses et codes d'invitation, transcription d'une
+réunion). Corrigé : un seul utilitaire, `src/lib/pressePapiers.ts`, qui passe dans l'application
+par un canal du processus principal (`electron/pressePapiers.cjs` : du texte seulement, deux
+millions de caractères au plus, relu avant de répondre, depuis la fenêtre de l'application
+seulement ; SECURITE.md § 29.12), dans un navigateur par `navigator.clipboard`, puis par la copie
+par sélection. Chaque bouton ne dit « Copié » que si c'est vrai, et sinon le dit (dans l'aide, le
+texte s'affiche sélectionné, à copier au clavier). À savoir : depuis Electron 44, le presse-papiers
+du processus principal est asynchrone, relevé à l'essai. **Vérifié sur ce Mac** : dans une vraie
+fenêtre Electron 44 avec le vrai préchargement et l'interface de développement (passerelle
+jetable), la copie directe est bien refusée, le canal écrit, et le parcours de Medhi (connexion,
+aide, clic) met les informations au presse-papiers avec « Copié » ; dans le navigateur, copie
+réelle, puis échec simulé (texte affiché et sélectionné) ; `npm run securite`, 459 contrôles
+(12 de plus, section 11 sexies). **Pas vérifié** : un vrai Windows ou Linux, et l'application
+empaquetée ; les autres boutons « Copier » n'ont pas été cliqués un à un (même utilitaire).
+
+**Fait le 27/09/2026 (après 2026.927.3) : un modèle qui répond mal sur un poste cède la place,
+seul.** Vu par Medhi sur le même PC (processeur seul, 16 Go, llmster) : même avec `--gpu off`
+et les réglages de Qwen, Qwen3.5 4B répond « 不 時////// » ; Ministral 3B, sur ce PC, répond.
+Le défaut est vraisemblablement dans le moteur (llama.cpp de llmster, architecture récente de
+Qwen3.5 au processeur sous Windows), hors de portée de Helix. Décidé par Medhi : « ça doit
+fonctionner en fonction des PC ». Pas de règle « pas de Qwen3.5 sans carte graphique » : la
+note décide toujours, mais seulement entre les modèles qui répondent juste **sur ce poste**,
+et c'est un essai qui le dit (`gateway/src/santeModeles.ts`).
+- **Essai à la mise en route** (provision.ts) : après `lms load`, avant « prêt », « Réponds
+  seulement : bonjour » par le serveur local, sans réflexion, 64 jetons au plus, 180 s au plus
+  (un processeur lent ; `HELIX_ESSAI_MODELE_MS`). Verdict : vide, boucle (`gardeBoucle.ts`, ou
+  un motif court répété), moins d'une lettre sur deux, ou plus d'un tiers de lettres hors
+  alphabet latin ; sans texte, la réflexion est jugée (le flux cassé du PC en était une).
+  Un moteur muet ou trop lent ne condamne pas le modèle (essai « sans conclusion », noté).
+  Raté : noté défaillant dans `modeles-sur-cette-machine.json` (dossier des données : raison,
+  date, début de la réponse), déchargé, et le suivant de `replis` est essayé, téléchargement
+  compris, comme pour un manque de mémoire (« … ne répond pas correctement sur cette machine,
+  essai de … »). Un modèle défaillant n'est plus installé, recommandé ni proposé d'office
+  (`classement`), ni pris en « Auto », « Rapide » ou « Approfondi » (router.ts, sélecteur) ;
+  il reste choisissable à la main, avec « répond mal sur cette machine » dans le sélecteur.
+  Registre illisible : rien n'est écrit par-dessus. Demander nommément un modèle défaillant
+  à la mise en route le réessaie, et un essai réussi efface la défaillance.
+- **En cours d'usage** (chat.ts, `apresCoupure`) : chaque réponse coupée par le garde-fou
+  d'un modèle local est comptée ; une fois, « douteux » (« Si cela se reproduit, … ne sera
+  plus choisi d'office ») ; deux fois, défaillant : en « Auto », la réponse suivante va au
+  modèle suivant, nommé dans le message ; choisi à la main, il reste choisi, et le message
+  dit comment en changer. S'il était le seul modèle : la mise en route en pose un autre en
+  arrière-plan.
+- **Postes déjà installés** : quinze secondes après le démarrage de la passerelle, le modèle
+  conseillé, s'il est installé et jamais essayé, passe l'essai (déjà en mémoire : sans
+  rechargement), et la mise en route prend le suivant s'il répond mal ; et tout modèle chargé
+  par le Chat pour la première fois sur ce poste passe le même essai (`loadModel`) : raté, la
+  demande échoue en le disant (« Renvoyez votre message »), et la suivante va ailleurs.
+  Rien au démarrage sans moteur local qui réponde, ni quand l'intégrateur prépare les modèles.
+**Sur le PC de Medhi, ce qui devrait se passer** (déduit, pas vu) : essai de Qwen3.5 4B au
+démarrage, raté, Qwen3.5 4B déchargé, puis Qwen3 8B (le suivant à la note pour 16 Go au
+processeur, 5 Go) téléchargé, chargé et essayé ; pendant ce temps, le Chat en « Auto » passe
+à un modèle déjà là (Ministral 3B, que Medhi a installé). **Vérifié ici** : `npm run securite`, 8 contrôles de plus
+(section 7 septies) : le verdict sur des réponses justes et cassées ; une mise en route
+devant un faux moteur et un faux `lms` (Windows de 16 Go simulé, dossier personnel et PATH
+jetables) qui rejette le modèle « 不 時////// », le note, le décharge et retient le suivant,
+sans nouvel essai la fois d'après ; le PC de Medhi rejoué (Qwen3.5 4B en mémoire, essai au
+démarrage, Qwen3 8B retenu, plus recommandé ensuite) ; deux coupures qui font passer « Auto »
+à un autre modèle. **Pas vérifié** : sur un vrai moteur, un vrai PC, ni l'écran (sélecteur,
+mise en route) dans l'application. **Reste ouvert** : un modèle noté défaillant le reste
+même si le moteur se corrige plus tard (sauf à le redemander nommément à la mise en route,
+ou à effacer le fichier) ; l'essai est fait sans réflexion, une panne qui ne toucherait que
+la réflexion n'est prise que par le garde-fou, en cours d'usage.
+
+**Vu par Medhi le 27/09/2026 sur le même PC Windows (2026.927.3, Ministral 3B) : « il est incapable
+de lire et traiter un document », quel que soit le fichier.** Demandé : que tout document courant
+soit lu et traité, par tout modèle et sur toute machine, en « double sécurité » même après un essai
+qui a fini par marcher (lent). Chemin d'une pièce jointe relu de bout en bout (composeur,
+`attachments.ts`, `documents.ts`, `useChat.ts`, `chat.ts`, `plan.ts`, chargement du modèle).
+**Causes trouvées à la relecture** (vraies sur Mac comme sur Windows, pour tout modèle local de moins
+de 45 milliards de paramètres ; aucune n'a été vue sur le PC même) :
+1. **Le découpage des tâches perdait le document.** Le texte du fichier était collé devant la
+   question : « résume-le » devenait une longue demande, que le tri du modèle découpait volontiers
+   (« lire le document », « résumer ») ; chaque étape repart d'une reformulation de 4 000 caractères
+   au plus, sans le fichier. Le modèle répondait sur un document qu'il ne voyait plus, ou cherchait à
+   l'ouvrir avec un outil. Probablement la cause principale.
+2. **La place n'était pas mesurée.** Jusqu'à 200 000 caractères par fichier partaient quelle que soit
+   la taille de conversation chargée (32 768 jetons sur un poste de 16 Go ; 4 096 chez LM Studio pour
+   un modèle chargé sans taille) : refus du moteur, ou coupure silencieuse par le moteur. PROJET.md
+   annonçait « moins pour un petit modèle local » : ce n'était pas fait.
+3. **La question suivante partait sans le fichier** (« et la page 3 ? »).
+4. **L'envoi n'attendait pas la lecture** : un PDF se lit en plusieurs secondes sur un PC modeste, et
+   une question envoyée entre-temps partait sans lui, sans rien à l'écran.
+5. **Encodages de Windows** : tout fichier texte était lu en UTF-8. Un fichier UTF-16 (Bloc-notes
+   « Unicode », PowerShell) arrivait illisible, un CSV d'Excel en Windows-1252 perdait ses accents.
+   Une extension inconnue (.srt, .ps1, .tex…) était refusée même quand c'est du texte.
+6. Word : le texte rangé dans des contrôles de contenu (`w:sdt`, documents faits d'un modèle)
+   manquait ; Excel : les cellules vides décalaient les colonnes (un montant passait dans la
+   mauvaise) ; plus de 300 pages ou 5 000 lignes étaient coupées sans que la puce le dise.
+7. Pas un défaut : Ministral 3B est déclaré « vision » par LM Studio ; une image part donc vers lui.
+   Pour un modèle sans vision, l'image est déjà remplacée par une note et l'écran le dit (contrôlé).
+
+**Corrigé** :
+- **Documents balisés, mesurés, lus en parties si besoin** (`gateway/src/documentsJoints.ts`, neuf).
+  L'écran enveloppe chaque fichier dans `<document nom="…" caracteres="…">` (longueur écrite : un
+  fichier qui contient « </document> » ne trompe pas la lecture ; une instance plus ancienne
+  transmet la balise telle quelle, lisible). L'instance mesure la place contre la taille réellement
+  chargée (`contexteDuModele`, backends.ts : `lms ps`, sinon la taille publiée par le service
+  (`context_length`, `max_context_length`, `max_model_len`), le champ `contexte` d'un backend du
+  profil, sinon 32 768 pour LM Studio chargé par Helix, 8 192 pour un autre serveur de la machine,
+  32 768 pour un service distant) ; les jetons sont estimés (3 caractères, 1 par idéogramme), la
+  réponse garde un cinquième de la place. S'il tient : en entier, avec son nom, la consigne de le
+  lire directement (pas d'outil pour l'ouvrir), puis la question et la langue de la réponse. Sinon :
+  **lu en parties** (coupées aux pages, feuilles, paragraphes), une demande par partie qui relève ce
+  qui sert à la question, et la réponse s'appuie sur les notes ; au-delà de 24 parties, la suite
+  n'est pas lue. Dans tous les cas l'écran le dit, en tête de la réponse et gardé avec elle (« lu en
+  5 parties… », « seules les 24 premières… »), et suit la lecture (« partie 2 sur 5 »). Des outils
+  qui prendraient la place du document sont retirés pour cette réponse, et c'est dit.
+- **Jamais de découpage en étapes** quand la conversation porte un document (`chat.ts`).
+- **La question suivante garde ses documents** tant que le Chat est ouvert (`useChat.ts`), au même
+  endroit et avec le même texte à chaque tour, pour que le moteur réutilise ce qu'il a déjà lu (la
+  lenteur vue par Medhi est d'abord la lecture du document par le processeur) ; un document lu en
+  parties repart avec ses notes, sans être relu (seize gardés en mémoire). Le texte n'est pas
+  enregistré avec le Chat (poids du stockage et de la synchronisation) : rouvert, le modèle sait
+  qu'un fichier était joint et demande de le rejoindre.
+- **Pièces jointes visibles dans le message** (demandé par Medhi) : une carte par fichier, icône du
+  type, nom, poids, « lu en entier » ou « début seulement » (`PiecesJointesMessage.tsx`), gardée avec
+  le Chat (`sessions.ts`, champ `pieces`, sans contenu). Le composeur montre « Lecture de … » et
+  n'envoie qu'une fois les fichiers lus.
+- **Extraction** : décodage UTF-8, UTF-16 avec ou sans marque, Windows-1252 (`src/lib/decodage.ts`) ;
+  extension inconnue lue si ses octets sont du texte ; RTF, sous-titres, scripts Windows ajoutés ;
+  Word à toute profondeur ; Excel à sa colonne ; lecture arrêtée dite « début seulement » ; image
+  reconnue par son extension quand Windows ne donne pas de type ; raisons de refus traduites.
+
+**Vérifié ici** : `npm run typecheck` ; `npm run securite`, 455 contrôles, 0 échec (8 de plus,
+section 7 septies : un texte en entier, balisé et en une seule demande ; PDF, Excel, chinois et un
+HTML qui contient « </document> » intacts ; un document de 52 000 caractères lu en parties à 8 192
+et à 4 096 jetons, chaque partie tenant dans la conversation et chaque repère revenant au modèle par
+les notes ; l'annonce et le suivi à l'écran ; la question suivante avec le document, et les notes
+reprises sans relecture ; les outils retirés sur un petit contexte ; l'image refusée à un modèle
+sans vision ; les encodages). Un premier passage de la batterie s'est arrêté en section 7 ter
+(connexion fermée pendant les employés, sans lien avec les documents), le suivant est passé en
+entier. Vu dans le navigateur contre une instance jetable et un faux modèle : cartes des pièces
+jointes, CSV en UTF-16 lu juste, Chat rouvert avec ses cartes, lecture en 5 parties annoncée.
+i18n à 100 % des deux côtés. **Pas vérifié** : un vrai modèle, pdf.js dans l'application Windows,
+la vitesse sur le PC.
+
+**À essayer sur le PC de Medhi** : joindre un PDF, un Word fait d'un modèle, un Excel, un CSV
+enregistré par Excel et un .txt du Bloc-notes, avec Ministral 3B puis Qwen3.5 4B ; relever si la
+réponse cite le contenu, le temps avant le premier mot, et, pour un long PDF, l'annonce « lu en N
+parties » ; poser une seconde question sur le même fichier (elle doit être plus rapide que la
+première : le moteur reprend ce qu'il a lu) ; `lms ps` pour voir la taille de conversation chargée.
+Restent non lus, et dits comme tels : PDF scanné (images de pages ; les faire lire par un modèle de
+vision reste à faire), PDF protégé, anciens .doc/.xls/.ppt, photo HEIC.
 
 **Trouvé le 27/09/2026 au premier vrai essai de mise à jour d'un clic (0.27.0 vers 0.27.1, par
 GitHub, sur ce Mac) : toute mise à jour était refusée.** La fenêtre « Nouvelle version » est bien

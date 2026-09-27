@@ -66,12 +66,39 @@ const vecteur = (texte) => {
 };
 /** Réponses en boucle servies par le faux modèle : morceaux envoyés, et coupure par la passerelle. */
 const BOUCLES = [];
+/** Questions d'essai reçues par le faux modèle (section 7 septies). */
+const ESSAIS = [];
+/** Demandes reçues par le faux modèle qui portent un document d'essai (section 7 septies). */
+const DOCS_RECUS = [];
 const fauxModele = serveurHttp((req, res) => {
   let corps = "";
   req.on("data", (b) => (corps += b));
   req.on("end", () => {
     res.setHeader("Content-Type", "application/json");
-    if (req.url === "/v1/models") return res.end(JSON.stringify({ data: [{ id: "essai-embed-texte" }, { id: "essai-chat" }] }));
+    /*
+     * « essai-court » publie une petite taille de conversation (4 096 jetons,
+     * celle de LM Studio pour un modèle chargé sans rien préciser) : la
+     * section 7 septies y lit un long document en parties (27/09/2026).
+     * « essai-chat » n'en publie aucune : l'instance suppose 8 192 jetons pour
+     * un serveur de la machine.
+     */
+    if (req.url === "/v1/models") return res.end(JSON.stringify({ data: [{ id: "essai-embed-texte" }, { id: "essai-chat" }, { id: "essai-court", context_length: 4096 }] }));
+    /*
+     * Pièces jointes (section 7 septies) : chaque demande qui porte
+     * « doc-essai » est gardée telle que le moteur la reçoit. Une demande sans
+     * flux est la lecture d'une partie d'un long document : les notes rendues
+     * recopient les repères « REPERE-… » de la partie, pour vérifier que tout
+     * le document est passé par le modèle.
+     */
+    if (req.url === "/v1/chat/completions" && corps.includes("doc-essai")) {
+      const demande = JSON.parse(corps || "{}");
+      DOCS_RECUS.push(demande);
+      if (demande.stream === false) {
+        const dernier = String((demande.messages ?? []).at(-1)?.content ?? "");
+        const reperes = [...new Set(dernier.match(/REPERE-\d+/g) ?? [])];
+        return res.end(JSON.stringify({ id: "essai-notes", object: "chat.completion", choices: [{ index: 0, message: { role: "assistant", content: `Notes de la partie : ${reperes.join(" ")}` }, finish_reason: "stop" }] }));
+      }
+    }
     /*
      * Une demande qui porte « attente-essai » ne reçoit rien pendant six
      * secondes : le temps que la passerelle publie un statut de lecture
@@ -108,6 +135,22 @@ const fauxModele = serveurHttp((req, res) => {
         setImmediate(suite);
       };
       return suite();
+    }
+    /*
+     * L'essai du modèle à la mise en route (santeModeles.ts, section 7 septies,
+     * 27/09/2026) : une question sans flux. Un modèle dont le nom porte
+     * « casse », ou Qwen3.5 4B (le PC de Medhi), répond ce que Medhi a vu ;
+     * tout autre, une vraie phrase.
+     */
+    if (req.url === "/v1/chat/completions" && JSON.parse(corps || "{}").stream === false) {
+      const demande = JSON.parse(corps);
+      ESSAIS.push({ modele: demande.model, question: demande.messages?.at(-1)?.content, max_tokens: demande.max_tokens, reflexion: demande.reasoning_effort });
+      const message = /casse/.test(demande.model)
+        ? { role: "assistant", content: "不 時//////" }
+        : /qwen3\.5-4b/.test(demande.model)
+          ? { role: "assistant", content: "", reasoning_content: `不時${"////".repeat(12)}` }
+          : { role: "assistant", content: "Bonjour !" };
+      return res.end(JSON.stringify({ id: "essai-machine", object: "chat.completion", choices: [{ index: 0, message, finish_reason: "stop" }] }));
     }
     if (req.url === "/v1/embeddings") {
       const entree = JSON.parse(corps || "{}").input ?? [];
@@ -1906,6 +1949,355 @@ console.log("\n7 sexies. Réponse partie en boucle : coupée, et dite (27/09/202
 }
 
 /* ------------------------------------------------------------------------- */
+console.log("\n7 septies. Essai du modèle sur cette machine : celui qui répond mal cède la place (27/09/2026)");
+{
+  /*
+   * Vu par Medhi sur un PC Windows sans carte graphique (2026.927.3) : Qwen3.5
+   * 4B, choisi d'office, répond « 不 時////// » ; Ministral 3B, sur le même PC,
+   * répond. Sans vrai modèle ni vrai LM Studio : le faux modèle ci-dessus sert
+   * d'API compatible OpenAI, et un faux `lms` (chargements notés dans un
+   * fichier) tient lieu de moteur. Le poste simulé est un Windows de 16 Go
+   * sans carte NVIDIA ; son dossier personnel et son PATH sont jetables, pour
+   * que le vrai `lms` de ce poste ne soit jamais lancé.
+   */
+  /*
+   * Tout se joue dans un processus à part : importer ici un module de la
+   * passerelle fixerait, pour le reste de la batterie, l'espace de travail et
+   * le profil lus à l'import (mcp.ts, config.ts), et la section 10 en dépend.
+   */
+  const { mkdirSync, writeFileSync, chmodSync, symlinkSync } = await import("node:fs");
+  const ICI = mkdtempSync(join(tmpdir(), "helix-essai-machine-"));
+  const BIN = join(ICI, "bin");
+  mkdirSync(BIN);
+  mkdirSync(join(ICI, "maison"));
+  symlinkSync(process.execPath, join(BIN, "node"));
+  writeFileSync(
+    join(BIN, "lms"),
+    [
+      "#!/usr/bin/env node",
+      'const fs = require("node:fs"), path = require("node:path");',
+      "const dir = process.env.FAUX_LMS_DIR, a = process.argv.slice(2);",
+      'fs.appendFileSync(path.join(dir, "appels.log"), a.join(" ") + "\\n");',
+      'const lire = (n) => { try { return JSON.parse(fs.readFileSync(path.join(dir, n), "utf8")); } catch { return []; } };',
+      "const ecrire = (n, v) => fs.writeFileSync(path.join(dir, n), JSON.stringify(v));",
+      'const charges = lire("charges.json"), installes = lire("installes.json"), json = a.includes("--json");',
+      'const entree = (k) => ({ modelKey: k, path: k, type: "llm", sizeBytes: 1e9 });',
+      'if (a[0] === "version") console.log("lms 0.0.0-essai");',
+      'else if (a[0] === "ps") console.log(json ? JSON.stringify(charges.map(entree)) : charges.join("\\n"));',
+      'else if (a[0] === "ls") console.log(json ? JSON.stringify(installes.map(entree)) : installes.join("\\n"));',
+      'else if (a[0] === "load") { if (!installes.includes(a[1])) process.exit(1); ecrire("charges.json", [...new Set([...charges, a[1]])]); }',
+      'else if (a[0] === "unload") ecrire("charges.json", charges.filter((k) => k !== a[1]));',
+      "else process.exit(1);",
+    ].join("\n"),
+  );
+  chmodSync(join(BIN, "lms"), 0o755);
+  writeFileSync(
+    join(ICI, "essai.mjs"),
+    `
+    import os from "node:os";
+    import { readFileSync, writeFileSync, mkdtempSync } from "node:fs";
+    import { join } from "node:path";
+    import { pathToFileURL } from "node:url";
+    Object.defineProperty(process, "platform", { value: "win32" });
+    Object.defineProperty(process, "arch", { value: "x64" });
+    os.totalmem = () => 16 * 1024 ** 3;
+    const ici = process.env.FAUX_LMS_DIR;
+    const mod = (f) => import(pathToFileURL(join(${JSON.stringify(RACINE)}, "gateway", "src", f)).href);
+    const p = await mod("provision.ts"), s = await mod("santeModeles.ts"), r = await mod("router.ts");
+    const { avecLangueDe } = await mod("langue.ts");
+    const enFr = (f) => avecLangueDe({ "x-helix-langue": "fr" }, new URL("http://essai/"), f);
+    const messages = [];
+    p.onProvisionChange((e) => messages.push(e.phase + "|" + e.message));
+    const poser = (charges, installes) => {
+      writeFileSync(join(ici, "charges.json"), JSON.stringify(charges));
+      writeFileSync(join(ici, "installes.json"), JSON.stringify(installes));
+      writeFileSync(join(ici, "appels.log"), "");
+      messages.length = 0;
+    };
+    const appels = () => readFileSync(join(ici, "appels.log"), "utf8").split("\\n").filter((l) => /^(load|unload|get) /.test(l)).map((l) => l.split(" ").slice(0, 2).join(" "));
+    const charges = () => JSON.parse(readFileSync(join(ici, "charges.json"), "utf8"));
+    const sortie = {};
+    const juge = (texte, reflexion) => s.verdictDeReponse(texte, reflexion);
+    sortie.V = {
+      justes: [juge("Bonjour !"), juge("Bonjour ! Comment puis-je vous aider aujourd'hui ?"), juge("", "La personne veut que je dise bonjour.")].map((v) => v.ok),
+      cassees: [juge("不 時//////"), juge(""), juge("你好"), juge("", "不時" + "////".repeat(12)), juge("bonjour ".repeat(8))].map((v) => v.ok ? "ok" : v.raison),
+    };
+
+    // A. Mise en route : le premier candidat répond mal, le second juste.
+    process.env.HELIX_DATA_DIR = mkdtempSync(join(ici, "a-"));
+    const fiche = (key, label, intelligence, verifie) => ({ key, label, editeur: "Essai", licence: "Apache 2.0", downloadGb: 0.5, intelligence, verifie, description: "" });
+    const cat = [fiche("essai-machine/casse", "Casse 4B", 13, false), fiche("essai-machine/bon", "Bon 3B", 5, true)];
+    poser([], ["essai-machine/casse", "essai-machine/bon"]);
+    const a = await enFr(() => p.ensureLocalModel(undefined, cat));
+    sortie.A = { phase: a.phase, model: a.model, message: a.message, messages: [...messages], appels: appels(), charges: charges(),
+      casse: s.ficheDe("essai-machine/casse"), bon: s.ficheDe("essai-machine/bon"),
+      replis: p.replis(p.detectHardware(), cat, cat[1]).map((e) => e.key) };
+    messages.length = 0;
+    const a2 = await enFr(() => p.ensureLocalModel(undefined, cat));
+    sortie.A2 = { phase: a2.phase, message: a2.message, model: a2.model };
+
+    // B. Poste déjà installé (le PC de Medhi) : Qwen3.5 4B en mémoire, jamais essayé ; essai au démarrage.
+    process.env.HELIX_DATA_DIR = mkdtempSync(join(ici, "b-"));
+    poser(["qwen/qwen3.5-4b"], ["qwen/qwen3.5-4b", "qwen3-8b"]);
+    const hw = p.detectHardware();
+    const avant = p.recommend(hw).key;
+    await enFr(() => p.verifierModeleEnPlace());
+    const b = p.getProvisionState();
+    sortie.B = { avant, apres: p.recommend(hw).key, phase: b.phase, model: b.model, messages: [...messages], appels: appels(), charges: charges(),
+      qwen35: s.ficheDe("qwen/qwen3.5-4b"), qwen3: s.ficheDe("qwen3-8b"),
+      recommandes: p.adaptesALaMachine(hw).filter((e) => e.recommande && e.role === "chat").map((e) => e.key) };
+    messages.length = 0;
+    await enFr(() => p.verifierModeleEnPlace());
+    sortie.B2 = { appels: appels().slice(sortie.B.appels.length), messages: [...messages] };
+
+    // C. En cours d'usage : deux réponses coupées en boucle, en « Auto ».
+    const modele = { id: "essai-chat", uid: "lmstudio/essai-chat", backendId: "lmstudio", backendLabel: "LM Studio", backendKind: "lmstudio", roles: ["chat"] };
+    r.invalidate();
+    const avantC = await r.resolve({ role: "chat" });
+    const c1 = await enFr(() => p.apresCoupure(modele, true));
+    const c2 = await enFr(() => p.apresCoupure(modele, true));
+    r.invalidate();
+    const auto = await r.resolve({ role: "chat" });
+    const main = await r.resolve({ model: "essai-chat" });
+    sortie.C = { avant: avantC.model?.id, c1, c2, fiche: s.ficheDe("essai-chat"), auto: auto.model?.id, main: main.model?.id,
+      nuage: await p.apresCoupure({ ...modele, id: "nuage", backendKind: "openai-compatible" }, true) };
+    console.log(JSON.stringify(sortie));
+    process.exit(0);
+    `,
+  );
+  const lancer = () =>
+    new Promise((ok) => {
+      const enfant = spawn(process.execPath, ["--experimental-strip-types", "--no-warnings", join(ICI, "essai.mjs")], {
+        cwd: ICI,
+        // Rien du poste : ni son PATH (le vrai `lms`), ni son dossier personnel (~/.lmstudio), ni ses réglages.
+        env: {
+          PATH: `${BIN}:/usr/bin:/bin`,
+          HOME: join(ICI, "maison"),
+          TMPDIR: tmpdir(),
+          FAUX_LMS_DIR: ICI,
+          HELIX_CONFIG: join(ICI, "absent.json"),
+          HELIX_DATA_DIR: join(ICI, "donnees"),
+          HELIX_LMSTUDIO_URL: `http://127.0.0.1:${PORT_EMBED}/v1`,
+          HELIX_EXO_URL: "http://127.0.0.1:9/v1",
+        },
+        stdio: ["ignore", "pipe", "pipe"],
+      });
+      let sortie = "";
+      enfant.stdout.on("data", (b) => (sortie += b));
+      enfant.stderr.on("data", (b) => (sortie += b));
+      const minuterie = setTimeout(() => enfant.kill(), 90_000);
+      enfant.on("close", () => {
+        clearTimeout(minuterie);
+        ok(sortie);
+      });
+    });
+  const brut = await lancer();
+  let e = {};
+  try {
+    e = JSON.parse(brut.trim().split("\n").at(-1));
+  } catch {
+    e = { erreur: brut.slice(-600) };
+  }
+  const A = e.A ?? {}, B = e.B ?? {}, C = e.C ?? {};
+  verifier(
+    "verdict : « Bonjour ! », une phrase, une réflexion saine sans texte passent ; « 不 時////// », une réponse vide, « 你好 », des barres et un mot en boucle non",
+    JSON.stringify(e.V?.justes) === "[true,true,true]" && JSON.stringify(e.V?.cassees) === JSON.stringify(["signes", "vide", "alphabet", "boucle", "boucle"]),
+    JSON.stringify(e.V ?? e).slice(0, 400),
+  );
+  verifier(
+    "mise en route : le modèle qui répond « 不 時////// » est essayé, noté défaillant, déchargé ; le suivant est chargé, essayé et retenu",
+    A.phase === "ready" && A.model === "essai-machine/bon" && A.casse?.etat === "defaillant" && A.casse?.raison === "signes" && A.bon?.etat === "valide" &&
+      JSON.stringify(A.appels) === JSON.stringify(["load essai-machine/casse", "unload essai-machine/casse", "load essai-machine/bon"]) &&
+      JSON.stringify(A.charges) === JSON.stringify(["essai-machine/bon"]),
+    JSON.stringify(e.A ?? e).slice(0, 600),
+  );
+  verifier(
+    "mise en route : l'écran dit « … ne répond pas correctement sur cette machine, essai de … », puis « … est prêt »",
+    A.messages?.some((m) => m === "checking|Casse 4B ne répond pas correctement sur cette machine, essai de Bon 3B...") &&
+      A.messages?.some((m) => m.startsWith("loading|Vérification de Casse 4B")) && A.message === "Bon 3B est prêt.",
+    JSON.stringify(A.messages).slice(0, 600),
+  );
+  verifier(
+    "le modèle défaillant n'est plus proposé en repli ni rechoisi ; une seconde mise en route garde le bon, sans nouvel essai",
+    JSON.stringify(A.replis) === JSON.stringify(["essai-machine/bon"]) && e.A2?.phase === "ready" && e.A2?.model === "essai-machine/bon" && e.A2?.message === "Bon 3B est déjà prêt.",
+    JSON.stringify([A.replis, e.A2]),
+  );
+  const essaisCasse = ESSAIS.filter((q) => q.modele === "essai-machine/casse");
+  verifier(
+    "l'essai est une courte question sans réflexion (64 jetons au plus), posée une fois",
+    essaisCasse.length === 1 && essaisCasse[0].max_tokens <= 64 && essaisCasse[0].reflexion === "none" && /bonjour/i.test(essaisCasse[0].question ?? ""),
+    JSON.stringify(essaisCasse),
+  );
+  verifier(
+    "poste déjà installé (Windows 16 Go simulé, Qwen3.5 4B en mémoire) : essai au démarrage, Qwen3.5 4B écarté, Qwen3 8B chargé et retenu, sans réinstaller",
+    B.avant === "qwen/qwen3.5-4b" && B.phase === "ready" && B.model === "qwen3-8b" && B.qwen35?.etat === "defaillant" && B.qwen35?.raison === "boucle" && B.qwen3?.etat === "valide" &&
+      JSON.stringify(B.appels) === JSON.stringify(["unload qwen/qwen3.5-4b", "load qwen3-8b"]) &&
+      B.messages?.some((m) => m.includes("Qwen3.5 4B ne répond pas correctement sur cette machine, essai de Qwen3 8B")),
+    JSON.stringify(e.B ?? e).slice(0, 700),
+  );
+  verifier(
+    "après l'essai, ce poste ne recommande plus Qwen3.5 4B, et le démarrage suivant ne refait rien",
+    B.apres !== "qwen/qwen3.5-4b" && !B.recommandes?.includes("qwen/qwen3.5-4b") && Array.isArray(e.B2?.appels) && e.B2.appels.length === 0 && e.B2.messages.length === 0,
+    JSON.stringify([B.apres, B.recommandes, e.B2]),
+  );
+  verifier(
+    "en cours d'usage : une coupure rend le modèle douteux, la deuxième défaillant ; en « Auto », la réponse suivante va à un autre modèle, et le Chat le dit",
+    C.avant === "essai-chat" && /Si cela se reproduit, essai-chat ne sera plus choisi d'office/.test(C.c1 ?? "") &&
+      // Le modèle qui prend le relais dépend des faux modèles de la batterie : n'importe lequel, sauf le défaillant, et c'est lui que le message nomme.
+      typeof C.auto === "string" && C.auto !== "" && C.auto !== "essai-chat" &&
+      (C.c2 ?? "") === `C'est la deuxième fois sur cette machine. En « Auto », essai-chat n'est plus choisi sur cette machine : la prochaine réponse viendra de ${C.auto}.` &&
+      C.fiche?.etat === "defaillant" && C.fiche?.coupures === 2 && C.main === "essai-chat" && C.nuage === "",
+    JSON.stringify(e.C ?? e).slice(0, 700),
+  );
+  rmSync(ICI, { recursive: true, force: true });
+}
+
+console.log("\n7 octies. Documents joints : lus par le modèle, en entier ou en parties annoncées (27/09/2026)");
+{
+  /*
+   * Vu par Medhi sur un PC Windows (Ministral 3B, processeur seul) : un
+   * fichier joint n'était pas lu. Ce que l'écran envoie (la balise de
+   * src/lib/attachments.ts, `enveloppe`) est rejoué ici devant le faux
+   * modèle, qui garde ce qu'il reçoit : le document doit lui arriver entier,
+   * balisé avec son nom, ou lu en parties dont chaque repère revient dans les
+   * notes, et la coupure doit être dite. Deux tailles de conversation : 8 192
+   * (supposée pour un serveur de la machine) et 4 096 (publiée par
+   * « essai-court »).
+   */
+  const enFrancais = { ...avecSeance, "X-Helix-Langue": "fr" };
+  const modeles = await (await appel("/v1/models", { headers: avecSeance })).json().catch(() => ({}));
+  const chat8k = (modeles.data ?? []).find((m) => /essai-chat/.test(m.id))?.id;
+  const chat4k = (modeles.data ?? []).find((m) => /essai-court/.test(m.id))?.id;
+  const enveloppe = (nom, contenu, coupe = false) => `<document nom="${nom}" caracteres="${contenu.length}"${coupe ? ' coupe="oui"' : ""}>\n${contenu}\n</document>`;
+  const demander = async (model, messages, tools = false) => {
+    const depuis = DOCS_RECUS.length;
+    const flux = await (await appel("/v1/chat/completions", { method: "POST", headers: enFrancais, body: JSON.stringify({ model, tools, stream: true, effort: "aucun", messages }) })).text();
+    let texte = "";
+    const statuts = [];
+    for (const ligne of flux.split("\n")) {
+      if (!ligne.startsWith("data: ") || ligne === "data: [DONE]") continue;
+      try {
+        const j = JSON.parse(ligne.slice(6));
+        if (j.helix?.type === "statut" && j.helix.message) statuts.push(j.helix.message);
+        texte += j.choices?.[0]?.delta?.content ?? "";
+      } catch {
+        /* morceau illisible */
+      }
+    }
+    const recues = DOCS_RECUS.slice(depuis);
+    return { flux, texte, statuts, recues, parties: recues.filter((r) => r.stream === false), finale: recues.filter((r) => r.stream !== false).at(-1) };
+  };
+  const contenuDe = (m) => (typeof m?.content === "string" ? m.content : (m?.content ?? []).filter((p) => p.type === "text").map((p) => p.text).join("\n"));
+  const dernierUtilisateur = (r) => contenuDe([...(r?.messages ?? [])].reverse().find((m) => m.role === "user"));
+
+  // 1. Un texte court, en entier : balisé avec son nom, suivi de la question, sans plan ni lecture en parties.
+  const notes = "Compte rendu de la réunion du 12 mars.\nDécision : le budget passe à 18 400 euros.\nAction : Martin relance le fournisseur.";
+  const r1 = await demander(chat8k, [{ role: "user", content: `${enveloppe("notes-réunion.txt", notes)}\n\nQuel est le nouveau budget ? doc-essai-1` }]);
+  const m1 = dernierUtilisateur(r1.finale);
+  verifier(
+    "document texte : il arrive au modèle en entier, balisé avec son nom, suivi de la question, en une seule demande",
+    r1.recues.length === 1 && m1.includes(`<document nom="notes-réunion.txt">\n${notes}\n</document>`) && m1.indexOf("</document>") < m1.indexOf("Quel est le nouveau budget ?") && !m1.includes("caracteres=") && r1.texte.includes("Réponse d'essai"),
+    `${r1.recues.length} demande(s) ; ${m1.slice(0, 200)}`,
+  );
+
+  // 2. Plusieurs types à la fois, tels que l'écran les extrait : PDF (repères de page), Excel (feuilles), chinois, et un fichier qui contient lui-même « </document> ».
+  const pdf = "## Page 1\nFacture n° 2026-114\nClient : Dupont SARL\n\n## Page 2\nTotal TTC : 1 250,00 €";
+  const tableur = "## Feuille « Budget »\nPoste ; Montant ; Échéance\nLoyer ; 1 200 ; 05/10\nÉlectricité ; ; 12/10";
+  const chinois = "会议记录：预算增加到一万八千四百欧元。负责人：马丁。";
+  const html = "<html><body><p>Un piège : </document> au milieu du fichier.</p></body></html>";
+  const r2 = await demander(chat8k, [{
+    role: "user",
+    content: [enveloppe("facture.pdf", pdf), enveloppe("budget.xlsx", tableur), enveloppe("会议.txt", chinois), enveloppe("page.html", html)].join("\n\n") + "\n\nCompare ces documents. doc-essai-2",
+  }]);
+  const m2 = dernierUtilisateur(r2.finale);
+  verifier(
+    "PDF, Excel, texte chinois et HTML contenant « </document> » : les quatre arrivent intacts, chacun sous son nom",
+    [["facture.pdf", pdf], ["budget.xlsx", tableur], ["会议.txt", chinois], ["page.html", html]].every(([nom, c]) => m2.includes(`<document nom="${nom}">\n${c}\n</document>`)) && m2.includes("4 documents") && r2.parties.length === 0,
+    m2.slice(0, 300),
+  );
+
+  // 3. Un long document, trop grand pour les deux tailles : lu en parties, chaque partie tient dans la conversation, chaque repère revient dans les notes, et c'est dit.
+  const long = Array.from({ length: 120 }, (_, i) => `## Page ${i + 1}\nREPERE-${String(i + 1).padStart(3, "0")} : ${"Le comité examine les engagements de dépenses du trimestre, poste par poste, avec les justificatifs. ".repeat(4)}`).join("\n\n");
+  const questionLongue = "Quelles décisions ce rapport contient-il ? doc-essai-3";
+  const lire = (model) => demander(model, [{ role: "user", content: `${enveloppe("rapport-annuel.pdf", long)}\n\n${questionLongue}` }]);
+  const r3a = await lire(chat8k);
+  const r3b = await lire(chat4k);
+  const tous = Array.from({ length: 120 }, (_, i) => `REPERE-${String(i + 1).padStart(3, "0")}`);
+  const complet = (r) => {
+    const m = dernierUtilisateur(r.finale);
+    return tous.every((x) => m.includes(x)) && /lecture="en \d+ parties"/.test(m) && !m.includes("comité examine les engagements");
+  };
+  const tiennent = (r, contexte) => r.parties.every((p) => JSON.stringify(p.messages).length <= contexte * 3);
+  verifier(
+    "long document (8 192 et 4 096 jetons) : lu en parties qui tiennent chacune dans la conversation, tous ses repères arrivent au modèle par les notes",
+    r3a.parties.length >= 2 && r3b.parties.length > r3a.parties.length && complet(r3a) && complet(r3b) && tiennent(r3a, 8192) && tiennent(r3b, 4096),
+    `${r3a.parties.length} parties à 8 192, ${r3b.parties.length} à 4 096 ; complet ${complet(r3a)} ${complet(r3b)} ; tiennent ${tiennent(r3a, 8192)} ${tiennent(r3b, 4096)}`,
+  );
+  verifier(
+    "long document : la lecture en parties est dite dans la réponse et suivie à l'écran (« partie 1 sur … »)",
+    /lu en \d+ parties/.test(r3b.texte) && r3b.texte.includes("rapport-annuel.pdf") && r3b.statuts.some((s) => /partie 1 sur \d+/.test(s)),
+    `${r3b.texte.slice(0, 200)} | ${r3b.statuts.slice(0, 2).join(" / ")}`,
+  );
+
+  // 4. La question suivante : le document repart avec la conversation ; lu en parties, il repart avec les mêmes notes, sans être relu.
+  const r4 = await demander(chat8k, [
+    { role: "user", content: `${enveloppe("notes-réunion.txt", notes)}\n\nQuel est le nouveau budget ? doc-essai-4` },
+    { role: "assistant", content: "Le budget passe à 18 400 euros." },
+    { role: "user", content: "Et qui relance le fournisseur ? doc-essai-4" },
+  ]);
+  const premier4 = contenuDe(r4.finale?.messages?.find((m) => m.role === "user"));
+  const r5 = await demander(chat4k, [
+    { role: "user", content: `${enveloppe("rapport-annuel.pdf", long)}\n\n${questionLongue}` },
+    { role: "assistant", content: "Le rapport contient plusieurs décisions." },
+    { role: "user", content: "Et la page 42 ? doc-essai-3" },
+  ]);
+  const premier5 = contenuDe(r5.finale?.messages?.find((m) => m.role === "user"));
+  verifier(
+    "question suivante : le document de la question d'avant est encore lu ; celui lu en parties repart avec ses notes, sans nouvelle lecture",
+    premier4.includes(notes) && dernierUtilisateur(r4.finale).startsWith("Et qui relance") && r5.parties.length === 0 && tous.every((x) => premier5.includes(x)),
+    `${premier4.slice(0, 120)} | ${r5.parties.length} partie(s) relue(s)`,
+  );
+
+  // 5. Avec les outils, sur un petit contexte : le document tient seulement sans eux ; il passe en entier, les outils sont retirés, et c'est dit.
+  const moyen = Array.from({ length: 30 }, (_, i) => `Ligne ${i + 1} : REPERE-${String(i + 1).padStart(3, "0")} montant ${100 + i} euros.`).join("\n");
+  const r6 = await demander(chat4k, [{ role: "user", content: `${enveloppe("releve.csv", moyen)}\n\nFais le total. doc-essai-6` }], true);
+  const m6 = dernierUtilisateur(r6.finale);
+  verifier(
+    "petit contexte avec outils : le document passe en entier, les outils sont retirés pour cette réponse, et l'écran le dit",
+    m6.includes(moyen) && !(r6.finale?.tools?.length > 0) && /sans outils/.test(r6.texte) && m6.endsWith("tu n'as pas d'outil : réponds à partir des documents.") && r6.parties.length === 0,
+    `${Array.isArray(r6.finale?.tools) ? r6.finale.tools.length : 0} outil(s) ; ${r6.texte.slice(0, 160)}`,
+  );
+
+  // 6. Une image à un modèle qui ne lit pas les images : remplacée par une note, et l'écran le dit (rien n'est envoyé à l'aveugle).
+  const r7 = await demander(chat8k, [{ role: "user", content: [{ type: "text", text: "Que montre cette capture ? doc-essai-7" }, { type: "image_url", image_url: { url: "data:image/png;base64,iVBORw0KGgo=" } }] }]);
+  const m7 = r7.finale?.messages?.at(-1)?.content;
+  verifier(
+    "image pour un modèle sans vision : elle ne part pas, une note la remplace, et l'écran le dit",
+    Array.isArray(m7) && !m7.some((p) => p.type === "image_url") && m7.some((p) => /aucun modèle de cette machine ne sait lire les images/.test(p.text ?? "")) && r7.statuts.some((s) => /ne sait pas lire les images/.test(s)),
+    `${JSON.stringify(m7).slice(0, 200)} | ${r7.statuts.join(" / ")}`,
+  );
+
+  // 7. Encodages de Windows : UTF-16 (avec et sans marque), Windows-1252, UTF-8 coupé au milieu d'une lettre ; un binaire n'est pas pris pour du texte.
+  const { pathToFileURL: versUrlDecodage } = await import("node:url");
+  const d = await import(versUrlDecodage(join(RACINE, "src", "lib", "decodage.ts")).href);
+  const phrase = "Référence ; Montant ; Échéance\nFacture 12 ; 1 250,00 € ; 05/10";
+  const utf16 = Buffer.from(phrase, "utf16le");
+  const cp1252 = Uint8Array.from([...phrase].map((c) => ({ "é": 0xe9, "É": 0xc9, "€": 0x80 })[c] ?? c.charCodeAt(0)));
+  const utf8 = Buffer.from(phrase, "utf8");
+  const coupeAuMilieu = utf8.subarray(0, utf8.indexOf(Buffer.from("é")) + 1);
+  const png = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0x0d, 0x49, 0x48, 0x44, 0x52, 0, 0, 1, 0, 0, 0, 1, 0, 8, 6, 0, 0, 0, 0x5c, 0x72, 0xa8, 0x66, 0, 0, 0, 1, 0x73, 0x52, 0x47, 0x42, 0, 0xae, 0xce, 0x1c, 0xe9]);
+  verifier(
+    "encodages : UTF-16 avec et sans marque, Windows-1252 et UTF-8 coupé se lisent juste ; un PNG n'est pas pris pour du texte",
+    d.decoderTexte(Uint8Array.from([0xff, 0xfe, ...utf16])) === phrase &&
+      d.decoderTexte(Uint8Array.from(utf16)) === phrase &&
+      d.decoderTexte(cp1252) === phrase &&
+      d.decoderTexte(Uint8Array.from(coupeAuMilieu), true) === "R" &&
+      d.ressembleATexte(Uint8Array.from(utf16)) && d.ressembleATexte(cp1252) && !d.ressembleATexte(png),
+    JSON.stringify([d.decoderTexte(Uint8Array.from(utf16)).slice(0, 20), d.decoderTexte(cp1252).slice(0, 20), d.decoderTexte(Uint8Array.from(coupeAuMilieu), true), d.ressembleATexte(png)]),
+  );
+}
+
+/* ------------------------------------------------------------------------- */
 console.log("\n8. Fin de séance");
 {
   const r1 = await appel("/helix/auth/revoke", { method: "POST", headers: avecSeance, body: JSON.stringify({ toutes: true }) });
@@ -2503,6 +2895,78 @@ console.log("\n11 quinquies. Windows et Linux : ce qui se vérifie depuis ce pos
   const absent = essai(sondeOpencode, sansOpencode("libre.json"));
   verifier("OpenCode sans clic : absent, la version épinglée est demandée à github.com, et une archive à la mauvaise empreinte n'est pas posée", /VERDICT lancee APPELS https:\/\/github\.com\/anomalyco\/opencode\/releases\/download\/v1\.18\.32\/\S+ POSE false ERREUR .*(empreinte|checksum)/.test(absent), absent.slice(-240));
   rmSync(d7, { recursive: true, force: true });
+}
+
+console.log("\n11 sexies. Presse-papiers de l'application de bureau : écrire du texte, rien lire (27/09/2026)");
+{
+  /*
+   * electron/pressePapiers.cjs. Vu par Medhi le 27/09/2026 sur un PC Windows :
+   * « Copier les informations techniques » ne faisait rien, la permission du
+   * presse-papiers étant refusée à la page. Les canaux sont joués ici avec un
+   * faux `ipcMain` et un faux presse-papiers : ni Electron ni le vrai
+   * presse-papiers de la machine.
+   */
+  const { createRequire } = await import("node:module");
+  const exiger = createRequire(import.meta.url);
+  const { installerPressePapiers, TAILLE_MAX } = exiger(join(RACINE, "electron", "pressePapiers.cjs"));
+  // Asynchrone, comme le presse-papiers du processus principal depuis Electron 44.
+  const fabriquer = ({ garde = true } = {}) => {
+    const canaux = {};
+    const pp = { contenu: "avant", garde, readText: async () => pp.contenu, writeText: async (t) => { if (pp.garde) pp.contenu = t; }, clear: () => { pp.contenu = ""; } };
+    const fenetre = { id: "fenetre" };
+    installerPressePapiers({ ipcMain: { handle: (nom, f) => (canaux[nom] = f) }, clipboard: pp, depuisLaFenetre: (e) => e.sender === fenetre });
+    const appeler = async (nom, valeur, sender = fenetre) => {
+      try {
+        return await canaux[nom]({ sender }, valeur);
+      } catch (e) {
+        return { leve: e.message };
+      }
+    };
+    return { canaux, pp, appeler };
+  };
+  const a = fabriquer();
+  verifier("presse-papiers : deux canaux seulement, écrire et vider (aucun pour lire)", Object.keys(a.canaux).sort().join(",") === "helix:presse-papiers-ecrire,helix:presse-papiers-vider", Object.keys(a.canaux).join(","));
+  const etrangere = await a.appeler("helix:presse-papiers-ecrire", "x", { id: "autre" });
+  verifier("presse-papiers : un appel qui ne vient pas de la fenêtre de l'application est refusé", etrangere.leve === "Refusé." && a.pp.contenu === "avant", JSON.stringify(etrangere));
+  const etrangereVider = await a.appeler("helix:presse-papiers-vider", "avant", { id: "autre" });
+  verifier("presse-papiers : vider depuis une autre fenêtre est refusé", etrangereVider.leve === "Refusé." && a.pp.contenu === "avant", JSON.stringify(etrangereVider));
+  const objet = await a.appeler("helix:presse-papiers-ecrire", { html: "<img>" });
+  const long = await a.appeler("helix:presse-papiers-ecrire", "x".repeat(TAILLE_MAX + 1));
+  verifier("presse-papiers : autre chose que du texte, ou plus de deux millions de caractères, n'est pas écrit", !objet.ok && !long.ok && a.pp.contenu === "avant", `${JSON.stringify(objet)} ${long.motif}`);
+  const bon = await a.appeler("helix:presse-papiers-ecrire", "Helix 2026.927.3\nSystème : Windows");
+  verifier("presse-papiers : un texte est écrit, et « copié » seulement après relecture", bon.ok === true && a.pp.contenu === "Helix 2026.927.3\nSystème : Windows", JSON.stringify(bon));
+  const sourd = fabriquer({ garde: false });
+  const perdu = await sourd.appeler("helix:presse-papiers-ecrire", "texte");
+  verifier("presse-papiers : un presse-papiers qui ne garde rien répond « non copié », pas « copié »", perdu.ok === false, JSON.stringify(perdu));
+  const crlf = fabriquer();
+  crlf.pp.writeText = async (t) => { crlf.pp.contenu = t.replace(/\n/g, "\r\n"); };
+  verifier("presse-papiers : les fins de ligne de Windows (\\r\\n) relues comme le même texte", (await crlf.appeler("helix:presse-papiers-ecrire", "a\nb")).ok === true, crlf.pp.contenu);
+  // Vider : seulement la dernière copie de Helix, et seulement si elle y est encore.
+  const v = fabriquer();
+  const devine = await v.appeler("helix:presse-papiers-vider", "avant");
+  verifier("presse-papiers : vider ce que Helix n'a pas copié (deviner le contenu) ne touche à rien", devine.ok === true && devine.vide === false && v.pp.contenu === "avant", JSON.stringify(devine));
+  await v.appeler("helix:presse-papiers-ecrire", "hx-cle-secrete");
+  v.pp.contenu = "copié ailleurs par la personne";
+  const remplace = await v.appeler("helix:presse-papiers-vider", "hx-cle-secrete");
+  verifier("presse-papiers : une clé remplacée depuis par autre chose, rien n'est vidé", remplace.vide === false && v.pp.contenu === "copié ailleurs par la personne", JSON.stringify(remplace));
+  await v.appeler("helix:presse-papiers-ecrire", "hx-cle-secrete");
+  const vide = await v.appeler("helix:presse-papiers-vider", "hx-cle-secrete");
+  verifier("presse-papiers : la clé copiée par Helix, encore là, est vidée", vide.vide === true && v.pp.contenu === "", JSON.stringify(vide));
+  const { readFileSync: lireF, readdirSync: lister, statSync: etat } = await import("node:fs");
+  const pre = lireF(join(RACINE, "electron", "preload.cjs"), "utf8");
+  const principal = lireF(join(RACINE, "electron", "main.cjs"), "utf8");
+  verifier("presse-papiers : le préchargement n'expose aucune lecture, et le processus principal passe la garde de la fenêtre", !/readText|presse-papiers-lire/.test(pre) && /installerPressePapiers\(\{ ipcMain, clipboard, depuisLaFenetre \}\)/.test(principal), "lecture exposée ou garde absente");
+  // Un bouton « Copier » qui repasserait par navigator.clipboard retomberait dans le défaut du 27/09.
+  const fautifs = [];
+  const parcourir = (d) => {
+    for (const n of lister(d)) {
+      const p = join(d, n);
+      if (etat(p).isDirectory()) parcourir(p);
+      else if (/\.tsx?$/.test(n) && !p.endsWith(join("lib", "pressePapiers.ts")) && /navigator\.clipboard\??\s*\.\s*(write|read)\w*\s*\(|execCommand\(\s*["']copy/.test(lireF(p, "utf8"))) fautifs.push(p.slice(RACINE.length + 1));
+    }
+  };
+  parcourir(join(RACINE, "src"));
+  verifier("presse-papiers : toute l'interface copie par lib/pressePapiers, aucun appel direct à navigator.clipboard", fautifs.length === 0, fautifs.join(", "));
 }
 
 console.log("\n12. Deviner un mot de passe");

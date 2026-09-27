@@ -11,20 +11,33 @@ import {
   Download,
   FileText,
   BookOpenText,
+  Timer,
 } from "lucide-react";
+import { dureeCourte, dureeMesuree, useMaintenant } from "@/lib/durees";
 import type { Citation } from "@/lib/connaissances";
 import { LogoMark } from "@/components/ui/Logo";
 import { Avatar } from "@/components/ui/Avatar";
+import { PiecesJointesMessage } from "./PiecesJointesMessage";
 import { cn } from "@/lib/cn";
-import type { EtapePlan, Message, ToolTrace } from "@/hooks/useChat";
+import type { DureesReponse, EtapePlan, Message, ToolTrace } from "@/hooks/useChat";
 import { TexteRiche } from "@/components/ui/TexteRiche";
 import { urlImage, type ImageCreee } from "@/lib/images";
-import { libelleOutil } from "@/lib/libellesOutils";
+import { cibleAffichee, libelleOutil } from "@/lib/libellesOutils";
 import { t, tf } from "@/lib/i18n";
 
-/** Bloc de raisonnement repliable (modèles à canal de réflexion séparé). */
-function Reasoning({ text, live }: { text: string; live?: boolean }) {
+/**
+ * Bloc de raisonnement repliable (modèles à canal de réflexion séparé).
+ *
+ * Avec sa durée depuis le 27/09/2026, comme ailleurs (« Réflexion : 12 s ») :
+ * un compteur qui avance tant que le modèle réfléchit, puis le temps qu'il y a
+ * passé, toutes phases comprises. Une réponse d'avant, sans mesure, garde
+ * l'ancien libellé : aucune durée n'est reconstituée.
+ */
+function Reasoning({ text, live, durees }: { text: string; live?: boolean; durees?: DureesReponse }) {
   const [open, setOpen] = useState(false);
+  const enCours = durees?.reflexionDepuis !== undefined;
+  const maintenant = useMaintenant(enCours);
+  const ecoulee = enCours ? (durees.reflexion ?? 0) + Math.max(0, maintenant - durees.reflexionDepuis!) : durees?.reflexion;
   return (
     <div className="mb-2">
       <button
@@ -34,7 +47,16 @@ function Reasoning({ text, live }: { text: string; live?: boolean }) {
         className="inline-flex items-center gap-1.5 rounded-full bg-muted/70 px-2.5 py-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
       >
         <Brain size={13} strokeWidth={1.75} />
-        {live ? t("Réflexion en cours...") : t("Réflexion")}
+        {live ? (
+          <>
+            {t("Réflexion en cours...")}
+            {ecoulee !== undefined && <span className="tabular-nums opacity-70">{dureeCourte(ecoulee)}</span>}
+          </>
+        ) : ecoulee ? (
+          tf("Réflexion : {0}", dureeMesuree(ecoulee))
+        ) : (
+          t("Réflexion")
+        )}
         <ChevronDown
           size={12}
           strokeWidth={2}
@@ -50,14 +72,6 @@ function Reasoning({ text, live }: { text: string; live?: boolean }) {
   );
 }
 
-/** Argument le plus parlant d'un appel d'outil (chemin, requête...). */
-function toolDetail(args: Record<string, unknown>): string | null {
-  for (const key of ["path", "query", "url", "pattern", "source"]) {
-    const value = args[key];
-    if (typeof value === "string" && value) return value;
-  }
-  return null;
-}
 
 /**
  * Plan suivi par l'agent sur une demande lourde.
@@ -161,7 +175,13 @@ function PlanSuivi({ etapes, revue }: { etapes: EtapePlan[]; revue?: "encours" |
   );
 }
 
-/** Activité des outils MCP pendant la réponse. */
+/**
+ * Activité des outils MCP pendant la réponse.
+ *
+ * Chaque étape dit son temps depuis le 27/09/2026 : celui qui passe tant
+ * qu'elle tourne, puis ce qu'elle a duré. Une recherche web de 40 s ne se
+ * confond plus avec une lecture de fichier instantanée.
+ */
 function ToolTraces({ traces }: { traces: ToolTrace[] }) {
   /*
    * L'index de la trace ouverte, et non un simple booleen : partage entre
@@ -169,11 +189,19 @@ function ToolTraces({ traces }: { traces: ToolTrace[] }) {
    * des qu'on cliquait sur l'un d'eux.
    */
   const [ouverte, setOuverte] = useState<number | null>(null);
+  const maintenant = useMaintenant(traces.some((trace) => trace.running && trace.debut !== undefined));
   return (
     <div className="mb-2 space-y-1">
       {traces.map((t, i) => {
-        const detail = t.cible ?? (t.libelle ? null : toolDetail(t.args));
+        const detail = t.cible ?? (t.libelle ? null : cibleAffichee(t.args));
         const open = ouverte === i;
+        const duree = t.running
+          ? t.debut !== undefined
+            ? dureeCourte(Math.max(0, maintenant - t.debut))
+            : null
+          : t.duree !== undefined
+            ? dureeMesuree(t.duree)
+            : null;
         return (
           <div key={`${t.name}-${i}`} className="text-xs">
             <button
@@ -194,6 +222,8 @@ function ToolTraces({ traces }: { traces: ToolTrace[] }) {
                 {t.libelle ?? libelleOutil(t.name)}
                 {detail && <span className="opacity-70"> · {detail}</span>}
               </span>
+              {/* Hors de la partie tronquée : un long chemin ne doit pas cacher la durée. */}
+              {duree && <span className="shrink-0 tabular-nums opacity-70">{duree}</span>}
             </button>
             {open && t.preview && (
               <pre className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap break-words border-l-2 border-border pl-3 text-[11px] leading-relaxed text-muted-foreground">
@@ -349,10 +379,18 @@ function Bubble({ message }: { message: Message }) {
   const isUser = message.role === "user";
 
   if (isUser) {
+    // Les pièces jointes en cartes au-dessus du texte ; sans texte tapé, les cartes seules (27/09/2026).
+    const pieces = message.pieces ?? [];
+    const texte = pieces.length > 0 && message.content === `(${pieces.map((p) => p.nom).join(", ")})` ? "" : message.content;
     return (
       <div className="flex justify-end gap-3">
-        <div className="max-w-[80%] rounded-2xl rounded-br-md bg-muted px-4 py-2.5 text-[15px] leading-relaxed text-foreground">
-          <p className="whitespace-pre-wrap">{message.content}</p>
+        <div className="flex max-w-[80%] flex-col items-end gap-2">
+          <PiecesJointesMessage pieces={pieces} />
+          {texte && (
+            <div className="max-w-full rounded-2xl rounded-br-md bg-muted px-4 py-2.5 text-[15px] leading-relaxed text-foreground">
+              <p className="whitespace-pre-wrap">{texte}</p>
+            </div>
+          )}
         </div>
         <Avatar size={28} className="mt-0.5 shrink-0" />
       </div>
@@ -371,7 +409,19 @@ function Bubble({ message }: { message: Message }) {
           </p>
         )}
         {message.reasoning && (
-          <Reasoning text={message.reasoning} live={message.streaming && !message.content} />
+          <Reasoning
+            text={message.reasoning}
+            /*
+             * Mesurée (Chat) : en cours tant qu'une phase de réflexion est
+             * ouverte. Sans mesure (Code, qui la reçoit d'un bloc), comme
+             * avant : tant que rien n'est écrit.
+             */
+            live={
+              message.streaming &&
+              (message.durees?.reflexionDepuis !== undefined || (message.durees?.reflexion === undefined && !message.content))
+            }
+            durees={message.durees}
+          />
         )}
         {message.plan && message.plan.length > 0 && <PlanSuivi etapes={message.plan} revue={message.revue} />}
         {message.tools && message.tools.length > 0 && (
@@ -404,8 +454,28 @@ function Bubble({ message }: { message: Message }) {
             <span>{message.error}</span>
           </p>
         )}
+        {!message.streaming && <DureeReponse durees={message.durees} />}
       </div>
     </div>
+  );
+}
+
+/**
+ * La durée de la réponse entière, discrète, sous la réponse (27/09/2026).
+ * Le délai avant le premier mot s'y ajoute quand il dit autre chose que le
+ * total : sur un processeur lent, c'est souvent l'essentiel de l'attente.
+ */
+function DureeReponse({ durees }: { durees?: DureesReponse }) {
+  if (durees?.reponse === undefined) return null;
+  const premierMot = durees.premierMot !== undefined && durees.reponse - durees.premierMot >= 1000 ? durees.premierMot : undefined;
+  return (
+    <p className="mt-2 flex items-center gap-1.5 text-[11px] tabular-nums text-muted-foreground/80">
+      <Timer size={11} strokeWidth={1.75} className="shrink-0" />
+      <span>
+        {tf("Réponse en {0}", dureeMesuree(durees.reponse))}
+        {premierMot !== undefined && <> · {tf("premier mot après {0}", dureeMesuree(premierMot))}</>}
+      </span>
+    </p>
   );
 }
 

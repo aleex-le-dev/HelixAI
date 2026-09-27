@@ -29,12 +29,30 @@ export interface StoredMessage {
   /** Image créée sur la machine (images.ts) : on garde sa référence, pas ses octets. */
   image?: { id: string; largeur: number; hauteur: number; description: string };
   /**
+   * Pièces jointes à la question (27/09/2026) : nom, type, poids, et si seul
+   * le début a été lu. Ce que le message montre ; le contenu n'est pas gardé.
+   */
+  pieces?: { nom: string; type: "texte" | "image"; taille?: number; tronque?: boolean }[];
+  /**
    * Passages des bases de connaissances cités sous la réponse (nom du
    * document, extrait de 600 caractères au plus). Gardés avec le Chat : qui le
    * rouvre, ou à qui on le partage, voit d'où venait la réponse, comme il en
    * voit le texte.
    */
   sources?: { n: number; base: string; document: string; documentId: string; extrait: string; debut: number; fin: number; similarite: number }[];
+  /**
+   * Ce que la réponse a pris de temps, en millisecondes, mesuré à l'écran qui
+   * l'a reçue (hooks/useChat.ts, `DureesReponse`), depuis le 27/09/2026.
+   * Absent sur une réponse plus ancienne, ou qui n'a pas été mesurée : rien
+   * ne s'affiche, rien n'est reconstitué.
+   */
+  durees?: { premierMot?: number; reflexion?: number; reponse?: number };
+  /**
+   * Étapes d'outils de la réponse, telles qu'elles s'affichent (nom, cible,
+   * issue, durée en ms). Ni les arguments ni l'aperçu du résultat : ils
+   * peuvent porter un document entier. Depuis le 27/09/2026.
+   */
+  outils?: { name: string; libelle?: string; cible?: string; ok: boolean; duree?: number }[];
   createdAt: string;
 }
 

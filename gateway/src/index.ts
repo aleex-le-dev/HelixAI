@@ -55,7 +55,9 @@ import {
   getProvisionState,
   setProvisionState,
   onProvisionChange,
+  verifierModeleEnPlace,
 } from "./provision.ts";
+import { etatSurCetteMachine } from "./santeModeles.ts";
 import { deployment, autoProvisionEnabled } from "./deployment.ts";
 import { db, isCollection, COLLECTIONS, migrerChiffrement, type Collection } from "./db.ts";
 import { exporterDonnees } from "./export.ts";
@@ -358,7 +360,13 @@ async function handleModels(
     });
     return;
   }
-  send(res, 200, { models: list });
+  // Un modèle local qui a mal répondu sur cette machine : le sélecteur l'avertit (santeModeles.ts, 27/09/2026).
+  send(res, 200, {
+    models: list.map((m) => {
+      const etat = m.backendKind === "lmstudio" ? etatSurCetteMachine(m.id) : undefined;
+      return etat ? { ...m, surCetteMachine: etat } : m;
+    }),
+  });
 }
 
 /**
@@ -5665,6 +5673,15 @@ void preparerMagasin().then(() => server.listen(PORT, HOST, () => {
   void slack.charger().catch(() => {});
   // OpenCode manquant : posé en arrière-plan, sans attendre personne (27/09/2026, opencodeEnFond).
   codeEnFond();
+  /*
+   * Poste déjà installé : le modèle conseillé, jamais essayé sur cette
+   * machine, passe l'essai une fois (provision.ts, 27/09/2026). Un quart de
+   * minute après le démarrage, le temps que le moteur local se réveille ; un
+   * échec ne gêne rien, l'essai se refera au premier chargement.
+   */
+  setTimeout(() => {
+    void verifierModeleEnPlace().catch((err: unknown) => console.error("[helix] essai du modèle en place", err));
+  }, 15_000).unref();
 
   /*
    * Les connecteurs branchés se redéclarent **avant** le démarrage automatique :

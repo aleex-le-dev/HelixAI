@@ -39,6 +39,12 @@ export interface BackendConfig {
   catalogue?: string;
   /** En-tête qui porte la clé pour lister les modèles, quand ce n'est pas `Authorization` (modelesCloud.ts). */
   cleEnTete?: string;
+  /**
+   * Taille de conversation de ses modèles, en jetons, quand on la connaît
+   * mieux que lui (profil de déploiement) : sert à mesurer la place d'un
+   * document joint (documentsJoints.ts, 27/09/2026).
+   */
+  contexte?: number;
 }
 
 export interface BackendStatus {
@@ -81,6 +87,11 @@ export interface ModelInfo {
   contexteMax?: number;
   /** LM Studio : taille de conversation avec laquelle il est chargé en ce moment (`contextLength`), s'il l'est. */
   contexteCharge?: number;
+  /**
+   * Autre service : taille de conversation publiée dans sa liste de modèles
+   * (`context_length`, `max_context_length`, `max_model_len`), s'il la publie.
+   */
+  contextePublie?: number;
   /**
    * Entraîné sur cette machine (entrainement.ts). Choisissable dans le
    * sélecteur, jamais choisi d'office : c'est un petit modèle spécialisé.

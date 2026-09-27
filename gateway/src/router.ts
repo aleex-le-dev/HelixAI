@@ -3,6 +3,18 @@ import { pinnedModel } from "./deployment.ts";
 import type { BackendConfig, ModelInfo, Role } from "./types.ts";
 // Ces refus s'affichent tels quels dans le Chat : ils suivent la langue de la personne.
 import { t, tf } from "./langue.ts";
+import { estDefaillant } from "./santeModeles.ts";
+
+/**
+ * Un modèle local qui a mal répondu sur cette machine (santeModeles.ts,
+ * 27/09/2026) n'est plus choisi d'office, tant qu'il en reste un autre. S'il
+ * n'y a que lui, on le garde : une réponse coupée et dite vaut mieux que
+ * « aucun modèle ».
+ */
+function sansDefaillants(list: ModelInfo[]): ModelInfo[] {
+  const sains = list.filter((m) => !(m.backendKind === "lmstudio" && estDefaillant(m.id)));
+  return sains.length > 0 ? sains : list;
+}
 
 /** Cache court : évite d'interroger les backends à chaque message. */
 const TTL_MS = 5000;
@@ -94,7 +106,7 @@ export async function resolve(opts: {
        * devant le modèle de conversation (vu le 25/09/2026, il devenait le
        * choix « Rapide » du sélecteur).
        */
-      const eligible = all.filter((m) => m.roles.includes(role) && m.origine !== "cle" && !m.entraine);
+      const eligible = sansDefaillants(all.filter((m) => m.roles.includes(role) && m.origine !== "cle" && !m.entraine));
       if (eligible.length === 0) {
         /*
          * Des modèles branchés par clé, mais rien d'autre : le mode Auto ne les
@@ -121,7 +133,7 @@ export async function resolve(opts: {
        * personne (chat.ts) au lieu de faire semblant.
        */
       if (opts.images && !peutVoir(candidate)) {
-        const voyants = all.filter((m) => peutVoir(m) && m.origine !== "cle");
+        const voyants = sansDefaillants(all.filter((m) => peutVoir(m) && m.origine !== "cle"));
         if (voyants.length > 0) candidate = voyantLePlusProche(voyants);
       }
     }

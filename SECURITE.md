@@ -1102,7 +1102,7 @@ son propre contenu (`setWindowOpenHandler`, `will-navigate`).
 Node (vérifié : `typeof require` vaut `undefined` dans la page) : le sélecteur de
 dossier du système, l'état de la mise à jour (lire, vérifier, installer une
 version déjà téléchargée et vérifiée, ouvrir le lien du paquet), et le bot de
-réunion (§ 16.3). La page ne fournit ni adresse ni fichier pour la mise à jour : le
+réunion (§ 16.3) ; depuis le 27/09/2026, aussi l'écriture de texte au presse-papiers (§ 29.12). La page ne fournit ni adresse ni fichier pour la mise à jour : le
 flux est inscrit dans le paquet, et le lien du paquet vient du flux, limité à
 `http(s)`. Chaque canal vérifie que l'appel vient de la fenêtre de l'application.
 
@@ -3415,3 +3415,31 @@ signature fausse ou clé absente, « Télécharger ». `npm run securite` : 435 
 (qui, actif, bloque un exécutable non signé même sans marque de téléchargement), un nom de profil
 hors de la page de code de Windows. L'installateur n'est toujours pas signé par un certificat de
 code Windows. Linux garde « Télécharger » : un `.deb` demande les droits d'administrateur.
+
+### 29.12 Presse-papiers : un canal du processus principal (27 septembre 2026)
+
+Vu par Medhi sur un PC Windows : les boutons « Copier » ne copiaient rien dans l'application de
+bureau. La page n'a pas la permission du presse-papiers (`setPermissionCheckHandler` et
+`setPermissionRequestHandler` refusent tout sauf le micro) : `navigator.clipboard.writeText` y
+échoue toujours. Plutôt que d'ouvrir cette permission à la page, deux canaux
+(`electron/pressePapiers.cjs`, exposés par `window.helix.pressePapiers` dans `preload.cjs`) :
+
+- **`helix:presse-papiers-ecrire`** : du texte seulement (ni image, ni HTML, ni fichier), deux
+  millions de caractères au plus, relu aussitôt ; la réponse ne dit « copié » que si la relecture
+  rend le même texte.
+- **`helix:presse-papiers-vider`** (vidage d'une clé d'API au bout d'une minute) : n'efface que la
+  **dernière copie faite par ce canal**, et seulement si elle y est encore. Aucun canal ne lit le
+  presse-papiers pour la page : elle ne peut ni récupérer ce que la personne a copié ailleurs, ni
+  s'en servir pour vérifier une supposition sur son contenu, ni effacer autre chose.
+- Les deux vérifient `depuisLaFenetre` : la fenêtre du bot et celle de connexion Google n'y ont
+  pas accès.
+
+Ce qui reste permis sans ce canal, et l'était déjà : la copie par sélection (`execCommand`), qui
+exige un geste de la personne ; l'interface ne s'en sert qu'en dernier recours.
+
+**Vérifié** : `npm run securite`, section 11 sexies (12 contrôles : appel d'une autre fenêtre
+refusé, objet ou texte trop long refusés, presse-papiers qui ne garde rien, fins de ligne de
+Windows, vidage d'un texte que Helix n'a pas copié ou d'une clé remplacée depuis, aucun appel
+direct à `navigator.clipboard` dans l'interface) ; dans Electron 44 même, avec le vrai
+préchargement : copie directe refusée, canal et parcours de l'aide réussis. **Pas essayé** :
+Windows et Linux réels (Wayland en particulier), l'application empaquetée.

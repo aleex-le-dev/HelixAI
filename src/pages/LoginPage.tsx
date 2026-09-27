@@ -40,6 +40,7 @@ import { cn } from "@/lib/cn";
 import { QrCode } from "@/components/ui/QrCode";
 import { adresseOtpauth, secretLisible } from "@/lib/deuxFacteurs";
 import { t, tf } from "@/lib/i18n";
+import { copierTexte } from "@/lib/pressePapiers";
 
 /** Même règle que la passerelle (`MOT_DE_PASSE_MIN`), qui reste seule juge. */
 const MOT_DE_PASSE_MIN = 10;
@@ -266,10 +267,11 @@ export function LoginPage({ onSignedIn }: { onSignedIn: () => void }) {
     });
 
   const copierCodes = async () => {
-    try {
-      await navigator.clipboard.writeText(codesSecours.join("\n"));
+    // lib/pressePapiers (27/09/2026) : dans l'application de bureau, `navigator.clipboard` était toujours refusé.
+    if (await copierTexte(codesSecours.join("\n"))) {
       setCopie(true);
-    } catch {
+    } else {
+      setCopie(false);
       setError(t("La copie a échoué : recopiez les codes à la main."));
     }
   };

@@ -59,7 +59,9 @@ import {
 import type { BackendConfig, ChatRequest, ModelInfo } from "./types.ts";
 import { t, tf } from "./langue.ts";
 import { gardesDeFlux, type Degenerescence } from "./gardeBoucle.ts";
-import { echantillonnageLocal } from "./backends.ts";
+import { contexteDuModele, echantillonnageLocal } from "./backends.ts";
+import { apresCoupure } from "./provision.ts";
+import { integrerDocuments, jetonsEstimes, messagesAvecDocuments } from "./documentsJoints.ts";
 import {
   accumulerAppels,
   appliquerCorrection,
@@ -264,11 +266,17 @@ function messageDeBoucle(modele: string, cause: Degenerescence): string {
       );
 }
 
-/** Une ligne au journal, sans le contenu : de quoi reconnaître le défaut sur un poste qu'on n'a pas sous la main. */
-function noterBoucle(modele: string, cause: Degenerescence): void {
+/**
+ * Une ligne au journal, sans le contenu : de quoi reconnaître le défaut sur un poste qu'on n'a pas sous la main.
+ * Et la coupure notée pour cette machine (provision.ts, 27/09/2026) : à la deuxième, le modèle n'est plus
+ * choisi d'office. Rend le message complet pour la personne.
+ */
+async function noterBoucle(model: ModelInfo, cause: Degenerescence, auto: boolean): Promise<string> {
   console.warn(
-    `[chat] réponse de ${modele} coupée : ${cause === "motif" ? "motif répété" : "réflexion sans fin"} (${process.platform} ${process.arch})`,
+    `[chat] réponse de ${model.id} coupée : ${cause === "motif" ? "motif répété" : "réflexion sans fin"} (${process.platform} ${process.arch})`,
   );
+  const suite = await apresCoupure(model, auto).catch(() => "");
+  return suite ? `${messageDeBoucle(model.id, cause)} ${suite}` : messageDeBoucle(model.id, cause);
 }
 
 async function callUpstream(
@@ -998,7 +1006,8 @@ export async function handleChatRequest(
   // Fichiers, écran, bureautique, courrier et agenda arrivent dans la même
   // liste : l'agent enchaîne les cinq dans une seule demande, sans que
   // l'utilisateur ait à changer de surface.
-  const tools = useTools
+  // Retirés pour une réponse quand ils prendraient la place d'un document joint (plus bas).
+  let tools = useTools
     ? [
         ...toolsForModel(),
         // Le contrôle du code web accompagne le serveur de fichiers : il lit ce que celui-ci a écrit.
@@ -1073,7 +1082,7 @@ export async function handleChatRequest(
   if (model.backendKind === "lmstudio" && model.loaded === false) {
     signaler({ type: "statut", message: tf("Chargement de {0} en mémoire...", model.id) });
     attente?.chargement(true);
-    const charge = await loadModel(model.id);
+    const charge = await loadModel(model.id, { auto: !body.model });
     attente?.chargement(false);
     invalidate();
     if (!charge.ok) {
@@ -1183,6 +1192,61 @@ export async function handleChatRequest(
   }
 
   /*
+   * Documents joints (documentsJoints.ts, 27/09/2026). Vu par Medhi sur un PC
+   * Windows avec Ministral 3B, mais vrai de tout modèle local : le document
+   * partait sans égard pour la place du modèle, se perdait dans le découpage
+   * des tâches, et manquait à la question suivante. Ici, il est mesuré contre
+   * la taille de conversation réellement chargée, passé en entier s'il tient,
+   * lu en parties sinon ; et ce qui a été fait est dit à la personne.
+   */
+  let annoncesDocuments: string[] = [];
+  let avecDocuments = false;
+  if (messagesAvecDocuments(messages).length > 0) {
+    const contexte = await contexteDuModele(model, backend);
+    const integration = await integrerDocuments(messages, {
+      contexte,
+      reflechit: Boolean(model.reasoning) && niveauEffort(body.effort).raisonner,
+      jetonsOutils: tools && tools.length > 0 ? jetonsEstimes(JSON.stringify(tools)) : 0,
+      modele: model.id,
+      lirePartie: async (consigne, jetonsNotes) => {
+        if (arret.signal.aborted) return null;
+        const fil = [
+          { role: "system", content: "Tu prends des notes fidèles sur un long document, une partie à la fois. Tu n'écris que tes notes." },
+          { role: "user", content: consigne },
+        ];
+        try {
+          const brut = await callUpstream(
+            backend,
+            { ...basePayload({ ...body, effort: "aucun" }, model, fil), tools: undefined, tool_choice: undefined, stream: false, max_tokens: jetonsNotes },
+            arret.signal,
+          );
+          if (!brut.ok) {
+            await brut.body?.cancel().catch(() => {});
+            return null;
+          }
+          const rep = (await brut.json().catch(() => ({}))) as { choices?: { message?: { content?: string } }[] };
+          // Chaque partie est une requête au moteur comme une autre : elle compte.
+          usage.releverReponse(qui, model, { messages: fil }, rep);
+          const notes = (rep.choices?.[0]?.message?.content ?? "").replace(/<think>[\s\S]*?(<\/think>|$)/g, "").trim();
+          return notes || null;
+        } catch {
+          return null;
+        }
+      },
+      progression: (message) => signaler({ type: "statut", message }),
+    });
+    if (arret.signal.aborted) {
+      res.end();
+      return;
+    }
+    messages = integration.messages;
+    avecDocuments = integration.avecDocuments;
+    annoncesDocuments = integration.annonces;
+    if (integration.sansOutils) tools = undefined;
+    console.log(`[chat] documents joints (${model.id}, contexte ${contexte}) : ${integration.journal}`);
+  }
+
+  /*
    * Client ordinaire, ou outils fournis par l'appelant : la passerelle devient
    * un simple relais. Le flux amont est retransmis octet pour octet — appels
    * d'outils compris — car c'est le client (OpenCode, par exemple) qui tient
@@ -1276,8 +1340,7 @@ export async function handleChatRequest(
           }
         }
         if (degenere) {
-          noterBoucle(model.id, degenere);
-          signalerErreur(messageDeBoucle(model.id, degenere));
+          signalerErreur(await noterBoucle(model, degenere, !body.model));
         } else if (reponse) {
           const objet = reponse.objet(model.id, sourcesCitees);
           repondreJson("error" in objet ? 502 : 200, objet);
@@ -1399,8 +1462,7 @@ export async function handleChatRequest(
        * s'arrête là au lieu d'enchaîner sur une étape qui n'a rien produit.
        */
       if (result.degenere) {
-        noterBoucle(model.id, result.degenere);
-        emitHelix(res, { type: "error", message: messageDeBoucle(model.id, result.degenere) });
+        emitHelix(res, { type: "error", message: await noterBoucle(model, result.degenere, !body.model) });
         return { texte, interrompu: "moteur", modifications, echecs, lectures, derniereErreur, releves, refus };
       }
       // Le fournisseur a dit une erreur en cours de flux (27/09/2026) : dite, et comptée comme une panne du moteur.
@@ -1638,6 +1700,13 @@ export async function handleChatRequest(
 
   try {
     /*
+     * Ce qui a été fait des documents joints, dit en tête de la réponse et
+     * gardé avec elle : lu en parties, lu en partie seulement, repris sans
+     * outils. Une réponse tirée de notes ne doit pas passer pour une lecture
+     * intégrale.
+     */
+    for (const annonce of annoncesDocuments) ecrire(`*${annonce}*\n\n`);
+    /*
      * Découpage. Le modèle juge la demande (voir plus bas) : une question
      * simple part en direct, un travail composé est découpé en étapes.
      */
@@ -1744,7 +1813,16 @@ export async function handleChatRequest(
      * retapait le texte, 42 actions, jamais d'enregistrement.
      */
     const pilotageEcran = outilsEcran.length > 0;
-    if (regime.decoupe && !avecImage && !pilotageEcran && demande.trim() && !estReplique(demande) && !(!avecOutils && estQuestionSimple(demande))) {
+    /*
+     * Ni plan ni étapes non plus quand la conversation porte un document
+     * (27/09/2026) : chaque étape repart d'une reformulation de la demande,
+     * sans le fichier, et le modèle répondait sur un document qu'il ne voyait
+     * plus. Le texte du fichier, collé devant la question, faisait en plus
+     * passer la question la plus simple (« résume-le ») pour un long travail.
+     * À la question suivante aussi : le tri, une requête à part, ferait
+     * oublier au moteur local le document qu'il venait de lire.
+     */
+    if (regime.decoupe && !avecImage && !avecDocuments && !pilotageEcran && demande.trim() && !estReplique(demande) && !(!avecOutils && estQuestionSimple(demande))) {
       emitHelix(res, { type: "plan_debut", regime: regime.raison });
       plan = lirePlan(
         await demanderAuModele(

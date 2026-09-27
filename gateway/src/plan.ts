@@ -67,11 +67,17 @@ export interface Plan {
  * noyé dans des explications n'est pas exploitable. On demande du JSON nu.
  */
 /**
- * La langue d'une demande, devinée sur son texte : lettres chinoises, mots et
- * accents français, anglais sinon. `null` quand rien ne tranche.
+ * La langue d'une demande, devinée sur son texte : kana japonais, lettres
+ * chinoises, mots et accents français, anglais sinon. `null` quand rien ne
+ * tranche.
+ *
+ * Le japonais d'abord (28/09/2026) : il s'écrit aussi avec des idéogrammes, et
+ * une demande japonaise passait pour du chinois, la réponse avec. Les kana
+ * (hiragana, katakana) n'existent qu'en japonais : deux suffisent à trancher.
  */
-export function langueDe(texte: string): "fr" | "en" | "zh" | null {
+export function langueDe(texte: string): "fr" | "en" | "zh" | "ja" | null {
   const t = texte.toLowerCase();
+  if ((texte.match(/[\u3040-\u30ff]/g) ?? []).length >= 2) return "ja";
   if ((texte.match(/[\u3400-\u9fff]/g) ?? []).length >= 4) return "zh";
   const fr = (t.match(/\b(le|la|les|un|une|des|du|de|et|pour|avec|qui|que|dans|sur|est|fais|ajoute|écris|ecris|peux|mon|mes|demain|aujourd'hui)\b/g) ?? []).length + (t.match(/[éèêàçùâîô]/g) ?? []).length;
   const en = (t.match(/\b(the|a|an|and|for|with|that|which|in|on|is|make|write|add|build|create|my|please|tomorrow|today)\b/g) ?? []).length;
@@ -95,6 +101,8 @@ export function phraseLangue(texte: string, verbe: "Réponds" | "Écris" = "Rép
       return `${verbe} en anglais : la demande est en anglais.`;
     case "zh":
       return `${verbe} en chinois : la demande est en chinois.`;
+    case "ja":
+      return `${verbe} en japonais : la demande est en japonais.`;
     default:
       return `${verbe} dans la langue de la demande.`;
   }

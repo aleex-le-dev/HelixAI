@@ -142,7 +142,7 @@ const ARTICLES: Article[] = [
     id: "langue",
     titre: t("Changer la langue"),
     resume: t("Français, anglais, chinois."),
-    motsCles: ["langue", "anglais", "chinois", "english", "traduction", "language", "中文"],
+    motsCles: ["langue", "anglais", "chinois", "japonais", "english", "japanese", "traduction", "language", "中文", "日本語"],
     lien: "/parametres/preferences",
     corps: t(`L'interface se lit en français, en anglais ou en chinois. Le choix se fait dans Réglages, Préférences, rubrique Langue.
 

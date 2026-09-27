@@ -84,18 +84,44 @@ const TEXTES = {
     tailleArchive: "收到的压缩包大小与通知不一致",
     droitsArchive: "无法重置压缩包中文件的权限",
   },
+  // Le japonais depuis le 28/09/2026 (demandé par Medhi).
+  ja: {
+    githubVide: "GitHub にリリースが見つかりません（非公開のリポジトリか、まだ何も公開されていません）。",
+    serveurMuet: "アップデートサーバーが応答しません。後でもう一度確認します。",
+    rienA: "アップデートのアドレスにリリースが見つかりません。",
+    signatureApple: "アップデートはインストールされませんでした。署名がアプリの署名と一致しません。",
+    verificationImpossible: "アップデートを確認できません：{0}",
+    developpement: "開発版ではアップデートは行われません。",
+    adresseRefusee: "アップデートのアドレスが HTTPS ではないため拒否しました：{0}",
+    installationImpossible: "インストールできません：{0}",
+    verificationSignature: "発行元の署名を確認しています…",
+    fermetureRelance: "インストール中です。アプリがいったん終了し、再び開きます。",
+    sansArchive: "告知に検証できるアーカイブが記載されていません",
+    sourceRepond: "配信元の応答は {0} でした",
+    empreinte: "アーカイブのチェックサムが告知と一致しません",
+    pasDApplication: "アーカイブにアプリケーションが含まれていません",
+    autreApplication: "アーカイブに別のアプリケーションが含まれています",
+    autreVersion: "アーカイブのバージョンが告知されたものと異なります",
+    sansCle: "このアプリには発行元の鍵がないため、ここではアップデートを検証できません。提供元のパッケージから手動でインストールしてください",
+    refusee: "アップデートは拒否されました：{0}",
+    sansInstallateur: "告知に検証できるインストーラーが記載されていません",
+    tailleInstallateur: "受信したインストーラーのサイズが告知と一致しません",
+    empreinteInstallateur: "インストーラーのチェックサムが告知と一致しません",
+    tailleArchive: "受信したアーカイブのサイズが告知と一致しません",
+    droitsArchive: "アーカイブ内のファイルの権限を元に戻せませんでした",
+  },
 };
 
 /** Les raisons de signatureEditeur.cjs (écrites en français), traduites à l'affichage. */
 const RAISONS = {
-  "elle ne porte pas de signature de l'éditeur": { en: "it carries no publisher signature", zh: "它没有发行方签名" },
-  "sa signature est d'un format inconnu": { en: "its signature has an unknown format", zh: "其签名格式未知" },
-  "sa signature porte sur une autre application ou une autre version": { en: "its signature is for another app or another version", zh: "其签名针对的是其他应用或其他版本" },
-  "la clé de l'application installée est illisible": { en: "the installed app's key cannot be read", zh: "无法读取已安装应用的密钥" },
-  "son contenu a changé depuis sa signature": { en: "its content changed after it was signed", zh: "其内容在签名后已被更改" },
-  "elle n'est pas signée par l'éditeur de cette application": { en: "it is not signed by this app's publisher", zh: "它不是由此应用的发行方签名的" },
-  "elle n'est pas un dossier d'application": { en: "it is not an application folder", zh: "它不是应用文件夹" },
-  "d'autres comptes de ce poste pourraient modifier ses fichiers": { en: "other accounts on this computer could modify its files", zh: "此电脑上的其他账户可能修改其文件" },
+  "elle ne porte pas de signature de l'éditeur": { en: "it carries no publisher signature", zh: "它没有发行方签名", ja: "発行元の署名がありません" },
+  "sa signature est d'un format inconnu": { en: "its signature has an unknown format", zh: "其签名格式未知", ja: "署名の形式が不明です" },
+  "sa signature porte sur une autre application ou une autre version": { en: "its signature is for another app or another version", zh: "其签名针对的是其他应用或其他版本", ja: "署名が別のアプリまたは別のバージョンのものです" },
+  "la clé de l'application installée est illisible": { en: "the installed app's key cannot be read", zh: "无法读取已安装应用的密钥", ja: "インストール済みのアプリの鍵を読み取れません" },
+  "son contenu a changé depuis sa signature": { en: "its content changed after it was signed", zh: "其内容在签名后已被更改", ja: "署名の後に内容が変更されています" },
+  "elle n'est pas signée par l'éditeur de cette application": { en: "it is not signed by this app's publisher", zh: "它不是由此应用的发行方签名的", ja: "このアプリの発行元による署名ではありません" },
+  "elle n'est pas un dossier d'application": { en: "it is not an application folder", zh: "它不是应用文件夹", ja: "アプリケーションのフォルダーではありません" },
+  "d'autres comptes de ce poste pourraient modifier ses fichiers": { en: "other accounts on this computer could modify its files", zh: "此电脑上的其他账户可能修改其文件", ja: "このコンピューターの他のアカウントがファイルを変更できる状態です" },
 };
 
 let langue = "en";

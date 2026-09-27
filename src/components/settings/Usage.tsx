@@ -21,7 +21,7 @@ import {
 } from "@/lib/usage";
 import { cn } from "@/lib/cn";
 import { formaterDate } from "@/lib/formats";
-import { t, tf } from "@/lib/i18n";
+import { locale, t, tf } from "@/lib/i18n";
 
 /**
  * Consommation réelle, mesurée par l'instance.
@@ -258,7 +258,7 @@ export function Usage() {
 
       <div className="grid gap-3 cq-sm:grid-cols-2 cq-lg:grid-cols-4">
         {[
-          { nom: t("Requêtes"), valeur: totaux.requetes.toLocaleString("fr-FR") },
+          { nom: t("Requêtes"), valeur: totaux.requetes.toLocaleString(locale()) },
           { nom: t("Jetons en entrée"), valeur: jetons(totaux.entree) },
           { nom: t("Jetons en sortie"), valeur: jetons(totaux.sortie) },
           {
@@ -326,7 +326,7 @@ export function Usage() {
                     <tr key={m.uid} className="border-t border-border">
                       <td className="py-2 font-mono text-xs text-foreground">{m.uid}</td>
                       <td className="py-2 text-xs text-muted-foreground">{m.local ? t("Local") : t("Distant")}</td>
-                      <td className="py-2 text-right tabular-nums">{m.requetes.toLocaleString("fr-FR")}</td>
+                      <td className="py-2 text-right tabular-nums">{m.requetes.toLocaleString(locale())}</td>
                       <td className="py-2 text-right tabular-nums">{jetons(m.entree)}</td>
                       <td className="py-2 text-right tabular-nums">
                         {jetons(m.sortie)}

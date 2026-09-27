@@ -1,5 +1,6 @@
 import en from "@/i18n/en.json";
 import zh from "@/i18n/zh.json";
+import ja from "@/i18n/ja.json";
 
 /**
  * La langue de l'interface.
@@ -49,6 +50,8 @@ export const LANGUES = [
   { code: "en", nom: "Anglais", natif: "English" },
   { code: "fr", nom: "Français", natif: "Français" },
   { code: "zh", nom: "Chinois", natif: "中文" },
+  // Demandé par Medhi le 28/09/2026.
+  { code: "ja", nom: "Japonais", natif: "日本語" },
 ] as const;
 
 export type Langue = (typeof LANGUES)[number]["code"];
@@ -59,12 +62,13 @@ const CLE = "helix:langue";
 const CATALOGUES: Record<Exclude<Langue, "fr">, Record<string, string>> = {
   en: en as Record<string, string>,
   zh: zh as Record<string, string>,
+  ja: ja as Record<string, string>,
 };
 
 function langueEnregistree(): Langue | null {
   try {
     const brut = localStorage.getItem(CLE);
-    return brut === "fr" || brut === "en" || brut === "zh" ? brut : null;
+    return LANGUES.find((l) => l.code === brut)?.code ?? null;
   } catch {
     return null;
   }
@@ -94,6 +98,7 @@ function langueDuSysteme(): Langue {
       const base = etiquette.toLowerCase().split("-")[0];
       if (base === "en") return "en";
       if (base === "zh") return "zh";
+      if (base === "ja") return "ja";
       if (base === "fr") return "fr";
     }
   } catch {
@@ -128,7 +133,7 @@ export function t(fr: string): string {
  * nombres, dates, tailles de fichiers.
  */
 export function locale(): string {
-  return { fr: "fr-FR", en: "en-US", zh: "zh-CN" }[courante];
+  return { fr: "fr-FR", en: "en-US", zh: "zh-CN", ja: "ja-JP" }[courante];
 }
 
 /**
@@ -136,8 +141,8 @@ export function locale(): string {
  *
  * Les unités étaient écrites en dur, en français, à plusieurs endroits du
  * code : l'écran passait en anglais en continuant d'annoncer « 1 Go ». Les
- * unités françaises (o, Ko, Mo, Go) n'ont pas cours ailleurs, l'anglais comme
- * le chinois disant B, KB, MB, GB. La virgule décimale suit elle aussi la
+ * unités françaises (o, Ko, Mo, Go) n'ont pas cours ailleurs, l'anglais, le
+ * chinois et le japonais disant B, KB, MB, GB. La virgule décimale suit elle aussi la
  * langue.
  */
 export function taille(octets: number): string {

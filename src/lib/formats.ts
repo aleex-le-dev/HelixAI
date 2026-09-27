@@ -1,7 +1,7 @@
 import { useMemo, useSyncExternalStore } from "react";
 import { currentUser, IDENTITE_CHANGEE } from "@/lib/store/identity";
 import { loadProfile, saveProfile, type UserProfile } from "@/lib/store/profile";
-import { t } from "@/lib/i18n";
+import { langue, locale, t } from "@/lib/i18n";
 
 /**
  * Formats de date et d'heure : le seul endroit de l'application qui transforme
@@ -55,8 +55,12 @@ export const FORMATS_HEURE: { valeur: FormatHeure; nom: string }[] = [
   { valeur: "12", nom: "12 heures" },
 ];
 
-/** Ce qu'affiche une installation neuve : l'usage français. */
-const DEFAUT: PreferencesFormats = { date: "eu", heure: "24" };
+/**
+ * Ce qu'affiche une installation neuve : l'usage français. En japonais, l'année
+ * d'abord (2026-09-28), l'ordre qu'on y lit ; le jour en premier y serait pris
+ * pour une erreur (28/09/2026).
+ */
+const DEFAUT: PreferencesFormats = { date: langue() === "ja" ? "iso" : "eu", heure: "24" };
 
 type ProfilAvecFormats = UserProfile & { formats?: unknown };
 
@@ -214,7 +218,7 @@ export function formaterMomentCourt(
 export function formaterMoisAnnee(valeur: Instant): string {
   const d = enDate(valeur);
   if (!d) return "";
-  return d.toLocaleDateString("fr-FR", { month: "long", year: "numeric" });
+  return d.toLocaleDateString(locale(), { month: "long", year: "numeric" });
 }
 
 /* ------------------------------------------------------------------ */

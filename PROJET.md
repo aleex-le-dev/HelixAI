@@ -68,7 +68,8 @@ une phrase perd confiance dans toutes les autres.
 4. Interface écrite en français, accents corrects. Pas de tiret cadratin dans le
    texte affiché. Depuis la 0.25.0, **toute phrase affichée passe par `t("…")`**
    ou `tf("… {0} …", valeur)` : le français reste la langue d'origine et sert de
-   clé, l'anglais et le chinois viennent des catalogues (ADR-045). Une phrase
+   clé, l'anglais, le chinois et (depuis le 28/09/2026) le japonais viennent des
+   catalogues (ADR-045). Une phrase
    oubliée n'est pas une panne — elle s'affiche en français — mais `npm run i18n`
    la signale.
 
@@ -3774,6 +3775,48 @@ que fait un vrai 3B du contexte rendu.
 5. Si une réponse est encore hors sujet : noter la question exacte, le modèle, la ligne `[chat]` du
    journal juste avant, et la sortie de `lms log stream` (ce que le moteur a reçu, au début de
    l'invite).
+
+**Fait le 28/09/2026 (pour la 2026.928.2) : le japonais, quatrième langue.** Demandé par Medhi.
+- **Traduit** : les 2 936 phrases de l'interface (`src/i18n/ja.json`) et les 966 de la passerelle
+  (`gateway/i18n/ja.json`), à 100 % selon `npm run i18n` et `node scripts/i18n-passerelle.mjs`,
+  plus les tables d'Electron (`textesMiseAJour.cjs`, `zoneNotification.cjs`). Registre poli
+  (です／ます), « Chat » rendu par チャット, noms de produits et commandes laissés tels quels.
+  Parti du français, pas de l'anglais. Les phrases coupées en morceaux autour d'une valeur
+  (`{t("Invitation envoyée à")} {email}{t(". Le mail…")}`) ont été traduites en lisant la ligne
+  de code qui les assemble, pour que la suite japonaise se lise dans l'ordre imposé par le
+  français. Relecture par une personne dont c'est la langue : **pas faite**.
+- **Branché** : « 日本語 » dans Réglages, Préférences (quatre choix, deux colonnes à 375 px) ;
+  un système en japonais est suivi ; `X-Helix-Langue: ja` (et `?langue=ja`) à la passerelle ;
+  `helix:langue` accepte `ja` ; dates et nombres en `ja-JP`, et une installation neuve en
+  japonais affiche les dates année d'abord (2026-09-28) ; les nombres de l'usage et de
+  l'abonnement, et le mois du calendrier, suivent désormais la langue (ils étaient en `fr-FR`
+  pour tout le monde). Une demande en japonais n'est plus prise pour du chinois (`plan.ts` :
+  les kana tranchent), la réponse est demandée en japonais.
+- **Police** : sous `:root:lang(ja)`, Hiragino, Yu Gothic, Meiryo puis Noto Sans JP après
+  Satoshi (`tokens.css`) ; le chinois garde la pile d'avant. Vérifié dans le navigateur :
+  kanji et kana s'affichent, `lang="ja"` sur la page.
+- **Vu à l'écran** (instance jetable, clé en fichier, LM Studio et exo éteints, Vite, navigateur
+  intégré) : premier lancement, création du compte, puis les 26 écrans principaux et pages de
+  Paramètres, à 375 px et à 1 440 px, thème clair et sombre, avec un relevé automatique des
+  textes coupés et des phrases restées en français. Corrigé : les trois onglets du haut de la
+  barre (« チャット » prend 52 px contre 29 pour « Chat ») se coupaient, marge réduite en
+  japonais seulement ; libellés d'outils de Cowork raccourcis en noms ; compteurs d'onglets en
+  parenthèses demi-chasse (les quatre onglets des agents tiennent à 375 px). Les pastilles de la
+  zone de saisie se replient à 375 px comme en anglais, qui déborde davantage.
+- **Contrôlé** : `npm run securite`, section « 15 ter. Japonais » (passerelle en japonais par
+  en-tête, par adresse, `ja-JP` ramené à `ja`, refus sans séance en japonais, anglais par défaut
+  inchangé, catalogues à 100 % avec leurs `{0}`, tables d'Electron, pile de polices, détection
+  d'une demande japonaise). `README.ja.md` ajouté, lien dans la ligne des langues des trois autres.
+- **Reste** : relecture native ; le texte d'aide « Changer la langue » et le résumé « Français,
+  anglais, chinois. » disent encore trois langues en français, anglais et chinois (seule la
+  version japonaise en cite quatre) : changer la phrase française change la clé, à reporter dans
+  les trois catalogues ; restent en français dans toutes les langues, faute de `t()` : l'aperçu de
+  suppression du compte (« document », « dossier », « projet ou partage »), le résumé d'export
+  (« conversation », « projet »), « ISO (AAAA-MM-JJ) » et « 12 heures » dans Préférences,
+  « basse d'abord », « ne figure(nt) », « En attente » dans Tâches, « dont » dans l'usage, les
+  codes de secours restants, « , et N autre(s) » d'une tâche bloquée, « interne » dans l'écran
+  Courrier ; l'application de bureau, la zone de notification et le menu en japonais ne sont pas
+  vus (pas d'Electron lancé) ; une vraie réponse de modèle en japonais pas essayée.
 
 **Fait le 27/09/2026 : parcours complet de l'interface, contre une instance jetable.** Passerelle
 jetable (dossier de données temporaire, clé des données en fichier, LM Studio éteint), faux

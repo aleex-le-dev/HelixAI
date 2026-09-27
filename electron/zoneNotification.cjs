@@ -80,6 +80,27 @@ const TEXTES = {
     tailleNormale: "实际大小",
     pleinEcran: "全屏",
   },
+  // Le japonais depuis le 28/09/2026 (demandé par Medhi).
+  ja: {
+    ouvrir: "{0} を開く",
+    quitter: "{0} を終了",
+    bulle: "{0}：スケジュールタスクと従業員は動作を続けます",
+    avisTitre: "{0} は動作を続けています",
+    avis: "スケジュールタスクと従業員は動作を続けます。ウィンドウは通知領域のアイコンから、または {0} をもう一度起動すると開けます。「終了」を選ぶとすべて停止します。",
+    fichier: "ファイル",
+    edition: "編集",
+    affichage: "表示",
+    annuler: "元に戻す",
+    retablir: "やり直す",
+    couper: "切り取り",
+    copier: "コピー",
+    coller: "貼り付け",
+    toutSelectionner: "すべて選択",
+    agrandir: "文字を拡大",
+    reduire: "文字を縮小",
+    tailleNormale: "実際のサイズ",
+    pleinEcran: "フルスクリーン",
+  },
 };
 
 const remplir = (texte, nom) => texte.replaceAll("{0}", nom);

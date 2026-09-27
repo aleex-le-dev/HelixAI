@@ -203,7 +203,7 @@ function decrire(f: Fiche, ecran = false): CatalogEntry {
           : t("Conversation, rédaction et outils.");
       const note =
         eci !== undefined
-          ? tf("Note ECI d'Epoch AI : {0}.", eci.toLocaleString(({ fr: "fr-FR", zh: "zh-CN" } as Record<string, string>)[langue()] ?? "en-US"))
+          ? tf("Note ECI d'Epoch AI : {0}.", eci.toLocaleString(({ fr: "fr-FR", zh: "zh-CN", ja: "ja-JP" } as Record<string, string>)[langue()] ?? "en-US"))
           : t("Pas de note publiée par Epoch AI pour ce modèle.");
       const rapide = f.moe ? ` ${t("Rapide, même sans carte graphique.")}` : "";
       // La note sur sa propre ligne (Medhi, 27/09/2026) : collée à la phrase, elle se coupait au milieu.

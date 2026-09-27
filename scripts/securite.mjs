@@ -4779,6 +4779,93 @@ console.log("\n12. Deviner un mot de passe");
   verifier("deviner un mot de passe est freiné (429), même avec un en-tête de séance inventé à chaque essai", bloque, "jamais freiné en 40 essais");
 }
 
+/* ------------------------------------------------------------------------- */
+console.log("\n15 ter. Japonais : la passerelle répond en japonais, les catalogues sont complets (28/09/2026)");
+{
+  /*
+   * Le japonais, demandé par Medhi le 28/09/2026. La langue voyage avec chaque
+   * requête (`X-Helix-Langue`, ou `?langue=` pour les flux) : une passerelle
+   * qui ne reconnaîtrait pas « ja » répondrait en anglais, sans erreur, et
+   * personne ne le verrait avant un poste japonais.
+   */
+  const lireJson = (...p) => JSON.parse(readFileSync(join(RACINE, ...p), "utf8"));
+  const jaPasserelle = lireJson("gateway", "i18n", "ja.json");
+  const enPasserelle = lireJson("gateway", "i18n", "en.json");
+  const inconnue = "Collection inconnue : {0}";
+  const attendu = (cat) => (cat[inconnue] ?? "").replace("{0}", "collection-essai-ja");
+  const lire = async (chemin, entetes) => {
+    const r = await appel(chemin, { headers: { ...avecJeton, ...entetes } });
+    return { statut: r.status, message: (await r.json().catch(() => ({}))).error?.message ?? "" };
+  };
+  const enJa = await lire("/helix/data/collection-essai-ja", { "X-Helix-Langue": "ja" });
+  verifier(
+    "X-Helix-Langue: ja : la passerelle répond en japonais",
+    enJa.statut === 404 && enJa.message === attendu(jaPasserelle) && /[\u3040-\u30ff]/.test(enJa.message),
+    `${enJa.statut} ${enJa.message}`,
+  );
+  const enJaJp = await lire("/helix/data/collection-essai-ja", { "X-Helix-Langue": "ja-JP,ja;q=0.9" });
+  verifier("« ja-JP » se ramène au japonais", enJaJp.message === attendu(jaPasserelle), enJaJp.message);
+  const parAdresse = await lire("/helix/data/collection-essai-ja?langue=ja", {});
+  verifier("?langue=ja (flux d'évènements, sans en-tête) : japonais aussi", parAdresse.message === attendu(jaPasserelle), parAdresse.message);
+  const sansLangue = await lire("/helix/data/collection-essai-ja", {});
+  verifier("sans langue, toujours l'anglais : le japonais ne déborde pas sur les autres", sansLangue.message === attendu(enPasserelle), sansLangue.message);
+  const seance = await appel("/helix/auth/sessions", { headers: { ...avecJeton, "X-Helix-Langue": "ja" } });
+  const corpsSeance = await seance.json().catch(() => ({}));
+  verifier(
+    "sans séance, le refus est en japonais",
+    seance.status === 401 && corpsSeance.error?.message === jaPasserelle["Séance expirée ou absente. Reconnectez-vous pour accéder à vos données."],
+    `${seance.status} ${JSON.stringify(corpsSeance).slice(0, 120)}`,
+  );
+
+  // Les catalogues : chaque phrase traduite, et chaque trou {0} gardé (un « s » de pluriel collé à un mot peut disparaître).
+  for (const [releve, nom] of [["i18n.mjs", "interface"], ["i18n-passerelle.mjs", "passerelle"]]) {
+    const sortie = execFileSync(process.execPath, [join(RACINE, "scripts", releve)], { cwd: RACINE, encoding: "utf8" });
+    const ligne = /ja : (\d+)\/(\d+) tradui/.exec(sortie);
+    verifier(`catalogue japonais (${nom}) : 100 %`, ligne && ligne[1] === ligne[2] && Number(ligne[2]) > 500, ligne?.[0] ?? sortie.slice(-200));
+  }
+  const trousPerdus = [];
+  for (const cat of [lireJson("src", "i18n", "ja.json"), jaPasserelle]) {
+    for (const [fr, ja] of Object.entries(cat)) {
+      const requis = fr.match(/(?<![A-Za-zÀ-ÿ])\{\d+\}/g) ?? [];
+      const presents = new Set(ja.match(/\{\d+\}/g) ?? []);
+      const tous = new Set(fr.match(/\{\d+\}/g) ?? []);
+      if (requis.some((r) => !presents.has(r)) || [...presents].some((r) => !tous.has(r)) || ja.includes("—")) trousPerdus.push(fr.slice(0, 50));
+    }
+  }
+  verifier("japonais : chaque {0} de la phrase française est gardé, aucun tiret cadratin", trousPerdus.length === 0, trousPerdus.slice(0, 3).join(" | "));
+
+  // Le code : la langue est choisie, détectée, transmise, et affichée avec une police japonaise.
+  const code = (...p) => readFileSync(join(RACINE, ...p), "utf8");
+  const i18n = code("src", "lib", "i18n.ts");
+  verifier(
+    "interface : « 日本語 » dans le sélecteur, système japonais suivi, dates et nombres en ja-JP",
+    /code: "ja", nom: "Japonais", natif: "日本語"/.test(i18n) && /base === "ja"\) return "ja"/.test(i18n) && /ja: "ja-JP"/.test(i18n),
+    "i18n.ts",
+  );
+  const main = code("electron", "main.cjs");
+  verifier("application de bureau : `helix:langue` et la langue du système acceptent « ja »", (main.match(/\["fr", "en", "zh", "ja"\]/g) ?? []).length >= 2, "main.cjs");
+  const { createRequire } = await import("node:module");
+  const textes = createRequire(import.meta.url)(join(RACINE, "electron", "textesMiseAJour.cjs"));
+  const clesMaj = [...code("electron", "textesMiseAJour.cjs").matchAll(/^ {4}(\w+): "/gm)].map((m) => m[1]);
+  textes.changerLangue("fr");
+  const enFrancais = clesMaj.map((c) => textes.tx(c));
+  textes.changerLangue("ja");
+  const restes = clesMaj.filter((c, i) => textes.tx(c) === enFrancais[i]);
+  verifier("messages de mise à jour : chacun a sa phrase japonaise", clesMaj.length >= 20 && restes.length === 0 && textes.raison("son contenu a changé depuis sa signature") !== "son contenu a changé depuis sa signature", restes.join(", "));
+  const zone = code("electron", "zoneNotification.cjs");
+  const blocs = (langue) => zone.slice(zone.indexOf(`  ${langue}: {`), zone.indexOf("},", zone.indexOf(`  ${langue}: {`)));
+  verifier("zone de notification et menu : autant de textes en japonais qu'en français", (blocs("ja").match(/^ {4}\w+:/gm) ?? []).length === (blocs("fr").match(/^ {4}\w+:/gm) ?? []).length && /日本|開く/.test(blocs("ja")), "zoneNotification.cjs");
+  const jetons = code("src", "styles", "tokens.css");
+  verifier("police : une pile japonaise (Hiragino, Yu Gothic, Noto Sans JP) sous :lang(ja), le chinois garde la sienne", /:root:lang\(ja\)\s*\{[^}]*Hiragino Sans[^}]*Yu Gothic[^}]*Noto Sans JP/.test(jetons) && !/:lang\(zh\)/.test(jetons), "tokens.css");
+  const { pathToFileURL: versUrlJa } = await import("node:url");
+  const { langueDe, phraseLangue } = await import(versUrlJa(join(RACINE, "gateway", "src", "plan.ts")));
+  verifier(
+    "une demande en japonais est reconnue comme telle (elle passait pour du chinois), le chinois reste le chinois",
+    langueDe("明日の会議の資料をまとめてください") === "ja" && langueDe("请把明天会议的资料整理一下") === "zh" && /japonais/.test(phraseLangue("来週の予定を教えてください")),
+    `${langueDe("明日の会議の資料をまとめてください")} / ${langueDe("请把明天会议的资料整理一下")}`,
+  );
+}
+
 passerelle.kill();
 fauxModele.close();
 await attendre(500);

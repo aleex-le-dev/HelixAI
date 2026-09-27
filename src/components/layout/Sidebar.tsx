@@ -337,6 +337,11 @@ function Badge({ children }: { children: string }) {
  * largeur : « Cowork » recevait les 74 px des autres alors qu'il en demandait
  * 75, et se coupait pour un pixel pendant que « Chat » en gaspillait quinze.
  * `grow` part de la largeur du mot et ne partage que la place restante.
+ *
+ * En japonais (28/09/2026), « チャット » prend 52 px contre 29 pour « Chat » :
+ * les trois pastilles se coupaient, « Cowork » et « Code » compris. Une marge
+ * intérieure de 4 px au lieu de 8, pour le japonais seulement, rend les 24 px
+ * qui manquaient ; les autres langues gardent leur dessin.
  */
 function PrimaryItem({ item }: { item: NavItem }) {
   const Icon = item.icon;
@@ -347,7 +352,7 @@ function PrimaryItem({ item }: { item: NavItem }) {
       title={item.label}
       className={({ isActive }) =>
         cn(
-          "flex min-w-0 grow items-center justify-center gap-1 rounded-xl px-2 py-1.5",
+          "flex min-w-0 grow items-center justify-center gap-1 rounded-xl px-2 py-1.5 [:lang(ja)_&]:px-1",
           "text-[13px] font-medium transition-colors",
           isActive
             ? "border border-sidebar-border bg-sidebar-active text-foreground shadow-sm"

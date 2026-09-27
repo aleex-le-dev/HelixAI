@@ -8,9 +8,9 @@ import { LANGUES, changerLangue, langue, t } from "@/lib/i18n";
  * ── Ce que l'écran dit, et qui n'est pas cosmétique ─────────────────────────
  *
  * Chaque langue porte son nom **dans cette langue** : quelqu'un qui ne lit pas
- * le français doit pouvoir trouver la sienne. « English » et « 中文 » se
- * reconnaissent sans traduction ; « Anglais » et « Chinois » ne servent qu'à
- * celui qui lit déjà le français.
+ * le français doit pouvoir trouver la sienne. « English », « 中文 » et
+ * « 日本語 » se reconnaissent sans traduction ; « Anglais » et « Chinois » ne
+ * servent qu'à celui qui lit déjà le français.
  *
  * L'écran annonce aussi que **le choix recharge la page**. Le rechargement est
  * assumé (voir `src/lib/i18n.ts`) : il garantit qu'aucun morceau d'écran ne
@@ -43,7 +43,7 @@ export function ChoixLangue() {
         </p>
       </div>
 
-      <div className="grid gap-2 sm:grid-cols-3">
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
         {LANGUES.map((l) => {
           const active = l.code === courante;
           return (

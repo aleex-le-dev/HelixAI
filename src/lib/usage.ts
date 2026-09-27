@@ -118,9 +118,9 @@ export async function definirTarif(
 
 /** Nombre de jetons lisible : 1 234 · 12,3 k · 1,2 M. */
 export function jetons(n: number): string {
-  if (n < 10_000) return n.toLocaleString("fr-FR");
-  if (n < 1_000_000) return `${(n / 1000).toLocaleString("fr-FR", { maximumFractionDigits: 1 })} k`;
-  return `${(n / 1_000_000).toLocaleString("fr-FR", { maximumFractionDigits: 2 })} M`;
+  if (n < 10_000) return n.toLocaleString(locale());
+  if (n < 1_000_000) return `${(n / 1000).toLocaleString(locale(), { maximumFractionDigits: 1 })} k`;
+  return `${(n / 1_000_000).toLocaleString(locale(), { maximumFractionDigits: 2 })} M`;
 }
 
 /** Montant dans sa devise, avec assez de décimales pour les petites sommes. */

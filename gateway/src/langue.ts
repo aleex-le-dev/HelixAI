@@ -1,6 +1,7 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import en from "../i18n/en.json" with { type: "json" };
 import zh from "../i18n/zh.json" with { type: "json" };
+import ja from "../i18n/ja.json" with { type: "json" };
 
 /**
  * Traduction des messages écrits par la passerelle.
@@ -15,7 +16,7 @@ import zh from "../i18n/zh.json" with { type: "json" };
  *
  * ── Le choix : la langue voyage avec la requête ─────────────────────────────
  *
- * La passerelle sert plusieurs postes à la fois, qui peuvent lire dans trois
+ * La passerelle sert plusieurs postes à la fois, qui peuvent lire dans quatre
  * langues différentes. Une langue « de l'instance » serait donc fausse pour
  * quelqu'un. Chaque requête porte la sienne (`X-Helix-Langue`, posé par
  * `authHeaders()` côté écran), et `AsyncLocalStorage` la rend lisible depuis
@@ -31,11 +32,13 @@ import zh from "../i18n/zh.json" with { type: "json" };
  * pire cas est une phrase non traduite, jamais une phrase absente.
  */
 
-export type Langue = "fr" | "en" | "zh";
+// Le japonais depuis le 28/09/2026, demandé par Medhi.
+export type Langue = "fr" | "en" | "zh" | "ja";
 
 const CATALOGUES: Record<Exclude<Langue, "fr">, Record<string, string>> = {
   en: en as Record<string, string>,
   zh: zh as Record<string, string>,
+  ja: ja as Record<string, string>,
 };
 
 const contexte = new AsyncLocalStorage<Langue>();
@@ -43,7 +46,7 @@ const contexte = new AsyncLocalStorage<Langue>();
 function normaliser(brut: string | undefined): Langue {
   const base = (brut ?? "").trim().toLowerCase().split(/[-_,;]/)[0];
   // Langue inconnue ou absente : l'anglais, langue de base du produit (27/09/2026, décidé par Medhi).
-  return base === "en" || base === "zh" || base === "fr" ? (base as Langue) : "en";
+  return base === "en" || base === "zh" || base === "fr" || base === "ja" ? (base as Langue) : "en";
 }
 
 /**

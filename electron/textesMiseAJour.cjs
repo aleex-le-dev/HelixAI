@@ -28,6 +28,9 @@ const TEXTES = {
     autreVersion: "la version de l'archive n'est pas celle annoncée",
     sansCle: "cette application n'a pas de clé d'éditeur : une mise à jour ne peut pas y être vérifiée. Installez-la à la main, depuis le paquet de votre prestataire",
     refusee: "la mise à jour a été refusée : {0}",
+    sansInstallateur: "l'annonce ne décrit pas d'installateur vérifiable",
+    tailleInstallateur: "l'installateur reçu n'a pas la taille annoncée",
+    empreinteInstallateur: "l'empreinte de l'installateur ne correspond pas à l'annonce",
   },
   en: {
     githubVide: "No release found on GitHub (private repository, or nothing published).",
@@ -48,6 +51,9 @@ const TEXTES = {
     autreVersion: "the archive's version is not the announced one",
     sansCle: "this app has no publisher key, so an update cannot be verified here. Install it by hand, from your provider's package",
     refusee: "the update was refused: {0}",
+    sansInstallateur: "the announcement describes no verifiable installer",
+    tailleInstallateur: "the installer received does not have the announced size",
+    empreinteInstallateur: "the installer's checksum does not match the announcement",
   },
   zh: {
     githubVide: "在 GitHub 上未找到任何发布（私有仓库，或尚未发布）。",
@@ -68,6 +74,9 @@ const TEXTES = {
     autreVersion: "压缩包的版本不是通知中的版本",
     sansCle: "此应用没有发行方密钥，无法在此验证更新。请使用服务商提供的安装包手动安装",
     refusee: "更新被拒绝：{0}",
+    sansInstallateur: "该通知未描述可验证的安装程序",
+    tailleInstallateur: "收到的安装程序大小与通知不一致",
+    empreinteInstallateur: "安装程序的校验值与通知不一致",
   },
 };
 

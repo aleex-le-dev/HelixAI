@@ -153,7 +153,9 @@ export function MiseAJour() {
           ) : (
             <>
               <p className="text-xs text-muted-foreground">
-                {t("Cette installation n'est pas signée : elle ne se met pas à jour seule, mais s'installe d'un clic. L'archive est vérifiée par son empreinte et par la signature de l'éditeur avant de remplacer l'application.")}
+                {etat.plateforme === "win32"
+                  ? t("Elle s'installe d'un clic : l'installateur est vérifié par son empreinte et par la signature de l'éditeur, puis il ferme l'application, installe la nouvelle version par-dessus et la rouvre.")
+                  : t("Cette installation n'est pas signée : elle ne se met pas à jour seule, mais s'installe d'un clic. L'archive est vérifiée par son empreinte et par la signature de l'éditeur avant de remplacer l'application.")}
               </p>
               <Button size="sm" icon={Download} onClick={() => void api.installer()}>
                 {t("Installer maintenant")}

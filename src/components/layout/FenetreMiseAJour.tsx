@@ -27,8 +27,10 @@ interface EtatMaj {
   message: string | null;
   /** D'où vient l'annonce : `agence`, `instance` ou `github`. */
   source?: string | null;
-  /** Installation d'un clic possible (macOS) ; sinon, le paquet se télécharge. */
+  /** Installation d'un clic possible (macOS ; Windows, installateur signé par l'éditeur) ; sinon, le paquet se télécharge. */
   unClic?: boolean;
+  /** Système du poste : sous Windows, c'est l'installateur qui ferme, installe et rouvre. */
+  plateforme?: string;
 }
 interface Pont {
   etat: () => Promise<EtatMaj>;
@@ -63,13 +65,15 @@ export function FenetreMiseAJour() {
   if (!api || !etat || !etat.versionDisponible) return null;
   const version = etat.versionDisponible;
   const aProposer = etat.phase === "disponible" || (etat.phase === "prete" && etat.automatique);
-  // Windows, Linux, ou annonce sans archive vérifiable : le paquet se télécharge, rien ne s'installe seul.
+  // Linux, ou annonce sans archive ni installateur vérifiable : le paquet se télécharge, rien ne s'installe seul.
   const aTelecharger = etat.phase === "disponible" && etat.unClic === false;
   const texte = aTelecharger
     ? tf("Vous avez la version {0}. Téléchargez le nouveau paquet, puis installez-le par-dessus celui-ci : vos Chats et vos réglages restent en place.", etat.versionInstallee)
-    : etat.source === "github"
-      ? tf("Vous avez la version {0}. L'installation télécharge la nouvelle depuis les versions publiées, vérifie qu'elle est intacte et signée par l'éditeur, puis ferme et rouvre l'application. Vos Chats et vos réglages restent en place.", etat.versionInstallee)
-      : tf("Vous avez la version {0}. L'installation télécharge la nouvelle depuis votre instance, vérifie qu'elle est intacte, puis ferme et rouvre l'application. Vos Chats et vos réglages restent en place.", etat.versionInstallee);
+    : etat.plateforme === "win32"
+      ? tf("Vous avez la version {0}. L'installation télécharge le nouvel installateur depuis les versions publiées, vérifie qu'il est intact et signé par l'éditeur, puis ferme l'application, l'installe et la rouvre. Vos Chats et vos réglages restent en place.", etat.versionInstallee)
+      : etat.source === "github"
+        ? tf("Vous avez la version {0}. L'installation télécharge la nouvelle depuis les versions publiées, vérifie qu'elle est intacte et signée par l'éditeur, puis ferme et rouvre l'application. Vos Chats et vos réglages restent en place.", etat.versionInstallee)
+        : tf("Vous avez la version {0}. L'installation télécharge la nouvelle depuis votre instance, vérifie qu'elle est intacte, puis ferme et rouvre l'application. Vos Chats et vos réglages restent en place.", etat.versionInstallee);
   const enCours = installation && (etat.phase === "telechargement" || etat.phase === "prete");
   const echec = installation && etat.phase === "erreur";
   if (!enCours && !echec && (!aProposer || fermee || repoussee(version))) return null;

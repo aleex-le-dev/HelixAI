@@ -12,8 +12,11 @@
  * Pourquoi ce n'est pas un risque de plus : l'archive d'une mise à jour macOS
  * n'est installée qu'après vérification de la signature de l'éditeur, avec la
  * clé de l'application déjà installée (signatureEditeur.cjs) ; une publication
- * remplacée par un tiers ne passerait pas. Sous Windows et Linux, rien ne
- * s'installe : la fenêtre propose le paquet, que la personne installe.
+ * remplacée par un tiers ne passerait pas. Sous Windows (27/09/2026), de même
+ * pour l'installateur : le manifeste en porte la signature de l'éditeur,
+ * vérifiée avec la clé de l'application installée (`lireManifesteWindows`).
+ * Sous Linux, rien ne s'installe : la fenêtre propose le paquet, que la
+ * personne installe.
  *
  * Ce module ne fait aucun appel réseau : il lit ce que l'API de GitHub rend, et
  * se vérifie sans Electron (scripts/essai-source-github.mjs).
@@ -70,9 +73,36 @@ function lireManifeste(brut, versionAttendue) {
   return { version: m.version, files: [{ url: mac.fichier, sha512: mac.sha512, size: mac.octets }] };
 }
 
+/**
+ * La partie Windows du manifeste (27/09/2026) : l'installateur NSIS, son
+ * empreinte SHA-512 (base64), sa taille, et la signature de l'éditeur sur le
+ * tout, vérifiée ici avec la clé de l'application installée
+ * (`clePubliquePem`, jamais une clé venue de la publication). Champ par champ
+ * comme pour macOS ; rien de bon, rien de rendu : l'écran garde alors
+ * « Télécharger ».
+ */
+function lireManifesteWindows(brut, versionAttendue, clePubliquePem, identifiant) {
+  let m;
+  try {
+    m = typeof brut === "string" ? JSON.parse(brut) : brut;
+  } catch {
+    return null;
+  }
+  const win = m && m.windows;
+  if (!m || m.version !== versionAttendue || !win || !clePubliquePem || typeof identifiant !== "string") return null;
+  // Le seul installateur que ce poste sait lancer : celui des processeurs x64.
+  if (typeof win.fichier !== "string" || !/^[\w.-]+-x64\.exe$/.test(win.fichier)) return null;
+  if (typeof win.sha512 !== "string" || !/^[A-Za-z0-9+/]{86}==$/.test(win.sha512)) return null;
+  if (!Number.isInteger(win.octets) || win.octets <= 0) return null;
+  const description = { identifiant, version: m.version, fichier: win.fichier, sha512: win.sha512, octets: win.octets };
+  const verdict = require("./signatureEditeur.cjs").verifierInstallateur(clePubliquePem, win.signature, description);
+  if (!verdict.ok) return null;
+  return { ...description, signature: win.signature };
+}
+
 /** Le dépôt `propriétaire/nom`, s'il a la bonne forme. */
 function depotValide(depot) {
   return typeof depot === "string" && /^[A-Za-z0-9-]+\/[A-Za-z0-9._-]+$/.test(depot) ? depot : null;
 }
 
-module.exports = { plusRecente, choisirPaquet, lireManifeste, depotValide };
+module.exports = { plusRecente, choisirPaquet, lireManifeste, lireManifesteWindows, depotValide };

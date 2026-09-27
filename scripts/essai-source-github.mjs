@@ -24,6 +24,34 @@ verifier("manifeste d'une autre version refusé", s.lireManifeste(JSON.stringify
 verifier("chemin dans le nom refusé", s.lireManifeste(JSON.stringify({ ...bon, mac: { ...bon.mac, fichier: "../x.zip" } }), "0.27.1") === null);
 verifier("empreinte mal formée refusée", s.lireManifeste(JSON.stringify({ ...bon, mac: { ...bon.mac, sha512: "abc" } }), "0.27.1") === null);
 verifier("JSON abîmé refusé", s.lireManifeste("{", "0.27.1") === null);
+// La partie Windows (27/09/2026) : signée par une clé d'essai, tirée ici, jamais la vraie.
+const { generateKeyPairSync, createPublicKey } = await import("node:crypto");
+const sig = require("../electron/signatureEditeur.cjs");
+const pem = (k) => k.export({ type: "pkcs8", format: "pem" });
+const privee = pem(generateKeyPairSync("ed25519").privateKey);
+const publique = createPublicKey(privee).export({ type: "spki", format: "pem" }).toString();
+const autre = pem(generateKeyPairSync("ed25519").privateKey);
+const shaWin = "B".repeat(86) + "==";
+const windows = (cle, d = {}) => {
+  const desc = { identifiant: "helix-plateforme", version: "0.27.1", fichier: "Helix-Setup-0.27.1-x64.exe", sha512: shaWin, octets: 20, ...d };
+  return { fichier: desc.fichier, sha512: desc.sha512, octets: desc.octets, signature: sig.signerInstallateur(cle, desc) };
+};
+const avecWin = (w, version = "0.27.1") => JSON.stringify({ ...bon, version, windows: w });
+const lireW = (brut, version = "0.27.1", cle = publique, id = "helix-plateforme") => s.lireManifesteWindows(brut, version, cle, id);
+verifier("Windows : installateur signé par l'éditeur lu", lireW(avecWin(windows(privee)))?.fichier === "Helix-Setup-0.27.1-x64.exe");
+verifier("Windows : le manifeste macOS se lit toujours à côté", s.lireManifeste(avecWin(windows(privee)), "0.27.1")?.files[0].url === "Helix-0.27.1-arm64-mac.zip");
+verifier("Windows : signé par une autre clé, refusé", lireW(avecWin(windows(autre))) === null);
+verifier("Windows : signature abîmée, refusée", lireW(avecWin({ ...windows(privee), signature: "A".repeat(86) + "==" })) === null);
+verifier("Windows : sans signature, refusé", lireW(avecWin({ ...windows(privee), signature: undefined })) === null);
+verifier("Windows : empreinte changée après la signature, refusée", lireW(avecWin({ ...windows(privee), sha512: "C".repeat(86) + "==" })) === null);
+verifier("Windows : taille changée après la signature, refusée", lireW(avecWin({ ...windows(privee), octets: 21 })) === null);
+verifier("Windows : manifeste d'une autre version, refusé", lireW(avecWin(windows(privee)), "0.27.2") === null);
+verifier("Windows : signature d'une autre version remise dans ce manifeste, refusée", lireW(avecWin(windows(privee, { version: "0.27.0" }))) === null);
+verifier("Windows : signature d'une autre application, refusée", lireW(avecWin(windows(privee)), "0.27.1", publique, "autre-application") === null);
+verifier("Windows : sans clé dans l'application, rien", lireW(avecWin(windows(privee)), "0.27.1", null) === null);
+verifier("Windows : chemin dans le nom, refusé", lireW(avecWin(windows(privee, { fichier: "..\\Helix-Setup-0.27.1-x64.exe" }))) === null);
+verifier("Windows : installateur ARM ou autre extension, refusé", lireW(avecWin(windows(privee, { fichier: "Helix-Setup-0.27.1-arm64.exe" }))) === null && lireW(avecWin(windows(privee, { fichier: "Helix-Setup-0.27.1-x64.msi" }))) === null);
+verifier("Windows : manifeste sans partie Windows, rien", lireW(JSON.stringify(bon)) === null);
 verifier("dépôt mal formé refusé", s.depotValide("a/b;rm") === null && s.depotValide("medhiclb/HelixAI") === "medhiclb/HelixAI");
 console.log(echecs ? `${echecs} échec(s)` : "tout est bon");
 process.exit(echecs ? 1 : 0);

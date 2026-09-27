@@ -297,7 +297,8 @@ function capaciteDe(hw: Hardware, mac: number | null): Capacite {
       moteur: "mlx",
       base: m,
       verifie: m.verifie,
-      raison: tf("Mac à puce Apple, {0} Go de mémoire : {1}, entraîné par MLX sur la puce graphique.", hw.totalMemoryGb, m.nom),
+      // La règle dite à l'écran : « c'est pas adaptatif ? » (Medhi, 27/09/2026), alors qu'elle l'est.
+      raison: tf("Mac à puce Apple, {0} Go de mémoire : {1}, entraîné par MLX sur la puce graphique. Choisi selon la mémoire : Qwen3 0.6B dès 8 Go, 1.7B dès 16 Go, 4B dès 32 Go.", hw.totalMemoryGb, m.nom),
     };
   }
   const vram = hw.gpuVramGb ?? 0;
@@ -308,7 +309,7 @@ function capaciteDe(hw: Hardware, mac: number | null): Capacite {
       moteur: "nvidia",
       base: m,
       verifie: false,
-      raison: tf("Carte NVIDIA de {0} Go : {1}, entraîné en QLoRA par Unsloth (transformers et peft en repli). Ce chemin n'a pas encore été essayé sur une vraie machine.", vram, m.nom),
+      raison: tf("Carte NVIDIA de {0} Go : {1}, entraîné en QLoRA par Unsloth (transformers et peft en repli). Choisi selon la mémoire de la carte : Qwen3 1.7B dès 6 Go, 4B dès 12 Go. Ce chemin n'a pas encore été essayé sur une vraie machine.", vram, m.nom),
     };
   }
   if (vram > 0) {

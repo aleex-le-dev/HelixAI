@@ -235,7 +235,19 @@ function transfererCle(app, safeStorage, etape, { dossier }) {
      * quels). Avant, le témoin était écrit quand même, et ce fichier restait
      * illisible (revue du 27/09/2026).
      */
-    if (echecs > 0) return false;
+    if (echecs > 0) {
+      /*
+       * Compteur remis à zéro : une partie des fichiers est déjà sous la
+       * nouvelle clé, garder l'ancien nom « pour de bon » après deux essais
+       * les rendrait illisibles (relu le 27/09/2026).
+       */
+      try {
+        fs.writeFileSync(e.essais, "0", { mode: 0o600 });
+      } catch {
+        /* au pire, le compteur continue */
+      }
+      return false;
+    }
     fs.rmSync(e.essais, { force: true });
     try {
       ecrireAtomique(e.temoin, app.getName());

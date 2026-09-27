@@ -696,8 +696,11 @@ async function provision(
     }
 
     // Mémoire toujours insuffisante : on redescend d'un cran plutôt que d'échouer.
+    if (isResourceError(loaded.output)) {
+      // Dans tous les cas : après un refus faute de mémoire, jamais plus lourd (relu le 27/09/2026).
+      plafondGo = Math.min(plafondGo, choice.downloadGb);
+    }
     if (isResourceError(loaded.output) && candidates.some((c) => c.downloadGb < choice.downloadGb)) {
-      plafondGo = choice.downloadGb;
       setState({
         phase: "checking",
         message: tf("{0} est trop lourd pour cette machine, essai d'un modèle plus léger...", choice.label),
@@ -706,7 +709,10 @@ async function provision(
     }
 
     console.error(`[helix] chargement de ${choice.key} refusé : ${loaded.output.slice(-400)}`);
-    echec = { message: t("Le chargement du modèle a échoué."), error: loaded.output.slice(-400) };
+    echec = {
+      message: isResourceError(loaded.output) ? t("Aucun modèle n'a pu être chargé sur cette machine.") : t("Le chargement du modèle a échoué."),
+      error: loaded.output.slice(-400),
+    };
   }
 
   setState({

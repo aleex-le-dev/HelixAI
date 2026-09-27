@@ -1016,6 +1016,131 @@ sur la boucle locale (`tls: true`, port 8914) : l'adresse de base annoncée pass
 **Pas essayé** : le paquet `openai` lui-même, un appel depuis une autre machine d'une
 instance ouverte aux collègues, un client tiers (tableur, éditeur).
 
+### 3.14 Un abonnement ChatGPT (par Codex) ou Claude dans Helix : ce qui est permis
+
+**À décider par Medhi.** Demandé le 27/09/2026 : « si possible, que quelqu'un puisse
+connecter son compte Codex ou Claude dans Helix, pour avoir le meilleur logiciel avec
+leur compte », c'est-à-dire se servir d'un abonnement ChatGPT Plus/Pro ou Claude
+Pro/Max sans clé d'API payée à l'usage.
+
+Relevé à la source le 27/09/2026, documentation et conditions officielles seulement
+(les articles de presse ne servent qu'à dater). Ce n'est pas un avis juridique. **Aucun
+code écrit** : la voie Claude est fermée, la voie OpenAI est ouverte mais défait le
+§ 3.1 et demande des garde-fous qui sont des choix, pas des détails.
+
+**Claude (Pro, Max) : interdit pour Helix, sauf accord écrit d'Anthropic.**
+
+- [Claude Code, Legal and compliance](https://code.claude.com/docs/en/legal-and-compliance),
+  « Authentication and credential use » : la connexion par compte (OAuth) est réservée
+  à l'usage ordinaire de Claude Code et des applications d'Anthropic ; un développeur
+  tiers ne peut ni offrir la connexion Claude.ai dans son application, ni faire passer
+  des requêtes par les identifiants d'un abonnement « on behalf of their users », ni
+  recueillir ou relayer les jetons. Anthropic se réserve de sévir sans préavis : c'est le
+  compte de la personne qui est exposé.
+- [Agent SDK overview](https://code.claude.com/docs/en/agent-sdk/overview), encadré :
+  sauf accord préalable, pas de connexion claude.ai ni des limites d'abonnement dans le
+  produit d'un tiers, « including agents built on the Claude Agent SDK ». Or
+  [la page du mode non interactif](https://code.claude.com/docs/en/headless) présente
+  `claude -p` comme l'Agent SDK en ligne de commande : piloter le `claude` installé par
+  la personne, comme moteur d'Helix, tombe sous cette phrase.
+- La même page Legal ne retient qu'une exception : une personne peut se connecter avec
+  son abonnement au binaire Claude Code **non modifié**, même quand une plateforme
+  l'héberge, à condition que l'éditeur de la plateforme accepte les Commercial Terms et
+  ne paie ni ne revende l'usage. Cela vise le fait de donner Claude Code lui-même à la
+  personne, pas d'en faire le moteur d'un autre produit ; et ne pas écrire « Claude
+  Code » dans le nom d'une fonction d'Helix.
+- [Consumer Terms](https://www.anthropic.com/legal/consumer-terms) (en vigueur le
+  08/10/2025) : pas d'accès automatisé hors clé d'API ou permission explicite ; pas de
+  compte mis à la disposition d'autrui.
+- À ne pas mal lire : [l'article d'aide sur l'Agent SDK et les abonnements](https://support.claude.com/en/articles/15036540-use-the-claude-agent-sdk-with-your-claude-plan)
+  cite les « third-party apps » qui passent par l'abonnement, mais pour décrire un crédit
+  mensuel **suspendu le 15/06/2026** (« no longer taking effect ») ; il ne lève pas la
+  règle faite aux développeurs.
+
+**ChatGPT (Plus, Pro) par Codex : permis sous une forme étroite.** Piloter le programme
+`codex` officiel, installé par la personne et connecté par elle, par le parcours
+d'OpenAI, pour son propre usage.
+
+- [Codex SDK](https://learn.chatgpt.com/docs/codex-sdk) : parmi les usages prévus,
+  « Integrate Codex within your own application ».
+- [Codex app-server](https://learn.chatgpt.com/docs/app-server) : l'interface des clients
+  riches (l'extension VS Code ; [l'article d'OpenAI sur l'app-server](https://openai.com/index/unlocking-the-codex-harness/)
+  cite aussi JetBrains et Xcode, page refusée à l'outil et lue par extrait), à prendre
+  « inside your own product » pour la connexion, l'historique et les approbations. En
+  mode « ChatGPT managed », c'est Codex qui mène la connexion, garde et renouvelle les
+  jetons ; `account/rateLimits/read` rend les limites de l'abonnement à l'application
+  hôte. La même page dit la commande `app-server` et son transport WebSocket
+  expérimentaux, non pris en charge en production. Pour un client destiné aux
+  entreprises, OpenAI demande qu'on le contacte pour être ajouté à sa liste de clients
+  connus (`clientInfo.name`).
+- [Mode non interactif](https://learn.chatgpt.com/docs/non-interactive-mode) : `codex exec`
+  reprend par défaut la connexion enregistrée ; la connexion par compte ChatGPT en
+  automatisation est décrite pour qui veut les limites de l'abonnement plutôt que la
+  facturation de l'API, sur des machines de confiance. La clé d'API reste le choix
+  recommandé pour l'automatisation, et [l'authentification](https://learn.chatgpt.com/docs/auth)
+  déconseille d'exposer Codex dans un environnement non fiable ou public.
+- [Terms of Use](https://openai.com/policies/row-terms-of-use/) (et la version
+  européenne) : ne pas mettre son compte à la disposition d'autrui, ne pas contourner les
+  limites, pas d'extraction automatisée hors de l'API. **Page refusée à l'outil de
+  lecture (403) le 27/09/2026** : ces clauses n'ont été lues que par extraits dans un
+  moteur de recherche, à relire en entier.
+
+**Écarté, parce qu'OpenAI ne le couvre nulle part pour un tiers :** reprendre ou copier
+des jetons (le fichier `~/.codex/auth.json`, que la documentation demande de traiter
+comme un mot de passe et qui reste dans les zones protégées, `zonesProtegees.ts`) ; le
+mode `chatgptAuthTokens` de l'app-server, prévu pour une application qui possède déjà la
+connexion ChatGPT de la personne ; la connexion ChatGPT qu'OpenCode fait lui-même
+(`/connect`, annoncée par ses auteurs le 11/01/2026, sans page d'OpenAI qui la valide) ;
+un Codex modifié (un ingénieur d'OpenAI a refusé de trancher, [discussion
+#8338](https://github.com/openai/codex/discussions/8338), 19/12/2025). « Sign in with
+ChatGPT », lancé le 02/08/2026 avec six partenaires, ne transmet que l'identité (nom,
+adresse, photo) : ce n'est pas un moyen de faire payer les modèles par l'abonnement.
+
+**Pourquoi rien n'est codé le 27/09/2026, même pour Codex :**
+
+1. **Le § 3.1.** Codex est un agent de code complet, avec ses outils, son bac à sable et
+   ses approbations. Le brancher, c'est un second moteur d'agent à côté d'OpenCode : le
+   « seul moteur » se défait, et c'est à Medhi de le dire.
+2. **Pour la personne seule.** La connexion de `codex` appartient au compte système qui
+   fait tourner la passerelle. Sur une instance ouverte aux collègues, par une clé de
+   l'API développeur (§ 3.13), par un employé OpenClaw ou une tâche programmée, d'autres
+   se serviraient de l'abonnement de cette personne, ce que les conditions interdisent.
+3. **Ce qui part chez OpenAI** : la demande, et tout ce que Codex lit dans son dossier de
+   travail, aux États-Unis, en dehors de la barrière d'approbation d'Helix (Codex décide
+   dans son propre bac à sable). La règle « chaque modèle dit où il tourne » s'applique.
+4. **Rien d'essayable dans cette session** : s'y connecter à un compte était exclu, tout
+   aurait été livré « pas essayé ».
+
+**Ce qu'Helix propose aujourd'hui, sans rien changer :** la clé d'API du fournisseur,
+OpenAI ou Anthropic, dans Paramètres → Modèles cloud (`fournisseurs.ts`), pour soi ou
+pour l'équipe, pays affiché, facturée à l'usage à la titulaire. C'est la seule voie que
+les deux éditeurs recommandent pour un produit tiers.
+
+**Si Medhi dit oui pour Codex, la voie la plus simple et la plus sûre :**
+
+- Écran Code seulement (pas le Chat : Codex répond en agent de code), moteur au choix
+  « Codex, avec votre abonnement ChatGPT » à côté d'OpenCode.
+- Détection : `codex` trouvé sur la machine, sa version, et l'état de connexion demandé
+  au programme lui-même (`codex login status`) ; Helix n'ouvre jamais `~/.codex`.
+- Connexion : un bouton lance `codex login`, la personne termine chez OpenAI dans son
+  navigateur ; Helix ne voit passer aucun jeton.
+- Exécution : `codex exec --json --sandbox workspace-write` dans le dossier du projet,
+  son flux JSONL (`item.*`, `turn.completed` avec la consommation) converti dans le flux
+  de Code existant (`fluxCode.ts`). `codex app-server` relaierait mieux les demandes
+  d'approbation vers la barrière d'Helix et les limites de l'abonnement, mais OpenAI le
+  dit expérimental : à reprendre quand il ne le sera plus.
+- Garde : réservé au compte propriétaire de l'installation de bureau ; refusé sans
+  séance, par clé d'API, pour un employé, une tâche programmée, et sur une instance
+  ouverte aux collègues. Contrôles dans `npm run securite` avec un faux `codex` sans
+  réseau.
+- À l'écran : « OpenAI, États-Unis », « limites de votre abonnement ChatGPT », et ce que
+  Codex peut lire.
+- À essayer sur le poste : Medhi se connecte lui-même par `codex login`, une vraie tâche
+  de Code, puis la limite d'abonnement atteinte.
+
+Pour Claude, la seule suite possible est une demande d'accord écrite à Anthropic
+(page « contact sales » citée par la page Legal) ; sans elle, rien.
+
 ---
 
 ## 4. Sécurité
@@ -2548,6 +2673,10 @@ ne restent ici que les points ouverts.*
    terminal sur un réseau lent.
 9. **Passer ce Mac sur Qwen3.5 9B**, le modèle qu'Helix y installerait aujourd'hui (il
    tourne encore sur Qwen3 8B, installé avant la règle) : 6 Go, à télécharger sur accord.
+10. **Abonnement ChatGPT ou Claude dans Helix** (27/09/2026, § 3.14) : Claude interdit
+    sans accord écrit d'Anthropic ; Codex permis en pilotant le programme officiel,
+    mais c'est un second moteur d'agent (§ 3.1). À décider : oui ou non pour Codex dans
+    l'écran Code, réservé à la personne qui l'a connecté.
 
 **Fait le 26/09/2026 : une réponse du Chat continue quand on quitte son Chat.**
 Signalé par Medhi : ouvrir un autre Chat ou en commencer un nouveau arrêtait la

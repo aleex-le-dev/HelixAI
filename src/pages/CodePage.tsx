@@ -147,8 +147,26 @@ export function CodePage() {
        * (permissionsCode.ts) : le même niveau, choisi ici aussi, décide ce qui
        * arrive en carte (écrire, lancer une commande, aller sur le réseau).
        */
-      accessoire={
+      accessoire={<ApprovalSelector />}
+      /*
+       * Le moteur (OpenCode ou Codex) se choisit sur la ligne du dossier, pas
+       * dans la barre de saisie : vu par Medhi le 27/09/2026, « ça fait trop
+       * surchargé », les libellés s'y coupaient (« Open… », « Sans appro… »).
+       * Les deux vont ensemble : en changer ouvre une session neuve.
+       */
+      contextBar={
         <>
+          <DossierTravailChip
+            dossier={dossierAffiche}
+            onChange={(chemin) => {
+              setDossier(chemin);
+              /*
+               * Changer de projet, c'est une nouvelle session dans ce dossier.
+               * Celle qu'on quitte n'est plus arrêtée : elle reste dans la liste.
+               */
+              if (sessionId || demandee) navigate("/code");
+            }}
+          />
           <MoteurCode
             moteur={moteur}
             onChange={(m) => {
@@ -164,21 +182,7 @@ export function CodePage() {
             connexionRefus={codex.connexionRefus}
             occupe={vue.busy}
           />
-          <ApprovalSelector />
         </>
-      }
-      contextBar={
-        <DossierTravailChip
-          dossier={dossierAffiche}
-          onChange={(chemin) => {
-            setDossier(chemin);
-            /*
-             * Changer de projet, c'est une nouvelle session dans ce dossier.
-             * Celle qu'on quitte n'est plus arrêtée : elle reste dans la liste.
-             */
-            if (sessionId || demandee) navigate("/code");
-          }}
-        />
       }
     />
   );

@@ -2891,6 +2891,15 @@ petites tailles (neuf tailles dans le `.ico`, de 16 à 256 px), et la fenêtre p
 son système. macOS ne change pas. **Pas vérifié sur un vrai PC** : Windows garde parfois
 l'ancienne icône en cache après une mise à jour (redémarrer l'explorateur la rafraîchit).
 
+**Fait le 27/09/2026 : petites icônes de Windows et de Linux au trait fin.** Vu par Medhi sur
+un PC : l'icône de la barre des tâches restait « encore grasse ». L'image détaillée réduite
+puis épaissie faisait une tache noire de 16 à 32 px. De 16 à 48 px, l'hélice est désormais
+redessinée en vectoriel (deux brins qui se croisent deux fois, pointes en haut à droite et en
+bas à gauche comme le logo, barreaux à partir de 32 px), trait d'un pixel calé sur la grille ;
+l'hélice détaillée reste à partir de 64 px, et l'icône du Mac ne change pas (même fichier,
+octet pour octet). **Vérifié** : planche avant / après, tailles réelles et agrandies, fond
+clair et fond sombre. **Pas vérifié sur un vrai PC** (cache d'icônes de Windows, voir plus haut).
+
 **Fait le 27/09/2026 (0.27.3) : Electron 44.4.5, au lieu de 33.4.11.** Relevé par `npm audit` en
 préparant le dépôt public : Electron 33 n'est plus maintenu, et une trentaine de failles
 publiées le touchent, dont plusieurs graves qui concernent Helix (contournement de

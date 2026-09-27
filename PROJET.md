@@ -10,8 +10,10 @@ refaite à l'envers.
 
 | | |
 |---|---|
-| Version | 2026.927.4 (`package.json`) |
-| Dernière mise à jour | 27 septembre 2026 |
+| Version | 2026.928.1 (`package.json`) |
+| Dernière mise à jour | 28 septembre 2026 |
+| Vérifié | `npm run securite` : 732 contrôles, 0 échec (28/09/2026) ; `npm run typecheck` ; traductions à 100 % (interface 2 945 phrases, passerelle 966) |
+| Reste à essayer | sur les vraies machines : § 5, « Ce qui reste à essayer sur les postes de Medhi » |
 | Documents liés | [ARCHITECTURE.md](ARCHITECTURE.md), [SECURITE.md](SECURITE.md), [SCREENS.md](SCREENS.md), [SIGNATURE.md](SIGNATURE.md), [README.md](README.md), [docs/GUIDE.md](docs/GUIDE.md) |
 
 ---
@@ -1504,6 +1506,13 @@ réussis le 26/09/2026**.
   l'installation.
 - **Séance de la ligne de commande** en clair sur le disque, protégée par les
   permissions du compte (§ 3.11).
+- **Codex** (27/09/2026, § 3.14) : ce qu'il fait ne passe pas par la barrière
+  d'approbation de Helix ; seul son bac à sable le borne, et Helix ne borne pas ce qu'il
+  lit sur le poste. D'où la réserve au propriétaire du poste, et l'écran le dit.
+- **RunAsNode reste ouvert** dans le paquet (les fusibles NODE_OPTIONS et `--inspect`
+  sont fermés depuis le 27/09/2026) : un programme du même compte peut faire tourner du
+  code avec le binaire de l'application. Le fermer demande de lancer la passerelle
+  autrement (SECURITE.md § 31.3).
 
 ---
 
@@ -1645,10 +1654,11 @@ lancé par le binaire de l'application, sans Node installé) ; depuis les source
 ### Ce qui est encore annoncé sans fonctionner, et le dit
 
 Plus aucun écran en maquette depuis 0.16.0. Les notifications et l'aide ont cessé
-d'être grisées en 0.22.0, « Créer une compétence » a été faite en 0.24.0.
-Reste, marqué « bientôt » à l'écran : le **téléchargement direct des applications**
-(Paramètres, Installer les apps). Les clés d'API développeur fonctionnent depuis le
-26/09/2026 (§ 3.13).
+d'être grisées en 0.22.0, « Créer une compétence » a été faite en 0.24.0, et le
+téléchargement direct de l'application de bureau fonctionne depuis 0.27.0 (l'instance
+sert son application macOS). Les clés d'API développeur fonctionnent depuis le
+26/09/2026 (§ 3.13). Reste, et l'écran le dit : pas d'application mobile, et l'Abonnement
+sans paiement branché.
 
 ### Affichages faux : ce qui a été réglé
 
@@ -2771,6 +2781,91 @@ gardé le vrai dossier personnel ; dans `~/.helix`, l'application d'essai n'écr
 fichier du thème (`electron/main.cjs`, `fichierTheme`), réécrit à 15 h 32 avec la même
 valeur, « clair ».
 
+### Ce qui reste à essayer sur les postes de Medhi
+
+*Regroupé le 28/09/2026 (2026.928.1), à partir des entrées « À essayer » et « Pas vérifié »
+des 26 et 27/09 plus bas, qui gardent le détail. Tout ce qui suit est écrit et vérifié ici
+contre des doublures (faux moteur, faux fournisseurs, faux `codex`, faux OpenCode, Windows
+simulé) ; rien de cela n'a tourné sur la vraie machine.*
+
+**PC Windows (processeur seul, 16 Go, llmster 0.0.25)**
+1. **Mise à jour** : installer 2026.928.1. Un poste installé avant 2026.927.3 n'a pas la clé
+   de l'éditeur dans son application : « Télécharger » une fois encore, puis « Installer
+   maintenant » à la version suivante. Relever l'installation silencieuse, la relance,
+   SmartScreen, Smart App Control et l'antivirus.
+2. **Le modèle qui répondait « 不 時//// »** : `lms unload --all` (ou redémarrer le PC), puis
+   « Bonjour, tu vas bien ? ». Au démarrage, l'essai doit écarter Qwen3.5 4B et garder le
+   suivant (avec les notes d'Epoch, Qwen3 8B passe devant sur 16 Go au processeur). Relever
+   le processeur et sa puce graphique intégrée, `lms ps`, `lms runtime ls`, `lms log stream`,
+   et les lignes « essai de … » et « réponse de … coupée » du journal de Helix.
+3. **Documents** : un PDF, un Word fait d'un modèle, un Excel, un CSV enregistré par Excel et
+   un .txt du Bloc-notes, avec Ministral 3B puis Qwen3.5 4B : le contenu cité, le temps avant
+   le premier mot, « lu en N parties » sur un long PDF, une seconde question plus rapide que
+   la première.
+4. **Les réponses « qui n'ont rien à voir »** : la conversation de dix échanges (« Liste les
+   trois risques principaux d'un prêt bancaire pour une TPE », puis « Développe le deuxième
+   point… »), Ministral 3B choisi à la main puis en « Auto » ; au premier message, la ligne
+   « … chargé par Helix : --context-length 32768 --parallel 1 --gpu off » du journal ; vingt
+   minutes sans rien demander, puis une question (nouveau `lms load`).
+5. **Boutons** : « Copier les informations techniques » et un autre « Copier » (canal du
+   processus principal) ; « Signaler un problème », avec le navigateur et la messagerie de
+   Windows (`mailto:`).
+6. **Sans clic** : OpenCode posé seul au démarrage ; Python et Node de Helix pour l'atelier ;
+   l'icône de la barre des tâches (cache de l'explorateur).
+
+**MacBook (Mac à puce Apple sans LM Studio ouvert)**
+7. Le parcours complet de mise en route : llmster posé et démarré par Helix, le modèle
+   téléchargé avec sa progression, puis un Chat ; la valeur de l'autorisation d'écran avant
+   toute demande.
+8. Une mise à jour d'un clic depuis GitHub entre deux versions publiées (fenêtre « Nouvelle
+   version », « Installer maintenant »), et la demande du trousseau, une fois par version.
+
+**Petits modèles (Ministral 3B, puis Qwen3.5 4B et 2B, sur le PC)**
+9. Dans Cowork : « crée un fichier bonjour.py qui affiche Bonjour », « ajoute une fonction
+   moyenne à calc.py » (fichier déjà là : lu avant d'être réécrit), « fais une page HTML avec
+   un bouton qui compte les clics » ; dans Code, les deux premières sur un dossier de projet.
+   Relever : fichier juste ou non, nombre de relances, lignes « appel d'outil … réparé » et
+   « écrit(s) dans le texte » du journal, temps total, et la session sous `helix-petit` dans
+   le journal d'OpenCode.
+
+**Le vrai Codex (poste de Medhi)**
+10. `npm install -g @openai/codex`, puis dans Code « Codex », « Se connecter avec ChatGPT »,
+    connexion finie dans le navigateur ; une demande à « Demander avant de modifier » (Codex
+    doit rester en lecture seule), puis à « Tout approuver » (une modification du projet) ; la
+    reprise par une deuxième demande, l'arrêt en cours de tâche, la limite d'abonnement
+    atteinte (message rendu) ; un compte membre et un poste rattaché ne voient pas la puce
+    (§ 3.14).
+
+**Employés sur modèle cloud**
+11. Un employé sur un modèle d'une vraie clé, personnelle puis de l'équipe : sa réponse et sa
+    consommation ; une mission sur un modèle changé, puis disparu (compte rendu) ; la
+    proposition « Son modèle » sur une machine où LM Studio déclare outils et tailles ; « le
+    service ne répond pas » avec le vrai OpenClaw. Et, toujours : un vrai mail traité (profil
+    restreint, web gardé), une mission du mois.
+
+**Prix réels et vraies clés**
+12. Une vraie clé OpenAI, puis Mistral : le point du modèle dans « Comparer intelligence et
+    prix », son coût dans Mon usage avec « prix publié par … », et les identifiants que le
+    fournisseur rend vraiment. Puis chaque fournisseur du catalogue (Anthropic, Google,
+    Mistral, gpt-5 et la série o, Groq, xAI, DeepSeek, Together) avec une image et un appel
+    d'outil ; Code sur un modèle de clé ; un vrai 429 de quota.
+
+**Le paquet fabriqué**
+13. **Fusibles** : `npx @electron/fuses read --app release/mac-arm64/Helix.app` (et
+    `release/win-unpacked/Helix.exe`) doit montrer NODE_OPTIONS et `--inspect` fermés,
+    RunAsNode ouvert ; puis lancer l'application et vérifier ce qui passe par RunAsNode : la
+    passerelle démarre, `helix` répond en ligne de commande, le contrôle `node --check` des
+    petits modèles répond.
+14. Dans l'application empaquetée : le travail de Code qui continue quand on quitte sa
+    session, pendant une vraie préparation d'application ; « Signaler un problème » ouvert
+    pour de vrai (ticket prérempli vu sur GitHub, brouillon dans la messagerie).
+
+**Toujours ouverts, d'avant** : Linux sur une vraie machine (`.deb` et AppArmor, AppImage sur
+Fedora) ; une tâche programmée partie seule à l'heure dite ; la dictée au micro dans
+l'application ; la vidéo Wan 2.2 sur 32 Go, et la vidéo sous Windows et Linux ; le bot dans
+une vraie réunion ; une mise à jour d'un clic signée entre deux versions sur un poste
+rattaché ; `lms get` sans terminal sur un réseau lent.
+
 ### Ce qui reste à faire
 
 *Liste refaite le 25/09/2026. Ce qui est fait est décrit plus haut ;
@@ -2793,9 +2888,8 @@ ne restent ici que les points ouverts.*
    d'emploi de l'administrateur ; envoi SMTP et déclenchement par mail sur une
    vraie boîte (Gmail, OVH) ; Drive et Slack ; agents sur Telegram, WhatsApp,
    Discord, Slack.
-5. **Rendre le dépôt public** (AGPL) le moment venu : retirer d'abord l'adresse
-   mail personnelle du client de `src/lib/store/identity.ts` et
-   `src/data/mock/user.ts`.
+5. ~~Rendre le dépôt public~~ : **fait le 27/09/2026** (AGPL-3.0), après relecture de
+   l'historique et l'identité de repli rendue neutre (plus bas, « dépôt public »).
 
 6. **Unsloth sur NVIDIA** (§ 3.12) : accepté et branché le 25/09/2026, jamais essayé
    (pas de carte NVIDIA ici). À vérifier sur une vraie machine : que pip résout la pile
@@ -2803,26 +2897,36 @@ ne restent ici que les points ouverts.*
 7. **Sauvegarder la clé d'éditeur** (27/09/2026, SIGNATURE.md § 4) :
    `~/.helix-editeur/cle-privee-mises-a-jour.pem`, à copier hors du Mac (gestionnaire de
    mots de passe, clé USB rangée). Jamais dans le dépôt.
-8. **Essais qui restent à faire sur de vraies machines** (ajoutés les 26 et 27/09/2026) :
-   une mise à jour d'un clic signée entre deux versions sur un poste rattaché ; un employé
-   OpenClaw qui traite un vrai mail (profil restreint, web gardé) et une mission du mois ;
-   une tâche programmée partie seule à l'heure dite ; la dictée au micro dans
-   l'application ; la vidéo Wan 2.2 sur une machine de 32 Go, et la vidéo sur Windows et
-   Linux ; le parcours complet de mise en route sur un Mac sans moteur (MacBook : llmster posé
-   et démarré par Helix, puis le modèle, et la valeur de l'autorisation d'écran avant toute
-   demande) ; l'installateur Windows, jamais lancé sur un vrai PC ; le `.deb` sur un vrai
-   Ubuntu (AppArmor) et l'AppImage sur Fedora (`/tmp` en mémoire) ; `lms get` de llmster sans
-   terminal sur un réseau lent ; une vraie clé de chaque fournisseur cloud (Chat, outil,
-   image, Code), vérifiée jusqu'ici contre des faux seulement (27/09/2026, ci-dessous) ;
-   le modèle proposé à la création d'un agent sur une machine où LM Studio déclare outils
-   et tailles, et une mission d'employé sur un modèle changé ou disparu (27/09/2026, « un
-   modèle par employé », plus bas).
+8. **Essais qui restent à faire sur de vraies machines** : regroupés le 28/09/2026 dans
+   « Ce qui reste à essayer sur les postes de Medhi », plus haut.
 9. **Passer ce Mac sur Qwen3.5 9B**, le modèle qu'Helix y installerait aujourd'hui (il
    tourne encore sur Qwen3 8B, installé avant la règle) : 6 Go, à télécharger sur accord.
-10. **Abonnement ChatGPT ou Claude dans Helix** (27/09/2026, § 3.14) : Claude interdit
-    sans accord écrit d'Anthropic ; Codex permis en pilotant le programme officiel,
-    mais c'est un second moteur d'agent (§ 3.1). À décider : oui ou non pour Codex dans
-    l'écran Code, réservé à la personne qui l'a connecté.
+10. **Abonnement ChatGPT ou Claude dans Helix** (27/09/2026, § 3.14) : **décidé** par
+    Medhi (« ajoute ») et fait le même jour pour Codex, dans l'écran Code, réservé au
+    propriétaire du poste ; pas encore essayé avec le vrai programme (essai 10 de la liste
+    ci-dessus). Claude par abonnement reste exclu sans accord écrit d'Anthropic.
+
+**Fait le 28/09/2026 : la documentation remise à l'état réel.** L'aide intégrée
+(`src/lib/aide.ts`) passe à vingt articles : « Code : OpenCode ou Codex » (brancher Codex,
+ce qui part chez OpenAI, le bac à sable selon le niveau, le travail qui continue quand on
+quitte sa session), « Joindre un document au Chat » (formats, cartes, lecture en parties,
+ce qui ne se lit pas), « Mon usage : ce que coûtent vos modèles » (prix publié, tarif saisi,
+« estimé ») ; le modèle de chaque agent (choisir, changer, « Modèle indisponible »),
+« Signaler un problème », l'essai des modèles sur le poste, les notes d'Epoch AI et les
+durées ajoutés aux articles existants. Le niveau d'accord n'est plus dit « dans Réglages,
+Sécurité » (il se choisit dans la barre du bas de Cowork et de Code), et « Helix » écrit en
+dur dans l'article des agents passe par `branding.name`. Au passage : « dont … de réflexion »
+de Mon usage passait hors traduction (« dont 1 200 of thinking » en anglais), et deux
+infobulles de pièces jointes disaient « l'assistant ». ARCHITECTURE.md (ADR-062 à 068,
+carte des modules, pile, feuille de route), docs/GUIDE.md (modules, routes, variables,
+fusibles, mise à jour d'un clic), SCREENS.md, CONTRIBUTING.md (commandes de vérification)
+et l'en-tête de SECURITE.md suivent. Vérifié : `npm run typecheck`, i18n à 100 % des deux
+côtés, `npm run securite` 732 contrôles, 0 échec, `node scripts/essai-notes-modeles.mjs` et
+`node scripts/essai-source-github.mjs` tout bons ; l'aide ouverte dans le navigateur contre
+une instance jetable (liste des vingt articles, « Joindre un document au Chat » et « Code :
+OpenCode ou Codex » lus à l'écran, recherche « codex »). Pas relus à l'écran : les autres
+articles, et l'anglais et le chinois (traductions faites ici, relecture native toujours à
+faire, point 3).
 
 **Fait le 26/09/2026 : une réponse du Chat continue quand on quitte son Chat.**
 Signalé par Medhi : ouvrir un autre Chat ou en commencer un nouveau arrêtait la
@@ -4096,10 +4200,10 @@ tailles (le faux moteur n'en déclare aucun : la ligne disait « aucun des modè
 ne déclare savoir appeler des outils ») ; un vrai modèle cloud sur un employé ; une mission
 (automatisation d'OpenClaw) sur un modèle changé ou disparu, dont le compte rendu garderait le
 texte anglais d'OpenClaw ; le cas « service qui ne répond pas » avec le vrai OpenClaw.
-**Relevé, pas corrigé** : la passerelle cherche `lms` dans `~/.lmstudio/bin` et le PATH même
-quand le profil éteint LM Studio (`lmStudioMetadata`, backends.ts) ; la batterie lance donc
-`lms version`, `lms ls` et `lms ps` du poste (lecture seule, mais `lms ps` interroge le
-LM Studio en marche).
+**Relevé, puis corrigé le soir même** : la passerelle cherchait `lms` dans `~/.lmstudio/bin` et
+le PATH même quand le profil éteint LM Studio (`lmStudioMetadata`, backends.ts), et la batterie
+lançait donc `lms ls` et `lms ps` du poste. Depuis, la découverte des modèles ne lance `lms`
+que si une source LM Studio est activée (`discover`, contrôlé par `npm run securite`).
 
 **Fait le 27/09/2026 : relecture des correctifs et test d'intrusion.** Demandé par Medhi
 (« refait un tour sur les potentielles bugs … une fois le code sûr à 100 % … fais la version
@@ -4167,9 +4271,10 @@ pas de source (c'est lui la source) : il se met à jour en installant le nouveau
 
 7. **Qwen-Image** (texte lisible dans l'image) : 48 Go ou carte de 24 Go.
 8. **Machine macOS de Cowork** (Lume) : Mac de 32 Go.
-9. **Windows et Linux** : paquets construits le 27/09/2026. **Windows : rien d'essayé**
-   (installation et SmartScreen, démarrage, icône de la zone de notification, moteur,
-   Python et Node de Helix, un Chat). **Linux** : le `.deb` essayé dans un conteneur Ubuntu
+9. **Windows et Linux** : paquets construits le 27/09/2026. **Windows** : installé par Medhi
+   sur un PC sans carte graphique (moteur llmster posé par Helix, des Chats, défauts vus et
+   corrigés plus haut, sans avoir vu les correctifs marcher) ; la liste de ce qui reste à y
+   essayer est dans « Ce qui reste à essayer sur les postes de Medhi », plus haut. **Linux** : le `.deb` essayé dans un conteneur Ubuntu
    24.04 (installation, atelier, moteur, modèle, Chat, application ouverte), pas sur une
    vraie machine ; restent l'icône de la zone de notification (GNOME sans l'extension
    AppIndicator ne la montre pas), l'AppImage, images, dictée, Helix Code, machine de

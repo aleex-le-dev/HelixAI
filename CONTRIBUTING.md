@@ -39,12 +39,24 @@ Each rule fixes a defect that has already happened in this repository.
 ## Before opening a pull request
 
 ```bash
-npm run typecheck                  # interface and gateway
-npm run securite                   # the security suite, against a disposable instance
-node scripts/i18n.mjs              # interface translations: 100 %
-node scripts/i18n-passerelle.mjs   # gateway translations: 100 %
-node scripts/essai-source-github.mjs
+npm run typecheck                    # interface and gateway
+npm run securite                     # the security suite (over 730 checks), against a disposable instance;
+                                     # it also runs scripts/essai-fournisseurs.mjs (fake cloud providers)
+node scripts/i18n.mjs                # interface translations: 100 %
+node scripts/i18n-passerelle.mjs     # gateway translations: 100 %
+node scripts/essai-source-github.mjs # in-app updates from GitHub releases, macOS and Windows, offline
+node scripts/essai-notes-modeles.mjs # model scores (Epoch AI), published prices, name matching, My usage
 ```
+
+`essai-notes-modeles.mjs` needs Node 23.6 or later (or add `--experimental-strip-types`). If you
+touch the design detection or the command line, also run `npm run essai:design` and
+`npm run essai:cli`.
+
+None of these scripts needs a model, a real provider key or the network. Each gateway they start
+has a disposable data folder and keeps its data key in a file there (`"chiffrement": "fichier"`
+in its `HELIX_CONFIG`), so the data of your own installation and its keychain entry are not used. If you start a gateway yourself for a test, do the same: point `HELIX_DATA_DIR` at a
+temporary folder, `HELIX_CONFIG` at a profile containing `{"chiffrement": "fichier"}`, and use a
+port other than 8787.
 
 Describe **what you checked, and how**. "Tested" says nothing; "opened screen X, clicked Y,
 saw Z in the request" can be verified.

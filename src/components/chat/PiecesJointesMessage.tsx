@@ -42,7 +42,7 @@ export function PiecesJointesMessage({ pieces }: { pieces: PieceMontree[] }) {
             className="flex w-[220px] max-w-full items-center gap-2.5 rounded-xl border border-border bg-card px-3 py-2"
             title={
               piece.tronque
-                ? t("Trop long pour être lu en entier : seul son début (environ 200 000 caractères) est parti avec la question. Pour un long document, déposez-le dans Fichiers : l'assistant y cherche et le lit par passages.")
+                ? t("Trop long pour être lu en entier : seul son début (environ 200 000 caractères) est parti avec la question. Pour un long document, déposez-le dans Fichiers : le modèle y cherche et le lit par passages.")
                 : piece.nom
             }
           >

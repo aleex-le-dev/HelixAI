@@ -5,7 +5,8 @@
 > dans [`docs/GUIDE.md`](./docs/GUIDE.md), la sécurité dans [`SECURITE.md`](./SECURITE.md).
 > Statut : les grands choix sont arrêtés ; les points encore ouverts portent la marque ⚠.
 > Chaque ADR indique ce qui est **implémenté** et ce qui reste une intention.
-> Dernière mise à jour : 21/09/2026 (0.25.0).
+> Dernière mise à jour : 28/09/2026 (2026.928.1). ADR-062 à 068 : les ajouts des 27 et
+> 28/09/2026.
 
 ---
 
@@ -190,9 +191,15 @@ Pour l'écran Code, la passerelle localise le binaire `opencode`, écrit un
 authentifiée par le jeton d'instance), lance `opencode serve` sur la boucle locale et
 relaie sessions, prompts, interruptions et flux d'évènements.
 
-⚠ **OpenCode n'est pas empaqueté dans l'installeur.** Il doit être présent sur la machine
-(`~/.opencode/bin/opencode` ou dans le `PATH`) ; sinon l'écran Code annonce que le moteur
-est absent. Dire « OpenCode embarqué » serait inexact.
+⚠ **OpenCode n'est pas empaqueté dans l'installeur**, mais depuis le 27/09/2026 la
+passerelle le pose elle-même, en arrière-plan, quand la machine n'en a pas (OpenCode
+1.18.32, empreinte SHA-256 écrite dans `opencodePrive.ts`, `<données>/opencode/`) ; un
+OpenCode déjà présent (`HELIX_OPENCODE_BIN`, `~/.opencode/bin/opencode`, le `PATH`) est pris
+tel quel. Hors ligne, ou sur un poste rattaché, l'écran Code annonce que le moteur est absent.
+Dire « OpenCode embarqué » resterait inexact.
+
+**Exception décidée le 27/09/2026 (ADR-062) : Codex**, second moteur de l'écran Code, pour le
+seul propriétaire du poste. Il n'est l'agent d'aucune autre surface.
 
 **Conséquences.** Un moteur de plus à maîtriser, à sécuriser et à mettre à jour, pour une
 seule surface. La dépendance à son API serveur n'est **pas encore** isolée derrière une
@@ -1107,15 +1114,16 @@ Fichiers de `gateway/src/`, regroupés par rôle :
 | Rôle | Modules |
 |---|---|
 | Point d'entrée et routes | `index.ts`, `entetes.ts`, `tls.ts` |
-| Modèles | `backends.ts`, `router.ts`, `engine.ts`, `provision.ts`, `config.ts`, `deployment.ts` |
-| Boucle d'agent | `chat.ts`, `plan.ts`, `approbation.ts`, `usage.ts`, `completion.ts` |
+| Modèles | `backends.ts`, `router.ts`, `engine.ts`, `provision.ts`, `config.ts`, `deployment.ts`, `santeModeles.ts` (essai sur le poste, ADR-064), `gardeBoucle.ts` (réponse coupée en boucle) |
+| Notes et prix (ADR-065) | `notesModeles.ts` (Epoch AI), `prixPublies.ts`, `nomsModeles.ts` (correspondance des noms) |
+| Boucle d'agent | `chat.ts`, `plan.ts`, `approbation.ts`, `usage.ts`, `completion.ts`, `documentsJoints.ts` et `historique.ts` (ADR-063), `petitsModeles.ts` (ADR-064) |
 | Outils | `outils.ts`, `mcp.ts`, `connecteurs.ts`, `computer.ts`, `bureau.ts`, `atelier.ts`, `courrier.ts`, `smtp.ts`, `agenda.ts`, `dictee.ts`, `espace.ts`, `televersement.ts`, `controleWeb.ts` |
 | Équipe | `groupes.ts`, `bibliotheque.ts`, `reunions.ts` |
 | Bases de connaissances (ADR-051) | `connaissances.ts`, `decoupage.ts` (notices de licence dans `gateway/rag/`) |
 | Entraînement (ADR-053) | `entrainement.ts`, `entrainement-paquets.json` |
 | Employés | `employes.ts`, `serveurOutils.ts`, `installationOpenClaw.ts` |
-| Modèles cloud | `fournisseurs.ts` |
-| Code | `opencode.ts`, `outilsCode.ts` (connecteurs servis à OpenCode), `fluxCode.ts` (flux de l'ancienne API traduit pour les clients), `attenteModele.ts` (statut pendant que le modèle lit), `allegementCode.ts` (consignes et outils raccourcis), ADR-052 |
+| Modèles cloud | `fournisseurs.ts`, `modelesCloud.ts` (dialectes des fournisseurs) |
+| Code | `codex.ts` et `codexGarde.ts` (Codex, ADR-062), `opencode.ts`, `outilsCode.ts` (connecteurs servis à OpenCode), `fluxCode.ts` (flux de l'ancienne API traduit pour les clients), `attenteModele.ts` (statut pendant que le modèle lit), `allegementCode.ts` (consignes et outils raccourcis), ADR-052 |
 | Identité et accès | `auth.ts`, `usersession.ts`, `accounts.ts`, `totp.ts`, `authz.ts` |
 | Données et traces | `db.ts`, `secret.ts`, `audit.ts`, `export.ts`, `effacement.ts`, `debit.ts`, `roles.ts` |
 | Flux d'évènements | `flux.ts` (billets d'ouverture à usage unique) |
@@ -1127,8 +1135,11 @@ Fichiers de `gateway/src/`, regroupés par rôle :
 | Types | `types.ts` |
 
 Côté application de bureau : `electron/main.cjs`, `preload.cjs`, `miseAJour.cjs`,
-`coffre.cjs` (secrets du poste dans le trousseau du système), et le bot de réunion
-`botReunion.cjs` avec son préchargement `botPreload.cjs`.
+`sourceGithub.cjs` (publications GitHub, ADR-067), `textesMiseAJour.cjs` (messages de la
+mise à jour dans la langue de l'écran), `coffre.cjs` (secrets du poste dans le trousseau du
+système), `nomTrousseau.cjs` (macOS : la clé du trousseau au nom de « Helix », reprise de
+l'ancienne « helix-plateforme »), `pressePapiers.cjs` (copie par le processus principal,
+ADR-068), et le bot de réunion `botReunion.cjs` avec son préchargement `botPreload.cjs`.
 
 Ligne de commande (ADR-052) : `cli/helix.mjs` et ses textes `cli/textes.mjs`, essayés par
 `scripts/essai-cli.mjs`. Interface, ajouts du 25/09/2026 : `src/lib/connaissances.ts`,
@@ -1218,7 +1229,8 @@ liste ; une demande d'accord tranchée retire la sienne.
 **Décision pour l'aide.** Elle est **dans l'application**, pas sur un site : une
 plateforme qui n'a pas besoin d'Internet pour fonctionner ne doit pas en avoir besoin
 pour s'expliquer. Douze articles écrits en français dans `src/lib/aide.ts`, filtrés
-par les modules réellement livrés, cherchables sans accent ni casse. Ils décrivent ce
+par les modules réellement livrés, cherchables sans accent ni casse (vingt le 28/09/2026,
+dont Code et Codex, les documents joints au Chat, Mon usage et « Signaler un problème »). Ils décrivent ce
 que le logiciel fait **vraiment, limites comprises** — une aide qui promet plus que le
 produit fait perdre plus de temps qu'elle n'en fait gagner. S'y ajoutent l'adresse de
 support de l'intégrateur et un bouton qui copie les informations techniques (version,
@@ -1722,11 +1734,11 @@ doit jamais autoriser *« alors j'écris »*.
 | Couche | Choix retenu | État |
 |---|---|---|
 | Front | React 18 + TypeScript + Tailwind + React Router 7 | livré |
-| Enveloppe desktop | **Electron 33**, empaquetage `electron-builder` | livré |
+| Enveloppe desktop | **Electron 44.4.5** (depuis le 27/09/2026, au lieu de 33), empaquetage `electron-builder`, deux fusibles fermés (ADR-067) | livré |
 | Passerelle modèles | Service **TypeScript** exécuté par Node 22+, HTTP et SSE écrits à la main, API OpenAI-compatible | livré |
 | Inférence cluster | **exo** (MLX, RDMA TB5), interrogé par la passerelle sur `:52415` | découverte et routage écrits ; aucun pilotage du cycle de vie des modèles |
 | Inférence poste | **LM Studio** (`lms`), cycle de vie complet piloté par la passerelle | livré |
-| Agent de code | **OpenCode** en mode serveur | livré, **non empaqueté** |
+| Agent de code | **OpenCode** en mode serveur ; **Codex** (`codex exec --json`) au choix du propriétaire du poste | OpenCode livré, non empaqueté mais posé par la passerelle ; Codex jamais installé par Helix, pas essayé avec le vrai programme |
 | Protocole outils | **SDK MCP TypeScript** (`@modelcontextprotocol/sdk`) | livré |
 | Outils internes | `@modelcontextprotocol/server-filesystem`, lancé par `npx` | livré, seul serveur par défaut |
 | Employés | **OpenClaw** 2026.9.4 (MIT), instance dédiée pilotée par la passerelle | livré ; installé et mis à jour depuis l'interface, avec retour arrière |
@@ -1758,7 +1770,7 @@ nous écrivons et doivent être contrôlées une par une :
 
 ## 6. Correspondance écrans → moteurs
 
-État au 15/09/2026 (0.21.0).
+État au 15/09/2026 (0.21.0), relu le 28/09/2026 (2026.928.1).
 
 | Écran | Moteur | État |
 |---|---|---|
@@ -1769,8 +1781,8 @@ nous écrivons et doivent être contrôlées une par une :
 | Panneau Cowork, cartes Compétences et Connecteurs | État réel des serveurs MCP et de leurs outils | ✅ branché en lecture ; « Créer une compétence » désactivé et marqué « bientôt » |
 | Cowork « Approuver pour moi » | Niveau d'approbation de l'instance | ✅ branché |
 | Cowork « Préparer Cowork », documents | Atelier bureautique, outils `bureau__…` | ✅ branché |
-| Code | OpenCode en mode serveur | ✅ branché |
-| Agents (création, mise en service, fiche) | Configurations d'agents, employés OpenClaw, installation et mise à jour d'OpenClaw | ✅ branché |
+| Code | OpenCode en mode serveur ; Codex pour le propriétaire du poste (ADR-062) | ✅ branché ; Codex vérifié avec un faux `codex` seulement |
+| Agents (création, mise en service, fiche) | Configurations d'agents, employés OpenClaw, installation et mise à jour d'OpenClaw ; un modèle par employé (ADR-066) | ✅ branché |
 | Tâches (Kanban, statuts, échéances) | Exécution par un agent, avancement automatique ; actions d'une réunion | ✅ branché |
 | Bibliothèque | `bibliotheque.ts`, contenus chiffrés, recherche dans le texte | ✅ branché |
 | Réunions | `reunions.ts`, Whisper, compte rendu, bot `botReunion.cjs` | ✅ branché ; bot pas encore éprouvé dans Google Meet |
@@ -1782,11 +1794,12 @@ nous écrivons et doivent être contrôlées une par une :
 | Paramètres → Personnalisation de l'IA | Profil privé, injecté dans le message système | ✅ branché |
 | Paramètres → Bot Recorder | Réglages des réunions et du bot | ✅ branché |
 | Paramètres → Connecteurs | Courrier IMAP (lecture, brouillons) et envoi SMTP (accord à chaque mail), agenda CalDAV, Drive, Slack, catalogue MCP | ✅ branché |
-| Paramètres → Modèles cloud, Mon usage | Clés de fournisseurs ; compteurs mesurés de la passerelle | ✅ branché |
+| Paramètres → Modèles cloud, Mon usage | Clés de fournisseurs ; compteurs mesurés de la passerelle, tarif saisi ou prix publié (ADR-065) | ✅ branché ; prix publiés pas encore vus avec une vraie clé |
+| Paramètres → Signaler un problème | Aucun : ticket GitHub ou mail préparés sur le poste (ADR-068) | ✅ branché ; ouverture dans l'application de bureau pas essayée |
 | Paramètres → Contrôle de l'écran | Diagnostic, activation, essai de capture | ✅ branché |
 | Paramètres → API développeur | `/helix/cles-api` ; clés reçues sur `/v1/models` et `/v1/chat/completions` (ADR-055) | ✅ branché |
-| Paramètres → Installer les apps | Liens de version | ⚠ téléchargement direct annoncé « bientôt » |
-| Barre latérale → Notifications, Aide | aucun | ❌ grisés, annoncés « bientôt » |
+| Paramètres → Installer les apps | Application macOS servie par l'instance (`telechargement.ts`), onglet CLI | ✅ branché ; Windows et Linux renvoyés au paquet du prestataire, pas d'application mobile |
+| Barre latérale → Notifications, Aide | `lib/notifications.ts`, `lib/aide.ts` (ADR-034) | ✅ branché |
 
 ---
 
@@ -1938,6 +1951,56 @@ Pour Code, la passerelle sert elle-même ses connecteurs à OpenCode, par MCP, s
 
 **Conséquences.** Le modèle lit toujours les instructions masquées (limite dite à l'écran). Un poste d'une version antérieure, sans `base`, garde l'ancien comportement.
 
+### ADR-062 : Codex, second moteur de l'écran Code, pour le seul propriétaire du poste ✅ implémenté, pas essayé avec le vrai Codex (27/09/2026)
+
+**Contexte.** Medhi : un abonnement ChatGPT ou Claude dans Helix (PROJET.md § 3.14). Claude par abonnement est exclu sans accord écrit d'Anthropic. Codex est permis en pilotant le programme officiel d'OpenAI, pour la personne qui l'a connecté, et pour elle seule.
+
+**Décision.** `gateway/src/codex.ts` (détection par `HELIX_CODEX_BIN` puis les emplacements connus, jamais sous `~/.codex` ; connexion par `codex login` ; tâches par `codex exec --json`, reprise par `resume`) et `gateway/src/codexGarde.ts` (qui, quel bac à sable, conversion du flux JSONL en évènements de l'écran Code, `fluxCode.ts`). Réservé, à chaque route, à l'administrateur d'une installation de bureau (`HELIX_BUREAU`, posée par `electron/main.cjs`), instance non partagée, par la boucle locale, sans clé d'API ni jeton dans l'adresse. Bac à sable jamais plus large que le niveau d'approbation (`workspace-write` sans réseau, `read-only`, ou refus) ; jamais `danger-full-access`. Interface : `MoteurCode.tsx` sur la ligne du dossier, `useCodex.ts`, `src/lib/codex.ts`. Garde détaillée : SECURITE.md § 30.
+
+**Conséquences.** Un second moteur d'agent, contre ADR-003, borné à une surface et à une personne. Ce que Codex fait ne passe pas par la barrière d'approbation de Helix, et l'écran le dit. Pas faits : les sessions de Codex dans la liste de Code, sa consommation, les limites de l'abonnement. Vérifié avec `scripts/faux-codex.mjs` ; le vrai programme et un vrai compte, jamais.
+
+### ADR-063 : Documents joints mesurés, conversation tenue dans sa place ✅ implémenté (27/09/2026)
+
+**Contexte.** Vu par Medhi sur un PC Windows sans carte graphique : un petit modèle « incapable de lire un document », puis des réponses « qui n'ont rien à voir ». Le texte du fichier partait collé à la question, sans mesure ; le découpage en étapes perdait le document et la conversation ; LM Studio coupait lui-même ce qui dépassait.
+
+**Décision.** `gateway/src/documentsJoints.ts` : chaque fichier arrive balisé (`<document nom=… caracteres=…>`), mesuré contre la taille de conversation réellement chargée (`contexteDuModele`, backends.ts) ; en entier s'il tient, sinon lu en parties (24 au plus) dont les notes servent à la réponse ; annonce en tête de la réponse ; jamais de découpage en étapes avec un document. `gateway/src/historique.ts` : au-delà de la place, Helix retire les plus anciens échanges, un tour entier à la fois, jamais la consigne ni la question, et le dit ; les étapes d'un plan reçoivent les derniers échanges et la demande mot pour mot. Interface : cartes des pièces jointes (`PiecesJointesMessage.tsx`, champ `pieces` du message, sans contenu), documents gardés pour la question suivante tant que le Chat est ouvert (`useChat.ts`), décodage UTF-16 et Windows-1252 (`src/lib/decodage.ts`).
+
+**Conséquences.** Seulement quand la taille chargée est connue : un cluster exo ou un grand modèle distant sans taille publiée n'est pas raccourci sur une supposition. Vérifié contre un faux modèle ; pas avec un vrai petit modèle sur le PC où le défaut a été vu.
+
+### ADR-064 : Un essai de chaque modèle sur le poste, et une couche d'aide aux petits modèles ✅ implémenté (27/09/2026)
+
+**Contexte.** Qwen3.5 4B répondait « 不 時////// » au processeur sous Windows, et juste sur un Mac. Décidé par Medhi : « ça doit fonctionner en fonction des PC », et un modèle de 2 ou 3 milliards doit bien coder avec l'aide de Helix.
+
+**Décision.** `gateway/src/santeModeles.ts` : après chaque chargement par la mise en route, et au premier chargement par le Chat, « Réponds seulement : bonjour » ; vide, en boucle ou illisible, le modèle est noté défaillant (`modeles-sur-cette-machine.json`, dossier des données), déchargé, et le suivant est essayé ; deux réponses coupées en cours d'usage font de même. Un modèle défaillant n'est plus choisi d'office ni en « Auto », il reste choisissable à la main. `gateway/src/petitsModeles.ts` : pour tout modèle, appels d'outils cassés réparés (nom, JSON, paramètres, appels écrits dans le texte ou la réflexion) et syntaxe vérifiée après chaque écriture, avec deux relances au plus ; pour un modèle de 8,5 milliards ou moins, sept outils de fichiers, une consigne courte avec deux exemples, lecture exigée avant de réécrire, et l'agent `helix-petit` d'OpenCode.
+
+**Conséquences.** Un modèle noté défaillant le reste même si le moteur se corrige (le redemander à la mise en route, ou effacer le fichier). Aucun vrai petit modèle n'a tourné avec la couche : seul un faux modèle qui fait exprès les erreurs l'a éprouvée.
+
+### ADR-065 : Notes sous licence ouverte, prix publiés des fournisseurs ✅ implémenté (27/09/2026)
+
+**Contexte.** Les notes du graphique « Comparer les modèles » venaient d'un relevé commercial dont les conditions interdisent de reprendre les données. Décision de Medhi : « source ouverte » (PROJET.md § 3.15).
+
+**Décision.** `gateway/src/notesModeles.ts` : l'indice ECI d'Epoch AI (CC BY 4.0), 217 modèles sortis depuis 2024, valeurs publiées telles quelles, attribution sous le graphique. `gateway/src/prixPublies.ts` : 211 lignes relevées le 27/09/2026 sur les pages de prix officielles (tarif standard, contexte court). `gateway/src/nomsModeles.ts` : correspondance des identifiants sans ressemblance partielle, un nom ambigu ne désigne rien. Mon usage (`usage.ts`) applique le prix publié par le fournisseur d'un modèle sans tarif saisi, le marque estimé avec la date du relevé et le lien ; un tarif saisi l'emporte ; totaux par devise. L'installation (`provision.ts`) met un modèle noté devant un modèle sans note.
+
+**Conséquences.** Les plus petits modèles n'ont pas de note publiée, et l'écran le dit au lieu d'en inventer une. Vérifié par `node scripts/essai-notes-modeles.mjs` ; les identifiants que rend chaque vrai fournisseur n'ont pas été vus (seulement ceux de leur documentation).
+
+### ADR-066 : Un modèle par employé, servi à chacun de ses appels ✅ implémenté (27/09/2026)
+
+**Décision.** Choisi à la création d'un agent (« Son modèle », proposé selon le poste par `proposerModele`, `src/lib/employes.ts`) et gardé à part (`Agent.modeleEmploye`), changé dans ses Réglages. La passerelle refuse (400) un modèle qu'elle ne sert pas à cette personne, et sert chaque appel d'un employé (`X-Helix-Employe` et sa clé) avec le modèle enregistré, quel que soit celui que la requête nomme ; modèle disparu : 404 `model_not_found`, rien ne part au moteur (un 503 ferait réessayer OpenClaw huit fois).
+
+**Conséquences.** Vérifié avec le vrai OpenClaw 2026.9.4 (rechargement à chaud de la seule partie de l'employé changé) et un faux moteur. Pas vérifiés : un vrai modèle cloud sur un employé, une mission sur un modèle changé ou disparu, la proposition sur une machine où LM Studio déclare outils et tailles.
+
+### ADR-067 : Mises à jour d'un clic depuis GitHub, et sous Windows ; fusibles d'Electron ✅ implémenté, Windows pas essayé sur un vrai PC (27/09/2026)
+
+**Décision.** Un poste installé seul lit les publications GitHub du dépôt (`electron/sourceGithub.cjs`, `depotMisesAJour` de `package.json`), après le serveur de l'agence et l'instance du poste rattaché. Le manifeste `helix-mise-a-jour.json` (`scripts/manifeste-mise-a-jour.mjs`) décrit l'archive macOS et, signé par la clé de l'éditeur, l'installateur Windows ; le poste vérifie taille, SHA-512 et signature avec la clé de l'application qui tourne, puis installe (macOS) ou lance l'installateur NSIS en silence (Windows). Sous Windows, la clé publique est posée dans `resources\cle-editeur.pem` par l'étape `afterPack` (`scripts/signature/cle-windows.cjs`). Linux garde « Télécharger ». Le paquet ferme les fusibles `EnableNodeOptionsEnvironmentVariable` et `EnableNodeCliInspectArguments` (`build.electronFuses`) ; RunAsNode reste ouvert pour la passerelle et la ligne de commande. `HELIX_SANS_MISE_A_JOUR=1` : rien n'est contacté.
+
+**Conséquences.** Les postes Windows installés avant 2026.927.3 n'ont pas la clé : « Télécharger » une fois encore. Les fusibles n'ont pas été relus sur un paquet fabriqué, et l'installation silencieuse sous Windows n'a jamais tourné sur un vrai PC (SECURITE.md §§ 29.11 et 31).
+
+### ADR-068 : Deux boutons qui disent vrai : copier, signaler ✅ implémenté (27/09/2026)
+
+**Décision.** Toute copie passe par `src/lib/pressePapiers.ts` : dans l'application, par un canal du processus principal (`electron/pressePapiers.cjs` : du texte seulement, deux millions de caractères au plus, depuis la fenêtre de l'application seulement) ; « Copié » n'est dit que si c'est vrai, sinon le texte s'affiche sélectionné. « Signaler un problème » (`SignalerProbleme.tsx`, `src/lib/signalement.ts`) prépare un ticket GitHub ou un mail, montre le texte exact, et n'envoie rien : aucun jeton GitHub dans l'application, publique comme son dépôt.
+
+**Conséquences.** Vérifiés dans une fenêtre Electron 44 et dans le navigateur ; pas sur un vrai Windows ou Linux, et l'ouverture réelle d'un ticket ou d'un mail depuis l'application de bureau n'a pas été essayée.
+
 ## 7. Roadmap
 
 | Phase | Contenu | État |
@@ -1945,17 +2008,18 @@ Pour Code, la passerelle sert elle-même ses connecteurs à OpenCode, par MCP, s
 | **0 — Socle** | Enveloppe desktop, empaquetage, magasin de données | ✅ Electron, `electron-builder`, magasin JSON chiffré ou PostgreSQL. ❌ pas d'interface `AgentRuntime` |
 | **1 — Chat réel** | Passerelle (rôles, SSE), backends, provisionnement automatique, historique, compteurs d'usage | ✅ tout, compteurs mesurés compris. ❌ pas de bascule automatique entre backends |
 | **2 — Outils** | Gestionnaire MCP, catalogue de connecteurs, boucle d'outils, approbation | ✅ ❌ OAuth Microsoft 365 |
-| **3 — Code** | OpenCode en mode serveur | ✅ ❌ OpenCode n'est pas empaqueté |
+| **3 — Code** | OpenCode en mode serveur | ✅ OpenCode posé par la passerelle, Codex au choix du propriétaire (ADR-062). ❌ OpenCode n'est pas dans l'installeur |
 | **4 — Agents & Tâches** | Agents mis en service sur OpenClaw, missions, canaux, déclencheurs | ✅ ❌ agents métiers prêts à l'emploi |
 | **5 — Cowork** | Outils fichiers, approbations, contrôle d'écran, bureautique | ✅ ❌ sandbox d'exécution des outils, journal rejouable |
 | **6 — Équipe** | Groupes, bibliothèque, réunions | ✅ ❌ bot éprouvé dans une vraie réunion, Teams et Zoom |
-| **7 — Industrialisation** | Rebranding, mises à jour, documentation, licence | ✅ profil de déploiement, éditions, TLS, audit, mise à jour. ❌ **signature et notarisation**, **licence du projet** |
+| **7 — Industrialisation** | Rebranding, mises à jour, documentation, licence | ✅ profil de déploiement, éditions, TLS, audit, mise à jour d'un clic signée par l'éditeur (macOS, Windows), licence AGPL-3.0. ❌ **signature et notarisation** |
 
 **Ce qui reste sur le chemin critique**, par ordre d'importance :
 
-1. **Licence du projet** : HelixAI se veut open source, aucune licence n'est encore
-   posée (PROJET.md § 3.9).
-2. **Signature et notarisation** du paquet.
+1. **Signature et notarisation** du paquet. (La licence du projet, qui était le premier
+   point, est posée : AGPL-3.0, `LICENSE`, `COPYRIGHT.md`.)
+2. **Windows essayé sur un vrai PC** : installation, mise à jour d'un clic, modèles au
+   processeur seul (PROJET.md, « Ce qui reste à essayer sur les postes de Medhi »).
 3. **Bot de réunion** éprouvé dans une vraie réunion Google Meet.
 4. **OAuth Microsoft 365** pour le courrier.
 
@@ -1994,7 +2058,7 @@ Pour Code, la passerelle sert elle-même ses connecteurs à OpenCode, par MCP, s
    raisonnement, pas mesurés.
 6. ~~Licences de LM Studio et des poids~~ : **tranché le 14/09/2026** (PROJET.md
    § 3.9) : chaque organisation installe HelixAI pour elle-même, ce que LM Studio
-   autorise ; la licence du projet lui-même reste à choisir.
+   autorise. La licence du projet lui-même est choisie depuis : AGPL-3.0.
 
 ---
 

@@ -335,7 +335,7 @@ export function Usage() {
                             className="block text-[11px] text-muted-foreground"
                             title={t("Part de la sortie passée à raisonner avant de répondre")}
                           >
-                            dont {jetons(m.raisonnement)}{" "}{t("de réflexion")}
+                            {tf("dont {0} de réflexion", jetons(m.raisonnement))}
                           </span>
                         )}
                       </td>

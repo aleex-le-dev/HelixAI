@@ -1,7 +1,8 @@
 # Inventaire des écrans
 
-État au 04/09/2026. Ce document liste les écrans **réellement livrés**, route par
-route, et dit pour chacun **ce qui fonctionne et ce qui est une maquette**.
+État au 04/09/2026, tenu à jour depuis ; relu le 28/09/2026 (2026.928.1). Ce document
+liste les écrans **réellement livrés**, route par route, et dit pour chacun **ce qui
+fonctionne et ce qui est une maquette**.
 
 Il remplace l'inventaire de cadrage rédigé en juillet 2026 à partir des 45
 captures de référence (`screenshots/`, gardées sur le poste de Medhi et hors du dépôt depuis le 25/09/2026 : elles montrent un autre produit). Cet inventaire décrivait ce qu'il fallait
@@ -96,6 +97,28 @@ par « Auto », « Rapide » ni « Approfondi ». Dans le fil, le message de cou
 « Si cela se reproduit, … ne sera plus choisi d'office sur cette machine. », puis, à la
 deuxième, quel modèle répondra ensuite en « Auto ». **Pas vu à l'écran** (typecheck et
 batterie seulement).
+
+**Pièces jointes lues par tout modèle (27/09/2026)** : le composeur montre « Lecture de … »
+et n'envoie qu'une fois les fichiers lus. Dans le message envoyé, une carte par fichier
+(`PiecesJointesMessage.tsx`) : icône du type, nom, poids, « lu en entier », « début
+seulement » (l'infobulle dit pourquoi et renvoie à Fichiers) ou « image » ; les cartes
+restent avec le Chat rouvert. Quand un document ne tient pas dans la place du modèle, la
+réponse l'annonce en tête (« … a été lu en 5 parties, et la réponse s'appuie sur les notes
+prises sur chacune », ou « seules les 24 premières… ») et le fil suit la lecture (« Lecture
+de « … » : partie 2 sur 5... »). Un Chat long dont les premiers messages n'ont pas été relus
+le dit aussi en tête de la réponse. Vu dans le navigateur contre une instance jetable et un
+faux modèle (cartes, CSV en UTF-16, lecture en 5 parties) ; pas avec un vrai modèle.
+
+**Durées (27/09/2026)** : « Réflexion : 12 s » sur le bloc de raisonnement, la durée de
+chaque étape d'outil, et sous la réponse « Réponse en 1 min 04 s · premier mot après 3 s »,
+gardées avec le Chat.
+
+**Comparer intelligence et prix** (bas du sélecteur de modèles, `ComparerModeles.tsx`,
+27/09/2026) : fenêtre « Comparer les modèles », nuage de points note ECI d'Epoch AI face au
+prix de sortie publié par l'éditeur (échelle logarithmique), ou tableau. Tous les modèles
+de la personne y figurent : un point, la bande « Sur votre machine » (sans frais d'API), la
+bande « Cloud, prix non relevé », ou la liste « Pas de note publiée par Epoch AI pour : ».
+Sous le graphique, la source, sa licence (CC BY 4.0), le lien et la date des relevés.
 
 Ce qui reste fictif sur cet écran :
 
@@ -221,8 +244,9 @@ l'enchaînement d'office, le texte du membre.
 **Moteur : OpenCode ou Codex** (27/09/2026, `src/components/code/MoteurCode.tsx`,
 `useCodex`, `src/lib/codex.ts` ; PROJET.md § 3.14). Pour le **seul propriétaire du
 poste** (administrateur d'une installation de bureau non partagée ; la passerelle
-le décide), une puce « OpenCode » / « Codex » dans la ligne d'outils de la saisie,
-à côté du niveau d'approbation. Le menu propose « OpenCode (modèles de …) », par
+le décide), une puce « OpenCode » / « Codex » sur la ligne du dossier, à côté du choix
+du dossier (d'abord dans la barre de saisie, déplacée le 27/09/2026 : les libellés s'y
+coupaient). Changer de moteur ouvre une conversation neuve. Le menu propose « OpenCode (modèles de …) », par
 défaut, et « Codex (votre compte ChatGPT) », grisé tant que Codex n'est pas prêt ;
 dessous, l'état : absent (commande officielle à copier, `npm install -g
 @openai/codex`, et `brew install --cask codex` sur Mac ; Helix ne l'installe pas),
@@ -240,8 +264,9 @@ fichiers écrits ou modifiés, liste de tâches) ; le bouton d'arrêt arrête Co
 conversation continue (reprise de la session Codex) tant que l'écran reste ouvert ;
 les sessions de Codex ne vont pas dans la barre latérale ; quitter l'écran arrête
 une tâche en cours. Le choix du moteur est retenu sur le poste. Un membre, un poste
-rattaché, une instance partagée ne voient pas la puce. **Pas vu à l'écran**
-(typecheck et batterie seuls) : ni dans le navigateur, ni dans l'application.
+rattaché, une instance partagée ne voient pas la puce. Vu dans le navigateur le
+27/09/2026 contre une passerelle jetable et un faux `codex` (choix du moteur, connexion) ;
+pas avec le vrai programme, ni dans l'application de bureau.
 
 ### `/projets` Projets
 
@@ -364,8 +389,11 @@ code affiché, à scanner depuis le téléphone), Discord, Slack, Mattermost, vo
 
 **Paramètres, Modèles cloud** (0.12.0, `src/components/settings/ModelesCloud.tsx`) :
 brancher la clé d'un fournisseur (Mistral, Scaleway, OVHcloud, IONOS, OpenAI,
-Anthropic, Google, OpenRouter, ou une adresse compatible OpenAI), la vérifier, choisir
-les modèles à proposer, pour soi ou pour l'équipe. Le sélecteur de modèle du Chat
+Anthropic, Google, OpenRouter, et depuis le 27/09/2026 Groq, DeepSeek, xAI, Together AI,
+ou une adresse compatible OpenAI), la vérifier, choisir les modèles à proposer, pour soi
+ou pour l'équipe. Les refus d'un fournisseur (clé, crédit, quota, modèle retiré, service
+surchargé) sont dits avec son nom et quoi faire ; vérifié contre de faux fournisseurs
+seulement (`scripts/essai-fournisseurs.mjs`), pas avec de vraies clés. Le sélecteur de modèle du Chat
 range les modèles par origine (sur vos machines, fournis par votre prestataire, vos
 clés, clés de l'équipe) et affiche le pays de chaque modèle cloud.
 
@@ -488,7 +516,7 @@ la fiche d'une réunion.
 `src/components/settings/SettingsShell.tsx` pour la navigation,
 `src/pages/ParametresPages.tsx` pour les pages. Quinze entrées, toutes atteignables
 (seize avec Abonnement, éteint en marque blanche), relevées dans `SettingsShell.tsx`
-le 25/09/2026.
+le 28/09/2026 (« Signaler un problème », la dernière, depuis le 27/09/2026).
 
 | Route | Écran | État |
 |---|---|---|
@@ -507,7 +535,7 @@ le 25/09/2026.
 | `/parametres/api` | API développeur | ✅ **fonctionne** (26/09/2026) : clés d'API personnelles et documentation |
 | `/parametres/usage` | Mon usage | ✅ **fonctionne** |
 | `/parametres/confidentialite` | Confidentialité | ✅ **fonctionne** |
-| `/parametres/apps` | Installer les apps | ❌ **maquette** |
+| `/parametres/apps` | Installer les apps | ✅ **fonctionne** pour l'application macOS servie par l'instance et l'onglet CLI ; Windows et Linux renvoyés au paquet du prestataire ; pas d'application mobile, et l'onglet le dit |
 | `/parametres/signaler` | Signaler un problème | ✅ **fonctionne dans l'interface de développement** (27/09/2026) : ticket GitHub ou mail préremplis ; ouverture dans l'application de bureau pas essayée |
 
 ### Détail
@@ -531,14 +559,17 @@ dont la bascule au coucher du soleil calculée sur le poste. ✅ **Dates et
 heures** : formats européen, américain ou ISO, 24 ou 12 heures, appliqués
 partout où une date s'affiche (journal d'audit, séances, tâches, usage,
 connecteurs, heures du soleil). Le choix suit la personne, pas le poste
-(`src/lib/formats.ts`). La langue n'offre plus de faux choix : l'interface est
-en français. ✅ **À propos** : version installée et mise à jour réelle
-(`MiseAJour.tsx`, depuis 0.10.0). Sept états, dont « aucune adresse de mise à jour
-n'est inscrite » (rien n'est contacté), « aucune version plus récente (vérifié
-le …) », « version X disponible » avec lien vers le paquet quand l'application n'est
-pas signée, barre de téléchargement, puis « Redémarrer pour installer » quand elle
-l'est. Le régime, automatique ou manuel, est toujours dit. Dans un navigateur, la
-carte n'affiche que la version.
+(`src/lib/formats.ts`). ✅ **Langue** (0.25.0, `ChoixLangue.tsx`) : français, anglais,
+chinois, pour ce poste ; la page se recharge. ✅ **À propos** : version installée et mise
+à jour réelle (`MiseAJour.tsx`, depuis 0.10.0). États, dont « aucune adresse de mise à
+jour n'est inscrite » (rien n'est contacté), « aucune version plus récente (vérifié
+le …) », « version X disponible » avec **« Installer maintenant »** quand l'archive (macOS)
+ou l'installateur (Windows, depuis le 27/09/2026) porte une signature de l'éditeur valide,
+« Télécharger » sinon (Linux, ou partie Windows absente), barre de téléchargement, puis
+« Redémarrer pour installer » quand l'application est signée par Apple. La source est dite
+(serveur du prestataire, instance, ou publications GitHub, toutes les six heures), et le
+régime, automatique ou d'un clic. Le clic sous Windows n'a jamais tourné sur un vrai PC.
+Dans un navigateur, la carte n'affiche que la version.
 
 **Sécurité** (capture 34). ✅ La carte **Postes et activité**
 (`SeancesEtJournal`) fonctionne : séances ouvertes du compte, révocation une par
@@ -636,7 +667,8 @@ les commandes de son catalogue — jamais une commande venue de cet écran.
 
 Pièces jointes du Chat (0.18.0) : un fichier texte de toute taille est accepté, sa
 puce porte « (début) » quand seul le début est lu (l'infobulle dit pourquoi et
-renvoie à la Bibliothèque) ; une photo lourde est réduite au lieu d'être refusée.
+renvoie à Fichiers) ; une photo lourde est réduite au lieu d'être refusée. Depuis le
+27/09/2026, le message envoyé porte une carte par fichier (§ 3, Chat).
 
 Dans le Chat, la puce **Outils** est retenue d'un Chat à l'autre (0.17.0), et les
 traces d'outils disent l'action en français (« Envoi d'un mail », « Lecture d'un
@@ -675,10 +707,18 @@ et les limites (60 requêtes par minute, 20 clés). Vu dans le navigateur le
 
 **Mon usage** (captures 41 et 42). ✅ Données réelles : requêtes, jetons
 d'entrée et de sortie (dont ceux de raisonnement), courbe par jour, table par
-modèle, sur quatre périodes. Coût « gratuit » pour un modèle local, calculé pour
-un modèle distant dont le tarif est renseigné, « tarif non renseigné » sinon.
-Chacun ne voit que sa propre consommation. L'ancien écran affichait un budget,
-une courbe et un modèle qui n'avaient jamais existé.
+modèle, sur quatre périodes. Coût « Gratuit » pour un modèle local ; pour un modèle
+distant, le **tarif saisi** (« tarif saisi », il l'emporte toujours), sinon, depuis le
+27/09/2026, le **prix publié** par son fournisseur : le montant suivi de « (estimé) », et
+dessous « prix publié par {fournisseur}, relevé du {date} » avec « Voir la page » ;
+l'infobulle dit que le cache, les lots et les paliers gratuits n'y sont pas. Sans l'un ni
+l'autre, « Tarif non renseigné », jamais compté à zéro, et le total dit « (incomplet) ».
+Totaux par devise, sans conversion (« 1,20 $ + 0,30 € ») ; tarifs illisibles : l'écran le
+dit et n'écrit rien par-dessus. Plus bas, « Tarifs des modèles distants » : entrée,
+sortie, devise (euro ou dollar), « Enregistrer », « Retirer ». Chacun ne voit que sa propre
+consommation. L'ancien écran affichait un budget, une courbe et un modèle qui n'avaient
+jamais existé. Relevé, pas corrigé : la table montre l'identifiant technique du modèle
+(`cle-…/…`). Prix publiés pas encore vus avec une vraie clé.
 
 **Confidentialité** (captures 43 et 44). ✅ « Télécharger mes données » produit
 l'export RGPD réel (`GET /helix/export`, SECURITE.md § 7.1) : un fichier JSON
@@ -688,8 +728,12 @@ documents, réunions et retours, qui n'existent pas. Le droit à l'effacement
 renvoie au délégué : l'écran affirmait qu'on supprimait son compte depuis le
 profil, ce qui n'existe pas. L'adresse du DPO vient de `branding.ts`.
 
-**Installer les apps** (capture 45). ⚠ Les boutons « Télécharger pour … » sont
-grisés et le disent (« bientôt disponible »), l'onglet Mobile aussi. L'onglet
+**Installer les apps** (capture 45). ✅ Onglet Desktop : l'instance sert l'application
+macOS qu'elle fait tourner (« Télécharger », taille, puis « Au premier lancement » : ouvrir
+le .zip, glisser dans Applications, clic droit puis Ouvrir tant que l'application n'est pas
+signée par Apple) ; pour Windows et Linux, l'écran dit que l'instance ne sert que
+l'application macOS et renvoie au paquet du prestataire. L'onglet Mobile est grisé
+(« Pas d'application mobile pour l'instant. »). L'onglet
 **CLI** (25/09/2026, `LigneDeCommande.tsx`) est actif dans l'application de bureau :
 « Mettre en place » pose `~/.local/bin/helix` (et une ligne marquée dans
 `~/.zprofile` si ce dossier manque au PATH), « Mettre à jour » quand le lanceur vise
@@ -697,8 +741,9 @@ une autre copie de l'application, « Retirer » enlève les deux ; suivent les
 commandes pour commencer. Dans un navigateur, l'onglet le dit au lieu d'offrir un
 bouton. Le
 lien « Voir toutes les versions » mène à l'URL de `branding.ts`. Seule
-l'application macOS est construite et éprouvée ; Windows et Linux figurent dans la
-configuration d'empaquetage sans avoir jamais été construits, et l'écran le dit.
+l'application macOS est éprouvée sur une vraie machine ; les paquets Windows et Linux
+sont construits depuis le 27/09/2026, jamais installés sur un vrai PC (le `.deb` l'a été
+dans un conteneur Ubuntu).
 
 ---
 
@@ -1075,8 +1120,10 @@ jour de l'application, mise à jour du moteur des agents, accord attendu, tâche
 terminée ou en échec, chat partagé. Un clic ouvre l'écran concerné et marque l'entrée
 lue. Rien n'est inventé : chaque entrée vient d'une source déjà en place.
 
-**Le « ? » ouvre l'aide (0.22.0)** : douze articles en français, cherchables sans
-accent ni casse, écrits pour dire ce que le logiciel fait vraiment, limites comprises.
+**Le « ? » ouvre l'aide (0.22.0)** : vingt articles le 28/09/2026 (dont « Code :
+OpenCode ou Codex », « Joindre un document au Chat », « Mon usage : ce que coûtent vos
+modèles », le modèle de chaque agent et « Signaler un problème »), traduits comme le
+reste de l'interface, cherchables sans accent ni casse, écrits pour dire ce que le logiciel fait vraiment, limites comprises.
 Tout est embarqué : l'aide fonctionne sans Internet. En pied de fenêtre, l'adresse de
 support de l'intégrateur, le lien vers son site, et un bouton qui copie les
 informations techniques (version, cadre d'exécution, adresse d'instance, système) —
@@ -1196,15 +1243,18 @@ Reprises ici avec ce qui a été tranché.
 
 ## 9. Récapitulatif pour un client
 
-**Ce qui est livré et fonctionne** : Chat, Cowork, Code, Projets, Agents,
-Bibliothèque, Réunions, Groupes, Tâches, et dans les paramètres : Profil (photo
-comprise), Préférences, Sécurité (postes, journal, double authentification),
-Personnalisation de l'IA, Bot Recorder, Connecteurs, Modèles cloud, Contrôle de
-l'écran, API développeur (clés d'API, depuis le 26/09/2026), Mon usage,
-Confidentialité (export RGPD).
+**Ce qui est livré et fonctionne** : Chat, Cowork, Code (OpenCode, et Codex pour le
+propriétaire du poste), Projets, Agents, Bibliothèque, Réunions, Groupes, Tâches, et
+dans les paramètres : Profil (photo comprise), Préférences, Sécurité (postes, journal,
+double authentification), Personnalisation de l'IA, Bot Recorder, Connecteurs, Modèles
+cloud, Entraîner un modèle (Mac), Contrôle de l'écran, API développeur (clés d'API,
+depuis le 26/09/2026), Mon usage (prix publiés depuis le 27/09/2026), Confidentialité
+(export RGPD), Installer les apps (macOS et CLI), Importer depuis d'autres IA, Signaler
+un problème.
 
-**Ce qui est annoncé « bientôt » et le dit à l'écran** : le téléchargement direct
-dans Installer les apps, « Créer une compétence ».
+**Ce qui est annoncé et le dit à l'écran** : pas d'application mobile ; Abonnement sans
+paiement branché. (« Créer une compétence » et le téléchargement direct, longtemps
+« bientôt », fonctionnent.)
 
 **À éprouver avant de le promettre** : le bot de réunion dans une vraie réunion
 Google Meet (il l'a été face à une réunion simulée).

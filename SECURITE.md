@@ -1,17 +1,42 @@
 # Sécurité de Helix
 
-État au 21/09/2026 (0.25.0). Ce document dit ce qui est protégé, **et ce qui ne l'est
-pas**. Chaque affirmation renvoie au fichier qui la porte, pour qu'un auditeur
-puisse la vérifier lui-même plutôt que de nous croire.
+État au 28/09/2026 (2026.928.1 ; `npm run securite` : 732 contrôles, 0 échec). Ce
+document dit ce qui est protégé, **et ce qui ne l'est pas**. Chaque affirmation renvoie
+au fichier qui la porte, pour qu'un auditeur puisse la vérifier lui-même plutôt que de
+nous croire.
 
-La dernière passe complète, ses vingt-trois trouvailles et ce qui en restait ouvert
+La passe complète du 18/09/2026, ses vingt-trois trouvailles et ce qui en restait ouvert
 sont au § 17 ; ce qui a été fermé depuis, au § 18 ; la surface ajoutée par les liens
 `helix://` de la 0.24.0, au § 19 ; et le jeton d'instance retiré du dossier de
 travail, au § 20. Les surfaces ajoutées le 24/09/2026 sont au § 21, celles du
 25/09/2026 (images des Chats partagés, bases de connaissances, entraînement,
 ligne de commande et outils de Code) au § 22. Les clés d'API personnelles du
-26/09/2026 sont au § 23. Le test d'intrusion de ce que font les agents et les
-modèles (27/09/2026) est au § 31.
+26/09/2026 sont au § 23, les revues du 26/09/2026 aux §§ 24 à 28.
+
+Le 27/09/2026 :
+
+- § 29, **les ajouts du jour** (instructions masquées, deux postes, vidéos, photo d'un
+  agent) et leurs relectures : test d'intrusion de l'instance (§ 29.1), Windows et Linux
+  (§ 29.2), relectures par cinq agents (§§ 29.3 et 29.6), clé du trousseau au nom de
+  « Helix » (§ 29.4), installation en une commande sur macOS (§ 29.5), mises à jour par
+  les publications GitHub (§ 29.7), OpenCode posé par Helix (§ 29.8), Electron 44
+  (§ 29.9), analyse CodeQL (§ 29.10), mise à jour d'un clic sous Windows (§ 29.11),
+  presse-papiers par le processus principal (§ 29.12) ;
+- § 30, **Codex** avec le compte ChatGPT du propriétaire du poste : qui y a droit, quel bac
+  à sable, ce que Helix ne lit pas ;
+- § 31, **test d'intrusion de l'application et de la chaîne de mise à jour** : archive à
+  lien symbolique, droits ouverts, manifeste sans limite, fusibles d'Electron
+  (NODE_OPTIONS et `--inspect` fermés, RunAsNode ouvert), fichiers cachés du banc d'essai.
+  Ce qu'il dit des fusibles remplace la phrase du § 24 (« aucun fusible Electron n'est
+  configuré »), vraie le 26/09 ;
+- § 32, **chaîne d'approvisionnement et dépôt public** : empreintes recomparées à la
+  source, paquets de l'atelier et de la dictée figés ;
+- § 33, **un nom de champ pris pour une expression régulière** (fournisseurs cloud,
+  `modelesCloud.ts`) ;
+- § 34, **bombe ZIP** dans un document bureautique relu (`relecture.ts`) ;
+- § 35, **test d'intrusion de ce que font les agents et les modèles** : réglages de projet
+  d'OpenCode coupés, `apply_patch` jugé fichier par fichier, environnement d'OpenClaw en
+  liste fermée, et ce qui reste soupçonné ou pas essayé.
 
 ---
 

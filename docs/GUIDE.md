@@ -21,8 +21,14 @@ bibliothèque, les réunions transcrites sur la machine et le bot de réunion, l
 branchement d'une trentaine de services (dont douze en un clic, par autorisation dans
 le navigateur), la synchronisation de plusieurs postes vers une instance, et depuis le
 25/09/2026 les bases de connaissances citées dans le Chat, la ligne de commande
-`helix` et l'entraînement d'un petit modèle sur Mac. Ce qui reste annoncé sans
-fonctionner est listé en fin de document.
+`helix` et l'entraînement d'un petit modèle sur Mac. Depuis le 27/09/2026 : les documents
+joints lus par tout modèle (mesurés contre sa place, lus en parties au besoin), les durées
+des réponses, un essai de chaque modèle local sur le poste, une couche d'aide aux petits
+modèles, les modèles des clés d'API vérifiés de bout en bout (contre de faux fournisseurs),
+Codex dans l'écran Code pour le propriétaire du poste, un modèle par employé, les notes
+d'Epoch AI et les prix publiés jusque dans Mon usage, « Signaler un problème », et la mise
+à jour d'un clic sous Windows. Ce qui n'a pas été essayé sur une vraie machine est dit à
+chaque fois ; ce qui reste annoncé sans fonctionner est listé en fin de document.
 
 ## Démarrer
 
@@ -81,7 +87,7 @@ machine :
 | Capacité | Ce qu'elle exige | Sans cela |
 |---|---|---|
 | Outils fichiers (MCP) | `npx` | Sans lui (ou sous Windows, où c'est un `.cmd`), Helix le lance par un vrai Node : celui du système, sinon son Node officiel, posé au besoin (nodejs.org, empreinte vérifiée). Hors ligne et sans Node : pas d'outils |
-| Écran Code | OpenCode : celui que Helix pose d'un clic depuis l'écran Code (1.18.32, empreinte SHA-256 écrite dans le code, `<données>/opencode/`), sinon `~/.opencode/bin/opencode` ou le `PATH` | L'écran Code propose « Installer OpenCode » (administrateur), et rappelle la commande manuelle |
+| Écran Code | OpenCode : celui que Helix pose seul, en arrière-plan, depuis le 27/09/2026 (1.18.32, empreinte SHA-256 écrite dans le code, `<données>/opencode/`), sinon `HELIX_OPENCODE_BIN`, `~/.opencode/bin/opencode` ou le `PATH`. Codex, second moteur facultatif, n'est jamais installé par Helix | Hors ligne, ou sur un poste rattaché : l'écran Code propose « Installer OpenCode » (administrateur), et rappelle la commande manuelle |
 | Modèles locaux | LM Studio | L'écran de mise en route l'installe, sans intervention : son moteur sans interface (llmster 0.0.25-1, empreinte SHA-512 écrite dans le code) sur Mac à puce Apple, Windows et Linux ; sur un Mac où l'application LM Studio a déjà servi, c'est elle qui sert (Mac Intel : l'application) |
 
 Avec un modèle local, l'écran Code peut attendre une ou deux minutes avant le premier
@@ -103,8 +109,18 @@ Limite : l'empreinte vient de la même publication que l'image. Non signée par 
 l'application voit aussi macOS redemander l'accès à sa clé du trousseau (« Helix Safe
 Storage ») une fois à chaque nouvelle version. Tout est prêt pour la signature et la
 notarisation (`npm run package:signe`) ; il manque le certificat Apple, voir
-[`SIGNATURE.md`](../SIGNATURE.md). La mise à jour automatique en dépend aussi : non
-signée, l'application signale seulement qu'une version existe.
+[`SIGNATURE.md`](../SIGNATURE.md). La mise à jour **automatique** en dépend aussi. Sans elle,
+la mise à jour se fait **d'un clic** (« Installer maintenant ») sur macOS, et sous Windows
+depuis le 27/09/2026 : l'archive ou l'installateur n'est installé que si sa signature de
+l'éditeur est bonne avec la clé de l'application qui tourne (SIGNATURE.md § 4, SECURITE.md
+§§ 29.7 et 29.11). Sous Linux, la fenêtre ouvre le paquet dans le navigateur. La mise à
+jour d'un clic sous Windows n'a jamais tourné sur un vrai PC.
+
+Le paquet ferme deux fusibles d'Electron (`build.electronFuses` de `package.json`) :
+`NODE_OPTIONS` et `--inspect` n'ouvrent plus l'application. RunAsNode reste ouvert, parce
+que la passerelle et la ligne de commande lancent le binaire de l'application en mode Node
+(SECURITE.md § 31). Ces fusibles n'ont pas encore été relus sur un paquet fabriqué :
+`npx @electron/fuses read --app release/mac-arm64/Helix.app` à la prochaine fabrication.
 
 ⚠ **LM Studio**, le moteur installé par défaut, est un logiciel fermé dont les
 conditions (version du 23/08/2026) permettent l'usage personnel et les besoins
@@ -192,7 +208,11 @@ modèle de conversation soit installé. Si le serveur local est éteint, la pass
 tente de le démarrer elle-même (`lms server start`) et le referme à la fermeture de
 Helix si c'est elle qui l'avait allumé. La passerelle classe les modèles par rôle
 (chat, code, vision, gui, embed), préfère un modèle déjà chargé, et relaie le canal de
-raisonnement des modèles qui en émettent un (Qwen3, Kimi Thinking…).
+raisonnement des modèles qui en émettent un (Qwen3, Kimi Thinking…). Depuis le 27/09/2026,
+ce qui est en mémoire, c'est `lms ps` qui le dit : un modèle que LM Studio liste sans
+l'avoir chargé (chargement à la demande) est chargé par Helix, avec ses réglages
+(`--context-length 32768`, `--parallel 1` au processeur seul, `--gpu off` sous Windows et
+Linux sans carte NVIDIA), puis passe l'essai de `santeModeles.ts`.
 
 #### Routes servies
 
@@ -223,6 +243,8 @@ Toutes exigent le jeton d'instance, sauf `GET /` et `GET /health`. Celles marqu�
 | `GET /helix/mcp`, `POST /helix/mcp/toggle`, `POST /helix/mcp/workspace` | Serveurs d'outils et espace de travail | oui pour les deux `POST` |
 | `GET /helix/code`, `GET /helix/code/events` | État du moteur, flux d'évènements d'une session | non |
 | `GET /helix/dossiers`, `POST /helix/code/session`, `POST /helix/code/prompt`, `POST /helix/code/interrupt` | Écran Code (OpenCode) | oui |
+| `GET /helix/code/sessions`, `GET`/`DELETE /helix/code/sessions/<id>` | Sessions de Code de la personne, avec `enCours` ; historique relu chez OpenCode ; retrait de la liste (409 tant que la session travaille) | oui |
+| `GET /helix/codex`, `POST /helix/codex/connexion`, `…/connexion/annuler`, `…/tache`, `…/arreter` | Codex avec le compte ChatGPT du propriétaire du poste : état, `codex login`, tâche en flux, arrêt (SECURITE.md § 30). Refusé hors de l'application de bureau, sur une instance partagée, hors de la boucle locale, sans compte administrateur ou par clé d'API | oui |
 | `GET /helix/computer`, `GET /helix/computer/events` | État du contrôle de l'écran, flux des approbations | non |
 | `POST /helix/computer/action`, `POST /helix/computer/approve` | Demander et approuver une action d'écran | oui |
 | `GET /helix/atelier` | Diagnostic de l'atelier bureautique de Cowork | non |
@@ -235,6 +257,7 @@ Toutes exigent le jeton d'instance, sauf `GET /` et `GET /health`. Celles marqu�
 | `GET /helix/entrainement`, `GET …/projet?id=`, `POST …/{installer,desinstaller,projets,renommer,exemples,importer,generer,lancer,arreter,comparer,publier,retirer,supprimer}` | Entraîner un modèle (SECURITE.md § 22.3) | oui |
 | `/helix/code/outils` | Connecteurs servis par MCP à l'agent de code de l'instance (jeton et clé `X-Helix-Cle`, SECURITE.md § 22.4) | non, clé |
 | `GET`/`POST /helix/cles-api`, `POST …/<id>` (renommer), `POST …/<id>/revoquer` | Clés d'API personnelles : liste (avec les adresses de l'API réellement servies), création, renommage, révocation (SECURITE.md § 23) | oui |
+| `GET /helix/usage`, `POST /helix/usage/tarif` | Mon usage : consommation de la personne, coût par modèle (tarif saisi, sinon prix publié par son fournisseur, marqué estimé) ; saisie ou retrait d'un tarif | oui |
 
 #### Clés d'API
 
@@ -288,6 +311,10 @@ essayé.
 | `HELIX_CODE_DIR` | Dossier de départ de l'écran Code | `workspace` du profil, sinon `~/Helix` |
 | `HELIX_EXO_URL`, `HELIX_LMSTUDIO_URL` | Adresses des backends | voir tableau ci-dessus |
 | `HELIX_DECHARGEMENT_GPU` | Part du modèle confiée à la carte graphique par `lms load --gpu` : `auto` (LM Studio décide), `off`, `max` ou un nombre entre 0 et 1 | `off` sous Windows et Linux sans carte NVIDIA, sinon LM Studio décide |
+| `HELIX_OPENCODE_BIN` | OpenCode à utiliser : quand elle est posée, Helix n'installe pas le sien | aucune |
+| `HELIX_CODEX_BIN` | Programme `codex` à utiliser pour l'écran Code, avant le `PATH`, Homebrew, `~/.local/bin`, npm global, Volta, Bun et nvm ; jamais sous `~/.codex` | cherché |
+| `HELIX_BUREAU` | Posée à `1` par l'application de bureau pour sa passerelle : sans elle, Codex n'est pas proposé (un serveur n'est le poste de personne). Ne pas la poser à la main sur un serveur | absente |
+| `HELIX_SANS_MISE_A_JOUR` | `1` : l'application ne contacte aucune source de mise à jour (ni serveur de l'agence, ni instance, ni GitHub) | absente |
 | `HELIX_ESSAI_MODELE_MS` | Délai de la courte question d'essai posée à un modèle local après son chargement (`santeModeles.ts`) ; dépassé, l'essai est « sans conclusion » et le modèle gardé. Le résultat de chaque essai est dans `modeles-sur-cette-machine.json`, dossier des données (l'effacer fait tout réessayer) | `180000` |
 | `HELIX_MAX_ETAPES` | Plafond d'allers-retours d'outils | `30` |
 | `HELIX_BUDGET_ETAPE` | Actions accordées à une étape d'un travail découpé, 4 au moins (à défaut : 8, 14 ou 20 selon la taille du modèle) | selon le modèle |
@@ -810,7 +837,7 @@ dans les composants.**
 | Couche | Choix |
 |---|---|
 | Interface | Vite · React 18 · TypeScript · Tailwind CSS · React Router 7 · icônes `lucide-react` |
-| Enveloppe desktop | Electron 33, empaquetage par `electron-builder` |
+| Enveloppe desktop | Electron 44.4.5 (Chromium 152, Node 24.21), empaquetage par `electron-builder` |
 | Passerelle | Node 22+, HTTP/SSE écrits à la main, SDK MCP, `pg` optionnel |
 | Inférence | LM Studio (`lms`) et/ou cluster exo, tout endpoint OpenAI-compatible |
 | Agent de code | OpenCode en mode serveur, piloté par la passerelle |
@@ -853,7 +880,33 @@ gateway/src/                Passerelle : routage par rôle, outils, écran, donn
 cli/helix.mjs               Ligne de commande « helix » (textes dans cli/textes.mjs)
 electron/main.cjs           Processus principal : lance la passerelle, CSP, TOFU TLS
 electron/botReunion.cjs     Bot de réunion (fenêtre cachée), et son préchargement
+electron/sourceGithub.cjs   Publications GitHub, source des mises à jour d'un poste installé seul
+electron/nomTrousseau.cjs   macOS : clé du trousseau au nom de « Helix », reprise de l'ancienne
+electron/pressePapiers.cjs  Copie dans le presse-papiers par le processus principal
 ```
+
+Modules ajoutés les 27 et 28/09/2026, côté passerelle (`gateway/src/`) :
+
+| Module | Rôle |
+|---|---|
+| `documentsJoints.ts` | Documents joints au Chat : balisés, mesurés contre la taille de conversation chargée, lus en entier ou en parties (24 au plus), gardés pour la question suivante |
+| `historique.ts` | La conversation tient dans la place du modèle : Helix retire les plus anciens échanges, un tour entier à la fois, jamais la consigne ni la question, et le dit ; les étapes d'un travail découpé reçoivent les derniers échanges |
+| `santeModeles.ts` | Essai de chaque modèle local sur ce poste (« Réponds seulement : bonjour ») et réponses coupées en cours d'usage ; un modèle qui répond mal n'est plus choisi d'office (`modeles-sur-cette-machine.json`) |
+| `petitsModeles.ts` | Aide aux petits modèles (8,5 milliards ou moins) : appels d'outils réparés, syntaxe vérifiée après chaque écriture, lecture exigée avant de réécrire, consignes et outils réduits, agent `helix-petit` d'OpenCode |
+| `codex.ts`, `codexGarde.ts` | Codex dans l'écran Code : détection, connexion, tâches et routes `/helix/codex*` ; qui y a droit, quel bac à sable, conversion du flux |
+| `modelesCloud.ts` | Dialectes des fournisseurs cloud (listes, capacités, champs refusés, raisonnement, erreurs) |
+| `notesModeles.ts` | Notes ECI d'Epoch AI (CC BY 4.0), recopiées telles quelles, avec leur attribution |
+| `prixPublies.ts` | Prix publiés par les fournisseurs sur leurs pages de prix, avec la date du relevé |
+| `nomsModeles.ts` | Correspondance prudente entre un identifiant de modèle et sa note ou son prix |
+
+Côté interface : `src/components/code/MoteurCode.tsx`, `src/hooks/useCodex.ts`, `src/lib/codex.ts`
+(choix du moteur de Code) ; `src/components/chat/PiecesJointesMessage.tsx` (cartes des pièces
+jointes), `src/lib/decodage.ts` (UTF-8, UTF-16, Windows-1252) ; `src/lib/durees.ts` (durées des
+réponses) ; `src/lib/pressePapiers.ts` ; `src/components/settings/SignalerProbleme.tsx` et
+`src/lib/signalement.ts`. Essais sans réseau : `scripts/essai-notes-modeles.mjs`,
+`scripts/essai-fournisseurs.mjs` (lancé par `npm run securite`), `scripts/essai-source-github.mjs`,
+`scripts/faux-codex.mjs`, `scripts/doublure-mise-a-jour.cjs` ; `scripts/atelier-empreintes.mjs`
+refait la liste figée des paquets de l'atelier et de la dictée.
 
 L'inventaire écran par écran (correspondance avec les captures de référence) est dans
 [`SCREENS.md`](../SCREENS.md).
@@ -869,14 +922,25 @@ l'agent d'orchestration par défaut. Aucun tiret cadratin dans les textes affich
 **Branché sur la passerelle et persistant :**
 
 - Chat : streaming, canal de raisonnement, sélection du modèle, pièces jointes
-  (documents et images lus sur le poste, envoyés avec la question), historique des
-  conversations, partage d'une conversation ;
+  (documents et images lus sur le poste, envoyés avec la question, une carte par fichier
+  dans le message ; depuis le 27/09/2026, mesurés contre la place du modèle et lus en
+  parties au besoin, gardés pour la question suivante), historique des conversations,
+  partage d'une conversation, durée de chaque réponse (réflexion, étapes, premier mot).
+  Vérifié contre un faux modèle ; pas avec un vrai modèle sur le PC Windows où le défaut
+  a été vu ;
+- Modèles locaux : un essai sur le poste à l'installation ou au premier chargement, et un
+  modèle qui répond mal cède la place (27/09/2026) ; conversation raccourcie par Helix
+  quand elle dépasse la place chargée ; aide aux petits modèles dans Cowork et Code.
+  Vérifié par la batterie et de faux moteurs ; aucun vrai petit modèle n'a tourné avec ;
 - Cowork : boucle d'outils fichiers avec découpage en étapes adapté au modèle,
   choix du dossier de travail, contrôle de l'écran avec approbations, préparation
   de l'atelier bureautique ;
 - Code : sessions OpenCode, choix du dossier de projet, flux d'évènements ; pour
   une demande de site, un design professionnel fourni au modèle (palette,
-  polices, feuille de style, guide) et les pages remises dessus en fin de tour ;
+  polices, feuille de style, guide) et les pages remises dessus en fin de tour ; le
+  travail continue quand on quitte sa session (27/09/2026) ; **Codex** au choix, avec le
+  compte ChatGPT du propriétaire du poste (27/09/2026, vérifié avec un faux `codex`
+  seulement, jamais avec le vrai programme ni un vrai compte) ;
 - Images : « + » > « Créer une image » dans le Chat, sur la machine (Z-Image
   Turbo, FLUX.2 klein 4B, Qwen-Image selon la mémoire, licences Apache 2.0) ;
 - Import : archives ChatGPT et Claude, et sans export depuis Claude Code, Codex
@@ -921,8 +985,13 @@ l'agent d'orchestration par défaut. Aucun tiret cadratin dans les textes affich
   serveurs MCP du catalogue ;
 - la barrière d'approbation des actions de Cowork ;
 - Paramètres → **Mon usage** : jetons exacts lus dans la réponse de chaque
-  moteur, par modèle et par jour, coût à 0 € pour un modèle local et à
-  renseigner pour un modèle distant ;
+  moteur, par modèle et par jour, gratuit pour un modèle local ; pour un modèle distant,
+  le tarif saisi, sinon (27/09/2026) le prix publié par son fournisseur, avec la date du
+  relevé et le lien, et le coût dit « estimé ». Sans prix connu, « tarif non renseigné »,
+  jamais compté à zéro. Pas encore vu avec une vraie clé ;
+- « Comparer intelligence et prix » (sélecteur de modèles) : notes ECI d'Epoch AI
+  (CC BY 4.0), prix publiés des éditeurs, tous les modèles de la personne au graphique ou
+  listés « pas de note publiée » (27/09/2026) ;
 - Paramètres → **Profil** : nom et adresse enregistrés ; changer d'adresse exige
   le mot de passe actuel et n'hérite d'aucune invitation ;
 - Paramètres → **Préférences** : apparence, et formats de date et d'heure
@@ -936,10 +1005,17 @@ l'agent d'orchestration par défaut. Aucun tiret cadratin dans les textes affich
 - Paramètres → **Connecteurs** : Google Drive et Slack en lecture seule (jamais
   éprouvés contre les vrais services) ;
 - Paramètres → Préférences, **À propos** : mise à jour de l'application depuis le
-  serveur de l'agence, automatique une fois l'application signée ;
+  serveur de l'agence, l'instance du poste rattaché ou les publications GitHub ;
+  automatique une fois l'application signée par Apple, d'un clic sinon (macOS, et Windows
+  depuis le 27/09/2026, jamais essayé sur un vrai PC), signature de l'éditeur vérifiée ;
+- Paramètres → **Signaler un problème** (27/09/2026), aussi depuis l'aide : un ticket
+  GitHub ou un mail préremplis, relus et envoyés par la personne, rien en arrière-plan ;
+  l'ouverture réelle dans l'application de bureau n'a pas été essayée ;
 - **Agents** toujours actifs (OpenClaw) : missions à heure fixe ou à chaque mail
   reçu, messageries, documents de référence, installation et mise à jour depuis la
-  page ;
+  page ; depuis le 27/09/2026, un modèle par employé, choisi à la création, changé dans
+  ses Réglages et servi à chacun de ses appels (vérifié avec le vrai OpenClaw 2026.9.4 et
+  un faux moteur ; pas avec un vrai modèle cloud) ;
 - **Groupes**, **Bibliothèque** (documents chiffrés, recherche dans le contenu),
   **Réunions** (micro, import, bot Google Meet, transcription et compte rendu sur la
   machine), Paramètres → **Bot Recorder** ;
@@ -983,15 +1059,18 @@ l'agent d'orchestration par défaut. Aucun tiret cadratin dans les textes affich
 - **trois langues** : français, anglais, chinois. Le choix se fait dans
   Réglages, Préférences, vaut pour ce poste, et recharge la page pour que tout
   change d'un coup. 1 842 phrases en 0.25.0 ; le 25/09/2026, 2 301 dans
-  l'interface et 650 dans la passerelle, traduites à 100 % dans les deux langues
-  (`npm run i18n` le mesure). Ce que vous écrivez n'est jamais traduit (0.25.0) ;
+  l'interface et 650 dans la passerelle ; le 28/09/2026, 2 945 et 966, traduites à
+  100 % dans les deux langues (`npm run i18n` le mesure). Ce que vous écrivez n'est
+  jamais traduit (0.25.0) ;
 - **Paramètres → Abonnement** : l'offre d'hébergement des modèles, quatre
   formules, avec ce qu'elles comprennent. Éteinte par défaut en marque blanche.
   Aucun paiement n'y est branché, et l'écran le dit (0.24.0).
 
 **Encore annoncé sans fonctionner, et marqué comme tel à l'écran :**
 
-- le téléchargement direct des applications ;
+- l'application mobile (onglet Mobile d'Installer les apps). Le téléchargement direct de
+  l'application de bureau, longtemps marqué « bientôt », fonctionne : l'instance sert son
+  application macOS ; pour Windows et Linux, l'écran renvoie au paquet du prestataire ;
 - **Composio** : écarté par défaut (voir `PROJET.md` § 3.5). Aucun code ne s'y
   connecte.
 

@@ -52,6 +52,14 @@ sont installés automatiquement s'ils manquent (versions épinglées, empreintes
 Sur Windows et Linux, une mise à jour s'installe en lançant le nouveau paquet par-dessus
 le précédent ; vos données sont conservées.
 
+**macOS, en une commande** (recommandé) : l'application s'installe sans l'avertissement de
+Gatekeeper, après vérification de l'image disque contre `SHA256SUMS.txt`. Demande l'outil
+GitHub (`gh`) connecté avec un compte qui a accès au dépôt :
+
+```bash
+gh api repos/medhiclb/HelixAI/contents/scripts/installer-macos.sh -H "Accept: application/vnd.github.raw" | sh
+```
+
 Pour construire depuis les sources : `npm install`, `npm run build`, puis `npm run package`
 (macOS), `npx electron-builder --win nsis --x64` (Windows) ou
 `npx electron-builder --linux AppImage deb --x64` (Linux).

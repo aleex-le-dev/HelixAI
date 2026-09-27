@@ -51,6 +51,14 @@ engine and the model best suited to the machine. Python and Node are installed
 automatically when missing (pinned versions, verified checksums). On Windows and Linux,
 updates are installed by running the new package over the previous one; your data is kept.
 
+**macOS, in one command** (recommended): the app installs without the Gatekeeper
+prompt, after checking the disk image against `SHA256SUMS.txt`. Requires the GitHub CLI
+(`gh`) signed in with an account that has access to the repository:
+
+```bash
+gh api repos/medhiclb/HelixAI/contents/scripts/installer-macos.sh -H "Accept: application/vnd.github.raw" | sh
+```
+
 To build from source: `npm install`, `npm run build`, then `npm run package` (macOS),
 `npx electron-builder --win nsis --x64` (Windows) or
 `npx electron-builder --linux AppImage deb --x64` (Linux).

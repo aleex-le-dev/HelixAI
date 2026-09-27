@@ -44,6 +44,12 @@ HelixAI 将 Chat、智能体、编程、知识库和模型微调整合到一个*
 
 首次启动时，Helix 会自动完成所需的安装：[LM Studio](https://lmstudio.ai) 引擎以及最适合本机的模型。若缺少 Python 和 Node，也会自动安装（版本固定，校验值已验证）。在 Windows 和 Linux 上，运行新安装包覆盖旧版本即可更新，数据会保留。
 
+**macOS 一条命令安装**（推荐）：先根据 `SHA256SUMS.txt` 校验磁盘映像，再安装应用，不会出现 Gatekeeper 提示。需要已用有权访问本仓库的账户登录的 GitHub 命令行工具（`gh`）：
+
+```bash
+gh api repos/medhiclb/HelixAI/contents/scripts/installer-macos.sh -H "Accept: application/vnd.github.raw" | sh
+```
+
 从源码构建：`npm install`、`npm run build`，然后运行 `npm run package`（macOS）、`npx electron-builder --win nsis --x64`（Windows）或 `npx electron-builder --linux AppImage deb --x64`（Linux）。
 
 ## 功能

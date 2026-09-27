@@ -8,6 +8,8 @@ import { applicationLmStudio, lmsDeLlmster, moteurAPoser, moteurSansInterface, p
 import { BACKENDS, classifyRoles, isReasoningModel, tousLesBackends } from "./config.ts";
 import type { BackendConfig, BackendStatus, ModelInfo } from "./types.ts";
 import { t, tf } from "./langue.ts";
+// Cycle voulu (provision.ts importe ce module) : `detectHardware` n'est appelée qu'au chargement d'un modèle, jamais à l'import.
+import { calculSurProcesseur, detectHardware } from "./provision.ts";
 
 const exec = promisify(execFile);
 
@@ -503,9 +505,76 @@ const TTL_SECONDES = "1200";
  */
 export function optionsDeChargement(): string[] {
   const go = totalmem() / 1024 ** 3;
-  if (go <= 18) return ["--context-length", "32768", "--parallel", "1"];
-  if (go <= 36) return ["--context-length", "32768", "--parallel", "2"];
-  return [];
+  const gpu = optionGpu();
+  if (go <= 18) return ["--context-length", "32768", "--parallel", "1", ...gpu];
+  if (go <= 36) return ["--context-length", "32768", "--parallel", "2", ...gpu];
+  return gpu;
+}
+
+/*
+ * Où le modèle calcule, dit à LM Studio au lieu de le lui laisser deviner.
+ *
+ * Vu par Medhi le 27/09/2026 sur un PC Windows sans carte graphique (16 Go,
+ * llmster 0.0.25, Qwen3.5 4B) : une réflexion « 不 時////… » sans fin, là où
+ * le même Helix répond juste sur un Mac. Sans `--gpu`, LM Studio choisit seul
+ * combien de couches confier à la carte graphique ; sur un PC sans carte
+ * dédiée, la seule qu'il puisse voir est la puce graphique intégrée (Intel,
+ * AMD), par Vulkan. Or les défauts publiés de llama.cpp qui rendent une
+ * sortie illisible avec Qwen3.5 (architecture hybride, « Gated DeltaNet »)
+ * sont presque tous du côté Vulkan, iGPU Intel compris, et « correct sur le
+ * processeur » (llama.cpp #21888, #28648, #20610, #27237, relevés le
+ * 27/09/2026). LM Studio dit laisser l'iGPU de côté depuis sa 0.4.17
+ * (« disabled by default ») ; ce qui se passe quand c'est la seule puce du
+ * poste n'est écrit nulle part, et n'a pas été vu sur ce PC.
+ *
+ * Helix traite déjà une telle machine comme calculant au processeur : c'est
+ * pour lui qu'il a choisi le modèle (`tientSur`, provision.ts). On le charge
+ * donc là aussi, `--gpu off`, sans rien laisser au hasard. Une carte NVIDIA
+ * (vue par `nvidia-smi`) garde le choix de LM Studio, par CUDA ; un Mac aussi.
+ *
+ * Contrepartie assumée : une carte AMD ou Intel dédiée, que Helix ne sait pas
+ * encore reconnaître, calcule elle aussi au processeur (plus lent, mais juste).
+ * `HELIX_DECHARGEMENT_GPU` rend la main : « auto » laisse LM Studio décider,
+ * « max », « off » ou une part entre 0 et 1 sont passés tels quels à `lms load`.
+ */
+function optionGpu(): string[] {
+  const reglage = (process.env.HELIX_DECHARGEMENT_GPU ?? "").trim().toLowerCase();
+  if (reglage === "auto") return [];
+  if (reglage === "off" || reglage === "max" || (/^(0(\.\d+)?|1(\.0+)?)$/.test(reglage))) return ["--gpu", reglage];
+  return calculSurProcesseur(detectHardware()) ? ["--gpu", "off"] : [];
+}
+
+/**
+ * Échantillonnage explicite pour la famille Qwen3.5 (3.5, 3.6, 3.8) servie
+ * par llama.cpp, quand l'appelant n'a rien demandé (27/09/2026).
+ *
+ * Sans rien préciser, LM Studio applique le préréglage du modèle, celui que
+ * Qwen conseille pour réfléchir : température 1,0, top_p 0,95, top_k 20 et
+ * une pénalité de présence de 1,5 (fiche lmstudio.ai/models/qwen/qwen3.5-4b).
+ * Sur un Mac, le moteur MLX de LM Studio n'a pas de pénalité de présence
+ * (mlx-engine relu le 27/09/2026 : absente de sa génération, refusée par son
+ * serveur) : la réponse juste vue sur le MacBook a donc, selon toute
+ * vraisemblance, été produite **sans** elle. Sous Windows et Linux, llama.cpp l'applique, et
+ * la fiche de Qwen prévient qu'une valeur haute « peut mêler les langues »,
+ * ce qui ressemble au « 不 » qui ouvrait la réflexion cassée.
+ *
+ * On aligne donc le PC sur ce qui marche, dans les réglages que Qwen publie :
+ * pour réfléchir, son profil « précis » (0,6, 0,95, 20, présence 0) ; sans
+ * réflexion, son profil général (0,7, 0,8, 20), présence 0 aussi ; et aucune
+ * pénalité de répétition (1,0, comme Qwen le demande). Les boucles que la
+ * pénalité aurait freinées, le garde-fou les coupe (gardeBoucle.ts).
+ *
+ * Rien pour un Mac à puce Apple (le moteur est MLX, qui répond juste avec son
+ * préréglage), ni pour les autres modèles, dont les réglages ont été essayés
+ * tels quels. Pas essayé sur le PC de Medhi : c'est une hypothèse raisonnée,
+ * pas une mesure.
+ */
+export function echantillonnageLocal(modele: string, raisonner: boolean): Record<string, number> {
+  if (process.platform === "darwin" && process.arch === "arm64") return {};
+  if (!/qwen3\.(?:[5-9]|\d{2,})/i.test(modele)) return {};
+  return raisonner
+    ? { temperature: 0.6, top_p: 0.95, top_k: 20, presence_penalty: 0, repeat_penalty: 1 }
+    : { temperature: 0.7, top_p: 0.8, top_k: 20, presence_penalty: 0, repeat_penalty: 1 };
 }
 
 /** Le refus vient-il d'un manque de mémoire plutôt que d'une panne ? */

@@ -12,7 +12,7 @@
 
 <p align="center">
   <img alt="License: AGPL-3.0" src="https://img.shields.io/badge/license-AGPL--3.0-blue" />
-  <img alt="Version 0.27.0" src="https://img.shields.io/badge/version-0.27.0-informational" />
+  <img alt="Version 0.27.1" src="https://img.shields.io/badge/version-0.27.1-informational" />
   <img alt="Platforms: macOS, Windows, Linux" src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey" />
   <img alt="Interface: English, French, Chinese" src="https://img.shields.io/badge/interface-EN%20%C2%B7%20FR%20%C2%B7%20ZH-success" />
 </p>
@@ -36,15 +36,15 @@ sold or rented.
 
 ## Installation
 
-Download the package for your system from the [latest release](https://github.com/medhiclb/HelixAI/releases/tag/v0.27.0).
-SHA-256 checksums: [`SHA256SUMS.txt`](https://github.com/medhiclb/HelixAI/releases/download/v0.27.0/SHA256SUMS.txt).
+Download the package for your system from the [latest release](https://github.com/medhiclb/HelixAI/releases/tag/v0.27.1).
+SHA-256 checksums: [`SHA256SUMS.txt`](https://github.com/medhiclb/HelixAI/releases/download/v0.27.1/SHA256SUMS.txt).
 
 | Platform | Download | Installation |
 |---|---|---|
-| **macOS** (Apple Silicon) | [Helix-0.27.0-arm64.dmg](https://github.com/medhiclb/HelixAI/releases/download/v0.27.0/Helix-0.27.0-arm64.dmg) | Open the disk image and drag Helix to Applications. On first launch: System Settings › Privacy & Security › "Open Anyway" |
-| **Windows 10/11** (x64) | [Helix-Setup-0.27.0-x64.exe](https://github.com/medhiclb/HelixAI/releases/download/v0.27.0/Helix-Setup-0.27.0-x64.exe) | Run the installer (no administrator rights needed). If SmartScreen appears: "More info" › "Run anyway" |
-| **Ubuntu, Debian** (x64) | [helix-plateforme_0.27.0_amd64.deb](https://github.com/medhiclb/HelixAI/releases/download/v0.27.0/helix-plateforme_0.27.0_amd64.deb) | `sudo apt install ./helix-plateforme_0.27.0_amd64.deb` |
-| **Other Linux** (x64) | [Helix-0.27.0.AppImage](https://github.com/medhiclb/HelixAI/releases/download/v0.27.0/Helix-0.27.0.AppImage) | `chmod +x Helix-0.27.0.AppImage`, then run it. On Ubuntu 24.04, prefer the `.deb` |
+| **macOS** (Apple Silicon) | [Helix-0.27.1-arm64.dmg](https://github.com/medhiclb/HelixAI/releases/download/v0.27.1/Helix-0.27.1-arm64.dmg) | Open the disk image and drag Helix to Applications. On first launch: System Settings › Privacy & Security › "Open Anyway" |
+| **Windows 10/11** (x64) | [Helix-Setup-0.27.1-x64.exe](https://github.com/medhiclb/HelixAI/releases/download/v0.27.1/Helix-Setup-0.27.1-x64.exe) | Run the installer (no administrator rights needed). If SmartScreen appears: "More info" › "Run anyway" |
+| **Ubuntu, Debian** (x64) | [helix-plateforme_0.27.1_amd64.deb](https://github.com/medhiclb/HelixAI/releases/download/v0.27.1/helix-plateforme_0.27.1_amd64.deb) | `sudo apt install ./helix-plateforme_0.27.1_amd64.deb` |
+| **Other Linux** (x64) | [Helix-0.27.1.AppImage](https://github.com/medhiclb/HelixAI/releases/download/v0.27.1/Helix-0.27.1.AppImage) | `chmod +x Helix-0.27.1.AppImage`, then run it. On Ubuntu 24.04, prefer the `.deb` |
 
 On first launch, Helix sets up everything it needs: [LM Studio](https://lmstudio.ai)'s
 headless engine (pinned version, verified checksum), or the LM Studio app if it is already in
@@ -53,11 +53,10 @@ automatically when missing (pinned versions, verified checksums). On Windows and
 updates are installed by running the new package over the previous one; your data is kept.
 
 **macOS, in one command** (recommended): the app installs without the Gatekeeper
-prompt, after checking the disk image against `SHA256SUMS.txt`. Requires the GitHub CLI
-(`gh`) signed in with an account that has access to the repository:
+prompt, after checking the disk image against `SHA256SUMS.txt` and its code signature:
 
 ```bash
-gh api repos/medhiclb/HelixAI/contents/scripts/installer-macos.sh -H "Accept: application/vnd.github.raw" | sh
+curl -fsSL https://raw.githubusercontent.com/medhiclb/HelixAI/main/scripts/installer-macos.sh | sh
 ```
 
 The apps are not signed by Apple or Microsoft yet. On macOS, until the app is notarised,

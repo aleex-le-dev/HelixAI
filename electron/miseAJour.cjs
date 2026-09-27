@@ -13,11 +13,14 @@
  *    vers le paquet. L'installation reste manuelle, parce que macOS refuserait
  *    de toute façon de remplacer une application non signée.
  *
- * Souveraineté : la seule adresse contactée est celle que l'agence a inscrite
- * à la construction du paquet (`publish.url`, fournisseur `generic`), sur son
- * propre serveur. Aucune plateforme tierce, aucun GitHub. Sans adresse, rien
- * n'est contacté et l'écran le dit. HTTPS exigé, sauf sur la boucle locale
- * (essais).
+ * D'où vient l'annonce, dans cet ordre : le serveur de l'agence s'il est
+ * inscrit dans le paquet (`publish.url`, fournisseur `generic`) ; sinon, pour
+ * un poste rattaché, son instance (décidé par Medhi le 26/09/2026) ; sinon,
+ * pour un poste installé seul, les publications GitHub du dépôt (décidé par
+ * Medhi le 27/09/2026, sourceGithub.cjs : sur macOS l'installation d'un clic,
+ * signature de l'éditeur vérifiée ; sous Windows et Linux, le paquet proposé
+ * au téléchargement). `HELIX_SANS_MISE_A_JOUR=1` : rien n'est contacté. HTTPS
+ * exigé, sauf sur la boucle locale (essais).
  */
 
 const fs = require("node:fs");
@@ -28,6 +31,7 @@ const { execFile, spawn } = require("node:child_process");
 const { app, BrowserWindow, ipcMain, shell, net } = require("electron");
 const coffre = require("./coffre.cjs");
 const signatureEditeur = require("./signatureEditeur.cjs");
+const sourceGithub = require("./sourceGithub.cjs");
 
 /** Toutes les six heures, et une première fois peu après le lancement. */
 const INTERVALLE_MS = 6 * 60 * 60 * 1000;
@@ -54,7 +58,68 @@ const etat = {
   lienPaquet: null,
   /** Le système du poste : hors de macOS, l'écran dit que la mise à jour se fait à la main. */
   plateforme: process.platform,
+  /** D'où vient l'annonce : `agence`, `instance`, `github`, ou null. */
+  source: null,
+  /** L'installation d'un clic est-elle possible ici (macOS, archive décrite) ? Sinon, le paquet se télécharge. */
+  unClic: false,
 };
+
+/** Le dépôt des publications, inscrit dans le package.json livré (`depotMisesAJour`). */
+const DEPOT = (() => {
+  try {
+    return sourceGithub.depotValide(require("../package.json").depotMisesAJour);
+  } catch {
+    return null;
+  }
+})();
+
+/**
+ * La dernière publication GitHub du dépôt. Sur macOS, l'annonce vient du
+ * manifeste publié avec elle (`helix-mise-a-jour.json`) ; ailleurs, le lien du
+ * paquet qui convient suffit.
+ */
+async function verifierGithub() {
+  publier({ phase: "verification", message: null });
+  try {
+    const entetes = { Accept: "application/vnd.github+json", "User-Agent": "Helix" };
+    const reponse = await net.fetch(`https://api.github.com/repos/${DEPOT}/releases/latest`, { headers: entetes });
+    if (reponse.status === 404) {
+      publier({ phase: "erreur", message: "Aucune publication trouvée sur GitHub (dépôt privé, ou rien de publié)." });
+      return;
+    }
+    if (!reponse.ok) throw new Error(`GitHub a répondu ${reponse.status}`);
+    const publication = await reponse.json();
+    const version = String(publication.tag_name ?? "").replace(/^v/, "");
+    const maintenant = new Date().toISOString();
+    if (publication.draft || publication.prerelease || !sourceGithub.plusRecente(version, app.getVersion())) {
+      annonce = null;
+      publier({ phase: "a-jour", versionDisponible: null, derniereVerification: maintenant, unClic: false });
+      return;
+    }
+    const fichiers = publication.assets ?? [];
+    const paquet = sourceGithub.choisirPaquet(fichiers, { plateforme: process.platform, arch: process.arch, appImage: Boolean(process.env.APPIMAGE) });
+    annonce = null;
+    if (process.platform === "darwin") {
+      const manifeste = fichiers.find((f) => f.name === "helix-mise-a-jour.json");
+      if (manifeste) {
+        const lu = await net.fetch(manifeste.browser_download_url, { headers: { "User-Agent": "Helix" } });
+        annonce = lu.ok ? sourceGithub.lireManifeste(await lu.text(), version) : null;
+        // L'archive décrite doit être dans la même publication.
+        if (annonce && !fichiers.some((f) => f.name === annonce.files[0].url)) annonce = null;
+      }
+      adresseFlux = `https://github.com/${DEPOT}/releases/download/${encodeURIComponent(publication.tag_name)}/`;
+    }
+    publier({
+      phase: "disponible",
+      versionDisponible: version,
+      derniereVerification: maintenant,
+      lienPaquet: paquet ? paquet.browser_download_url : (typeof publication.html_url === "string" ? publication.html_url : null),
+      unClic: Boolean(annonce),
+    });
+  } catch (err) {
+    publier({ phase: "erreur", message: messageErreur(err) });
+  }
+}
 
 function publier(changements) {
   Object.assign(etat, changements);
@@ -116,6 +181,10 @@ function lireAdresseFlux() {
 }
 
 async function verifier() {
+  if (etat.source === "github") {
+    await verifierGithub();
+    return { ...etat };
+  }
   if (!updater) return { ...etat };
   publier({ phase: "verification", message: null });
   try {
@@ -168,9 +237,9 @@ function brancher() {
     return false;
   }));
   ipcMain.handle("helix:maj-ouvrir-paquet", garde(() => {
-    // Le lien vient du flux de l'agence, jamais de la page, et reste du web :
+    // Le lien vient du flux de l'agence ou de GitHub, jamais de la page, et reste du web :
     // un flux altéré ne doit pas pouvoir faire ouvrir un `file:` ou un `smb:`.
-    if (!etat.lienPaquet || !/^https?:\/\//i.test(etat.lienPaquet)) return false;
+    if (!etat.lienPaquet || !/^https:\/\//i.test(etat.lienPaquet)) return false;
     void shell.openExternal(etat.lienPaquet);
     return true;
   }));
@@ -187,32 +256,51 @@ async function demarrerMiseAJour(permis) {
     publier({ phase: "inactif", message: "Pas de mise à jour en développement." });
     return;
   }
-
-  /*
-   * Windows et Linux (audit du 27/09/2026) : l'installation d'un clic ne sait
-   * remplacer qu'une application macOS, et l'instance ne sert que celle-là.
-   * Le bouton « Installer » était proposé puis échouait à coup sûr, après le
-   * téléchargement. L'écran dit désormais que la mise à jour se fait à la
-   * main, avec le paquet du prestataire, et rien n'est contacté.
-   */
-  if (process.platform !== "darwin") {
+  if (process.env.HELIX_SANS_MISE_A_JOUR === "1") {
     publier({ phase: "non-configuree", message: null });
     return;
   }
 
-  // Le serveur de l'agence s'il a été inscrit dans le paquet, sinon l'instance du poste.
+  /*
+   * Poste installé seul (ni serveur de l'agence dans le paquet, ni instance) :
+   * les publications GitHub, sur les trois systèmes (sourceGithub.cjs).
+   */
+  const brancherGithub = () => {
+    if (!DEPOT) return false;
+    publier({ source: "github", signee: false, automatique: false });
+    setTimeout(() => void verifier(), PREMIERE_VERIFICATION_MS).unref?.();
+    minuterie = setInterval(() => void verifier(), INTERVALLE_MS);
+    minuterie.unref?.();
+    return true;
+  };
+
+  /*
+   * Windows et Linux (audit du 27/09/2026) : l'installation d'un clic ne sait
+   * remplacer qu'une application macOS, et l'instance ne sert que celle-là.
+   * Un poste rattaché suit son prestataire, à la main ; un poste installé
+   * seul voit la nouvelle version annoncée, avec son paquet à télécharger.
+   */
+  if (process.platform !== "darwin") {
+    if (sourceInstance() || !brancherGithub()) publier({ phase: "non-configuree", message: null });
+    return;
+  }
+
+  // Le serveur de l'agence s'il a été inscrit dans le paquet, sinon l'instance du poste, sinon GitHub.
   let flux = lireAdresseFlux();
+  let source = flux ? "agence" : null;
   if (!flux) {
     const instance = sourceInstance();
     if (instance) {
       flux = { url: instance.url };
       entetesFlux = instance.entetes;
+      source = "instance";
     }
   }
   if (!flux) {
-    publier({ phase: "non-configuree", message: null });
+    if (!brancherGithub()) publier({ phase: "non-configuree", message: null });
     return;
   }
+  publier({ source });
   if (flux.refusee) {
     publier({
       phase: "non-configuree",
@@ -236,6 +324,7 @@ async function demarrerMiseAJour(permis) {
 
   updater.on("update-available", (info) => {
     annonce = info;
+    publier({ unClic: !signee && (info.files ?? []).some((f) => /\.zip$/i.test(f.url)) });
     const dmg = (info.files ?? []).find((f) => /\.dmg$/i.test(f.url));
     publier({
       phase: signee ? "telechargement" : "disponible",

@@ -12,7 +12,7 @@
 
 <p align="center">
   <img alt="License: AGPL-3.0" src="https://img.shields.io/badge/license-AGPL--3.0-blue" />
-  <img alt="Version 0.27.0" src="https://img.shields.io/badge/version-0.27.0-informational" />
+  <img alt="Version 0.27.1" src="https://img.shields.io/badge/version-0.27.1-informational" />
   <img alt="Platforms: macOS, Windows, Linux" src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey" />
   <img alt="Interface: English, French, Chinese" src="https://img.shields.io/badge/interface-EN%20%C2%B7%20FR%20%C2%B7%20ZH-success" />
 </p>
@@ -36,15 +36,15 @@ et modèles restent sur ses machines, et rien n'est vendu ni loué.
 
 ## Installation
 
-Téléchargez le paquet de votre système dans la [dernière publication](https://github.com/medhiclb/HelixAI/releases/tag/v0.27.0).
-Empreintes SHA-256 : [`SHA256SUMS.txt`](https://github.com/medhiclb/HelixAI/releases/download/v0.27.0/SHA256SUMS.txt).
+Téléchargez le paquet de votre système dans la [dernière publication](https://github.com/medhiclb/HelixAI/releases/tag/v0.27.1).
+Empreintes SHA-256 : [`SHA256SUMS.txt`](https://github.com/medhiclb/HelixAI/releases/download/v0.27.1/SHA256SUMS.txt).
 
 | Système | Téléchargement | Installation |
 |---|---|---|
-| **macOS** (Apple Silicon) | [Helix-0.27.0-arm64.dmg](https://github.com/medhiclb/HelixAI/releases/download/v0.27.0/Helix-0.27.0-arm64.dmg) | Ouvrez l'image disque et glissez Helix dans Applications. Au premier lancement : Réglages Système › Confidentialité et sécurité › « Ouvrir quand même » |
-| **Windows 10/11** (x64) | [Helix-Setup-0.27.0-x64.exe](https://github.com/medhiclb/HelixAI/releases/download/v0.27.0/Helix-Setup-0.27.0-x64.exe) | Lancez l'installateur (aucun droit d'administration nécessaire). Si SmartScreen s'affiche : « Informations complémentaires » › « Exécuter quand même » |
-| **Ubuntu, Debian** (x64) | [helix-plateforme_0.27.0_amd64.deb](https://github.com/medhiclb/HelixAI/releases/download/v0.27.0/helix-plateforme_0.27.0_amd64.deb) | `sudo apt install ./helix-plateforme_0.27.0_amd64.deb` |
-| **Autres Linux** (x64) | [Helix-0.27.0.AppImage](https://github.com/medhiclb/HelixAI/releases/download/v0.27.0/Helix-0.27.0.AppImage) | `chmod +x Helix-0.27.0.AppImage`, puis lancez-le. Sur Ubuntu 24.04, préférez le `.deb` |
+| **macOS** (Apple Silicon) | [Helix-0.27.1-arm64.dmg](https://github.com/medhiclb/HelixAI/releases/download/v0.27.1/Helix-0.27.1-arm64.dmg) | Ouvrez l'image disque et glissez Helix dans Applications. Au premier lancement : Réglages Système › Confidentialité et sécurité › « Ouvrir quand même » |
+| **Windows 10/11** (x64) | [Helix-Setup-0.27.1-x64.exe](https://github.com/medhiclb/HelixAI/releases/download/v0.27.1/Helix-Setup-0.27.1-x64.exe) | Lancez l'installateur (aucun droit d'administration nécessaire). Si SmartScreen s'affiche : « Informations complémentaires » › « Exécuter quand même » |
+| **Ubuntu, Debian** (x64) | [helix-plateforme_0.27.1_amd64.deb](https://github.com/medhiclb/HelixAI/releases/download/v0.27.1/helix-plateforme_0.27.1_amd64.deb) | `sudo apt install ./helix-plateforme_0.27.1_amd64.deb` |
+| **Autres Linux** (x64) | [Helix-0.27.1.AppImage](https://github.com/medhiclb/HelixAI/releases/download/v0.27.1/Helix-0.27.1.AppImage) | `chmod +x Helix-0.27.1.AppImage`, puis lancez-le. Sur Ubuntu 24.04, préférez le `.deb` |
 
 Au premier lancement, Helix installe ce dont il a besoin : le moteur sans interface de
 [LM Studio](https://lmstudio.ai) (version épinglée, empreinte vérifiée), ou l'application
@@ -54,11 +54,11 @@ Sur Windows et Linux, une mise à jour s'installe en lançant le nouveau paquet 
 le précédent ; vos données sont conservées.
 
 **macOS, en une commande** (recommandé) : l'application s'installe sans l'avertissement de
-Gatekeeper, après vérification de l'image disque contre `SHA256SUMS.txt`. Demande l'outil
-GitHub (`gh`) connecté avec un compte qui a accès au dépôt :
+Gatekeeper, après vérification de l'image disque contre `SHA256SUMS.txt` et de sa signature
+de code :
 
 ```bash
-gh api repos/medhiclb/HelixAI/contents/scripts/installer-macos.sh -H "Accept: application/vnd.github.raw" | sh
+curl -fsSL https://raw.githubusercontent.com/medhiclb/HelixAI/main/scripts/installer-macos.sh | sh
 ```
 
 Les applications ne sont pas encore signées par Apple ni par Microsoft. Sur macOS, tant que

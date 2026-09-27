@@ -25,10 +25,15 @@ interface EtatMaj {
   pourcent: number | null;
   automatique: boolean;
   message: string | null;
+  /** D'où vient l'annonce : `agence`, `instance` ou `github`. */
+  source?: string | null;
+  /** Installation d'un clic possible (macOS) ; sinon, le paquet se télécharge. */
+  unClic?: boolean;
 }
 interface Pont {
   etat: () => Promise<EtatMaj>;
   installer: () => Promise<boolean>;
+  ouvrirPaquet: () => Promise<boolean>;
   surChangement: (rappel: (e: EtatMaj) => void) => () => void;
 }
 
@@ -58,6 +63,13 @@ export function FenetreMiseAJour() {
   if (!api || !etat || !etat.versionDisponible) return null;
   const version = etat.versionDisponible;
   const aProposer = etat.phase === "disponible" || (etat.phase === "prete" && etat.automatique);
+  // Windows, Linux, ou annonce sans archive vérifiable : le paquet se télécharge, rien ne s'installe seul.
+  const aTelecharger = etat.phase === "disponible" && etat.unClic === false;
+  const texte = aTelecharger
+    ? tf("Vous avez la version {0}. Téléchargez le nouveau paquet, puis installez-le par-dessus celui-ci : vos Chats et vos réglages restent en place.", etat.versionInstallee)
+    : etat.source === "github"
+      ? tf("Vous avez la version {0}. L'installation télécharge la nouvelle depuis les versions publiées, vérifie qu'elle est intacte et signée par l'éditeur, puis ferme et rouvre l'application. Vos Chats et vos réglages restent en place.", etat.versionInstallee)
+      : tf("Vous avez la version {0}. L'installation télécharge la nouvelle depuis votre instance, vérifie qu'elle est intacte, puis ferme et rouvre l'application. Vos Chats et vos réglages restent en place.", etat.versionInstallee);
   const enCours = installation && (etat.phase === "telechargement" || etat.phase === "prete");
   const echec = installation && etat.phase === "erreur";
   if (!enCours && !echec && (!aProposer || fermee || repoussee(version))) return null;
@@ -76,9 +88,7 @@ export function FenetreMiseAJour() {
       <div className="space-y-4 p-6">
         <div>
           <h2 className="text-lg font-semibold text-foreground">{tf("{0} {1} est disponible", branding.name, version)}</h2>
-          <p className="mt-1 text-sm text-muted-foreground">
-            {tf("Vous avez la version {0}. L'installation télécharge la nouvelle depuis votre instance, vérifie qu'elle est intacte, puis ferme et rouvre l'application. Vos Chats et vos réglages restent en place.", etat.versionInstallee)}
-          </p>
+          <p className="mt-1 text-sm text-muted-foreground">{texte}</p>
         </div>
         {enCours && (
           <div className="space-y-1.5">
@@ -101,17 +111,29 @@ export function FenetreMiseAJour() {
             <Button variant="secondary" onClick={plusTard}>
               {t("Plus tard")}
             </Button>
-            <Button
-              icon={Download}
-              onClick={() => {
-                setInstallation(true);
-                void api.installer().then((ok) => {
-                  if (!ok) setInstallation(false);
-                });
-              }}
-            >
-              {echec ? t("Réessayer") : t("Installer maintenant")}
-            </Button>
+            {aTelecharger ? (
+              <Button
+                icon={Download}
+                onClick={() => {
+                  void api.ouvrirPaquet();
+                  setFermee(true);
+                }}
+              >
+                {t("Télécharger")}
+              </Button>
+            ) : (
+              <Button
+                icon={Download}
+                onClick={() => {
+                  setInstallation(true);
+                  void api.installer().then((ok) => {
+                    if (!ok) setInstallation(false);
+                  });
+                }}
+              >
+                {echec ? t("Réessayer") : t("Installer maintenant")}
+              </Button>
+            )}
           </div>
         )}
       </div>

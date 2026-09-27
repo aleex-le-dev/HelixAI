@@ -3230,3 +3230,24 @@ lancés ; l'icône de la zone de notification invisible sur GNOME sans AppIndica
 rattaché sous Linux sans trousseau lance quand même sa passerelle ; pas d'intégration au bureau
 (liens `helix://`) avec l'AppImage. Rien de cela n'a été essayé sur un vrai PC Windows ni sur un
 vrai Linux.
+
+### 29.7 Mises à jour d'un poste installé seul, par les publications GitHub (27 septembre 2026)
+
+Décidé par Medhi : le dépôt devient public, et un poste qui n'a ni serveur de l'agence inscrit
+dans son paquet ni instance lit la dernière publication du dépôt (`electron/sourceGithub.cjs`,
+`api.github.com`, peu après le lancement puis toutes les six heures).
+
+- Rien ne s'installe sans un clic. Sur macOS, l'archive décrite par `helix-mise-a-jour.json`
+  n'est installée qu'après son empreinte SHA-512 **et** la signature de l'éditeur, vérifiée avec
+  la clé de l'application déjà installée (§ 29.1) : une publication remplacée par un tiers, ou un
+  compte GitHub volé, ne fait rien installer d'autre que ce que la clé privée a signé. Sous Windows
+  et Linux, Helix ne télécharge rien : la fenêtre ouvre le paquet dans le navigateur (lien
+  `https:` seulement, pris dans la réponse de GitHub, jamais dans la page).
+- Le manifeste est lu champ par champ (version égale à celle de la publication, nom d'archive sans
+  chemin, empreinte bien formée, archive présente dans la même publication) ; une préversion ou
+  un brouillon n'est jamais proposé.
+- Ce que GitHub apprend : l'adresse IP du poste et qu'un Helix demande la dernière version, toutes
+  les six heures. `HELIX_SANS_MISE_A_JOUR=1` coupe tout appel ; un poste rattaché ne contacte que
+  son instance.
+- Avant de rendre le dépôt public : historique git relu (aucune clé privée, aucun jeton ; la clé de
+  l'éditeur vit dans `~/.helix-editeur`, hors du dépôt).

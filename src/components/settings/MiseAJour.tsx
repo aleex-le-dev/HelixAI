@@ -35,6 +35,10 @@ interface EtatMiseAJour {
   lienPaquet: string | null;
   /** Système du poste (absent d'une application plus ancienne). */
   plateforme?: string;
+  /** D'où vient l'annonce : `agence`, `instance` ou `github`. */
+  source?: string | null;
+  /** Installation d'un clic possible ; sinon, le paquet se télécharge. */
+  unClic?: boolean;
 }
 
 interface PontMiseAJour {
@@ -137,12 +141,25 @@ export function MiseAJour() {
       corps = (
         <>
           <p className="text-sm text-foreground">{tf("Version {0} disponible.", etat.versionDisponible ?? "")}</p>
-          <p className="text-xs text-muted-foreground">
-            {t("Cette installation n'est pas signée : elle ne se met pas à jour seule, mais s'installe d'un clic. L'archive est vérifiée par son empreinte avant de remplacer l'application.")}
-          </p>
-          <Button size="sm" icon={Download} onClick={() => void api.installer()}>
-            {t("Installer maintenant")}
-          </Button>
+          {etat.unClic === false ? (
+            <>
+              <p className="text-xs text-muted-foreground">
+                {t("Téléchargez le nouveau paquet, puis installez-le par-dessus celui-ci : vos données restent en place.")}
+              </p>
+              <Button size="sm" icon={Download} onClick={() => void api.ouvrirPaquet()}>
+                {t("Télécharger")}
+              </Button>
+            </>
+          ) : (
+            <>
+              <p className="text-xs text-muted-foreground">
+                {t("Cette installation n'est pas signée : elle ne se met pas à jour seule, mais s'installe d'un clic. L'archive est vérifiée par son empreinte et par la signature de l'éditeur avant de remplacer l'application.")}
+              </p>
+              <Button size="sm" icon={Download} onClick={() => void api.installer()}>
+                {t("Installer maintenant")}
+              </Button>
+            </>
+          )}
         </>
       );
       break;
@@ -195,7 +212,9 @@ export function MiseAJour() {
         <p className="text-xs text-muted-foreground">
           {etat.automatique
             ? t("Mise à jour automatique : l'application est signée, chaque nouvelle version est vérifiée avant d'être installée.")
-            : t("Mise à jour manuelle : l'application n'est pas encore signée. Elle vérifie seulement qu'une version plus récente existe.")}
+            : etat.source === "github"
+              ? t("Les nouvelles versions sont cherchées dans les versions publiées du projet (GitHub), toutes les six heures. Rien ne s'installe sans votre clic.")
+              : t("Mise à jour manuelle : l'application n'est pas encore signée. Elle vérifie qu'une version plus récente existe, et l'installe sur votre clic.")}
         </p>
       )}
       {configuree && etat.phase !== "prete" && verifier}

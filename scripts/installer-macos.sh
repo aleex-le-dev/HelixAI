@@ -9,9 +9,8 @@
 # contre SHA256SUMS.txt de la même publication avant d'être ouverte, et sa
 # signature de code l'est aussi avant la copie.
 #
-#   Dépôt public :  curl -fsSL https://raw.githubusercontent.com/medhiclb/HelixAI/main/scripts/installer-macos.sh | sh
-#   Dépôt privé  :  gh api repos/medhiclb/HelixAI/contents/scripts/installer-macos.sh -H "Accept: application/vnd.github.raw" | sh
-#                   (demande `gh`, connecté avec un compte qui a accès au dépôt)
+#   curl -fsSL https://raw.githubusercontent.com/medhiclb/HelixAI/main/scripts/installer-macos.sh | sh
+#   (dépôt public depuis le 27/09/2026 ; `gh`, s'il est connecté, sert aussi)
 set -eu
 
 DEPOT="medhiclb/HelixAI"

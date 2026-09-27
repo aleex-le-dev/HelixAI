@@ -10,7 +10,7 @@ refaite à l'envers.
 
 | | |
 |---|---|
-| Version | 0.27.0 (`package.json`) |
+| Version | 0.27.1 (`package.json`) |
 | Dernière mise à jour | 27 septembre 2026 |
 | Documents liés | [ARCHITECTURE.md](ARCHITECTURE.md), [SECURITE.md](SECURITE.md), [SCREENS.md](SCREENS.md), [SIGNATURE.md](SIGNATURE.md), [README.md](README.md), [docs/GUIDE.md](docs/GUIDE.md) |
 
@@ -2833,6 +2833,29 @@ moteur n'est plus coupé à 30 minutes sur une connexion lente, et le script d'i
 n'efface plus une application encore ouverte. Restent, écrits dans SECURITE.md § 29.6, les
 limites de Windows et de Linux qu'on ne peut essayer que sur de vraies machines. `npm run
 securite` : 433 contrôles, tous réussis.
+
+**Décidé par Medhi le 27/09/2026 : les postes installés seuls voient les nouvelles versions,
+par les publications GitHub, et le dépôt devient public.** « Faut qu'on teste la mise à jour
+[…] pour savoir si y'a bien la popup pour les autres PC » : jusque-là, seul un poste rattaché
+à une instance recevait la fenêtre « Nouvelle version » (décision du 26/09), et un poste
+installé depuis GitHub, jamais. Revient sur « aucun GitHub » pour ces postes seulement.
+Ordre des sources : serveur de l'agence inscrit dans le paquet, puis instance du poste
+rattaché, puis publications GitHub (`electron/sourceGithub.cjs`, `depotMisesAJour` dans
+`package.json`). Sur macOS, « Installer maintenant » : l'archive décrite par
+`helix-mise-a-jour.json` (écrit par `scripts/manifeste-mise-a-jour.mjs`, publié avec la
+version), empreinte SHA-512 puis signature de l'éditeur vérifiées avec la clé de
+l'application installée, comme depuis une instance. Sous Windows et Linux, « Télécharger »
+ouvre le bon paquet (.exe, .deb, ou AppImage si c'est ainsi que Helix tourne) : rien ne
+s'installe seul. Un poste rattaché sous Windows ou Linux suit toujours son prestataire.
+`HELIX_SANS_MISE_A_JOUR=1` : rien n'est contacté. Avant de rendre le dépôt public :
+historique relu (aucune clé, aucun jeton ; la clé privée de l'éditeur vit hors du dépôt,
+`~/.helix-editeur`), et l'identité de repli de l'interface, qui portait le nom et l'adresse
+de Medhi, rendue neutre. Logique vérifiée sans réseau (`scripts/essai-source-github.mjs`,
+17 cas).
+
+**À faire (demandé par Medhi le 27/09/2026) : OpenCode installé par Helix.** L'écran Code
+affiche aujourd'hui la commande à lancer ; OpenCode est sous licence MIT, il peut s'installer
+comme le moteur (version épinglée, empreinte écrite dans le code).
 - Réponses en français à un message en anglais : la consigne française disait « tu réponds en
   français ». Le modèle répond maintenant dans la langue du dernier message, agents compris ;
   la langue de base est l'anglais (interface, passerelle, zone de notification) quand celle du

@@ -31,10 +31,11 @@ const KEY = "identity:current";
 /** Utilisateur par défaut tant que la connexion n'est pas branchée. */
 const FALLBACK: User = {
   id: "u_local",
-  handle: "medhi.clabaut",
-  fullName: "Medhi Clabaut",
-  email: "medhi.clabaut@gmail.com",
-  initials: "MC",
+  // Neutre : le dépôt est public, et ce repli ne doit nommer personne (27/09/2026).
+  handle: "local",
+  fullName: "",
+  email: "",
+  initials: "?",
   groupIds: [],
   organisationId: "org_default",
 };

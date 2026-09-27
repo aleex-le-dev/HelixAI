@@ -294,7 +294,10 @@ ou un hébergement européen raccourcit d'autant.
 **Élargi en 0.12.0, à la demande du client (« l'ensemble des choses d'OpenClaw »,
 « libre d'agir si on l'autorise ») :**
 
-- **Modèle au choix** : local, fourni par l'agence, ou cloud par clé (voir § 1).
+- **Modèle au choix** : local, fourni par l'agence, ou cloud par clé (voir § 1). **Un par
+  employé** (27/09/2026, « pas tous le même ») : choisi à la création de l'agent, proposé
+  selon son poste, changé dans ses réglages ; la passerelle sert à chaque employé le sien, et
+  jamais un autre quand il a disparu (§ 5, entrée du 27/09/2026).
 - **Trois paliers de liberté**, au choix du propriétaire : Encadré (ce qui précède),
   Étendu (recherche web par DuckDuckGo, lecture de pages, navigateur, envoi de messages
   sur ses canaux), Libre (en plus : commandes sur la machine de l'instance, rappels

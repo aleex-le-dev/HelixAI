@@ -14,8 +14,8 @@ import { useMiseEnService, type EtatMiseEnService } from "@/hooks/useMiseEnServi
 import { currentUser } from "@/lib/store/identity";
 import { getAgent, type Agent, type AgentVisibility } from "@/lib/store/agents";
 import { AvatarAgent, ChoixPhotoAgent } from "@/components/ui/AvatarAgent";
-import { MiseAJourOpenClaw, PanneauEmploye, Statut, useEmployes } from "@/components/agents/Employes";
-import { ACCEPT_DOCUMENTS, retenirFichiers, supprimerEmploye, type Employe, type EtatEmployes } from "@/lib/employes";
+import { ChoixModele, MiseAJourOpenClaw, ModeleDiscret, PanneauEmploye, Statut, useEmployes } from "@/components/agents/Employes";
+import { ACCEPT_DOCUMENTS, proposerModele, retenirFichiers, supprimerEmploye, type Employe, type EtatEmployes } from "@/lib/employes";
 import { optimiserInstructions } from "@/lib/gateway";
 import { ChoixDepuisEspace } from "@/components/agents/ChoixDepuisEspace";
 import { ChoixBases } from "@/components/bibliotheque/ChoixBases";
@@ -167,6 +167,7 @@ export function AgentsPage() {
 
       <AgentModal
         open={modalOpen}
+        etat={etat}
         onClose={() => setModalOpen(false)}
         onCreate={(data, fichiers) => {
           // La mise en service suit d'elle-même (useMiseEnService), documents compris.
@@ -292,6 +293,7 @@ function AgentCard({
         {agent.description && <p className="line-clamp-2 text-sm text-muted-foreground">{agent.description}</p>}
         <div className="mt-auto flex flex-wrap items-center gap-2">
           <LigneService employe={employe} etat={etat} miseEnService={miseEnService} onReessayer={onReessayer} />
+          {employe && !miseEnService && <ModeleDiscret employe={employe} />}
           {agent.toolsEnabled && (
             <span className="inline-flex w-fit items-center gap-1.5 rounded-full bg-accent/12 px-2 py-0.5 text-[11px] font-medium text-accent">
               <Wrench size={11} strokeWidth={2} />{" "}{t("Outils")}
@@ -422,7 +424,10 @@ function CarteEmploye({
           </div>
         </div>
         <p className="line-clamp-2 text-sm text-muted-foreground">{employe.poste}</p>
-        <div className="mt-auto">{etat && <Statut employe={employe} etat={etat} />}</div>
+        <div className="mt-auto flex flex-wrap items-center gap-2">
+          {etat && <Statut employe={employe} etat={etat} />}
+          <ModeleDiscret employe={employe} />
+        </div>
       </button>
     </li>
   );
@@ -438,14 +443,19 @@ interface NewAgent {
   hidePrompt: boolean;
   toolsEnabled: boolean;
   connaissances: string[];
+  /** Le modèle de son employé toujours actif (27/09/2026). */
+  modeleEmploye?: string;
 }
 
 function AgentModal({
   open,
+  etat,
   onClose,
   onCreate,
 }: {
   open: boolean;
+  /** Les modèles que cette personne peut lui donner (null : l'instance n'a pas encore répondu). */
+  etat: EtatEmployes | null;
   onClose: () => void;
   onCreate: (data: NewAgent, fichiers: File[]) => void;
 }) {
@@ -467,8 +477,27 @@ function AgentModal({
   const [description, setDescription] = useState("");
   const [instructions, setInstructions] = useState("");
   const [photo, setPhoto] = useState<string | null>(null);
+  /*
+   * Son modèle (27/09/2026, demandé par Medhi : « pas tous le même ») : la
+   * proposition suit ce que le poste demande tant que la personne n'en a pas
+   * choisi un elle-même.
+   */
+  const [modeleChoisi, setModeleChoisi] = useState<string | null>(null);
+  const modeles = etat?.modeles ?? [];
+  const proposition = useMemo(
+    () =>
+      proposerModele(modeles, {
+        outils: (toolsEnabled && (etat?.familles ?? []).some((f) => f.disponible)) || connaissances.length > 0 || fichiers.length > 0,
+        longueurPoste: (instructions.trim() || description.trim()).length,
+      }),
+    [modeles, etat, toolsEnabled, connaissances.length, fichiers.length, instructions, description],
+  );
+  const modele = modeleChoisi ?? proposition?.uid ?? "";
+  // Des modèles, mais aucun gratuit à proposer : un modèle facturé ne se choisit pas d'office.
+  const modeleAChoisir = modeles.length > 0 && !modele;
 
   const reset = () => {
+    setModeleChoisi(null);
     setPhoto(null);
     setName("");
     setDescription("");
@@ -670,6 +699,15 @@ function AgentModal({
             </div>
           )}
 
+          {etat && (
+            <div className="space-y-1">
+              <ChoixModele modeles={modeles} valeur={modele} onChange={setModeleChoisi} proposition={proposition} />
+              <p className="text-xs text-muted-foreground">
+                {t("Il répond avec ce modèle sur sa fiche, dans ses missions et sur ses messageries ; il se change dans ses réglages. Dans le Chat, c'est le modèle choisi dans le Chat.")}
+              </p>
+            </div>
+          )}
+
           {/*
             « Masquer le prompt aux non-administrateurs » retiré le 26/09/2026
             (revue de sécurité) : rien ne le faisait respecter. Les
@@ -703,9 +741,12 @@ function AgentModal({
           {t("Annuler")}
         </Button>
         <Button
-          disabled={!name.trim() || (visibility === "groupes" && groupIds.length === 0)}
+          disabled={!name.trim() || (visibility === "groupes" && groupIds.length === 0) || modeleAChoisir}
           onClick={() => {
-            onCreate({ name, description, instructions, visibility, groupIds, hidePrompt, toolsEnabled, connaissances, ...(photo ? { photo } : {}) }, fichiers);
+            onCreate(
+              { name, description, instructions, visibility, groupIds, hidePrompt, toolsEnabled, connaissances, ...(photo ? { photo } : {}), ...(modele ? { modeleEmploye: modele } : {}) },
+              fichiers,
+            );
             reset();
           }}
         >

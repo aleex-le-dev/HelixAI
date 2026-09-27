@@ -20,6 +20,7 @@ import { OUTIL_EMPLOYE } from "./connaissances.ts";
 import { groupesDe, listerGroupes } from "./groupes.ts";
 import { chiffrerOctets, dechiffrerOctets } from "./secret.ts";
 import { arreterArbre } from "./processus.ts";
+import { backendById, discover, type Discovery } from "./backends.ts";
 
 /**
  * Employés : des agents OpenClaw déployés et pilotés par Helix.
@@ -450,6 +451,89 @@ export async function employesDe(qui: string): Promise<Employe[]> {
 
 export async function employe(id: string): Promise<Employe | undefined> {
   return (await charger()).find((e) => e.id === id);
+}
+
+/* ---- Son modèle ------------------------------------------------------ */
+
+/**
+ * Chaque employé a son modèle (`Employe.modele`), choisi à la création et
+ * changé dans ses réglages : demandé par Medhi le 27/09/2026 (« OpenClaw, on
+ * doit choisir le modèle selon l'agent aussi, pas tous le même »).
+ *
+ * Quand ce modèle ne répond plus, l'employé ne bascule jamais sur un autre en
+ * silence : un autre modèle, c'est une autre qualité de réponse, parfois un
+ * autre pays, parfois une facture. L'écran le dit, avec la raison :
+ *  - `retire` : il n'est plus sur la machine de l'instance (désinstallé), ou
+ *    plus parmi les modèles retenus de sa clé ;
+ *  - `cle-retiree` : la clé qui le branchait a été retirée ;
+ *  - `hors-ligne` : le service qui le fait tourner ne répond pas (LM Studio
+ *    arrêté, par exemple) : il peut revenir de lui-même ;
+ *  - `reserve` : sa clé est devenue personnelle à quelqu'un d'autre que son
+ *    propriétaire.
+ */
+export type RaisonModele = "retire" | "cle-retiree" | "hors-ligne" | "reserve";
+
+export interface EtatModele {
+  /** Son nom chez son fournisseur (« qwen3-8b »), lisible même quand il a disparu. */
+  nom: string;
+  disponible: boolean;
+  raison?: RaisonModele;
+  origine?: "local" | "agence" | "cle";
+  fournisseur?: string;
+  pays?: string;
+}
+
+/** « lmstudio/qwen/qwen3-8b » : le service (« lmstudio ») et le nom chez lui (« qwen/qwen3-8b »). */
+function decouperUid(uid: string): { service: string; nom: string } {
+  const i = uid.indexOf("/");
+  return i > 0 ? { service: uid.slice(0, i), nom: uid.slice(i + 1) } : { service: "", nom: uid };
+}
+
+/**
+ * L'état du modèle d'un employé, lu dans une découverte des modèles (une seule
+ * pour toute la liste des employés). Jugé avec les droits de son
+ * **propriétaire** : c'est à son nom que la passerelle sert l'employé
+ * (index.ts), ses modèles de clé personnelle compris.
+ */
+export function etatDuModele(e: Pick<Employe, "modele" | "ownerId">, decouverte: Discovery): EtatModele {
+  const { service, nom } = decouperUid(e.modele);
+  const trouve = decouverte.models.find((m) => m.uid === e.modele && m.roles.includes("chat"));
+  const infos = trouve
+    ? { origine: trouve.origine ?? "local", fournisseur: trouve.fournisseur ?? trouve.backendLabel, ...(trouve.pays ? { pays: trouve.pays } : {}) }
+    : {};
+  if (trouve && (!trouve.proprietaire || trouve.proprietaire === e.ownerId)) return { nom, disponible: true, ...infos };
+  if (trouve) return { nom, disponible: false, raison: "reserve", ...infos };
+  const config = backendById(service);
+  if (!config || !config.enabled) {
+    return { nom, disponible: false, raison: service.startsWith("cle-") ? "cle-retiree" : "retire" };
+  }
+  const suite = { origine: config.origine ?? "local", fournisseur: config.fournisseur ?? config.label, ...(config.pays ? { pays: config.pays } : {}) } as const;
+  const enLigne = decouverte.backends.find((b) => b.id === service)?.online;
+  return { nom, disponible: false, raison: enLigne === false ? "hors-ligne" : "retire", ...suite };
+}
+
+/** Ce que l'employé répond quand son modèle ne répond plus : la raison, et ce qu'il faut faire. Jamais un autre modèle. */
+export function messageModeleIndisponible(e: Pick<Employe, "nom">, etat: EtatModele): string {
+  switch (etat.raison) {
+    case "cle-retiree":
+      return tf("La clé qui donnait accès au modèle de {0} ({1}) a été retirée. Il ne prend pas un autre modèle de lui-même : choisissez-en un dans ses réglages.", e.nom, etat.nom);
+    case "hors-ligne":
+      return tf("Le service qui fait tourner le modèle de {0} ({1}) ne répond pas. Il ne prend pas un autre modèle de lui-même : relancez ce service, ou choisissez-lui un autre modèle dans ses réglages.", e.nom, etat.nom);
+    case "reserve":
+      return tf("Le modèle de {0} ({1}) est maintenant réservé à la personne qui a branché sa clé. Il ne prend pas un autre modèle de lui-même : choisissez-en un dans ses réglages.", e.nom, etat.nom);
+    default:
+      return tf("Le modèle de {0} ({1}) n'est plus disponible sur l'instance. Il ne prend pas un autre modèle de lui-même : choisissez-en un dans ses réglages.", e.nom, etat.nom);
+  }
+}
+
+/** Le message à dire si son modèle ne répond plus, `null` s'il est là (la cause d'un échec est alors ailleurs). */
+async function modeleManquant(e: Employe): Promise<string | null> {
+  try {
+    const etat = etatDuModele(e, await discover());
+    return etat.disponible ? null : messageModeleIndisponible(e, etat);
+  } catch {
+    return null;
+  }
 }
 
 /* ------------------------------------------------------------------ */
@@ -2265,7 +2349,10 @@ export async function parler(id: string, texte: string, qui: string): Promise<Re
     const d = lireJson<{ status?: string; result?: { payloads?: { text?: string | null }[] } }>(r.sortie);
     const textes = (d?.result?.payloads ?? []).map((p) => p.text ?? "").filter(Boolean);
     const ok = d?.status === "ok" && textes.length > 0;
-    const reponse = ok ? textes.join("\n\n") : ((await instanceMuette()) ?? t("Pas de réponse cette fois. Vérifiez que le modèle est bien chargé, puis réessayez."));
+    // Son modèle a disparu : on le dit, plutôt que « vérifiez que le modèle est bien chargé ».
+    const reponse = ok
+      ? textes.join("\n\n")
+      : ((await instanceMuette()) ?? (await modeleManquant((await employe(id)) ?? e)) ?? t("Pas de réponse cette fois. Vérifiez que le modèle est bien chargé, puis réessayez."));
     const travail = travaux.get(cle);
     if (travail) Object.assign(travail, { etat: ok ? "termine" : "erreur", reponse });
     await retenirEchange(qui, id, { quand: new Date().toISOString(), question, reponse, ok });

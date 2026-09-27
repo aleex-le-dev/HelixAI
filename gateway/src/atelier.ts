@@ -15,6 +15,7 @@ import { constants, existsSync, readdirSync, readFileSync } from "node:fs";
 import { cpus, homedir, tmpdir, totalmem } from "node:os";
 import { dirname, join, delimiter } from "node:path";
 import { assurerNodePrive, nodePriveInstallable, npmPrive } from "./installationOpenClaw.ts";
+import { assurerPythonPrive, pythonPrive, pythonPriveInstallable, taillePythonPriveMo } from "./pythonPrive.ts";
 
 const exec = promisify(execFile);
 
@@ -278,6 +279,20 @@ async function venvDisponible(python: string): Promise<boolean> {
 const obstacleVenv = (): string =>
   tf("Python est là, mais sans son module de création d'environnement (venv). Installez-le, puis réessayez : {0}.", process.platform === "linux" ? "sudo apt install python3-venv" : commentPython());
 
+/*
+ * Python pour créer l'environnement de l'atelier : celui du système s'il sait
+ * en créer un, sinon celui que Helix pose lui-même (pythonPrive.ts, décidé par
+ * Medhi le 27/09/2026). `installer` : le poser s'il manque (à l'installation),
+ * pas au diagnostic, qui ne fait que regarder.
+ */
+async function pythonPourVenv(installer: boolean, avancer?: (pourcent: number) => void): Promise<string | null> {
+  const systeme = await trouverPython();
+  if (systeme && (await venvDisponible(systeme))) return systeme;
+  const prive = pythonPrive();
+  if (prive || !installer) return prive;
+  return assurerPythonPrive(avancer);
+}
+
 /** Un script JavaScript (npm sous Windows) se lance par Node ; le reste, tel quel. */
 const commandeDe = (commande: string, args: string[]): [string, string[]] =>
   commande.endsWith(".js") ? [process.execPath, [commande, ...args]] : [commande, args];
@@ -419,7 +434,8 @@ async function optionnels(): Promise<OutilOptionnel[]> {
 /** Inspection en lecture seule : rien n'est installé, rien n'est modifié. */
 export async function diagnostic(): Promise<Diagnostic> {
   const [cheminPython, cheminNpm, cheminNode] = await Promise.all([
-    trouverPython(),
+    // Celui du système, sinon celui que Helix a posé (pythonPrive.ts).
+    trouverPython().then((p) => p ?? pythonPrive()),
     trouverNpm(),
     trouverNode(),
   ]);
@@ -487,12 +503,14 @@ export async function diagnostic(): Promise<Diagnostic> {
   ];
 
   const obstacles: string[] = [];
-  if (!cheminPython || !versionPython) {
+  // Sans Python qui convienne, Helix pose le sien à la préparation : ce n'est un obstacle que là où il ne sait pas le faire.
+  const venvLa = await existe(pythonVenv(), constants.X_OK);
+  if (!venvLa && !(await pythonPourVenv(false)) && pythonPriveInstallable() !== null) {
     obstacles.push(
-      tf("Python 3 est absent de cette machine. C'est le socle qui sait écrire et relire les documents Word, Excel et PowerPoint. Installez Python 3 ({0}), puis relancez ce diagnostic.", commentPython()),
+      !cheminPython || !versionPython
+        ? tf("Python 3 est absent de cette machine. C'est le socle qui sait écrire et relire les documents Word, Excel et PowerPoint. Installez Python 3 ({0}), puis relancez ce diagnostic.", commentPython())
+        : obstacleVenv(),
     );
-  } else if (!(await existe(pythonVenv(), constants.X_OK)) && !(await venvDisponible(cheminPython))) {
-    obstacles.push(obstacleVenv());
   }
   /*
    * Sans npm sur la machine, Helix pose son propre Node officiel (vérifié par
@@ -523,7 +541,10 @@ export async function diagnostic(): Promise<Diagnostic> {
     // Estimation par écosystème : n'annoncer que ce qui reste réellement à
     // télécharger évite de faire peur pour une mise à jour de deux paquets.
     tailleEstimeeMo:
-      (manquantesPython > 0 ? TAILLE_PYTHON_MO : 0) + (manquantesNode > 0 ? TAILLE_NODE_MO : 0),
+      (manquantesPython > 0 ? TAILLE_PYTHON_MO : 0) +
+      (manquantesNode > 0 ? TAILLE_NODE_MO : 0) +
+      // Python lui-même, quand Helix doit le poser.
+      (!venvLa && !(await pythonPourVenv(false)) ? taillePythonPriveMo() : 0),
   };
 }
 
@@ -668,10 +689,11 @@ async function executerPreparation(onProgres: (p: Progres) => void): Promise<Bil
 
   /* ------------------------------- Python ------------------------------------ */
   try {
-    const python = await trouverPython();
-    if (!python) throw new Error("Python 3 est introuvable.");
-
     if (!(await existe(pythonVenv(), constants.X_OK))) {
+      const python = await pythonPourVenv(true, (p) =>
+        onProgres({ phase: "python", message: tf("Installation de Python ({0} %)...", p), percent: 2 + Math.round(p * 0.04) }),
+      );
+      if (!python) throw new Error(t("Python 3 est introuvable."));
       onProgres({
         phase: "python",
         message: t("Création de l'environnement Python isolé..."),
@@ -1302,13 +1324,13 @@ export async function diagnosticDictee(): Promise<DiagnosticDictee> {
 
   const obstacles: string[] = [];
   // Le venv existant suffit : c'est lui qui servira, pas le Python du système.
-  const pythonSysteme = venv ? null : await trouverPython();
-  if (!venv && !pythonSysteme) {
+  if (!venv && !(await pythonPourVenv(false)) && pythonPriveInstallable() !== null) {
+    const pythonSysteme = await trouverPython();
     obstacles.push(
-      tf("Python 3 est absent de cette machine. C'est lui qui fait tourner la transcription. Installez Python 3 ({0}), puis réessayez.", commentPython()),
+      !pythonSysteme
+        ? tf("Python 3 est absent de cette machine. C'est lui qui fait tourner la transcription. Installez Python 3 ({0}), puis réessayez.", commentPython())
+        : obstacleVenv(),
     );
-  } else if (!venv && pythonSysteme && !(await venvDisponible(pythonSysteme))) {
-    obstacles.push(obstacleVenv());
   }
 
   return {
@@ -1323,7 +1345,7 @@ export async function diagnosticDictee(): Promise<DiagnosticDictee> {
     installable: obstacles.length === 0,
     obstacles,
     telechargementMo:
-      (paquet ? 0 : DICTEE_PAQUETS_TELECHARGES_MO) + (modele ? 0 : courant.tailleMo),
+      (paquet ? 0 : DICTEE_PAQUETS_TELECHARGES_MO) + (modele ? 0 : courant.tailleMo) + (!venv && !(await pythonPourVenv(false)) ? taillePythonPriveMo() : 0),
     placeMo: (paquet ? 0 : DICTEE_PAQUETS_INSTALLES_MO) + (modele ? 0 : courant.tailleMo),
     dossier: dossierDictee(),
     installationEnCours: enCours !== null,
@@ -1407,8 +1429,8 @@ async function executerDictee(onProgres: (p: ProgresDictee) => void): Promise<Bi
 
   /* ------------------------------ venv ---------------------------------------- */
   if (!(await existe(pythonVenv(), constants.X_OK))) {
-    const python = await trouverPython();
-    if (!python) throw new Error("Python 3 est introuvable.");
+    const python = await pythonPourVenv(true, (p) => onProgres({ phase: "python", message: tf("Installation de Python ({0} %)...", p), percent: 2 }));
+    if (!python) throw new Error(t("Python 3 est introuvable."));
     onProgres({ phase: "python", message: t("Création de l'environnement Python isolé..."), percent: 5 });
     await lancer(python, ["-m", "venv", dossierPython()], { timeout: 5 * 60_000 });
   }

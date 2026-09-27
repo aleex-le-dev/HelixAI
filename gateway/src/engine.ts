@@ -1,7 +1,7 @@
 import { execFile, execFileSync } from "node:child_process";
 import { promisify } from "node:util";
 import { createHash } from "node:crypto";
-import { createWriteStream, existsSync, readFileSync } from "node:fs";
+import { createWriteStream, existsSync, mkdirSync, readFileSync } from "node:fs";
 import { mkdtemp, rm, access, mkdir } from "node:fs/promises";
 import { constants } from "node:fs";
 import { tmpdir, homedir } from "node:os";
@@ -275,6 +275,24 @@ export function dossierLmStudio(): string {
 
 export const lmsDeLlmster = (): string => join(dossierLmStudio(), "bin", process.platform === "win32" ? "lms.exe" : "lms");
 
+/**
+ * Le dossier temporaire interne du moteur, que llmster 0.0.25 ne crée pas
+ * lui-même (essai sous Ubuntu 24.04 du 27/09/2026) : sans lui, chaque
+ * chargement de modèle échouait (`ENOENT … mkdtemp .internal/temp/…`), juste
+ * après une installation réussie. Créé à l'installation, et à chaque démarrage
+ * du moteur pour les installations déjà faites. Sans effet s'il existe.
+ */
+export function preparerDossiersLlmster(): void {
+  if (process.platform === "darwin") return;
+  const racine = dossierLmStudio();
+  if (!existsSync(racine)) return;
+  try {
+    mkdirSync(join(racine, ".internal", "temp"), { recursive: true });
+  } catch {
+    /* dossier du moteur en lecture seule : le chargement le dira */
+  }
+}
+
 /** Version courante de llmster, lue dans le script officiel. */
 async function versionLlmster(): Promise<string> {
   const res = await fetch(SCRIPT_OFFICIEL, { signal: AbortSignal.timeout(20_000) });
@@ -391,6 +409,7 @@ async function installerLlmster(onProgress: (p: EngineProgress) => void): Promis
     });
     const lms = lmsDeLlmster();
     if (!existsSync(lms)) throw new Error(t("Le moteur s'est installé, mais son outil `lms` est introuvable. Réessayez, ou installez LM Studio depuis lmstudio.ai."));
+    preparerDossiersLlmster();
     onProgress({ phase: "pret", message: tf("Moteur installé (version {0}).", version), percent: 100 });
     return lms;
   } finally {

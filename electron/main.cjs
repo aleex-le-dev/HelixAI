@@ -82,6 +82,8 @@ let gateway = null;
 let mainWindow = null;
 /** Windows et Linux : l'icône de la zone de notification (zoneNotification.cjs), null sur macOS ou si elle n'a pas pu être posée. */
 let zone = null;
+/** La fenêtre principale a-t-elle été ouverte au moins une fois ? (voir `window-all-closed`) */
+let fenetrePrincipaleOuverte = false;
 /** « Quitter » a été demandé : fermer la fenêtre ne doit plus seulement la cacher. */
 let quitterVraiment = false;
 /** Langue de l'écran, que l'interface donne au démarrage : pour les quelques textes de ce processus. */
@@ -710,6 +712,7 @@ async function reprendreAncienStockage() {
 
 function createWindow() {
   const theme = themeDemarrage();
+  fenetrePrincipaleOuverte = true;
 
   mainWindow = new BrowserWindow({
     width: 1280,
@@ -1111,6 +1114,19 @@ app.whenReady().then(async () => {
   );
   if (lienDeDemarrage) recevoirLien(lienDeDemarrage);
   installerVerificationCertificats();
+  // Windows et Linux : l'icône d'abord, avant les étapes qui peuvent ouvrir et fermer des fenêtres de service.
+  if (process.platform !== "darwin") {
+    zone = installerZoneNotification({
+      nom: app.getName(),
+      icone: path.join(__dirname, "..", "build", "icon.png"),
+      langue: langueEcran,
+      montrer: montrerFenetre,
+      quitter: () => {
+        quitterVraiment = true;
+        app.quit();
+      },
+    });
+  }
   // En développement, l'interface vient du serveur Vite : rien à servir ici.
   if (!isDev) servirInterface();
   installerBotReunion(() => mainWindow);
@@ -1135,18 +1151,6 @@ app.whenReady().then(async () => {
   } else {
     await startGateway();
   }
-  if (process.platform !== "darwin") {
-    zone = installerZoneNotification({
-      nom: app.getName(),
-      icone: path.join(__dirname, "..", "build", "icon.png"),
-      langue: langueEcran,
-      montrer: montrerFenetre,
-      quitter: () => {
-        quitterVraiment = true;
-        app.quit();
-      },
-    });
-  }
   createWindow();
   void demarrerMiseAJour(depuisLaFenetre);
 
@@ -1164,7 +1168,16 @@ app.whenReady().then(async () => {
  */
 app.on("window-all-closed", () => {
   // Windows et Linux : l'icône de la zone de notification tient l'application ouverte ; sans elle, on quitte comme avant.
-  if (process.platform !== "darwin" && !zone) app.quit();
+  if (process.platform === "darwin" || zone) return;
+  /*
+   * Seulement une fois la fenêtre principale ouverte (essai sous Ubuntu du
+   * 27/09/2026) : au démarrage, une fenêtre de service invisible (reprise de
+   * l'ancien stockage) s'ouvre puis se ferme, et sa fermeture faisait quitter
+   * l'application sous Windows et Linux avant même que la passerelle ne
+   * démarre. Sur macOS, cette règle ne s'appliquait pas : rien ne se voyait.
+   */
+  if (!fenetrePrincipaleOuverte) return;
+  app.quit();
 });
 
 /*

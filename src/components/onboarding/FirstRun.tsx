@@ -91,7 +91,7 @@ export function FirstRun({ onReady }: { onReady: () => void }) {
         </h1>
         <p className="max-w-md text-sm leading-relaxed text-muted-foreground">
           {t("Il manque le moteur qui fait tourner les modèles : LM Studio, d'Element Labs.")}
-          {" "}{branding.name}{" "}{t("l'installe lui-même : rien à télécharger ni à glisser, environ une minute selon votre connexion. Les modèles tournent ensuite sur cette machine, sans rien envoyer à l'éditeur.")}
+          {" "}{branding.name}{" "}{t("l'installe lui-même : rien à télécharger ni à glisser. Comptez quelques minutes selon votre connexion (0,5 à 1 Go selon le système). Les modèles tournent ensuite sur cette machine, sans rien envoyer à l'éditeur.")}
         </p>
 
         {busy || state.phase === "ready" ? (

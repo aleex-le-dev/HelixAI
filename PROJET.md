@@ -675,6 +675,14 @@ local, conforme à la règle du § 1) :
 | transformers, peft, accelerate ; bitsandbytes ; PyTorch ; llama.cpp | Hugging Face ; bitsandbytes ; PyTorch ; ggml-org | Apache 2.0 ; MIT ; BSD-3 ; MIT | entraînement sur carte NVIDIA | versions figées, **sans empreintes** pour les paquets NVIDIA |
 | Unsloth 2026.9.11, unsloth_zoo 2026.9.7 | Unsloth AI | cœur Apache 2.0, `unsloth_zoo` LGPL-3.0-or-later (Studio AGPL-3.0, non utilisé) | entraînement sur carte NVIDIA | **accepté par Medhi le 25/09/2026** ; roues vérifiées par empreinte, repli sur transformers et peft (§ 3.12) |
 
+**Ajouté le 27/09/2026** :
+
+| Brique | Éditeur | Licence | Usage | Remarque |
+|---|---|---|---|---|
+| CPython 3.12.14, construction autonome `python-build-standalone` (publication 20260901) | Python Software Foundation ; construction par Astral | PSF-2.0 (construction : MPL-2.0) | Python de l'atelier, de la dictée et de l'entraînement quand la machine n'en a pas un qui convient (`pythonPrive.ts`) | **accepté par Medhi le 27/09/2026** (« Python doit s'installer ») ; publication épinglée, empreintes SHA-256 écrites dans le code |
+| Node 24 LTS officiel | OpenJS Foundation | MIT (npm : Artistic 2.0) | npm de l'atelier quand la machine n'en a pas | même Node que celui d'OpenClaw, déjà en place ; empreinte vérifiée contre `SHASUMS256.txt` |
+| llmster (moteur sans interface de LM Studio) | Element Labs | conditions de LM Studio (acceptées par l'entreprise à l'installation) | moteur des modèles sous Windows et Linux | empreinte SHA-512 publiée par l'éditeur, vérifiée |
+
 Écartés pour le RAG : LanceDB, better-sqlite3 / sqlite-vec et le reclassement par
 onnxruntime-node (modules natifs, § 3.10) ; Orama (licence déclarée « NOASSERTION »
 par GitHub le 25/09/2026, non vérifiée plus avant).

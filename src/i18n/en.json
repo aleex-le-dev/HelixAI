@@ -1436,7 +1436,7 @@
   "L'installation n'a pas abouti.": "The installation did not complete.",
   "L'installation n'a pas pu être lancée. Vérifiez que l'instance répond, puis réessayez.": "The installation could not be started. Check that the instance answers, then try again.",
   "L'installation s'est interrompue sans rendre de bilan.": "The installation stopped without reporting back.",
-  "l'installe lui-même : rien à télécharger ni à glisser, environ une minute selon votre connexion. Les modèles tournent ensuite sur cette machine, sans rien envoyer à l'éditeur.": "installs it itself: nothing to download or drag, about a minute depending on your connection. The models then run on this machine, without sending anything to the publisher.",
+  "l'installe lui-même : rien à télécharger ni à glisser. Comptez quelques minutes selon votre connexion (0,5 à 1 Go selon le système). Les modèles tournent ensuite sur cette machine, sans rien envoyer à l'éditeur.": "installs it itself: nothing to download or drag. Allow a few minutes depending on your connection (0.5 to 1 GB depending on the system). Models then run on this machine, without sending anything to the publisher.",
   "L'instance": "The instance",
   "L'instance a rendu vos Chats : ils sont de nouveau sur cet ordinateur.": "The instance returned your Chats: they are back on this computer.",
   "L'instance a rendu vos Chats ({0}) : ils sont de nouveau sur cet ordinateur.": "The instance returned your Chats ({0}): they are back on this computer.",

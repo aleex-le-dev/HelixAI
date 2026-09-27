@@ -1,4 +1,5 @@
 import { nomProduit } from "./marque.ts";
+import { pythonPrive } from "./pythonPrive.ts";
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { execFile } from "node:child_process";
 import { basename, dirname, extname, join, relative, sep } from "node:path";
@@ -278,7 +279,8 @@ async function problemesAutres(dossier: string, depuis: number): Promise<{ probl
   const python = touches.filter((x) => x.endsWith(".py"));
   if (python.length > 0) {
     const r = await new Promise<string>((resolve) => {
-      execFile("python3", ["-I", "-B", "-c", ANALYSE_PYTHON, dossier, ...python], { timeout: 30_000, maxBuffer: 2_000_000 }, (err, stdout) => resolve(err ? "" : stdout));
+      // Sous Windows, `python3` n'existe pas : le Python que Helix a posé, s'il l'a posé (pythonPrive.ts).
+      execFile(process.platform === "win32" ? (pythonPrive() ?? "python") : "python3", ["-I", "-B", "-c", ANALYSE_PYTHON, dossier, ...python], { timeout: 30_000, maxBuffer: 2_000_000 }, (err, stdout) => resolve(err ? "" : stdout));
     });
     try {
       for (const e of JSON.parse(r || "[]") as { f: string; l: number; k: string; m: string }[]) {

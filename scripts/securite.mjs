@@ -2288,6 +2288,16 @@ console.log("\n11 quinquies. Windows et Linux : ce qui se vérifie depuis ce pos
     m.spawn("lms", ["ls"]); m.execFile("a", () => {}); m.exec("dir"); m.execFileSync("b", ["c"], { stdio: "ignore" }); await promisify(m.execFile)("nvidia-smi", ["-q"]);
     console.log(vus.every((v) => v.includes('"windowsHide":true')) && vus.length === 5 ? "CACHEES" : vus.join(" "));`);
   verifier("Windows (simulé) : les processus lancés par la passerelle n'ouvrent pas de console", consoles.includes("CACHEES"), consoles.slice(0, 200));
+
+  // Le Python que Helix pose (décidé par Medhi le 27/09/2026) : publication épinglée, empreinte écrite, refus d'une archive différente.
+  const sourcePython = readFileSync(join(RACINE, "gateway", "src", "pythonPrive.ts"), "utf8");
+  const empreintes = [...sourcePython.matchAll(/"([a-z0-9_]+-(?:pc-windows-msvc|unknown-linux-gnu|apple-darwin))": \{ sha256: "([0-9a-f]{64})"/g)];
+  verifier("Python posé par Helix : publication épinglée, une empreinte SHA-256 par système (Windows, Linux, macOS ; x64 et arm64)", /const PUBLICATION = "\d{8}"/.test(sourcePython) && empreintes.length === 6, `${empreintes.length} empreintes`);
+  const d4 = dossierNeuf(join(tmpdir(), "helix-python-"));
+  const piegee = essai(`globalThis.fetch = async () => new Response(new Blob([new Uint8Array(4096).fill(7)]).stream(), { status: 200 });
+    const m = await import("./gateway/src/pythonPrive.ts");
+    try { await m.assurerPythonPrive(); console.log("ACCEPTEE"); } catch (e) { console.log("REFUS", e.message.slice(0, 60), m.pythonPrive() === null); }`, { HELIX_DATA_DIR: d4 });
+  verifier("Python posé par Helix : une archive à la mauvaise empreinte est refusée, rien n'est installé", /REFUS .*empreinte.* true/.test(piegee), piegee.slice(0, 200));
 }
 
 console.log("\n12. Deviner un mot de passe");

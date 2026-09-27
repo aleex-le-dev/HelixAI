@@ -1,5 +1,5 @@
 import { homedir } from "node:os";
-import { join, dirname } from "node:path";
+import { delimiter, join, dirname } from "node:path";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import {
@@ -10,6 +10,7 @@ import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/
 import { deployment } from "./deployment.ts";
 import { t, tf } from "./langue.ts";
 import { cheminProtegeDans, filtrerResultat } from "./zonesProtegees.ts";
+import { assurerNodePrive, nodePriveInstallable, npxPrive } from "./installationOpenClaw.ts";
 
 /**
  * Gestionnaire de serveurs MCP auto-hébergés (ARCHITECTURE.md, ADR-004).
@@ -258,6 +259,40 @@ async function demarrerDistant(
   return { ok: true };
 }
 
+/*
+ * `npx`, là où il n'est pas directement lançable (27/09/2026, essai sous
+ * Ubuntu et audit Windows) : une machine sans Node n'en a pas, et sous Windows
+ * c'est un `.cmd`, que Node refuse de lancer sans interpréteur de commandes.
+ * Dans l'ordre : `npx` du système (macOS et Linux, comme avant) ; le Node du
+ * système sous Windows, avec le script de `npx` ; le Node que Helix pose
+ * (installationOpenClaw.ts, empreinte vérifiée), installé au besoin. Son
+ * dossier passe en tête du PATH : les paquets lancés par `npx` y trouvent
+ * `node`.
+ */
+async function resoudreNpx(): Promise<{ command: string; prefixe: string[]; path?: string } | null> {
+  const dansLePath = (nom: string) =>
+    (process.env.PATH ?? "")
+      .split(delimiter)
+      .filter(Boolean)
+      .map((d) => join(d, nom))
+      .find((c) => existsSync(c));
+  if (process.platform !== "win32" && (dansLePath("npx") || ["/opt/homebrew/bin/npx", "/usr/local/bin/npx"].some((c) => existsSync(c)))) {
+    return { command: "npx", prefixe: [] };
+  }
+  if (process.platform === "win32") {
+    const node = dansLePath("node.exe");
+    const script = node ? join(dirname(node), "node_modules", "npm", "bin", "npx-cli.js") : null;
+    if (node && script && existsSync(script)) return { command: node, prefixe: [script] };
+  }
+  let prive = npxPrive();
+  if (!prive && nodePriveInstallable() === null) {
+    console.log("[mcp] npx absent de cette machine : installation du Node de Helix (nodejs.org, empreinte vérifiée)...");
+    await assurerNodePrive().catch((err) => console.error(`[mcp] Node non installé : ${(err as Error).message}`));
+    prive = npxPrive();
+  }
+  return prive ? { command: prive.node, prefixe: [prive.script], path: prive.dossier } : null;
+}
+
 export async function startServer(id: string): Promise<{ ok: boolean; error?: string }> {
   const entry = servers.get(id);
   if (!entry) return { ok: false, error: `Serveur inconnu : ${id}` };
@@ -265,16 +300,20 @@ export async function startServer(id: string): Promise<{ ok: boolean; error?: st
 
   try {
     if (entry.config.url) return await demarrerDistant(id, entry);
+    const npx = entry.config.command === "npx" ? await resoudreNpx() : null;
+    if (entry.config.command === "npx" && !npx) throw new Error(t("npx est absent de cette machine, et Node n'a pas pu être installé."));
+    const defaut = getDefaultEnvironment();
     const transport = new StdioClientTransport({
-      command: entry.config.command!,
-      args: entry.config.args ?? [],
+      command: npx ? npx.command : entry.config.command!,
+      args: [...(npx?.prefixe ?? []), ...(entry.config.args ?? [])],
       /*
        * `getDefaultEnvironment()` d'abord : sans PATH ni HOME, `npx` ne trouve
        * ni Node ni son cache et le serveur ne démarre jamais. Les secrets du
        * connecteur viennent ensuite, et priment.
        */
       env: {
-        ...getDefaultEnvironment(),
+        ...defaut,
+        ...(npx?.path ? { PATH: [npx.path, defaut.PATH ?? process.env.PATH ?? ""].filter(Boolean).join(delimiter) } : {}),
         ...(entry.config.env ?? {}),
         /*
          * Aucun script d'installation : `npx` télécharge le paquet épinglé et ses

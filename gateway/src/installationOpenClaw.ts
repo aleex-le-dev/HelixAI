@@ -102,6 +102,18 @@ export function npmPrive(): string | null {
   return existsSync(npm) && existsSync(executableNode(dossier)) ? npm : null;
 }
 
+/**
+ * Le Node privé pour lancer `npx` (serveurs MCP, mcp.ts) : son exécutable, son
+ * dossier (à mettre en tête du PATH, pour que les paquets lancés trouvent
+ * `node`) et le script de `npx`. Null s'il n'est pas installé.
+ */
+export function npxPrive(): { node: string; dossier: string; script: string } | null {
+  const dossier = join(racine(), "node");
+  const node = executableNode(dossier);
+  const script = platform() === "win32" ? join(dossier, "node_modules", "npm", "bin", "npx-cli.js") : join(dossier, "lib", "node_modules", "npm", "bin", "npx-cli.js");
+  return existsSync(node) && existsSync(script) ? { node, dossier: platform() === "win32" ? dossier : join(dossier, "bin"), script } : null;
+}
+
 /** Le Node privé peut-il être installé ici ? La raison sinon. */
 export function nodePriveInstallable(): string | null {
   const p = plateformeNode("atelier");

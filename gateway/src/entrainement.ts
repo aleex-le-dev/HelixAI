@@ -24,6 +24,7 @@ import { chiffrerOctets, dechiffrerOctets } from "./secret.ts";
 import { t, tf } from "./langue.ts";
 import empreintesPaquets from "./entrainement-paquets.json" with { type: "json" };
 import { arreterArbre } from "./processus.ts";
+import { assurerPythonPrive, pythonPrive, pythonPriveInstallable } from "./pythonPrive.ts";
 
 const exec = promisify(execFile);
 
@@ -744,6 +745,23 @@ export interface EtatEntrainement {
   projets: ResumeProjet[];
 }
 
+/** numpy 2.5, figé pour le Mac, demande Python 3.12 ou plus récent. */
+const minimumPython = (moteur: string | null): [number, number] => (moteur === "mlx" ? [3, 12] : [3, 10]);
+
+/**
+ * Le Python à partir duquel créer l'environnement d'entraînement : celui du
+ * système s'il est assez récent, sinon celui que Helix pose (3.12). `installer`
+ * seulement à l'installation.
+ */
+async function pythonPourEntrainement(moteur: string | null, installer: boolean): Promise<string | null> {
+  const py = await pythonSysteme();
+  const [maj, min] = minimumPython(moteur);
+  if (py && (py.version[0] > maj || (py.version[0] === maj && py.version[1] >= min))) return py.chemin;
+  const prive = pythonPrive();
+  if (prive || !installer) return prive;
+  return assurerPythonPrive();
+}
+
 async function pythonSysteme(): Promise<{ chemin: string; version: [number, number] } | null> {
   const candidats =
     process.platform === "win32"
@@ -769,14 +787,16 @@ export async function etat(qui: string): Promise<EtatEntrainement> {
   const b = cap.base;
   const obstacles: string[] = [];
   const venvLa = existsSync(pythonVenv());
-  if (cap.possible && !venvLa) {
+  /*
+   * Sans Python assez récent sur la machine, Helix pose le sien (Python 3.12,
+   * pythonPrive.ts, décidé par Medhi le 27/09/2026) : un obstacle seulement là
+   * où il ne sait pas le faire.
+   */
+  if (cap.possible && !venvLa && !(await pythonPourEntrainement(cap.moteur, false)) && pythonPriveInstallable() !== null) {
     const py = await pythonSysteme();
-    // numpy 2.5, figé pour le Mac, demande Python 3.12 ou plus récent.
-    const minimum: [number, number] = cap.moteur === "mlx" ? [3, 12] : [3, 10];
+    const minimum = minimumPython(cap.moteur);
     if (!py) obstacles.push(t("Python 3 est absent de cette machine. Installez-le (site officiel python.org, ou Homebrew), puis revenez ici."));
-    else if (py.version[0] < minimum[0] || (py.version[0] === minimum[0] && py.version[1] < minimum[1])) {
-      obstacles.push(tf("Python {0}.{1} est trop ancien : il faut Python {2}.{3} ou plus récent (site officiel python.org, ou Homebrew).", py.version[0], py.version[1], minimum[0], minimum[1]));
-    }
+    else obstacles.push(tf("Python {0}.{1} est trop ancien : il faut Python {2}.{3} ou plus récent (site officiel python.org, ou Homebrew).", py.version[0], py.version[1], minimum[0], minimum[1]));
   }
   const pret = Boolean(cap.possible && b && tem && tem.moteur === cap.moteur && tem.base === b.cle && venvLa && basePresente(b));
   const reste = b ? b.fichiers.filter((f) => !fichierPresent(b, f)).reduce((s, f) => s + f.taille, 0) : 0;
@@ -836,10 +856,11 @@ export function installer(qui: string): Promise<void> {
 
     /* ----- environnement Python isolé ----- */
     if (!existsSync(pythonVenv())) {
-      const py = await pythonSysteme();
-      if (!py) throw new Error(t("Python 3 est absent de cette machine. Installez-le (site officiel python.org, ou Homebrew), puis revenez ici."));
+      tr.message = t("Installation de Python...");
+      const chemin = await pythonPourEntrainement(cap.moteur, true);
+      if (!chemin) throw new Error(t("Python 3 est absent de cette machine. Installez-le (site officiel python.org, ou Homebrew), puis revenez ici."));
       tr.message = t("Création de l'environnement Python isolé...");
-      await lancer(py.chemin, [...(py.chemin === "py" ? ["-3"] : []), "-m", "venv", dossierPython()], { env: environnement(false), delai: 5 * 60_000 });
+      await lancer(chemin, [...(chemin === "py" ? ["-3"] : []), "-m", "venv", dossierPython()], { env: environnement(false), delai: 5 * 60_000 });
     }
     tr.message = cap.moteur === "mlx" ? t("Installation de MLX (moteur d'entraînement d'Apple)...") : t("Installation de PyTorch et des bibliothèques d'entraînement...");
     let lignes = 0;

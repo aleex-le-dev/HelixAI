@@ -1,9 +1,10 @@
 import { redirectionPour, refusSortie } from "./sortieReseau.ts";
 import { execFile, execFileSync } from "node:child_process";
+import { existsSync } from "node:fs";
 import { promisify } from "node:util";
 import { homedir, totalmem } from "node:os";
 import { join } from "node:path";
-import { lmsDeLlmster } from "./engine.ts";
+import { lmsDeLlmster, preparerDossiersLlmster } from "./engine.ts";
 import { BACKENDS, classifyRoles, isReasoningModel, tousLesBackends } from "./config.ts";
 import type { BackendConfig, BackendStatus, ModelInfo } from "./types.ts";
 import { t, tf } from "./langue.ts";
@@ -45,7 +46,17 @@ export async function findLms(): Promise<string | null> {
   if (lmsPathCache !== undefined) return lmsPathCache;
   for (const candidate of LMS_CANDIDATES()) {
     try {
-      await exec(candidate, ["version"], { timeout: 5000 });
+      /*
+       * 30 s pour un fichier présent à sa place connue (essai sous Ubuntu du
+       * 27/09/2026) : le `lms` du moteur sans interface pèse 109 Mo et mettait
+       * plus de 5 s à répondre sur une machine lente, et Helix le déclarait
+       * absent juste après l'avoir installé. Présent et exécutable, il compte
+       * même si sa réponse tarde : les appels suivants diront s'il est cassé.
+       */
+      const connu = candidate !== "lms" && existsSync(candidate);
+      await exec(candidate, ["version"], { timeout: connu ? 30_000 : 5000 }).catch((err) => {
+        if (!(connu && (err as { killed?: boolean }).killed)) throw err;
+      });
       lmsPathCache = candidate;
       return candidate;
     } catch {
@@ -178,6 +189,8 @@ async function repond(url: string): Promise<boolean> {
  */
 export async function ensureLmStudioServer(): Promise<boolean> {
   if (!LMSTUDIO_URL) return false;
+  // Avant tout, même serveur déjà en marche : sans ce dossier, llmster ne charge aucun modèle (engine.ts).
+  preparerDossiersLlmster();
   if (await repond(LMSTUDIO_URL)) return true;
 
   const maintenant = Date.now();
@@ -216,7 +229,7 @@ export async function ensureLmStudioServer(): Promise<boolean> {
   }
   try {
     console.log("[helix] serveur LM Studio arrêté, démarrage...");
-    await exec(lms, ["server", "start"], { timeout: 30_000 });
+    await exec(lms, ["server", "start"], { timeout: 60_000 });
   } catch {
     // Peut échouer si LM Studio n'est pas installé ou pas encore initialisé.
     return false;

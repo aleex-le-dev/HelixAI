@@ -59,6 +59,16 @@ contextBridge.exposeInMainWorld("helix", {
   /** Ouvre le sélecteur de dossier du système. Renvoie le chemin, ou null. */
   choisirDossier: () => ipcRenderer.invoke("helix:choisir-dossier"),
   /**
+   * Copier du texte (electron/pressePapiers.cjs, 27/09/2026) : la permission
+   * du presse-papiers est refusée à la page, les boutons « Copier » passent
+   * donc par ici. Écrire seulement, jamais lire ; `vider` n'efface que la
+   * dernière copie faite par Helix, si elle y est encore.
+   */
+  pressePapiers: {
+    ecrire: (texte) => ipcRenderer.invoke("helix:presse-papiers-ecrire", texte),
+    vider: (texte) => ipcRenderer.invoke("helix:presse-papiers-vider", texte),
+  },
+  /**
    * Relance la passerelle de cette machine. Sert quand l'instance vient d'être
    * ouverte aux collègues : l'adresse d'écoute se choisit au démarrage.
    */

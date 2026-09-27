@@ -88,6 +88,15 @@ d'agent alimentés par les données réelles (`ContextSelectors`, `useProjects`,
 `useAgents`). Le message système est reconstruit à chaque conversation depuis le
 profil privé de l'utilisateur (`buildSystemPrompt`).
 
+**Modèle qui répond mal sur cette machine (27/09/2026)** : dans le sélecteur, sous le nom,
+une ligne en couleur d'avertissement, « répond mal sur cette machine » (essai raté ou deux
+réponses coupées en boucle) ou « une réponse en boucle ici » (une coupure) ; le détail, avec
+la raison et la date, au survol. Un tel modèle reste choisissable, mais n'est plus retenu
+par « Auto », « Rapide » ni « Approfondi ». Dans le fil, le message de coupure dit en plus
+« Si cela se reproduit, … ne sera plus choisi d'office sur cette machine. », puis, à la
+deuxième, quel modèle répondra ensuite en « Auto ». **Pas vu à l'écran** (typecheck et
+batterie seulement).
+
 Ce qui reste fictif sur cet écran :
 
 - les **suggestions** de l'état vide (`src/data/mock/suggestions.ts`) ;
@@ -948,6 +957,14 @@ modèle est suivi ensuite sur le même écran, y compris un téléchargement lai
 lancement précédent, et après une coupure du flux (passerelle redémarrée). « Commencer »
 n'apparaît qu'avec un modèle de Chat disponible ; un modèle conseillé pas encore essayé avec
 Helix le dit. Poste piloté par l'intégrateur : rien à installer, « Vérifier à nouveau ».
+
+**Essai du modèle (27/09/2026)** : après le chargement, une étape de plus, « Vérification
+de … : une courte question d'essai... ». Un modèle qui répond mal sur cette machine (réponse
+vide, en boucle, faite de signes, ou dans un autre alphabet) cède la place : « … ne répond
+pas correctement sur cette machine, essai de … », puis le téléchargement et le chargement du
+suivant, sur la même barre. Si aucun ne reste : « … ne répond pas correctement sur cette
+machine. », avec la piste (sélecteur de modèles, ou modèle par une clé). **Pas vu à l'écran**
+(batterie seule, faux moteur) : les textes sont ceux de l'état de mise en route déjà affiché.
 
 L'écran de connexion a quatre étapes possibles : choix du compte (un cadenas
 pour ceux qui ont un mot de passe, « Mot de passe à choisir » pour un compte

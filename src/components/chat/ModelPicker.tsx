@@ -97,6 +97,40 @@ function marqueDuModele(id: string): CleMarque | undefined {
   return MARQUE_DU_MODELE.find(([re]) => re.test(id))?.[1];
 }
 
+/* --- Modèle qui a mal répondu sur cette machine ---------------------------- */
+
+/**
+ * Ce que le sélecteur dit d'un modèle qui a mal répondu sur la machine de
+ * l'instance (27/09/2026, gateway/src/santeModeles.ts). Choisissable quand
+ * même : la personne sait alors à quoi s'attendre.
+ */
+function avertissementMachine(m: GatewayModel): { court: string; long: string } | null {
+  const s = m.surCetteMachine;
+  if (!s) return null;
+  const jour = new Date(s.date).toLocaleDateString(locale());
+  if (s.etat === "douteux") {
+    return {
+      court: t("une réponse en boucle ici"),
+      long: tf("Une de ses réponses est partie en boucle sur cette machine le {0}. À la deuxième, il ne sera plus choisi d'office.", jour),
+    };
+  }
+  const raisons: Record<string, string> = {
+    vide: t("réponse d'essai vide"),
+    boucle: t("réponse d'essai en boucle"),
+    signes: t("réponse d'essai faite de signes"),
+    alphabet: t("réponse d'essai dans un autre alphabet"),
+    coupures: t("deux réponses parties en boucle"),
+  };
+  return {
+    court: t("répond mal sur cette machine"),
+    long: tf(
+      "Ne répond pas correctement sur cette machine ({0}, le {1}) : il n'est plus choisi d'office. Vous pouvez le choisir quand même.",
+      raisons[s.raison ?? ""] ?? t("réponse illisible"),
+      jour,
+    ),
+  };
+}
+
 /* --- Choix « Rapide » et « Approfondi » ------------------------------------ */
 
 /**
@@ -213,8 +247,15 @@ export function ModelBehaviorPicker({
   const selected = models.find((m) => m.uid === value);
   const label = selected?.id ?? (loading ? t("Chargement...") : error ? t("Hors ligne") : t("Auto"));
 
-  // Les raccourcis ne proposent jamais un modèle entraîné sur la machine : il reste dans la liste, à choisir soi-même.
-  const pourConverser = useMemo(() => models.filter((m) => m.roles.includes("chat") && !m.entraine), [models]);
+  /*
+   * Les raccourcis ne proposent jamais un modèle entraîné sur la machine, ni
+   * un modèle qui a mal répondu sur elle (27/09/2026) : ils restent dans la
+   * liste, à choisir soi-même.
+   */
+  const pourConverser = useMemo(
+    () => models.filter((m) => m.roles.includes("chat") && !m.entraine && m.surCetteMachine?.etat !== "defaillant"),
+    [models],
+  );
   const rapide = useMemo(() => leRapide(pourConverser), [pourConverser]);
   const capable = useMemo(() => leCapable(pourConverser), [pourConverser]);
 
@@ -235,10 +276,12 @@ export function ModelBehaviorPicker({
     const size = formatSize(m.sizeBytes);
     const lieu = lieuDuModele(m);
     const pavillon = drapeau(m);
+    const avertissement = avertissementMachine(m);
     return (
       <button
         key={m.uid}
         type="button"
+        title={avertissement?.long}
         onClick={() => {
           onChange?.(m.uid);
           setOpen(false);
@@ -264,6 +307,12 @@ export function ModelBehaviorPicker({
             {size && <span>· {size}</span>}
             {m.reasoning && <span>{t("· raisonnement")}</span>}
           </span>
+          {avertissement && (
+            <span className="flex items-center gap-1 text-[11px] text-warning">
+              <CircleAlert size={11} strokeWidth={2} className="shrink-0" />
+              <span className="truncate">{avertissement.court}</span>
+            </span>
+          )}
         </span>
         {pavillon && <span className="shrink-0 text-base leading-none">{pavillon}</span>}
         {isSelected && <Check size={16} strokeWidth={2} className="shrink-0 text-foreground" />}

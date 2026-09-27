@@ -2,10 +2,14 @@ import { execFileSync, spawn } from "node:child_process";
 import os from "node:os";
 import { readdirSync, statSync, type Dirent } from "node:fs";
 import { join } from "node:path";
-import { faireLaPlace, findLms, optionsDeChargement } from "./backends.ts";
+import { backendById, faireLaPlace, findLms, lmStudioRepond, optionsDeChargement } from "./backends.ts";
 import { nomProduit } from "./marque.ts";
 import { t, tf } from "./langue.ts";
 import { dossierLmStudio, moteurAPoser, preparerDossiersLlmster } from "./engine.ts";
+import { aEssayer, essayerModele, estDefaillant, nomDuModele, noterCoupure, noterEssai, type Verdict } from "./santeModeles.ts";
+import { autoProvisionEnabled } from "./deployment.ts";
+import { invalidate, resolve } from "./router.ts";
+import type { ModelInfo } from "./types.ts";
 
 /**
  * Provisionnement automatique du modèle local (ARCHITECTURE.md, ADR-009).
@@ -231,11 +235,23 @@ export function tientSur(hw: Hardware, f: { downloadGb: number; moe?: boolean })
   return f.downloadGb <= 5 && besoin + reserve <= hw.totalMemoryGb;
 }
 
-/** Ce que la machine peut faire tourner, du mieux noté au moins bien noté. */
+/**
+ * Ce que la machine peut faire tourner, du mieux noté au moins bien noté.
+ *
+ * Sans les modèles qui ont mal répondu sur cette machine (santeModeles.ts,
+ * 27/09/2026) : ils ne sont plus installés, recommandés ni proposés d'office.
+ * On peut toujours les choisir à la main.
+ */
 function classement(hw: Hardware, catalogue: CatalogEntry[], verifiesSeulement: boolean): CatalogEntry[] {
   return catalogue
-    .filter((e) => (!verifiesSeulement || e.verifie) && tientSur(hw, e))
+    .filter((e) => (!verifiesSeulement || e.verifie) && tientSur(hw, e) && !estDefaillant(e.key))
     .sort((a, b) => b.intelligence - a.intelligence || a.downloadGb - b.downloadGb);
+}
+
+/** Le plus léger des modèles vérifiés, hors ceux qui ont mal répondu ici (tous, s'ils ont tous mal répondu). */
+function legerVerifie(catalogue: CatalogEntry[]): CatalogEntry | undefined {
+  const verifies = catalogue.filter((e) => e.verifie).sort((a, b) => a.downloadGb - b.downloadGb);
+  return verifies.find((e) => !estDefaillant(e.key)) ?? verifies[0];
 }
 
 /**
@@ -259,15 +275,20 @@ function classement(hw: Hardware, catalogue: CatalogEntry[], verifiesSeulement: 
  * encore vérifié avec Helix »), et les autres restent proposés.
  */
 function best(hw: Hardware, catalogue: CatalogEntry[], verifiesSeulement = false): CatalogEntry {
-  const verifies = catalogue.filter((e) => e.verifie).sort((a, b) => a.downloadGb - b.downloadGb);
-  return classement(hw, catalogue, verifiesSeulement)[0] ?? verifies[0] ?? catalogue[catalogue.length - 1]!;
+  return classement(hw, catalogue, verifiesSeulement)[0] ?? legerVerifie(catalogue) ?? catalogue[catalogue.length - 1]!;
 }
 
-/** Modèles de repli si le conseillé ne se charge pas : les suivants du classement, puis le plus léger vérifié. */
+/**
+ * Modèles de repli si le conseillé ne se charge pas, ou répond mal à l'essai :
+ * les suivants du classement, puis le plus léger vérifié. Ceux qui ont déjà
+ * mal répondu sur cette machine n'y sont pas (sauf le départ, s'il a été
+ * demandé nommément : il est alors réessayé).
+ */
 export function replis(hw: Hardware, catalogue: CatalogEntry[], depart: CatalogEntry): CatalogEntry[] {
   const suite = classement(hw, catalogue, false).filter((e) => e.key !== depart.key);
-  const leger = [...catalogue].filter((e) => e.verifie).sort((a, b) => a.downloadGb - b.downloadGb)[0];
-  return [depart, ...suite, ...(leger && leger.key !== depart.key && !suite.includes(leger) ? [leger] : [])];
+  const leger = legerVerifie(catalogue);
+  const garderLeger = leger && leger.key !== depart.key && !suite.includes(leger) && !estDefaillant(leger.key);
+  return [depart, ...suite, ...(garderLeger ? [leger] : [])];
 }
 
 /**
@@ -522,6 +543,105 @@ async function dejaEnTelechargement(key: string): Promise<boolean> {
   return ok;
 }
 
+/**
+ * L'essai du modèle qu'on vient de charger (santeModeles.ts, 27/09/2026) :
+ * une courte question, un verdict, noté pour cette machine. Réussi : l'écran
+ * dit « prêt ». Raté : le modèle est déchargé et l'écran dit lequel suit.
+ */
+async function essaiReussi(lms: string, choice: CatalogEntry, suivant: CatalogEntry | undefined): Promise<boolean> {
+  setState({
+    phase: "loading",
+    message: tf("Vérification de {0} : une courte question d'essai...", choice.label),
+    percent: undefined,
+  });
+  const backend = backendById("lmstudio");
+  // Sans serveur connu, rien à essayer : le modèle est pris tel quel, comme avant.
+  const verdict: Verdict = backend ? await essayerModele(backend.baseUrl, choice.key, backend.apiKey) : { ok: true, indecis: "sans serveur" };
+  noterEssai(choice.key, verdict);
+  if (verdict.ok) {
+    setState({ phase: "ready", message: tf("{0} est prêt.", choice.label), percent: 100 });
+    return true;
+  }
+  await run(lms, ["unload", choice.key], () => {});
+  invalidate();
+  if (suivant) {
+    setState({
+      phase: "checking",
+      message: tf("{0} ne répond pas correctement sur cette machine, essai de {1}...", choice.label, suivant.label),
+    });
+  }
+  return false;
+}
+
+/**
+ * Poste déjà installé (27/09/2026) : le modèle conseillé pour cette machine,
+ * s'il est déjà là mais n'a jamais été essayé, passe l'essai une fois, au
+ * démarrage de la passerelle. S'il répond mal, la mise en route prend le
+ * suivant d'elle-même, téléchargement compris : c'est ce qui fait basculer le
+ * PC de Medhi, où Qwen3.5 4B était installé, sans rien réinstaller.
+ *
+ * Rien si le modèle conseillé n'est pas installé (on n'installe rien de neuf
+ * au démarrage), ni sans serveur local qui réponde, ni quand l'intégrateur
+ * prépare les modèles.
+ */
+export async function verifierModeleEnPlace(): Promise<void> {
+  if (enCours || !autoProvisionEnabled()) return;
+  if (!backendById("lmstudio")?.enabled || !(await lmStudioRepond())) return;
+  const lms = await findLms();
+  if (!lms || moteurAPoser()) return;
+  const conseil = best(detectHardware(), CATALOG);
+  if (!aEssayer(conseil.key)) return;
+  const installes = await run(lms, ["ls"], () => {});
+  if (!installes.ok || !installes.output.includes(conseil.key)) return;
+  console.log(`[helix] ${conseil.key} n'a jamais été essayé sur cette machine : essai au démarrage.`);
+  await ensureLocalModel();
+  invalidate();
+}
+
+/** Deux identifiants désignent-ils le même modèle (avec ou sans éditeur, copie « :2 ») ? */
+const memeModele = (a: string, b: string) => nomDuModele(a) === nomDuModele(b);
+
+/**
+ * Ce qui prend le relais d'un modèle qui vient d'être noté défaillant sur
+ * cette machine, dit en une phrase pour le Chat.
+ *
+ *  - Un autre modèle est là : en « Auto », c'est lui qui répondra ensuite ;
+ *    avec un modèle choisi à la main, la personne garde son choix, et on lui
+ *    dit comment en changer.
+ *  - Aucun autre : la mise en route en installe un adapté à la machine, en
+ *    arrière-plan (hors déploiement piloté par l'intégrateur).
+ */
+export async function relaisApresDefaillance(modele: string, auto: boolean): Promise<string> {
+  invalidate();
+  const r = await resolve({ role: "chat" });
+  const autre = "error" in r || memeModele(r.model.id, modele) || estDefaillant(r.model.id) ? null : r.model;
+  if (autre) {
+    return auto
+      ? tf("En « Auto », {0} n'est plus choisi sur cette machine : la prochaine réponse viendra de {1}.", modele, autre.id)
+      : tf("{0} n'est plus choisi d'office sur cette machine ; il reste sélectionné pour ce Chat : passez en « Auto » ou choisissez un autre modèle.", modele);
+  }
+  if (autoProvisionEnabled() && !enCours) {
+    void ensureLocalModel()
+      .then(() => invalidate())
+      .catch((err: unknown) => console.error("[helix] relais après défaillance", err));
+    return tf("{0} n'est plus choisi d'office sur cette machine, et {1} installe un modèle qui lui convient : les réponses suivantes viendront de lui dès qu'il sera prêt.", modele, nomProduit());
+  }
+  return tf("{0} n'est plus choisi d'office sur cette machine, et aucun autre modèle n'y est installé.", modele);
+}
+
+/**
+ * Une réponse d'un modèle local vient d'être coupée par le garde-fou (chat.ts) :
+ * noté pour cette machine. La phrase rendue complète le message du Chat.
+ */
+export async function apresCoupure(model: ModelInfo, auto: boolean): Promise<string> {
+  if (model.backendKind !== "lmstudio") return "";
+  const etat = noterCoupure(model.id);
+  if (etat === "douteux") return tf("Si cela se reproduit, {0} ne sera plus choisi d'office sur cette machine.", model.id);
+  if (etat !== "defaillant") return "";
+  console.warn(`[helix] ${model.id} noté défaillant sur cette machine : deux réponses parties en boucle.`);
+  return `${t("C'est la deuxième fois sur cette machine.")} ${await relaisApresDefaillance(model.id, auto)}`;
+}
+
 export function ensureLocalModel(
   requested?: string,
   catalogue: CatalogEntry[] = CATALOG,
@@ -561,17 +681,26 @@ async function provision(
     error: undefined,
   });
 
-  // Un modèle déjà chargé en mémoire suffit : ne rien refaire.
+  /*
+   * Un modèle déjà chargé en mémoire suffit : ne rien refaire. Sauf s'il n'a
+   * jamais été essayé sur cette machine (poste installé avant l'essai, comme
+   * le PC de Medhi, 27/09/2026) : l'essai se fait alors une fois, sans le
+   * recharger, et un modèle qui répond mal cède la place au suivant.
+   */
   const loadedNow = await run(lms, ["ps"], () => {});
-  if (loadedNow.output.includes(start.key)) {
+  const dejaCharge = loadedNow.output.includes(start.key);
+  if (dejaCharge && !aEssayer(start.key)) {
     setState({ phase: "ready", message: tf("{0} est déjà prêt.", start.label), percent: 100 });
     return state;
   }
 
   let installed = await run(lms, ["ls"], () => {});
 
-  // On tente le modèle recommandé, puis les plus légers si la machine refuse.
+  // On tente le modèle recommandé, puis les plus légers si la machine refuse ou s'il répond mal.
   const candidates = replis(hw, catalogue, start);
+  /** Le prochain qui sera vraiment essayé après `apres`, pour le dire à l'écran. */
+  const suivantDe = (apres: CatalogEntry): CatalogEntry | undefined =>
+    candidates.slice(candidates.indexOf(apres) + 1).find((c) => c.downloadGb < plafondGo && !estDefaillant(c.key));
 
   /*
    * Après un refus faute de mémoire, seuls les modèles plus légers que celui
@@ -589,7 +718,19 @@ async function provision(
   let echec: { message: string; error: string } | null = null;
   for (const choice of candidates) {
     if (choice.downloadGb >= plafondGo) continue;
+    // Noté défaillant pendant cette mise en route, ou avant : pas réessayé d'office.
+    if (choice !== start && estDefaillant(choice.key)) continue;
     setState({ model: choice.key, error: undefined });
+
+    // Déjà en mémoire, jamais essayé : directement à l'essai.
+    if (choice === start && dejaCharge) {
+      if (await essaiReussi(lms, choice, suivantDe(choice))) return state;
+      echec = {
+        message: tf("{0} ne répond pas correctement sur cette machine.", choice.label),
+        error: t("Aucun autre modèle adapté à cette machine ne reste à essayer. Choisissez-en un dans le sélecteur de modèles du Chat, ou branchez un modèle par une clé."),
+      };
+      continue;
+    }
 
     if (!installed.output.includes(choice.key)) {
       /*
@@ -701,8 +842,13 @@ async function provision(
     }
 
     if (loaded.ok) {
-      setState({ phase: "ready", message: tf("{0} est prêt.", choice.label), percent: 100 });
-      return state;
+      if (await essaiReussi(lms, choice, suivantDe(choice))) return state;
+      // Mal répondu : noté, déchargé, et le suivant est essayé (ou l'échec dit, s'il n'y en a plus).
+      echec = {
+        message: tf("{0} ne répond pas correctement sur cette machine.", choice.label),
+        error: t("Aucun autre modèle adapté à cette machine ne reste à essayer. Choisissez-en un dans le sélecteur de modèles du Chat, ou branchez un modèle par une clé."),
+      };
+      continue;
     }
 
     // Mémoire toujours insuffisante : on redescend d'un cran plutôt que d'échouer.

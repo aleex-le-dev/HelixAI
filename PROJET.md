@@ -3012,6 +3012,55 @@ classique, sans Gated DeltaNet) pour séparer le modèle du moteur. Choisir d'of
 modèle sur les machines sans carte graphique irait contre la règle « la note seule décide »
 (25/09/2026) : à décider par Medhi si l'essai le montre.
 
+**Fait le 27/09/2026 (après 2026.927.3) : un modèle qui répond mal sur un poste cède la place,
+seul.** Vu par Medhi sur le même PC (processeur seul, 16 Go, llmster) : même avec `--gpu off`
+et les réglages de Qwen, Qwen3.5 4B répond « 不 時////// » ; Ministral 3B, sur ce PC, répond.
+Le défaut est vraisemblablement dans le moteur (llama.cpp de llmster, architecture récente de
+Qwen3.5 au processeur sous Windows), hors de portée de Helix. Décidé par Medhi : « ça doit
+fonctionner en fonction des PC ». Pas de règle « pas de Qwen3.5 sans carte graphique » : la
+note décide toujours, mais seulement entre les modèles qui répondent juste **sur ce poste**,
+et c'est un essai qui le dit (`gateway/src/santeModeles.ts`).
+- **Essai à la mise en route** (provision.ts) : après `lms load`, avant « prêt », « Réponds
+  seulement : bonjour » par le serveur local, sans réflexion, 64 jetons au plus, 180 s au plus
+  (un processeur lent ; `HELIX_ESSAI_MODELE_MS`). Verdict : vide, boucle (`gardeBoucle.ts`, ou
+  un motif court répété), moins d'une lettre sur deux, ou plus d'un tiers de lettres hors
+  alphabet latin ; sans texte, la réflexion est jugée (le flux cassé du PC en était une).
+  Un moteur muet ou trop lent ne condamne pas le modèle (essai « sans conclusion », noté).
+  Raté : noté défaillant dans `modeles-sur-cette-machine.json` (dossier des données : raison,
+  date, début de la réponse), déchargé, et le suivant de `replis` est essayé, téléchargement
+  compris, comme pour un manque de mémoire (« … ne répond pas correctement sur cette machine,
+  essai de … »). Un modèle défaillant n'est plus installé, recommandé ni proposé d'office
+  (`classement`), ni pris en « Auto », « Rapide » ou « Approfondi » (router.ts, sélecteur) ;
+  il reste choisissable à la main, avec « répond mal sur cette machine » dans le sélecteur.
+  Registre illisible : rien n'est écrit par-dessus. Demander nommément un modèle défaillant
+  à la mise en route le réessaie, et un essai réussi efface la défaillance.
+- **En cours d'usage** (chat.ts, `apresCoupure`) : chaque réponse coupée par le garde-fou
+  d'un modèle local est comptée ; une fois, « douteux » (« Si cela se reproduit, … ne sera
+  plus choisi d'office ») ; deux fois, défaillant : en « Auto », la réponse suivante va au
+  modèle suivant, nommé dans le message ; choisi à la main, il reste choisi, et le message
+  dit comment en changer. S'il était le seul modèle : la mise en route en pose un autre en
+  arrière-plan.
+- **Postes déjà installés** : quinze secondes après le démarrage de la passerelle, le modèle
+  conseillé, s'il est installé et jamais essayé, passe l'essai (déjà en mémoire : sans
+  rechargement), et la mise en route prend le suivant s'il répond mal ; et tout modèle chargé
+  par le Chat pour la première fois sur ce poste passe le même essai (`loadModel`) : raté, la
+  demande échoue en le disant (« Renvoyez votre message »), et la suivante va ailleurs.
+  Rien au démarrage sans moteur local qui réponde, ni quand l'intégrateur prépare les modèles.
+**Sur le PC de Medhi, ce qui devrait se passer** (déduit, pas vu) : essai de Qwen3.5 4B au
+démarrage, raté, Qwen3.5 4B déchargé, puis Qwen3 8B (le suivant à la note pour 16 Go au
+processeur, 5 Go) téléchargé, chargé et essayé ; pendant ce temps, le Chat en « Auto » passe
+à un modèle déjà là (Ministral 3B, que Medhi a installé). **Vérifié ici** : `npm run securite`, 8 contrôles de plus
+(section 7 septies) : le verdict sur des réponses justes et cassées ; une mise en route
+devant un faux moteur et un faux `lms` (Windows de 16 Go simulé, dossier personnel et PATH
+jetables) qui rejette le modèle « 不 時////// », le note, le décharge et retient le suivant,
+sans nouvel essai la fois d'après ; le PC de Medhi rejoué (Qwen3.5 4B en mémoire, essai au
+démarrage, Qwen3 8B retenu, plus recommandé ensuite) ; deux coupures qui font passer « Auto »
+à un autre modèle. **Pas vérifié** : sur un vrai moteur, un vrai PC, ni l'écran (sélecteur,
+mise en route) dans l'application. **Reste ouvert** : un modèle noté défaillant le reste
+même si le moteur se corrige plus tard (sauf à le redemander nommément à la mise en route,
+ou à effacer le fichier) ; l'essai est fait sans réflexion, une panne qui ne toucherait que
+la réflexion n'est prise que par le garde-fou, en cours d'usage.
+
 **Trouvé le 27/09/2026 au premier vrai essai de mise à jour d'un clic (0.27.0 vers 0.27.1, par
 GitHub, sur ce Mac) : toute mise à jour était refusée.** La fenêtre « Nouvelle version » est bien
 apparue, l'archive s'est téléchargée, puis « la mise à jour a été refusée : son contenu a changé

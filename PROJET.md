@@ -10,7 +10,7 @@ refaite à l'envers.
 
 | | |
 |---|---|
-| Version | 2026.9.27 (`package.json`) |
+| Version | 2026.9.28 (`package.json`) |
 | Dernière mise à jour | 27 septembre 2026 |
 | Documents liés | [ARCHITECTURE.md](ARCHITECTURE.md), [SECURITE.md](SECURITE.md), [SCREENS.md](SCREENS.md), [SIGNATURE.md](SIGNATURE.md), [README.md](README.md), [docs/GUIDE.md](docs/GUIDE.md) |
 
@@ -2911,6 +2911,14 @@ corrigées ou classées avec leur raison (SECURITE.md § 29.10), dont un vrai du
 mots de passe à 600 000 itérations, avec la migration des anciens à la connexion. **À faire
 par Medhi** : l'image d'aperçu du dépôt (Settings, Social preview) ne se règle que dans le
 navigateur.
+
+**Fait le 27/09/2026 (2026.9.28) : seconde version du jour, pour essayer la fenêtre de mise à
+jour sur le MacBook réinstallé.** Numérotée 2026.9.28 comme décidé (une seconde publication le
+même jour prend la date du lendemain). Contenu : les messages de la mise à jour (erreurs,
+« Vérification de la signature de l'éditeur… ») dans la langue de l'écran
+(`electron/textesMiseAJour.cjs`) ; ils étaient en français seulement. Image d'aperçu du dépôt :
+`docs/images/apercu-github.png` (`scripts/icones/fabriquer-apercu.cjs`), à déposer par Medhi
+dans Settings › Social preview.
 
 **Trouvé le 27/09/2026 au premier vrai essai de mise à jour d'un clic (0.27.0 vers 0.27.1, par
 GitHub, sur ce Mac) : toute mise à jour était refusée.** La fenêtre « Nouvelle version » est bien

@@ -32,6 +32,7 @@ const { app, BrowserWindow, ipcMain, shell, net } = require("electron");
 const coffre = require("./coffre.cjs");
 const signatureEditeur = require("./signatureEditeur.cjs");
 const sourceGithub = require("./sourceGithub.cjs");
+const { changerLangue, tx, raison } = require("./textesMiseAJour.cjs");
 
 /** Toutes les six heures, et une première fois peu après le lancement. */
 const INTERVALLE_MS = 6 * 60 * 60 * 1000;
@@ -84,7 +85,7 @@ async function verifierGithub() {
     const entetes = { Accept: "application/vnd.github+json", "User-Agent": "Helix" };
     const reponse = await net.fetch(`https://api.github.com/repos/${DEPOT}/releases/latest`, { headers: entetes });
     if (reponse.status === 404) {
-      publier({ phase: "erreur", message: "Aucune publication trouvée sur GitHub (dépôt privé, ou rien de publié)." });
+      publier({ phase: "erreur", message: tx("githubVide") });
       return;
     }
     if (!reponse.ok) throw new Error(`GitHub a répondu ${reponse.status}`);
@@ -199,13 +200,13 @@ function messageErreur(err) {
   const brut = err instanceof Error ? err.message : String(err);
   // Codes de Node et de Chromium (`net::ERR_…`) : electron-updater passe par l'un ou l'autre.
   if (/ENOTFOUND|ECONNREFUSED|ETIMEDOUT|ENETUNREACH|EAI_AGAIN|net::ERR_(CONNECTION|NAME_NOT_RESOLVED|INTERNET_DISCONNECTED|TIMED_OUT|ADDRESS_UNREACHABLE|NETWORK)/.test(brut)) {
-    return "Le serveur de mises à jour ne répond pas. Nouvel essai plus tard.";
+    return tx("serveurMuet");
   }
-  if (/404/.test(brut)) return "Aucune publication trouvée à l'adresse de mise à jour.";
+  if (/404/.test(brut)) return tx("rienA");
   if (/code signature|signature/i.test(brut)) {
-    return "La mise à jour n'a pas été installée : sa signature ne correspond pas à celle de l'application.";
+    return tx("signatureApple");
   }
-  return `Vérification impossible : ${brut.slice(0, 160)}`;
+  return tx("verificationImpossible", brut.slice(0, 160));
 }
 
 /*
@@ -231,7 +232,7 @@ function brancher() {
     }
     // Sans signature : Helix l'installe lui-même, sur le clic de la personne.
     if (etat.phase === "disponible" && annonce) {
-      void installerSansSignature().catch((err) => publier({ phase: "erreur", message: `Installation impossible : ${String(err?.message ?? err).slice(0, 200)}` }));
+      void installerSansSignature().catch((err) => publier({ phase: "erreur", message: tx("installationImpossible", String(err?.message ?? err).slice(0, 200)) }));
       return true;
     }
     return false;
@@ -253,7 +254,7 @@ function brancher() {
 async function demarrerMiseAJour(permis) {
   if (typeof permis === "function") expediteurPermis = permis;
   if (!app.isPackaged) {
-    publier({ phase: "inactif", message: "Pas de mise à jour en développement." });
+    publier({ phase: "inactif", message: tx("developpement") });
     return;
   }
   if (process.env.HELIX_SANS_MISE_A_JOUR === "1") {
@@ -304,7 +305,7 @@ async function demarrerMiseAJour(permis) {
   if (flux.refusee) {
     publier({
       phase: "non-configuree",
-      message: `Adresse de mise à jour refusée, faute de HTTPS : ${flux.refusee}`,
+      message: tx("adresseRefusee", flux.refusee),
     });
     return;
   }
@@ -368,13 +369,13 @@ async function demarrerMiseAJour(permis) {
  */
 async function installerSansSignature() {
   const zip = (annonce.files ?? []).find((f) => /\.zip$/i.test(f.url));
-  if (!zip || !zip.sha512) throw new Error("l'annonce ne décrit pas d'archive vérifiable");
+  if (!zip || !zip.sha512) throw new Error(tx("sansArchive"));
   const url = new URL(zip.url, adresseFlux).toString();
   const dossier = fs.mkdtempSync(path.join(os.tmpdir(), "helix-maj-"));
   const fichier = path.join(dossier, "maj.zip");
   publier({ phase: "telechargement", pourcent: 0, message: null });
   const reponse = await net.fetch(url, { headers: entetesFlux });
-  if (!reponse.ok || !reponse.body) throw new Error(`la source a répondu ${reponse.status}`);
+  if (!reponse.ok || !reponse.body) throw new Error(tx("sourceRepond", reponse.status));
   const total = Number(reponse.headers.get("content-length")) || zip.size || 0;
   const hash = crypto.createHash("sha512");
   const sortie = fs.createWriteStream(fichier);
@@ -389,12 +390,12 @@ async function installerSansSignature() {
     if (total) publier({ pourcent: Math.min(99, Math.round((recu / total) * 100)) });
   }
   await new Promise((r) => sortie.end(r));
-  if (hash.digest("base64") !== zip.sha512) throw new Error("l'empreinte de l'archive ne correspond pas à l'annonce");
+  if (hash.digest("base64") !== zip.sha512) throw new Error(tx("empreinte"));
   const extrait = path.join(dossier, "extrait");
   fs.mkdirSync(extrait);
   await new Promise((resolve, reject) => execFile("/usr/bin/ditto", ["-x", "-k", fichier, extrait], (err) => (err ? reject(err) : resolve())));
   const nomApp = fs.readdirSync(extrait).find((n) => n.endsWith(".app"));
-  if (!nomApp) throw new Error("l'archive ne contient pas d'application");
+  if (!nomApp) throw new Error(tx("pasDApplication"));
   const nouvelle = path.join(extrait, nomApp);
   const actuelle = path.resolve(path.dirname(process.execPath), "..", "..");
   const lirePlist = (appli, cle) =>
@@ -402,10 +403,10 @@ async function installerSansSignature() {
       execFile("/usr/bin/plutil", ["-extract", cle, "raw", path.join(appli, "Contents", "Info.plist")], (err, out) => resolve(err ? "" : String(out).trim())),
     );
   if ((await lirePlist(nouvelle, "CFBundleIdentifier")) !== (await lirePlist(actuelle, "CFBundleIdentifier"))) {
-    throw new Error("l'archive contient une autre application");
+    throw new Error(tx("autreApplication"));
   }
   const identifiant = await lirePlist(actuelle, "CFBundleIdentifier");
-  if ((await lirePlist(nouvelle, "CFBundleShortVersionString")) !== annonce.version) throw new Error("la version de l'archive n'est pas celle annoncée");
+  if ((await lirePlist(nouvelle, "CFBundleShortVersionString")) !== annonce.version) throw new Error(tx("autreVersion"));
   /*
    * La signature de l'éditeur (electron/signatureEditeur.cjs, 27/09/2026).
    * L'empreinte ci-dessus vient de la même source que l'archive : elle dit
@@ -414,10 +415,10 @@ async function installerSansSignature() {
    * nouvelle. Sans clé, ou si la signature ne va pas : rien ne s'installe.
    */
   const cle = signatureEditeur.cleDeLApplication(actuelle);
-  if (!cle) throw new Error("cette application n'a pas de clé d'éditeur : une mise à jour ne peut pas y être vérifiée. Installez-la à la main, depuis le paquet de votre prestataire");
-  publier({ message: "Vérification de la signature de l'éditeur…" });
+  if (!cle) throw new Error(tx("sansCle"));
+  publier({ message: tx("verificationSignature") });
   const verdict = await signatureEditeur.verifierApplication(nouvelle, cle, { identifiant, version: annonce.version });
-  if (!verdict.ok) throw new Error(`la mise à jour a été refusée : ${verdict.raison}`);
+  if (!verdict.ok) throw new Error(tx("refusee", raison(verdict.raison)));
   fs.accessSync(path.dirname(actuelle), fs.constants.W_OK);
   const q = (s) => `'${String(s).replace(/'/g, `'\\''`)}'`;
   const avant = `${actuelle}.avant-maj`;
@@ -441,11 +442,11 @@ async function installerSansSignature() {
     ].join("\n"),
     { mode: 0o700 },
   );
-  publier({ phase: "prete", pourcent: 100, message: "Installation : l'application va se fermer et se rouvrir." });
+  publier({ phase: "prete", pourcent: 100, message: tx("fermetureRelance") });
   spawn("/bin/sh", [script], { detached: true, stdio: "ignore" }).unref();
   setTimeout(() => app.quit(), 800);
 }
 
 brancher();
 
-module.exports = { demarrerMiseAJour };
+module.exports = { demarrerMiseAJour, changerLangue };

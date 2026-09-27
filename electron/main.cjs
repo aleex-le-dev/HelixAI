@@ -1,5 +1,5 @@
 const { app, BrowserWindow, dialog, ipcMain, nativeTheme, net, protocol, safeStorage, shell, systemPreferences } = require("electron");
-const { demarrerMiseAJour } = require("./miseAJour.cjs");
+const { demarrerMiseAJour, changerLangue: changerLangueMaj } = require("./miseAJour.cjs");
 const coffre = require("./coffre.cjs");
 const grandStockage = require("./grandStockage.cjs");
 const ligneDeCommande = require("./ligneDeCommande.cjs");
@@ -490,6 +490,7 @@ ipcMain.on("helix:langue", (_evenement, code) => {
   if (!["fr", "en", "zh"].includes(code)) return;
   langueEcran = code;
   zone?.changerLangue(code);
+  changerLangueMaj(code);
 });
 
 /*
@@ -1173,6 +1174,7 @@ app.whenReady().then(async () => {
   {
     const l = app.getLocale().slice(0, 2);
     if (["fr", "en", "zh"].includes(l) && langueEcran === "en") langueEcran = l;
+    changerLangueMaj(langueEcran);
   }
   /*
    * Windows : le même identifiant que les raccourcis posés par l'installateur,

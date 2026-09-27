@@ -48,15 +48,15 @@ sold or rented.
 
 ## Installation
 
-Download the package for your system from the [latest release](https://github.com/medhiclb/HelixAI/releases/tag/v2026.9.27).
-SHA-256 checksums: [`SHA256SUMS.txt`](https://github.com/medhiclb/HelixAI/releases/download/v2026.9.27/SHA256SUMS.txt).
+Download the package for your system from the [latest release](https://github.com/medhiclb/HelixAI/releases/tag/v2026.9.28).
+SHA-256 checksums: [`SHA256SUMS.txt`](https://github.com/medhiclb/HelixAI/releases/download/v2026.9.28/SHA256SUMS.txt).
 
 | Platform | Download | Installation |
 |---|---|---|
-| **macOS** (Apple Silicon) | [Helix-2026.9.27-arm64.dmg](https://github.com/medhiclb/HelixAI/releases/download/v2026.9.27/Helix-2026.9.27-arm64.dmg) | Open the disk image and drag Helix to Applications. On first launch: System Settings › Privacy & Security › "Open Anyway" |
-| **Windows 10/11** (x64) | [Helix-Setup-2026.9.27-x64.exe](https://github.com/medhiclb/HelixAI/releases/download/v2026.9.27/Helix-Setup-2026.9.27-x64.exe) | Run the installer (no administrator rights needed). If SmartScreen appears: "More info" › "Run anyway" |
-| **Ubuntu, Debian** (x64) | [helix-plateforme_2026.9.27_amd64.deb](https://github.com/medhiclb/HelixAI/releases/download/v2026.9.27/helix-plateforme_2026.9.27_amd64.deb) | `sudo apt install ./helix-plateforme_2026.9.27_amd64.deb` |
-| **Other Linux** (x64) | [Helix-2026.9.27.AppImage](https://github.com/medhiclb/HelixAI/releases/download/v2026.9.27/Helix-2026.9.27.AppImage) | `chmod +x Helix-2026.9.27.AppImage`, then run it. On Ubuntu 24.04, prefer the `.deb` |
+| **macOS** (Apple Silicon) | [Helix-2026.9.28-arm64.dmg](https://github.com/medhiclb/HelixAI/releases/download/v2026.9.28/Helix-2026.9.28-arm64.dmg) | Open the disk image and drag Helix to Applications. On first launch: System Settings › Privacy & Security › "Open Anyway" |
+| **Windows 10/11** (x64) | [Helix-Setup-2026.9.28-x64.exe](https://github.com/medhiclb/HelixAI/releases/download/v2026.9.28/Helix-Setup-2026.9.28-x64.exe) | Run the installer (no administrator rights needed). If SmartScreen appears: "More info" › "Run anyway" |
+| **Ubuntu, Debian** (x64) | [helix-plateforme_2026.9.28_amd64.deb](https://github.com/medhiclb/HelixAI/releases/download/v2026.9.28/helix-plateforme_2026.9.28_amd64.deb) | `sudo apt install ./helix-plateforme_2026.9.28_amd64.deb` |
+| **Other Linux** (x64) | [Helix-2026.9.28.AppImage](https://github.com/medhiclb/HelixAI/releases/download/v2026.9.28/Helix-2026.9.28.AppImage) | `chmod +x Helix-2026.9.28.AppImage`, then run it. On Ubuntu 24.04, prefer the `.deb` |
 
 On first launch, Helix sets up everything it needs: [LM Studio](https://lmstudio.ai)'s
 headless engine (pinned version, verified checksum), or the LM Studio app if it is already in

@@ -455,6 +455,7 @@ le 25/09/2026.
 | `/parametres/usage` | Mon usage | ✅ **fonctionne** |
 | `/parametres/confidentialite` | Confidentialité | ✅ **fonctionne** |
 | `/parametres/apps` | Installer les apps | ❌ **maquette** |
+| `/parametres/signaler` | Signaler un problème | ✅ **fonctionne dans l'interface de développement** (27/09/2026) : ticket GitHub ou mail préremplis ; ouverture dans l'application de bureau pas essayée |
 
 ### Détail
 
@@ -678,6 +679,29 @@ fermeture ; puis si l'instance en a reçu la copie ou non (et quoi faire). **Vu 
 inscriptible et stockage du navigateur rempli : « 2 Chat(s) repris sur 2. Ni le fichier
 chiffré de cet ordinateur ni le stockage du navigateur n'ont pu les garder […] L'instance
 en a reçu la copie : ils y restent. »
+
+### Signaler un problème (27/09/2026)
+
+Paramètres > **Signaler un problème** (dernière entrée), ou l'aide, « Besoin d'une
+personne » (`src/components/settings/SignalerProbleme.tsx`, `src/lib/signalement.ts`).
+Trois champs : ce qui ne va pas (obligatoire), ce que la personne faisait, ce qu'elle
+attendait ; une case **« Joindre les informations techniques »**, cochée par défaut
+(version, cadre d'exécution, système et processeur, agent utilisateur, langue, modèle
+choisi, date ; ni message, ni document, ni clé, ni adresse d'une instance d'entreprise).
+Un encadré **« Ce qui sera envoyé »** montre le texte exact avant l'envoi. Deux cartes :
+
+- **Ouvrir un ticket sur GitHub** : ouvre dans le navigateur un ticket prérempli du
+  dépôt de la marque (`branding.urls.sourceCode`, formulaire `bug_report.yml`). L'écran
+  dit qu'il faut un compte GitHub et que le ticket sera public. Absente si le dépôt de
+  la marque n'est pas sur github.com.
+- **Envoyer par mail** : ouvre un brouillon adressé à `branding.urls.supportEmail`,
+  sujet et corps remplis ; si aucune messagerie ne s'ouvre, l'écran dit de copier le
+  texte.
+
+Rien ne part en arrière-plan : l'application ne porte aucun jeton GitHub. Un texte trop
+long pour une adresse (7 500 caractères) est coupé à un endroit marqué, et l'écran le
+dit. **Vu le 27/09/2026** dans l'interface de développement : adresse du ticket et
+`mailto:` construits ; ouverture réelle dans l'application de bureau pas essayée.
 
 ### Entraîner un modèle (25/09/2026)
 
@@ -995,7 +1019,8 @@ accent ni casse, écrits pour dire ce que le logiciel fait vraiment, limites com
 Tout est embarqué : l'aide fonctionne sans Internet. En pied de fenêtre, l'adresse de
 support de l'intégrateur, le lien vers son site, et un bouton qui copie les
 informations techniques (version, cadre d'exécution, adresse d'instance, système) —
-ni messages, ni documents, ni clés.
+ni messages, ni documents, ni clés. Depuis le 27/09/2026, un bouton **« Signaler un
+problème »** y referme l'aide et ouvre l'écran du même nom (Paramètres, voir § 6).
 
 **Bandeau « fichier des Chats illisible »** (25/09/2026,
 `src/components/layout/AvisChatsIllisibles.tsx`) : par-dessus l'écran, où que l'on

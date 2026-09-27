@@ -41,6 +41,7 @@ import {
   AppsSettings,
   ImportSettings,
   EcranSettings,
+  SignalerSettings,
 } from "@/pages/ParametresPages";
 
 /** Route incluse seulement si son module est actif dans l'édition livrée. */
@@ -117,6 +118,7 @@ const router = creerRouteur([
           { path: "confidentialite", element: <ConfidentialiteSettings /> },
           { path: "apps", element: <AppsSettings /> },
           { path: "importer", element: <ImportSettings /> },
+          { path: "signaler", element: <SignalerSettings /> },
         ],
       },
       { path: "*", element: <HomePage /> },

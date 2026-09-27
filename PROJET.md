@@ -3031,6 +3031,39 @@ README). La 0.27.1 publiée a été refaite avec le correctif.
 - Aide : « Ouvrir l'écran concerné » refermait mal l'aide ; 28 textes restés en français
   passent par la traduction. README : prérequis pour les trois systèmes, LM Studio n'en est plus un.
 
+**Fait le 27/09/2026 : « Signaler un problème », dans l'aide et les paramètres.** Demandé par
+Medhi (« que les retours m'arrivent directement »). Écran `/parametres/signaler`
+(`src/components/settings/SignalerProbleme.tsx`, `src/lib/signalement.ts`), ouvert aussi par un
+bouton de l'aide, section « Besoin d'une personne ». Trois champs (ce qui ne va pas, seul
+obligatoire ; ce que la personne faisait ; ce qu'elle attendait) et une case « Joindre les
+informations techniques », cochée par défaut : version, cadre d'exécution, système (et processeur,
+que `preload.cjs` donne désormais : `architecture`), agent utilisateur, langue, modèle choisi,
+date. Ni message, ni document, ni clé, et **pas l'adresse d'une instance d'entreprise** (un ticket
+est public ; la copie de l'aide, envoyée au support, la garde). L'écran montre le texte exact qui
+partira. Deux envois, dits pour ce qu'ils sont : **« Ouvrir sur GitHub »** ouvre dans le navigateur
+un ticket prérempli du dépôt de `branding.urls.sourceCode` (`issues/new?template=bug_report.yml`,
+champs `title`, `version`, `etapes`, `attendu`, `details`, et `systeme` quand on le sait sans
+deviner : Mac Apple silicon ou Intel ; la documentation de GitHub ne promet le préremplissage que
+pour les champs de texte, le menu n'est pas essayé) ; l'écran dit qu'il faut un compte GitHub et
+que le ticket sera public. **« Envoyer par mail »** ouvre un brouillon adressé à
+`branding.urls.supportEmail` (support@helix-agence.fr), sujet et corps remplis. Adresses bornées à
+7 500 caractères : les textes les plus longs sont coupés à un endroit marqué, et l'écran le dit.
+Seules deux destinations sont admises depuis cet écran (https://github.com et `mailto:`).
+**Décidé : aucun jeton GitHub dans l'application, donc aucun envoi en arrière-plan.** Le dépôt et
+l'application sont publics : un jeton glissé dedans serait lisible par tous et permettrait
+d'écrire au nom de l'éditeur. On prépare, la personne relit et envoie. Pour recevoir ces mails sur
+une autre adresse : une redirection de support@helix-agence.fr, ou changer `supportEmail` (pas
+d'adresse personnelle dans le code). Au passage, **les liens `mailto:` dans l'application de
+bureau** : `will-navigate` les annulait comme une navigation ailleurs, et `setWindowOpenHandler` ne
+transmettait que http(s) ; les deux les remettent maintenant à la messagerie du système
+(`shell.openExternal`). **Vérifié** dans l'interface de développement (passerelle jetable, port
+8895) : l'écran depuis l'aide, l'adresse du ticket construite (clic sur « Ouvrir sur GitHub »,
+`window.open` remplacé pour ne rien ouvrir), le `mailto:` construit, la case décochée, la coupe
+de textes de 6 000 à 9 000 caractères (adresses de 7 459 à 7 500 caractères), le refus de toute
+autre destination. **Pas vérifié** : l'ouverture réelle dans l'application de bureau (navigateur
+et messagerie du système, `mailto:` sous Windows et Linux), le ticket prérempli vu sur GitHub
+(aucun ticket ouvert), la longueur que chaque messagerie accepte dans un `mailto:`.
+
 **Fait le 27/09/2026 : mise à jour d'un clic sous Windows.** Demandé par Medhi après un essai sur
 un vrai PC (« que Windows se mette à jour tout seul, d'un clic, comme le Mac »). Revient sur
 « Télécharger » seulement hors de macOS, pour Windows (décision du même jour, plus haut). Un poste

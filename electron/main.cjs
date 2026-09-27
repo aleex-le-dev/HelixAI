@@ -967,11 +967,14 @@ function createWindow() {
    * Les liens externes s'ouvrent dans le navigateur, jamais dans l'application.
    * Seuls http(s) sont transmis au système : d'autres schémas (file:, smb:...)
    * permettraient de déclencher des actions locales depuis un contenu affiché.
+   * `mailto:` s'y ajoute le 27/09/2026 (« Signaler un problème », lien du
+   * support dans l'aide) : il ouvre un brouillon dans la messagerie, que la
+   * personne relit et envoie elle-même ; rien ne part sans elle.
    */
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     try {
       const { protocol: schemaDuLien } = new URL(url);
-      if (schemaDuLien === "http:" || schemaDuLien === "https:") shell.openExternal(url);
+      if (schemaDuLien === "http:" || schemaDuLien === "https:" || schemaDuLien === "mailto:") shell.openExternal(url);
     } catch {
       /* adresse illisible, ignorée */
     }
@@ -999,6 +1002,17 @@ function createWindow() {
       }
     };
     if (url === actuelle) return;
+    /*
+     * Un lien `mailto:` suivi dans la page (celui du support, dans l'aide)
+     * était annulé ici comme une navigation ailleurs, et le clic restait sans
+     * effet dans l'application de bureau. On le remet à la messagerie du
+     * système (27/09/2026, non essayé sur le poste à cette date).
+     */
+    if (/^mailto:/i.test(url)) {
+      event.preventDefault();
+      shell.openExternal(url).catch(() => {});
+      return;
+    }
     // Rechargement de la même page : l'adresse porte des paramètres qui varient
     // (jeton passé au démarrage en production, rechargement à chaud en
     // développement). C'est la page elle-même, pas une navigation ailleurs.

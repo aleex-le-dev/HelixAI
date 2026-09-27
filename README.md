@@ -206,6 +206,7 @@ The technical documentation is written in French.
 
 - Questions and ideas: [Discussions](https://github.com/medhiclb/HelixAI/discussions)
 - Bugs and feature requests: [Issues](https://github.com/medhiclb/HelixAI/issues)
+- Report a bug from the app: Settings › Report a problem (or Help), opens a prefilled issue or email that you review and send yourself
 - Security vulnerabilities: report them privately, see [SECURITY.md](SECURITY.md)
 - [Code of conduct](CODE_OF_CONDUCT.md)
 

@@ -212,6 +212,7 @@ La documentation technique est en français.
 
 - Questions et idées : [Discussions](https://github.com/medhiclb/HelixAI/discussions)
 - Défauts et demandes : [Issues](https://github.com/medhiclb/HelixAI/issues)
+- Signaler un défaut depuis l'application : Paramètres › Signaler un problème (ou l'aide), qui prépare un ticket ou un mail que vous relisez et envoyez vous-même
 - Failles de sécurité : à signaler en privé, voir [SECURITY.md](SECURITY.md)
 - [Code de conduite](CODE_OF_CONDUCT.md)
 

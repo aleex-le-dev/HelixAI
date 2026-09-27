@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, ClipboardCheck, Copy, ExternalLink, LifeBuoy, Mail } from "lucide-react";
+import { ArrowLeft, Bug, ClipboardCheck, Copy, ExternalLink, LifeBuoy, Mail } from "lucide-react";
 import { Modal } from "@/components/ui/Modal";
 import { SearchInput } from "@/components/ui/SearchInput";
 import { TexteRiche } from "@/components/ui/TexteRiche";
@@ -17,6 +17,8 @@ import { t, tf } from "@/lib/i18n";
  * de l'agence, et copier les informations qu'on vous demandera de toute façon.
  * Les articles vivent dans `lib/aide.ts` ; aucun ne part chercher quoi que ce
  * soit sur Internet, l'aide d'un logiciel souverain doit marcher hors ligne.
+ * Depuis le 27/09/2026, « Besoin d'une personne » mène aussi à l'écran
+ * « Signaler un problème » (Paramètres), qui prépare un ticket ou un mail.
  */
 
 /** Ce qu'on demande toujours à quelqu'un qui signale un problème. */
@@ -49,6 +51,27 @@ function BoutonCopier() {
       }}
     >
       {copie ? t("Copié") : t("Copier les informations techniques")}
+    </Button>
+  );
+}
+
+/**
+ * Mène à l'écran « Signaler un problème » (27/09/2026) : un ticket GitHub ou
+ * un mail préremplis, que la personne relit et envoie elle-même. L'aide se
+ * referme d'abord, sans quoi elle cacherait l'écran qu'on vient d'ouvrir.
+ */
+function BoutonSignaler({ onOuvrir }: { onOuvrir: () => void }) {
+  const navigate = useNavigate();
+  return (
+    <Button
+      variant="secondary"
+      icon={Bug}
+      onClick={() => {
+        onOuvrir();
+        navigate("/parametres/signaler");
+      }}
+    >
+      {t("Signaler un problème")}
     </Button>
   );
 }
@@ -169,6 +192,7 @@ export function Aide({ open, onClose }: { open: boolean; onClose: () => void }) 
             {t("Site du prestataire")}
           </a>
           <BoutonCopier />
+          <BoutonSignaler onOuvrir={fermer} />
         </div>
         <p className="text-xs leading-relaxed text-muted-foreground">
           {t("Les informations techniques ne contiennent ni vos messages, ni vos documents, ni aucune clé : seulement la version, le cadre d'exécution, l'adresse de l'instance et votre système.")}

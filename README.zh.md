@@ -154,6 +154,7 @@ helix code               # 在当前文件夹上使用代码智能体
 
 - 问题与想法：[Discussions](https://github.com/medhiclb/HelixAI/discussions)
 - 缺陷与功能请求：[Issues](https://github.com/medhiclb/HelixAI/issues)
+- 在应用内报告缺陷：设置 › 报告问题（或帮助），预先填好问题单或邮件，由您查看后亲自发送
 - 安全漏洞：请私下报告，见 [SECURITY.md](SECURITY.md)
 - [行为准则](CODE_OF_CONDUCT.md)
 

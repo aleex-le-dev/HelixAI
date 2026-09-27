@@ -3711,3 +3711,65 @@ Qwen2.5-VL 72B (licence Qwen).
   installés, à leur dernière version.
 - **Plateformes sans roues** pour la liste figée : Windows arm64 et Mac Intel (cryptography), que
   l'application ne vise pas ; sur Mac, la dictée demande macOS 14 (roues d'onnxruntime et de PyAV).
+
+## 33. Un nom de champ n'est pas une expression régulière (27 septembre 2026)
+
+`gateway/src/modelesCloud.ts`, fonction `correctionPour`. Trouvé et fermé pendant le test
+d'intrusion de la passerelle du 27/09/2026.
+
+**Le défaut.** Quand un fournisseur cloud refuse un champ qu'il ne connaît pas (OpenAI répond
+400, Mistral 422), la passerelle relit le refus et rejoue la requête sans le champ nommé. Pour
+savoir si le refus vise tel champ, `correctionPour` construisait une expression régulière à partir
+du **nom du champ** : `new RegExp(\`\\b${champ}\\b\`)`. Or ce nom vient du corps de la requête
+`POST /v1/chat/completions`, que l'appelant contrôle : `basePayload` recopie toute clé de tête
+inconnue (`...rest`) vers le moteur. Une clé comme `"("` ou `"["` donnait une expression régulière
+invalide (`/\b(\b/`), et `new RegExp` **levait une exception**. Elle était rattrapée (le relais a
+son `try/catch`, et le filet global `unhandledRejection` évite l'arrêt du service), mais le message
+interne — « Invalid regular expression: /\b(\b/: Unterminated group » — repartait au client à la
+place du refus du fournisseur. Une fuite de détail interne, et le mécanisme de correction se
+cassait au lieu d'ignorer un champ qu'il ne comprenait pas.
+
+**Démontré** (instance jetable, un faux fournisseur qui refuse un champ inconnu par 400) : au jeton
+d'instance seul, comme un client tiers compatible OpenAI, un corps portant `"(": 1` répondait
+« Invalid regular expression… » ; un corps portant `"[": 1`, de même ; une clé ordinaire, non.
+
+**La correction.** Le nom du champ est échappé avant d'entrer dans l'expression régulière
+(`echapperRegex`, `gateway/src/texteBrut.ts`). Un champ au nom inhabituel ne correspond alors
+simplement à rien : le refus du fournisseur est rendu tel quel, jamais une erreur interne. C'est le
+principe déjà posé au § 1.5 : un contrôle qui ne comprend pas son entrée refuse, il ne plante pas.
+
+**Vérifié** : `npm run securite`, section 7 decies. Le contrôle échoue avant la correction (la
+réponse porte « regular expression »), réussit après (le refus du fournisseur, « 400 …
+Unrecognized … », est rendu, et rien d'interne ne fuit), sur les deux clés `(` et `[` et un témoin.
+
+## 34. Bombe ZIP dans un document bureautique relu (27 septembre 2026)
+
+`gateway/src/relecture.ts`, fonction `lireZip`. Trouvé et fermé pendant le même test d'intrusion.
+
+**Le défaut.** Un `.docx` ou un `.xlsx` est une archive ZIP. Pour relire le texte d'un document
+enregistré par l'agent sur le poste (machine macOS, `computer.ts`, où Python n'est pas garanti),
+`relecture.ts` décompresse `word/document.xml`, `xl/worksheets/sheet1.xml` et
+`xl/sharedStrings.xml` avec `inflateRawSync` — **sans borne de sortie**. Le résultat n'est utilisé
+qu'à concurrence de mille caractères, mais la décompression, elle, allouait tout d'abord. Une
+« bombe ZIP » — une entrée faite d'un long run d'un même octet, qui se compresse autour de
+1 000:1 — tenait dans un fichier de quelques dizaines de kilo-octets et gonflait à des centaines de
+méga-octets, jusqu'à épuiser la mémoire de la passerelle (l'`uncaughtException` ne rattrape pas un
+dépassement mémoire).
+
+**Démontré** : un `.docx` de 408 Ko dont `word/document.xml` déclare 400 Mo une fois décompressé
+faisait passer la mémoire résidente du processus de 457 à 1 096 Mo en un appel ; une cible de
+quelques gigaoctets (toujours quelques méga-octets sur le disque) l'aurait fait tomber.
+
+Portée : l'entrée n'est pas une route HTTP directe — le fichier vient du dossier d'échange de la
+machine, écrit par l'agent de contrôle d'écran. Elle reste atteignable en agent (un document piégé
+qu'on fait enregistrer, par exemple par une consigne cachée dans une tâche), et la classe était au
+programme de l'audit : on la ferme à la racine.
+
+**La correction.** `inflateRawSync` reçoit `maxOutputLength` (16 Mo par entrée : de quoi lire un
+vrai document volumineux, dont on ne garde de toute façon que le début). Au-delà, `inflateRawSync`
+lève, l'entrée est ignorée (le `try/catch` était déjà là), et rien n'est alloué en trop. Une entrée
+stockée sans compression est bornée de la même façon. Un vrai document se relit à l'identique.
+
+**Vérifié** : `npm run securite`, section 7 undecies. Le contrôle échoue avant la correction (une
+entrée de 32 Mo décompressés rend un long run de « A »), réussit après (l'entrée qui dépasse la
+borne est ignorée, tandis qu'un document ordinaire se relit).

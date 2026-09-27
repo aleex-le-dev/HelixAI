@@ -1,6 +1,7 @@
 import { classifyRoles, isReasoningModel } from "./config.ts";
 import type { Role } from "./types.ts";
 import { tf } from "./langue.ts";
+import { echapperRegex } from "./texteBrut.ts";
 
 /**
  * Les modèles des fournisseurs cloud : ceux qu'une personne branche avec sa clé
@@ -353,7 +354,12 @@ export function appliquerCorrection(corps: Record<string, unknown>, c: Correctio
  * des refus, et la personne les lit (`messageDuFournisseur`).
  */
 export function correctionPour(corps: Record<string, unknown>, detail: string): Correction | null {
-  const nomme = (champ: string) => new RegExp(`\\b${champ}\\b`).test(detail);
+  // Le nom du champ vient du corps de la requête (clés arbitraires que l'appelant contrôle) :
+  // sans échappement, une clé comme « ( » ou « [ » faisait lever `new RegExp` (audit du
+  // 27/09/2026), et l'erreur interne remontait au client. Un contrôle qui ne comprend pas
+  // son entrée doit refuser, jamais planter : on l'échappe, un champ inhabituel ne correspond
+  // simplement à rien et son refus est dit tel quel.
+  const nomme = (champ: string) => new RegExp(`\\b${echapperRegex(champ)}\\b`).test(detail);
   for (const champ of ["max_tokens", "max_completion_tokens"]) {
     if (!(champ in corps) || !nomme(champ)) continue;
     // gpt-5 et la série o : « Use 'max_completion_tokens' instead ».

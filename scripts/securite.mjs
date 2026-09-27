@@ -137,6 +137,16 @@ const fauxModele = serveurHttp((req, res) => {
       return suite();
     }
     /*
+     * Un fournisseur qui refuse un champ inconnu (400), comme OpenAI ou Mistral :
+     * la passerelle relit le refus et rejoue sans le champ nommé (modelesCloud.ts,
+     * `correctionPour`). Sert la section 7 decies (clés de corps métacaractères,
+     * 27/09/2026). Placé avant la branche sans flux, qui le prendrait sinon.
+     */
+    if (req.url === "/v1/chat/completions" && corps.includes("refus-champ-essai")) {
+      res.statusCode = 400;
+      return res.end(JSON.stringify({ error: { message: "Unrecognized request argument supplied: champ-inconnu" } }));
+    }
+    /*
      * L'essai du modèle à la mise en route (santeModeles.ts, section 7 septies,
      * 27/09/2026) : une question sans flux. Un modèle dont le nom porte
      * « casse », ou Qwen3.5 4B (le PC de Medhi), répond ce que Medhi a vu ;
@@ -222,6 +232,12 @@ await new Promise((ok) => fauxModele.listen(PORT_EMBED, "127.0.0.1", ok));
   writeFileSync(
     join(AUX, "profil.json"),
     JSON.stringify({
+      // Clé de chiffrement dans un fichier du dossier de données jetable, jamais
+      // dans le trousseau : sur macOS, sans ce réglage, la passerelle tombe sur
+      // le trousseau par défaut (secret.ts) et appelle `security` — une fenêtre
+      // s'ouvrait alors sur le poste (incident du 27/09/2026). Une instance
+      // jetable ne touche jamais au trousseau de qui lance la batterie.
+      chiffrement: "fichier",
       openclaw: { chemin: join(AUX, "openclaw", "bin", "openclaw"), port: PORT_OPENCLAW },
       backends: [
         { id: "lmstudio", enabled: false },
@@ -2889,6 +2905,78 @@ console.log("\n7 decies. Petit modèle local sans carte graphique : ce qui part 
 }
 
 /* ------------------------------------------------------------------------- */
+console.log("\n7 duodecies. Correction d'un champ refusé : un nom de champ n'est jamais une expression régulière (27/09/2026)");
+{
+  /*
+   * Un fournisseur cloud refuse un champ qu'il ne connaît pas (OpenAI 400,
+   * Mistral 422) ; la passerelle relit le refus et rejoue sans le champ nommé
+   * (modelesCloud.ts, `correctionPour`). Le nom du champ vient du corps de la
+   * requête, donc de l'appelant : une clé comme « ( » ou « [ » faisait lever
+   * `new RegExp`, et le message interne « Invalid regular expression » partait
+   * au client (test d'intrusion du 27/09/2026). Ici, au jeton seul comme un
+   * client tiers, on vérifie que le refus du fournisseur est rendu tel quel,
+   * jamais l'erreur interne. Un contrôle qui ne comprend pas son entrée refuse.
+   */
+  const modeles = await (await appel("/v1/models", { headers: avecJeton })).json().catch(() => ({}));
+  const modeleEssai = (modeles.data ?? []).find((m) => /essai-chat/.test(m.id))?.id;
+  const chat = (extra) =>
+    appel("/v1/chat/completions", {
+      method: "POST",
+      headers: avecJeton,
+      body: JSON.stringify({ model: modeleEssai, stream: false, messages: [{ role: "user", content: "refus-champ-essai" }], ...extra }),
+    });
+  const temoin = await (await chat({ champ_ordinaire: 1 })).text();
+  const attaqueParenthese = await (await chat({ "(": 1 })).text();
+  const attaqueCrochet = await (await chat({ "[": 1 })).text();
+  const fuiteRegex = (t) => /regular expression|expression régulière|Invalid regular/i.test(t);
+  verifier(
+    "champ « ( » ou « [ » dans le corps : le refus du fournisseur est rendu, jamais une erreur d'expression régulière",
+    !fuiteRegex(attaqueParenthese) && !fuiteRegex(attaqueCrochet) && !fuiteRegex(temoin) && /400|Unrecognized|champ-inconnu/i.test(attaqueParenthese),
+    `${attaqueParenthese.slice(0, 200)} || ${attaqueCrochet.slice(0, 120)}`,
+  );
+}
+
+/* ------------------------------------------------------------------------- */
+console.log("\n7 terdecies. Bombe ZIP dans un document bureautique : la relecture ne l'ouvre pas en entier (27/09/2026)");
+{
+  /*
+   * Un .docx/.xlsx est un ZIP ; sa relecture (relecture.ts) décompressait
+   * `word/document.xml` sans borne. Un fichier de quelques dizaines de Ko dont
+   * cette entrée est un long run d'un même octet gonflait à des centaines de Mo
+   * (ratio ~1000:1), de quoi épuiser la mémoire de la passerelle — alors qu'on
+   * n'en lit que le début. La relecture est appelée sur le poste (computer.ts,
+   * machine macOS) sur un fichier que l'agent vient d'écrire : on l'éprouve ici
+   * en important le module, comme le web gardé plus haut.
+   */
+  const { pathToFileURL: versUrlRel } = await import("node:url");
+  const { deflateRawSync } = await import("node:zlib");
+  const rel = await import(versUrlRel(join(RACINE, "gateway", "src", "relecture.ts")).href);
+  const zipUn = (nom, clair) => {
+    const comp = deflateRawSync(clair, { level: 9 });
+    const nomBuf = Buffer.from(nom, "utf8");
+    const lo = Buffer.alloc(30);
+    lo.writeUInt32LE(0x04034b50, 0); lo.writeUInt16LE(8, 8); lo.writeUInt32LE(comp.length, 18); lo.writeUInt32LE(clair.length >>> 0, 22); lo.writeUInt16LE(nomBuf.length, 26);
+    const loC = Buffer.concat([lo, nomBuf, comp]);
+    const ce = Buffer.alloc(46);
+    ce.writeUInt32LE(0x02014b50, 0); ce.writeUInt16LE(8, 10); ce.writeUInt32LE(comp.length, 20); ce.writeUInt32LE(clair.length >>> 0, 24); ce.writeUInt16LE(nomBuf.length, 28); ce.writeUInt32LE(0, 42);
+    const ceC = Buffer.concat([ce, nomBuf]);
+    const eo = Buffer.alloc(22);
+    eo.writeUInt32LE(0x06054b50, 0); eo.writeUInt16LE(1, 8); eo.writeUInt16LE(1, 10); eo.writeUInt32LE(ceC.length, 12); eo.writeUInt32LE(loC.length, 16);
+    return Buffer.concat([loC, ceC, eo]);
+  };
+  // 32 Mo décompressés (au-dessus de la borne de 16 Mo) dans un ZIP de ~32 Ko : la bombe.
+  const bombe = zipUn("word/document.xml", Buffer.alloc(32 * 1024 * 1024, 0x41));
+  const noteBombe = rel.relireDocument(bombe);
+  const legit = zipUn("word/document.xml", Buffer.from("<w:t>Bonjour, vrai document.</w:t>", "utf8"));
+  const noteLegit = rel.relireDocument(legit);
+  verifier(
+    "bombe ZIP : l'entrée qui dépasse la borne de décompression est ignorée (pas de run géant), un vrai document se relit",
+    !/A{100}/.test(noteBombe) && bombe.length < 200_000 && noteLegit.includes("Bonjour, vrai document."),
+    `bombe ${bombe.length} o -> ${noteBombe.length} car ; legit -> ${JSON.stringify(noteLegit).slice(0, 60)}`,
+  );
+}
+
+/* ------------------------------------------------------------------------- */
 console.log("\n8. Fin de séance");
 {
   const r1 = await appel("/helix/auth/revoke", { method: "POST", headers: avecSeance, body: JSON.stringify({ toutes: true }) });
@@ -2954,7 +3042,7 @@ console.log("\n10. Dossier de l'équipe contenant les données de l'instance, in
   symlinkSync(DONNEES2, join(ESPACE, "raccourci"));
   symlinkSync(join(MEMOIRE, "note.md"), join(ESPACE, "Docs", "lien-memoire.md"));
   const PROFIL2 = join(ESPACE, "..", `${ESPACE.split("/").pop()}-profil.json`);
-  writeFileSync(PROFIL2, JSON.stringify({ share: true, tls: false, backends: [{ id: "lmstudio", enabled: false }, { id: "exo", enabled: false }] }));
+  writeFileSync(PROFIL2, JSON.stringify({ chiffrement: "fichier", share: true, tls: false, backends: [{ id: "lmstudio", enabled: false }, { id: "exo", enabled: false }] }));
   const PORT2 = await portLibre();
   const G2 = `http://127.0.0.1:${PORT2}`;
   const seconde = spawn(process.execPath, [join(RACINE, "gateway", "src", "index.ts")], {
@@ -3865,7 +3953,7 @@ console.log("\n11 septies. Petit modèle qui code : Helix répare, relance, vér
   });
   await new Promise((ok) => petitModele.listen(PORT_PETIT, "127.0.0.1", ok));
   const PROFIL3 = join(DONNEES3, "..", `${DONNEES3.split("/").pop()}-profil.json`);
-  writeFileSync(PROFIL3, JSON.stringify({ backends: [{ id: "lmstudio", enabled: false }, { id: "exo", enabled: false }, { id: "petit", label: "Petit", baseUrl: `http://127.0.0.1:${PORT_PETIT}/v1` }] }));
+  writeFileSync(PROFIL3, JSON.stringify({ chiffrement: "fichier", backends: [{ id: "lmstudio", enabled: false }, { id: "exo", enabled: false }, { id: "petit", label: "Petit", baseUrl: `http://127.0.0.1:${PORT_PETIT}/v1` }] }));
   const PORT3 = await portLibre();
   const G3 = `http://127.0.0.1:${PORT3}`;
   const troisieme = spawn(process.execPath, [join(RACINE, "gateway", "src", "index.ts")], {

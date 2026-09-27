@@ -3378,6 +3378,106 @@ première : le moteur reprend ce qu'il a lu) ; `lms ps` pour voir la taille de c
 Restent non lus, et dits comme tels : PDF scanné (images de pages ; les faire lire par un modèle de
 vision reste à faire), PDF protégé, anciens .doc/.xls/.ppt, photo HEIC.
 
+**Fait le 27/09/2026 : la couche de Helix pour un petit modèle qui code (2 à 8 milliards).**
+Demandé par Medhi : « même un modèle de 2 ou 3 milliards de paramètres doit bien coder ; je
+comprends qu'il est tout petit, mais la couche logicielle de Helix doit l'aider ». Contexte : le PC
+Windows sans carte graphique, où Helix choisit Ministral 3B, Qwen3.5 4B ou Qwen3.5 2B.
+**Diagnostic**, relu dans le code (ce que reçoit et doit produire un petit modèle) :
+- **Cowork** : quatorze outils de fichiers (dont `read_file` en double de `read_text_file`,
+  `directory_tree`, `read_multiple_files`), plus le contrôle web et les connecteurs, relus à chaque
+  appel ; aucune consigne propre aux petits modèles, aucun exemple d'appel. Un appel au mauvais nom
+  (« write_file » au lieu de « fichiers__write_file ») était refusé ; un JSON avec des retours à la
+  ligne bruts dans le contenu d'un fichier (le cas le plus courant quand il écrit du code) était
+  refusé en entier (`lireArguments` ne savait refermer que les accolades) ; un appel écrit dans le
+  texte (`<tool_call>…`, ou le XML de Qwen3.5 que llama.cpp laisse parfois dans la réponse ou la
+  réflexion) finissait la demande sans rien faire ; le code recopié dans la réponse au lieu d'être
+  écrit n'était relancé que pour l'écran ; un fichier existant pouvait être réécrit sans avoir été
+  lu ; la syntaxe de ce qui était écrit n'était contrôlée qu'à la revue finale d'un travail découpé,
+  pour le web seulement.
+- **Code** (OpenCode 1.18.32) : le même agent pour tous les modèles, avec `task` (un sous-agent qui
+  repart d'un contexte vide), `todowrite`, `webfetch` ; OpenCode répare seul un nom d'outil écrit
+  en majuscules, et renvoie tout autre appel cassé à son outil `invalid`, qui dit l'erreur au modèle
+  (lu dans son code : `experimental_repairToolCall`, `session/llm.ts`). Le contrôle de fin de tour
+  (`controleCode.ts`) et le séquençage existaient déjà.
+**Ce que font les outils reconnus** : aider contrôle chaque fichier modifié (lint) et lance les
+tests après chaque modification, puis renvoie les erreurs au modèle
+([lint et tests](https://aider.chat/docs/usage/lint-test.html)), et propose le format « whole »
+(fichier entier) plus simple que les différences ([formats](https://aider.chat/docs/more/edit-formats.html)) ;
+SWE-agent refuse une modification qui casse la syntaxe et montre au modèle l'erreur et le fichier
+d'origine, ce qui évite les erreurs en cascade, surtout des modèles faibles
+([article](https://arxiv.org/abs/2405.15793)) ; la documentation de Qwen prévient que des appels
+d'outils mal formés échappent à l'analyse des serveurs et conseille de les relire soi-même
+([Qwen, appels de fonctions](https://qwen.readthedocs.io/en/latest/framework/function_call.html)) ;
+Qwen3.5 écrit ses appels en XML, parfois dans la réflexion, puis s'arrête
+([llama.cpp #20837](https://github.com/ggml-org/llama.cpp/issues/20837),
+[#22684](https://github.com/ggml-org/llama.cpp/issues/22684)) ; OpenClaw a vu le même défaut avec
+Qwen sous llama.cpp, contourné en relisant le texte
+([openclaw #60601](https://github.com/openclaw/openclaw/issues/60601)) ; OpenCode : agents, `steps`
+et permissions ([documentation](https://opencode.ai/docs/agents/)), vérifiés dans son code 1.18.32.
+**Fait** (`gateway/src/petitsModeles.ts`, neuf ; branché dans `chat.ts` et `opencode.ts`) :
+- **Taille** (`estPetitModele`) : 8,5 milliards ou moins, d'après `params` de LM Studio, sinon le nom
+  (« ministral-3-3b », « qwen3.5-4b »), sinon le poids du fichier. Taille inconnue : pas petit.
+- **Pour tout modèle, parce qu'elles n'agissent que sur un appel cassé** : nom réparé vers un outil
+  **proposé** et un seul (séparateurs, préfixe oublié, noms d'autres logiciels : `cat`, `ls`,
+  `str_replace`, `create_file`…) ; JSON remis en forme (retours à la ligne et tabulations bruts,
+  guillemets simples, clés sans guillemets, `True`/`None`, virgules de trop, bloc ```json, objet
+  encodé deux fois) ; paramètres renommés d'après le schéma (`file_path` → `path`, `old_text` et
+  `new_text` à plat rangés dans `edits`). **Une chaîne jamais refermée reste refusée** (règle de la
+  0.20.0 : une valeur coupée n'est jamais refermée). Ce qui a été réparé est dit au modèle avec le
+  résultat (« [Note de l'instance : l'outil s'appelle… ] »), et une ligne sans contenu va au journal.
+  Appels écrits dans le texte ou la réflexion (`<tool_call>` JSON, `<function=…>` XML, réponse qui
+  n'est qu'un objet `{"name", "arguments"}`) lancés comme de vrais appels, vers un outil proposé
+  seulement, en passant par la barrière comme les autres.
+- **Contrôle après chaque écriture** (tout modèle) : `node --check` (le binaire de la passerelle, en
+  `ELECTRON_RUN_AS_NODE`, environnement réduit), Python par `ast.parse` (ni import ni `.pyc`),
+  `JSON.parse`, accolades CSS, scripts d'une page ; rien du code écrit n'est exécuté. Le problème
+  (fichier, ligne, message) est joint au retour de l'outil ; avant la réponse finale, deux relances
+  au plus par demande tant qu'un fichier reste faux, puis la réponse le dit à la personne
+  (« Contrôle automatique : e.js a encore une erreur de syntaxe… », traduit).
+- **Petit modèle seulement** : sept outils de fichiers au lieu de quatorze (`outilsPourPetit`) ; une
+  consigne courte, numérotée, avec deux exemples d'appels réussis écrits avec les vrais noms et le
+  vrai dossier (`consignePetit`) ; le code donné au lieu d'être écrit relancé une fois, avec l'outil
+  exact ; **lire avant d'écrire** : réécrire ou modifier un fichier existant jamais lu ne part pas
+  (ni carte d'accord), le modèle est prié de le lire d'abord, une fois par fichier. Le contenu n'est
+  pas joint par la garde : la lecture passe par l'outil, donc par la barrière et les zones protégées.
+- **Helix Code** : un agent `helix-petit` dans la configuration d'OpenCode, demandé par `prompt_async`
+  (`agent`, via `refModele`) pour les seuls modèles marqués petits quand la configuration a été
+  écrite (elle ne l'est qu'au démarrage d'OpenCode, et un modèle inconnu le fait redémarrer : l'agent
+  existe donc toujours quand il est demandé). Consignes numérotées avec deux exemples dans les noms
+  réels d'OpenCode (`read`, `write`, `bash` ; `filePath`, `content`) et les règles de sécurité de la
+  revue du 25/09 (1 661 caractères, contre 1 731 : à peine plus court, les exemples prennent la
+  place gagnée) ; `task`, `todowrite`, `todoread`, `webfetch`, `websearch`, `codesearch`, `lsp`
+  refusés, donc retirés de la liste envoyée au modèle (`Permission.disabled`, vérifié dans le code ;
+  `task` et `todowrite` pesaient 722 jetons à eux deux, mesure du 25/09) ; 30 tours au plus, après
+  quoi OpenCode demande de conclure. Les permissions « ask » de Helix restent (un agent déclaré hérite
+  des permissions globales, `agent/agent.ts`).
+**Vérifié ici** : `npm run typecheck` ; `npm run securite`, 492 contrôles, 0 échec (17 de plus,
+section 11 septies) : les réparations une à une (noms, JSON, paramètres, XML de Qwen3.5, chaîne
+coupée refusée, rien d'inventé devant un outil non proposé ou deux candidats), les tailles, l'agent
+`helix-petit` et la configuration réellement écrite pour OpenCode ; puis **de bout en bout**, une
+instance jetable avec le vrai serveur de fichiers et un faux « ministral-3b » qui fait exprès les
+erreurs d'un petit modèle : JSON cassé et mauvais nom, puis code faux → réparé, lancé, `node --check`
+renvoie l'erreur, le modèle réécrit, le fichier final compile ; code donné au lieu d'être écrit →
+relancé, puis l'appel écrit dans le texte est lancé et `bonjour.py` existe ; réécriture de `notes.md`
+sans lecture → retenue, lecture sous un mauvais nom réparée, contenu d'origine gardé ; appel XML dans
+la réflexion → lancé ; un modèle qui ne corrige jamais → deux relances puis la réponse le dit.
+i18n à 100 %. **Ce que cela ne prouve pas** : aucun vrai modèle n'a tourné. Le faux modèle suit un
+script ; qu'un vrai 3B comprenne les notes, les relances et l'exemple, et corrige juste, n'est pas
+montré. Pas essayé non plus : l'agent `helix-petit` dans un vrai OpenCode (seule la configuration
+écrite est contrôlée), `node --check` sous Electron et sous Windows (Python : le Python posé par
+Helix, `pythonPrive.ts`), et un appel écrit dans le texte qu'un grand modèle donnerait en exemple
+(il serait lancé ; une écriture passe toujours par la carte d'accord).
+**Reste, écarté pour l'instant** : dans Helix Code, réparer les noms et le JSON dans le relais
+(`chat.ts` retransmet le flux d'OpenCode octet pour octet ; OpenCode renvoie déjà l'erreur au modèle
+par son outil `invalid`) ; un agent de code plus court encore pour 2 milliards.
+**À essayer sur le PC de Medhi**, avec Ministral 3B, puis Qwen3.5 4B et 2B : dans Cowork, « crée un
+fichier bonjour.py qui affiche Bonjour », « ajoute une fonction moyenne à calc.py » (fichier déjà
+là : il doit être lu avant d'être réécrit), « fais une page HTML avec un bouton qui compte les
+clics » ; dans Code, les deux mêmes demandes sur un dossier de projet. Relever pour chacune : fichier
+juste ou non, nombre de relances, lignes « appel d'outil … réparé » et « écrit(s) dans le texte » du
+journal, temps total ; et vérifier dans le journal d'OpenCode que la session tourne sous
+`helix-petit`.
+
 **Trouvé le 27/09/2026 au premier vrai essai de mise à jour d'un clic (0.27.0 vers 0.27.1, par
 GitHub, sur ce Mac) : toute mise à jour était refusée.** La fenêtre « Nouvelle version » est bien
 apparue, l'archive s'est téléchargée, puis « la mise à jour a été refusée : son contenu a changé

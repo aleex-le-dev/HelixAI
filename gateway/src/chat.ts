@@ -2,7 +2,7 @@ import { remplirInstructions } from "./instructionsAgents.ts";
 import { redirectionPour, refusSortie } from "./sortieReseau.ts";
 import type http from "node:http";
 import { readFileSync } from "node:fs";
-import { isAbsolute, resolve as resoudreChemin, sep } from "node:path";
+import { isAbsolute, relative, resolve as resoudreChemin, sep } from "node:path";
 import { entetesFlux } from "./entetes.ts";
 import { niveauEffort } from "./config.ts";
 import { resolve, invalidate, peutVoir } from "./router.ts";
@@ -72,6 +72,7 @@ import {
   messageDuRefus,
   type Correction,
 } from "./modelesCloud.ts";
+import * as petits from "./petitsModeles.ts";
 
 /**
  * Boucle conversationnelle avec outils (ARCHITECTURE.md, ADR-003/004).
@@ -116,6 +117,8 @@ interface UpstreamResult {
   degenere?: Degenerescence;
   /** Erreur envoyée par le fournisseur au milieu du flux. */
   erreur?: { statut: number; detail: string };
+  /** La réflexion reçue : un petit modèle y écrit parfois son appel d'outil (petitsModeles.ts). */
+  reflexion?: string;
 }
 
 function sse(res: http.ServerResponse, payload: unknown): void {
@@ -148,6 +151,7 @@ async function consumeUpstream(
   let buffer = "";
 
   let content = "";
+  let reflexion = "";
   let finishReason: string | null = null;
   const toolCalls: ToolCallAccumulator[] = [];
   // Texte et réflexion suivis à part : une boucle dans l'un ne se dilue pas dans l'autre (gardeBoucle.ts).
@@ -232,6 +236,7 @@ async function consumeUpstream(
             choices: [{ index: 0, delta: { reasoning_content: delta.reasoning_content } }],
           });
           degenere ??= gardes.reflexion.ajouter(delta.reasoning_content);
+          if (reflexion.length < 200_000) reflexion += delta.reasoning_content;
         }
 
         // Les appels d'outils arrivent par fragments, indexés (ou non : voir `accumulerAppels`).
@@ -245,7 +250,7 @@ async function consumeUpstream(
   // Coupé en route : les appels d'outils à moitié reçus ne partent pas.
   if (degenere) return { content, toolCalls: [], finishReason: "boucle", degenere };
   if (erreur) return { content, toolCalls: [], finishReason: "erreur", erreur };
-  return { content, toolCalls: toolCalls.filter((t) => t.name), finishReason };
+  return { content, toolCalls: toolCalls.filter((t) => t.name), finishReason, reflexion };
 }
 
 /**
@@ -1022,6 +1027,15 @@ export async function handleChatRequest(
         ...outilsTaches,
       ]
     : undefined;
+  /*
+   * Un petit modèle (8 milliards de paramètres ou moins, petitsModeles.ts,
+   * 27/09/2026) : moins d'outils de fichiers à relire à chaque appel, une
+   * consigne courte avec un exemple (plus bas), et, dans la boucle, les appels
+   * réparés, le code donné au lieu d'être écrit relancé, et la lecture exigée
+   * avant de réécrire un fichier qui existe.
+   */
+  const petit = petits.estPetitModele(model);
+  if (petit && tools) tools = petits.outilsPourPetit(tools);
 
   /*
    * Ce flux transporte le contenu des conversations : il porte les mêmes
@@ -1147,6 +1161,9 @@ export async function handleChatRequest(
       } else {
         messages = [{ role: "system", content: note }, ...messages];
       }
+    }
+    if (petit && tools && tools.length > 0) {
+      messages = avecConsigne(messages, petits.consignePetit(tools.map((o) => o.function.name), workspace()));
     }
   }
 
@@ -1379,6 +1396,12 @@ export async function handleChatRequest(
   let modificationsDemande = 0;
   /** Un document a-t-il été enregistré dans la machine de l'agent pendant cette demande ? */
   let documentEnregistre = false;
+  /** Fichiers lus, écrits, et écrits avec une erreur de syntaxe pendant cette demande (petitsModeles.ts). */
+  const fichiersSuivis = petits.nouveauSuivi();
+  let relancesSyntaxe = 0;
+  let erreursDites = false;
+  /** La demande veut qu'on produise ou change quelque chose : sert à relancer un petit modèle qui montre le code au lieu de l'écrire. */
+  const demandeAgit = petit && petits.demandeUneAction(petits.texteDuDernierMessage(body.messages));
 
   /**
    * Une boucle d'outils, sur un objectif donné.
@@ -1417,6 +1440,11 @@ export async function handleChatRequest(
     let derniereErreur = "";
     let refus = 0;
     const releves: { cible: string; extrait: string }[] = [];
+    /** Relance « écris-le au lieu de le montrer » déjà faite dans cette boucle (petit modèle). */
+    let relancesAgir = 0;
+    const nomsProposes = (tools ?? []).map((d) => d.function.name);
+    // Une boucle de contrôle (revue finale, vérification d'étape, compte rendu) cite volontiers du code : pas de relance « écris-le » là.
+    const enControle = /^(Revue finale, avant de rendre|Contrôle avant de passer|Tu n'as rien répondu à la fin)/.test(petits.texteDuDernierMessage(fil));
 
     for (let iteration = 0; iteration < budget; iteration++) {
       siArrete();
@@ -1471,8 +1499,57 @@ export async function handleChatRequest(
         return { texte, interrompu: "moteur", modifications, echecs, lectures, derniereErreur, releves, refus };
       }
 
+      /*
+       * L'appel écrit dans le texte au lieu d'être fait (`<tool_call>…`, ou le
+       * XML de Qwen3.5 que llama.cpp laisse parfois dans la réponse ou la
+       * réflexion, petitsModeles.ts) : exécuté comme un vrai appel, vers un
+       * outil proposé seulement. Sans cela la demande finissait sur ce texte,
+       * rien de fait.
+       */
+      if (result.toolCalls.length === 0 && nomsProposes.length > 0) {
+        let ecrits = petits.appelsDansLeTexte(result.content, nomsProposes);
+        if (ecrits.length === 0 && !result.content.trim() && result.reflexion) ecrits = petits.appelsDansLeTexte(result.reflexion, nomsProposes);
+        if (ecrits.length > 0) {
+          result.toolCalls = ecrits.map((e, k) => ({ id: `helix_texte_${iteration}_${k}`, name: e.name, args: e.args }));
+          result.content = petits.sansAppelsEcrits(result.content);
+          texte = result.content;
+          console.log(`[chat] ${ecrits.length} appel(s) d'outil écrit(s) dans le texte par ${model.id} : lancé(s) comme de vrais appels.`);
+        }
+      }
+
       // Pas d'outil demandé : la réponse est finale.
-      if (result.toolCalls.length === 0) return { texte, interrompu: false, modifications, echecs, lectures, derniereErreur, releves, refus };
+      if (result.toolCalls.length === 0) {
+        /*
+         * Un petit modèle qui donne le code au lieu de l'écrire (« Voici le
+         * code… enregistrez-le dans app.py ») : une relance par boucle, avec
+         * l'outil exact à appeler (petitsModeles.ts).
+         */
+        if (petit && demandeAgit && !enControle && relancesAgir < 1 && modifications + lectures + echecs === 0 && nomsProposes.some((n) => n.endsWith("__write_file")) && petits.decritAuLieuDAgir(result.content)) {
+          relancesAgir++;
+          fil.push({ role: "assistant", content: result.content });
+          fil.push({ role: "user", content: petits.relanceAgir(nomsProposes) });
+          continue;
+        }
+        /*
+         * Un fichier écrit pendant la demande a encore une erreur de syntaxe
+         * (vérifiée après chaque écriture, plus bas) : le modèle est relancé
+         * avec la liste avant de répondre, deux fois au plus par demande. Au-delà,
+         * la réponse le dit à la personne plutôt que de laisser croire que c'est fait.
+         */
+        if (fichiersSuivis.enErreur.size > 0 && relancesSyntaxe < 2) {
+          relancesSyntaxe++;
+          fil.push({ role: "assistant", content: result.content || "" });
+          fil.push({ role: "user", content: petits.relanceSyntaxe(fichiersSuivis.enErreur, nomsProposes.find((n) => n.endsWith("__write_file")) ?? "fichiers__write_file") });
+          continue;
+        }
+        if (fichiersSuivis.enErreur.size > 0 && !erreursDites) {
+          erreursDites = true;
+          for (const f of fichiersSuivis.enErreur.keys()) {
+            ecrire(`\n\n*${tf("Contrôle automatique : {0} a encore une erreur de syntaxe. Le fichier est écrit, mais il ne fonctionnera pas tel quel.", relative(workspace(), f) || f)}*`);
+          }
+        }
+        return { texte, interrompu: false, modifications, echecs, lectures, derniereErreur, releves, refus };
+      }
 
       /*
        * Les arguments sont analysés AVANT d'être renvoyés au modèle, et
@@ -1489,17 +1566,40 @@ export async function handleChatRequest(
       const analyses = result.toolCalls.map((t, i) => {
         let args: Record<string, unknown> = {};
         let lisible = true;
-        const lu = t.args ? lireArguments(t.args) : {};
-        if (lu) args = lu;
-        else lisible = false;
+        /*
+         * Réparations de forme (petitsModeles.ts, 27/09/2026), pour tout modèle
+         * puisqu'elles n'agissent que sur un appel cassé : le nom vers un outil
+         * proposé et un seul (« write_file » → « fichiers__write_file »), le
+         * JSON presque juste (retours à la ligne bruts, guillemets simples,
+         * virgule de trop), les paramètres mal nommés (« file_path » → « path »).
+         * Ce qui a été réparé est dit au modèle avec le résultat, pour qu'il
+         * apprenne la bonne forme au tour suivant.
+         */
+        const nom = petits.reparerNomOutil(t.name, nomsProposes) ?? t.name;
+        const notes: string[] = [];
+        if (nom !== t.name) notes.push(`l'outil s'appelle « ${nom} » (tu as écrit « ${t.name} »)`);
+        let lu = t.args ? lireArguments(t.args) : {};
+        if (!lu && t.args) {
+          lu = petits.reparerArguments(t.args).args;
+          if (lu) notes.push("tes arguments n'étaient pas du JSON valide et l'instance les a remis en forme : écris un objet JSON complet, avec des guillemets doubles et \\n pour les retours à la ligne");
+        }
+        if (lu) {
+          const schema = (tools ?? []).find((d) => d.function?.name === nom)?.function?.parameters;
+          const adapte = petits.adapterArguments(lu, schema);
+          args = adapte.args;
+          if (adapte.renommees.length > 0) notes.push(`paramètres renommés comme l'outil les attend : ${adapte.renommees.join(", ")}`);
+        } else lisible = false;
+        if (notes.length > 0) console.log(`[chat] appel d'outil de ${model.id} réparé : ${t.name} → ${nom}${lu && notes.length > (nom !== t.name ? 1 : 0) ? ", arguments remis en forme" : ""}`);
         return {
           ...t,
+          name: nom,
           // Deux appels ne peuvent pas porter le même identifiant : les
           // réponses d'outils ne seraient plus rattachables à leur demande.
-          identifiant: t.id || `${t.name}_${i}`,
+          identifiant: t.id || `${nom}_${i}`,
           args,
           lisible,
           canonique: JSON.stringify(args),
+          notes,
         };
       });
 
@@ -1550,7 +1650,18 @@ export async function handleChatRequest(
          */
         const cheminMachine =
           call.name.startsWith("fichiers__") && /\/home\/kasm-user|\/Volumes\/My Shared Files/.test(JSON.stringify(args ?? {}));
-        const verdict = cheminMachine
+        /*
+         * Petit modèle qui réécrit ou modifie un fichier existant sans l'avoir
+         * lu : l'appel ne part pas (ni carte d'accord, puisqu'il n'aura pas
+         * lieu), il est prié de lire d'abord (petitsModeles.ts). Une fois par fichier.
+         */
+        const garde =
+          petit && call.lisible && propose && !cheminMachine
+            ? petits.gardeLecture(fichiersSuivis, call.name, args, workspace(), nomsProposes.find((n) => /^fichiers__read(_text)?_file$/.test(n)) ?? "")
+            : null;
+        const verdict = garde
+          ? ({ autorise: false, message: garde } as approbation.Verdict)
+          : cheminMachine
           ? ({
               autorise: false,
               message:
@@ -1590,6 +1701,24 @@ export async function handleChatRequest(
                   ...(await executerOutil(call.name, args, qui ? { userId: qui, groupes: await groupesDe(qui) } : undefined)),
                   capture: undefined,
                 };
+
+        /*
+         * Contrôle de ce qui vient d'être écrit, pour tout modèle (petitsModeles.ts,
+         * 27/09/2026) : syntaxe JavaScript (node --check), Python, JSON, CSS,
+         * scripts d'une page. Le problème est joint au retour de l'outil, que le
+         * modèle lit au tour suivant, comme le font les agents de code qui
+         * vérifient chaque modification ; rien de son code n'est exécuté.
+         */
+        if (outcome.ok && /^fichiers__(write|edit)_file$/.test(call.name)) {
+          const absolu = petits.cheminDans(workspace(), args.path);
+          const probleme = absolu ? await petits.verifierEcriture(absolu, workspace()) : null;
+          if (absolu && probleme) {
+            fichiersSuivis.enErreur.set(absolu, probleme);
+            outcome.content += petits.noteErreurEcriture(probleme, nomsProposes.find((n) => n === "fichiers__write_file") ?? call.name);
+          } else if (absolu) fichiersSuivis.enErreur.delete(absolu);
+        }
+        if (outcome.ok) petits.noterAppel(fichiersSuivis, call.name, args, workspace());
+        if (call.notes.length > 0) outcome.content = `[Note de l'instance : ${call.notes.join(" ; ")}.]\n${outcome.content}`;
 
         emitHelix(res, {
           type: "tool_end",
@@ -1634,9 +1763,10 @@ export async function handleChatRequest(
             releves.push({ cible: typeof cible === "string" ? cible : Array.isArray(cible) ? cible.join(", ") : "", extrait: outcome.content.slice(0, 600) });
           }
         }
-        else if (modifiant) echecs++;
+        // Retenue par la garde de lecture : ni un échec ni une erreur, une étape de plus demandée au modèle.
+        else if (modifiant && !garde) echecs++;
         if (!verdict.autorise && verdict.parLaPersonne) refus++;
-        if (!outcome.ok) derniereErreur = `${call.name.replace(/^[a-z]+__/, "")} : ${outcome.content.slice(0, 240)}`;
+        if (!outcome.ok && !garde) derniereErreur = `${call.name.replace(/^[a-z]+__/, "")} : ${outcome.content.slice(0, 240)}`;
 
         if (!call.name.startsWith("ecran__")) {
           journaliser("outil.appele", qui ?? "agent", {

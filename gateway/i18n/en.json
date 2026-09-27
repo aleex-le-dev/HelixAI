@@ -274,6 +274,7 @@
   "Contacts, entreprises et affaires HubSpot.": "HubSpot contacts, companies and deals.",
   "Contenu attendu : {0}": "Expected content: {0}",
   "Contenu relu dans le fichier :": "Content read back from the file:",
+  "Contrôle automatique : {0} a encore une erreur de syntaxe. Le fichier est écrit, mais il ne fonctionnera pas tel quel.": "Automatic check: {0} still has a syntax error. The file is written, but it will not work as it is.",
   "Contrôle automatique : {0} fichier(s) vérifié(s) et {1} page(s) essayée(s), aucun problème trouvé.": "Automatic check: {0} file(s) checked and {1} page(s) tried, no problem found.",
   "Contrôle automatique : {0} fichier(s) vérifié(s), aucun problème trouvé (pages non essayées : navigateur de l'application indisponible).": "Automatic check: {0} file(s) checked, no problem found (pages not tried: the app's browser is unavailable).",
   "Contrôle automatique : {0} fichier(s) vérifié(s), aucun problème trouvé.": "Automatic check: {0} file(s) checked, no problem found.",

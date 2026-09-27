@@ -22,6 +22,7 @@ import { models } from "./router.ts";
 import { autoProvisionEnabled, deployment } from "./deployment.ts";
 import { t, tf } from "./langue.ts";
 import { CONSIGNES_CODE } from "./allegementCode.ts";
+import { AGENT_PETIT, agentPetitOpenCode, agentPourModele, estPetitModele, noterPetitsModeles } from "./petitsModeles.ts";
 import { optionsDeChargement } from "./backends.ts";
 import { contientUneZone, estProtege } from "./zonesProtegees.ts";
 import type { ModelInfo } from "./types.ts";
@@ -381,6 +382,8 @@ async function writeConfig(dir: string): Promise<void> {
     modelEntries["auto"] = { name: "Automatique", variants: variantes };
   }
   modelesEcrits = new Set(Object.keys(modelEntries));
+  // Les petits modèles (8 milliards ou moins) travaillent avec l'agent `helix-petit` (petitsModeles.ts, 27/09/2026).
+  noterPetitsModeles(usable.filter((m) => estPetitModele(m)).map((m) => m.id));
 
   const pinned = deployment().models?.code;
   const preferred = pinned?.includes("/") ? pinned.split("/").pop()! : pinned;
@@ -507,7 +510,7 @@ async function writeConfig(dir: string): Promise<void> {
          * principal et le sous-agent généraliste ; l'explorateur a déjà les
          * siennes, courtes.
          */
-        agent: { build: { prompt: CONSIGNES_CODE }, general: { prompt: CONSIGNES_CODE } },
+        agent: { build: { prompt: CONSIGNES_CODE }, general: { prompt: CONSIGNES_CODE }, [AGENT_PETIT]: agentPetitOpenCode() },
         /*
          * Les connecteurs de l'instance (Drive, Slack, courrier, agenda,
          * serveurs MCP du catalogue), servis par la passerelle elle-même et non
@@ -939,8 +942,9 @@ export function varianteDe(effort?: string): string | undefined {
 export function refModele(
   id: string,
   variante?: string,
-): { model: { providerID: string; modelID: string }; variant?: string } {
-  return { model: { providerID: "helix", modelID: id }, ...(variante ? { variant: variante } : {}) };
+): { model: { providerID: string; modelID: string }; variant?: string; agent?: string } {
+  // Un petit modèle : l'agent aux consignes courtes et aux outils essentiels (petitsModeles.ts).
+  return { model: { providerID: "helix", modelID: id }, ...(variante ? { variant: variante } : {}), ...agentPourModele(id) };
 }
 
 /** Un port TCP libre sur la boucle locale, attribué par le système. */

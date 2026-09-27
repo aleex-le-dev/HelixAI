@@ -2969,6 +2969,285 @@ console.log("\n11 sexies. Presse-papiers de l'application de bureau : écrire du
   verifier("presse-papiers : toute l'interface copie par lib/pressePapiers, aucun appel direct à navigator.clipboard", fautifs.length === 0, fautifs.join(", "));
 }
 
+console.log("\n11 septies. Petit modèle qui code : Helix répare, relance, vérifie (27/09/2026)");
+{
+  /*
+   * Demandé par Medhi : « même un modèle de 2 ou 3 milliards de paramètres doit
+   * bien coder ». Aucun vrai modèle ici : un faux « ministral-3b », joué par la
+   * batterie, fait exprès les erreurs d'un petit modèle, et l'on regarde ce que
+   * Helix en fait (petitsModeles.ts, chat.ts). Ce que cela prouve : la couche
+   * répare, relance et vérifie comme prévu devant ces erreurs-là. Ce que cela ne
+   * prouve pas : qu'un vrai petit modèle comprenne les relances et corrige
+   * juste ; cela reste à voir sur le PC de Medhi (PROJET.md).
+   */
+  const { spawnSync } = await import("node:child_process");
+  const { writeFileSync, readFileSync: lireF } = await import("node:fs");
+  const code = (texte) =>
+    spawnSync(process.execPath, ["--experimental-strip-types", "--no-warnings", "--input-type=module", "-e", texte], { cwd: RACINE, encoding: "utf8", timeout: 60_000 });
+
+  // 1. Les fonctions, sans passerelle.
+  const u = code(`
+    const p = await import("./gateway/src/petitsModeles.ts");
+    const proposes = ["fichiers__read_text_file", "fichiers__write_file", "fichiers__edit_file", "fichiers__list_directory", "controle__site_web"];
+    const noms = Object.fromEntries(["write_file", "writeFile", "fichiers.write_file", "functions.fichiers__write_file", "ReadFile", "cat", "str_replace", "ls", "fichiers__delete_file", "ecran__capture"].map((n) => [n, p.reparerNomOutil(n, proposes)]));
+    const ambigu = p.reparerNomOutil("read", ["a__read_text_file", "b__read_text_file"]);
+    const r = (t) => p.reparerArguments(t).args;
+    const json = {
+      retours: r('{"path": "a.js", "content": "l1\\nl2"'),
+      simples: r("{'path': 'a.txt', 'content': 'l\\\\'école'}"),
+      python: r('{path: "a.txt", overwrite: True,}'),
+      bloc: r("\`\`\`json\\n{\\"path\\": \\"b.txt\\"}\\n\`\`\`"),
+      coupee: r('{"path": "decoupe/notes/202'),
+    };
+    const adapte = p.adapterArguments({ file_path: "a", old_text: "x", new_text: "y" }, { properties: { path: {}, edits: {} } }).args;
+    const tailles = ["mistralai/ministral-3-3b", "qwen/qwen3.5-4b", "qwen/qwen3.5-2b", "qwen/qwen3.5-9b", "qwen3-30b-a3b", "service-inconnu"].map((id) => p.estPetitModele({ id }));
+    const texte = p.appelsDansLeTexte("<tool_call>\\n<function=list_directory>\\n<parameter=path>\\n/tmp/x\\n</parameter>\\n</function>\\n</tool_call>", proposes);
+    const agent = p.agentPetitOpenCode();
+    const { CONSIGNES_CODE } = await import("./gateway/src/allegementCode.ts");
+    p.noterPetitsModeles(["qwen/qwen3.5-4b"]);
+    console.log(JSON.stringify({ noms, ambigu, json, adapte, tailles, texte, agent, court: p.CONSIGNES_CODE_PETIT.length, long: CONSIGNES_CODE.length, pour4b: p.agentPourModele("qwen/qwen3.5-4b"), pour9b: p.agentPourModele("qwen/qwen3.5-9b") }));
+  `);
+  let v = {};
+  try {
+    v = JSON.parse(u.stdout.trim().split("\n").pop());
+  } catch {
+    /* rien de lisible : les contrôles ci-dessous échouent et montrent la sortie */
+  }
+  verifier(
+    "nom d'outil réparé vers l'outil proposé (write_file, writeFile, fichiers.write_file, ReadFile, cat, str_replace, ls)",
+    v.noms?.write_file === "fichiers__write_file" && v.noms?.writeFile === "fichiers__write_file" && v.noms?.["fichiers.write_file"] === "fichiers__write_file" && v.noms?.["functions.fichiers__write_file"] === "fichiers__write_file" && v.noms?.ReadFile === "fichiers__read_text_file" && v.noms?.cat === "fichiers__read_text_file" && v.noms?.str_replace === "fichiers__edit_file" && v.noms?.ls === "fichiers__list_directory",
+    `${JSON.stringify(v.noms)} ${u.stderr.slice(0, 300)}`,
+  );
+  verifier("nom d'outil : rien d'inventé (outil non proposé, ou deux candidats → pas de réparation)", v.noms?.fichiers__delete_file === null && v.noms?.ecran__capture === null && v.ambigu === null, JSON.stringify([v.noms?.fichiers__delete_file, v.noms?.ecran__capture, v.ambigu]));
+  verifier(
+    "JSON presque juste remis en forme : retours à la ligne bruts, guillemets simples, True, virgule de trop, bloc ```json",
+    v.json?.retours?.content === "l1\nl2" && v.json?.simples?.content === "l'école" && v.json?.python?.overwrite === true && v.json?.bloc?.path === "b.txt",
+    JSON.stringify(v.json),
+  );
+  verifier("une chaîne jamais refermée (valeur coupée) reste refusée, comme depuis la 0.20.0", v.json && v.json.coupee === null, JSON.stringify(v.json?.coupee));
+  verifier("paramètres mal nommés : file_path → path, old_text/new_text → edits", v.adapte?.path === "a" && v.adapte?.edits?.[0]?.oldText === "x" && v.adapte?.edits?.[0]?.newText === "y", JSON.stringify(v.adapte));
+  verifier("taille : Ministral 3B, Qwen3.5 4B et 2B sont petits ; Qwen3.5 9B, un 30B à experts et un service inconnu ne le sont pas", JSON.stringify(v.tailles) === "[true,true,true,false,false,false]", JSON.stringify(v.tailles));
+  verifier("appel écrit en XML de Qwen3.5 dans le texte : relu comme un vrai appel", v.texte?.[0]?.name === "fichiers__list_directory" && JSON.parse(v.texte?.[0]?.args ?? "{}").path === "/tmp/x", JSON.stringify(v.texte));
+  verifier(
+    "Helix Code, agent helix-petit : sous-agents, liste de tâches et web retirés, 30 tours au plus, consignes plus courtes, demandé pour un petit modèle seulement",
+    v.agent?.permission?.task === "deny" && v.agent?.permission?.todowrite === "deny" && v.agent?.permission?.webfetch === "deny" && v.agent?.steps === 30 && v.court < v.long && v.pour4b?.agent === "helix-petit" && v.pour9b?.agent === undefined,
+    JSON.stringify({ agent: v.agent?.permission, steps: v.agent?.steps, court: v.court, long: v.long, pour4b: v.pour4b, pour9b: v.pour9b }),
+  );
+  {
+    const config = JSON.parse(readFileSync(join(DONNEES, "opencode", "opencode.json"), "utf8"));
+    const a = config.agent?.["helix-petit"];
+    verifier("la configuration écrite pour OpenCode porte l'agent helix-petit, en plus de build", a?.mode === "primary" && a?.permission?.task === "deny" && typeof config.agent?.build?.prompt === "string", JSON.stringify(a ?? {}).slice(0, 160));
+  }
+
+  // 2. De bout en bout : une instance jetable, un dossier de travail jetable, le vrai serveur de fichiers, le faux petit modèle.
+  const ESPACE = mkdtempSync(join(tmpdir(), "helix-securite-petit-"));
+  writeFileSync(join(ESPACE, "notes.md"), "LIGNE-ORIGINALE\n");
+  const DONNEES3 = mkdtempSync(join(tmpdir(), "helix-securite-petit-donnees-"));
+  const RECUS = [];
+  const PORT_PETIT = await portLibre();
+  const chemin = (n) => join(ESPACE, n);
+  const petitModele = serveurHttp((req, res) => {
+    let corps = "";
+    req.on("data", (b) => (corps += b));
+    req.on("end", () => {
+      res.setHeader("Content-Type", "application/json");
+      if (req.url === "/v1/models") return res.end(JSON.stringify({ data: [{ id: "ministral-3b-essai" }] }));
+      const demande = JSON.parse(corps || "{}");
+      if (req.url !== "/v1/chat/completions") {
+        res.statusCode = 404;
+        return res.end("{}");
+      }
+      if (demande.stream === false) return res.end(JSON.stringify({ id: "p", object: "chat.completion", choices: [{ index: 0, message: { role: "assistant", content: "Bonjour !" }, finish_reason: "stop" }] }));
+      RECUS.push(demande);
+      const messages = demande.messages ?? [];
+      const texteDe = (m) => (typeof m?.content === "string" ? m.content : "");
+      const scenario = /SCENARIO-([A-E])/.exec(messages.filter((m) => m.role === "user").map(texteDe).join(" "))?.[1];
+      const dernier = messages.at(-1) ?? {};
+      const dit = texteDe(dernier);
+      res.setHeader("Content-Type", "text/event-stream");
+      const morceau = (delta, fin = null) => res.write(`data: ${JSON.stringify({ id: "p", object: "chat.completion.chunk", created: 1, model: "ministral-3b-essai", choices: [{ index: 0, delta, finish_reason: fin }] })}\n\n`);
+      const repondre = (texte, reflexion) => {
+        if (reflexion) morceau({ role: "assistant", reasoning_content: reflexion });
+        morceau({ role: "assistant", content: texte });
+        morceau({}, "stop");
+        res.end("data: [DONE]\n\n");
+      };
+      const appeler = (nom, argumentsBruts) => {
+        morceau({ role: "assistant", tool_calls: [{ index: 0, id: `appel-${RECUS.length}`, type: "function", function: { name: nom, arguments: "" } }] });
+        // En deux morceaux, comme un vrai flux.
+        morceau({ tool_calls: [{ index: 0, function: { arguments: argumentsBruts.slice(0, 20) } }] });
+        morceau({ tool_calls: [{ index: 0, function: { arguments: argumentsBruts.slice(20) } }] });
+        morceau({}, "tool_calls");
+        res.end("data: [DONE]\n\n");
+      };
+      if (scenario === "A") {
+        // Mauvais nom, JSON cassé (retours à la ligne bruts, accolade finale oubliée), code à la syntaxe fausse.
+        if (dernier.role === "user") return appeler("write_file", `{"path": "${chemin("calc.js")}", "content": "function somme(a, b) {\n  return a + b\n"`);
+        if (dernier.role === "tool" && /erreur de syntaxe/.test(dit)) {
+          return appeler("fichiers__write_file", JSON.stringify({ path: chemin("calc.js"), content: "function somme(a, b) {\n  return a + b;\n}\nmodule.exports = { somme };\n" }));
+        }
+        return repondre("Fait : calc.js est écrit.");
+      }
+      if (scenario === "B") {
+        // Le code dans la réponse au lieu du fichier, puis l'appel écrit dans le texte.
+        if (/\[Rappel de l'instance\]/.test(dit)) {
+          return repondre(`<tool_call>\n${JSON.stringify({ name: "fichiers__write_file", arguments: { path: chemin("bonjour.py"), content: "def bonjour():\n    print('Bonjour')\n\nbonjour()\n" } })}\n</tool_call>`);
+        }
+        if (dernier.role === "tool") return repondre("J'ai créé bonjour.py.");
+        return repondre("Voici le code :\n```python\ndef bonjour():\n    print('Bonjour')\n\nbonjour()\n```\nEnregistrez-le dans bonjour.py.");
+      }
+      if (scenario === "C") {
+        // Réécrire sans lire, puis lire sous un mauvais nom avec un paramètre mal nommé.
+        if (dernier.role === "user") return appeler("fichiers__write_file", JSON.stringify({ path: chemin("notes.md"), content: "AJOUT\n" }));
+        if (/n'a pas lancé/.test(dit)) return appeler("ReadFile", JSON.stringify({ file_path: chemin("notes.md") }));
+        if (/LIGNE-ORIGINALE/.test(dit) && !/AJOUT/.test(dit)) return appeler("fichiers__write_file", JSON.stringify({ path: chemin("notes.md"), content: "LIGNE-ORIGINALE\nAJOUT\n" }));
+        return repondre("Ligne ajoutée.");
+      }
+      if (scenario === "E") {
+        // Un modèle qui ne corrige jamais : la relance est bornée, et la réponse le dit.
+        if (dernier.role === "user") return appeler("fichiers__write_file", JSON.stringify({ path: chemin("e.js"), content: "const x = ;\n" }));
+        return repondre("Fait.");
+      }
+      if (scenario === "D") {
+        // Qwen3.5 : l'appel en XML dans la réflexion, rien dans la réponse.
+        if (dernier.role === "user") {
+          morceau({ role: "assistant", reasoning_content: `Je liste le dossier.\n<tool_call>\n<function=list_directory>\n<parameter=path>\n${ESPACE}\n</parameter>\n</function>\n</tool_call>` });
+          morceau({}, "stop");
+          return res.end("data: [DONE]\n\n");
+        }
+        return repondre(`Dans le dossier : ${dit.slice(0, 300)}`);
+      }
+      return repondre("Bonjour.");
+    });
+  });
+  await new Promise((ok) => petitModele.listen(PORT_PETIT, "127.0.0.1", ok));
+  const PROFIL3 = join(DONNEES3, "..", `${DONNEES3.split("/").pop()}-profil.json`);
+  writeFileSync(PROFIL3, JSON.stringify({ backends: [{ id: "lmstudio", enabled: false }, { id: "exo", enabled: false }, { id: "petit", label: "Petit", baseUrl: `http://127.0.0.1:${PORT_PETIT}/v1` }] }));
+  const PORT3 = await portLibre();
+  const G3 = `http://127.0.0.1:${PORT3}`;
+  const troisieme = spawn(process.execPath, [join(RACINE, "gateway", "src", "index.ts")], {
+    env: {
+      ...process.env,
+      HELIX_CONFIG: PROFIL3,
+      HELIX_GATEWAY_PORT: String(PORT3),
+      HELIX_GATEWAY_HOST: "127.0.0.1",
+      HELIX_DATA_DIR: DONNEES3,
+      HELIX_WORKSPACE: ESPACE,
+      HELIX_LMSTUDIO_URL: "http://127.0.0.1:9/v1",
+      HELIX_EXO_URL: "http://127.0.0.1:9/v1",
+      HELIX_OPENCODE_BIN: FAUX_OPENCODE,
+    },
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  let journal3 = "";
+  troisieme.stdout.on("data", (b) => (journal3 += b));
+  troisieme.stderr.on("data", (b) => (journal3 += b));
+  for (let i = 0; i < 60; i++) {
+    try {
+      await fetch(`${G3}/health`);
+      break;
+    } catch {
+      await attendre(250);
+    }
+  }
+  const JETON3 = readFileSync(join(DONNEES3, "instance-token"), "utf8").trim();
+  const appel3 = (c, o = {}) => fetch(`${G3}${c}`, { redirect: "manual", ...o });
+  const cree3 = await (await appel3("/helix/auth/create", {
+    method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${JETON3}` },
+    body: JSON.stringify({ fullName: "Codeuse", email: "codeuse@example.test", password: "PetitModele2Passe!71" }),
+  })).json();
+  const avec3 = { "Content-Type": "application/json", Authorization: `Bearer ${JETON3}`, "X-Helix-Session": cree3.session?.token ?? "", "X-Helix-Langue": "fr" };
+  await appel3("/helix/approbation/niveau", { method: "POST", headers: avec3, body: JSON.stringify({ niveau: "tout" }) });
+  // Le serveur de fichiers démarre avec la passerelle (npx) : on attend qu'il ait ses outils.
+  let outilsPrets = false;
+  for (let i = 0; i < 80 && !outilsPrets; i++) {
+    const etat = await (await appel3("/helix/mcp", { headers: avec3 })).json().catch(() => ({}));
+    outilsPrets = (etat.servers ?? []).some((s) => s.id === "fichiers" && s.running && s.toolCount > 0);
+    if (!outilsPrets) await attendre(500);
+  }
+  const modeles3 = await (await appel3("/v1/models", { headers: avec3 })).json().catch(() => ({}));
+  const petitId = (modeles3.data ?? []).find((m) => /ministral-3b-essai/.test(m.id))?.id;
+  if (!outilsPrets || !petitId) {
+    console.log(`  · serveur de fichiers ou faux modèle indisponible (${outilsPrets ? "" : "outils absents "}${petitId ? "" : "modèle absent"}) : essais de bout en bout sautés`);
+  } else {
+    const demander = async (texte) => {
+      const depuis = RECUS.length;
+      const flux = await (await appel3("/v1/chat/completions", { method: "POST", headers: avec3, body: JSON.stringify({ model: petitId, tools: true, stream: true, effort: "aucun", messages: [{ role: "user", content: texte }] }) })).text();
+      let reponse = "";
+      const outils = [];
+      for (const ligne of flux.split("\n")) {
+        if (!ligne.startsWith("data: ") || ligne === "data: [DONE]") continue;
+        try {
+          const j = JSON.parse(ligne.slice(6));
+          if (j.helix?.type === "tool_start") outils.push(j.helix.name);
+          reponse += j.choices?.[0]?.delta?.content ?? "";
+        } catch {
+          /* morceau illisible */
+        }
+      }
+      const recues = RECUS.slice(depuis);
+      const retours = recues.flatMap((r) => (r.messages ?? []).filter((m) => m.role === "tool").map((m) => String(m.content)));
+      return { reponse, outils, recues, retours: [...new Set(retours)], premiere: recues[0] };
+    };
+    const nodeCheck = (f) => spawnSync(process.execPath, ["--check", f], { encoding: "utf8" }).status === 0;
+
+    const a = await demander("SCENARIO-A Écris dans calc.js une fonction somme(a, b).");
+    const sys = String((a.premiere?.messages ?? []).find((m) => m.role === "system")?.content ?? "");
+    const nomsOutils = (a.premiere?.tools ?? []).map((o) => o.function?.name);
+    verifier(
+      "petit modèle dans Cowork : consigne courte avec un exemple d'appel, et outils de fichiers réduits à l'essentiel",
+      sys.includes("Méthode de travail") && sys.includes("Exemple réussi") && nomsOutils.includes("fichiers__write_file") && !nomsOutils.includes("fichiers__directory_tree") && !nomsOutils.includes("fichiers__read_multiple_files"),
+      `${sys.slice(0, 80)} | ${nomsOutils.join(",")}`,
+    );
+    verifier(
+      "JSON cassé et mauvais nom (« write_file ») : l'appel est réparé, lancé sur fichiers__write_file, et le modèle apprend la bonne forme",
+      a.outils[0] === "fichiers__write_file" && a.retours.some((t) => t.includes("l'outil s'appelle « fichiers__write_file »") && t.includes("remis en forme")),
+      `${a.outils.join(",")} | ${a.retours.map((t) => t.slice(0, 120)).join(" || ")}`,
+    );
+    verifier(
+      "code à la syntaxe fausse : node --check le voit, le modèle reçoit la ligne et l'erreur, réécrit, et le fichier final compile",
+      a.retours.some((t) => /\[Contrôle de l'instance\].*erreur de syntaxe JavaScript/s.test(t)) && a.outils.filter((n) => n === "fichiers__write_file").length === 2 && nodeCheck(chemin("calc.js")) && lireF(chemin("calc.js"), "utf8").includes("return a + b;"),
+      `${a.outils.join(",")} | ${existsSync(chemin("calc.js")) ? lireF(chemin("calc.js"), "utf8").slice(0, 80) : "absent"}`,
+    );
+
+    const b = await demander("SCENARIO-B Crée un fichier bonjour.py qui affiche Bonjour.");
+    verifier(
+      "code donné au lieu d'être écrit : Helix relance avec l'outil exact, et l'appel écrit ensuite dans le texte (<tool_call>) est lancé",
+      b.recues.some((r) => String(r.messages?.at(-1)?.content ?? "").includes("[Rappel de l'instance]")) && b.outils.includes("fichiers__write_file") && existsSync(chemin("bonjour.py")) && lireF(chemin("bonjour.py"), "utf8").includes("print('Bonjour')") && journal3.includes("écrit(s) dans le texte"),
+      `${b.outils.join(",")} | ${b.reponse.slice(0, 120)}`,
+    );
+
+    const c = await demander("SCENARIO-C Ajoute la ligne AJOUT à notes.md.");
+    verifier(
+      "écriture sans lecture : la réécriture de notes.md ne part pas, le modèle est prié de lire, et le contenu d'origine est gardé",
+      c.retours.some((t) => t.includes("n'a pas lancé") && !t.includes("LIGNE-ORIGINALE")) && lireF(chemin("notes.md"), "utf8") === "LIGNE-ORIGINALE\nAJOUT\n",
+      `${c.outils.join(",")} | ${lireF(chemin("notes.md"), "utf8").replace(/\n/g, "⏎")}`,
+    );
+    verifier(
+      "lecture sous un mauvais nom (« ReadFile », file_path) : réparée vers fichiers__read_text_file et path",
+      c.outils.includes("fichiers__read_text_file") && c.retours.some((t) => t.includes("tu as écrit « ReadFile »") && t.includes("file_path → path")),
+      c.retours.map((t) => t.slice(0, 100)).join(" || "),
+    );
+
+    const e = await demander("SCENARIO-E Écris e.js.");
+    const relances = e.recues.filter((r) => String(r.messages?.at(-1)?.content ?? "").startsWith("[Contrôle de l'instance] Avant de répondre")).length;
+    verifier(
+      "un fichier qui reste faux : deux relances au plus, puis la réponse dit à la personne que e.js ne fonctionnera pas",
+      relances === 2 && e.outils.filter((n) => n === "fichiers__write_file").length === 3 && e.reponse.includes("e.js a encore une erreur de syntaxe"),
+      `${relances} relance(s), ${e.outils.join(",")} | ${e.reponse.slice(-160)}`,
+    );
+
+    const d = await demander("SCENARIO-D Qu'y a-t-il dans le dossier ?");
+    verifier("Qwen3.5 : l'appel en XML laissé dans la réflexion est lancé, et la réponse s'appuie sur son résultat", d.outils.includes("fichiers__list_directory") && d.reponse.includes("notes.md"), `${d.outils.join(",")} | ${d.reponse.slice(0, 120)}`);
+  }
+  troisieme.kill();
+  petitModele.close();
+  await attendre(300);
+  rmSync(ESPACE, { recursive: true, force: true });
+  rmSync(DONNEES3, { recursive: true, force: true });
+  rmSync(PROFIL3, { force: true });
+}
+
 console.log("\n12. Deviner un mot de passe");
 {
   let bloque = false;

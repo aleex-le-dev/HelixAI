@@ -222,6 +222,8 @@ await new Promise((ok) => fauxModele.listen(PORT_EMBED, "127.0.0.1", ok));
   writeFileSync(
     join(AUX, "profil.json"),
     JSON.stringify({
+      // Clé en fichier, dans le dossier jetable : la batterie ne sollicite jamais le trousseau du poste (27/09/2026).
+      chiffrement: "fichier",
       openclaw: { chemin: join(AUX, "openclaw", "bin", "openclaw"), port: PORT_OPENCLAW },
       backends: [
         { id: "lmstudio", enabled: false },
@@ -2013,9 +2015,13 @@ console.log("\n7 septies. Essai du modèle sur cette machine : celui qui répond
    * 4B, choisi d'office, répond « 不 時////// » ; Ministral 3B, sur le même PC,
    * répond. Sans vrai modèle ni vrai LM Studio : le faux modèle ci-dessus sert
    * d'API compatible OpenAI, et un faux `lms` (chargements notés dans un
-   * fichier) tient lieu de moteur. Le poste simulé est un Windows de 16 Go
+   * fichier) tient lieu de moteur. Le poste simulé est un Windows de 8 Go
    * sans carte NVIDIA ; son dossier personnel et son PATH sont jetables, pour
-   * que le vrai `lms` de ce poste ne soit jamais lancé.
+   * que le vrai `lms` de ce poste ne soit jamais lancé. 8 Go et non plus 16
+   * depuis le 27/09/2026 : avec les notes d'Epoch AI, un modèle noté passe
+   * devant un modèle sans note, et sur 16 Go Qwen3 8B (noté) n'est plus
+   * derrière Qwen3.5 4B (non noté). Sur 8 Go, où aucun modèle noté ne tient,
+   * Qwen3.5 4B est toujours le conseillé, et Qwen3 4B le suivant.
    */
   /*
    * Tout se joue dans un processus à part : importer ici un module de la
@@ -2027,6 +2033,13 @@ console.log("\n7 septies. Essai du modèle sur cette machine : celui qui répond
   const BIN = join(ICI, "bin");
   mkdirSync(BIN);
   mkdirSync(join(ICI, "maison"));
+  /*
+   * Clé de chiffrement en fichier (27/09/2026) : sans profil, macOS la range au
+   * trousseau, et `security` lancé avec ce dossier personnel jetable ouvrait
+   * chez Medhi « Trousseau introuvable ». Le trousseau du poste n'est plus
+   * jamais sollicité par ce scénario.
+   */
+  writeFileSync(join(ICI, "helix.config.json"), JSON.stringify({ chiffrement: "fichier" }));
   symlinkSync(process.execPath, join(BIN, "node"));
   writeFileSync(
     join(BIN, "lms"),
@@ -2057,7 +2070,7 @@ console.log("\n7 septies. Essai du modèle sur cette machine : celui qui répond
     import { pathToFileURL } from "node:url";
     Object.defineProperty(process, "platform", { value: "win32" });
     Object.defineProperty(process, "arch", { value: "x64" });
-    os.totalmem = () => 16 * 1024 ** 3;
+    os.totalmem = () => 8 * 1024 ** 3;
     const ici = process.env.FAUX_LMS_DIR;
     const mod = (f) => import(pathToFileURL(join(${JSON.stringify(RACINE)}, "gateway", "src", f)).href);
     const p = await mod("provision.ts"), s = await mod("santeModeles.ts"), r = await mod("router.ts");
@@ -2082,7 +2095,7 @@ console.log("\n7 septies. Essai du modèle sur cette machine : celui qui répond
 
     // A. Mise en route : le premier candidat répond mal, le second juste.
     process.env.HELIX_DATA_DIR = mkdtempSync(join(ici, "a-"));
-    const fiche = (key, label, intelligence, verifie) => ({ key, label, editeur: "Essai", licence: "Apache 2.0", downloadGb: 0.5, intelligence, verifie, description: "" });
+    const fiche = (key, label, eci, verifie) => ({ key, label, editeur: "Essai", licence: "Apache 2.0", downloadGb: 0.5, eci, verifie, description: "" });
     const cat = [fiche("essai-machine/casse", "Casse 4B", 13, false), fiche("essai-machine/bon", "Bon 3B", 5, true)];
     poser([], ["essai-machine/casse", "essai-machine/bon"]);
     const a = await enFr(() => p.ensureLocalModel(undefined, cat));
@@ -2095,13 +2108,13 @@ console.log("\n7 septies. Essai du modèle sur cette machine : celui qui répond
 
     // B. Poste déjà installé (le PC de Medhi) : Qwen3.5 4B en mémoire, jamais essayé ; essai au démarrage.
     process.env.HELIX_DATA_DIR = mkdtempSync(join(ici, "b-"));
-    poser(["qwen/qwen3.5-4b"], ["qwen/qwen3.5-4b", "qwen3-8b"]);
+    poser(["qwen/qwen3.5-4b"], ["qwen/qwen3.5-4b", "qwen3-4b"]);
     const hw = p.detectHardware();
     const avant = p.recommend(hw).key;
     await enFr(() => p.verifierModeleEnPlace());
     const b = p.getProvisionState();
     sortie.B = { avant, apres: p.recommend(hw).key, phase: b.phase, model: b.model, messages: [...messages], appels: appels(), charges: charges(),
-      qwen35: s.ficheDe("qwen/qwen3.5-4b"), qwen3: s.ficheDe("qwen3-8b"),
+      qwen35: s.ficheDe("qwen/qwen3.5-4b"), qwen3: s.ficheDe("qwen3-4b"),
       recommandes: p.adaptesALaMachine(hw).filter((e) => e.recommande && e.role === "chat").map((e) => e.key) };
     messages.length = 0;
     await enFr(() => p.verifierModeleEnPlace());
@@ -2132,7 +2145,7 @@ console.log("\n7 septies. Essai du modèle sur cette machine : celui qui répond
           HOME: join(ICI, "maison"),
           TMPDIR: tmpdir(),
           FAUX_LMS_DIR: ICI,
-          HELIX_CONFIG: join(ICI, "absent.json"),
+          HELIX_CONFIG: join(ICI, "helix.config.json"),
           HELIX_DATA_DIR: join(ICI, "donnees"),
           HELIX_LMSTUDIO_URL: `http://127.0.0.1:${PORT_EMBED}/v1`,
           HELIX_EXO_URL: "http://127.0.0.1:9/v1",
@@ -2186,10 +2199,10 @@ console.log("\n7 septies. Essai du modèle sur cette machine : celui qui répond
     JSON.stringify(essaisCasse),
   );
   verifier(
-    "poste déjà installé (Windows 16 Go simulé, Qwen3.5 4B en mémoire) : essai au démarrage, Qwen3.5 4B écarté, Qwen3 8B chargé et retenu, sans réinstaller",
-    B.avant === "qwen/qwen3.5-4b" && B.phase === "ready" && B.model === "qwen3-8b" && B.qwen35?.etat === "defaillant" && B.qwen35?.raison === "boucle" && B.qwen3?.etat === "valide" &&
-      JSON.stringify(B.appels) === JSON.stringify(["unload qwen/qwen3.5-4b", "load qwen3-8b"]) &&
-      B.messages?.some((m) => m.includes("Qwen3.5 4B ne répond pas correctement sur cette machine, essai de Qwen3 8B")),
+    "poste déjà installé (Windows 8 Go simulé, Qwen3.5 4B en mémoire) : essai au démarrage, Qwen3.5 4B écarté, Qwen3 4B chargé et retenu, sans réinstaller",
+    B.avant === "qwen/qwen3.5-4b" && B.phase === "ready" && B.model === "qwen3-4b" && B.qwen35?.etat === "defaillant" && B.qwen35?.raison === "boucle" && B.qwen3?.etat === "valide" &&
+      JSON.stringify(B.appels) === JSON.stringify(["unload qwen/qwen3.5-4b", "load qwen3-4b"]) &&
+      B.messages?.some((m) => m.includes("Qwen3.5 4B ne répond pas correctement sur cette machine, essai de Qwen3 4B")),
     JSON.stringify(e.B ?? e).slice(0, 700),
   );
   verifier(
@@ -2659,7 +2672,7 @@ console.log("\n10. Dossier de l'équipe contenant les données de l'instance, in
   symlinkSync(DONNEES2, join(ESPACE, "raccourci"));
   symlinkSync(join(MEMOIRE, "note.md"), join(ESPACE, "Docs", "lien-memoire.md"));
   const PROFIL2 = join(ESPACE, "..", `${ESPACE.split("/").pop()}-profil.json`);
-  writeFileSync(PROFIL2, JSON.stringify({ share: true, tls: false, backends: [{ id: "lmstudio", enabled: false }, { id: "exo", enabled: false }] }));
+  writeFileSync(PROFIL2, JSON.stringify({ chiffrement: "fichier", share: true, tls: false, backends: [{ id: "lmstudio", enabled: false }, { id: "exo", enabled: false }] }));
   const PORT2 = await portLibre();
   const G2 = `http://127.0.0.1:${PORT2}`;
   const seconde = spawn(process.execPath, [join(RACINE, "gateway", "src", "index.ts")], {
@@ -3153,7 +3166,7 @@ console.log("\n11 quinquies. Windows et Linux : ce qui se vérifie depuis ce pos
     fs.mkdirSync(os.homedir() + "/ailleurs"); fs.writeFileSync(p, "//serveur/partage"); const unc = e.dossierLmStudio();
     fs.writeFileSync(p, "relatif/bin"); const rel = e.dossierLmStudio();
     fs.writeFileSync(p, os.homedir() + "/ailleurs"); const ok = e.dossierLmStudio();
-    console.log([unc.endsWith("/.lmstudio"), rel.endsWith("/.lmstudio"), ok.endsWith("/ailleurs"), z.estProtege(p), z.estProtege(os.homedir() + "/.lmstudio/bin/lms"), z.estProtege(os.homedir() + "/snap/firefox/common/.mozilla")].join(","));`, { HOME: d5, HELIX_DATA_DIR: join(d5, "donnees") });
+    console.log([unc.endsWith("/.lmstudio"), rel.endsWith("/.lmstudio"), ok.endsWith("/ailleurs"), z.estProtege(p), z.estProtege(os.homedir() + "/.lmstudio/bin/lms"), z.estProtege(os.homedir() + "/snap/firefox/common/.mozilla")].join(","));`, (ecrireF(join(d5, "c.json"), JSON.stringify({ chiffrement: "fichier" })), { HOME: d5, HELIX_DATA_DIR: join(d5, "donnees"), HELIX_CONFIG: join(d5, "c.json") }));
   verifier("pointeur de LM Studio : ni partage réseau ni chemin relatif ; le pointeur, `lms` et les profils snap sont des zones protégées", pointeur.trim().endsWith("true,true,true,true,true,true"), pointeur.slice(-200));
   const d6 = dossierNeuf(join(tmpdir(), "helix-cle-lien-"));
   ecrireF(join(d6, "c.json"), JSON.stringify({ chiffrement: "fichier" }));
@@ -3176,8 +3189,9 @@ console.log("\n11 quinquies. Windows et Linux : ce qui se vérifie depuis ce pos
    * remplacé, et le dossier personnel est un dossier neuf (jamais ~/.opencode).
    */
   const d7 = dossierNeuf(join(tmpdir(), "helix-opencode-auto-"));
-  ecrireF(join(d7, "libre.json"), JSON.stringify({ backends: [{ id: "lmstudio", enabled: false }, { id: "exo", enabled: false }] }));
-  ecrireF(join(d7, "integrateur.json"), JSON.stringify({ autoProvision: false, backends: [{ id: "lmstudio", enabled: false }, { id: "exo", enabled: false }] }));
+  // Clé en fichier : avec ce dossier personnel jetable, le trousseau du poste ne doit jamais être sollicité (27/09/2026).
+  ecrireF(join(d7, "libre.json"), JSON.stringify({ chiffrement: "fichier", backends: [{ id: "lmstudio", enabled: false }, { id: "exo", enabled: false }] }));
+  ecrireF(join(d7, "integrateur.json"), JSON.stringify({ chiffrement: "fichier", autoProvision: false, backends: [{ id: "lmstudio", enabled: false }, { id: "exo", enabled: false }] }));
   const sondeOpencode = `const appels = []; globalThis.fetch = async (u) => { appels.push(String(u)); return new Response(new Blob([new Uint8Array(4096).fill(7)]).stream(), { status: 200 }); };
     const o = await import("./gateway/src/opencode.ts"); const p = await import("./gateway/src/opencodePrive.ts"); const fs = await import("node:fs");
     const verdict = await o.opencodeEnFond();
@@ -3418,7 +3432,7 @@ console.log("\n11 septies. Petit modèle qui code : Helix répare, relance, vér
   });
   await new Promise((ok) => petitModele.listen(PORT_PETIT, "127.0.0.1", ok));
   const PROFIL3 = join(DONNEES3, "..", `${DONNEES3.split("/").pop()}-profil.json`);
-  writeFileSync(PROFIL3, JSON.stringify({ backends: [{ id: "lmstudio", enabled: false }, { id: "exo", enabled: false }, { id: "petit", label: "Petit", baseUrl: `http://127.0.0.1:${PORT_PETIT}/v1` }] }));
+  writeFileSync(PROFIL3, JSON.stringify({ chiffrement: "fichier", backends: [{ id: "lmstudio", enabled: false }, { id: "exo", enabled: false }, { id: "petit", label: "Petit", baseUrl: `http://127.0.0.1:${PORT_PETIT}/v1` }] }));
   const PORT3 = await portLibre();
   const G3 = `http://127.0.0.1:${PORT3}`;
   const troisieme = spawn(process.execPath, [join(RACINE, "gateway", "src", "index.ts")], {

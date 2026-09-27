@@ -10,7 +10,8 @@ export interface ModeleInstallable {
   recommande: boolean;
   editeur: string;
   licence: string;
-  intelligence: number;
+  /** Note ECI d'Epoch AI (gateway/src/notesModeles.ts) ; absente quand Epoch ne note pas ce modèle. */
+  eci?: number;
   vision?: boolean;
   /** Essayé avec Helix (raisonnement, outils) ; sinon proposé en le disant. */
   verifie: boolean;

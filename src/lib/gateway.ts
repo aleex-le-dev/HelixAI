@@ -28,6 +28,8 @@ export interface GatewayModel {
   /** Où tourne le service, pour un modèle cloud. */
   pays?: string;
   fournisseur?: string;
+  /** Fournisseur cloud reconnu (gateway/src/prixPublies.ts), pour ses prix et ses noms de modèles. */
+  catalogue?: string;
   /** Présent quand le modèle vient d'une clé personnelle (la sienne : les autres ne le voient pas). */
   proprietaire?: string;
   /** Entraîné sur la machine de l'instance : choisissable, jamais choisi d'office. */

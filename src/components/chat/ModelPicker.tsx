@@ -21,7 +21,7 @@ import { Chip } from "@/components/ui/Chip";
 import { SearchInput } from "@/components/ui/SearchInput";
 import { LogoMarque } from "@/components/settings/TuileService";
 import { ComparerModeles } from "@/components/chat/ComparerModeles";
-import { referenceDuModele } from "@/data/artificialAnalysis";
+import { noteDuModeleServi } from "../../../gateway/src/notesModeles.ts";
 import { branding } from "@/config/branding";
 import type { CleMarque } from "@/components/ui/marques";
 import { Popover } from "@/components/ui/Popover";
@@ -154,14 +154,14 @@ function leRapide(models: GatewayModel[]): GatewayModel | undefined {
 }
 
 /**
- * Le plus capable : la note du relevé si elle existe, le poids sinon.
+ * Le plus capable : la note ECI d'Epoch AI si elle existe, le poids sinon.
  *
  * Les deux ne se comparent pas entre eux — un modèle noté passe toujours
- * devant un modèle non noté, plutôt que de mélanger une note sur soixante et
+ * devant un modèle non noté, plutôt que de mélanger une note ECI et
  * des milliards de paramètres dans un même calcul, ce qui n'aurait aucun sens.
  */
 function leCapable(models: GatewayModel[]): GatewayModel | undefined {
-  const note = (m: GatewayModel) => referenceDuModele(m.id)?.intelligence;
+  const note = (m: GatewayModel) => noteDuModeleServi(m)?.eci;
   const notes = models.filter((m) => note(m) !== undefined);
   if (notes.length > 0) {
     return [...notes].sort((a, b) => (note(b) ?? 0) - (note(a) ?? 0))[0];
@@ -427,7 +427,9 @@ export function ModelBehaviorPicker({
                                   {celuiCi
                                     ? installation?.message
                                     : [
-                                        tf("Note {0}", m.intelligence.toLocaleString(locale())),
+                                        m.eci !== undefined
+                                          ? tf("Note ECI {0}", m.eci.toLocaleString(locale()))
+                                          : t("sans note publiée"),
                                         tf("{0} Go", m.downloadGb.toLocaleString(locale())),
                                         m.vision ? t("images") : "",
                                         m.verifie ? "" : t("pas encore vérifié avec Helix"),

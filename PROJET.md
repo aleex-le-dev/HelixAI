@@ -1211,6 +1211,72 @@ au niveau « Demander avant de modifier » (Codex doit rester en lecture seule),
 l'arrêt en cours de tâche ; enfin la limite d'abonnement atteinte, pour voir le message rendu.
 Vérifier aussi qu'un compte membre et un poste rattaché ne voient pas le sélecteur.
 
+### 3.15 Notes et prix des modèles : Epoch AI (CC BY 4.0) et les pages de prix des fournisseurs (27/09/2026)
+
+**Décision de Medhi, 27/09/2026 : « Source ouverte ».** Les notes des modèles (graphique
+« Comparer les modèles », sélecteur, catalogue de `provision.ts`) venaient jusqu'ici d'un
+relevé commercial dont les conditions interdisent de reprendre les données (historique :
+Artificial Analysis, jusqu'à 2026.927.4). Elles viennent désormais d'une source sous
+licence ouverte, et les coûts des pages de prix officielles des fournisseurs.
+
+- **Notes : l'indice ECI d'Epoch AI** (« Capabilities & benchmarking »,
+  https://epoch.ai/benchmarks/use-this-data, archive `benchmark_data.zip`, fichier
+  `epoch_capabilities_index/eci_scores.csv`). Licence CC BY 4.0, lue sur la page : « free to
+  use, distribute, and reproduce provided the source and authors are credited ». Attribution
+  affichée sous le graphique (source, licence, lien, date du relevé). Retenue parce qu'elle
+  couvre sur **une seule échelle** les modèles cloud du jour et des modèles ouverts qu'on fait
+  tourner chez soi (Qwen3 8B à 32B, Qwen3.5 9B et 35B-A3B, Qwen 3.8 27B, gpt-oss-20b,
+  Magistral Small, Gemma, Llama, Phi). Recopiés : les 217 modèles sortis depuis le
+  01/01/2024, valeurs publiées telles quelles (`gateway/src/notesModeles.ts`). Epoch ne note
+  pas les plus petits (Qwen3 4B et 1.7B, Qwen3.5 4B et 2B, Ministral 3, Granite 4.1, OLMo 3,
+  Qwen3-VL, GLM-4.7 Flash, Muse Glimmer) : l'écran dit « pas de note publiée », rien ne les
+  remplace. Epoch a été lue en premier et suffit : sa licence est écrite en clair et sa
+  couverture répond au besoin. LMArena, Open LLM Leaderboard, Aider et LiveBench n'ont pas
+  été examinés en détail (l'archive d'Epoch contient d'ailleurs des résultats d'Aider et de
+  LiveBench, qui gardent leur propre licence et ne sont pas repris). Une seconde série
+  d'Epoch (GPQA Diamond, évaluée par Epoch) couvrirait Qwen3 4B et 1.7B ; elle n'est pas
+  reprise, pour ne pas mettre deux échelles côte à côte.
+- **Prix : les pages officielles** (`gateway/src/prixPublies.ts`), relevées le 27/09/2026 :
+  OpenAI, Anthropic, Google, Mistral (en euros, la page donne aussi les dollars), DeepSeek
+  (tarif de pointe), xAI, Groq, Together, Scaleway, OVHcloud, IONOS (page allemande, en
+  euros), OpenRouter (sa liste publique de modèles) : 211 lignes. Tarif standard, contexte
+  court ; ni cache, ni lots, ni paliers gratuits. Le graphique place un modèle au prix de
+  sortie publié par **son éditeur**, en dollars (57 modèles notés ont un tel prix).
+- **Correspondance des noms** (`gateway/src/nomsModeles.ts`), parce que Medhi voyait que
+  « quel que soit le modèle cloud choisi, il n'apparaissait pas » : préfixe de clé
+  (`cle-…/`) et d'éditeur, quantification (`@q4_k_m`, `-mlx`), `-latest`, `-instruct`, casse
+  et séparateurs s'effacent ; une date complète (`-2025-04-14`, `-20250514`) seulement en
+  second essai, et jamais entre deux instantanés datés ; une date courte (`-2507`) jamais.
+  Aucune ressemblance partielle, et un nom qui désigne deux modèles n'en désigne aucun
+  (`gpt-4o`, trois instantanés notés). Les renvois documentés par un fournisseur
+  (`mistral-medium-3` est Mistral Medium 3.5 chez Mistral) valent pour ses modèles cloud,
+  jamais pour un modèle local. Vérifié par `node scripts/essai-notes-modeles.mjs`.
+- **Tous les modèles de la personne figurent au graphique** : un point (cloud noté avec
+  prix), la bande de gauche (machine), la bande de droite (cloud noté sans prix relevé), ou
+  la liste « pas de note publiée ».
+- **Conséquence sur l'installation** (`provision.ts`) : un modèle noté passe devant un modèle
+  sans note, et entre deux modèles sans note le plus lourd d'abord. Sur un PC de 16 Go sans
+  carte graphique, Qwen3 8B (136,17) est désormais conseillé avant Qwen3.5 4B (non noté) ;
+  sur 8 Go, Qwen3.5 4B reste le premier ; sur un Mac de 256 Go, Qwen 3.8 27B (149,38) passe
+  devant DeepSeek V4 Flash (146,1). Le scénario de `npm run securite` qui rejouait le PC de
+  Medhi simule donc un Windows de 8 Go, avec Qwen3 4B pour relais.
+
+**Mon usage : les prix publiés s'appliquent (Medhi, 27/09/2026 : « dans mon usage ça serait
+sympa d'avoir le tarif de tous les modèles cloud »).** La règle d'origine de l'écran, « aucun
+prix par défaut » (§ 5, Affichages faux), est changée : un modèle cloud sans tarif saisi prend le prix publié par **son**
+fournisseur (même correspondance de noms), l'écran écrit « prix publié par {fournisseur},
+relevé du {date} » avec le lien, et dit le coût estimé. Un tarif saisi l'emporte toujours et
+est marqué comme tel ; un modèle sans prix connu garde « tarif non renseigné » et n'est jamais
+compté à zéro ; un modèle local n'a pas de tarif. Les devises ne se convertissent pas : un
+tarif porte sa devise (EUR pour ceux saisis avant, c'était la seule proposée), et les totaux
+se font devise par devise (« 1,20 $ + 0,30 € »). Au passage : des tarifs ou un registre
+illisibles valaient `{}` et le premier tarif saisi écrasait tout ; ils restent désormais
+illisibles, rien n'est écrit par-dessus, et l'écran le dit.
+
+**À essayer sur le poste** : une vraie clé (OpenAI, Mistral) pour voir le point du modèle
+au graphique et son coût dans Mon usage avec la mention du prix publié ; les identifiants que
+chaque fournisseur rend vraiment (seuls ceux de la documentation ont été vus).
+
 ---
 
 ## 4. Sécurité
@@ -1595,7 +1661,9 @@ et chaque étape d'une tâche découpée, agent de code. Vérifié : chiffres
 identiques à ceux du moteur interrogé directement, et une tâche découpée compte
 bien un appel pour le plan et un pour chaque tour d'étape. Un modèle local coûte
 0 € de frais d'API ; un modèle distant a un tarif à renseigner, et tant qu'il ne
-l'est pas, l'écran dit « tarif non renseigné » plutôt qu'un chiffre faux.
+l'est pas, l'écran dit « tarif non renseigné » plutôt qu'un chiffre faux. Depuis
+le 27/09/2026, un modèle distant sans tarif saisi prend le prix publié par son
+fournisseur, cité avec sa date et son lien, et son coût est dit estimé (§ 3.15).
 Chacun ne voit que sa consommation.
 
 **Profil, Préférences, suggestions et dictée**, livrés en même temps :
@@ -1844,20 +1912,21 @@ en ordonnée et coût moyen par tâche en abscisse (échelle logarithmique) : le
 modèles que l'instance sert sont marqués, les autres servent de repères, et
 cliquer un point choisit le modèle.
 
-Les chiffres viennent d'Artificial Analysis et sont **figés dans le logiciel**,
-avec la date du relevé affichée et un lien vers la source. Décision du client,
-et elle est cohérente avec le produit : interroger un service américain à
-l'ouverture d'un écran contredirait la promesse « rien ne part vers un service
-tiers », et l'écran ne marcherait plus sans Internet, ce qui n'a pas de sens
-sur une instance au fond d'un bureau. Le prix est que les chiffres vieillissent
-d'une version à l'autre ; l'écran le dit.
+Les chiffres sont **figés dans le logiciel**, avec la date du relevé affichée
+et un lien vers la source. Décision du client, et elle est cohérente avec le
+produit : interroger un service américain à l'ouverture d'un écran
+contredirait la promesse « rien ne part vers un service tiers », et l'écran ne
+marcherait plus sans Internet, ce qui n'a pas de sens sur une instance au fond
+d'un bureau. Le prix est que les chiffres vieillissent d'une version à
+l'autre ; l'écran le dit. Depuis le 27/09/2026, les notes sont l'indice ECI
+d'Epoch AI (CC BY 4.0) et les prix ceux des pages des éditeurs : § 3.15.
 
-Ce que le relevé ne donne pas, l'écran ne l'invente pas : le coût n'est publié
-en clair que pour onze des vingt-cinq modèles, les quatorze autres figurent
-donc au tableau avec un tiret et **pas** sur le graphique. Lire une position de
-point pour en déduire un prix aurait rempli le nuage d'approximations
-présentées comme des mesures. De même, un Qwen 8B sur un portable n'a aucune
-entrée au relevé : il n'hérite pas de la note de son grand frère hébergé.
+Ce que la source ne donne pas, l'écran ne l'invente pas : un modèle sans prix
+relevé n'a pas de position sur l'axe des prix, un modèle sans note n'en a pas
+sur l'axe des notes. Lire une position de point pour en déduire un chiffre
+aurait rempli le nuage d'approximations présentées comme des mesures. De même,
+un petit modèle sur un portable n'hérite pas de la note de son grand frère
+hébergé.
 
 Un effet de bord corrigé au passage : le tri qui précède **chaque** demande
 (« faut-il découper ce travail ? ») héritait du niveau choisi, et se serait
@@ -2106,8 +2175,7 @@ fenêtre sur macOS ne coupe plus la passerelle (les employés continuent).
   avant le tri par le modèle : question courte, ou phrase courte qui commence
   comme une réplique, jamais découpée. Les marqueurs de contrôle (« VERIFIE : … »,
   « RIEN A FAIRE ») sont retirés à l'affichage s'ils fuient dans la réponse.
-- *Graphique « Comparer »* : les modèles locaux sans note Artificial Analysis
-  étaient empilés le long de l'axe gradué, ce qui leur prêtait une note
+- *Graphique « Comparer »* : les modèles locaux sans note publiée étaient empilés le long de l'axe gradué, ce qui leur prêtait une note
   (« qwen3-8b-dwq vaut 27 ? »). Ils sont désormais listés sous le graphique,
   sans position ; la bande de gauche n'existe que si l'un d'eux est noté.
 - *Ce que l'installation pose* : un modèle de conversation adapté à la machine
@@ -2118,8 +2186,8 @@ fenêtre sur macOS ne coupe plus la passerelle (les employés continuent).
   L'installation fait elle aussi la place en mémoire avant de charger
   (`faireLaPlace`, partagé avec le chargement à la demande).
 - *Choix du modèle selon la machine* (`provision.ts`) : catalogue multi-éditeurs
-  relevé le 23/09/2026 sur le catalogue LM Studio (capacités, mémoire), sur
-  Artificial Analysis (indice d'intelligence) et sur les licences (Apache 2.0 /
+  relevé le 23/09/2026 sur le catalogue LM Studio (capacités, mémoire), sur un
+  indice de notes (l'ECI d'Epoch AI depuis le 27/09/2026, § 3.15) et sur les licences (Apache 2.0 /
   MIT seulement : Gemma, Llama, NVIDIA écartés). `tientSur` : poids × 1,3 plus
   une réserve de 30 % de la RAM (3 à 8 Go) ; sur PC, un modèle dense doit tenir
   dans la carte NVIDIA (`nvidia-smi`), un modèle à experts peut déborder en RAM ;

@@ -9,6 +9,7 @@ import { BACKENDS, classifyRoles, isReasoningModel, tousLesBackends } from "./co
 import type { BackendConfig, BackendStatus, ModelInfo } from "./types.ts";
 import { t, tf } from "./langue.ts";
 import { capacitesDistantes, entetesAvecCle, listerModelesDistants, type ModeleDistant } from "./modelesCloud.ts";
+import { fournisseurDuBackend } from "./prixPublies.ts";
 // Cycle voulu (provision.ts importe ce module) : `detectHardware` n'est appelée qu'au chargement d'un modèle, jamais à l'import.
 import { calculSurProcesseur, detectHardware, relaisApresDefaillance } from "./provision.ts";
 import { aEssayer, essayerModele, noterEssai } from "./santeModeles.ts";
@@ -590,6 +591,13 @@ function toModelInfo(
     ...(backend.proprietaire ? { proprietaire: backend.proprietaire } : {}),
     ...(backend.pays ? { pays: backend.pays } : {}),
     ...(backend.fournisseur ? { fournisseur: backend.fournisseur } : {}),
+    // Le fournisseur au sens des prix et des renvois de noms (prixPublies.ts, 27/09/2026) : un modèle cloud seulement.
+    ...(backend.origine === "cle" || backend.origine === "agence"
+      ? (() => {
+          const f = fournisseurDuBackend(backend);
+          return f ? { catalogue: f.id } : {};
+        })()
+      : {}),
     ...extra,
   };
 }

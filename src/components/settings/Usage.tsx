@@ -4,14 +4,17 @@ import { Card } from "@/components/settings/SettingsShell";
 import { SegmentedTabs } from "@/components/ui/SegmentedTabs";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Field";
+import { Select } from "@/components/ui/Select";
 import { InfoBox } from "@/components/ui/InfoBox";
 import {
   PERIODES,
   definirTarif,
-  euros,
   jetons,
   lireRapport,
+  montant,
+  montants,
   type Cout,
+  type Devise,
   type ModeleDistant,
   type Periode,
   type Rapport,
@@ -27,23 +30,48 @@ import { t, tf } from "@/lib/i18n";
  * n'existaient pas. Tout vient maintenant de la passerelle, qui lit les jetons
  * dans la réponse de chaque moteur. Là où une valeur manque, l'écran le dit :
  * un tarif non renseigné ne devient jamais un zéro.
+ *
+ * Depuis le 27/09/2026 (demandé par Medhi), un modèle cloud sans tarif saisi
+ * prend le prix publié par son fournisseur (gateway/src/usage.ts) : l'écran le
+ * cite, avec la date du relevé et le lien, et dit le coût estimé. Chaque coût
+ * reste dans sa devise ; rien n'est converti.
  */
 
+/** La date d'un relevé (AAAA-MM-JJ), à midi pour qu'aucun fuseau ne la fasse glisser. */
+const jourCourt = (iso: string) => formaterDate(`${iso}T12:00:00`);
+
 /** Libellé du coût d'un modèle, sans jamais combler un manque par un chiffre. */
-function libelleCout(cout: Cout): { texte: string; aide?: string; atenue?: boolean } {
+function libelleCout(cout: Cout): {
+  texte: string;
+  aide?: string;
+  atenue?: boolean;
+  source?: { texte: string; lien?: string };
+} {
   if (cout.statut === "gratuit") {
-    return { texte: "Gratuit", aide: t("Calculé sur votre machine : aucun frais d'API.") };
+    return { texte: t("Gratuit"), aide: t("Calculé sur votre machine : aucun frais d'API.") };
   }
   if (cout.statut === "non-renseigne") {
     return {
       texte: t("Tarif non renseigné"),
-      aide: t("Renseignez le tarif de ce modèle plus bas pour voir son coût."),
+      aide: t("Aucun prix publié connu pour ce modèle chez ce fournisseur : renseignez son tarif plus bas pour voir son coût."),
       atenue: true,
     };
   }
+  const texte = montant(cout.montant, cout.devise) + (cout.estime ? ` ${t("(estimé)")}` : "");
+  if (cout.source === "publie" && cout.publie) {
+    return {
+      texte,
+      aide: t("Estimé avec le prix publié : le cache, les lots et les paliers gratuits n'y sont pas."),
+      source: {
+        texte: tf("prix publié par {0}, relevé du {1}", cout.publie.fournisseur, jourCourt(cout.publie.releveLe)),
+        lien: cout.publie.page,
+      },
+    };
+  }
   return {
-    texte: euros(cout.montant) + (cout.estime ? ` ${t("(estimé)")}` : ""),
+    texte,
     aide: cout.estime ? t("Une partie des jetons a été estimée : le moteur ne les a pas rapportés.") : undefined,
+    source: { texte: t("tarif saisi") },
   };
 }
 
@@ -105,12 +133,14 @@ function Courbe({ jours }: { jours: Rapport["jours"] }) {
   );
 }
 
-/** Saisie du tarif d'un modèle distant. */
+/** Saisie du tarif d'un modèle distant, avec le prix publié quand il est connu. */
 function LigneTarif({ modele, onChange }: { modele: ModeleDistant; onChange: () => void }) {
   const [entree, setEntree] = useState(modele.tarif ? String(modele.tarif.entree) : "");
   const [sortie, setSortie] = useState(modele.tarif ? String(modele.tarif.sortie) : "");
+  const [devise, setDevise] = useState<Devise>(modele.tarif?.devise ?? modele.publie?.devise ?? "EUR");
   const [enCours, setEnCours] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const symbole = devise === "USD" ? "$" : "€";
 
   const enregistrer = async (retirer = false) => {
     setEnCours(true);
@@ -118,7 +148,7 @@ function LigneTarif({ modele, onChange }: { modele: ModeleDistant; onChange: () 
     const lire = (v: string) => Number(v.replace(",", "."));
     const res = retirer
       ? await definirTarif(modele.uid, null, null)
-      : await definirTarif(modele.uid, lire(entree), lire(sortie));
+      : await definirTarif(modele.uid, lire(entree), lire(sortie), devise);
     setEnCours(false);
     if (!res.ok) {
       setMessage(res.raison ?? t("Tarif refusé."));
@@ -133,14 +163,45 @@ function LigneTarif({ modele, onChange }: { modele: ModeleDistant; onChange: () 
 
   return (
     <div className="flex flex-wrap items-end gap-3 border-b border-border py-3 last:border-b-0">
-      <p className="min-w-40 flex-1 truncate font-mono text-xs text-foreground">{modele.uid}</p>
+      <div className="min-w-40 flex-1">
+        <p className="truncate font-mono text-xs text-foreground">{modele.uid}</p>
+        {modele.tarif ? (
+          <p className="mt-0.5 text-[11px] text-muted-foreground">{t("Tarif saisi : il l'emporte sur le prix publié.")}</p>
+        ) : modele.publie ? (
+          <p className="mt-0.5 text-[11px] text-muted-foreground">
+            {tf(
+              "Prix publié par {0}, relevé du {1} : {2} en entrée, {3} en sortie, par million de jetons.",
+              modele.publie.fournisseur,
+              jourCourt(modele.publie.releveLe),
+              montant(modele.publie.entree, modele.publie.devise),
+              montant(modele.publie.sortie, modele.publie.devise),
+            )}{" "}
+            <a href={modele.publie.page} target="_blank" rel="noreferrer" className="underline underline-offset-2 hover:text-foreground">
+              {t("Voir la page")}
+            </a>
+          </p>
+        ) : (
+          <p className="mt-0.5 text-[11px] text-muted-foreground">{t("Aucun prix publié connu : sans tarif saisi, son coût n'est pas compté.")}</p>
+        )}
+      </div>
       <label className="w-28 text-xs text-muted-foreground">
         {t("Entrée")}
-        <Input value={entree} onChange={(e) => setEntree(e.target.value)} inputMode="decimal" placeholder={t("€ / M")} />
+        <Input value={entree} onChange={(e) => setEntree(e.target.value)} inputMode="decimal" placeholder={tf("{0} / M", symbole)} />
       </label>
       <label className="w-28 text-xs text-muted-foreground">
         {t("Sortie")}
-        <Input value={sortie} onChange={(e) => setSortie(e.target.value)} inputMode="decimal" placeholder={t("€ / M")} />
+        <Input value={sortie} onChange={(e) => setSortie(e.target.value)} inputMode="decimal" placeholder={tf("{0} / M", symbole)} />
+      </label>
+      <label className="w-32 text-xs text-muted-foreground">
+        {t("Devise")}
+        <Select
+          value={devise}
+          onChange={(v) => setDevise(v as Devise)}
+          options={[
+            { value: "EUR", label: t("Euro (€)") },
+            { value: "USD", label: t("Dollar ($)") },
+          ]}
+        />
       </label>
       <Button size="sm" variant="secondary" disabled={enCours || !entree || !sortie} onClick={() => void enregistrer()}>
         {t("Enregistrer")}
@@ -201,8 +262,14 @@ export function Usage() {
           { nom: t("Jetons en entrée"), valeur: jetons(totaux.entree) },
           { nom: t("Jetons en sortie"), valeur: jetons(totaux.sortie) },
           {
-            nom: t("Coût"),
-            valeur: totaux.cout > 0 ? euros(totaux.cout) : totaux.sansTarif > 0 ? "Incomplet" : "0 €",
+            nom: totaux.coutEstime ? t("Coût (estimé)") : t("Coût"),
+            // Par devise, sans conversion : aucun taux n'est inventé.
+            valeur:
+              totaux.couts.length > 0
+                ? montants(totaux.couts) + (totaux.sansTarif > 0 ? ` (${t("incomplet")})` : "")
+                : totaux.sansTarif > 0
+                  ? t("Incomplet")
+                  : montant(0),
           },
         ].map((t) => (
           <Card key={t.nom}>
@@ -212,9 +279,20 @@ export function Usage() {
         ))}
       </div>
 
+      {rapport.tarifsIllisibles && (
+        <InfoBox tone="warning" leading={<TriangleAlert size={15} strokeWidth={1.75} />}>
+          {t("Les tarifs enregistrés sur cette instance ne peuvent pas être lus : aucun coût distant n'est calculé, et rien n'est réécrit par-dessus.")}
+        </InfoBox>
+      )}
+
       {totaux.sansTarif > 0 && (
         <InfoBox tone="muted" leading={<TriangleAlert size={15} strokeWidth={1.75} />}>
-          {totaux.sansTarif === 1 ? t("Un modèle distant utilisé") : tf("{0} modèles distants utilisés", totaux.sansTarif)}{" "}{t("sur cette période n'a pas de tarif : son coût n'est pas compté. Renseignez-le plus bas.")}
+          {totaux.sansTarif === 1
+            ? t("Un modèle distant utilisé sur cette période n'a ni tarif saisi ni prix publié connu : son coût n'est pas compté. Renseignez-le plus bas.")
+            : tf(
+                "{0} modèles distants utilisés sur cette période n'ont ni tarif saisi ni prix publié connu : leur coût n'est pas compté. Renseignez-les plus bas.",
+                totaux.sansTarif,
+              )}
         </InfoBox>
       )}
 
@@ -246,7 +324,7 @@ export function Usage() {
                   return (
                     <tr key={m.uid} className="border-t border-border">
                       <td className="py-2 font-mono text-xs text-foreground">{m.uid}</td>
-                      <td className="py-2 text-xs text-muted-foreground">{m.local ? "Local" : "Distant"}</td>
+                      <td className="py-2 text-xs text-muted-foreground">{m.local ? t("Local") : t("Distant")}</td>
                       <td className="py-2 text-right tabular-nums">{m.requetes.toLocaleString("fr-FR")}</td>
                       <td className="py-2 text-right tabular-nums">{jetons(m.entree)}</td>
                       <td className="py-2 text-right tabular-nums">
@@ -265,6 +343,17 @@ export function Usage() {
                         title={cout.aide}
                       >
                         {cout.texte}
+                        {cout.source && (
+                          <span className="block text-[11px] text-muted-foreground">
+                            {cout.source.lien ? (
+                              <a href={cout.source.lien} target="_blank" rel="noreferrer" className="underline underline-offset-2 hover:text-foreground">
+                                {cout.source.texte}
+                              </a>
+                            ) : (
+                              cout.source.texte
+                            )}
+                          </span>
+                        )}
                       </td>
                     </tr>
                   );
@@ -284,7 +373,7 @@ export function Usage() {
         <Card>
           <p className="text-sm font-semibold text-foreground">{t("Tarifs des modèles distants")}</p>
           <p className="mb-2 text-xs text-muted-foreground">
-            {t("En euros par million de jetons, selon le tarif de votre hébergeur. Il change : aucun prix n'est proposé par défaut.")}
+            {t("Par million de jetons, dans la devise choisie. Sans tarif saisi, le prix publié par le fournisseur s'applique, avec sa date de relevé : il peut avoir changé depuis. Un tarif saisi l'emporte toujours.")}
           </p>
           {rapport.distants.map((d) => (
             <LigneTarif key={d.uid} modele={d} onChange={relire} />

@@ -1,5 +1,5 @@
 import { apiFetch } from "./endpoint";
-import { t } from "@/lib/i18n";
+import { locale, t } from "@/lib/i18n";
 
 /**
  * Consommation mesurée par l'instance, côté interface.
@@ -19,10 +19,30 @@ export const PERIODES: { valeur: Periode; nom: string }[] = [
   { valeur: "tout", nom: t("Tout") },
 ];
 
+/** Aucune conversion entre les deux : chaque montant garde la devise de son tarif. */
+export type Devise = "EUR" | "USD";
+
+/** Un prix publié par le fournisseur, avec de quoi le citer (gateway/src/prixPublies.ts). */
+export interface PrixCite {
+  entree: number;
+  sortie: number;
+  devise: Devise;
+  fournisseur: string;
+  page: string;
+  releveLe: string;
+}
+
 export type Cout =
   | { statut: "gratuit" }
   | { statut: "non-renseigne" }
-  | { statut: "calcule"; montant: number; estime: boolean };
+  | {
+      statut: "calcule";
+      montant: number;
+      devise: Devise;
+      estime: boolean;
+      source: "saisi" | "publie";
+      publie?: { fournisseur: string; page: string; releveLe: string };
+    };
 
 export interface Compteurs {
   requetes: number;
@@ -42,17 +62,20 @@ export interface LigneModele extends Compteurs {
 export interface ModeleDistant {
   uid: string;
   backend: string;
-  tarif: { entree: number; sortie: number; depuis: string } | null;
+  tarif: { entree: number; sortie: number; devise: Devise; depuis: string } | null;
+  /** Le prix publié par son fournisseur, appliqué tant qu'aucun tarif n'est saisi. */
+  publie: PrixCite | null;
 }
 
 export interface Rapport {
   periode: Periode;
   du: string;
   au: string;
-  totaux: Compteurs & { cout: number; coutEstime: boolean; sansTarif: number };
+  totaux: Compteurs & { couts: { devise: Devise; montant: number }[]; coutEstime: boolean; sansTarif: number };
   modeles: LigneModele[];
   jours: { jour: string; entree: number; sortie: number; requetes: number }[];
   distants: ModeleDistant[];
+  tarifsIllisibles: boolean;
   conservationJours: number;
 }
 
@@ -66,19 +89,20 @@ export async function lireRapport(periode: Periode): Promise<Rapport | null> {
 }
 
 /**
- * Enregistre le tarif d'un modèle distant, en euros par million de jetons.
- * `null` pour les deux prix retire le tarif.
+ * Enregistre le tarif d'un modèle distant, par million de jetons, dans sa
+ * devise. `null` pour les deux prix retire le tarif.
  */
 export async function definirTarif(
   modele: string,
   entree: number | null,
   sortie: number | null,
+  devise: Devise = "EUR",
 ): Promise<{ ok: boolean; raison?: string }> {
   try {
     const res = await apiFetch("/helix/usage/tarif", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ modele, entree, sortie }),
+      body: JSON.stringify({ modele, entree, sortie, devise }),
     });
     const corps = (await res.json().catch(() => ({}))) as {
       ok?: boolean;
@@ -88,7 +112,7 @@ export async function definirTarif(
     if (res.ok && corps.ok !== false) return { ok: true };
     return { ok: false, raison: corps.raison ?? corps.error?.message ?? t("Tarif refusé.") };
   } catch {
-    return { ok: false, raison: "Instance injoignable." };
+    return { ok: false, raison: t("Instance injoignable.") };
   }
 }
 
@@ -99,11 +123,18 @@ export function jetons(n: number): string {
   return `${(n / 1_000_000).toLocaleString("fr-FR", { maximumFractionDigits: 2 })} M`;
 }
 
-/** Montant en euros, avec assez de décimales pour les petites sommes. */
-export function euros(montant: number): string {
-  const decimales = montant > 0 && montant < 1 ? 4 : 2;
-  return `${montant.toLocaleString("fr-FR", {
+/** Montant dans sa devise, avec assez de décimales pour les petites sommes. */
+export function montant(valeur: number, devise: Devise = "EUR"): string {
+  const decimales = valeur > 0 && valeur < 1 ? 4 : 2;
+  return valeur.toLocaleString(locale(), {
+    style: "currency",
+    currency: devise,
     minimumFractionDigits: 2,
     maximumFractionDigits: decimales,
-  })} €`;
+  });
+}
+
+/** Des totaux par devise, sans conversion : « 1,20 $ + 0,30 € ». */
+export function montants(couts: { devise: Devise; montant: number }[]): string {
+  return couts.map((c) => montant(c.montant, c.devise)).join(" + ");
 }

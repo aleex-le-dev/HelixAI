@@ -42,12 +42,24 @@ exports.default = async function signerMiseAJour(context) {
    * l'ouvrir. Signée ainsi, elle s'ouvre par Réglages Système > Confidentialité
    * et sécurité > « Ouvrir quand même », tant qu'elle n'est pas signée par Apple.
    */
-  const signerCode = () =>
+  /*
+   * L'exigence de signature de l'application porte sur son identifiant, pas
+   * sur l'empreinte de ce paquet-ci (27/09/2026). Une signature ad hoc a par
+   * défaut pour exigence son empreinte, qui change à chaque fabrication : le
+   * trousseau prenait alors chaque nouvelle version pour une autre application,
+   * redemandait l'accès à « Helix Safe Storage », et l'application attendait la
+   * réponse avant de lancer sa passerelle. Les programmes intérieurs gardent la
+   * leur ; seule l'application elle-même est resignée avec cette exigence.
+   */
+  const droits = path.join(__dirname, "..", "..", "build", "entitlements.mac.plist");
+  const signerCode = () => {
+    execFileSync("/usr/bin/codesign", ["--force", "--deep", "--sign", "-", "--options", "runtime", "--entitlements", droits, app], { stdio: "inherit" });
     execFileSync(
       "/usr/bin/codesign",
-      ["--force", "--deep", "--sign", "-", "--options", "runtime", "--entitlements", path.join(__dirname, "..", "..", "build", "entitlements.mac.plist"), app],
+      ["--force", "--sign", "-", "--options", "runtime", "--entitlements", droits, `-r=designated => identifier "${context.packager.appInfo.id}"`, app],
       { stdio: "inherit" },
     );
+  };
   const chemin = process.env.HELIX_CLE_EDITEUR || path.join(os.homedir(), ".helix-editeur", "cle-privee-mises-a-jour.pem");
   if (!fs.existsSync(chemin)) {
     if (process.env.HELIX_SANS_CLE_EDITEUR === "1") {

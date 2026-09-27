@@ -251,12 +251,21 @@ export type EvenementApprobation =
   | { type: "approbation_resolue"; id: string; accord: boolean }
   | { type: "approbation_expiree"; id: string };
 
-/** S'abonne aux demandes d'approbation d'outils. Renvoie de quoi se désabonner. */
+/**
+ * S'abonne aux demandes d'approbation d'outils. Renvoie de quoi se désabonner.
+ *
+ * `onOuvert` est appelé à chaque ouverture du flux, reprises comprises : une
+ * demande tranchée ou perdue pendant la coupure (passerelle redémarrée, poste
+ * en veille) n'envoie aucun évènement, et seul un nouvel état lu le dit.
+ */
 export function subscribeApprobation(
   onEvent: (event: EvenementApprobation) => void,
+  onOuvert?: () => void,
 ): () => void {
-  return ouvrirFlux("/helix/approbation/evenements", (donnees) =>
-    onEvent(JSON.parse(donnees) as EvenementApprobation),
+  return ouvrirFlux(
+    "/helix/approbation/evenements",
+    (donnees) => onEvent(JSON.parse(donnees) as EvenementApprobation),
+    onOuvert ? { onOuvert } : {},
   );
 }
 

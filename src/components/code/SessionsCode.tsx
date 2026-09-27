@@ -56,15 +56,22 @@ function LigneSessionCode({
           <span className="shrink-0 text-[11px] tabular-nums text-muted-foreground">{dateCourte(session.maj)}</span>
         )}
       </button>
-      <button
-        type="button"
-        onClick={onRetirer}
-        aria-label={tf("Retirer « {0} » de la liste", titre)}
-        title={t("Retirer de la liste (la session reste chez l'agent de code)")}
-        className="absolute right-1 top-1/2 hidden h-6 w-6 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground group-hover:flex focus-visible:flex"
-      >
-        <X size={13} strokeWidth={1.75} />
-      </button>
+      {/*
+        Pas de retrait pendant que l'agent travaille (27/09/2026) : la session
+        quittait l'écran et la liste, et l'agent continuait sans que personne
+        puisse le suivre ni l'arrêter. On l'arrête d'abord, depuis la session.
+      */}
+      {!enCours && (
+        <button
+          type="button"
+          onClick={onRetirer}
+          aria-label={tf("Retirer « {0} » de la liste", titre)}
+          title={t("Retirer de la liste (la session reste chez l'agent de code)")}
+          className="absolute right-1 top-1/2 hidden h-6 w-6 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground group-hover:flex focus-visible:flex"
+        >
+          <X size={13} strokeWidth={1.75} />
+        </button>
+      )}
     </li>
   );
 }

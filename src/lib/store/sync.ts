@@ -1,4 +1,4 @@
-import { apiFetch } from "@/lib/endpoint";
+import { apiFetch, sessionToken } from "@/lib/endpoint";
 import { retenirGroupes } from "@/lib/store/identity";
 import { auGrand, ecrireGrand, grandIllisible, grandRelu, lireGrand, noterReleve } from "@/lib/store/grandStockage";
 import { refuseesParLeNavigateur } from "./secours";
@@ -401,6 +401,21 @@ async function pousser(collection: Collection, reprise = false): Promise<boolean
   }
 }
 
+/*
+ * Sans séance, l'instance ne rend que la liste des comptes (écran de
+ * connexion) : les autres collections répondent 401. Relevé le 27/09/2026 en
+ * essayant l'écran de connexion : six requêtes refusées toutes les quatre
+ * secondes, tant que personne ne se connectait, et, une fois connecté, une
+ * liste de Chats vide jusqu'à la relève suivante. On ne les demande donc
+ * qu'une séance ouverte, et `relireMaintenant` les relit dès la connexion.
+ */
+const lisible = (collection: Collection): boolean => collection === "accounts" || Boolean(sessionToken());
+
+/** Relit tout de suite ce qui n'a pas encore été relu (une séance vient de s'ouvrir). */
+export function relireMaintenant(): Promise<void> {
+  return refresh();
+}
+
 /** Compare les révisions et re-tire ce qui a changé sur un autre poste. */
 async function refresh(): Promise<void> {
   try {
@@ -415,6 +430,7 @@ async function refresh(): Promise<void> {
     online = true;
     for (const collection of COLLECTIONS) {
       if (pushing.has(collection)) continue;
+      if (!lisible(collection)) continue;
       const known = revisions.get(collection) ?? 0;
       const parGroupe = groupesChanges && (collection === "sessions" || collection === "agents");
       // Pas encore relue cette séance (instance injoignable au lancement) : on la relit, même sans changement en face.
@@ -465,6 +481,7 @@ export async function startSync(): Promise<void> {
    * On n'amorce donc que sur « absente », jamais sur « échec ».
    */
   for (const collection of COLLECTIONS) {
+    if (!lisible(collection)) continue;
     const etat = await pull(collection);
     if (etat === "absente" && readLocal(collection) !== null) await push(collection);
   }

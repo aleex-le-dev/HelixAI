@@ -136,7 +136,7 @@ function suivreMiseAJour(): void {
       signaler({
         id: `maj:disponible:${version}`,
         genre: "maj",
-        titre: `Version ${version} disponible`,
+        titre: tf("Version {0} disponible", version),
         detail: t("Elle s'installe depuis les Réglages, rubrique Mise à jour."),
         lien: "/parametres/preferences",
       });
@@ -169,7 +169,7 @@ function suivreMoteur(): void {
           id: `moteur:${etat.moteur.miseAJour}`,
           genre: "moteur",
           titre: tf("Mise à jour du moteur des agents : {0}", etat.moteur.miseAJour),
-          detail: tf("La version en place est {0}.", etat.moteur.version ?? "inconnue"),
+          detail: tf("La version en place est {0}.", etat.moteur.version ?? t("inconnue")),
           lien: "/agents",
         });
       }
@@ -178,8 +178,9 @@ function suivreMoteur(): void {
     }
   };
   void regarder();
-  const t = setInterval(() => void regarder(), 6 * 60 * 60 * 1000);
-  window.addEventListener("beforeunload", () => clearInterval(t));
+  // Pas « t » : ce nom masquerait la traduction dans `regarder`.
+  const minuterie = setInterval(() => void regarder(), 6 * 60 * 60 * 1000);
+  window.addEventListener("beforeunload", () => clearInterval(minuterie));
 }
 
 /**
@@ -205,9 +206,22 @@ function suivreApprobations(): void {
       lien: "/cowork",
     });
   };
-  void fetchApprobation()
-    .then((etat) => etat.enAttente.forEach(poser))
-    .catch(() => undefined);
+  /*
+   * L'état lu fait foi, au démarrage et à chaque reprise du flux (27/09/2026).
+   * La liste est gardée dans le navigateur : une demande tranchée ou perdue
+   * pendant que la fenêtre était fermée, ou pendant un redémarrage de la
+   * passerelle, ne produit aucun évènement, et la cloche disait encore « Une
+   * action attend votre accord » (vu en essayant l'écran Code). Une lecture
+   * ratée ne retire rien : on ne sait pas.
+   */
+  const synchroniser = () =>
+    void fetchApprobation()
+      .then((etat) => {
+        const enAttente = new Set(etat.enAttente.map((d) => `approbation:${d.id}`));
+        for (const n of lire()) if (n.genre === "approbation" && !enAttente.has(n.id)) retirer(n.id);
+        etat.enAttente.forEach(poser);
+      })
+      .catch(() => undefined);
   subscribeApprobation((evenement) => {
     if (evenement.type === "approbation_demandee") {
       const { type: _type, ...demande } = evenement;
@@ -215,7 +229,7 @@ function suivreApprobations(): void {
     } else {
       retirer(`approbation:${evenement.id}`);
     }
-  });
+  }, synchroniser);
 }
 
 /**

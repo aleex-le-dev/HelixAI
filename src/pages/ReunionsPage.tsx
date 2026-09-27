@@ -71,6 +71,7 @@ import {
   type Visibilite,
 } from "@/lib/reunions";
 import { t, tf } from "@/lib/i18n";
+import { nomDuPays } from "@/lib/fournisseurs";
 import { copierTexte } from "@/lib/pressePapiers";
 
 /**
@@ -939,7 +940,7 @@ function CompteRenduVue({
         )}
       </section>
       <p className="flex flex-wrap items-center gap-2 border-t border-border pt-4 text-xs text-muted-foreground">
-        {t("Rédigé par")}{" "}{cr.modele}, {cr.origine === "local" ? t("sur la machine de l'instance") : `chez le prestataire${cr.pays ? ` (${cr.pays})` : ""}`}{t(", à partir d'une transcription automatique : relisez avant de diffuser.")}
+        {t("Rédigé par")}{" "}{cr.modele}, {cr.origine === "local" ? t("sur la machine de l'instance") : cr.pays ? tf("chez le prestataire ({0})", nomDuPays(cr.pays)) : t("chez le prestataire")}{t(", à partir d'une transcription automatique : relisez avant de diffuser.")}
         {proprietaire && (
           <button type="button" onClick={onResumer} className="underline underline-offset-2 hover:text-foreground">
             {t("Rédiger à nouveau")}

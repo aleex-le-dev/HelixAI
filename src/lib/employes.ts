@@ -2,6 +2,7 @@ import { apiFetch } from "./endpoint";
 import { decrireRythme as decrireRythmeTache } from "@/lib/tachesProgrammees";
 import { DOCUMENT_MAX, EXTRACTION_MAX, LIBELLE_DOCUMENT_MAX, envoyerEnFlux } from "./televersement";
 import { t, tf } from "@/lib/i18n";
+import { nomDuPays } from "@/lib/fournisseurs";
 
 /**
  * Employés : des agents OpenClaw qui travaillent pour toute l'équipe (voir
@@ -176,7 +177,7 @@ export const LIBELLE_RYTHME: Record<Rythme, string> = {
 
 /** « qwen3-8b · LM Studio (chargé) », « mistral-large · Mistral AI · France ». */
 export function libelleModele(m: EtatEmployes["modeles"][number]): string {
-  const ou = m.origine === "local" ? (m.charge ? t("sur la machine, chargé") : "sur la machine") : `cloud, ${m.pays ?? t("pays non précisé")}`;
+  const ou = m.origine === "local" ? (m.charge ? t("sur la machine, chargé") : t("sur la machine")) : `cloud, ${m.pays ? nomDuPays(m.pays) : t("pays non précisé")}`;
   return `${m.nom} · ${m.fournisseur ?? ""} (${ou})`;
 }
 

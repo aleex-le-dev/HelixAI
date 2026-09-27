@@ -71,6 +71,7 @@ import { ConfirmationMemoire } from "@/components/agents/ConfirmationMemoire";
 import { ChoixDepuisEspace } from "@/components/agents/ChoixDepuisEspace";
 import { updateAgent } from "@/lib/store/agents";
 import { langue, t, tf, taille } from "@/lib/i18n";
+import { nomDuPays } from "@/lib/fournisseurs";
 
 /**
  * Employés : des agents qui travaillent pour toute l'équipe, jour et nuit, avec
@@ -452,7 +453,7 @@ function ChoixModele({ etat, valeur, onChange }: { etat: EtatEmployes; valeur: s
           ? t("Son modèle n'est plus disponible : choisissez-en un autre.")
           : choisi.origine === "local"
             ? t("Sur vos machines : rien ne sort. Un modèle chargé répond le plus vite.")
-            : tf("Cloud : ses messages partent chez {0}{1}, et sa consommation est facturée.", choisi.fournisseur ?? "le fournisseur", choisi.pays ? ` (${choisi.pays})` : "")
+            : tf("Cloud : ses messages partent chez {0}{1}, et sa consommation est facturée.", choisi.fournisseur ?? t("le fournisseur"), choisi.pays ? ` (${nomDuPays(choisi.pays)})` : "")
       }
     >
       <Select value={valeur} onChange={onChange} options={etat.modeles.map((m) => ({ value: m.uid, label: libelleModele(m) }))} />

@@ -327,8 +327,15 @@ async function callUpstream(
        * connexion de la machine qu'il faut regarder.
        */
       if (signal?.aborted) throw err;
+      /*
+       * Un service de cette machine (boucle locale), même déclaré par le profil
+       * ou branché par clé, n'a rien à voir avec internet : relevé le
+       * 27/09/2026, le Chat conseillait de vérifier la connexion à internet
+       * pour un moteur éteint sur le poste.
+       */
+      const surCetteMachine = /^https?:\/\/(localhost|127\.|\[::1\])/i.test(backend.baseUrl);
       throw new Error(
-        backend.origine === "cle" || backend.origine === "agence"
+        (backend.origine === "cle" || backend.origine === "agence") && !surCetteMachine
           ? tf("{0} est injoignable : vérifiez la connexion à internet de cette machine, puis réessayez.", backend.fournisseur ?? backend.label)
           : tf("{0} ne répond pas : vérifiez qu'il est démarré, puis réessayez.", backend.label),
       );
@@ -954,8 +961,14 @@ export async function handleChatRequest(
     images: avecImages,
   });
   if ("error" in resolution) {
-    res.writeHead(503, { "Content-Type": "application/json; charset=utf-8" });
-    res.end(JSON.stringify({ error: { message: resolution.error } }));
+    /*
+     * Avec les en-têtes d'origine (27/09/2026). Écrit sans eux, ce refus
+     * n'était pas lisible par l'application (origine `helix://app`, ou le
+     * navigateur d'un poste) : l'écran ne voyait qu'une requête bloquée et
+     * disait « L'instance ne répond pas » au lieu de la raison (aucun modèle,
+     * « Auto » qui ne prend pas un modèle branché par clé, modèle réservé).
+     */
+    repondreJson(503, { error: { message: resolution.error } });
     return;
   }
   const { model, backend } = resolution;

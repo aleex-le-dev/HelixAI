@@ -223,7 +223,14 @@ function touchedFiles(messages: Message[]): TouchedFile[] {
 
 /** Ecran Cowork (captures 6 a 8), branché sur le runtime avec outils. */
 export function CoworkPage() {
-  const [panelOpen, setPanelOpen] = useState(true);
+  /*
+   * Ouvert d'office seulement dans une fenêtre assez large, comme le suivi de
+   * Code : à 375 px (relevé le 27/09/2026), le panneau de 320 px prenait toute
+   * la place et le champ de Cowork disparaissait.
+   */
+  const [panelOpen, setPanelOpen] = useState(
+    () => typeof window === "undefined" || window.matchMedia("(min-width: 1024px)").matches,
+  );
   const [draft, setDraft] = useState("");
   // Bases de connaissances consultées avant chaque réponse de Cowork (l'instance vérifie les droits).
   const [bases, setBases] = useState<string[]>([]);

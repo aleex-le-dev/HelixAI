@@ -9,6 +9,7 @@ import { useEffect, useState } from "react";
 import { features } from "@/config/branding";
 import { isSignedIn, clearCurrentUser } from "@/lib/store/identity";
 import { SEANCE_EXPIREE } from "@/lib/endpoint";
+import { relireMaintenant } from "@/lib/store/sync";
 import { LoginPage } from "@/pages/LoginPage";
 import { InstanceSetupPage } from "@/pages/InstanceSetupPage";
 import { isConfigured } from "@/lib/instance";
@@ -190,7 +191,16 @@ export default function App() {
     );
   }
 
-  if (!signedIn) return <LoginPage onSignedIn={() => setSignedIn(true)} />;
+  if (!signedIn)
+    return (
+      <LoginPage
+        onSignedIn={() => {
+          setSignedIn(true);
+          // Les Chats et les projets de la personne, relus sans attendre la relève suivante.
+          void relireMaintenant();
+        }}
+      />
+    );
 
   return <RouterProvider router={router} />;
 }

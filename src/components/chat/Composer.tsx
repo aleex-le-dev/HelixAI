@@ -219,7 +219,8 @@ export function Composer({
         <div
           className={cn(
             // Au focus, comme ailleurs : le bord fonce à peine et l'ombre s'étoffe, en gris, sans couleur.
-            "rounded-xl border border-border bg-card shadow-sm transition-[border-color,box-shadow] duration-150 focus-within:border-foreground/20 focus-within:shadow-md",
+            // `cq` : la barre du bas se règle sur la largeur réelle du champ, pas sur celle de la fenêtre.
+            "cq rounded-xl border border-border bg-card shadow-sm transition-[border-color,box-shadow] duration-150 focus-within:border-foreground/20 focus-within:shadow-md",
             survol && "border-accent",
           )}
         >
@@ -279,7 +280,16 @@ export function Composer({
             onKeyDown={onKeyDown}
             className="block max-h-52 w-full resize-none bg-transparent px-4 pb-2 pt-3.5 text-[15px] leading-relaxed text-foreground placeholder:text-muted-foreground focus:outline-none"
           />
-          <div className="flex items-center gap-2 px-2.5 pb-2.5 pt-1">
+          {/*
+            Relevé le 27/09/2026 (Code et Cowork, en français) : le libellé du
+            niveau d'approbation se coupait à toute largeur de fenêtre dès que le
+            modèle choisi avait un nom un peu long, parce que le groupe de droite
+            ne savait pas rétrécir ; et à 375 px, ce groupe débordait du champ,
+            bouton d'envoi compris. Désormais le nom du modèle se raccourcit le
+            premier (le champ assez large, la puce de l'accessoire garde sa
+            taille), et un champ très étroit passe la ligne en deux.
+          */}
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 px-2.5 pb-2.5 pt-1 cq-xs:flex-nowrap">
             <input
               ref={fichierRef}
               type="file"
@@ -349,10 +359,15 @@ export function Composer({
                 onClick={() => fichierRef.current?.click()}
               />
             )}
-            {accessoire}
-            <div className="ml-auto flex items-center gap-0.5">
+            {accessoire && <div className="flex min-w-0 cq-md:shrink-0">{accessoire}</div>}
+            <div className="ml-auto flex min-w-0 items-center gap-0.5">
               {!sansModele && <ModelBehaviorPicker value={modelUid} onChange={onModelChange} />}
-              {!sansModele && <ReasoningPicker value={effort} onChange={onEffortChange} />}
+              {/* Le niveau de réflexion garde son mot court : c'est le nom du modèle qui se raccourcit. */}
+              {!sansModele && (
+                <div className="flex shrink-0">
+                  <ReasoningPicker value={effort} onChange={onEffortChange} />
+                </div>
+              )}
               {/* Sans champ contrôlé, il n'y aurait nulle part où écrire la dictée. */}
               {controlled && onChange && <BoutonDictee onTexte={insererDictee} />}
               {busy ? (
@@ -360,7 +375,7 @@ export function Composer({
                   type="button"
                   aria-label={t("Arrêter la génération")}
                   onClick={onStop}
-                  className="ml-1 inline-flex h-9 w-9 items-center justify-center rounded-full bg-primary text-primary-foreground transition-opacity hover:opacity-90"
+                  className="ml-1 inline-flex shrink-0 h-9 w-9 items-center justify-center rounded-full bg-primary text-primary-foreground transition-opacity hover:opacity-90"
                 >
                   <Square size={14} strokeWidth={2} className="fill-current" />
                 </button>
@@ -371,7 +386,7 @@ export function Composer({
                   onClick={() => canSend && onSubmit?.()}
                   disabled={controlled && !canSend}
                   className={cn(
-                    "ml-1 inline-flex h-9 w-9 items-center justify-center rounded-full bg-primary text-primary-foreground transition-opacity",
+                    "ml-1 inline-flex shrink-0 h-9 w-9 items-center justify-center rounded-full bg-primary text-primary-foreground transition-opacity",
                     controlled && !canSend
                       ? "opacity-40"
                       : "hover:opacity-90",

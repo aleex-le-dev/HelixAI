@@ -56,6 +56,8 @@ contextBridge.exposeInMainWorld("helix", {
   langue: (code) => ipcRenderer.send("helix:langue", String(code)),
   /** Le système du poste (`darwin`, `win32`, `linux`) : l'écran dit ce qui vaut ici. */
   plateforme: process.platform,
+  /** Le processeur (`arm64`, `x64`) : « Signaler un problème » distingue ainsi un Mac Apple silicon d'un Mac Intel (27/09/2026). */
+  architecture: process.arch,
   /** Ouvre le sélecteur de dossier du système. Renvoie le chemin, ou null. */
   choisirDossier: () => ipcRenderer.invoke("helix:choisir-dossier"),
   /**

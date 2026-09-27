@@ -38,6 +38,7 @@ import { SettingsPage, SettingsRow, Card } from "@/components/settings/SettingsS
 import { SeancesEtJournal } from "@/components/settings/SeancesEtJournal";
 import { DeuxFacteurs } from "@/components/settings/DeuxFacteurs";
 import { SupprimerCompte } from "@/components/settings/SupprimerCompte";
+import { SignalerProbleme } from "@/components/settings/SignalerProbleme";
 import { MiseAJour } from "@/components/settings/MiseAJour";
 import { ActivationEcran } from "@/components/settings/ActivationEcran";
 import { telechargerMesDonnees, type ResumeExport } from "@/lib/exportDonnees";
@@ -1633,5 +1634,19 @@ function Autorisation({ ok, titre, manque }: { ok: boolean; titre: string; manqu
         </span>
       </span>
     </div>
+  );
+}
+
+/* ----------------------------- Signaler un problème ----------------------------- */
+
+/** Retours envoyés à l'éditeur par un ticket GitHub ou un mail (27/09/2026). */
+export function SignalerSettings() {
+  return (
+    <SettingsPage
+      title={t("Signaler un problème")}
+      subtitle={t("Dites ce qui ne va pas : le retour arrive directement à ceux qui font le logiciel.")}
+    >
+      <SignalerProbleme />
+    </SettingsPage>
   );
 }

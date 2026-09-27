@@ -18,6 +18,7 @@ import {
   Cloud,
   CreditCard,
   GraduationCap,
+  Bug,
 } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { features } from "@/config/branding";
@@ -57,6 +58,8 @@ export const settingsNav: NavEntry[] = [
   { label: t("Confidentialité"), path: "/parametres/confidentialite", icon: Lock },
   { label: t("Installer les apps"), path: "/parametres/apps", icon: Download },
   { label: t("Importer depuis d'autres IA"), path: "/parametres/importer", icon: FileInput },
+  // En dernier (27/09/2026) : on y vient quand quelque chose ne va pas, pas pour régler.
+  { label: t("Signaler un problème"), path: "/parametres/signaler", icon: Bug },
 ];
 
 function SettingsNav() {

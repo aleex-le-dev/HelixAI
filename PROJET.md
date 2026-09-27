@@ -2756,7 +2756,13 @@ l'administrateur, pointeur de LM Studio protégé et vérifié). Aussi : moteur 
 Windows ; images et vidéos non proposées sur un Linux trop ancien ; nom du produit affiché
 sous Windows et Linux (« helix-plateforme » avant) ; icônes Linux à toutes les tailles ; sur
 macOS, Homebrew retrouvé par l'application ouverte depuis le Finder. `npm run securite` : 432
-contrôles, tous réussis.
+contrôles, tous réussis. **Essai refait avec les paquets finaux** dans le même Ubuntu : paquet
+installé par-dessus l'ancien, application ouverte, Node de Helix posé seul et serveur de
+fichiers démarré (14 outils), dossier du moteur recréé, un Chat (« Rome »). Cette fois, le
+chargement du modèle lancé par Helix a échoué (le modèle s'est chargé à la demande au premier
+message) ; c'était au moment où le disque du Mac se remplissait (images d'essai de Docker) :
+**cause non établie, à revérifier**. Sur macOS, l'application reconstruite, ouverte comme
+depuis le Finder, a son serveur de fichiers (14 outils).
 
 **Fait le 27/09/2026 (nuit) : Python posé par Helix, et le .deb essayé dans un Ubuntu vierge.**
 Demandé par Medhi (« fais en sorte que tout fonctionne, sûr, vérifié ; Python doit

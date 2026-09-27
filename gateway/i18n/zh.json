@@ -178,6 +178,7 @@
   "Carte NVIDIA de {0} Go : il en faut 6 au moins pour entraîner un modèle.": "{0} GB NVIDIA 显卡：训练模型至少需要 6 GB。",
   "Catalogue, commandes et paiements Square.": "Square 的商品目录、订单与付款。",
   "Ce bot a fini.": "该机器人已完成。",
+  "Ce Chat est long : les {0} premiers messages n'ont pas été relus par {1}, faute de place (conversation de {2} jetons).": "此 Chat 较长：由于空间不足，{1} 未重新读取前 {0} 条消息（对话容量 {2} 个词元）。",
   "Ce chemin n'est pas un dossier.": "此路径不是文件夹。",
   "Ce code a déjà servi. Demandez-en un nouveau.": "此代码已被使用。请索取新的代码。",
   "Ce code a expiré. Demandez-en un nouveau.": "此代码已过期。请索取新的代码。",

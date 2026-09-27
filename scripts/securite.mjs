@@ -2596,6 +2596,299 @@ console.log("\n7 nonies. Codex avec le compte ChatGPT : le propriétaire du post
 }
 
 /* ------------------------------------------------------------------------- */
+console.log("\n7 decies. Petit modèle local sans carte graphique : ce qui part au modèle, tenu dans sa place (27/09/2026)");
+{
+  /*
+   * Vu par Medhi sur le PC Windows sans carte graphique (16 Go, llmster,
+   * Ministral 3B) : « le modèle des fois répondait bien et des fois un truc qui
+   * n'a rien à voir ». Aucun vrai modèle : une passerelle jetable, sur un
+   * « Linux x64 de 16 Go sans carte NVIDIA » simulé (mêmes chemins que
+   * Windows pour le chargement), devant un faux LM Studio qui note chaque
+   * requête telle qu'il la reçoit, et un faux `lms` (dossier personnel et PATH
+   * jetables : le vrai `lms` de ce poste n'est jamais lancé). Ce que cela
+   * prouve : ce que Helix envoie. Ce que cela ne prouve pas : ce qu'un vrai
+   * Ministral 3B en fait, à voir sur le PC (PROJET.md).
+   */
+  const { mkdirSync, writeFileSync, chmodSync, symlinkSync, readFileSync: lire } = await import("node:fs");
+  const { createServer: serveur } = await import("node:http");
+  const { spawnSync } = await import("node:child_process");
+  const ICI = mkdtempSync(join(tmpdir(), "helix-conversation-"));
+  const BIN = join(ICI, "bin");
+  mkdirSync(BIN);
+  mkdirSync(join(ICI, "maison"));
+  mkdirSync(join(ICI, "espace"));
+  symlinkSync(process.execPath, join(BIN, "node"));
+  // Le faux `lms` : `ps` rend ce qui est chargé, avec sa taille de conversation ; `load` note ses options.
+  writeFileSync(
+    join(BIN, "lms"),
+    [
+      "#!/usr/bin/env node",
+      'const fs = require("node:fs"), path = require("node:path");',
+      "const dir = process.env.FAUX_LMS_DIR, a = process.argv.slice(2);",
+      'fs.appendFileSync(path.join(dir, "appels.log"), a.join(" ") + "\\n");',
+      'const lire = (n) => { try { return JSON.parse(fs.readFileSync(path.join(dir, n), "utf8")); } catch { return []; } };',
+      'const charges = lire("charges.json"), installes = lire("installes.json"), json = a.includes("--json");',
+      'const opt = (n) => { const i = a.indexOf(n); return i >= 0 ? a[i + 1] : undefined; };',
+      'if (a[0] === "version") console.log("lms 0.0.0-essai");',
+      'else if (a[0] === "ps") console.log(JSON.stringify(charges.map((c) => ({ modelKey: c.cle, path: c.cle, identifier: c.cle, type: "llm", sizeBytes: 2.5e9, contextLength: c.contexte, status: "idle" }))));',
+      'else if (a[0] === "ls") console.log(json ? JSON.stringify(installes.map((k) => ({ modelKey: k, path: k, type: "llm", sizeBytes: 2.5e9, paramsString: "3B", maxContextLength: 262144 }))) : installes.join("\\n"));',
+      'else if (a[0] === "load") fs.writeFileSync(path.join(dir, "charges.json"), JSON.stringify([...charges.filter((c) => c.cle !== a[1]), { cle: a[1], contexte: Number(opt("--context-length") ?? 4096) }]));',
+      'else if (a[0] === "unload") fs.writeFileSync(path.join(dir, "charges.json"), JSON.stringify(charges.filter((c) => c.cle !== a[1])));',
+      'else if (a[0] === "server") console.log(JSON.stringify({ running: true }));',
+    ].join("\n"),
+  );
+  chmodSync(join(BIN, "lms"), 0o755);
+  /*
+   * Un faux `security` en tête du PATH, qui refuse et note : le dossier
+   * personnel est jetable (pour que ~/.lmstudio ne soit jamais touché), et le
+   * vrai `security` ouvrirait alors une fenêtre « Trousseau introuvable » chez
+   * la personne (vu le 27/09/2026). Le profil chiffre par fichier : il ne doit
+   * de toute façon jamais être appelé, et c'est contrôlé en fin de section.
+   */
+  writeFileSync(join(BIN, "security"), `#!/bin/sh\necho "$*" >> "${join(ICI, "security.log")}"\nexit 1\n`);
+  chmodSync(join(BIN, "security"), 0o755);
+  const MINISTRAL = "mistralai/ministral-3-3b";
+  const poser = (charges) => {
+    writeFileSync(join(ICI, "installes.json"), JSON.stringify([MINISTRAL]));
+    writeFileSync(join(ICI, "charges.json"), JSON.stringify(charges));
+    writeFileSync(join(ICI, "appels.log"), "");
+  };
+  poser([]);
+  /*
+   * Le faux LM Studio. Comme la documentation de LM Studio le dit du
+   * chargement à la demande (actif par défaut) : `/v1/models` liste les
+   * modèles téléchargés, chargés ou non. Le tri (« Tu organises un
+   * travail ») rend le plan que `PLAN` lui donne.
+   */
+  const RECUES = [];
+  let PLAN = '{"etapes": []}';
+  const PORT_LM = await portLibre();
+  const lm = serveur((req, res) => {
+    let corps = "";
+    req.on("data", (b) => (corps += b));
+    req.on("end", () => {
+      res.setHeader("Content-Type", "application/json");
+      if (req.url === "/v1/models") return res.end(JSON.stringify({ data: [{ id: MINISTRAL, object: "model" }] }));
+      if (req.url !== "/v1/chat/completions") {
+        res.statusCode = 404;
+        return res.end("{}");
+      }
+      const d = JSON.parse(corps || "{}");
+      RECUES.push(d);
+      if (d.stream === false) {
+        const tri = String(d.messages?.[0]?.content ?? "").startsWith("Tu organises un travail");
+        return res.end(JSON.stringify({ choices: [{ index: 0, message: { role: "assistant", content: tri ? PLAN : "Bonjour !" }, finish_reason: "stop" }] }));
+      }
+      res.setHeader("Content-Type", "text/event-stream");
+      const m = (o) => res.write(`data: ${JSON.stringify({ id: "x", object: "chat.completion.chunk", created: 1, model: d.model, ...o })}\n\n`);
+      m({ choices: [{ index: 0, delta: { role: "assistant", content: "Réponse d'essai." } }] });
+      m({ choices: [{ index: 0, delta: {}, finish_reason: "stop" }] });
+      res.end("data: [DONE]\n\n");
+    });
+  });
+  await new Promise((ok) => lm.listen(PORT_LM, "127.0.0.1", ok));
+
+  const PORT4 = await portLibre();
+  writeFileSync(join(ICI, "profil.json"), JSON.stringify({ chiffrement: "fichier", autoProvision: false, backends: [{ id: "exo", enabled: false }] }));
+  writeFileSync(
+    join(ICI, "lancer.mjs"),
+    `import os from "node:os";
+     Object.defineProperty(process, "platform", { value: "linux" });
+     Object.defineProperty(process, "arch", { value: "x64" });
+     os.totalmem = () => 16 * 1024 ** 3;
+     (await import("node:module")).syncBuiltinESMExports();
+     await import(${JSON.stringify(join(RACINE, "gateway", "src", "index.ts"))});`,
+  );
+  const quatrieme = spawn(process.execPath, ["--experimental-strip-types", "--no-warnings", join(ICI, "lancer.mjs")], {
+    cwd: RACINE,
+    env: {
+      PATH: `${BIN}:/usr/bin:/bin`,
+      HOME: join(ICI, "maison"),
+      TMPDIR: tmpdir(),
+      FAUX_LMS_DIR: ICI,
+      HELIX_CONFIG: join(ICI, "profil.json"),
+      HELIX_DATA_DIR: join(ICI, "donnees"),
+      HELIX_WORKSPACE: join(ICI, "espace"),
+      HELIX_GATEWAY_PORT: String(PORT4),
+      HELIX_GATEWAY_HOST: "127.0.0.1",
+      HELIX_LMSTUDIO_URL: `http://127.0.0.1:${PORT_LM}/v1`,
+      HELIX_EXO_URL: "http://127.0.0.1:9/v1",
+      HELIX_OPENCODE_BIN: "/usr/bin/true",
+    },
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  let journal4 = "";
+  quatrieme.stdout.on("data", (b) => (journal4 += b));
+  quatrieme.stderr.on("data", (b) => (journal4 += b));
+  const G4 = `http://127.0.0.1:${PORT4}`;
+  for (let i = 0; i < 80; i++) {
+    try {
+      await fetch(`${G4}/health`);
+      break;
+    } catch {
+      await attendre(250);
+    }
+  }
+  let JETON4 = "";
+  try {
+    JETON4 = lire(join(ICI, "donnees", "instance-token"), "utf8").trim();
+  } catch {
+    /* passerelle muette : les contrôles le diront */
+  }
+  const envoyer4 = async (messages) => {
+    const avant = RECUES.length;
+    const texte = await (
+      await fetch(`${G4}/v1/chat/completions`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${JETON4}`, "X-Helix-Langue": "fr" },
+        body: JSON.stringify({ messages, tools: false, stream: true, effort: "moyen" }),
+      }).catch(() => ({ text: async () => "" }))
+    ).text();
+    return { texte, requetes: RECUES.slice(avant), flux: RECUES.slice(avant).filter((r) => r.stream !== false) };
+  };
+  const SYSTEME = "Tu es Helix, l'assistant IA de l'entreprise. Réponds toujours dans la langue du dernier message de la personne.";
+  const longue = (i) => `Réponse ${i}. `.padEnd(1400, "Le modèle développe son explication avec des exemples concrets. ");
+  const questions = [
+    "Explique-moi comment préparer un budget prévisionnel pour une petite entreprise",
+    "Quels sont les postes de dépenses à ne pas oublier",
+    "Donne un exemple chiffré pour une boulangerie de trois salariés",
+    "Et pour les charges sociales, comment les estimer",
+    "Rédige un court paragraphe de synthèse pour le banquier",
+    "Reformule-le de façon plus formelle",
+    "Ajoute une phrase sur la trésorerie des six premiers mois",
+    "Maintenant traduis le paragraphe en anglais",
+  ];
+
+  // A. Téléchargé mais pas en mémoire, listé quand même par le serveur : Helix le charge lui-même, avec ses réglages.
+  const a = await envoyer4([{ role: "system", content: SYSTEME }, { role: "user", content: "Bonjour, tu vas bien ?" }]);
+  const chargements = lire(join(ICI, "appels.log"), "utf8").split("\n").filter((l) => l.startsWith("load "));
+  verifier(
+    "modèle listé par le serveur mais absent de `lms ps` (chargement à la demande de LM Studio) : Helix le charge lui-même, 32 768 jetons, une réponse à la fois, au processeur",
+    chargements.length === 1 && chargements[0].includes(MINISTRAL) && chargements[0].includes("--context-length 32768") && chargements[0].includes("--parallel 1") && chargements[0].includes("--gpu off"),
+    `${JSON.stringify(chargements)} ${a.texte.slice(-200)}`,
+  );
+  verifier(
+    "Ministral 3 reçoit la température que Mistral conseille (0,1), pour la réponse comme pour le tri",
+    a.requetes.length > 0 && a.requetes.every((r) => r.temperature === 0.1),
+    JSON.stringify(a.requetes.map((r) => [r.stream, r.temperature])),
+  );
+
+  // B. Chargé ailleurs avec 4 096 jetons (le défaut de LM Studio) : huit échanges ne débordent jamais, la question et la consigne restent.
+  poser([{ cle: MINISTRAL, contexte: 4096 }]);
+  await attendre(5200);
+  const fil = [{ role: "system", content: SYSTEME }];
+  let dernier = null;
+  for (let i = 0; i < questions.length; i++) {
+    fil.push({ role: "user", content: questions[i] });
+    dernier = await envoyer4(fil);
+    fil.push({ role: "assistant", content: longue(i + 1) });
+  }
+  const recue = dernier?.flux.at(-1);
+  const place = (m) => (m ?? []).reduce((s, x) => s + 8 + Math.ceil(String(x.content ?? "").length / 3), 0);
+  verifier(
+    "contexte de 4 096 jetons : huit échanges qui débordent sont raccourcis par Helix sous la place (4 096 moins la réponse et la marge), au lieu d'être coupés par le moteur",
+    Boolean(recue) && recue.messages.length < fil.length - 1 && place(recue.messages) <= 4096 - 1024 - 460,
+    `${recue?.messages.length} messages, ~${place(recue?.messages)} jetons (conversation : ${fil.length - 1} messages, ~${place(fil.slice(0, -1))} jetons)`,
+  );
+  verifier(
+    "raccourci proprement : la consigne système d'abord (avec la note), puis un message de la personne, et la question en dernier, mot pour mot",
+    recue?.messages[0]?.role === "system" && String(recue.messages[0].content).startsWith(SYSTEME) && /ne te sont plus donnés, faute de place/.test(String(recue.messages[0].content)) &&
+      recue.messages[1]?.role === "user" && recue.messages.at(-1)?.content === questions.at(-1) && recue.messages.slice(1).every((m, i) => m.role === (i % 2 === 0 ? "user" : "assistant")),
+    JSON.stringify(recue?.messages.map((m) => [m.role, String(m.content).slice(0, 30)])),
+  );
+  verifier(
+    "et la personne le lit, en tête de la réponse (« Ce Chat est long : les … premiers messages n'ont pas été relus »)",
+    /Ce Chat est long : les \d+ premiers messages n'ont pas été relus par mistralai\/ministral-3-3b, faute de place \(conversation de 4096 jetons\)/.test(dernier?.texte ?? ""),
+    (dernier?.texte ?? "").slice(0, 300),
+  );
+
+  // C. Le tri découpe une suite de conversation : chaque partie garde l'échange d'avant et les mots de la personne.
+  poser([{ cle: MINISTRAL, contexte: 32768 }]);
+  await attendre(5200);
+  PLAN = '{"objectif": "Rédiger un texte sur le deuxième point", "etapes": ["Premier paragraphe", "Deuxième paragraphe", "Troisième paragraphe"]}';
+  const demande = "Développe le deuxième point en trois paragraphes pour mon associé";
+  const c = await envoyer4([
+    { role: "system", content: SYSTEME },
+    { role: "user", content: "Liste les trois risques principaux d'un prêt bancaire pour une TPE" },
+    { role: "assistant", content: "1. Le taux variable. 2. La caution personnelle. 3. Le remboursement anticipé." },
+    { role: "user", content: demande },
+  ]);
+  PLAN = '{"etapes": []}';
+  const parties = c.flux;
+  const tri = c.requetes.find((r) => r.stream === false);
+  verifier(
+    "découpé en parties : chacune reçoit l'échange qui précède (« la caution personnelle ») et la demande mot pour mot, pas seulement la reformulation du tri",
+    parties.length === 3 && parties.every((r) => JSON.stringify(r.messages).includes("La caution personnelle") && JSON.stringify(r.messages).includes(demande)),
+    JSON.stringify(parties.map((r) => r.messages.map((m) => [m.role, String(m.content).slice(0, 50)]))).slice(0, 600),
+  );
+  verifier("le tri qui décide du découpage se fait à température basse (0,2 au plus), et non à celle du moteur", typeof tri?.temperature === "number" && tri.temperature <= 0.2, JSON.stringify(tri?.temperature));
+
+  // D. Les fonctions seules : jamais la question ni la consigne, un tour entier à la fois, résultats d'outils abrégés sauf le dernier ; au processeur, une réponse à la fois.
+  const u = spawnSync(
+    process.execPath,
+    ["--experimental-strip-types", "--no-warnings", "--input-type=module", "-e",
+      `import os from "node:os";
+       Object.defineProperty(process, "platform", { value: "linux" });
+       Object.defineProperty(process, "arch", { value: "x64" });
+       const h = await import("./gateway/src/historique.ts");
+       const gros = "x".repeat(6000);
+       const fil = [{ role: "system", content: "S" }, { role: "assistant", content: gros }, { role: "user", content: gros }, { role: "assistant", content: "", tool_calls: [{ id: "1", function: { name: "f", arguments: "{}" } }] }, { role: "tool", tool_call_id: "1", content: gros }, { role: "assistant", content: gros }, { role: "user", content: "Q" }];
+       const r = h.tenirDansLaPlace(fil, 500);
+       const outils = [{ role: "system", content: "S" }, { role: "user", content: "Q" }, { role: "tool", content: gros }, { role: "tool", content: gros }, { role: "tool", content: gros }];
+       const o = h.tenirDansLaPlace(outils, 3000, 1);
+       const d = h.derniersEchanges([{ role: "system", content: "S" }, { role: "assistant", content: "a0" }, { role: "user", content: "u1" }, { role: "assistant", content: "a1" }, { role: "user", content: "u2" }, { role: "user", content: "Q" }], 5, 1000);
+       console.log(JSON.stringify({ roles: r.messages.map((m) => m.role), dernier: r.messages.at(-1).content, retires: r.retires, note: /faute de place/.test(r.messages[0].content), outils: o.messages.map((m) => m.content.length), abreges: o.abreges, d: d.map((m) => m.content) }));`],
+    { cwd: RACINE, encoding: "utf8", timeout: 60_000, env: { ...process.env, PATH: `${BIN}:/usr/bin:/bin`, HOME: join(ICI, "maison"), HELIX_DATA_DIR: join(ICI, "u"), HELIX_CONFIG: join(ICI, "absent.json") } },
+  );
+  let fx = {};
+  try {
+    fx = JSON.parse((u.stdout ?? "").trim().split("\n").at(-1));
+  } catch {
+    fx = { erreur: `${u.stdout ?? ""}${u.stderr ?? ""}`.slice(-400) };
+  }
+  verifier(
+    "raccourcir : la consigne et la question restent, un appel d'outil ne part jamais sans son résultat, la conversation reprend sur un message de la personne",
+    JSON.stringify(fx.roles) === JSON.stringify(["system", "user"]) && fx.dernier === "Q" && fx.retires === 5 && fx.note === true,
+    JSON.stringify(fx).slice(0, 400),
+  );
+  verifier(
+    "dans une boucle d'outils : les plus anciens résultats sont abrégés, le dernier reste entier ; une étape de plan reçoit des échanges complets (personne, puis réponse)",
+    fx.abreges === 2 && fx.outils?.at(-1) === 6000 && fx.outils?.[2] < 200 && JSON.stringify(fx.d) === JSON.stringify(["u1", "a1"]),
+    JSON.stringify(fx).slice(0, 400),
+  );
+  // Les tailles choisies au chargement, sans carte graphique, pour 8, 16 et 32 Go.
+  const tailles = spawnSync(
+    process.execPath,
+    ["--experimental-strip-types", "--no-warnings", "--input-type=module", "-e",
+      `import os from "node:os";
+       Object.defineProperty(process, "platform", { value: "linux" });
+       Object.defineProperty(process, "arch", { value: "x64" });
+       const b = await import("./gateway/src/backends.ts");
+       const memoires = {};
+       // \`import { totalmem } from "node:os"\` ne voit le remplacement qu'une fois les exports resynchronisés.
+       const { syncBuiltinESMExports } = await import("node:module");
+       for (const go of [8, 16, 32]) { os.totalmem = () => go * 1024 ** 3; syncBuiltinESMExports(); memoires[go] = b.optionsDeChargement().join(" "); }
+       console.log(JSON.stringify(memoires));`],
+    { cwd: RACINE, encoding: "utf8", timeout: 60_000, env: { ...process.env, PATH: `${BIN}:/usr/bin:/bin`, HOME: join(ICI, "maison"), HELIX_DATA_DIR: join(ICI, "u"), HELIX_CONFIG: join(ICI, "absent.json") } },
+  );
+  try {
+    fx.memoires = JSON.parse((tailles.stdout ?? "").trim().split("\n").at(-1));
+  } catch {
+    fx.memoires = { erreur: `${tailles.stdout ?? ""}${tailles.stderr ?? ""}`.slice(-300) };
+  }
+  verifier(
+    "sans carte graphique : 32 768 jetons et une seule réponse à la fois à 8 et 16 Go, et aussi à 32 Go (au lieu de deux)",
+    fx.memoires?.[8]?.includes("--context-length 32768 --parallel 1 --gpu off") && fx.memoires?.[16]?.includes("--context-length 32768 --parallel 1 --gpu off") && fx.memoires?.[32]?.includes("--parallel 1"),
+    JSON.stringify(fx.memoires),
+  );
+  quatrieme.kill();
+  lm.close();
+  await attendre(300);
+  verifier("aucun appel au trousseau macOS pendant ces essais (dossier personnel jetable, clé par fichier)", !existsSync(join(ICI, "security.log")), existsSync(join(ICI, "security.log")) ? lire(join(ICI, "security.log"), "utf8").slice(0, 200) : "");
+  rmSync(ICI, { recursive: true, force: true });
+}
+
+/* ------------------------------------------------------------------------- */
 console.log("\n8. Fin de séance");
 {
   const r1 = await appel("/helix/auth/revoke", { method: "POST", headers: avecSeance, body: JSON.stringify({ toutes: true }) });

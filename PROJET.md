@@ -3579,6 +3579,128 @@ juste ou non, nombre de relances, lignes « appel d'outil … réparé » et « 
 journal, temps total ; et vérifier dans le journal d'OpenCode que la session tourne sous
 `helix-petit`.
 
+**Vu par Medhi le 27/09/2026 sur le même PC Windows (processeur seul, 16 Go, llmster 0.0.25,
+Ministral 3B et Qwen3.5 4B) : « le modèle des fois répondait bien et des fois un truc qui n'a
+rien à voir ».** Rien ne tourne sous Windows d'ici, et aucun modèle n'a été chargé sur ce Mac (son
+LM Studio sert un autre projet) : tout est mesuré contre une passerelle jetable, sur un « Linux x64
+de 16 Go sans carte NVIDIA » simulé (mêmes chemins de chargement que Windows), devant un faux LM
+Studio qui garde chaque requête telle qu'il la reçoit et un faux `lms`. Cinq pistes examinées :
+**Démontré** (ce que Helix envoie, relevé requête par requête) :
+1. **Le découpage perdait la question et la conversation.** Avant chaque demande qui n'est ni une
+   question courte ni une réplique, le modèle trie (« Tu organises un travail… »). S'il rend un plan,
+   chaque partie ou étape partait avec la consigne système et la **reformulation** du tri, rien
+   d'autre : ni les mots de la personne, ni l'échange d'avant. Mesuré : à « Liste les trois risques
+   d'un prêt » puis « Développe le deuxième point en trois paragraphes pour mon associé », les trois
+   parties rédigées recevaient « Rédiger un texte sur le deuxième point », sans la liste. Un 3B
+   écrivait donc sur un deuxième point de son invention. Le tri se tirait en plus au sort : aucune
+   température n'était envoyée, le moteur prenait la sienne, et la même demande pouvait recevoir un
+   plan une fois, aucun la suivante. C'est l'explication la plus directe du « des fois » (non vue
+   sur le PC). Sur huit échanges typiques, sept passaient par ce tri.
+2. **Le modèle n'était pas chargé par Helix.** Le chargement à la demande de LM Studio (JIT) est
+   actif par défaut, et sa documentation prévient que `/v1/models` peut alors lister tous les modèles
+   téléchargés ([docs](https://lmstudio.ai/docs/developer/openai-compat/models)). Helix tenait pour
+   chargé tout ce que cette liste montrait : mesuré devant un faux LM Studio qui liste ainsi, huit
+   questions et **aucun** `lms load`. LM Studio chargeait alors le modèle seul, avec ses réglages
+   (sa taille de conversation par défaut, quatre réponses en parallèle, [docs](https://lmstudio.ai/docs/app/advanced/parallel-requests),
+   la puce graphique à sa guise, donc sans le `--gpu off` du 27/09) et sans l'essai de
+   santeModeles.ts, pendant que Helix, lui, comptait sur 32 768 jetons pour mesurer les documents.
+   En « Auto », tous les modèles listés passaient pour chargés, et le choix entre eux suivait l'ordre
+   de la liste. Que llmster 0.0.25 liste bien ainsi sur le PC n'est pas vu (documenté, pas mesuré).
+3. **La conversation n'était jamais mesurée** : seuls les documents l'étaient. Mesures (3 caractères
+   par jeton, l'estimation de Helix) : consigne système de l'écran environ 300 jetons ; huit
+   échanges avec des réponses de 1 200 caractères, 3 400 jetons à la huitième question (1 000 à la
+   troisième) ; le tri, jusqu'à 1 800 jetons. À 32 768 jetons, chargés par Helix, une conversation
+   ordinaire ne déborde pas. À 4 096 (un modèle chargé par LM Studio lui-même, cas 2), la septième
+   question et sa réponse ne tiennent plus : c'est LM Studio qui coupait, selon sa politique de
+   dépassement, sans que personne sache ce que le modèle voyait encore.
+4. **Ministral 3B répondait à la température du moteur.** Mistral conseille 0,1 (« We recommend
+   starting with a Temperature of 0.1 for most use cases », [carte du modèle](https://huggingface.co/mistralai/Ministral-3-3B-Instruct-2512)) ;
+   Helix n'envoyait rien. Les réglages de Qwen3.5 (0,6 ou 0,7, top_p 0,95 ou 0,8, top_k 20, sans
+   pénalité) étaient déjà posés le 27/09 et n'ont pas changé.
+**Corrigé** :
+- **Le découpage garde la conversation** (`chat.ts`, `fondation` ; `historique.ts`,
+  `derniersEchanges`) : chaque partie et chaque étape reçoit les derniers échanges (six messages, un
+  quart de la place au plus, en tours complets), et l'objectif du tri est toujours suivi de la
+  demande mot pour mot (`avecDemande`, plan.ts). Le tri se fait à 0,2 au plus.
+- **Ce qui est en mémoire, c'est `lms ps` qui le dit** quand il répond (`discover`, backends.ts) :
+  un modèle listé mais absent est chargé par Helix, avec ses réglages et l'essai. Si `lms ps` ne
+  répond pas, rien ne change (la seconde copie « qwen3-8b:2 » du 23/09 reste évitée). Le compte
+  rendu des réunions et les autres appels de `completion.ts` chargent aussi le modèle eux-mêmes.
+- **La conversation tient dans sa place, coupée par Helix** (`historique.ts`, branché dans
+  `chat.ts` pour l'écran) : place = taille chargée (`contexteDuModele`) moins la réponse (un
+  cinquième), la marge et les outils ; au-delà, les plus anciens échanges partent, un tour entier à
+  la fois (jamais un résultat d'outil sans son appel, reprise toujours sur un message de la
+  personne, comme le gabarit de Mistral l'exige), jamais la consigne système ni la question ; le
+  modèle en est averti dans sa consigne, et la personne le lit en tête de la réponse (« Ce Chat est
+  long : les 4 premiers messages n'ont pas été relus… »). Dans une boucle d'outils, les plus anciens
+  résultats sont abrégés, le dernier reste entier. Seulement quand la taille est sue (LM Studio, ou
+  une taille publiée ou écrite dans le profil) : un cluster exo ou un grand modèle distant sans taille
+  connue n'est pas raccourci sur une supposition.
+- **Ministral 3 (3B, 8B, 14B, instruct)** : température 0,1 sur tout moteur (`echantillonnageLocal`).
+- **Au processeur seul, une réponse à la fois quelle que soit la mémoire** (`optionsDeChargement`) :
+  `--parallel 2` restait posé sur un PC de 17 à 36 Go sans carte graphique.
+**Calcul des tailles au chargement, sans carte graphique** (vérifié en simulant 8 et 16 Go) : dans
+les deux cas `--context-length 32768 --parallel 1 --gpu off`, et Qwen3.5 4B conseillé. Mémoire du
+cache de conversation à 32 768 jetons (en f16, d'après les `config.json` publiés) : Ministral 3B,
+26 couches × 8 têtes × 128 × 2 × 2 octets = 104 Kio par jeton, **3,5 Go** ; Qwen3.5 4B (8 couches
+d'attention sur 32, le reste récurrent) 32 Kio par jeton, 1,1 Go. Avec les poids (2,5 et 3 Go
+environ) : 6 Go et 4 Go. Tient sur 16 Go ; sur 8 Go, Ministral 3B à 32 768 jetons laisse peu à
+Windows. Non changé (la règle « jamais moins de 32 768 », 24/09, sert Helix Code) : **à décider par
+Medhi** si un PC de 8 Go le montre.
+**Examiné, non retenu ou non démontré** :
+- **Requêtes simultanées** : dans le Chat, rien ne part en même temps que la réponse (le titre est
+  tiré de la question sur le poste, le tri et la lecture des documents précèdent la réponse, l'une
+  après l'autre ; pas d'appel pour les suggestions ni la mémoire). Deux Chats ouverts partent bien
+  ensemble (mesuré : les deux requêtes se chevauchent au moteur), comme l'essai du modèle quinze
+  secondes après le démarrage ou une tâche programmée. Avec `--parallel 1`, désormais assuré puisque
+  Helix charge lui-même, llama.cpp les sert l'une après l'autre. Qu'un moteur mêle deux
+  conversations est une **hypothèse** sans preuve (un défaut de llama.cpp sur l'architecture
+  récurrente de Qwen3.5 en parallèle n'est pas exclu, pas trouvé écrit) ; ce qui est sûr, c'est que
+  le tri, requête différente, oblige le moteur à relire toute la conversation à la question suivante
+  (un seul emplacement) : du temps, pas une erreur.
+- **Changement de modèle en cours de conversation** (« Auto », essai raté, garde-fou) : le modèle
+  suivant reçoit tout l'historique, envoyé par l'écran à chaque question ; une réponse coupée ou en
+  erreur n'y est pas renvoyée (`useChat.ts`). Rien de mal reconstruit. Le seul changement de modèle
+  involontaire relevé était celui du cas 2, corrigé.
+- **Construction des messages** : un seul message système (les consignes s'y ajoutent), rôles dans
+  l'ordre, pas de résultat d'outil orphelin dans l'historique de l'écran, documents d'un Chat fermé
+  non renvoyés, mémoire limitée à ce que la personne a enregistrée. Rien trouvé.
+- **Politique de dépassement de LM Studio** (`truncateMiddle`, `stopAtLimit`, `rollingWindow`) :
+  celle qu'applique llmster au serveur n'a pas été vue ; elle ne compte plus, Helix ne dépassant plus.
+**Vérifié ici** : `npm run typecheck` ; i18n à 100 % des deux côtés ; `npm run securite`, 649
+contrôles, 0 échec, dont la section 7 decies : dix contrôles, tous en échec sur le code d'avant (rejoué
+sur une copie du dépôt) et réussis après : le modèle listé mais pas chargé est chargé par Helix
+(32 768, `--parallel 1`, `--gpu off`) ; température 0,1 pour Ministral, tri à 0,2 au plus ; huit
+échanges à 4 096 jetons raccourcis sous la place, consigne et question gardées, alternance respectée,
+annonce à l'écran ; les parties d'un plan avec l'échange d'avant et la demande mot pour mot ; les
+fonctions seules ; `--parallel 1` à 32 Go sans carte graphique. Un onzième contrôle, ajouté après
+qu'une fenêtre « Trousseau introuvable » s'est ouverte sur ce Mac pendant les essais du jour : la
+section tourne avec un dossier personnel jetable, une clé par fichier et un faux `security` en tête
+du PATH, et vérifie que le trousseau n'a jamais été appelé (section rejouée seule après cet ajout :
+11 sur 11 ; la batterie entière, 649 sur 649, l'a été juste avant). Les autres passerelles de la batterie
+(instance principale, sections 10 et 11 septies, essai des fournisseurs) gardent le dossier personnel
+réel et le trousseau : **à décider** si elles passent elles aussi à la clé par fichier.
+**Pas vérifié** : un vrai modèle, llmster, Windows ; la liste réelle de `/v1/models` de llmster ; ce
+que fait un vrai 3B du contexte rendu.
+**À essayer sur le PC de Medhi**, avec Ministral 3B choisi à la main, puis en « Auto » :
+1. Avant : `lms ps` (noter la taille de conversation `CONTEXT` du modèle chargé) et, pendant une
+   question, `lms log stream`.
+2. Une conversation de dix échanges qui s'appuie sur ce qui précède : « Liste les trois risques
+   principaux d'un prêt bancaire pour une TPE », puis « Développe le deuxième point en trois
+   paragraphes pour mon associé », « Reformule-le de façon plus formelle », « Ajoute une phrase sur
+   la trésorerie », « Traduis-le en anglais », et ainsi de suite. Relever : si chaque réponse parle
+   bien de ce qui précède ; si « Développe… » est rédigé en parties (intertitres « ## ») ; le temps
+   avant le premier mot.
+3. Dans le journal de Helix : au premier message, « … chargé par Helix : --context-length 32768
+   --parallel 1 --gpu off » (ligne ajoutée ce jour ; sans elle, et si `lms ps` montre une autre
+   taille, le modèle a été chargé par LM Studio lui-même) ; « essai de … sur cette machine » ; « conversation de ~… jetons pour … de place » (seulement si
+   elle a été raccourcie) ; « documents joints (…, contexte …) ».
+4. Laisser le PC vingt minutes sans rien demander (le modèle est libéré), puis reposer une question
+   dans le même Chat : `lms ps` doit montrer de nouveau 32 768, et le journal un nouveau `lms load`.
+5. Si une réponse est encore hors sujet : noter la question exacte, le modèle, la ligne `[chat]` du
+   journal juste avant, et la sortie de `lms log stream` (ce que le moteur a reçu, au début de
+   l'invite).
+
 **Fait le 27/09/2026 : Codex dans l'écran Code, avec le compte ChatGPT du propriétaire du
 poste.** Décidé par Medhi (« ajoute »). Le détail, les sources et ce qui reste à essayer sont
 au § 3.14 (« Fait ») ; les barrières au § 30 de SECURITE.md. En bref : second moteur au choix

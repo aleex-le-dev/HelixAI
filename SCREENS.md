@@ -186,11 +186,18 @@ chaque outil (« Sous-tâche : … », « Écriture · index.html ») et, pendan
 l'annonce de panne. Vu dans le navigateur le 25/09/2026 (instance jetable, Qwen3 8B),
 à 1 400 px et à 375 px ; pas vu dans l'application de bureau.
 
-**OpenCode absent** : l'écran annonce que le moteur est absent et propose
-« Installer OpenCode » (administrateur ; 1.18.32, empreinte vérifiée, environ 60 Mo,
-progression affichée, refus dit en clair), avec la commande manuelle en rappel. Une
-fois posé, l'écran Code s'ouvre sans relancer l'application. OpenCode n'est pas
-empaqueté dans l'installeur de Helix.
+**OpenCode absent** : l'écran annonce que le moteur est absent. Depuis le 27/09/2026,
+il n'y a plus de clic à faire : la passerelle pose OpenCode d'elle-même au démarrage et
+après la mise en route du modèle, et l'écran, s'il trouve cette installation en cours,
+en montre la progression. Sinon, pour un **administrateur**, il la lance d'office à
+l'ouverture (1.18.32, empreinte vérifiée, environ 60 Mo, progression affichée). Le
+bouton ne reste que pour « Réessayer » après un échec (hors ligne : l'erreur est dite
+en clair), ou quand l'installation d'office n'a pas lieu (profil qui la réserve à
+l'intégrateur, poste rattaché : « Installer OpenCode »). La commande manuelle reste en
+rappel pour l'administrateur. Un **membre** lit que l'administrateur de l'instance doit
+l'installer. Une fois posé, l'écran Code s'ouvre sans relancer l'application. OpenCode
+n'est pas empaqueté dans l'installeur de Helix. **Pas vu à l'écran** (typecheck seul) :
+l'enchaînement d'office, le texte du membre.
 
 ### `/projets` Projets
 

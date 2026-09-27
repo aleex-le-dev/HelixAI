@@ -78,8 +78,14 @@ function iconePleine(taille, logo) {
   g.lineWidth = Math.max(1, taille / 256); g.strokeStyle = LISERE; g.stroke();
   const { s, x0, y0, w, h } = encre(logo);
   const hauteur = cote * 0.84, echelle = hauteur / h, trait = 8 * echelle;
-  // Un pixel de trait au moins, sans empâter : à 16 px, l'hélice reste une hélice, pas une tache.
-  const rayon = Math.max(0, (Math.min(1.1, taille / 20) - trait) / 2 / echelle);
+  /*
+   * Juste assez de trait pour rester visible, pas plus : un pixel à 16 et 24 px,
+   * moins au-delà. Plus épais, l'hélice devenait une tache noire sur le bureau
+   * de Windows (48 px ; vu par Medhi le 27/09/2026, « noir foncé bizarre »),
+   * loin du trait fin de l'icône du Mac.
+   */
+  const voulu = taille <= 24 ? 1 : taille <= 32 ? 0.75 : taille <= 64 ? 0.55 : 0;
+  const rayon = Math.max(0, (voulu - trait) / 2 / echelle);
   const e = document.createElement("canvas"); e.width = w + 2 * rayon + 4; e.height = h + 2 * rayon + 4; const eg = e.getContext("2d");
   const ox = rayon + 2 - x0, oy = rayon + 2 - y0;
   if (rayon > 0) {

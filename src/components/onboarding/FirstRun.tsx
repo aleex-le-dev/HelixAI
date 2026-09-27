@@ -235,7 +235,7 @@ export function FirstRun({ onReady }: { onReady: () => void }) {
             {tf("environ {0} Go", recommended.downloadGb)}
           </span>
         </div>
-        <p className="mt-1 text-sm text-muted-foreground">{recommended.description}</p>
+        <p className="mt-1 whitespace-pre-line text-sm text-muted-foreground">{recommended.description}</p>
         {recommended.verifie === false && (
           <p className="mt-1 text-xs text-muted-foreground">
             {tf("Pas encore essayé avec {0} : s'il ne se charge pas, un autre modèle adapté à la machine prend le relais.", branding.name)}

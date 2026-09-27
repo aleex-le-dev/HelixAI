@@ -186,7 +186,8 @@ function decrire(f: Fiche, ecran = false): CatalogEntry {
           : t("Conversation, rédaction et outils.");
       const note = tf("Note Artificial Analysis : {0}.", String(f.intelligence));
       const rapide = f.moe ? ` ${t("Rapide, même sans carte graphique.")}` : "";
-      return `${usage} ${note}${rapide}`;
+      // La note sur sa propre ligne (Medhi, 27/09/2026) : collée à la phrase, elle se coupait au milieu.
+      return `${usage}${rapide}\n${note}`;
     },
   };
 }

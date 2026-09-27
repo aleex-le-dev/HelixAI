@@ -1,8 +1,12 @@
-# Alertes et correctifs de sécurité des dépendances (dépôt public depuis le 27/09/2026).
+# Dependabot : correctifs de sécurité seulement (activés dans les réglages du dépôt, 27/09/2026).
+# Les montées de version ordinaires sont faites à la main, avec les vérifications du projet
+# (npm run typecheck, npm run securite, l'application ouverte) : une version majeure de React
+# ou d'une bibliothèque d'icônes peut casser l'écran sans qu'aucun test ne le voie.
 version: 2
 updates:
   - package-ecosystem: npm
     directory: /
     schedule:
       interval: weekly
-    open-pull-requests-limit: 5
+    # 0 : pas de demande pour une simple nouvelle version ; les alertes et correctifs de sécurité continuent.
+    open-pull-requests-limit: 0

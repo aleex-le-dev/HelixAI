@@ -94,6 +94,24 @@ async function empreinteSansSignatureDeCode(chemin) {
   }
 }
 
+/*
+ * Les dossiers `_CodeSignature` écartés : ceux que pose macOS, et seulement
+ * ceux-là (seconde tournée du test d'intrusion, 28/09/2026). Un vrai dossier,
+ * rangé dans `<paquet>/Contents` (l'application et ses assistants) ou dans
+ * `<cadre>.framework/Versions/<v>`. Écartés à toute profondeur, sous n'importe
+ * quelle forme, ils laissaient une archive ajouter des fichiers où elle
+ * voulait (`Contents/Resources/_CodeSignature/…`, ou un lien de ce nom) sans
+ * toucher au relevé signé. L'application publiée n'en a pas d'autres (relevé
+ * sur release/mac-arm64/Helix.app : neuf, tous à ces places) : le relevé d'une
+ * application authentique ne change pas, et les postes déjà installés,
+ * qui écartent encore tout `_CodeSignature`, calculent le même.
+ */
+function signatureDeCodeMacos(rel, st) {
+  if (!st.isDirectory() || st.isSymbolicLink()) return false;
+  const parent = path.dirname(rel).split(path.sep).join("/");
+  return parent === "Contents" || /\.(app|framework|appex|xpc|bundle|plugin)\/Contents$/.test(parent) || /\.framework\/Versions\/[^/]+$/.test(parent);
+}
+
 /**
  * Le relevé de l'application, dans un ordre fixe. Seul le fichier de signature
  * en est exclu (il ne peut pas se contenir lui-même), avec la signature de code
@@ -106,9 +124,10 @@ async function releve(app, { droits = null } = {}) {
     const noms = fs.readdirSync(path.join(app, rel)).sort();
     for (const nom of noms) {
       const r = rel ? path.join(rel, nom) : nom;
-      if (r === exclu || nom === "_CodeSignature") continue;
+      if (r === exclu) continue;
       const abs = path.join(app, r);
       const st = fs.lstatSync(abs);
+      if (nom === "_CodeSignature" && signatureDeCodeMacos(r, st)) continue;
       // Hors du relevé (voir DROITS_INTERDITS) : noté à part, pour la vérification seulement.
       if (droits && !st.isSymbolicLink() && st.mode & DROITS_INTERDITS) droits.push(r);
       if (st.isSymbolicLink()) lignes.push(`l ${JSON.stringify(r)} ${JSON.stringify(fs.readlinkSync(abs))}`);
@@ -162,6 +181,100 @@ function assainirDroits(app) {
   } catch {
     return false;
   }
+}
+
+/*
+ * Ce que la signature de code de macOS dit de chaque programme, et que le
+ * relevé ne couvre pas (seconde tournée du test d'intrusion, 28/09/2026).
+ *
+ * Le relevé hache chaque Mach-O sans sa signature de code (voir plus haut),
+ * pour rester le même avant et après la signature ad hoc. Or c'est dans cette
+ * signature que sont écrits les droits (entitlements) et le durcissement
+ * (« hardened runtime »). Une source piratée pouvait donc servir le code
+ * authentique, re-signé ad hoc sans durcissement, ou avec
+ * `com.apple.security.get-task-allow` ou
+ * `com.apple.security.cs.allow-dyld-environment-variables` : la signature de
+ * l'éditeur passait. Reproduit sur une copie de programme : relevé identique,
+ * durcissement perdu. Un programme du même compte pouvait ensuite faire
+ * charger sa bibliothèque à Helix (DYLD_INSERT_LIBRARIES) ou s'y attacher, et
+ * agir avec les autorisations accordées à Helix (écran, accessibilité, micro).
+ *
+ * La règle : rien de plus que l'application qui tourne. Chaque droit d'un
+ * programme de la nouvelle doit exister, avec la même valeur, dans
+ * l'application installée ; un programme durci dans l'installée doit l'être
+ * aussi dans la nouvelle. Conséquence à connaître : une version qui ajoute un
+ * droit (build/entitlements.mac.plist) ne s'installe plus d'un clic sur les
+ * postes d'avant ; elle se pose alors à la main, une fois.
+ */
+function executer(commande, args, entree) {
+  return new Promise((resolve) => {
+    const enfant = require("node:child_process").execFile(commande, args, { encoding: "utf8", maxBuffer: 4 * 1024 * 1024, timeout: 30_000 }, (err, sortie, erreurs) =>
+      resolve({ ok: !err, sortie: String(sortie ?? ""), erreurs: String(erreurs ?? "") }),
+    );
+    if (entree !== undefined) enfant.stdin.end(entree);
+  });
+}
+
+/** Durci ou non, et ses droits (clé → valeur en JSON), pour un programme. */
+async function proprietesDeCode(fichier) {
+  const dv = await executer("/usr/bin/codesign", ["-dv", fichier]);
+  const drapeaux = /flags=0x[0-9a-f]+\(([^)]*)\)/.exec(dv.erreurs)?.[1]?.split(",") ?? [];
+  const droits = new Map();
+  if (dv.ok) {
+    const xml = (await executer("/usr/bin/codesign", ["-d", "--entitlements", "-", "--xml", fichier])).sortie;
+    if (xml.trim()) {
+      const json = await executer("/usr/bin/plutil", ["-convert", "json", "-o", "-", "-"], xml);
+      let lu;
+      try {
+        lu = JSON.parse(json.sortie);
+      } catch {
+        // Des droits qu'on ne sait pas lire ne passent pas pour « aucun droit ».
+        return { lisible: false, durci: false, droits };
+      }
+      for (const [cle, valeur] of Object.entries(lu ?? {})) droits.set(cle, JSON.stringify(valeur));
+    }
+  }
+  return { lisible: true, durci: drapeaux.includes("runtime"), droits };
+}
+
+/** Les programmes (Mach-O) d'une application, par chemin relatif, sans suivre les liens. */
+function programmes(app) {
+  const trouves = [];
+  const parcourir = (rel) => {
+    for (const nom of fs.readdirSync(path.join(app, rel)).sort()) {
+      const r = rel ? path.join(rel, nom) : nom;
+      const st = fs.lstatSync(path.join(app, r));
+      if (st.isSymbolicLink()) continue;
+      if (st.isDirectory()) parcourir(r);
+      else if (st.isFile() && estMachO(path.join(app, r))) trouves.push(r);
+    }
+  };
+  parcourir("");
+  return trouves;
+}
+
+/**
+ * macOS : la nouvelle application n'a ni plus de droits ni moins de
+ * durcissement que celle qui tourne. Rend { ok } ou { ok: false, raison }.
+ */
+async function controlerSignaturesDeCode(nouvelle, actuelle) {
+  if (process.platform !== "darwin") return { ok: true };
+  const permis = new Map();
+  const durcisAvant = new Set();
+  for (const r of programmes(actuelle)) {
+    const p = await proprietesDeCode(path.join(actuelle, r));
+    if (p.durci) durcisAvant.add(r);
+    for (const [cle, valeur] of p.droits) permis.set(`${cle}\n${valeur}`, true);
+  }
+  for (const r of programmes(nouvelle)) {
+    const p = await proprietesDeCode(path.join(nouvelle, r));
+    if (!p.lisible) return { ok: false, raison: "les droits macOS d'un de ses programmes sont illisibles" };
+    if (durcisAvant.has(r) && !p.durci) return { ok: false, raison: "un de ses programmes n'est plus protégé contre l'injection de code" };
+    for (const [cle, valeur] of p.droits) {
+      if (!permis.has(`${cle}\n${valeur}`)) return { ok: false, raison: "elle demande à macOS des droits que l'application installée n'a pas" };
+    }
+  }
+  return { ok: true };
 }
 
 const donneesSignees = (identifiant, version, empreinte) => Buffer.from(`${ENTETE}\n${identifiant}\n${version}\n${empreinte}`, "utf8");
@@ -304,6 +417,7 @@ module.exports = {
   signerApplication,
   verifierApplication,
   assainirDroits,
+  controlerSignaturesDeCode,
   cleDeLApplication,
   cleDesRessources,
   signerInstallateur,

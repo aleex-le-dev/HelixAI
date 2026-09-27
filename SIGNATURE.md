@@ -180,6 +180,13 @@ instance piratée (SECURITE.md § 28). Désormais :
    de la nouvelle et vérifie la signature **avec sa propre clé publique**, jamais avec
    celle qu'apporte la nouvelle. Clé absente, signature fausse, fichier ajouté ou modifié,
    autre version : rien ne s'installe, et la fenêtre dit pourquoi.
+4. **Depuis le 28/09/2026, la signature de code de macOS** (hors du relevé) est comparée à
+   celle de l'application qui tourne (SECURITE.md § 38) : chaque droit (entitlement) de la
+   nouvelle doit déjà exister dans l'installée, et un programme durci (« hardened runtime »)
+   doit le rester. **À savoir avant d'ajouter un droit à `build/entitlements.mac.plist`** :
+   les postes d'avant refuseront cette version d'un clic (« elle demande à macOS des droits
+   que l'application installée n'a pas ») ; il faudra la poser à la main, une fois, par
+   l'image disque ou `installer-macos.sh`.
 
 Limite dite : un poste qui tourne encore sur une version d'avant le 27/09/2026 n'a pas ce
 contrôle ; il installera la première version signée sans la vérifier. Toutes les

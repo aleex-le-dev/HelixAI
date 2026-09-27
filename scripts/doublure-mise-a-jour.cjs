@@ -49,12 +49,30 @@ const attendre = async (fini) => {
 };
 const plist = (version) =>
   `<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n<plist version="1.0"><dict><key>CFBundleIdentifier</key><string>fr.helix.plateforme</string><key>CFBundleShortVersionString</key><string>${version}</string></dict></plist>\n`;
+/*
+ * Un vrai programme (Mach-O) signé ad hoc, pour les scénarios « mac-code-… »
+ * (seconde tournée, 28/09/2026) : une copie de /usr/bin/true, jamais lancée.
+ * Le fichier de droits est rangé hors de l'application, qui ne doit contenir
+ * que ce qui est signé.
+ */
+function signerProgramme(fichier, { durci = true, droits = ["com.apple.security.cs.allow-jit"] } = {}) {
+  const liste = path.join(AUX, `droits-${crypto.randomBytes(4).toString("hex")}.plist`);
+  fs.writeFileSync(liste, `<?xml version="1.0" encoding="UTF-8"?>\n<plist version="1.0"><dict>${droits.map((d) => `<key>${d}</key><true/>`).join("")}</dict></plist>\n`);
+  cp.execFileSync("/usr/bin/codesign", ["-f", "-s", "-", ...(durci ? ["--options", "runtime"] : []), "--entitlements", liste, fichier], { stdio: "ignore" });
+}
+const PROGRAMME = "Contents/Frameworks/outil";
+
 async function fausseApplication(dossier, version) {
   const app = path.join(dossier, "Helix.app");
   for (const d of ["Contents/Resources", "Contents/MacOS"]) fs.mkdirSync(path.join(app, d), { recursive: true });
   fs.writeFileSync(path.join(app, "Contents/Info.plist"), plist(version));
   fs.writeFileSync(path.join(app, "Contents/MacOS/Helix"), "binaire", { mode: 0o755 });
   fs.writeFileSync(path.join(app, "Contents/Resources/app.asar"), `application ${version}`);
+  if (scenario.startsWith("mac-code")) {
+    fs.mkdirSync(path.join(app, "Contents/Frameworks"), { recursive: true });
+    fs.copyFileSync("/usr/bin/true", path.join(app, PROGRAMME));
+    signerProgramme(path.join(app, PROGRAMME));
+  }
   await sig.signerApplication(app, cle, { identifiant: "fr.helix.plateforme", version });
   return app;
 }
@@ -110,6 +128,10 @@ async function fausseApplication(dossier, version) {
       fs.renameSync(nouvelle, path.join(source, "Helix.app"));
       nouvelle = path.join(source, "Helix.app");
     }
+    // Le code authentique, re-signé ad hoc par la source : sans durcissement, ou avec un droit de plus. Le relevé signé ne change pas.
+    if (scenario === "mac-code-sans-durci") signerProgramme(path.join(nouvelle, PROGRAMME), { durci: false });
+    if (scenario === "mac-code-droit") signerProgramme(path.join(nouvelle, PROGRAMME), { droits: ["com.apple.security.cs.allow-jit", "com.apple.security.get-task-allow"] });
+    if (scenario.startsWith("mac-code")) resultat.releveInchange = (await sig.verifierApplication(nouvelle, sig.cleDeLApplication(installee), { identifiant: "fr.helix.plateforme", version: "9.0.1" })).ok;
     if (scenario === "mac-droits") {
       // L'application authentique, rendue modifiable par tous : droits 0777 et ACL « everyone ».
       for (const d of ["", "Contents", "Contents/Resources"]) fs.chmodSync(path.join(nouvelle, d), 0o777);

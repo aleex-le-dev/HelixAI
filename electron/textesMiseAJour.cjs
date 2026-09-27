@@ -96,6 +96,9 @@ const RAISONS = {
   "elle n'est pas signée par l'éditeur de cette application": { en: "it is not signed by this app's publisher", zh: "它不是由此应用的发行方签名的" },
   "elle n'est pas un dossier d'application": { en: "it is not an application folder", zh: "它不是应用文件夹" },
   "d'autres comptes de ce poste pourraient modifier ses fichiers": { en: "other accounts on this computer could modify its files", zh: "此电脑上的其他账户可能修改其文件" },
+  "les droits macOS d'un de ses programmes sont illisibles": { en: "the macOS entitlements of one of its programs cannot be read", zh: "无法读取其中某个程序的 macOS 权限" },
+  "un de ses programmes n'est plus protégé contre l'injection de code": { en: "one of its programs is no longer protected against code injection", zh: "其中某个程序不再受到代码注入防护" },
+  "elle demande à macOS des droits que l'application installée n'a pas": { en: "it asks macOS for entitlements the installed app does not have", zh: "它向 macOS 请求了已安装应用所没有的权限" },
 };
 
 let langue = "en";

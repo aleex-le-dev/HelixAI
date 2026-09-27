@@ -3672,7 +3672,8 @@ rejoués contre le code d'avant échouent. `node scripts/essai-source-github.mjs
   vérifie que l'empreinte publiée à côté de l'image disque et une signature de code ad hoc :
   une publication remplacée de bout en bout passerait (première installation, pas de clé à
   laquelle se fier) ; le banc d'essai des pages peut envoyer des requêtes simples aux services de
-  la boucle locale.
+  la boucle locale. *Repris au § 38 (28/09/2026) : `_CodeSignature`, les droits et le banc d'essai
+  démontrés et fermés ; le bot de réunion examiné.*
 - **Pas essayé** : l'application empaquetée elle-même (ouverte chez Medhi pendant le test), un
   vrai Windows, un Mac à plusieurs comptes (le scénario des droits ouverts a été rejoué avec un
   seul).
@@ -4014,3 +4015,123 @@ fichiers avec un `path` en plus pour `move_file` (son schéma publié ne lit que
 `destination` ; l'essai porte sur la barrière) ; Windows et Linux (OpenCode y lit
 `XDG_CONFIG_HOME` et `OPENCODE_TEST_HOME` de la même façon, d'après son code ; non essayé hors de
 macOS).
+
+## 38. Seconde tournée : application et interface (28 septembre 2026)
+
+Autorisé par Medhi. Code de la version 2026.928.1 (main 6b77c21). Périmètre : l'application
+Electron (`electron/`), la mise à jour, les installateurs, l'interface (`src`, surtout ce qui a
+changé depuis `v2026.927.3`) et le moteur des applications écrites par Helix
+(`gateway/application`). Le § 31 n'a pas été refait : on a cherché ce qui lui avait échappé, en
+commençant par les soupçons qu'il laissait. Chaque faille ci-dessous a été reproduite sur une copie
+du binaire d'Electron 44.4.5 du projet (jamais l'application installée de Medhi, ouverte pendant le
+test), aux fusibles du paquet posés (`@electron/fuses` : RunAsNode ouvert, NODE_OPTIONS et
+`--inspect` fermés), et son contrôle échoue sur le code d'avant.
+
+### 38.1 Failles corrigées
+
+| Gravité | Composant | Ce qui se passait | Correctif | Contrôles (`npm run securite`, 13 quater) |
+|---|---|---|---|---|
+| Moyenne | Banc d'essai des pages (`electron/rendu.cjs`) | La page à l'essai (écrite par un modèle, ou prise dans un dépôt cloné, avec les scripts de CDN qu'elle charge) est servie depuis `http://127.0.0.1:<port>` : elle joignait tous les services de la machine. Essayé : un service local qui répond `Access-Control-Allow-Origin: *` (Ollama le fait pour les origines de boucle locale, LM Studio quand son CORS est activé, beaucoup de serveurs de développement) était **lu** par `127.0.0.1`, `localhost` et `0.0.0.0` ; un nom public qui pointe vers 127.0.0.1 (`localtest.me`, `*.nip.io`) passait de même. La passerelle admet toute origine de boucle locale (`entetes.ts`) : ses routes publiques aussi. L'en-tête `treat-as-public-address` ne change rien dans ce Chromium (même essai). | Un mandataire à soi (`electron/filtreReseau.cjs`), que la session de la page doit utiliser, boucle locale comprise (`<-loopback>`) : il résout le nom lui-même et se connecte à l'adresse qu'il a vérifiée ; un nom local, ou qui change de réponse (« DNS rebinding »), ne passe pas. Refusés : boucle locale, réseaux privés, lien local (169.254, donc les métadonnées d'un nuage), CGNAT 100.64/10 (Tailscale), multidiffusion, IPv4 écrite en IPv6. Seule exception : le service de la page. WebRTC n'ouvre plus d'UDP à côté (`disable_non_proxied_udp`). Le rapport dit « adresse de la machine ou du réseau local : refusée pendant l'essai ». Internet reste ouvert (un CDN en HTTPS essayé : servi). | 9, dont le banc joué dans le vrai Electron : `R=LLL` avant, `R=bbb` après |
+| Faible | Passerelle en mode Node (`electron/main.cjs`) | Le fusible EnableNodeCliInspectArguments ne protège que le processus principal (essayé : SIGUSR1 n'y ouvre rien). La passerelle, elle, tourne avec le binaire de Helix en mode Node : **SIGUSR1 ouvrait le débogueur de Node** sur 127.0.0.1:9229 (essayé avec la vraie `dist-gateway`, fusibles posés). Un programme du même compte pouvait y exécuter son code dans le processus qui tient la clé des données déchiffrée et toutes les séances. `--inspect` en argument est aussi respecté en mode Node, mais ces arguments-là, c'est Helix qui les écrit. | `--disable-sigusr1` au lancement de la passerelle. Même essai : aucun débogueur, la passerelle répond toujours. | 3, dont un témoin (sans l'option, le débogueur s'ouvre) |
+| Faible | Mise à jour macOS (`signatureEditeur.cjs`, `miseAJour.cjs`) | Soupçon du § 31.3, démontré : le relevé signé hache chaque programme **sans** sa signature de code, or les droits (entitlements) et le durcissement (« hardened runtime ») y sont écrits. Essayé avec la doublure de mise à jour et une copie de `/usr/bin/true` : le code authentique re-signé ad hoc **sans durcissement**, ou avec `com.apple.security.get-task-allow`, gardait un relevé identique et s'installait. Une source piratée (instance rattachée, publication GitHub remplacée) rendait ainsi Helix injectable (DYLD_INSERT_LIBRARIES, débogueur) par un programme du même compte, avec les autorisations accordées à Helix. Aujourd'hui, RunAsNode ouvert donne déjà cette prise ; le jour où il sera fermé, ce trou l'aurait rouverte. | `controlerSignaturesDeCode` : rien de plus que l'application qui tourne. Chaque droit d'un programme de la nouvelle doit exister, à la même valeur, dans l'installée ; un programme durci dans l'installée l'est aussi dans la nouvelle. Vérifié sur `release/mac-arm64/Helix.app` comparée à elle-même : acceptée (0,4 s). **Conséquence** : une version qui ajoute un droit à `build/entitlements.mac.plist` ne s'installe plus d'un clic sur les postes d'avant ; elle se pose alors à la main, une fois. | 4 |
+| Faible | Relevé signé (`signatureEditeur.cjs`) | Soupçon du § 31.3 : tout ce qui s'appelait `_CodeSignature`, à toute profondeur et sous toute forme (fichier, lien), était hors du relevé. Essayé : un `Contents/Resources/_CodeSignature/charge.js` ajouté à une application signée, ou un lien de ce nom, passait la vérification. Aucun chargeur trouvé qui les lirait : de la place pour un fichier non signé, pas encore une exécution. | Écartés seulement en vrais dossiers, à leurs places (`<paquet>/Contents/`, `<cadre>.framework/Versions/<v>/`). L'application publiée n'en a pas d'autres (neuf, relevés) : son relevé ne change pas (vérifié : `release/mac-arm64/Helix.app` 2026.927.4 passe la nouvelle vérification avec sa clé), et les postes déjà installés calculent le même. | 3 |
+| Faible | Canal `helix:langue` (`main.cjs`) | Seul canal `helix:*` de la fenêtre principale qui ne vérifiait pas l'expéditeur. Il ne fait que changer la langue des textes du processus principal ; c'était le seul à répondre à une autre fenêtre (celle du bot, qui partage le monde de Google Meet). | `depuisLaFenetre`, comme les autres. | 1 (chaque canal de main.cjs) |
+| Faible | Moteur des applications écrites par Helix (`gateway/application/app.js`) | `dateFr` rendait une date illisible telle quelle, et le résultat part dans `innerHTML` : une valeur « date » qui n'en est pas une (données du navigateur modifiées, plan retouché à la main) devenait du HTML. Les exemples produits par Helix sont validés (`application.ts`) : gravité faible. | Échappée comme le reste. | 1 |
+
+**Vérifié** : `npm run securite`, section 13 quater ; les scénarios de la doublure et le banc dans
+Electron, rejoués contre les sources d'avant, échouent (installation faite, `R=LLL`). Plus
+`npm run typecheck`, les deux scripts i18n (100 %), `node scripts/essai-source-github.mjs`.
+
+### 38.2 Fusibles : rien de Helix n'a besoin de NODE_OPTIONS ni de `--inspect`
+
+Relu dans le code, puis essayé sur la copie aux fusibles du paquet :
+- **la passerelle** (`main.cjs`) : `spawn(process.execPath, [...])` avec `ELECTRON_RUN_AS_NODE`, sans
+  option de Node ni NODE_OPTIONS. Démarrée pour de vrai (`dist-gateway/index.cjs`, profil jetable en
+  `"chiffrement": "fichier"`, moteurs éteints) avec, en plus, `NODE_OPTIONS=--require /nexiste/pas.cjs`
+  dans l'environnement : ignoré, elle répond ;
+- **`node --check`** des petits modèles (`petitsModeles.ts`) et **l'épreuve Node de l'atelier**
+  (`atelier.ts`, qui hérite de `ELECTRON_RUN_AS_NODE` : vérifié, l'enfant le voit) : aucune option de
+  débogage, marchent fusibles posés ;
+- **la commande `helix`** (`ligneDeCommande.cjs`) : `ELECTRON_RUN_AS_NODE=1 exec <binaire> helix.mjs`,
+  sans option ;
+- **les MCP** (`npx`) et **npm de l'atelier** : le Node du système ou le Node privé, pas le binaire de
+  Helix (sauf le repli de `nodeDuScript` quand aucun Node n'est à côté de npm : même cas que
+  l'épreuve Node, sans option).
+
+**Fermer RunAsNode** demanderait : la passerelle en `utilityProcess` (le canal `process.send` de
+`computer.ts` et `index.ts` devient `process.parentPort`, l'arrêt sous Windows change) ; un
+remplaçant à `process.execPath` en mode Node pour `--check` (Node n'a pas de vérificateur de syntaxe
+ESM sans dépendance), pour l'épreuve de l'atelier (un `worker_thread`) et pour le repli de npm (le
+Node privé) ; et surtout un Node pour la commande `helix`, qui n'en exige pas aujourd'hui. Deux à
+trois jours avec les essais sur les trois systèmes : pas fait.
+
+### 38.3 Examiné, et qui tient
+
+- **Interface** : aucun `dangerouslySetInnerHTML`, `innerHTML` ni `eval` dans `src` ; les réponses
+  des modèles passent par `TexteRiche` (nœuds texte ; les liens restent du texte) ; noms de fichiers,
+  pièces jointes, prix, notes du graphique « Comparer les modèles » (SVG en éléments React, sources
+  écrites dans le code) rendus en texte. Les `href` dynamiques viennent de catalogues écrits dans le
+  code (`prixPublies.ts`, `notesModeles.ts`, `connecteurs.ts`) ou d'adresses `blob:` d'images ; un
+  lien en `target="_blank"` passe par `setWindowOpenHandler`, qui n'ouvre que `http(s):` et `mailto:`.
+- **« Signaler un problème »** : ni adresse d'instance, ni message, ni clé, ni chemin ; le texte qui
+  part est montré en entier avant, et la personne envoie elle-même. `destinationAdmise` : github.com
+  en HTTPS, ou `mailto:`.
+- **Presse-papiers** : deux canaux étroits, expéditeur vérifié, écriture seule ; `vider` n'efface que
+  la dernière copie de Helix.
+- **CSP de l'application empaquetée** : posée par le gestionnaire de `helix://app` (l'en-tête de
+  `onHeadersReceived` ne s'applique pas à ce schéma), plus la balise `meta` de Vite ; les deux
+  s'appliquent. `script-src 'self'`, `object-src 'none'`, `frame-src 'none'`, `form-action 'none'`,
+  `base-uri 'self'` ; `connect-src` se réduit à l'instance rattachée quand il y en a une.
+  `gateway/application` : une page ouverte depuis le disque ou dans le banc, sans CSP ; son
+  `metier.js` est du code écrit par le modèle, qui fait de toute façon ce qu'il veut dans cette page.
+- **Bot de réunion** : essayé, une page hostile qui remplace `addEventListener` fait partir un son de
+  son choix par le préchargement (le contrôle `instanceof Blob` ne l'arrête pas). Ce n'est pas une
+  faille de plus : c'est la page qui fournit le son de la réunion, et un Meet hostile jouerait aussi
+  bien un faux participant. Les commentaires de `botPreload.cjs` et `botReunion.cjs`, qui
+  promettaient le contraire et parlaient d'Electron 33, sont corrigés. `contextBridge.executeInMainWorld`
+  n'y changerait rien (il faudrait exposer à la page une fonction d'envoi) : pas repris.
+- **Grand stockage** : clés en liste fermée, aucun chemin venu de la page.
+
+### 38.4 Soupçons, non démontrés
+
+- **Windows** : `--disable-sigusr1` n'a pas été essayé sous Windows, où le débogueur de Node s'ouvre
+  par un autre mécanisme (`process._debugProcess`) ; la documentation de Node ne dit pas qu'il le
+  couvre.
+- **Commande `helix`** : lancée sans `--disable-sigusr1`. Elle vit le temps d'une commande et lit le
+  jeton d'instance, qu'un programme du même compte peut lire de toute façon. Non changé : le lanceur
+  déjà posé chez les gens aurait différé de celui du paquet.
+- **Signalement** : l'identifiant du modèle choisi part tel quel (`<moteur>/<modèle>`). Un moteur
+  nommé par l'administrateur, ou un modèle affiné chez un fournisseur (`ft:…:<organisation>:…`),
+  peut y porter un nom d'entreprise, sur un ticket public. La personne le voit avant d'envoyer.
+- **Presse-papiers** : une clé d'API copiée entre dans l'historique du presse-papiers de Windows (et
+  sa synchronisation), ou dans celui d'un gestionnaire sous macOS ; `writeText` d'Electron n'offre
+  pas les formats qui l'en excluent (`ExcludeClipboardContentFromMonitorProcessing`,
+  `org.nspasteboard.ConcealedType`).
+- **Banc d'essai** : la page garde Internet ; une page écrite après une injection peut encore envoyer
+  au dehors ce qu'elle contient (elle ne lit plus rien de la machine). Un contournement du
+  mandataire par Chromium n'a pas été cherché au-delà des essais ci-dessus.
+- **Origines de boucle locale** : `entetes.ts` admet toujours toute origine `http://localhost:*` et
+  `http://127.0.0.1:*`. Le banc n'en profite plus ; une autre page servie sur la boucle locale (le
+  serveur de développement d'un projet, ouvert dans le navigateur) lit encore les routes publiques
+  de la passerelle, sans jeton.
+
+### 38.5 Pas essayé
+
+L'application empaquetée (`release/mac-arm64/Helix.app`, ouverte chez Medhi : seules ses signatures
+de code ont été lues, sans la lancer) ; une vraie mise à jour d'un poste à l'autre avec le contrôle
+des droits ; Windows et Linux ; une vraie réunion Google Meet ; le banc d'essai sur une vraie page
+d'agent avec ses polices et ses CDN (un seul CDN essayé).
+
+**À vérifier sur le paquet construit** :
+1. `npx @electron/fuses read --app release/mac-arm64/Helix.app` (et `win-unpacked/Helix.exe`) :
+   RunAsNode ouvert, EnableNodeOptionsEnvironmentVariable et EnableNodeCliInspectArguments fermés.
+2. Application lancée : `ps -o args= -p <pid de la passerelle>` montre `--disable-sigusr1` ; après
+   `kill -USR1 <pid>`, rien n'écoute sur 9229 (`lsof -iTCP:9229`) et la passerelle répond.
+3. `helix` en ligne de commande, l'atelier (« Vérifier »), un petit modèle qui code
+   (`node --check`), un connecteur MCP.
+4. Helix Code : faire vérifier une page qui charge une police Google et un script de CDN ; le
+   rapport ne les dit pas introuvables, et un `fetch("http://127.0.0.1:1234/v1/models")` écrit dans
+   la page y apparaît « refusée pendant l'essai ».
+5. Mise à jour d'un clic de cette version vers la suivante sur un Mac : elle passe (mêmes droits,
+   programmes durcis) ; `codesign -dv` sur l'application installée ensuite : `runtime`.
+6. Langue changée dans les Paramètres : la zone de notification et les textes de mise à jour suivent.

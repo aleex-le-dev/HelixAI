@@ -398,10 +398,11 @@ function demarrerBot({ reunionId, lien, titre, nom, passerelle }) {
       preload: path.join(__dirname, "botPreload.cjs"),
       /*
        * Le préchargement doit voir les connexions WebRTC de la page (voir
-       * botPreload.cjs, qui explique ce que cela coûte et ce qui le compense :
-       * les fonctions du navigateur sont capturées avant tout script de la
-       * page, donc un remplacement ultérieur n'a plus d'effet). À reprendre
-       * dès qu'Electron 35 apportera `contextBridge.executeInMainWorld`.
+       * botPreload.cjs, qui dit ce que cela coûte : la page peut faire partir
+       * un son de son choix, comme elle le pourrait de toute façon en jouant un
+       * faux participant, et rien d'autre, les canaux vérifiant l'expéditeur).
+       * `contextBridge.executeInMainWorld` (Electron 35 et suivants) n'y
+       * changerait pas ce point ; pas repris, faute de pouvoir l'essayer ici.
        */
       contextIsolation: false,
       nodeIntegration: false,

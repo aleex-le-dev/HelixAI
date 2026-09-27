@@ -38,6 +38,7 @@ const crypto = require("node:crypto");
 const fs = require("node:fs");
 const path = require("node:path");
 const { BrowserWindow, session } = require("electron");
+const { demarrerFiltre } = require("./filtreReseau.cjs");
 
 const ATTENTE_CHARGEMENT_MS = 2500;
 const DUREE_MAX_MS = 25_000;
@@ -182,6 +183,17 @@ async function rendre(fichier, racine) {
   ses.setPermissionRequestHandler((_wc, _permission, callback) => callback(false));
   ses.setPermissionCheckHandler(() => false);
   let service = null;
+  let filtre = null;
+  /** Une adresse refusée par le mandataire : dite une fois, par sa raison, et non par l'erreur de réseau qu'elle provoque. */
+  const refusee = (url) => {
+    try {
+      const u = new URL(url);
+      const port = u.port || (u.protocol === "https:" || u.protocol === "wss:" ? "443" : "80");
+      return Boolean(filtre?.refus.includes(`${u.hostname.replace(/^\[|\]$/g, "")}:${port}`));
+    } catch {
+      return false;
+    }
+  };
   /*
    * Depuis Electron 35, le niveau et le message sont dans l'événement (le niveau
    * en mot : « error ») ; avant, en arguments (le niveau en nombre, 3 pour une
@@ -199,7 +211,7 @@ async function rendre(fichier, racine) {
      * cache d'une session sans cache (mesuré le 26/09/2026 : les polices de
      * Google Fonts sortaient toutes « introuvables », net::ERR_CACHE_MISS).
      */
-    if (/ERR_ABORTED|ERR_CACHE_MISS|ERR_BLOCKED_BY_CLIENT/.test(d.error)) return;
+    if (/ERR_ABORTED|ERR_CACHE_MISS|ERR_BLOCKED_BY_CLIENT/.test(d.error) || refusee(d.url)) return;
     const locale = service && d.url.startsWith(service.origine + "/");
     if (!locale && /fonts\.(googleapis|gstatic)\.com/.test(d.url)) return;
     echecs.push(`${locale ? d.url.slice(service.origine.length + 1) : d.url} (${d.error})`);
@@ -210,7 +222,7 @@ async function rendre(fichier, racine) {
    * local, et le rapport n'en disait rien.
    */
   ses.webRequest.onCompleted((d) => {
-    if (d.statusCode < 400) return;
+    if (d.statusCode < 400 || refusee(d.url)) return;
     const locale = service && d.url.startsWith(service.origine + "/");
     echecs.push(`${locale ? d.url.slice(service.origine.length + 1) : d.url} (${d.statusCode === 404 ? "introuvable" : `erreur ${d.statusCode}`})`);
   });
@@ -222,12 +234,22 @@ async function rendre(fichier, racine) {
   const minuterie = setTimeout(() => fenetre.destroy(), DUREE_MAX_MS);
   try {
     service = await servirDossier(racine);
+    /*
+     * Internet, mais ni la machine ni le réseau local (seconde tournée du test
+     * d'intrusion, 28/09/2026, electron/filtreReseau.cjs) : tout passe par le
+     * mandataire, boucle locale comprise (`<-loopback>` retire l'exception que
+     * Chromium lui fait d'office), et WebRTC n'ouvre rien à côté de lui.
+     */
+    filtre = await demarrerFiltre({ permis: `127.0.0.1:${service.serveur.address().port}` });
+    await ses.setProxy({ mode: "fixed_servers", proxyRules: `http://127.0.0.1:${filtre.port}`, proxyBypassRules: "<-loopback>" });
+    fenetre.webContents.setWebRTCIPHandlingPolicy("disable_non_proxied_udp");
     const relatif = path.relative(service.reelle, fs.realpathSync(fichier));
     if (relatif.startsWith("..") || path.isAbsolute(relatif)) throw new Error("La page n'est pas dans le dossier du projet.");
     const adresse = `${service.origine}/${relatif.split(path.sep).map(encodeURIComponent).join("/")}`;
     await fenetre.loadURL(adresse).catch((err) => echecs.push(String(err?.message ?? err).slice(0, 200)));
     await new Promise((r) => setTimeout(r, ATTENTE_CHARGEMENT_MS));
     const analyse = await fenetre.webContents.executeJavaScript(ANALYSE, true).catch((err) => ({ erreurAnalyse: String(err?.message ?? err) }));
+    for (const hote of filtre.refus) echecs.push(`${hote} (adresse de la machine ou du réseau local : refusée pendant l'essai)`);
     return { ok: true, console: [...new Set(console_)].slice(0, 12), ressources: [...new Set(echecs)].slice(0, 12), ...analyse };
   } catch (err) {
     return { ok: false, message: String(err?.message ?? err) };
@@ -235,6 +257,7 @@ async function rendre(fichier, racine) {
     clearTimeout(minuterie);
     if (!fenetre.isDestroyed()) fenetre.destroy();
     service?.serveur.close();
+    filtre?.fermer();
     void ses.clearStorageData().catch(() => {});
   }
 }

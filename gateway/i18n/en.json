@@ -544,6 +544,8 @@
   "La préparation du paquet a échoué : {0}": "Preparing the package failed: {0}",
   "La recherche ne répond pas pour l'instant (DuckDuckGo freine les recherches trop rapprochées) : réessaie dans quelques minutes, ou ouvre une adresse déjà vue.": "Search is not answering right now (DuckDuckGo slows down searches that come too close together): try again in a few minutes, or open an address already seen.",
   "La rédaction s'est arrêtée à la partie {0} (« {1} ») : {2}. Les parties suivantes n'ont pas été rédigées.": "Writing stopped at part {0} (“{1}”): {2}. The following parts were not written.",
+  "La réflexion de {0} ne finissait pas (plus de 40 000 jetons) : elle a été arrêtée. Relancez la question avec un niveau de réflexion plus bas, ou choisissez un autre modèle.": "{0}'s thinking would not end (more than 40,000 tokens): it was stopped. Ask again with a lower thinking level, or choose another model.",
+  "La réponse de {0} est partie en boucle (le même motif répété sans fin) : elle a été arrêtée, et ce qui s'affiche au-dessus n'est pas une réponse. Relancez la question ; si cela recommence, choisissez le niveau de réflexion « Aucun » ou un autre modèle.": "{0}'s reply went into a loop (the same pattern repeated endlessly): it was stopped, and what is shown above is not an answer. Ask again; if it happens again, choose the “None” thinking level or another model.",
   "La réponse de Google ne contient pas de code d'autorisation. Recommencez.": "Google's response contains no authorisation code. Try again.",
   "La vidéo n'a pas pu être créée.": "The video could not be created.",
   "le {0} de chaque mois à {1}": "on day {0} of each month at {1}",

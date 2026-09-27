@@ -76,6 +76,15 @@ export function detectHardware(): Hardware {
   };
 }
 
+/**
+ * Le modèle doit-il calculer au processeur ? Windows ou Linux sans carte
+ * NVIDIA vue par `nvidia-smi` : c'est ainsi que `tientSur` choisit déjà le
+ * modèle, et c'est là qu'il est chargé (`--gpu off`, backends.ts, 27/09/2026).
+ */
+export function calculSurProcesseur(hw: Hardware): boolean {
+  return (hw.platform === "win32" || hw.platform === "linux") && hw.gpuVramGb === undefined;
+}
+
 export interface CatalogEntry {
   /** Identifiant de téléchargement compris par `lms get` (catalogue LM Studio). */
   key: string;

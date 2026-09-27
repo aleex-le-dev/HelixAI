@@ -58,6 +58,8 @@ import {
 } from "./plan.ts";
 import type { BackendConfig, ChatRequest, ModelInfo } from "./types.ts";
 import { t, tf } from "./langue.ts";
+import { gardesDeFlux, type Degenerescence } from "./gardeBoucle.ts";
+import { echantillonnageLocal } from "./backends.ts";
 
 /**
  * Boucle conversationnelle avec outils (ARCHITECTURE.md, ADR-003/004).
@@ -98,6 +100,8 @@ interface UpstreamResult {
   content: string;
   toolCalls: ToolCallAccumulator[];
   finishReason: string | null;
+  /** Flux coupé par la passerelle : la réponse était partie en boucle (gardeBoucle.ts). */
+  degenere?: Degenerescence;
 }
 
 function sse(res: http.ServerResponse, payload: unknown): void {
@@ -132,8 +136,20 @@ async function consumeUpstream(
   let content = "";
   let finishReason: string | null = null;
   const toolCalls: ToolCallAccumulator[] = [];
+  // Texte et réflexion suivis à part : une boucle dans l'un ne se dilue pas dans l'autre (gardeBoucle.ts).
+  const gardes = gardesDeFlux();
+  let degenere: Degenerescence | null = null;
 
   for (;;) {
+    /*
+     * Réponse partie en boucle : on cesse de lire, et l'annulation ferme la
+     * connexion, ce qui arrête aussi le moteur (sinon il générerait jusqu'au
+     * bout du contexte pour personne, et la demande suivante attendrait).
+     */
+    if (degenere) {
+      await reader.cancel().catch(() => {});
+      break;
+    }
     const { done, value } = await reader.read();
     if (done) break;
     buffer += decoder.decode(value, { stream: true });
@@ -189,11 +205,13 @@ async function consumeUpstream(
           content += delta.content;
           emitContent(res, delta.content);
           if (sortie) sortie.fin = (sortie.fin + delta.content).slice(-4);
+          degenere ??= gardes.texte.ajouter(delta.content);
         }
         if (typeof delta.reasoning_content === "string" && delta.reasoning_content) {
           sse(res, {
             choices: [{ index: 0, delta: { reasoning_content: delta.reasoning_content } }],
           });
+          degenere ??= gardes.reflexion.ajouter(delta.reasoning_content);
         }
 
         // Les appels d'outils arrivent par fragments, indexés.
@@ -211,7 +229,34 @@ async function consumeUpstream(
     }
   }
 
+  // Coupé en route : les appels d'outils à moitié reçus ne partent pas.
+  if (degenere) return { content, toolCalls: [], finishReason: "boucle", degenere };
   return { content, toolCalls: toolCalls.filter((t) => t.name), finishReason };
+}
+
+/**
+ * Ce que la personne lit quand la passerelle a coupé une réponse partie en
+ * boucle (gardeBoucle.ts). L'écran ne doit pas laisser croire que ce qui
+ * précède est une réponse ; la piste proposée est une chose qu'elle peut faire
+ * elle-même.
+ */
+function messageDeBoucle(modele: string, cause: Degenerescence): string {
+  return cause === "motif"
+    ? tf(
+        "La réponse de {0} est partie en boucle (le même motif répété sans fin) : elle a été arrêtée, et ce qui s'affiche au-dessus n'est pas une réponse. Relancez la question ; si cela recommence, choisissez le niveau de réflexion « Aucun » ou un autre modèle.",
+        modele,
+      )
+    : tf(
+        "La réflexion de {0} ne finissait pas (plus de 40 000 jetons) : elle a été arrêtée. Relancez la question avec un niveau de réflexion plus bas, ou choisissez un autre modèle.",
+        modele,
+      );
+}
+
+/** Une ligne au journal, sans le contenu : de quoi reconnaître le défaut sur un poste qu'on n'a pas sous la main. */
+function noterBoucle(modele: string, cause: Degenerescence): void {
+  console.warn(
+    `[chat] réponse de ${modele} coupée : ${cause === "motif" ? "motif répété" : "réflexion sans fin"} (${process.platform} ${process.arch})`,
+  );
 }
 
 async function callUpstream(
@@ -390,6 +435,17 @@ function basePayload(
       payload.chat_template_kwargs = { enable_thinking: false };
       payload.reasoning_effort = "none";
       if (/qwen3(?![.\d])|qwq/i.test(model.id)) payload.messages = avecSansReflexion(messages);
+    }
+  }
+  /*
+   * Échantillonnage de Qwen3.5 sous llama.cpp (backends.ts, 27/09/2026) : ce
+   * que l'appelant a fixé lui-même (OpenCode, un script par clé) est gardé.
+   * Qwen3.5 réfléchit d'office : sans niveau connu, c'est le profil qui réfléchit.
+   */
+  if (model.backendKind === "lmstudio") {
+    const reflechit = model.reasoning ? niveauEffort(effort).raisonner : true;
+    for (const [champ, valeur] of Object.entries(echantillonnageLocal(model.id, reflechit))) {
+      if (payload[champ] === undefined) payload[champ] = valeur;
     }
   }
   return payload;
@@ -1147,9 +1203,20 @@ export async function handleChatRequest(
       } else {
         releve = new usage.Releve(qui, model, payload);
         const reponse = nonFlux ? new ReponseEntiere() : null;
+        /*
+         * Même garde-fou que pour l'écran (gardeBoucle.ts, 27/09/2026) : un
+         * agent de code ou un script qui reçoit « //// » sans fin attendrait
+         * jusqu'au bout du contexte. Le relais reste octet pour octet ; seule
+         * la coupure s'y ajoute, avec une erreur au format de l'API.
+         */
+        const gardes = gardesDeFlux();
+        let degenere: Degenerescence | null = null;
         const lire = usage.lecteurSSE((json) => {
           releve?.observer(json);
           reponse?.observer(json);
+          const delta = (json as { choices?: { delta?: { content?: unknown; reasoning_content?: unknown } }[] } | null)?.choices?.[0]?.delta;
+          if (typeof delta?.content === "string") degenere ??= gardes.texte.ajouter(delta.content);
+          if (typeof delta?.reasoning_content === "string") degenere ??= gardes.reflexion.ajouter(delta.reasoning_content);
         });
         const reader = upstream.body.getReader();
         for (;;) {
@@ -1158,8 +1225,15 @@ export async function handleChatRequest(
           attente?.premierMorceau();
           if (!reponse) res.write(value);
           lire(value);
+          if (degenere) {
+            await reader.cancel().catch(() => {});
+            break;
+          }
         }
-        if (reponse) {
+        if (degenere) {
+          noterBoucle(model.id, degenere);
+          signalerErreur(messageDeBoucle(model.id, degenere));
+        } else if (reponse) {
           const objet = reponse.objet(model.id, sourcesCitees);
           repondreJson("error" in objet ? 502 : 200, objet);
         }
@@ -1273,6 +1347,17 @@ export async function handleChatRequest(
       const releve = new usage.Releve(qui, model, payload);
       const result = await consumeUpstream(upstream, res, releve, sortie).finally(() => releve.clore());
       if (result.content) texte = result.content;
+
+      /*
+       * Réponse partie en boucle, coupée par la passerelle (27/09/2026) : dit
+       * à la personne, et compté comme une panne du moteur, pour qu'un plan
+       * s'arrête là au lieu d'enchaîner sur une étape qui n'a rien produit.
+       */
+      if (result.degenere) {
+        noterBoucle(model.id, result.degenere);
+        emitHelix(res, { type: "error", message: messageDeBoucle(model.id, result.degenere) });
+        return { texte, interrompu: "moteur", modifications, echecs, lectures, derniereErreur, releves, refus };
+      }
 
       // Pas d'outil demandé : la réponse est finale.
       if (result.toolCalls.length === 0) return { texte, interrompu: false, modifications, echecs, lectures, derniereErreur, releves, refus };

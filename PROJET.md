@@ -2920,6 +2920,76 @@ même jour prend la date du lendemain). Contenu : les messages de la mise à jou
 `docs/images/apercu-github.png` (`scripts/icones/fabriquer-apercu.cjs`), à déposer par Medhi
 dans Settings › Social preview.
 
+**Vu par Medhi le 27/09/2026 sur un PC Windows (2026.9.28) : une réponse illisible, sans fin.**
+PC sans carte graphique, processeur seul, 16 Go ; moteur llmster 0.0.25-1 posé par Helix ;
+modèle choisi par Helix, Qwen3.5 4B (`qwen/qwen3.5-4b`, environ 3 Go). À « Bonjour, tu vas
+bien ? », la réflexion affiche « 不 » puis « 時////… » sans fin. Même parcours juste sur le
+MacBook. **Cause : pas trouvée avec certitude** (rien ne peut s'essayer sous Windows d'ici).
+Ce qui diffère entre les deux postes, classé du plus au moins probable :
+1. **Le moteur de calcul.** Sur le Mac, MLX ; sur le PC, llama.cpp (GGUF). Qwen3.5 a une
+   architecture hybride récente (« Gated DeltaNet ») dont les défauts publiés donnent
+   exactement ce genre de sortie, presque tous par Vulkan, y compris sur une puce graphique
+   Intel intégrée, et « justes au processeur » : llama.cpp
+   [#21888](https://github.com/ggml-org/llama.cpp/issues/21888) (iGPU Intel Arc, `!"!"""`),
+   [#28648](https://github.com/ggml-org/llama.cpp/issues/28648) (iGPU Arc 140V sous Windows, NaN
+   dès le début, juste avec `-ngl 0`), [#20610](https://github.com/ggml-org/llama.cpp/issues/20610),
+   [#27237](https://github.com/ggml-org/llama.cpp/issues/27237), et chez LM Studio une boucle
+   de « / » avec Qwen 3.8 ([#2297](https://github.com/lmstudio-ai/lmstudio-bug-tracker/issues/2297)).
+   Sans `--gpu`, Helix laissait LM Studio décider de la puce ; LM Studio dit laisser l'iGPU de
+   côté depuis sa 0.4.17 ([notes](https://lmstudio.ai/changelog/lmstudio-v0.4.17)), mais rien
+   ne dit ce qu'il fait quand c'est la seule puce du poste. Si le calcul était déjà au
+   processeur, cette piste tombe, et il reste un défaut du llama.cpp processeur de Windows
+   (un processeur sans AVX2 en est un connu, [ik_llama.cpp #2487](https://github.com/ikawrakow/ik_llama.cpp/issues/2487)).
+2. **L'échantillonnage.** Helix n'envoyait rien : LM Studio applique le préréglage du modèle
+   (température 1,0, top_p 0,95, top_k 20, pénalité de présence 1,5, [fiche](https://lmstudio.ai/models/qwen/qwen3.5-4b)).
+   Le moteur MLX de LM Studio n'a pas de pénalité de présence (`mlx-engine`, relu) : la
+   réponse juste du MacBook a été faite sans elle ; llama.cpp l'applique, et Qwen prévient
+   qu'une valeur haute peut mêler les langues ([fiche de Qwen3.5 4B](https://huggingface.co/Qwen/Qwen3.5-4B)).
+   Cela explique mal les « //// » (une pénalité les freinerait), mieux le « 不 ».
+3. Le reste ne diffère pas entre les deux postes et n'est pas retenu : gabarit de réflexion,
+   niveau « Moyen » (`reasoning_effort`), contexte de 32 768 jetons et `--parallel 1` (les
+   mêmes sur le Mac de 16 Go qui répond juste).
+
+**Corrigé** (sans l'avoir vu marcher sur le PC) :
+- **Chargement selon le matériel** (`optionsDeChargement`, backends.ts ; `calculSurProcesseur`,
+  provision.ts) : sous Windows et Linux sans carte NVIDIA vue par `nvidia-smi`, `lms load … --gpu off`.
+  C'est déjà ainsi que `tientSur` choisit le modèle pour cette machine. Carte NVIDIA et Mac :
+  inchangés. Contrepartie : une carte AMD ou Intel dédiée, que Helix ne reconnaît pas encore,
+  calcule aussi au processeur ; `HELIX_DECHARGEMENT_GPU=auto` rend la main à LM Studio
+  (docs/GUIDE.md). `--gpu` existe dans `lms` depuis longtemps (code de `lms`, relu) ; ni
+  l'attention flash ni le cache quantifié n'ont d'option en ligne de commande (seulement un
+  fichier de configuration du moteur, ajouté à `lms` le 25/09/2026, trop neuf pour s'y fier).
+- **Échantillonnage de Qwen3.5 sous llama.cpp** (`echantillonnageLocal`, backends.ts, posé dans
+  `basePayload`, chat.ts) : pour réfléchir, le profil « précis » publié par Qwen (0,6, 0,95,
+  20, présence 0) ; sans réflexion, son profil général (0,7, 0,8, 20), présence 0 ; pas de
+  pénalité de répétition. Seulement pour la famille Qwen3.5 (3.5, 3.6, 3.8), jamais sur un
+  Mac à puce Apple, et jamais par-dessus ce que l'appelant a fixé (OpenCode, clé d'API).
+- **Garde-fou** (`gardeBoucle.ts`) : un même motif de 1 à 200 caractères répété sur 600
+  caractères et 25 fois au moins, ou une réflexion de plus de 160 000 caractères, et la
+  passerelle coupe le flux (le moteur cesse de générer), le dit dans le Chat (« La réponse
+  de … est partie en boucle… ; ce qui s'affiche au-dessus n'est pas une réponse »), propose
+  de relancer, le niveau « Aucun » ou un autre modèle, et écrit une ligne au journal sans le
+  contenu. Même coupure pour l'API compatible (Helix Code, clés), avec une erreur au format
+  OpenAI. Un filet, pas le remède.
+
+**Vérifié ici** : `npm run securite`, 442 contrôles (7 de plus, section 7 sexies : le
+détecteur sur « 不 時//// », sur la prose du dépôt, un grand tableau et une phrase en boucle ;
+la coupure devant un faux moteur qui rejoue le flux du PC, pour l'écran et pour l'API ; les
+options et l'échantillonnage d'un Windows simulé ; un Mac inchangé). **Pas vérifié** : que
+`--gpu off` ou l'échantillonnage suffisent sur le PC de Medhi.
+
+**À essayer sur le PC**, dans cet ordre : installer cette version ; décharger le modèle
+chargé par l'ancienne (`lms unload --all`, ou redémarrer le PC : sinon il reste en mémoire
+avec ses anciens réglages jusqu'à 20 minutes d'inactivité) ; reposer « Bonjour, tu vas
+bien ? ». Relever : la marque et le modèle du processeur et de la puce graphique intégrée
+(Gestionnaire des tâches › Performances) ; `lms ps` pendant la réponse ; `lms runtime ls`
+(quel moteur llama.cpp, CPU ou Vulkan, et sa version) ; le journal du moteur pendant la
+question (`lms log stream`) ; le journal de Helix (ligne « réponse de … coupée »). Si la
+sortie reste cassée au processeur : essayer le niveau « Aucun », puis Qwen3 4B (architecture
+classique, sans Gated DeltaNet) pour séparer le modèle du moteur. Choisir d'office un autre
+modèle sur les machines sans carte graphique irait contre la règle « la note seule décide »
+(25/09/2026) : à décider par Medhi si l'essai le montre.
+
 **Trouvé le 27/09/2026 au premier vrai essai de mise à jour d'un clic (0.27.0 vers 0.27.1, par
 GitHub, sur ce Mac) : toute mise à jour était refusée.** La fenêtre « Nouvelle version » est bien
 apparue, l'archive s'est téléchargée, puis « la mise à jour a été refusée : son contenu a changé

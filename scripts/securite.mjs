@@ -64,6 +64,8 @@ const vecteur = (texte) => {
   }
   return v;
 };
+/** Réponses en boucle servies par le faux modèle : morceaux envoyés, et coupure par la passerelle. */
+const BOUCLES = [];
 const fauxModele = serveurHttp((req, res) => {
   let corps = "";
   req.on("data", (b) => (corps += b));
@@ -81,6 +83,31 @@ const fauxModele = serveurHttp((req, res) => {
         res.end("{}");
       }, 6000);
       return;
+    }
+    /*
+     * Une demande qui porte « boucle-essai » reçoit ce que Medhi a vu le
+     * 27/09/2026 sur un PC Windows (Qwen3.5 4B) : une réflexion « 不 », puis
+     * « 時//// » sans fin (ici 20 000 morceaux, un par tour de boucle). On note
+     * combien sont partis avant que la passerelle coupe (section 7 sexies).
+     */
+    if (req.url === "/v1/chat/completions" && corps.includes("boucle-essai")) {
+      res.setHeader("Content-Type", "text/event-stream");
+      const suivi = { envoyes: 0, coupe: false };
+      BOUCLES.push(suivi);
+      res.on("close", () => {
+        if (!res.writableEnded) suivi.coupe = true;
+      });
+      const morceau = (delta) => res.write(`data: ${JSON.stringify({ id: "essai-boucle", object: "chat.completion.chunk", created: 1, model: "essai-chat", choices: [{ index: 0, delta }] })}\n\n`);
+      morceau({ role: "assistant", reasoning_content: "不" });
+      morceau({ reasoning_content: "時" });
+      const suite = () => {
+        if (res.destroyed || suivi.coupe) return;
+        if (suivi.envoyes >= 20_000) return res.end("data: [DONE]\n\n");
+        suivi.envoyes++;
+        morceau({ reasoning_content: "////" });
+        setImmediate(suite);
+      };
+      return suite();
     }
     if (req.url === "/v1/embeddings") {
       const entree = JSON.parse(corps || "{}").input ?? [];
@@ -1779,6 +1806,95 @@ console.log("\n7 quinquies. Mises à jour des postes : seulement l'archive de l'
     const corps = await r.text();
     verifier(`archive « ${nom} » : 404, rien de lu`, r.status === 404 && !corps.includes(JETON), `${r.status} ${corps.slice(0, 40)}`);
   }
+}
+
+/* ------------------------------------------------------------------------- */
+console.log("\n7 sexies. Réponse partie en boucle : coupée, et dite (27/09/2026)");
+{
+  /*
+   * Vu par Medhi sur un PC Windows sans carte graphique (Qwen3.5 4B) : « 不 »,
+   * puis « 時//// » sans fin, et un écran qui laissait croire que la réponse
+   * avançait. Le détecteur seul d'abord, puis la passerelle devant le faux
+   * modèle qui rejoue ce flux, pour l'écran et pour l'API compatible.
+   */
+  const { pathToFileURL: versUrlGarde } = await import("node:url");
+  const g = await import(versUrlGarde(join(RACINE, "gateway", "src", "gardeBoucle.ts")).href);
+  const suivre = (texte, garde = new g.GardeBoucle(), pas = 7) => {
+    for (let i = 0; i < texte.length; i += pas) {
+      const cause = garde.ajouter(texte.slice(i, i + pas));
+      if (cause) return cause;
+    }
+    return null;
+  };
+  const prose = ["README.fr.md", "PROJET.md"].map((f) => readFileSync(join(RACINE, f), "utf8").slice(0, 60_000)).join("\n");
+  const tableau = `| ${Array.from({ length: 30 }, (_, i) => `Col ${i}`).join(" | ")} |\n|${"---|".repeat(30)}\n` + Array.from({ length: 40 }, (_, l) => `| ${Array.from({ length: 30 }, (_, i) => l * 30 + i).join(" | ")} |`).join("\n");
+  verifier(
+    "garde-fou : « 不 時//// » est reconnu comme une boucle, la prose du dépôt, un grand tableau et une règle ===== non",
+    suivre(`不時${"////".repeat(400)}`) === "motif" && suivre(prose) === null && suivre(tableau) === null && suivre(`Titre\n${"=".repeat(80)}\n${prose.slice(0, 3000)}`) === null,
+    `${suivre(`不時${"////".repeat(400)}`)} ${suivre(prose)} ${suivre(tableau)}`,
+  );
+  verifier(
+    "garde-fou : une phrase recopiée en boucle est reconnue ; une réflexion sans fin passe le plafond",
+    suivre("Je dois répondre à la question de l'utilisateur. ".repeat(40)) === "motif" && suivre(prose, new g.GardeBoucle(50_000), 997) === "sans-fin" && g.REFLEXION_MAX >= 100_000,
+    suivre("Je dois répondre à la question de l'utilisateur. ".repeat(40)),
+  );
+
+  const enFrancais = { ...avecSeance, "X-Helix-Langue": "fr" };
+  const modeles = await (await appel("/v1/models", { headers: avecSeance })).json().catch(() => ({}));
+  const modeleEssai = (modeles.data ?? []).find((m) => /essai-chat/.test(m.id))?.id;
+  const debut = Date.now();
+  const ecran = await (await appel("/v1/chat/completions", { method: "POST", headers: enFrancais, body: JSON.stringify({ model: modeleEssai, tools: false, stream: true, messages: [{ role: "user", content: "Bonjour, tu vas bien ? boucle-essai" }] }) })).text();
+  await attendre(300);
+  const s1 = BOUCLES.at(-1);
+  verifier(
+    "écran : la réponse en boucle est coupée (le moteur cesse d'envoyer), dite en clair, et le flux se termine",
+    Boolean(s1?.coupe) && s1.envoyes < 20_000 && ecran.includes("est partie en boucle") && ecran.includes("[DONE]") && Date.now() - debut < 20_000,
+    `${JSON.stringify(s1)} ${ecran.slice(-240)}`,
+  );
+  const relais = await (await appel("/v1/chat/completions", { method: "POST", headers: enFrancais, body: JSON.stringify({ model: modeleEssai, stream: true, messages: [{ role: "user", content: "boucle-essai" }] }) })).text();
+  await attendre(300);
+  const s2 = BOUCLES.at(-1);
+  verifier(
+    "API compatible (relais) : même coupure, avec une erreur au format OpenAI",
+    s2 !== s1 && Boolean(s2?.coupe) && s2.envoyes < 20_000 && /"error":\{"message":"La réponse de [^"]+ est partie en boucle/.test(relais),
+    `${JSON.stringify(s2)} ${relais.slice(-240)}`,
+  );
+
+  // Poste Windows sans carte NVIDIA (simulé) : chargé au processeur, et l'échantillonnage de Qwen3.5 posé ; un Mac ne change pas.
+  const { spawnSync } = await import("node:child_process");
+  const dossierEssai = mkdtempSync(join(tmpdir(), "helix-chargement-"));
+  const charger = (plateforme, env = {}) => {
+    const r = spawnSync(
+      process.execPath,
+      ["--experimental-strip-types", "--no-warnings", "--input-type=module", "-e",
+        `${plateforme ? `Object.defineProperty(process, "platform", { value: "${plateforme}" }); Object.defineProperty(process, "arch", { value: "x64" });` : ""}
+         const b = await import("./gateway/src/backends.ts");
+         console.log(JSON.stringify({ options: b.optionsDeChargement(), qwen35: b.echantillonnageLocal("qwen/qwen3.5-4b", true), sans: b.echantillonnageLocal("qwen/qwen3.5-4b", false), qwen3: b.echantillonnageLocal("qwen3-8b", true) }));`],
+      { cwd: RACINE, env: { ...process.env, HELIX_DATA_DIR: dossierEssai, HELIX_CONFIG: join(dossierEssai, "c.json"), PATH: "/usr/bin:/bin", ...env }, encoding: "utf8", timeout: 60_000 },
+    );
+    try {
+      return JSON.parse((r.stdout ?? "").trim().split("\n").at(-1));
+    } catch {
+      return { erreur: `${r.stdout ?? ""}${r.stderr ?? ""}`.slice(0, 300) };
+    }
+  };
+  const windows = charger("win32");
+  const windowsAuto = charger("win32", { HELIX_DECHARGEMENT_GPU: "auto" });
+  verifier(
+    "Windows sans carte NVIDIA (simulé) : le modèle est chargé au processeur (--gpu off), sauf réglage HELIX_DECHARGEMENT_GPU=auto",
+    windows.options?.join(" ").includes("--gpu off") && !windowsAuto.options?.includes("--gpu"),
+    JSON.stringify([windows, windowsAuto]).slice(0, 300),
+  );
+  verifier(
+    "Windows (simulé) : Qwen3.5 reçoit l'échantillonnage de Qwen sans pénalité de présence ; Qwen3 garde le sien",
+    windows.qwen35?.temperature === 0.6 && windows.qwen35?.top_k === 20 && windows.qwen35?.presence_penalty === 0 && windows.sans?.top_p === 0.8 && Object.keys(windows.qwen3 ?? { x: 1 }).length === 0,
+    JSON.stringify(windows).slice(0, 300),
+  );
+  if (process.platform === "darwin" && process.arch === "arm64") {
+    const mac = charger(null);
+    verifier("Mac à puce Apple : ni --gpu ni échantillonnage imposé (ce qui marche sur le MacBook ne bouge pas)", Array.isArray(mac.options) && !mac.options.includes("--gpu") && Object.keys(mac.qwen35 ?? { x: 1 }).length === 0, JSON.stringify(mac).slice(0, 300));
+  }
+  rmSync(dossierEssai, { recursive: true, force: true });
 }
 
 /* ------------------------------------------------------------------------- */

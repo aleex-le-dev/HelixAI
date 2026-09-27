@@ -2787,6 +2787,11 @@ moment du choix (niveau d'approbation, palier « étendu »). Ne pas refaire à 
   nouvelle version (« Toujours autoriser ») ; il retient l'empreinte exacte d'une application
   signée ad hoc, et l'exigence de signature sur l'identifiant (commit précédent) n'y suffit pas
   (relancement d'une nouvelle construction, 27/09). Seule la signature Apple le règle.
+- « La session n'a pas pu être retirée de la liste » (Helix Code) : la préparation CORS de la
+  passerelle ne permettait pas DELETE. L'application installée parle depuis `helix://app`, une
+  autre origine : le navigateur refusait sans rien envoyer. En développement, tout passe par le
+  serveur de Vite (même origine), d'où un défaut invisible jusque-là. Même cause pour « supprimer
+  une tâche programmée ». DELETE est permis, et `npm run securite` le contrôle (433 contrôles).
 - Réponses en français à un message en anglais : la consigne française disait « tu réponds en
   français ». Le modèle répond maintenant dans la langue du dernier message, agents compris ;
   la langue de base est l'anglais (interface, passerelle, zone de notification) quand celle du

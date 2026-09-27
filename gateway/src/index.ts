@@ -4904,7 +4904,7 @@ const traiter = (
      */
     res.writeHead(204, {
       ...entetesOrigine(req),
-      "Access-Control-Allow-Methods": "GET, POST, PUT, OPTIONS",
+      "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
       /*
        * Tout en-tête que l'écran pose doit figurer ici : sans lui, le
        * navigateur refuse la requête avant même de l'envoyer. X-Helix-Session

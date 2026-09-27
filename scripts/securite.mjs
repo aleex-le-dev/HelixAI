@@ -663,6 +663,17 @@ console.log("\n5. Navigateur et origine");
   verifier("une origine étrangère ne reçoit pas d'autorisation CORS", !r.headers.get("access-control-allow-origin"), r.headers.get("access-control-allow-origin"));
   const pre = await appel("/helix/models", { method: "OPTIONS", headers: { Origin: "https://site-malveillant.example", "Access-Control-Request-Method": "GET" } });
   verifier("ni en préparation (OPTIONS)", !pre.headers.get("access-control-allow-origin"), pre.headers.get("access-control-allow-origin"));
+  /*
+   * L'application installée parle à la passerelle depuis une autre origine
+   * (`helix://app`) : chaque méthode que l'écran emploie doit être permise en
+   * préparation, sinon le navigateur refuse sans rien envoyer. DELETE
+   * manquait (27/09/2026) : « retirer de la liste » une session de Code et
+   * supprimer une tâche programmée échouaient dans l'application, pas en
+   * développement (même origine, par le serveur de Vite).
+   */
+  const app = await appel("/helix/code/sessions/essai", { method: "OPTIONS", headers: { Origin: "helix://app", "Access-Control-Request-Method": "DELETE" } });
+  const methodes = (app.headers.get("access-control-allow-methods") ?? "").split(/\s*,\s*/);
+  verifier("l'application peut employer GET, POST, PUT et DELETE (préparation CORS)", ["GET", "POST", "PUT", "DELETE"].every((m) => methodes.includes(m)) && app.headers.get("access-control-allow-origin") === "helix://app", `${app.headers.get("access-control-allow-origin")} ${methodes.join(",")}`);
   const h = await appel("/helix/models", { headers: avecJeton });
   verifier("X-Content-Type-Options: nosniff", h.headers.get("x-content-type-options") === "nosniff", h.headers.get("x-content-type-options"));
   verifier("Cache-Control: no-store", (h.headers.get("cache-control") ?? "").includes("no-store"), h.headers.get("cache-control"));

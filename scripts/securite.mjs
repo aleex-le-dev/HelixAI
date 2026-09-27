@@ -2143,8 +2143,10 @@ console.log("\n7 septies. Essai du modèle sur cette machine : celui qui répond
   verifier(
     "en cours d'usage : une coupure rend le modèle douteux, la deuxième défaillant ; en « Auto », la réponse suivante va à un autre modèle, et le Chat le dit",
     C.avant === "essai-chat" && /Si cela se reproduit, essai-chat ne sera plus choisi d'office/.test(C.c1 ?? "") &&
-      /^C'est la deuxième fois sur cette machine\. En « Auto », essai-chat n'est plus choisi sur cette machine : la prochaine réponse viendra de qwen3-8b\.$/.test(C.c2 ?? "") &&
-      C.fiche?.etat === "defaillant" && C.fiche?.coupures === 2 && C.auto === "qwen3-8b" && C.main === "essai-chat" && C.nuage === "",
+      // Le modèle qui prend le relais dépend des faux modèles de la batterie : n'importe lequel, sauf le défaillant, et c'est lui que le message nomme.
+      typeof C.auto === "string" && C.auto !== "" && C.auto !== "essai-chat" &&
+      (C.c2 ?? "") === `C'est la deuxième fois sur cette machine. En « Auto », essai-chat n'est plus choisi sur cette machine : la prochaine réponse viendra de ${C.auto}.` &&
+      C.fiche?.etat === "defaillant" && C.fiche?.coupures === 2 && C.main === "essai-chat" && C.nuage === "",
     JSON.stringify(e.C ?? e).slice(0, 700),
   );
   rmSync(ICI, { recursive: true, force: true });

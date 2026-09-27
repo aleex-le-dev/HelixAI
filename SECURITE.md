@@ -3154,7 +3154,7 @@ le `.deb` a été installé et lancé dans un Ubuntu 24.04 vierge (conteneur Doc
 | **Instance partagée en clair sous Windows** : sans openssl, pas de certificat, et `tlsMaterial()` rendait `null`. | Le certificat est fabriqué par `node:crypto` (`certificat.ts` : ECDSA P-256, SHA-256, noms alternatifs, relu par `X509Certificate` avant usage), sur les trois systèmes ; une instance exposée sans certificat ne démarre pas. | Connexion TLS réelle sans openssl dans le PATH ; `openssl verify` du certificat |
 | **Clé de données remplaçable** (mode fichier, défaut de Windows et Linux) : tronquée, remplacée sans rien dire ; verrouillée, écritures en clair. | Même règle que le trousseau : présente mais illisible ou abîmée, refus de démarrer. Création par fichier provisoire `wx`, `fsync`, lien dur qui n'écrase jamais, relecture. | Clé tronquée refusée et intacte ; clé neuve de 32 octets |
 | **Linux sans trousseau** : Chromium chiffre avec une clé écrite dans son code (`basic_text`) et se dit chiffré. | Tenu pour non chiffré (`chiffrementPoste.cjs`) : le coffre et le grand stockage le disent et retombent sur le stockage du navigateur. | Relu, pas essayé sur Linux |
-| **Zones protégées** : rien de `AppData` (profil de Helix, jetons de gh et gcloud, identifiants de Windows), ni trousseaux GNOME, Firefox, Thunderbird, certificats de Chromium, Flatpak. Noms courts (`MEDHI~1`) non développés. | Ajoutés ; chemin réel natif sous Windows ; chemins réseau, de périphérique et flux secondaires (`fichier:flux`) refusés. | 6 chemins vérifiés |
+| **Zones protégées** : rien de `AppData` (profil de Helix, jetons de gh et gcloud, identifiants de Windows), ni trousseaux GNOME, Firefox, Thunderbird, certificats de Chromium, Flatpak. Noms courts (`PRENOM~1`) non développés. | Ajoutés ; chemin réel natif sous Windows ; chemins réseau, de périphérique et flux secondaires (`fichier:flux`) refusés. | 6 chemins vérifiés |
 | **Dossiers système** acceptés comme dossier de travail (`C:\Windows`, `C:\`, `/etc`, `/root`). | Liste propre à chaque système, séparateur du système, racine de disque reconnue partout. | Relu, pas essayé hors macOS |
 | **Arrêt** : sous Windows, `kill()` tuait net la passerelle, qui laissait OpenCode, OpenClaw, l'entraînement et LM Studio derrière. | Arrêt demandé par un canal, puis `taskkill /T /F` ; le moteur llmster, partagé comme LM Studio sur macOS, reste allumé (seuls les modèles chargés par Helix sont déchargés) ; les processus lancés par la passerelle s'arrêtent avec tout leur arbre ; canal coupé, la passerelle s'arrête aussi. | Relu |
 | **Consoles** : chaque programme lancé ouvrait une fenêtre noire. | `windowsHide` par défaut pour tout le processus (`processus.ts`), `promisify` compris. | Windows simulé : les 5 formes d'appel |
@@ -3719,6 +3719,9 @@ Qwen2.5-VL 72B (licence Qwen).
 - **Plateformes sans roues** pour la liste figée : Windows arm64 et Mac Intel (cryptography), que
   l'application ne vise pas ; sur Mac, la dictée demande macOS 14 (roues d'onnxruntime et de PyAV).
 
+La seconde tournée (§ 39, 28/09/2026) reprend ces points : dépendances npm tenues à une date,
+licence du FFmpeg de PyAV lue dans ses roues, empreintes de la pile NVIDIA relevables.
+
 ## 33. Un nom de champ n'est pas une expression régulière (27 septembre 2026)
 
 `gateway/src/modelesCloud.ts`, fonction `correctionPour`. Trouvé et fermé pendant le test
@@ -3867,3 +3870,184 @@ Le vrai `codex` et un compte ChatGPT ; le vrai OpenClaw (la liste fermée de son
 tourné qu'avec le faux) ; un `apply_patch` produit par un vrai modèle dans le vrai OpenCode (la
 forme de la demande est lue dans son code et rejouée par le faux) ; Windows et Linux ; l'écran de
 réglages vu par un membre (le bouton d'activation lui reste proposé et répond 403).
+
+## 39. Seconde tournée : dépôt et téléchargements (28 septembre 2026)
+
+Audit autorisé par Medhi, sur le code de la version 2026.928.1 (`main` 6b77c21, identique à
+`origin/main`). Ce que le § 32 a vérifié (empreintes écrites dans le code, listes Python figées,
+verrou npm de l'atelier, licences des modèles) n'est pas refait. Trois questions : ce que le § 32
+laissait ouvert, les ajouts du 27/09 (notes d'Epoch AI, prix publiés), et ce que porte le dépôt
+public.
+
+### 39.1 Ce qui a été trouvé
+
+| Élément | Problème | Gravité | Corrigé |
+|---|---|---|---|
+| Police Satoshi (`public/fonts/satoshi.woff2`) | Police d'Indian Type Foundry sous ITF Free Font License 2.0 (texte lu dans l'archive officielle de Fontshare le 28/09/2026). Sa section 02 interdit de la rendre disponible à d'autres, « through […] repository […] publicly accessible servers », et de la modifier ; elle n'accorde aucun droit à qui reçoit HelixAI. Elle est dans le dépôt public depuis sa création. | **Élevée** (licence) | **Non** : c'est la police de la marque, le choix revient à Medhi (police sous SIL OFL, licence écrite d'ITF, ou ne plus la livrer). Retirée de l'arbre, elle resterait dans l'historique. Détail dans THIRD_PARTY_NOTICES.md § 2. |
+| Dépendances des serveurs lancés par `npx` et d'OpenClaw | Le paquet est épinglé, pas ses dépendances : npm prenait la dernière version de chacune à chaque installation. Aucun de ces 14 paquets ne publie de `npm-shrinkwrap.json` (relu sur le registre). Mesuré : `ansi-regex` 6.4.0, publiée le 27/09/2026 à 03:34 (UTC), entrait dans les arbres de Firecrawl et de Kubernetes. | Moyenne | **Oui** : `npm_config_before` pour `npx` (serveurs du catalogue, pas les commandes libres) et `--before` pour OpenClaw 2026.9.4, à la date `DEPENDANCES_NPM_AVANT` (27/09/2026, 00:00 UTC, `installationOpenClaw.ts`). |
+| Mentions d'Electron et de Chromium | electron-builder efface `LICENSE` et `LICENSES.chromium.html` du paquet macOS (`electronMac.js` d'app-builder-lib 26.15.7) ; vu dans le paquet macOS local de la 0.27.0, alors que Windows et Linux les ont. L'application pour Mac, la seule publiée, partait sans les mentions qu'exigent MIT et BSD. | Moyenne (licence) | **Oui** : `mac.extraResources` les recopie dans `Contents/Resources/`. Configuration validée par le schéma d'electron-builder ; **pas construite** (pas de `npm run package` dans cette tournée). |
+| Composants tiers | Aucun fichier ne les recensait. esbuild et Vite fondent 42 paquets dans la passerelle et l'interface sans leurs fichiers de licence ; `pg` et `pdfjs-dist`, dépendances de développement, y sont pourtant livrés. | Moyenne (licence) | **Oui** : `THIRD_PARTY_NOTICES.md`, dont la partie npm est produite par `scripts/notices-tiers.mjs` à partir de ce qui se construit vraiment (texte de chaque licence recopié) ; livré dans les ressources de l'application. |
+| Attribution d'Epoch AI (CC BY 4.0) | À l'écran, auteur, titre, lien, licence et date étaient là. Manquaient l'indication des modifications (section 3(a)(1)(B) de la licence : extrait des modèles depuis 2024, identifiants sans « _high », deux écartés, noms rapprochés) et toute mention dans le dépôt. | Faible | **Oui** : phrase ajoutée sous « Comparer les modèles » (traduite), attribution complète dans THIRD_PARTY_NOTICES.md § 3. |
+| Page de prix d'OpenAI | `platform.openai.com/docs/pricing` renvoie (301) vers `developers.openai.com/api/docs/pricing`. | Faible | **Oui**. |
+| Traces dans le dépôt | `scripts/securite.mjs` renvoyait au fichier de consignes d'un outil d'IA (qui n'est pas publié) ; le nom court Windows du poste de Medhi (`…~1`) figurait dans `zonesProtegees.ts` et ici. | Faible | **Oui** dans l'arbre ; l'historique poussé les garde (le réécrire demanderait de forcer la branche publique : pas fait). |
+| OpenClaw avec un npm antérieur à 11.16 | Sans `--allow-scripts` (npm trop ancien), les scripts d'installation de toutes les dépendances tournent : `@google/genai`, `koffi`, `protobufjs`, `tree-sitter-bash` en ont. N'arrive que si le profil impose un Node plus ancien : le Node 24.21.0 épinglé porte npm 11.19.0 (index de nodejs.org). | Faible | Non. |
+| Modèle de conversation (`lms get`) | Ni révision ni empreinte possibles avec `lms` (§ 39.2). | Moyenne (inchangée) | Non : deux voies, à décider. |
+| Pile NVIDIA de l'entraînement | Les empreintes sont relevables (§ 39.5), mais la liste ne peut pas être essayée sans carte NVIDIA. | Moyenne (inchangée) | Non : relevé fait, pas branché. |
+| FFmpeg dans les roues de PyAV | FFmpeg se déclare LGPL-3.0+, mais x264 et x265 (GPL-2.0+) sont dans les roues et liés ; les roues ne portent aucun de ces textes de licence (§ 39.4). | Information (Helix ne redistribue pas ces roues) | Documenté. |
+
+### 39.2 Le modèle de conversation : `lms get` ne sait ni épingler ni vérifier
+
+Lu le 28/09/2026 dans la documentation de LM Studio (`lmstudio.ai/docs/cli/get`) et dans le source
+de la commande (`lmstudio-ai/lms`, `src/subcommands/get.ts`, branche `main` : que llmster 0.0.25
+embarque exactement ce code n'est pas vérifié) : `lms get` accepte un nom du catalogue, une adresse
+Hugging Face, `propriétaire/dépôt` et `@quantification`, avec `--mlx`, `--gguf`, `--select`,
+`--yes`. Le téléchargement passe par `createArtifactDownloadPlanner({ owner, name,
+compatibilityTypes, resolutionPreference })` : aucune révision, aucune empreinte. On ne peut donc
+rien épingler par `lms`.
+
+Deux voies, laissées à Medhi :
+
+1. **Vérifier après coup** : hacher le fichier posé sous le dossier des modèles de LM Studio et le
+   comparer à l'oid LFS que publie Hugging Face. Mais l'oid serait lu à la même source, au moment
+   présent : cela protège d'un fichier abîmé ou modifié sur le disque, pas d'un dépôt remplacé en
+   amont. Il faut aussi savoir quel fichier LM Studio a choisi (quantification, GGUF ou MLX), ce
+   que dit `lms ls --json` : pas essayé (le vrai `lms` n'est pas lancé dans cette tournée).
+2. **Télécharger soi-même**, comme les modèles d'images et d'entraînement : un fichier par modèle
+   et par format, à une révision et une empreinte écrites dans `provision.ts`, posé dans le dossier
+   des modèles de LM Studio, puis `lms load`. C'est la vraie correction ; elle demande de choisir
+   et de relever une cinquantaine de fichiers au plus (21 modèles de conversation et 4 d'écran,
+   en GGUF et en MLX).
+
+### 39.3 Dépendances npm tenues à une date
+
+Chaque arbre a été résolu sans rien installer (`npm install --package-lock-only
+--ignore-scripts`, dossier jetable), une fois sans date et une fois avec
+`--before=2026-09-27T00:00:00Z` :
+
+| Paquet | Paquets dans l'arbre | Écart avec la date | Scripts d'installation dans l'arbre |
+|---|---|---|---|
+| openclaw 2026.9.4 | 371 | aucun | `openclaw`, `@google/genai`, `koffi`, `protobufjs`, `tree-sitter-bash` |
+| mcp-server-kubernetes 4.1.7 | 405 | `ansi-regex` 6.4.0 → 6.3.0 | `protobufjs` |
+| firecrawl-mcp 3.25.5 | 191 | `ansi-regex` 6.4.0 → 6.3.0 | `tldjs` |
+| @notionhq/notion-mcp-server 2.5.2 | 177 | aucun | aucun |
+| exa-mcp-server 3.4.1, tavily-mcp 0.2.22, server-sequential-thinking, context7-mcp 4.1.1, brave-search-mcp-server 2.1.4, hubspot, airtable, server-memory | 95 à 132 | aucun | aucun |
+| @playwright/mcp 0.0.82 | 3 | aucun | aucun |
+
+Toutes les versions épinglées (catalogue, serveur de fichiers, paquets retirés du catalogue,
+extensions d'OpenClaw) ont été publiées avant cette date (champ `time` du registre ; la plus
+récente : firecrawl-mcp 3.25.5, le 25/09/2026). **Essayé** avec npx 11.19, dossier personnel et
+cache jetables : une date antérieure au paquet le fait refuser (`ETARGET … with a date before`),
+la date du 27/09 le laisse passer et le serveur de mémoire répond à `initialize`. La batterie lance
+aussi `mcp.ts` sur un faux `npx` qui relève son environnement.
+
+Ce que la date donne : le même arbre d'une installation à l'autre (le registre ne laisse pas
+remplacer une version publiée), et plus de dépendance publiée la veille. Ce qu'elle ne donne pas :
+une empreinte écrite dans le code (npm vérifie chaque archive contre celle du registre), ni rien
+contre une version piégée publiée **avant** la date. **Monter la version d'un paquet du catalogue
+ou d'OpenClaw, c'est avancer la date** : sinon `npx` refuse le paquet, et le connecteur ne démarre
+pas. Les extensions d'OpenClaw passent par `openclaw plugins install`, que la date ne couvre pas
+(OpenClaw résout lui-même ; pas vérifié). Un verrou complet par serveur (`npm ci` sur un
+`package-lock.json` écrit dans le dépôt, comme l'atelier) est possible (3 à 405 paquets par
+serveur) ; il changerait la façon dont chaque connecteur se lance, et n'a pas été fait.
+
+**Pas essayé** : le démarrage de chaque serveur du catalogue avec la date (seul le serveur de
+mémoire l'a été), l'installation réelle d'OpenClaw (archive de 200 Mo) avec `--before`.
+
+### 39.4 Licence du FFmpeg embarqué dans PyAV
+
+La page d'installation de PyAV (`pyav.basswood.io`) et le dépôt qui construit son FFmpeg
+(`PyAV-Org/pyav-ffmpeg`, script `build-ffmpeg.py`) ne la disent pas. Elle a donc été lue dans les
+roues publiées, téléchargées depuis PyPI et comparées à la liste figée (empreintes conformes) :
+macOS arm64 de 15.1.0 (Python 3.9) et 17.1.0 (Python 3.10), Linux x86_64 et Windows x64 de 18.1.0.
+Dans chacune, `libavcodec` se déclare « LGPL version 3 or later » ; sa configuration, lue dans la
+bibliothèque, porte `--enable-version3` et pas `--enable-gpl`, mais `--enable-libx264
+--enable-libx265`, et les deux bibliothèques sont dans la roue. x264 et x265 sont sous
+GPL-2.0-or-later : l'ensemble relève donc, pour ce qu'il contient d'eux, de la GPL. Ces roues ne
+portent que la licence BSD de PyAV. Compatibilité avec l'AGPL-3.0 : oui (GPL « ou ultérieure »,
+section 13 de l'AGPL-3.0) ; et Helix ne redistribue pas ces roues, pip les prend sur PyPI, sur le
+poste. H.264 et HEVC sont couverts par des brevets dans certains pays ; la dictée ne décode que de
+l'audio. À décider par Medhi avec les autres licences hors règle (THIRD_PARTY_NOTICES.md § 4).
+
+### 39.5 Empreintes de la pile NVIDIA
+
+Le dépôt de PyTorch (`download.pytorch.org/whl/cu128`) publie l'empreinte SHA-256 de chaque roue et
+ses métadonnées à part (PEP 658) : la résolution se fait sans télécharger les roues (quelques
+dizaines de Mo de cache, aucune roue de PyTorch). `uv pip compile --generate-hashes
+--only-binary :all:` sur la liste de `entrainement.ts`, plus Unsloth 2026.9.11 et unsloth_zoo
+2026.9.7, résout pour Linux x86_64 (manylinux 2.28) et Windows x64, Python 3.10, 3.12 et 3.13 :
+85 à 105 paquets, **chacun avec son empreinte**, `torch==2.11.0+cu128` compris. Brancher cette
+liste (`pip --require-hashes`) fermerait la dernière exception du § 32, mais une liste qui ne
+s'installe pas casserait l'entraînement sur toutes les cartes NVIDIA, et elle ne peut être essayée
+sur aucune machine du projet. Pas branché ; à faire avec un essai sur un PC NVIDIA.
+
+### 39.6 Prix publiés revérifiés
+
+Dix lignes tirées au hasard dans `PRIX_PUBLIES`, relues le 28/09/2026 sur la page de chaque
+fournisseur (et dans la liste publique d'OpenRouter) :
+
+| Fournisseur | Modèle | Écrit dans Helix (entrée / sortie, par million) | Lu le 28/09 |
+|---|---|---|---|
+| OpenAI | gpt-5.6-sol | 4 / 20 $ | 4 / 20 $ |
+| OpenAI | gpt-5.2 | 1,75 / 14 $ | 1,75 / 14 $ |
+| Anthropic | Claude Sonnet 4.6 | 3 / 15 $ | 3 / 15 $ |
+| Anthropic | Claude Fable 5 | 10 / 50 $ | 10 / 50 $ |
+| Google | gemini-3.5-flash | 1,50 / 9 $ | 1,50 / 9 $ |
+| xAI | grok-4.20-0309-reasoning | 1,25 / 2,50 $ | 1,25 / 2,50 $ |
+| Scaleway | gemma-4-26b-a4b-it | 0,25 / 0,50 € | 0,25 / 0,50 € |
+| Together | MiniMax M3 | 0,30 / 1,20 $ | 0,30 / 1,20 $ |
+| OpenRouter | qwen/qwen3.6-35b-a3b | 0,15 / 1 $ | 0,15 / 1 $ |
+| OpenRouter | qwen/qwen3.5-397b-a17b | 0,55 / 3,50 $ | 0,55 / 3,50 $ |
+
+Et trois de plus, parce que ces pages bougent souvent : DeepSeek V4.1 Flash (0,30 / 1,20 $ aux
+heures pleines, la moitié hors pointe), Mistral Medium 3.5 (1,50 / 7,50 $), Groq gpt-oss-20b
+(0,075 / 0,30 $). **Aucun prix n'a changé.** Seule l'adresse de la page d'OpenAI a bougé
+(corrigée). Chaque ligne a une source officielle : la page de son fournisseur, avec la date du
+relevé (contrôle ajouté). À noter : OpenRouter facture `openai/gpt-5.6-sol` 2 / 10 $, la moitié du
+prix d'OpenAI ; chaque ligne garde le prix de sa propre source.
+
+### 39.7 Dépôt public
+
+- **Secrets et données personnelles** : les 84 commits poussés depuis le 27/09/2026
+  (`log origin/main --since=2026-09-27 -p`) relus par motifs (clés privées, clés d'OpenAI,
+  d'Anthropic, de GitHub, d'AWS, de Google, de Slack, de Hugging Face, JWT, mots de passe,
+  dossiers personnels, courriels, téléphones, adresses privées). Rien de réel : les mots de passe
+  sont ceux des comptes jetables de la batterie (`@example.test`), la « clé » `sk-proj-ABCD…` est
+  un faux de la batterie, les adresses sont celles de la documentation (203.0.113.0/24) ou d'un
+  faux DNS. L'adresse de Medhi n'apparaît que dans des lignes retirées et dans l'auteur des
+  commits, choisi par lui. Le nom court Windows de son poste : retiré (ci-dessus).
+- **Traces d'outil d'IA** : aucun fichier de consignes ni dossier de réglages d'un outil d'IA
+  dans l'arbre ni dans l'historique poussé, aucun « Co-Authored-By » ni « Generated with », auteur et commettant
+  « Medhi Clabaut » sur les 171 commits. « Claude » n'apparaît dans les messages que comme produit
+  (0d3eb99, 44a56b9 : les abonnements dans Helix). Dans le code, « Claude Code » est une source
+  d'import et une référence de conception, pas une trace. Retiré : le renvoi de `scripts/securite.mjs` au fichier de consignes. Restent dans l'historique
+  poussé : ce renvoi, un commentaire retiré de `scripts/manifeste-mise-a-jour.mjs` qui nommait le
+  dossier du projet, et un renvoi du même genre retiré d'`atelier.ts`.
+- **Alertes GitHub** (lecture seule, 28/09/2026) : analyse de code, 0 ouverte (17 écartées, 34
+  corrigées ; la dernière analyse, sur 6b77c21, ne trouve que les 17 écartées) ; Dependabot, 0
+  alerte (alertes et correctifs de sécurité actifs) ; secrets, 0 alerte (détection et blocage à
+  l'envoi actifs). `npm audit` : 0 faille. Aucun réglage changé, aucune alerte fermée.
+
+### 39.8 Contrôles ajoutés
+
+`npm run securite`, section 14 bis : la date des dépendances npm (valide, déjà passée) ;
+`npm_config_before` dans `mcp.ts` sauf pour une commande libre, et le drapeau « libre » transmis
+par les connecteurs ; `--before` pour OpenClaw ; un faux `npx` lancé par `mcp.ts` reçoit la date
+pour un serveur du catalogue, pas pour une commande libre, et les scripts coupés dans les deux cas ;
+THIRD_PARTY_NOTICES.md à jour de ce qui se construit (`scripts/notices-tiers.mjs --verifier`), livré
+dans l'application, et les mentions d'Electron et de Chromium recopiées pour macOS ; l'attribution
+d'Epoch AI complète à l'écran et dans le dépôt ; chaque prix rattaché à une page officielle datée ;
+aucun fichier de consignes ni dossier de réglages d'un outil d'IA suivi, aucun « Co-Authored-By » dans les messages ni les fichiers,
+aucun renvoi au fichier de consignes d'un outil d'IA, aucun nom court Windows du poste. Rejoués sur
+les sources d'avant le correctif, les contrôles statiques échouent tous (11 sur 11) ; après, la
+batterie passe.
+
+### 39.9 Pas revérifié, pas essayé
+
+Un paquet construit (les mentions d'Electron dans `Helix.app`, THIRD_PARTY_NOTICES.md dans les
+ressources) ; chaque serveur du catalogue et OpenClaw installés avec la date ; `lms` et un
+téléchargement de modèle de conversation ; la pile NVIDIA avec empreintes sur une vraie carte ;
+Windows et Linux. Les autres lignes de prix (198 sur 211), et les prix en euros de Mistral (la page
+lue ne montrait que les dollars). Les notes d'Epoch AI elles-mêmes (le fichier n'a pas été
+retéléchargé). Les 779 licences recensées par Chromium, une par une. Les licences des paquets
+Python, relevées au § 32 et reprises telles quelles. Rien de ce qui touche aux licences n'a été vu
+par un juriste.

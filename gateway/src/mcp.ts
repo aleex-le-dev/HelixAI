@@ -11,7 +11,7 @@ import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/
 import { deployment } from "./deployment.ts";
 import { t, tf } from "./langue.ts";
 import { cheminProtegeDans, filtrerResultat } from "./zonesProtegees.ts";
-import { assurerNodePrive, nodePriveInstallable, npxPrive } from "./installationOpenClaw.ts";
+import { assurerNodePrive, DEPENDANCES_NPM_AVANT, nodePriveInstallable, npxPrive } from "./installationOpenClaw.ts";
 
 /**
  * Gestionnaire de serveurs MCP auto-hébergés (ARCHITECTURE.md, ADR-004).
@@ -52,6 +52,12 @@ export interface McpServerConfig {
   env?: Record<string, string>;
   /** Serveur démarré automatiquement au lancement. */
   autoStart: boolean;
+  /**
+   * Commande libre, hors catalogue (instance qui l'autorise, connecteurs.ts) :
+   * ses dépendances ne sont pas tenues à la date du catalogue, qui refuserait
+   * un paquet publié après elle.
+   */
+  libre?: boolean;
 }
 
 export interface McpTool {
@@ -341,6 +347,15 @@ export async function startServer(id: string): Promise<{ ok: boolean; error?: st
          * revue des connecteurs). Les serveurs du catalogue n'en ont pas besoin.
          */
         ...(entry.config.command === "npx" ? { npm_config_ignore_scripts: "true", npm_config_update_notifier: "false", npm_config_fund: "false", npm_config_audit: "false" } : {}),
+        /*
+         * Et ses dépendances publiées avant la date du catalogue
+         * (DEPENDANCES_NPM_AVANT, installationOpenClaw.ts) : le paquet est
+         * épinglé, pas ses dépendances, et aucun de ces paquets ne publie de
+         * fichier de verrouillage. Essayé le 28/09/2026 avec npx 11.19 : la
+         * variable est honorée (une date antérieure au paquet le fait refuser,
+         * `ETARGET`), le serveur de mémoire répond à `initialize`.
+         */
+        ...(entry.config.command === "npx" && !entry.config.libre ? { npm_config_before: DEPENDANCES_NPM_AVANT } : {}),
       },
       /*
        * Par défaut, le SDK laisse le serveur écrire sur la sortie d'erreur de

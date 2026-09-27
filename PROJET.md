@@ -692,6 +692,14 @@ local, conforme à la règle du § 1) :
 | Node 24 LTS officiel | OpenJS Foundation | MIT (npm : Artistic 2.0) | npm de l'atelier et `npx` des serveurs d'outils (MCP) quand la machine n'en a pas | même Node que celui d'OpenClaw, déjà en place ; empreinte vérifiée contre `SHASUMS256.txt` |
 | llmster (moteur sans interface de LM Studio) | Element Labs | conditions de LM Studio (acceptées à l'installation, pour soi ou au nom de son organisation) | moteur des modèles sur Mac à puce Apple, Windows et Linux | version 0.0.25-1 épinglée, empreintes SHA-512 écrites dans le code |
 
+**Relevé le 28/09/2026** (seconde tournée de l'audit, SECURITE.md § 39) : tous les composants
+tiers, avec leur licence et leur compatibilité avec l'AGPL-3.0, sont dans `THIRD_PARTY_NOTICES.md`
+(livré avec l'application). **À décider par Medhi** : la police Satoshi (ITF Free Font License,
+qui interdit sa diffusion par un dépôt public) ; les roues de PyAV de la dictée, qui embarquent
+x264 et x265 (GPL-2.0-or-later) à côté d'un FFmpeg LGPL-3.0 ; le modèle de conversation, que
+`lms get` ne sait ni épingler ni vérifier ; les empreintes de la pile NVIDIA, relevables mais à
+essayer sur une carte NVIDIA avant d'être imposées.
+
 Écartés pour le RAG : LanceDB, better-sqlite3 / sqlite-vec et le reclassement par
 onnxruntime-node (modules natifs, § 3.10) ; Orama (licence déclarée « NOASSERTION »
 par GitHub le 25/09/2026, non vérifiée plus avant).

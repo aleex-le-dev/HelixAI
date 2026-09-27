@@ -4,7 +4,8 @@ import { readdirSync, statSync, type Dirent } from "node:fs";
 import { join } from "node:path";
 import { backendById, faireLaPlace, findLms, lmStudioRepond, optionsDeChargement } from "./backends.ts";
 import { nomProduit } from "./marque.ts";
-import { t, tf } from "./langue.ts";
+import { langue, t, tf } from "./langue.ts";
+import { noteDuModele } from "./notesModeles.ts";
 import { dossierLmStudio, moteurAPoser, preparerDossiersLlmster } from "./engine.ts";
 import { aEssayer, essayerModele, estDefaillant, nomDuModele, noterCoupure, noterEssai, type Verdict } from "./santeModeles.ts";
 import { autoProvisionEnabled } from "./deployment.ts";
@@ -99,11 +100,11 @@ export interface CatalogEntry {
   /** Taille approximative du téléchargement (les poids), en Go. */
   downloadGb: number;
   /**
-   * Indice d'intelligence Artificial Analysis (v4.3.2, relevé le 23/09/2026),
-   * en mode raisonnement quand le modèle en a un : c'est ainsi que Helix le
-   * fait travailler par défaut.
+   * Note ECI d'Epoch AI (notesModeles.ts, relevé du 27/09/2026), lue par le
+   * nom du modèle. Absente quand Epoch ne note pas ce modèle : c'est le cas des
+   * plus petits (Qwen3 4B, Qwen3.5 4B, Ministral 3…), et rien ne la remplace.
    */
-  intelligence: number;
+  eci?: number;
   /** Architecture à experts : seule une petite partie des poids calcule, donc rapide même sans carte graphique. */
   moe?: boolean;
   /** Lit les images (captures, photos, documents scannés). */
@@ -123,11 +124,12 @@ type Fiche = Omit<CatalogEntry, "description">;
 /*
  * Le catalogue.
  *
- * Choisi sur trois sources, relevées le 23/09/2026 :
+ * Choisi sur trois sources, relevées le 23/09/2026 (la note, le 27/09/2026) :
  *  - le catalogue de LM Studio (lmstudio.ai/models) : ce qu'on peut installer
  *    d'un clic, avec la mémoire minimale publiée et les capacités (outils,
  *    raisonnement, images) ;
- *  - Artificial Analysis : l'indice d'intelligence, même échelle pour tous ;
+ *  - l'indice ECI d'Epoch AI (CC BY 4.0, notesModeles.ts) : une seule échelle
+ *    pour tous, quand le modèle y figure ;
  *  - la licence de chaque modèle : seulement des licences libres (Apache 2.0,
  *    MIT). Gemma, Llama et les licences « ouvertes » à conditions sont écartées :
  *    elles obligent à répercuter leurs restrictions dans chaque contrat client.
@@ -137,37 +139,37 @@ type Fiche = Omit<CatalogEntry, "description">;
  * Mistral (France), OpenAI (gpt-oss), IBM et Meta sont au catalogue et
  * gagneront leur place s'ils dépassent. Modèles écartés parce qu'un autre fait
  * mieux pour la même mémoire : Qwen3.5 27B et Qwen3.6 27B (Qwen3.8 27B les
- * dépasse), Granite 4.1 30B, OLMo 3, LFM2, MiniMax M2 (121 Go pour 18,6),
+ * dépasse), Granite 4.1 30B, OLMo 3, LFM2, MiniMax M2 (121 Go),
  * Nemotron 3 (licence NVIDIA).
  */
 const FICHES: Fiche[] = [
   /*
    * Pour les très grosses machines (Mac Studio de 256 Go et plus). Kimi K3
-   * (43,6), GLM-5.3 (44,8) et MiniMax, plus forts encore, pèsent plusieurs
+   * (ECI 157,7), GLM-5.3 (155,6) et MiniMax, plus forts encore, pèsent plusieurs
    * centaines de Go : ils ne tournent que sur un serveur à plusieurs cartes, et
    * s'utilisent dans Helix par un prestataire ou une clé, pas en local.
    */
-  { key: "deepseek/deepseek-v4-flash", label: "DeepSeek V4 Flash", editeur: "DeepSeek", licence: "MIT", downloadGb: 150, intelligence: 34.3, moe: true, verifie: false },
-  { key: "qwen/qwen3.8-27b", label: "Qwen3.8 27B", editeur: "Alibaba (Qwen)", licence: "Apache 2.0", downloadGb: 16, intelligence: 27.6, vision: true, verifie: false },
-  { key: "qwen/qwen3.5-35b-a3b", label: "Qwen3.5 35B A3B", editeur: "Alibaba (Qwen)", licence: "Apache 2.0", downloadGb: 20, intelligence: 19.3, moe: true, vision: true, verifie: false },
-  { key: "zai-org/glm-4.7-flash", label: "GLM-4.7 Flash", editeur: "Zhipu (Z.ai)", licence: "MIT", downloadGb: 16, intelligence: 14.9, moe: true, verifie: false },
-  { key: "meta/muse-glimmer", label: "Muse Glimmer", editeur: "Meta", licence: "Apache 2.0", downloadGb: 25, intelligence: 17.5, vision: true, verifie: false },
-  { key: "qwen/qwen3.5-9b", label: "Qwen3.5 9B", editeur: "Alibaba (Qwen)", licence: "Apache 2.0", downloadGb: 6, intelligence: 13.7, vision: true, verifie: true },
-  { key: "qwen/qwen3.5-4b", label: "Qwen3.5 4B", editeur: "Alibaba (Qwen)", licence: "Apache 2.0", downloadGb: 3, intelligence: 13.1, vision: true, verifie: false },
-  { key: "openai/gpt-oss-20b", label: "gpt-oss 20B", editeur: "OpenAI", licence: "Apache 2.0", downloadGb: 12, intelligence: 9.5, moe: true, verifie: false },
-  { key: "mistralai/magistral-small-2509", label: "Magistral Small", editeur: "Mistral AI", licence: "Apache 2.0", downloadGb: 14, intelligence: 8.6, vision: true, verifie: false },
-  { key: "qwen/qwen3-32b", label: "Qwen3 32B", editeur: "Alibaba (Qwen)", licence: "Apache 2.0", downloadGb: 19, intelligence: 8.6, verifie: true },
-  { key: "qwen/qwen3-14b", label: "Qwen3 14B", editeur: "Alibaba (Qwen)", licence: "Apache 2.0", downloadGb: 9, intelligence: 8.2, verifie: true },
-  { key: "qwen/qwen3-30b-a3b", label: "Qwen3 30B A3B", editeur: "Alibaba (Qwen)", licence: "Apache 2.0", downloadGb: 18, intelligence: 7.6, moe: true, verifie: true },
-  { key: "qwen3-8b", label: "Qwen3 8B", editeur: "Alibaba (Qwen)", licence: "Apache 2.0", downloadGb: 5, intelligence: 7.3, verifie: true },
-  { key: "qwen3-4b", label: "Qwen3 4B", editeur: "Alibaba (Qwen)", licence: "Apache 2.0", downloadGb: 2.5, intelligence: 7.2, verifie: true },
-  { key: "qwen/qwen3.5-2b", label: "Qwen3.5 2B", editeur: "Alibaba (Qwen)", licence: "Apache 2.0", downloadGb: 1.6, intelligence: 6.9, vision: true, verifie: false },
-  { key: "ibm/granite-4.1-8b", label: "Granite 4.1 8B", editeur: "IBM", licence: "Apache 2.0", downloadGb: 5, intelligence: 6.6, verifie: false },
-  { key: "mistralai/ministral-3-14b-reasoning", label: "Ministral 3 14B", editeur: "Mistral AI", licence: "Apache 2.0", downloadGb: 9, intelligence: 6.0, vision: true, verifie: false },
-  { key: "qwen3-1.7b", label: "Qwen3 1.7B", editeur: "Alibaba (Qwen)", licence: "Apache 2.0", downloadGb: 1.2, intelligence: 5.2, verifie: true },
-  { key: "mistralai/ministral-3-8b", label: "Ministral 3 8B", editeur: "Mistral AI", licence: "Apache 2.0", downloadGb: 5.5, intelligence: 5.5, vision: true, verifie: false },
-  { key: "allenai/olmo-3-7b-think", label: "OLMo 3 7B Think", editeur: "Ai2", licence: "Apache 2.0", downloadGb: 4.5, intelligence: 5.6, verifie: false },
-  { key: "mistralai/ministral-3-3b", label: "Ministral 3 3B", editeur: "Mistral AI", licence: "Apache 2.0", downloadGb: 2.5, intelligence: 4.8, vision: true, verifie: false },
+  { key: "deepseek/deepseek-v4-flash", label: "DeepSeek V4 Flash", editeur: "DeepSeek", licence: "MIT", downloadGb: 150, moe: true, verifie: false },
+  { key: "qwen/qwen3.8-27b", label: "Qwen3.8 27B", editeur: "Alibaba (Qwen)", licence: "Apache 2.0", downloadGb: 16, vision: true, verifie: false },
+  { key: "qwen/qwen3.5-35b-a3b", label: "Qwen3.5 35B A3B", editeur: "Alibaba (Qwen)", licence: "Apache 2.0", downloadGb: 20, moe: true, vision: true, verifie: false },
+  { key: "zai-org/glm-4.7-flash", label: "GLM-4.7 Flash", editeur: "Zhipu (Z.ai)", licence: "MIT", downloadGb: 16, moe: true, verifie: false },
+  { key: "meta/muse-glimmer", label: "Muse Glimmer", editeur: "Meta", licence: "Apache 2.0", downloadGb: 25, vision: true, verifie: false },
+  { key: "qwen/qwen3.5-9b", label: "Qwen3.5 9B", editeur: "Alibaba (Qwen)", licence: "Apache 2.0", downloadGb: 6, vision: true, verifie: true },
+  { key: "qwen/qwen3.5-4b", label: "Qwen3.5 4B", editeur: "Alibaba (Qwen)", licence: "Apache 2.0", downloadGb: 3, vision: true, verifie: false },
+  { key: "openai/gpt-oss-20b", label: "gpt-oss 20B", editeur: "OpenAI", licence: "Apache 2.0", downloadGb: 12, moe: true, verifie: false },
+  { key: "mistralai/magistral-small-2509", label: "Magistral Small", editeur: "Mistral AI", licence: "Apache 2.0", downloadGb: 14, vision: true, verifie: false },
+  { key: "qwen/qwen3-32b", label: "Qwen3 32B", editeur: "Alibaba (Qwen)", licence: "Apache 2.0", downloadGb: 19, verifie: true },
+  { key: "qwen/qwen3-14b", label: "Qwen3 14B", editeur: "Alibaba (Qwen)", licence: "Apache 2.0", downloadGb: 9, verifie: true },
+  { key: "qwen/qwen3-30b-a3b", label: "Qwen3 30B A3B", editeur: "Alibaba (Qwen)", licence: "Apache 2.0", downloadGb: 18, moe: true, verifie: true },
+  { key: "qwen3-8b", label: "Qwen3 8B", editeur: "Alibaba (Qwen)", licence: "Apache 2.0", downloadGb: 5, verifie: true },
+  { key: "qwen3-4b", label: "Qwen3 4B", editeur: "Alibaba (Qwen)", licence: "Apache 2.0", downloadGb: 2.5, verifie: true },
+  { key: "qwen/qwen3.5-2b", label: "Qwen3.5 2B", editeur: "Alibaba (Qwen)", licence: "Apache 2.0", downloadGb: 1.6, vision: true, verifie: false },
+  { key: "ibm/granite-4.1-8b", label: "Granite 4.1 8B", editeur: "IBM", licence: "Apache 2.0", downloadGb: 5, verifie: false },
+  { key: "mistralai/ministral-3-14b-reasoning", label: "Ministral 3 14B", editeur: "Mistral AI", licence: "Apache 2.0", downloadGb: 9, vision: true, verifie: false },
+  { key: "qwen3-1.7b", label: "Qwen3 1.7B", editeur: "Alibaba (Qwen)", licence: "Apache 2.0", downloadGb: 1.2, verifie: true },
+  { key: "mistralai/ministral-3-8b", label: "Ministral 3 8B", editeur: "Mistral AI", licence: "Apache 2.0", downloadGb: 5.5, vision: true, verifie: false },
+  { key: "allenai/olmo-3-7b-think", label: "OLMo 3 7B Think", editeur: "Ai2", licence: "Apache 2.0", downloadGb: 4.5, verifie: false },
+  { key: "mistralai/ministral-3-3b", label: "Ministral 3 3B", editeur: "Mistral AI", licence: "Apache 2.0", downloadGb: 2.5, vision: true, verifie: false },
 ];
 
 /**
@@ -177,10 +179,10 @@ const FICHES: Fiche[] = [
  * éprouvés au pointage.
  */
 const FICHES_ECRAN: Fiche[] = [
-  { key: "qwen/qwen3-vl-30b", label: "Qwen3-VL 30B A3B", editeur: "Alibaba (Qwen)", licence: "Apache 2.0", downloadGb: 18, intelligence: 9.5, moe: true, vision: true, verifie: true },
-  { key: "qwen3-vl-8b", label: "Qwen3-VL 8B", editeur: "Alibaba (Qwen)", licence: "Apache 2.0", downloadGb: 6, intelligence: 8.2, vision: true, verifie: true },
-  { key: "qwen3-vl-4b", label: "Qwen3-VL 4B", editeur: "Alibaba (Qwen)", licence: "Apache 2.0", downloadGb: 3.5, intelligence: 7.0, vision: true, verifie: true },
-  { key: "qwen3-vl-2b", label: "Qwen3-VL 2B", editeur: "Alibaba (Qwen)", licence: "Apache 2.0", downloadGb: 2, intelligence: 5.5, vision: true, verifie: true },
+  { key: "qwen/qwen3-vl-30b", label: "Qwen3-VL 30B A3B", editeur: "Alibaba (Qwen)", licence: "Apache 2.0", downloadGb: 18, moe: true, vision: true, verifie: true },
+  { key: "qwen3-vl-8b", label: "Qwen3-VL 8B", editeur: "Alibaba (Qwen)", licence: "Apache 2.0", downloadGb: 6, vision: true, verifie: true },
+  { key: "qwen3-vl-4b", label: "Qwen3-VL 4B", editeur: "Alibaba (Qwen)", licence: "Apache 2.0", downloadGb: 3.5, vision: true, verifie: true },
+  { key: "qwen3-vl-2b", label: "Qwen3-VL 2B", editeur: "Alibaba (Qwen)", licence: "Apache 2.0", downloadGb: 2, vision: true, verifie: true },
 ];
 
 /**
@@ -189,15 +191,20 @@ const FICHES_ECRAN: Fiche[] = [
  * au chargement du module, elle resterait figée en français.
  */
 function decrire(f: Fiche, ecran = false): CatalogEntry {
+  const eci = f.eci ?? noteDuModele(f.key)?.eci;
   return {
     ...f,
+    ...(eci !== undefined ? { eci } : {}),
     get description() {
       const usage = ecran
         ? t("Lit l'écran et désigne les éléments à cliquer.")
         : f.vision
           ? t("Conversation, rédaction, outils et images.")
           : t("Conversation, rédaction et outils.");
-      const note = tf("Note Artificial Analysis : {0}.", String(f.intelligence));
+      const note =
+        eci !== undefined
+          ? tf("Note ECI d'Epoch AI : {0}.", eci.toLocaleString(({ fr: "fr-FR", zh: "zh-CN" } as Record<string, string>)[langue()] ?? "en-US"))
+          : t("Pas de note publiée par Epoch AI pour ce modèle.");
       const rapide = f.moe ? ` ${t("Rapide, même sans carte graphique.")}` : "";
       // La note sur sa propre ligne (Medhi, 27/09/2026) : collée à la phrase, elle se coupait au milieu.
       return `${usage}${rapide}\n${note}`;
@@ -238,6 +245,15 @@ export function tientSur(hw: Hardware, f: { downloadGb: number; moe?: boolean })
 /**
  * Ce que la machine peut faire tourner, du mieux noté au moins bien noté.
  *
+ * Un modèle noté passe devant un modèle sans note (27/09/2026, passage à
+ * l'indice d'Epoch AI) : on ne lui prête pas une note qu'il n'a pas. Entre
+ * deux modèles sans note, le plus lourd d'abord, comme le fait déjà le
+ * sélecteur (« la note si elle existe, le poids sinon ») : à famille égale, un
+ * modèle plus gros répond mieux. Conséquence mesurée sur le catalogue : sur un
+ * PC de 16 Go sans carte graphique, Qwen3 8B (noté 136,2) passe devant
+ * Qwen3.5 4B (non noté), qui passait devant avec l'ancien relevé ; sur un Mac
+ * ou un PC de 8 Go, où aucun modèle noté ne tient, Qwen3.5 4B reste le premier.
+ *
  * Sans les modèles qui ont mal répondu sur cette machine (santeModeles.ts,
  * 27/09/2026) : ils ne sont plus installés, recommandés ni proposés d'office.
  * On peut toujours les choisir à la main.
@@ -245,7 +261,12 @@ export function tientSur(hw: Hardware, f: { downloadGb: number; moe?: boolean })
 function classement(hw: Hardware, catalogue: CatalogEntry[], verifiesSeulement: boolean): CatalogEntry[] {
   return catalogue
     .filter((e) => (!verifiesSeulement || e.verifie) && tientSur(hw, e) && !estDefaillant(e.key))
-    .sort((a, b) => b.intelligence - a.intelligence || a.downloadGb - b.downloadGb);
+    .sort((a, b) => {
+      if (a.eci !== undefined && b.eci !== undefined) return b.eci - a.eci || a.downloadGb - b.downloadGb;
+      if (a.eci !== undefined) return -1;
+      if (b.eci !== undefined) return 1;
+      return b.downloadGb - a.downloadGb;
+    });
 }
 
 /** Le plus léger des modèles vérifiés, hors ceux qui ont mal répondu ici (tous, s'ils ont tous mal répondu). */

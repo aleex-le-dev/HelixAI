@@ -2,13 +2,12 @@ import { useMemo, useState } from "react";
 import { ExternalLink, Table2, ChartScatter } from "lucide-react";
 import { Modal } from "@/components/ui/Modal";
 import {
-  MODELES_REFERENCE,
-  RELEVE_LE,
-  SOURCE,
-  VERSION_INDICE,
-  referenceDuModele,
-  type ModeleReference,
-} from "@/data/artificialAnalysis";
+  MODELES_NOTES,
+  SOURCE_NOTES,
+  noteDuModeleServi,
+  prixDeLEditeur,
+  type ModeleNote,
+} from "../../../gateway/src/notesModeles.ts";
 import type { GatewayModel } from "@/lib/gateway";
 import { lieuDuModele } from "@/lib/fournisseurs";
 import { formaterDate } from "@/lib/formats";
@@ -16,32 +15,37 @@ import { cn } from "@/lib/cn";
 import { t, tf, locale } from "@/lib/i18n";
 
 /**
- * Comparer les modèles : intelligence face au coût.
+ * Comparer les modèles : la note ECI d'Epoch AI face au prix de l'éditeur.
  *
  * ── Ce que l'écran montre, et ce qu'il refuse de montrer ────────────────────
  *
- * Deux axes, et une seule question : pour ce que ça coûte, qu'est-ce que ça
- * vaut ? Le coin en haut à gauche est le bon. Les modèles que l'instance sert
- * vraiment sont marqués ; les autres sont là comme repères, parce qu'un point
- * seul dans un graphique ne dit rien.
+ * Deux axes, une question : pour ce que ça coûte, qu'est-ce que ça vaut ? Le
+ * coin en haut à gauche est le bon. Les notes sont l'indice ECI d'Epoch AI
+ * (CC BY 4.0, gateway/src/notesModeles.ts) ; les prix, ceux que l'éditeur du
+ * modèle publie, en dollars par million de jetons de sortie
+ * (gateway/src/prixPublies.ts). Les deux sources sont nommées sous le
+ * graphique, avec la date du relevé.
  *
- * Le relevé ne publie en clair le coût que pour une partie des modèles. Ceux
- * qui n'en ont pas ne sont **pas placés** sur le graphique : ils sont listés
- * dessous avec leur seule note. Inventer une abscisse pour remplir le nuage
- * aurait été plus joli et faux.
- *
- * De même, un modèle de la machine — un Qwen 8B sur un portable — n'a
- * généralement aucune entrée dans le relevé. L'écran le dit plutôt que de lui
- * prêter la note de son grand frère hébergé.
+ * **Tous les modèles de la personne y figurent** (Medhi, 27/09/2026 : « quel
+ * que soit le modèle cloud choisi, il n'apparaissait pas ») :
+ *  - un modèle cloud noté et dont l'éditeur publie un prix : un point du nuage ;
+ *  - un modèle cloud noté sans prix relevé : la bande de droite, à sa note ;
+ *  - un modèle de la machine noté : la bande de gauche, à sa note (il ne
+ *    coûte aucun frais d'API, et « rien » n'a pas de place sur une échelle
+ *    logarithmique) ;
+ *  - un modèle qu'Epoch ne note pas : listé sous le graphique, sans position.
+ *    Une hauteur sur un axe gradué est une affirmation ; le client y avait lu
+ *    des notes (« qwen3-8b-dwq vaut 27 ? ») quand on les empilait le long de
+ *    l'axe.
+ * Les autres modèles notés et tarifés sont là comme repères, en gris.
  */
 
 /** Un nom trop long déborderait de la bande : on le coupe plutôt que de l'étaler. */
 const nomCourt = (id: string) => (id.length > 22 ? `${id.slice(0, 21)}…` : id);
 
-/** Échelle logarithmique : les prix vont de quelques centimes à dix dollars. */
-function echelleX(cout: number, min: number, max: number): number {
-  const l = Math.log10(cout);
-  return (l - Math.log10(min)) / (Math.log10(max) - Math.log10(min));
+/** Échelle logarithmique : les prix vont de quelques centimes à plus de cent dollars. */
+function echelleX(prix: number, min: number, max: number): number {
+  return (Math.log10(prix) - Math.log10(min)) / (Math.log10(max) - Math.log10(min));
 }
 
 /*
@@ -49,25 +53,8 @@ function echelleX(cout: number, min: number, max: number): number {
  * sous le premier trait vertical, et dépassait du cadre — « 0,10 $US » se
  * lisait « 10 $US », soit cent fois le prix annoncé.
  */
-const MARGE = { gauche: 58, droite: 34, haut: 26, bas: 52 };
+const MARGE = { gauche: 58, droite: 26, haut: 26, bas: 52 };
 
-/**
- * Largeur de la bande réservée aux modèles de la machine, à gauche de l'échelle.
- *
- * ── Pourquoi une bande à part, et pas un point comme les autres ─────────────
- *
- * Un modèle qui tourne sur la machine ne coûte rien par tâche. Sur une échelle
- * logarithmique, « rien » n'a pas de place : log(0) n'existe pas, et le poser
- * à la valeur la plus basse du graphique reviendrait à lui inventer un prix.
- * Il a donc sa colonne, avant que l'échelle ne commence, séparée par un trait.
- *
- * Sa hauteur, en revanche, reste honnête : la note du relevé quand le modèle y
- * figure, et sinon une place explicitement marquée « note non relevée », en
- * cercle creux, en bas de la bande. C'est le cas courant — un Qwen 8B sur un
- * portable n'est mesuré par personne — et c'était jusqu'ici la raison pour
- * laquelle l'écran affichait « aucun de vos modèles n'y figure » à quelqu'un
- * qui en avait un sous les yeux.
- */
 /*
  * 128 px : la largeur d'un nom de modèle. « deepseek-v4.1-flash » fait dix-neuf
  * caractères, soit un peu plus de cent pixels ; une bande plus étroite laissait
@@ -75,8 +62,28 @@ const MARGE = { gauche: 58, droite: 34, haut: 26, bas: 52 };
  */
 const BANDE = 128;
 const ECART_BANDE = 18;
-const LARGEUR = 720;
-const HAUTEUR = 360;
+const LARGEUR = 760;
+const HAUTEUR = 380;
+
+interface Place {
+  modele: GatewayModel;
+  note: ModeleNote;
+  py: number;
+  yNom: number;
+}
+
+/** Descend chaque nom jusqu'à ce qu'il ait sa place, sans bouger le point, qui dit quelque chose de vrai. */
+function empiler(entrees: { modele: GatewayModel; note: ModeleNote }[], hauteurDe: (n: number) => number): Place[] {
+  const poses: Place[] = [];
+  let precedent = -Infinity;
+  for (const e of [...entrees].sort((a, b) => b.note.eci - a.note.eci)) {
+    const py = hauteurDe(e.note.eci);
+    const yNom = Math.max(py - 10, precedent + 16);
+    precedent = yNom;
+    poses.push({ ...e, py, yNom });
+  }
+  return poses;
+}
 
 export function ComparerModeles({
   open,
@@ -91,156 +98,147 @@ export function ComparerModeles({
   modeles: GatewayModel[];
   /** uid du modèle en cours : c'est lui que le graphique met en avant. */
   choisi?: string;
-  /** Cliquer un point servi choisit ce modèle et ferme la fenêtre. */
+  /** Cliquer un modèle de la personne le choisit et ferme la fenêtre. */
   onChoisir?: (uid: string) => void;
 }) {
   const [vue, setVue] = useState<"nuage" | "tableau">("nuage");
 
-  /**
-   * Quel modèle **hébergé** de l'instance correspond à quelle entrée du relevé.
-   *
-   * Hébergé seulement : un modèle qui tourne sur la machine ne paie pas le
-   * prix du service, il a sa bande à gauche. Le compter ici l'aurait affiché
-   * deux fois, dont une au prix de quelqu'un d'autre.
-   */
-  const correspondances = useMemo(() => {
+  /** Chaque modèle de la personne, sa note et le prix de son éditeur. */
+  const siens = useMemo(
+    () =>
+      modeles.map((m) => {
+        const note = noteDuModeleServi(m);
+        return { modele: m, local: lieuDuModele(m) === null, note, prix: note ? prixDeLEditeur(note) : undefined };
+      }),
+    [modeles],
+  );
+
+  /** Les repères : tout modèle noté dont l'éditeur publie un prix. */
+  const tarifes = useMemo(
+    () =>
+      MODELES_NOTES.flatMap((n) => {
+        const p = prixDeLEditeur(n);
+        return p ? [{ note: n, entree: p.tarif.entree, sortie: p.tarif.sortie }] : [];
+      }),
+    [],
+  );
+
+  /** Quel modèle cloud de la personne correspond à quelle entrée notée. */
+  const servis = useMemo(() => {
     const table = new Map<string, GatewayModel>();
-    for (const m of modeles) {
-      if (lieuDuModele(m) === null) continue;
-      const ref = referenceDuModele(m.id);
-      if (ref && !table.has(ref.nom)) table.set(ref.nom, m);
-    }
+    for (const s of siens) if (!s.local && s.note && !table.has(s.note.nom)) table.set(s.note.nom, s.modele);
     return table;
-  }, [modeles]);
+  }, [siens]);
 
-  const places = MODELES_REFERENCE.filter((m) => typeof m.coutParTache === "number");
-  /** Ceux des vôtres que le graphique peut réellement placer. */
-  const servisPlaces = places.filter((m) => correspondances.has(m.nom)).length;
+  const machine = siens.filter((s) => s.local && s.note) as { modele: GatewayModel; note: ModeleNote }[];
+  const sansPrix = siens.filter((s) => !s.local && s.note && !s.prix) as { modele: GatewayModel; note: ModeleNote }[];
+  const sansNote = siens.filter((s) => !s.note);
+  const dansLeNuage = siens.filter((s) => !s.local && s.note && s.prix).length;
 
-  /** Le modèle en cours, et son entrée au relevé si elle existe. */
-  const modeleChoisi = modeles.find((m) => m.uid === choisi);
-  const refChoisie = modeleChoisi ? referenceDuModele(modeleChoisi.id) : undefined;
-  /**
-   * Son rang, sur les vingt-cinq modèles notés. Le rang se calcule sur la
-   * note seule : c'est la seule valeur que le relevé donne pour tous.
-   */
-  const rangChoisi = refChoisie
-    ? [...MODELES_REFERENCE].sort((a, b) => b.intelligence - a.intelligence).findIndex((m) => m.nom === refChoisie.nom) + 1
+  const avecGauche = machine.length > 0;
+  const avecDroite = sansPrix.length > 0;
+  const debutEchelle = MARGE.gauche + (avecGauche ? BANDE + ECART_BANDE : 0);
+  const finEchelle = LARGEUR - MARGE.droite - (avecDroite ? BANDE + ECART_BANDE : 0);
+
+  // Axe des notes : de la dizaine sous la plus basse à la dizaine au-dessus de la plus haute.
+  const toutesNotes = [...tarifes.map((r) => r.note.eci), ...machine.map((e) => e.note.eci), ...sansPrix.map((e) => e.note.eci)];
+  const minY = Math.floor((Math.min(...toutesNotes) - 2) / 10) * 10;
+  const maxY = Math.ceil((Math.max(...toutesNotes) + 2) / 10) * 10;
+  const hauteurDe = (note: number) => MARGE.haut + (1 - (note - minY) / (maxY - minY)) * (HAUTEUR - MARGE.haut - MARGE.bas);
+  const reperesY: number[] = [];
+  for (let v = minY; v <= maxY; v += 10) reperesY.push(v);
+
+  const sorties = tarifes.map((r) => r.sortie);
+  const minX = Math.min(...sorties) * 0.7;
+  const maxX = Math.max(...sorties) * 1.4;
+  const x = (prix: number) => debutEchelle + echelleX(prix, minX, maxX) * (finEchelle - debutEchelle);
+  const reperesX = [0.01, 0.1, 1, 10, 100, 1000].filter((v) => v >= minX && v <= maxX);
+
+  const gauche = empiler(machine, hauteurDe);
+  const droite = empiler(sansPrix, hauteurDe);
+  const xGauche = MARGE.gauche + BANDE / 2;
+  const xDroite = LARGEUR - MARGE.droite - BANDE / 2;
+
+  /** Le modèle en cours, sa note et son rang parmi les modèles notés. */
+  const actuel = siens.find((s) => s.modele.uid === choisi);
+  const rang = actuel?.note
+    ? [...MODELES_NOTES].sort((a, b) => b.eci - a.eci).findIndex((m) => m.nom === actuel.note?.nom) + 1
     : 0;
-  const sansCout = MODELES_REFERENCE.filter((m) => typeof m.coutParTache !== "number");
-
-  const couts = places.map((m) => m.coutParTache as number);
-  // Le premier repère (0,10 $US) doit tomber dans le cadre, pas à sa gauche.
-  const minX = Math.min(Math.min(...couts) * 0.7, 0.08);
-  const maxX = Math.max(...couts) * 1.4;
-  const maxY = 60;
-
-  /** L'échelle des prix commence après la bande de la machine. */
-  // La bande n'a lieu d'être que si un modèle de la machine a une note à y poser.
-  const avecBande = modeles.some((m) => lieuDuModele(m) === null && referenceDuModele(m.id));
-  const debutEchelle = MARGE.gauche + (avecBande ? BANDE + ECART_BANDE : 0);
-  const x = (m: ModeleReference) =>
-    debutEchelle + echelleX(m.coutParTache as number, minX, maxX) * (LARGEUR - debutEchelle - MARGE.droite);
-  const hauteurDe = (note: number) =>
-    MARGE.haut + (1 - note / maxY) * (HAUTEUR - MARGE.haut - MARGE.bas);
-  const y = (m: ModeleReference) => hauteurDe(m.intelligence);
-
-  /** Le milieu de la bande, et la ligne des notes non relevées. */
-  const xBande = MARGE.gauche + BANDE / 2;
-
-  /**
-   * Les modèles de la machine, avec leur note quand le relevé en donne une.
-   *
-   * `lieuDuModele` rend null pour ce qui tourne ici : c'est déjà la définition
-   * qu'emploie le sélecteur, autant s'en servir plutôt que d'en écrire une
-   * seconde qui finirait par diverger.
-   */
-  const surLaMachineTout = useMemo(() => {
-    const liste = modeles
-      .filter((m) => lieuDuModele(m) === null)
-      .map((m) => ({ modele: m, reference: referenceDuModele(m.id) }));
-
-    /*
-     * La hauteur d'un point est sa note ; celle de son nom peut s'en écarter.
-     * Deux modèles de force voisine posaient sinon leurs noms l'un sur
-     * l'autre, ce qui arrive vite : c'est souvent la même famille déclinée en
-     * plusieurs tailles. On descend donc chaque nom jusqu'à ce qu'il ait sa
-     * place, sans bouger le point, qui, lui, dit quelque chose de vrai.
-     */
-    const sansNoteListe = liste.filter((e) => !e.reference);
-    const avecNote = liste.filter((e) => e.reference);
-    const posees: { modele: GatewayModel; reference?: ModeleReference; py: number; yNom: number }[] = [];
-    let precedent = -Infinity;
-    for (const entree of [...avecNote].sort(
-      (a, b) => (b.reference?.intelligence ?? 0) - (a.reference?.intelligence ?? 0),
-    )) {
-      const py = hauteurDe(entree.reference?.intelligence ?? 0);
-      const yNom = Math.max(py - 10, precedent + 16);
-      precedent = yNom;
-      posees.push({ ...entree, py, yNom });
-    }
-    /*
-     * Les modèles sans note ne sont PAS posés sur l'axe. Ils l'étaient, empilés
-     * de bas en haut pour ne pas se chevaucher : le client y a lu des notes
-     * (« qwen3-8b-dwq vaut 27 ? »). Une hauteur sur un axe gradué est une
-     * affirmation ; ils sont donc listés sous le graphique, à part.
-     */
-    return { posees, sansNoteListe };
-  }, [modeles, hauteurDe]);
-  const { posees: surLaMachine, sansNoteListe: machineSansNote } = surLaMachineTout;
-
-  /** Ce que le graphique montre de vous : la machine, plus les correspondances. */
-  const montres = surLaMachine.length + machineSansNote.length + servisPlaces;
-  const sansNote = machineSansNote.length;
 
   /*
-   * Où poser chaque nom sans qu'ils se marchent dessus.
-   *
-   * Un nuage de points sans noms ne dit rien : on voit des ronds. Mais onze
-   * noms écrits au même endroit ne disent rien non plus. On place donc chaque
-   * étiquette au-dessus de son point, sinon dessous, et on la renonce si les
-   * deux places sont prises — dans l'ordre d'importance, pour que ce soit
-   * toujours un repère lointain qui cède la place, jamais le modèle en cours.
-   *
-   * La largeur d'un nom est estimée à six pixels par caractère : c'est une
-   * approximation, elle sert à espacer, pas à mesurer.
+   * Où poser chaque nom sans qu'ils se marchent dessus : au-dessus du point,
+   * sinon dessous, sinon pas du tout, dans l'ordre d'importance, pour que ce
+   * soit toujours un repère lointain qui cède la place, jamais le modèle en
+   * cours. Six pixels par caractère : une approximation, pour espacer.
    */
   const etiquetes = useMemo(() => {
-    const importance = (m: ModeleReference) => {
-      const servi = correspondances.get(m.nom);
+    const importance = (n: ModeleNote) => {
+      const servi = servis.get(n.nom);
       if (servi && servi.uid === choisi) return 0;
-      if (servi) return 1;
-      return 2;
+      return servi ? 1 : 2;
     };
-    const ordre = [...places].sort((a, b) => importance(a) - importance(b));
+    const ordre = [...tarifes].sort((a, b) => importance(a.note) - importance(b.note));
     const prises: { x1: number; x2: number; y: number }[] = [];
     const libre = (px: number, largeur: number, py: number) =>
-      !prises.some(
-        (b) => Math.abs(b.y - py) < 12 && px - largeur / 2 < b.x2 && px + largeur / 2 > b.x1,
-      );
-
-    const pose = new Map<string, { dessus: boolean; texte: string }>();
-    for (const m of ordre) {
-      const texte = m.nom.replace(/\s*\([^)]*\)\s*$/, "");
-      const largeur = texte.length * 6;
-      const px = x(m);
-      const py = y(m);
-      const hautEtiquette = py - 11;
-      const basEtiquette = py + 17;
-      if (libre(px, largeur, hautEtiquette)) {
-        prises.push({ x1: px - largeur / 2, x2: px + largeur / 2, y: hautEtiquette });
-        pose.set(m.nom, { dessus: true, texte });
-      } else if (libre(px, largeur, basEtiquette)) {
-        prises.push({ x1: px - largeur / 2, x2: px + largeur / 2, y: basEtiquette });
-        pose.set(m.nom, { dessus: false, texte });
+      !prises.some((b) => Math.abs(b.y - py) < 12 && px - largeur / 2 < b.x2 && px + largeur / 2 > b.x1);
+    const pose = new Map<string, { dessus: boolean }>();
+    // Les points des modèles de la personne sont plus gros : aucun nom de repère ne passe dessous.
+    for (const r of tarifes) {
+      if (!servis.has(r.note.nom)) continue;
+      const px = x(r.sortie);
+      const py = hauteurDe(r.note.eci) + 4;
+      prises.push({ x1: px - 9, x2: px + 9, y: py });
+    }
+    for (const r of ordre) {
+      const servi = servis.get(r.note.nom);
+      const largeur = (servi ? nomCourt(servi.id) : r.note.nom).length * 6;
+      const px = x(r.sortie);
+      const py = hauteurDe(r.note.eci);
+      if (libre(px, largeur, py - 11)) {
+        prises.push({ x1: px - largeur / 2, x2: px + largeur / 2, y: py - 11 });
+        pose.set(r.note.nom, { dessus: true });
+      } else if (libre(px, largeur, py + 17)) {
+        prises.push({ x1: px - largeur / 2, x2: px + largeur / 2, y: py + 17 });
+        pose.set(r.note.nom, { dessus: false });
       }
     }
-    return places.map((m) => ({ modele: m, px: x(m), py: y(m), etiquette: pose.get(m.nom) }));
+    // Les modèles de la personne par-dessus les repères.
+    return [...tarifes]
+      .sort((a, b) => importance(b.note) - importance(a.note))
+      .map((r) => ({ ...r, px: x(r.sortie), py: hauteurDe(r.note.eci), etiquette: pose.get(r.note.nom) }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [places, correspondances, choisi, minX, maxX]);
+  }, [tarifes, servis, choisi, minX, maxX, minY, maxY, debutEchelle, finEchelle]);
 
   const dollars = (v: number) =>
-    v.toLocaleString(locale(), { style: "currency", currency: "USD", maximumFractionDigits: 2 });
+    v.toLocaleString(locale(), { style: "currency", currency: "USD", maximumFractionDigits: v < 0.1 ? 3 : 2 });
+  const nombre = (v: number) => v.toLocaleString(locale(), { maximumFractionDigits: 2 });
+
+  /** Un modèle de la personne dans une bande : point plein, nom au-dessus. */
+  const pointDeBande = (p: Place, cx: number) => {
+    const actif = p.modele.uid === choisi;
+    return (
+      <g key={p.modele.uid}>
+        <text
+          x={cx}
+          y={p.yNom}
+          textAnchor="middle"
+          className={cn("fill-foreground text-[11px]", actif ? "font-semibold" : "font-medium")}
+        >
+          {nomCourt(p.modele.id)}
+        </text>
+        <circle
+          cx={cx}
+          cy={p.py}
+          r={actif ? 7 : 6}
+          className={actif ? "fill-info" : "fill-accent"}
+          onClick={onChoisir ? () => onChoisir(p.modele.uid) : undefined}
+          style={onChoisir ? { cursor: "pointer" } : undefined}
+        >
+          <title>{`${p.modele.id} · ${p.note.nom} · ECI ${nombre(p.note.eci)}`}</title>
+        </circle>
+      </g>
+    );
+  };
 
   return (
     <Modal open={open} onClose={onClose} size="xl">
@@ -248,15 +246,15 @@ export function ComparerModeles({
         <div>
           <h2 className="text-lg font-semibold text-foreground">{t("Comparer les modèles")}</h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            {t("Intelligence face au coût. Plus haut et plus à gauche : plus capable pour moins cher.")}{" "}
-            {montres === 0
-              ? t("Aucun de vos modèles n'est placé : ni le relevé ni votre machine n'en donnent de quoi le situer.")
-              : sansNote === 0
-                ? tf("{0} de vos modèles y figurent.", montres)
+            {t("Note face au prix. Plus haut et plus à gauche : plus capable pour moins cher.")}{" "}
+            {siens.length === 0
+              ? t("Aucun modèle n'est servi par votre instance pour l'instant.")
+              : sansNote.length === 0
+                ? tf("Vos {0} modèles y figurent.", siens.length)
                 : tf(
-                    "{0} de vos modèles y figurent, dont {1} sans note publiée : ils sont listés sous le graphique, sans position sur l'axe.",
-                    montres,
-                    sansNote,
+                    "Vos {0} modèles y figurent, dont {1} sans note publiée : ils sont listés sous le graphique, sans position sur l'axe.",
+                    siens.length,
+                    sansNote.length,
                   )}
           </p>
         </div>
@@ -272,84 +270,57 @@ export function ComparerModeles({
 
       {vue === "nuage" ? (
         <>
-          <div className="mt-4 flex items-center gap-4 text-xs text-muted-foreground">
+          <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
             <span className="inline-flex items-center gap-1.5">
               <span className="h-2.5 w-2.5 rounded-full bg-info" />
               {t("Modèle en cours")}
             </span>
             <span className="inline-flex items-center gap-1.5">
               <span className="h-2.5 w-2.5 rounded-full bg-accent" />
-              {t("Servi par votre instance")}
+              {t("Vos modèles")}
             </span>
             <span className="inline-flex items-center gap-1.5">
-              <span className="h-2.5 w-2.5 rounded-full bg-neutral-70" />
+              <span className="h-2.5 w-2.5 rounded-full bg-muted-foreground/50" />
               {t("Repère")}
             </span>
-            {machineSansNote.length > 0 && (
-              <span className="inline-flex items-center gap-1.5">
-                <span className="h-2.5 w-2.5 rounded-full border-2 border-dashed border-accent" />
-                {t("Note non relevée")}
-              </span>
-            )}
           </div>
 
           <div className="mt-2 overflow-x-auto">
             <svg
               viewBox={`0 0 ${LARGEUR} ${HAUTEUR}`}
-              className="w-full min-w-[520px]"
+              className="w-full min-w-[560px]"
               role="img"
-              aria-label={t("Intelligence face au coût, par modèle")}
+              aria-label={t("Note ECI face au prix, par modèle")}
             >
-              {/* Repères horizontaux : l'indice va de 0 à 60. */}
-              {[0, 15, 30, 45, 60].map((v) => {
-                const py = MARGE.haut + (1 - v / maxY) * (HAUTEUR - MARGE.haut - MARGE.bas);
+              {reperesY.map((v) => {
+                const py = hauteurDe(v);
                 return (
                   <g key={v}>
-                    <line
-                      x1={MARGE.gauche}
-                      x2={LARGEUR - MARGE.droite}
-                      y1={py}
-                      y2={py}
-                      className="stroke-border"
-                      strokeWidth={1}
-                    />
+                    <line x1={MARGE.gauche} x2={LARGEUR - MARGE.droite} y1={py} y2={py} className="stroke-border" strokeWidth={1} />
                     <text x={MARGE.gauche - 8} y={py + 4} textAnchor="end" className="fill-muted-foreground text-[11px]">
                       {v}
                     </text>
                   </g>
                 );
               })}
-              {/* Repères verticaux : puissances de dix, échelle logarithmique. */}
-              {[0.1, 1, 10].map((v) => {
-                const px = debutEchelle + echelleX(v, minX, maxX) * (LARGEUR - debutEchelle - MARGE.droite);
+              {reperesX.map((v) => {
+                const px = x(v);
                 return (
                   <g key={v}>
-                    <line
-                      x1={px}
-                      x2={px}
-                      y1={MARGE.haut}
-                      y2={HAUTEUR - MARGE.bas}
-                      className="stroke-border"
-                      strokeWidth={1}
-                    />
-                    <text
-                      x={px}
-                      y={HAUTEUR - MARGE.bas + 16}
-                      textAnchor="middle"
-                      className="fill-muted-foreground text-[11px]"
-                    >
+                    <line x1={px} x2={px} y1={MARGE.haut} y2={HAUTEUR - MARGE.bas} className="stroke-border" strokeWidth={1} />
+                    <text x={px} y={HAUTEUR - MARGE.bas + 16} textAnchor="middle" className="fill-muted-foreground text-[11px]">
                       {dollars(v)}
                     </text>
                   </g>
                 );
               })}
               <text
-                x={(LARGEUR + debutEchelle) / 2}
+                x={(debutEchelle + finEchelle) / 2}
                 y={HAUTEUR - 8}
                 textAnchor="middle"
                 className="fill-muted-foreground text-[11px]"
               >
-                {t("Coût moyen par tâche (échelle logarithmique)")}
+                {t("Prix de sortie chez l'éditeur, par million de jetons (échelle logarithmique)")}
               </text>
               <text
                 x={14}
@@ -358,15 +329,10 @@ export function ComparerModeles({
                 transform={`rotate(-90 14 ${HAUTEUR / 2})`}
                 className="fill-muted-foreground text-[11px]"
               >
-                {t("Intelligence")}
+                {t("Note ECI")}
               </text>
 
-              {/*
-               * La bande de la machine : son titre, son trait de séparation,
-               * et ses modèles. Dessinée avant les autres points pour que le
-               * trait passe dessous et non dessus.
-               */}
-              {surLaMachine.length > 0 && (
+              {avecGauche && (
                 <g>
                   <line
                     x1={MARGE.gauche + BANDE + ECART_BANDE / 2}
@@ -377,67 +343,39 @@ export function ComparerModeles({
                     strokeWidth={1}
                     strokeDasharray="3 3"
                   />
-                  <text
-                    x={xBande}
-                    y={MARGE.haut - 12}
-                    textAnchor="middle"
-                    className="fill-muted-foreground text-[11px]"
-                  >
+                  <text x={xGauche} y={MARGE.haut - 12} textAnchor="middle" className="fill-muted-foreground text-[11px]">
                     {t("Sur votre machine")}
                   </text>
-                  <text
-                    x={xBande}
-                    y={HAUTEUR - MARGE.bas + 16}
-                    textAnchor="middle"
-                    className="fill-muted-foreground text-[11px]"
-                  >
-                    {t("sans coût")}
+                  <text x={xGauche} y={HAUTEUR - MARGE.bas + 16} textAnchor="middle" className="fill-muted-foreground text-[11px]">
+                    {t("sans frais d'API")}
                   </text>
-                  {surLaMachine.map(({ modele, reference, py, yNom }) => {
-                    const actif = modele.uid === choisi;
-                    return (
-                      <g key={modele.uid}>
-                        <text
-                          x={xBande}
-                          y={yNom}
-                          textAnchor="middle"
-                          className={cn(
-                            "text-[11px]",
-                            actif ? "fill-foreground font-semibold" : "fill-foreground font-medium",
-                          )}
-                        >
-                          {nomCourt(modele.id)}
-                        </text>
-                        <circle
-                          cx={xBande}
-                          cy={py}
-                          r={actif ? 7 : 6}
-                          className={cn(
-                            actif ? "stroke-info" : "stroke-accent",
-                            reference ? (actif ? "fill-info" : "fill-accent") : "fill-transparent",
-                          )}
-                          strokeWidth={2}
-                          strokeDasharray={reference ? undefined : "3 2"}
-                          onClick={onChoisir ? () => onChoisir(modele.uid) : undefined}
-                          style={onChoisir ? { cursor: "pointer" } : undefined}
-                        >
-                          <title>
-                            {reference
-                              ? `${modele.id} · ${reference.intelligence}`
-                              : `${modele.id} · ${t("note non relevée")}`}
-                          </title>
-                        </circle>
-                      </g>
-                    );
-                  })}
+                  {gauche.map((p) => pointDeBande(p, xGauche))}
                 </g>
               )}
 
-              {etiquetes.map(({ modele: m, px, py, etiquette }) => {
-                const servi = correspondances.get(m.nom);
+              {avecDroite && (
+                <g>
+                  <line
+                    x1={LARGEUR - MARGE.droite - BANDE - ECART_BANDE / 2}
+                    x2={LARGEUR - MARGE.droite - BANDE - ECART_BANDE / 2}
+                    y1={MARGE.haut - 8}
+                    y2={HAUTEUR - MARGE.bas}
+                    className="stroke-border"
+                    strokeWidth={1}
+                    strokeDasharray="3 3"
+                  />
+                  <text x={xDroite} y={MARGE.haut - 12} textAnchor="middle" className="fill-muted-foreground text-[11px]">
+                    {t("Cloud, prix non relevé")}
+                  </text>
+                  {droite.map((p) => pointDeBande(p, xDroite))}
+                </g>
+              )}
+
+              {etiquetes.map(({ note, px, py, sortie, entree, etiquette }) => {
+                const servi = servis.get(note.nom);
                 const actif = Boolean(servi && servi.uid === choisi);
                 return (
-                  <g key={m.nom}>
+                  <g key={note.nom}>
                     {etiquette && (
                       <text
                         x={px}
@@ -445,26 +383,22 @@ export function ComparerModeles({
                         textAnchor="middle"
                         className={cn(
                           "text-[11px]",
-                          actif
-                            ? "fill-foreground font-semibold"
-                            : servi
-                              ? "fill-foreground font-medium"
-                              : "fill-muted-foreground",
+                          actif ? "fill-foreground font-semibold" : servi ? "fill-foreground font-medium" : "fill-muted-foreground",
                         )}
                       >
-                        {etiquette.texte}
+                        {servi ? nomCourt(servi.id) : note.nom}
                       </text>
                     )}
                     <circle
                       cx={px}
                       cy={py}
                       r={actif ? 7 : servi ? 6 : 4}
-                      className={actif ? "fill-info" : servi ? "fill-accent" : "fill-neutral-70"}
+                      className={actif ? "fill-info" : servi ? "fill-accent" : "fill-muted-foreground opacity-50"}
                       onClick={servi && onChoisir ? () => onChoisir(servi.uid) : undefined}
                       style={servi && onChoisir ? { cursor: "pointer" } : undefined}
                     >
                       <title>
-                        {`${m.nom} · ${m.intelligence} · ${dollars(m.coutParTache as number)}`}
+                        {`${note.nom} · ECI ${nombre(note.eci)} · ${tf("{0} en entrée, {1} en sortie", dollars(entree), dollars(sortie))}`}
                       </title>
                     </circle>
                   </g>
@@ -473,10 +407,10 @@ export function ComparerModeles({
             </svg>
           </div>
 
-          {machineSansNote.length > 0 && (
+          {sansNote.length > 0 && (
             <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs">
-              <span className="text-muted-foreground">{t("Sur votre machine, sans note publiée :")}</span>
-              {machineSansNote.map(({ modele }) => {
+              <span className="text-muted-foreground">{t("Pas de note publiée par Epoch AI pour :")}</span>
+              {sansNote.map(({ modele, local }) => {
                 const actif = modele.uid === choisi;
                 return (
                   <button
@@ -484,19 +418,13 @@ export function ComparerModeles({
                     type="button"
                     onClick={onChoisir ? () => onChoisir(modele.uid) : undefined}
                     disabled={!onChoisir}
+                    title={local ? t("Sur votre machine") : (lieuDuModele(modele) ?? undefined)}
                     className={cn(
                       "inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 transition-colors",
-                      actif
-                        ? "border-info/40 bg-info/10 font-medium text-foreground"
-                        : "border-border text-foreground hover:bg-muted",
+                      actif ? "border-info/40 bg-info/10 font-medium text-foreground" : "border-border text-foreground hover:bg-muted",
                     )}
                   >
-                    <span
-                      className={cn(
-                        "h-2 w-2 rounded-full border-[1.5px] border-dashed",
-                        actif ? "border-info" : "border-accent",
-                      )}
-                    />
+                    <span className={cn("h-2 w-2 rounded-full border-[1.5px] border-dashed", actif ? "border-info" : "border-accent")} />
                     {nomCourt(modele.id)}
                   </button>
                 );
@@ -505,57 +433,53 @@ export function ComparerModeles({
           )}
 
           {/*
-           * Le bandeau du modèle en cours.
-           *
-           * Un nuage répond à « où se situent les modèles » ; il ne répond pas
-           * à « et le mien, alors ? ». Cette ligne-là le dit en toutes lettres,
-           * et suit le modèle choisi. Quand il n'est pas au relevé — un modèle
-           * de la machine, le plus souvent — elle le dit aussi, plutôt que de
-           * disparaître et de laisser croire à un oubli.
+           * Le bandeau du modèle en cours : un nuage répond à « où se situent
+           * les modèles », pas à « et le mien, alors ? ». Quand le modèle n'est
+           * pas noté, le bandeau le dit au lieu de disparaître.
            */}
-          {modeleChoisi && (
+          {actuel && (
             <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 rounded-xl bg-muted px-3.5 py-2.5 text-sm">
-              <span className="font-medium text-foreground">{modeleChoisi.id}</span>
-              {refChoisie ? (
+              <span className="font-medium text-foreground">{actuel.modele.id}</span>
+              {actuel.note ? (
                 <>
-                  <span className="text-muted-foreground">
-                    {t("Intelligence")}{" "}
-                    <span className="tabular-nums text-foreground">{refChoisie.intelligence}</span>
-                  </span>
-                  {refChoisie.coutParTache !== undefined && (
-                    <span className="text-muted-foreground">
-                      {tf("{0} par tâche", dollars(refChoisie.coutParTache))}
-                    </span>
-                  )}
-                  {refChoisie.vitesse !== undefined && (
-                    <span className="text-muted-foreground">
-                      {tf("{0} jetons par seconde", refChoisie.vitesse)}
-                    </span>
+                  {actuel.note.nom !== actuel.modele.id && (
+                    <span className="text-muted-foreground">{tf("noté comme « {0} »", actuel.note.nom)}</span>
                   )}
                   <span className="text-muted-foreground">
-                    {tf("{0}e sur {1}", rangChoisi, MODELES_REFERENCE.length)}
+                    {t("Note ECI")} <span className="tabular-nums text-foreground">{nombre(actuel.note.eci)}</span>
                   </span>
+                  <span className="text-muted-foreground">{tf("{0}e sur {1}", rang, MODELES_NOTES.length)}</span>
+                  {actuel.local ? (
+                    <span className="text-muted-foreground">{t("Sur votre machine : aucun frais d'API.")}</span>
+                  ) : actuel.prix ? (
+                    <span className="text-muted-foreground">
+                      {tf(
+                        "Prix de {0} : {1} en entrée, {2} en sortie",
+                        actuel.prix.fournisseur.nom,
+                        dollars(actuel.prix.tarif.entree),
+                        dollars(actuel.prix.tarif.sortie),
+                      )}
+                    </span>
+                  ) : (
+                    <span className="text-muted-foreground">{t("Prix de l'éditeur non relevé.")}</span>
+                  )}
                 </>
-              ) : lieuDuModele(modeleChoisi) === null ? (
-                <span className="text-muted-foreground">
-                  {t("Sur votre machine : aucun coût par tâche, et pas de note à ce relevé.")}
-                </span>
               ) : (
                 <span className="text-muted-foreground">
-                  {t("Pas mesuré par ce relevé : il ne figure donc pas sur le graphique.")}
+                  {t("Pas de note publiée par Epoch AI pour ce modèle : il est listé sous le graphique, sans position.")}
                 </span>
               )}
             </div>
           )}
 
-          {sansCout.length > 0 && (
-            <p className="mt-3 text-xs text-muted-foreground">
-              {tf(
-                "{0} autres modèles sont notés mais sans coût publié en clair : ils figurent dans le tableau, pas sur le graphique.",
-                sansCout.length,
-              )}
-            </p>
-          )}
+          <p className="mt-3 text-xs text-muted-foreground">
+            {tf(
+              "Repères : {0} modèles notés dont l'éditeur publie un prix ({1} des vôtres parmi eux). Le tableau donne les {2} modèles notés.",
+              tarifes.length,
+              dansLeNuage,
+              MODELES_NOTES.length,
+            )}
+          </p>
         </>
       ) : (
         <div className="mt-4 max-h-[420px] overflow-auto">
@@ -564,19 +488,17 @@ export function ComparerModeles({
               <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-muted-foreground">
                 <th className="py-2 pr-3 font-semibold">{t("Modèle")}</th>
                 <th className="py-2 pr-3 font-semibold">{t("Éditeur")}</th>
-                <th className="py-2 pr-3 text-right font-semibold">{t("Intelligence")}</th>
-                <th className="py-2 pr-3 text-right font-semibold">{t("Coût par tâche")}</th>
-                <th className="py-2 text-right font-semibold">{t("Jetons par seconde")}</th>
+                <th className="py-2 pr-3 text-right font-semibold">{t("Note ECI")}</th>
+                <th className="py-2 pr-3 text-right font-semibold">{t("Entrée")}</th>
+                <th className="py-2 text-right font-semibold">{t("Sortie")}</th>
               </tr>
             </thead>
             <tbody>
-              {MODELES_REFERENCE.map((m) => {
-                const servi = correspondances.get(m.nom);
+              {MODELES_NOTES.map((m) => {
+                const servi = servis.get(m.nom) ?? siens.find((s) => s.local && s.note === m)?.modele;
+                const p = prixDeLEditeur(m);
                 return (
-                  <tr
-                    key={m.nom}
-                    className={cn("border-b border-border/60", servi && "bg-muted/60")}
-                  >
+                  <tr key={m.nom} className={cn("border-b border-border/60", servi && "bg-muted/60")}>
                     <td className="py-2 pr-3 text-foreground">
                       {m.nom}
                       {servi && (
@@ -585,34 +507,39 @@ export function ComparerModeles({
                         </span>
                       )}
                     </td>
-                    <td className="py-2 pr-3 text-muted-foreground">{m.editeur}</td>
-                    <td className="py-2 pr-3 text-right tabular-nums text-foreground">{m.intelligence}</td>
-                    <td className="py-2 pr-3 text-right tabular-nums text-muted-foreground">
-                      {m.coutParTache === undefined ? "—" : dollars(m.coutParTache)}
-                    </td>
-                    <td className="py-2 text-right tabular-nums text-muted-foreground">
-                      {m.vitesse === undefined ? "—" : m.vitesse}
-                    </td>
+                    <td className="py-2 pr-3 text-muted-foreground">{m.editeur || "?"}</td>
+                    <td className="py-2 pr-3 text-right tabular-nums text-foreground">{nombre(m.eci)}</td>
+                    <td className="py-2 pr-3 text-right tabular-nums text-muted-foreground">{p ? dollars(p.tarif.entree) : "?"}</td>
+                    <td className="py-2 text-right tabular-nums text-muted-foreground">{p ? dollars(p.tarif.sortie) : "?"}</td>
                   </tr>
                 );
               })}
             </tbody>
           </table>
+          <p className="mt-2 text-xs text-muted-foreground">
+            {t("Prix par million de jetons, chez l'éditeur ; « ? » : non relevé.")}
+          </p>
         </div>
       )}
 
+      {/* Attribution exigée par la licence CC BY 4.0 d'Epoch AI : la source, l'auteur, la licence, le lien. */}
       <p className="mt-4 text-xs text-muted-foreground">
-        {t("Source :")}{" "}
+        {t("Notes :")}{" "}
         <a
-          href={SOURCE}
+          href={SOURCE_NOTES.page}
           target="_blank"
           rel="noreferrer"
           className="inline-flex items-center gap-1 underline underline-offset-2 hover:text-foreground"
         >
-          Artificial Analysis
+          {tf("{0}, « {1} »", SOURCE_NOTES.nom, SOURCE_NOTES.titre)}
           <ExternalLink size={11} strokeWidth={1.75} />
         </a>{" "}
-        {tf("· indice {0}, relevé le {1}.", VERSION_INDICE, formaterDate(new Date(RELEVE_LE)))}
+        {tf("· indice {0}, licence", SOURCE_NOTES.indice)}{" "}
+        <a href={SOURCE_NOTES.licenceUrl} target="_blank" rel="noreferrer" className="underline underline-offset-2 hover:text-foreground">
+          {SOURCE_NOTES.licence}
+        </a>
+        {tf(", relevé le {0}.", formaterDate(`${SOURCE_NOTES.releveLe}T12:00:00`))}{" "}
+        {tf("Prix : pages de prix des éditeurs, relevées le {0}.", formaterDate(`${SOURCE_NOTES.releveLe}T12:00:00`))}
       </p>
     </Modal>
   );

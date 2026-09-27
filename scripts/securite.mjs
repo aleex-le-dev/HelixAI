@@ -2029,9 +2029,13 @@ console.log("\n7 septies. Essai du modèle sur cette machine : celui qui répond
    * 4B, choisi d'office, répond « 不 時////// » ; Ministral 3B, sur le même PC,
    * répond. Sans vrai modèle ni vrai LM Studio : le faux modèle ci-dessus sert
    * d'API compatible OpenAI, et un faux `lms` (chargements notés dans un
-   * fichier) tient lieu de moteur. Le poste simulé est un Windows de 16 Go
+   * fichier) tient lieu de moteur. Le poste simulé est un Windows de 8 Go
    * sans carte NVIDIA ; son dossier personnel et son PATH sont jetables, pour
-   * que le vrai `lms` de ce poste ne soit jamais lancé.
+   * que le vrai `lms` de ce poste ne soit jamais lancé. 8 Go et non plus 16
+   * depuis le 27/09/2026 : avec les notes d'Epoch AI, un modèle noté passe
+   * devant un modèle sans note, et sur 16 Go Qwen3 8B (noté) n'est plus
+   * derrière Qwen3.5 4B (non noté). Sur 8 Go, où aucun modèle noté ne tient,
+   * Qwen3.5 4B est toujours le conseillé, et Qwen3 4B le suivant.
    */
   /*
    * Tout se joue dans un processus à part : importer ici un module de la
@@ -2043,6 +2047,13 @@ console.log("\n7 septies. Essai du modèle sur cette machine : celui qui répond
   const BIN = join(ICI, "bin");
   mkdirSync(BIN);
   mkdirSync(join(ICI, "maison"));
+  /*
+   * Clé de chiffrement en fichier (27/09/2026) : sans profil, macOS la range au
+   * trousseau, et `security` lancé avec ce dossier personnel jetable ouvrait
+   * chez Medhi « Trousseau introuvable ». Le trousseau du poste n'est plus
+   * jamais sollicité par ce scénario.
+   */
+  writeFileSync(join(ICI, "helix.config.json"), JSON.stringify({ chiffrement: "fichier" }));
   symlinkSync(process.execPath, join(BIN, "node"));
   writeFileSync(
     join(BIN, "lms"),
@@ -2073,7 +2084,7 @@ console.log("\n7 septies. Essai du modèle sur cette machine : celui qui répond
     import { pathToFileURL } from "node:url";
     Object.defineProperty(process, "platform", { value: "win32" });
     Object.defineProperty(process, "arch", { value: "x64" });
-    os.totalmem = () => 16 * 1024 ** 3;
+    os.totalmem = () => 8 * 1024 ** 3;
     const ici = process.env.FAUX_LMS_DIR;
     const mod = (f) => import(pathToFileURL(join(${JSON.stringify(RACINE)}, "gateway", "src", f)).href);
     const p = await mod("provision.ts"), s = await mod("santeModeles.ts"), r = await mod("router.ts");
@@ -2098,7 +2109,7 @@ console.log("\n7 septies. Essai du modèle sur cette machine : celui qui répond
 
     // A. Mise en route : le premier candidat répond mal, le second juste.
     process.env.HELIX_DATA_DIR = mkdtempSync(join(ici, "a-"));
-    const fiche = (key, label, intelligence, verifie) => ({ key, label, editeur: "Essai", licence: "Apache 2.0", downloadGb: 0.5, intelligence, verifie, description: "" });
+    const fiche = (key, label, eci, verifie) => ({ key, label, editeur: "Essai", licence: "Apache 2.0", downloadGb: 0.5, eci, verifie, description: "" });
     const cat = [fiche("essai-machine/casse", "Casse 4B", 13, false), fiche("essai-machine/bon", "Bon 3B", 5, true)];
     poser([], ["essai-machine/casse", "essai-machine/bon"]);
     const a = await enFr(() => p.ensureLocalModel(undefined, cat));
@@ -2111,13 +2122,13 @@ console.log("\n7 septies. Essai du modèle sur cette machine : celui qui répond
 
     // B. Poste déjà installé (le PC de Medhi) : Qwen3.5 4B en mémoire, jamais essayé ; essai au démarrage.
     process.env.HELIX_DATA_DIR = mkdtempSync(join(ici, "b-"));
-    poser(["qwen/qwen3.5-4b"], ["qwen/qwen3.5-4b", "qwen3-8b"]);
+    poser(["qwen/qwen3.5-4b"], ["qwen/qwen3.5-4b", "qwen3-4b"]);
     const hw = p.detectHardware();
     const avant = p.recommend(hw).key;
     await enFr(() => p.verifierModeleEnPlace());
     const b = p.getProvisionState();
     sortie.B = { avant, apres: p.recommend(hw).key, phase: b.phase, model: b.model, messages: [...messages], appels: appels(), charges: charges(),
-      qwen35: s.ficheDe("qwen/qwen3.5-4b"), qwen3: s.ficheDe("qwen3-8b"),
+      qwen35: s.ficheDe("qwen/qwen3.5-4b"), qwen3: s.ficheDe("qwen3-4b"),
       recommandes: p.adaptesALaMachine(hw).filter((e) => e.recommande && e.role === "chat").map((e) => e.key) };
     messages.length = 0;
     await enFr(() => p.verifierModeleEnPlace());
@@ -2138,7 +2149,6 @@ console.log("\n7 septies. Essai du modèle sur cette machine : celui qui répond
     process.exit(0);
     `,
   );
-  writeFileSync(join(ICI, "essai-fichier.json"), JSON.stringify({ chiffrement: "fichier" }));
   const lancer = () =>
     new Promise((ok) => {
       const enfant = spawn(process.execPath, ["--experimental-strip-types", "--no-warnings", join(ICI, "essai.mjs")], {
@@ -2150,7 +2160,7 @@ console.log("\n7 septies. Essai du modèle sur cette machine : celui qui répond
           TMPDIR: tmpdir(),
           FAUX_LMS_DIR: ICI,
           // Dossier personnel sans trousseau : chiffrement par fichier, sinon macOS ouvre « Trousseau introuvable ».
-          HELIX_CONFIG: join(ICI, "essai-fichier.json"),
+          HELIX_CONFIG: join(ICI, "helix.config.json"),
           HELIX_DATA_DIR: join(ICI, "donnees"),
           HELIX_LMSTUDIO_URL: `http://127.0.0.1:${PORT_EMBED}/v1`,
           HELIX_EXO_URL: "http://127.0.0.1:9/v1",
@@ -2204,10 +2214,10 @@ console.log("\n7 septies. Essai du modèle sur cette machine : celui qui répond
     JSON.stringify(essaisCasse),
   );
   verifier(
-    "poste déjà installé (Windows 16 Go simulé, Qwen3.5 4B en mémoire) : essai au démarrage, Qwen3.5 4B écarté, Qwen3 8B chargé et retenu, sans réinstaller",
-    B.avant === "qwen/qwen3.5-4b" && B.phase === "ready" && B.model === "qwen3-8b" && B.qwen35?.etat === "defaillant" && B.qwen35?.raison === "boucle" && B.qwen3?.etat === "valide" &&
-      JSON.stringify(B.appels) === JSON.stringify(["unload qwen/qwen3.5-4b", "load qwen3-8b"]) &&
-      B.messages?.some((m) => m.includes("Qwen3.5 4B ne répond pas correctement sur cette machine, essai de Qwen3 8B")),
+    "poste déjà installé (Windows 8 Go simulé, Qwen3.5 4B en mémoire) : essai au démarrage, Qwen3.5 4B écarté, Qwen3 4B chargé et retenu, sans réinstaller",
+    B.avant === "qwen/qwen3.5-4b" && B.phase === "ready" && B.model === "qwen3-4b" && B.qwen35?.etat === "defaillant" && B.qwen35?.raison === "boucle" && B.qwen3?.etat === "valide" &&
+      JSON.stringify(B.appels) === JSON.stringify(["unload qwen/qwen3.5-4b", "load qwen3-4b"]) &&
+      B.messages?.some((m) => m.includes("Qwen3.5 4B ne répond pas correctement sur cette machine, essai de Qwen3 4B")),
     JSON.stringify(e.B ?? e).slice(0, 700),
   );
   verifier(
@@ -3683,6 +3693,7 @@ console.log("\n11 quinquies. Windows et Linux : ce qui se vérifie depuis ce pos
    * remplacé, et le dossier personnel est un dossier neuf (jamais ~/.opencode).
    */
   const d7 = dossierNeuf(join(tmpdir(), "helix-opencode-auto-"));
+  // Clé en fichier : avec ce dossier personnel jetable, le trousseau du poste ne doit jamais être sollicité (27/09/2026).
   ecrireF(join(d7, "libre.json"), JSON.stringify({ chiffrement: "fichier", backends: [{ id: "lmstudio", enabled: false }, { id: "exo", enabled: false }] }));
   ecrireF(join(d7, "integrateur.json"), JSON.stringify({ chiffrement: "fichier", autoProvision: false, backends: [{ id: "lmstudio", enabled: false }, { id: "exo", enabled: false }] }));
   const sondeOpencode = `const appels = []; globalThis.fetch = async (u) => { appels.push(String(u)); return new Response(new Blob([new Uint8Array(4096).fill(7)]).stream(), { status: 200 }); };

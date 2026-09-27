@@ -4,6 +4,7 @@ import { models } from "./router.ts";
 import { journaliser } from "./audit.ts";
 import type { BackendKind, ModelInfo } from "./types.ts";
 import { t, tf } from "./langue.ts";
+import { fournisseurDuBackend, prixPublie, type Devise } from "./prixPublies.ts";
 
 /**
  * Consommation des modèles : ce que l'écran « Mon usage » affiche.
@@ -21,10 +22,27 @@ import { t, tf } from "./langue.ts";
  *     elle part du nombre de caractères. Elle ne se confond jamais avec une
  *     mesure : les deux sont additionnées dans des compteurs séparés, et
  *     l'écran dit laquelle il affiche.
- *  3. **Des tarifs saisis à la main** pour les modèles distants. Aucun prix
- *     par défaut, même « indicatif » : le tarif d'un hébergeur change, et un
- *     chiffre recopié ici serait faux le jour où il changera. Sans tarif,
- *     l'écran dit « tarif non renseigné » et ne calcule rien.
+ *  3. **Les tarifs des modèles distants**, dans cet ordre :
+ *      - un tarif saisi à la main, qui l'emporte toujours et est marqué comme
+ *        tel, dans sa devise (euros pour un tarif saisi avant que la devise
+ *        existe : c'était la seule que l'écran proposait) ;
+ *      - sinon, le prix publié par le fournisseur qui sert le modèle
+ *        (prixPublies.ts), avec la même correspondance de noms que les notes
+ *        (« cle-…/ », suffixes de date : nomsModeles.ts). L'écran écrit « prix
+ *        publié par {fournisseur}, relevé du {date} », avec le lien, et dit le
+ *        coût « estimé » : cache, lots et paliers gratuits n'y sont pas ;
+ *      - sinon, « tarif non renseigné », et rien n'est compté : jamais zéro.
+ *     Un modèle local n'a toujours pas de tarif.
+ *
+ *     Jusqu'au 27/09/2026, il n'y avait **aucun prix par défaut** : un tarif
+ *     recopié serait faux le jour où l'hébergeur le change. Medhi a changé la
+ *     règle ce jour-là (« dans mon usage ça serait sympa d'avoir le tarif de
+ *     tous les modèles cloud ») ; le risque demeure, et l'écran le dit par la
+ *     date du relevé et le lien vers la page.
+ *
+ * Les devises ne se convertissent pas : aucun taux n'est inventé. Chaque coût
+ * reste dans la devise de son tarif, et les totaux se font devise par devise
+ * (« 1,20 $ + 0,30 € »).
  */
 
 /* ------------------------------------------------------------------ */
@@ -75,10 +93,12 @@ interface Registre {
 }
 
 interface Tarif {
-  /** Euros par million de jetons d'entrée. */
+  /** Par million de jetons d'entrée, dans `devise`. */
   entree: number;
-  /** Euros par million de jetons de sortie. */
+  /** Par million de jetons de sortie, dans `devise`. */
   sortie: number;
+  /** Absente d'un tarif saisi avant le 27/09/2026 : c'était alors toujours des euros. */
+  devise?: Devise;
   /** Horodatage ISO de la saisie. */
   depuis: string;
   /** Compte qui l'a saisi. */
@@ -138,13 +158,24 @@ function joursAvant(date: Date, n: number): Date {
 
 let registre: Registre | null = null;
 let tarifs: Record<string, Tarif> | null = null;
+/**
+ * Registre ou tarifs présents mais illisibles. Ils valaient `{}` jusqu'au
+ * 27/09/2026, et la première mesure ou le premier tarif saisi remplaçait tout
+ * ce qu'on n'avait pas pu lire. Ils restent désormais `null` : rien n'est écrit
+ * par-dessus (règle du projet, pertes du 20/09 et du 24/09).
+ */
+let illisible = { registre: false, tarifs: false };
 let chargement: Promise<void> | null = null;
 
 function estLigne(v: unknown): v is Ligne {
   return typeof v === "object" && v !== null && "exact" in v && "estime" in v;
 }
 
-/** Relit registre et tarifs, une fois. Un magasin illisible donne un registre vide. */
+/**
+ * Relit registre et tarifs, une fois. Un magasin illisible n'est pas pris pour
+ * un magasin vide : il reste `null`, rien n'est écrit par-dessus, et la
+ * lecture est retentée à l'appel suivant.
+ */
 async function charger(): Promise<void> {
   if (chargement) return chargement;
   chargement = (async () => {
@@ -154,19 +185,32 @@ async function charger(): Promise<void> {
         brut && typeof brut === "object" && typeof brut.jours === "object"
           ? { version: 1, jours: brut.jours }
           : { version: 1, jours: {} };
+      illisible.registre = false;
     } catch (err) {
-      console.error("[usage] registre illisible :", err instanceof Error ? err.message : err);
-      registre = { version: 1, jours: {} };
+      console.error("[usage] registre illisible, rien n'est écrit par-dessus :", err instanceof Error ? err.message : err);
+      registre = null;
+      illisible.registre = true;
     }
     try {
       const brut = await db().read("tarifs");
       tarifs = brut && typeof brut === "object" ? (brut as Record<string, Tarif>) : {};
+      illisible.tarifs = false;
     } catch (err) {
-      console.error("[usage] tarifs illisibles :", err instanceof Error ? err.message : err);
-      tarifs = {};
+      console.error("[usage] tarifs illisibles, rien n'est écrit par-dessus :", err instanceof Error ? err.message : err);
+      tarifs = null;
+      illisible.tarifs = true;
     }
+    if (illisible.registre || illisible.tarifs) chargement = null;
   })();
   return chargement;
+}
+
+/** Pour les essais : oublie ce qui a été lu ; la lecture suivante repart du magasin. */
+export function oublierLecture(): void {
+  registre = null;
+  tarifs = null;
+  illisible = { registre: false, tarifs: false };
+  chargement = null;
 }
 
 /*
@@ -508,14 +552,75 @@ export function noterRefus(backendId: string): void {
 /* Tarifs                                                              */
 /* ------------------------------------------------------------------ */
 
-/** Un euro par jeton : au-delà, c'est une faute de frappe, pas un tarif. */
+/** Un euro (ou un dollar) par jeton : au-delà, c'est une faute de frappe, pas un tarif. */
 const TARIF_MAX = 1_000_000;
 
+const DEVISES: readonly Devise[] = ["EUR", "USD"];
+
+/** Devise d'un tarif saisi : euros quand elle manque (tarifs d'avant le 27/09/2026). */
+export const deviseDuTarif = (t: { devise?: unknown }): Devise =>
+  DEVISES.includes(t.devise as Devise) ? (t.devise as Devise) : "EUR";
+
 /** Nature du modèle d'après son identifiant qualifié, même s'il est hors ligne. */
-function backendDe(uid: string): { id: string; kind: BackendKind } | null {
+function backendDe(uid: string): { id: string; kind: BackendKind; catalogue?: string; baseUrl?: string } | null {
   const id = uid.split("/")[0];
   const b = tousLesBackends().find((x) => x.id === id);
-  return b ? { id: b.id, kind: b.kind } : null;
+  return b ? { id: b.id, kind: b.kind, catalogue: b.catalogue, baseUrl: b.baseUrl } : null;
+}
+
+/** Ce que l'écran montre d'un prix publié : de quoi le citer. */
+export interface PrixCite {
+  entree: number;
+  sortie: number;
+  devise: Devise;
+  fournisseur: string;
+  page: string;
+  releveLe: string;
+}
+
+/** Le prix publié pour un modèle distant, par son fournisseur, ou rien. */
+export function prixPublieDe(
+  uid: string,
+  backend: { id: string; kind: BackendKind | string; catalogue?: string; baseUrl?: string } | null,
+  le = new Date(),
+): PrixCite | null {
+  if (!backend || estLocal(backend.kind)) return null;
+  const f = fournisseurDuBackend(backend);
+  if (!f) return null;
+  const idModele = uid.startsWith(`${backend.id}/`) ? uid.slice(backend.id.length + 1) : uid;
+  const p = prixPublie(f.id, idModele, { le });
+  return p
+    ? { entree: p.tarif.entree, sortie: p.tarif.sortie, devise: p.tarif.devise, fournisseur: p.fournisseur.nom, page: p.fournisseur.page, releveLe: p.fournisseur.releveLe }
+    : null;
+}
+
+/**
+ * Coût d'un modèle sur la période, d'après ses jetons : le tarif saisi s'il y
+ * en a un, sinon le prix publié, sinon rien. Jamais zéro faute de tarif.
+ */
+export function coutDuModele(
+  c: { entree: number; sortie: number; requetesEstimees: number },
+  local: boolean,
+  saisi: Tarif | undefined,
+  publie: PrixCite | null,
+): Cout {
+  if (local) return { statut: "gratuit" };
+  const montant = (p: { entree: number; sortie: number }) => (c.entree * p.entree + c.sortie * p.sortie) / 1_000_000;
+  if (saisi) {
+    return { statut: "calcule", source: "saisi", montant: montant(saisi), devise: deviseDuTarif(saisi), estime: c.requetesEstimees > 0 };
+  }
+  if (publie) {
+    return {
+      statut: "calcule",
+      source: "publie",
+      montant: montant(publie),
+      devise: publie.devise,
+      // Toujours estimé : le prix publié ne sait rien du cache, des lots ni des paliers gratuits.
+      estime: true,
+      publie: { fournisseur: publie.fournisseur, page: publie.page, releveLe: publie.releveLe },
+    };
+  }
+  return { statut: "non-renseigne" };
 }
 
 export type ResultatTarif = { ok: true } | { ok: false; raison: string };
@@ -532,9 +637,10 @@ export async function definirTarif(
   qui: string,
 ): Promise<ResultatTarif> {
   await charger();
+  // Illisibles : on n'écrit pas une table de tarifs par-dessus celle qu'on n'a pas pu lire.
   if (!tarifs) return { ok: false, raison: t("Tarifs illisibles sur cette instance.") };
 
-  const c = (corps ?? {}) as { modele?: unknown; entree?: unknown; sortie?: unknown };
+  const c = (corps ?? {}) as { modele?: unknown; entree?: unknown; sortie?: unknown; devise?: unknown };
   if (typeof c.modele !== "string" || !c.modele.includes("/")) {
     return { ok: false, raison: t("« modele » doit être l'identifiant complet, par exemple « mistral/mistral-large ».") };
   }
@@ -558,24 +664,27 @@ export async function definirTarif(
       return {
         ok: false,
         raison:
-          t("Les deux prix sont requis, en euros par million de jetons, et doivent être des nombres positifs ou nuls."),
+          t("Les deux prix sont requis, par million de jetons, et doivent être des nombres positifs ou nuls."),
       };
+    }
+    if (c.devise !== undefined && !DEVISES.includes(c.devise as Devise)) {
+      return { ok: false, raison: t("« devise » doit valoir EUR ou USD.") };
     }
     tarifs[c.modele] = {
       entree: c.entree as number,
       sortie: c.sortie as number,
+      devise: (c.devise as Devise | undefined) ?? "EUR",
       depuis: new Date().toISOString(),
       par: qui,
     };
   }
 
   await db().write("tarifs", tarifs);
+  const resume = (x: Tarif | null) => (x ? { entree: x.entree, sortie: x.sortie, devise: deviseDuTarif(x) } : null);
   journaliser("tarif.modifie", qui, {
     modele: c.modele,
-    ancien: ancien ? { entree: ancien.entree, sortie: ancien.sortie } : null,
-    nouveau: tarifs[c.modele]
-      ? { entree: tarifs[c.modele].entree, sortie: tarifs[c.modele].sortie }
-      : null,
+    ancien: resume(ancien),
+    nouveau: resume(tarifs[c.modele] ?? null),
   });
   return { ok: true };
 }
@@ -599,22 +708,32 @@ interface CompteursRendus extends Compteurs {
 /**
  * Coût d'un modèle sur la période.
  *  - `gratuit`       : modèle local, aucun frais d'API ;
- *  - `non-renseigne` : modèle distant sans tarif, aucun montant n'est calculé ;
- *  - `calcule`       : jetons × tarif ; `estime` si une part des jetons l'est.
+ *  - `non-renseigne` : modèle distant sans tarif saisi ni prix publié connu,
+ *                      aucun montant n'est calculé ;
+ *  - `calcule`       : jetons × tarif, dans la devise du tarif ; `source` dit
+ *                      s'il a été saisi ou publié ; `estime` si une part des
+ *                      jetons l'est, et toujours pour un prix publié.
  */
-type Cout =
+export type Cout =
   | { statut: "gratuit" }
   | { statut: "non-renseigne" }
-  | { statut: "calcule"; montant: number; estime: boolean };
+  | {
+      statut: "calcule";
+      montant: number;
+      devise: Devise;
+      estime: boolean;
+      source: "saisi" | "publie";
+      publie?: { fournisseur: string; page: string; releveLe: string };
+    };
 
 export interface Rapport {
   periode: Periode;
   du: string;
   au: string;
   totaux: CompteursRendus & {
-    /** Somme des coûts calculés. */
-    cout: number;
-    /** Un coût au moins repose sur des jetons estimés. */
+    /** Somme des coûts calculés, devise par devise : aucun taux de change n'est inventé. */
+    couts: { devise: Devise; montant: number }[];
+    /** Un coût au moins est estimé (jetons estimés, ou prix publié). */
     coutEstime: boolean;
     /** Modèles distants utilisés sur la période et restés sans tarif. */
     sansTarif: number;
@@ -626,8 +745,15 @@ export interface Rapport {
     cout: Cout;
   })[];
   jours: { jour: string; entree: number; sortie: number; requetes: number }[];
-  /** Modèles distants connus, pour la saisie des tarifs. */
-  distants: { uid: string; backend: string; tarif: { entree: number; sortie: number; depuis: string } | null }[];
+  /** Modèles distants connus, pour la saisie des tarifs, avec le prix publié quand il est connu. */
+  distants: {
+    uid: string;
+    backend: string;
+    tarif: { entree: number; sortie: number; devise: Devise; depuis: string } | null;
+    publie: PrixCite | null;
+  }[];
+  /** Les tarifs saisis n'ont pas pu être lus : aucun coût distant n'est calculé, rien n'est réécrit. */
+  tarifsIllisibles: boolean;
   conservationJours: number;
 }
 
@@ -700,20 +826,16 @@ export async function rapport(compte: string, periode: Periode): Promise<Rapport
   }
 
   const tableTarifs = tarifs ?? {};
+  const tarifsIllisibles = tarifs === null;
+  /*
+   * Tarifs illisibles : un tarif saisi existe peut-être, et le prix publié ne
+   * doit pas passer devant lui. Aucun coût distant n'est donc calculé, et
+   * l'écran dit pourquoi.
+   */
+  const publieDe = (uid: string) => (tarifsIllisibles ? null : prixPublieDe(uid, backendDe(uid)));
   const modeles: Rapport["modeles"] = [...parModele.entries()]
     .map(([uid, { backend, local, c }]) => {
-      let cout: Cout;
-      if (local) cout = { statut: "gratuit" };
-      else {
-        const t = tableTarifs[uid];
-        cout = t
-          ? {
-              statut: "calcule",
-              montant: (c.entree * t.entree + c.sortie * t.sortie) / 1_000_000,
-              estime: c.requetesEstimees > 0,
-            }
-          : { statut: "non-renseigne" };
-      }
+      const cout = coutDuModele(c, local, tableTarifs[uid], local ? null : publieDe(uid));
       return { uid, backend, local, ...c, cout };
     })
     .sort((a, b) => b.entree + b.sortie - (a.entree + a.sortie));
@@ -724,7 +846,7 @@ export async function rapport(compte: string, periode: Periode): Promise<Rapport
     sortie: 0,
     raisonnement: 0,
     requetesEstimees: 0,
-    cout: 0,
+    couts: [],
     coutEstime: false,
     sansTarif: 0,
   };
@@ -735,7 +857,10 @@ export async function rapport(compte: string, periode: Periode): Promise<Rapport
     totaux.raisonnement += m.raisonnement;
     totaux.requetesEstimees += m.requetesEstimees;
     if (m.cout.statut === "calcule") {
-      totaux.cout += m.cout.montant;
+      const devise = m.cout.devise;
+      const cumul = totaux.couts.find((x) => x.devise === devise);
+      if (cumul) cumul.montant += m.cout.montant;
+      else totaux.couts.push({ devise, montant: m.cout.montant });
       if (m.cout.estime) totaux.coutEstime = true;
     } else if (m.cout.statut === "non-renseigne") totaux.sansTarif += 1;
   }
@@ -780,9 +905,11 @@ export async function rapport(compte: string, periode: Periode): Promise<Rapport
         return {
           uid,
           backend,
-          tarif: t ? { entree: t.entree, sortie: t.sortie, depuis: t.depuis } : null,
+          tarif: t ? { entree: t.entree, sortie: t.sortie, devise: deviseDuTarif(t), depuis: t.depuis } : null,
+          publie: publieDe(uid),
         };
       }),
+    tarifsIllisibles,
     conservationJours: CONSERVATION_JOURS,
   };
 }

@@ -104,6 +104,8 @@ export interface ModelInfo {
   proprietaire?: string;
   pays?: string;
   fournisseur?: string;
+  /** Fournisseur cloud reconnu (prixPublies.ts : « openai », « mistral »…), pour ses prix et ses noms de modèles. */
+  catalogue?: string;
 }
 
 export interface ChatMessage {

@@ -2,6 +2,7 @@ import { annuler, fermerDemande, modifie, ouvrirDemande, verifierOutil } from ".
 import { journaliser } from "./audit.ts";
 import { sessionCode } from "./sessionsCode.ts";
 import { t, tf } from "./langue.ts";
+import { isAbsolute, join, resolve } from "node:path";
 import { cheminReel, estProtege } from "./zonesProtegees.ts";
 
 /**
@@ -105,7 +106,8 @@ export function outilDe(d: DemandeOpenCode, dossier: string): { outil: string; a
     case "write":
     case "apply_patch": {
       const chemin = texte(m.filepath) || texte(m.filePath) || texte(motif);
-      return { outil, args: { path: chemin && !chemin.startsWith("/") ? `${dossier}/${chemin}` : chemin } };
+      // `isAbsolute`, pas `startsWith("/")` (audit Windows du 27/09/2026) : `C:\\projet\\app.ts` devenait `C:\\projet/C:\\projet\\app.ts`, refusé comme zone protégée.
+      return { outil, args: { path: chemin && !isAbsolute(chemin) ? join(dossier, chemin) : chemin } };
     }
     case "webfetch":
       return { outil, args: { url: texte(m.url) || texte(motif) } };
@@ -114,7 +116,8 @@ export function outilDe(d: DemandeOpenCode, dossier: string): { outil: string; a
       return { outil, args: { requete: texte(m.query) || texte(motif) } };
     default: {
       const chemin = texte(m.filepath) || texte(m.path) || texte(motif);
-      return { outil, args: chemin ? { path: chemin.startsWith("/") || chemin.includes("*") ? chemin : `${dossier}/${chemin}` } : {} };
+      // Un motif (`src/**/*.ts`) aussi, rattaché au dossier du projet : il se jugeait sinon depuis le dossier courant de la passerelle.
+      return { outil, args: chemin ? { path: isAbsolute(chemin) ? chemin : join(dossier, chemin) } : {} };
     }
   }
 }
@@ -158,7 +161,7 @@ export async function traiterPermissionCode(
    */
   if (typeof args.path === "string" && args.path) {
     const sansMotif = args.path.split(/[*?[{]/)[0]!;
-    if (estProtege(cheminReel(sansMotif || args.path))) {
+    if (estProtege(cheminReel(sansMotif ? resolve(dossier, sansMotif) : args.path))) {
       return refuser("zone-protegee", t("Refusé par l'instance : ce chemin est dans une zone protégée (données de l'instance, clés, réglages d'autres logiciels). Aucun accord ne l'ouvre."), proprietaire);
     }
   }

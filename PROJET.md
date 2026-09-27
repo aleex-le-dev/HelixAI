@@ -680,7 +680,7 @@ local, conforme à la règle du § 1) :
 | Brique | Éditeur | Licence | Usage | Remarque |
 |---|---|---|---|---|
 | CPython 3.12.14, construction autonome `python-build-standalone` (publication 20260901) | Python Software Foundation ; construction par Astral | PSF-2.0 (construction : MPL-2.0) | Python de l'atelier, de la dictée et de l'entraînement quand la machine n'en a pas un qui convient (`pythonPrive.ts`) | **accepté par Medhi le 27/09/2026** (« Python doit s'installer ») ; publication épinglée, empreintes SHA-256 écrites dans le code |
-| Node 24 LTS officiel | OpenJS Foundation | MIT (npm : Artistic 2.0) | npm de l'atelier quand la machine n'en a pas | même Node que celui d'OpenClaw, déjà en place ; empreinte vérifiée contre `SHASUMS256.txt` |
+| Node 24 LTS officiel | OpenJS Foundation | MIT (npm : Artistic 2.0) | npm de l'atelier et `npx` des serveurs d'outils (MCP) quand la machine n'en a pas | même Node que celui d'OpenClaw, déjà en place ; empreinte vérifiée contre `SHASUMS256.txt` |
 | llmster (moteur sans interface de LM Studio) | Element Labs | conditions de LM Studio (acceptées par l'entreprise à l'installation) | moteur des modèles sous Windows et Linux | empreinte SHA-512 publiée par l'éditeur, vérifiée |
 
 Écartés pour le RAG : LanceDB, better-sqlite3 / sqlite-vec et le reclassement par
@@ -2280,8 +2280,8 @@ pour la réponse suivante.
 **Le téléchargement direct**, marqué « bientôt », fonctionne : l'instance sert
 une archive de l'application qu'elle fait tourner (`telechargement.ts`), dans
 sa version exacte, sans passer par Internet ; le lien porte un billet d'une
-minute et d'un seul usage. Windows et Linux sont dits « pas encore
-construits ». L'écran explique le clic droit → Ouvrir, tant que l'application
+minute et d'un seul usage. Pour Windows et Linux, l'écran dit que l'instance
+ne sert que l'application macOS et renvoie au paquet du prestataire (27/09/2026). L'écran explique le clic droit → Ouvrir, tant que l'application
 n'est pas signée.
 
 **La sécurité, attaquée plutôt que relue** : `npm run securite` lance une
@@ -2746,13 +2746,45 @@ Seuls restent toujours confirmés : envoyer un mail, supprimer un événement, p
 tâche ; et un employé qui traite un mail reçu n'a jamais le web. L'écran dit ce risque au
 moment du choix (niveau d'approbation, palier « étendu »). Ne pas refaire à l'envers.
 
+**Fait le 27/09/2026 (nuit, suite) : relecture par cinq agents avant publication.** Demandée par
+Medhi (« déploie plusieurs agents, être sûr que tout est bon »). Windows, Linux et paquets,
+sécurité des installations, régressions sur macOS, documentation : tout ce qu'ils ont trouvé
+est corrigé (SECURITE.md § 29.3). Le plus sérieux : un membre pouvait faire exécuter un
+programme de son choix par l'instance (dossier de l'équipe et « Tout mon poste » désormais à
+l'administrateur, pointeur de LM Studio protégé et vérifié). Aussi : moteur llmster et Node
+épinglés avec leurs empreintes ; Helix Code et les documents de l'atelier corrigés pour
+Windows ; images et vidéos non proposées sur un Linux trop ancien ; nom du produit affiché
+sous Windows et Linux (« helix-plateforme » avant) ; icônes Linux à toutes les tailles ; sur
+macOS, Homebrew retrouvé par l'application ouverte depuis le Finder. `npm run securite` : 432
+contrôles, tous réussis.
+
+**Fait le 27/09/2026 (nuit) : Python posé par Helix, et le .deb essayé dans un Ubuntu vierge.**
+Demandé par Medhi (« fais en sorte que tout fonctionne, sûr, vérifié ; Python doit
+s'installer »). **Python** : quand la machine n'en a pas un qui convient, Helix pose
+CPython 3.12.14 autonome (python-build-standalone d'Astral, publication 20260901 épinglée,
+empreintes SHA-256 écrites dans `pythonPrive.ts`), pour l'atelier, la dictée, l'entraînement
+et le contrôle du code ; exception de licence décidée par Medhi (PSF, table des licences).
+Posé pour de vrai sur ce Mac (5 s) et dans l'Ubuntu. **Essai du `.deb`** dans un Ubuntu 24.04
+amd64 vierge (Docker, processeur émulé, écran virtuel Xvfb), installé sans les paquets
+recommandés, donc sans Python ni Node : l'atelier s'est installé seul (Python et Node de
+Helix, 10 bibliothèques Python, 6 Node, Word, Excel, PowerPoint et PDF créés puis relus) ; le
+moteur llmster s'est installé seul (1 Go, empreinte vérifiée), puis Helix a choisi, téléchargé
+et chargé Qwen3.5 4B ; un Chat a répondu (« Paris ») ; l'application complète s'est ouverte
+sur l'écran d'accueil. **L'essai a trouvé quatre défauts, corrigés et revérifiés** : trois
+bibliothèques manquaient au `.deb` (`libdrm2`, `libgbm1`, `libasound2`) ; l'application se
+fermait au démarrage sous Windows et Linux (une fenêtre de service fermée avant la fenêtre
+principale) ; llmster ne chargeait aucun modèle (dossier `.internal/temp` absent) ; sans
+`npx`, Cowork n'avait pas d'outils fichiers (désormais par un vrai Node, celui de Helix au
+besoin, ce qui règle aussi Windows, où `npx` est un `.cmd`). Vérifié : `npm run securite`,
+425 contrôles (2 de plus, section 11 quinquies). **Windows : toujours rien d'essayé.**
+
 **Fait le 27/09/2026 : les versions Windows et Linux, construites.** Demandé par Medhi (« fais
 la version Windows et Linux », « tout s'installe en automatique sans soucis, bien adapté »).
 Construits depuis ce Mac : `release/Helix Setup 0.27.0.exe` (NSIS, pour le compte, sans droits
 d'administration), `release/helix-plateforme_0.27.0_amd64.deb` et `release/Helix-0.27.0.AppImage`.
-**Aucun n'a encore été installé sur un vrai PC Windows ni sur une vraie machine Linux** : leur
-contenu a été vérifié (passerelle, ligne de commande, modules, dépendances du .deb, bac à sable
-de Chromium, profil AppArmor, liens `helix://`), pas leur fonctionnement. Ce qui a changé pour
+**Jamais installés sur un vrai PC Windows ni sur une vraie machine Linux.** Le `.deb` a ensuite
+été installé dans un Ubuntu 24.04 vierge (entrée suivante) ; l'installateur Windows n'a jamais
+tourné. Ce qui a changé pour
 qu'ils tiennent (SECURITE.md § 29.2, audit Windows et Linux du même jour) :
 - **Installation automatique** : le moteur de LM Studio s'installe seul aussi sur Windows et
   Linux (son moteur sans interface, llmster, par l'archive officielle et son empreinte
@@ -2761,8 +2793,9 @@ qu'ils tiennent (SECURITE.md § 29.2, audit Windows et Linux du même jour) :
   Microsoft Store), et, sans npm sur la machine, pose le Node officiel de Helix (déjà utilisé
   pour OpenClaw, empreinte vérifiée), zip compris sous Windows ; les archives d'images
   s'ouvrent sans `unzip` sous Linux. Le `.deb` fait installer par apt `libatomic1`,
-  `libgomp1`, `python3`, `python3-venv` et `unzip`. **Pas posés par Helix** : Python (licence
-  PSF, hors de la liste Apache/MIT) ; l'écran donne la commande exacte (winget, apt, dnf).
+  `libgomp1`, `python3`, `python3-venv` et `unzip`. **Python** : posé par Helix quand la
+  machine n'en a pas un qui convient (entrée suivante) ; la commande (winget, apt, dnf) n'est
+  donnée que là où il ne sait pas le poser.
 - **Fenêtre fermée** : l'application reste dans la zone de notification (tâches et employés
   continuent), « Quitter » arrête tout ; menu de fenêtre dans la langue de l'écran ; la
   passerelle s'arrête proprement sous Windows (canal, puis tout son arbre de processus) et
@@ -2847,13 +2880,15 @@ pas de source (c'est lui la source) : il se met à jour en installant le nouveau
 
 7. **Qwen-Image** (texte lisible dans l'image) : 48 Go ou carte de 24 Go.
 8. **Machine macOS de Cowork** (Lume) : Mac de 32 Go.
-9. **Windows et Linux** : paquets construits le 27/09/2026, jamais installés sur place.
-   À essayer, dans l'ordre : installation (SmartScreen sous Windows, `sudo apt install
-   ./helix-plateforme_…_amd64.deb` sous Ubuntu 24.04), démarrage et passerelle, icône de la
-   zone de notification (GNOME sans l'extension AppIndicator ne la montre pas), installation
-   du moteur llmster et premier modèle, un Chat ; puis images, dictée, atelier, Helix Code,
-   machine de l'agent. OpenClaw n'est pas proposé sous Windows (il y demande WSL) ; la ligne
-   de commande non plus ; ni la mise à jour d'un clic.
+9. **Windows et Linux** : paquets construits le 27/09/2026. **Windows : rien d'essayé**
+   (installation et SmartScreen, démarrage, icône de la zone de notification, moteur,
+   Python et Node de Helix, un Chat). **Linux** : le `.deb` essayé dans un conteneur Ubuntu
+   24.04 (installation, atelier, moteur, modèle, Chat, application ouverte), pas sur une
+   vraie machine ; restent l'icône de la zone de notification (GNOME sans l'extension
+   AppIndicator ne la montre pas), l'AppImage, images, dictée, Helix Code, machine de
+   l'agent, la vitesse réelle. Pas proposés sous Windows : OpenClaw (il y demande WSL), la
+   ligne de commande ; nulle part hors macOS : mise à jour d'un clic, essais de code en bac
+   à sable.
 10. **Entraînement sur carte NVIDIA** : installation de PyTorch CUDA, QLoRA, comparaison
     et fusion par peft jamais essayés sur une vraie machine (seule la conversion GGUF
     l'a été, sur le Mac) ; paquets NVIDIA figés à la version mais sans empreintes.
@@ -2903,7 +2938,7 @@ pas de source (c'est lui la source) : il se met à jour en installant le nouveau
 17. **Ligne de commande** : livrée avec l'application le 25/09/2026 (paquet
     `Resources/cli`, Paramètres > Installer les apps > CLI, qui pose `~/.local/bin/helix`
     et, si besoin, une ligne marquée dans `~/.zprofile` ; `electron/ligneDeCommande.cjs`).
-    Windows pas fait. Traductions anglaise et chinoise de ses textes (`cli/textes.mjs`), si le
+    Windows pas fait ; l'AppImage non plus (le `.deb` l'a). Traductions anglaise et chinoise de ses textes (`cli/textes.mjs`), si le
     client le demande. Documenter `NODE_EXTRA_CA_CERTS` pour une instance à certificat
     auto-signé.
 18. **Employés OpenClaw et bases de connaissances** : fait le 25/09/2026 (outil

@@ -77,9 +77,17 @@ async function charger(): Promise<StoredSession[]> {
          * stockage ne sait pas le ranger, les séances restent en mémoire
          * seulement : rien n'est écrit par-dessus ce qu'on n'a pas pu lire.
          */
-        const garde = await Promise.resolve(db().mettreDeCote?.("authSessions")).catch(() => null);
+        /*
+         * Rangé à côté seulement s'il est vraiment abîmé (JSON illisible). Un
+         * trousseau verrouillé, un antivirus qui tient le fichier, un disque
+         * lent : le fichier est bon, on ne le déplace pas (revues du
+         * 27/09/2026) ; les séances vivent alors en mémoire, sans rien écrire
+         * par-dessus, jusqu'au prochain démarrage.
+         */
+        const abime = /abîmée/.test((err as Error).message);
+        const garde = abime ? await Promise.resolve(db().mettreDeCote?.("authSessions")).catch(() => null) : null;
         if (!garde) sansEcriture = true;
-        console.error(`[helix] séances de connexion illisibles (${(err as Error).message}) : ${garde ? `gardées dans ${garde}, ` : ""}chacun se reconnecte.`);
+        console.error(`[helix] séances de connexion illisibles (${(err as Error).message}) : ${garde ? `gardées dans ${garde}, ` : "laissées en place, "}chacun se reconnecte.`);
         cache = [];
       }
       return cache;

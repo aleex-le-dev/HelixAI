@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { execFile } from "node:child_process";
-import { createWriteStream, existsSync, mkdirSync, rmSync, renameSync, symlinkSync, readlinkSync, unlinkSync } from "node:fs";
+import { createWriteStream, existsSync, mkdirSync, rmSync, symlinkSync, readlinkSync, unlinkSync } from "node:fs";
 import { homedir, release, platform, arch, tmpdir } from "node:os";
 import { join } from "node:path";
 import { Readable } from "node:stream";
@@ -8,6 +8,7 @@ import { pipeline } from "node:stream/promises";
 import { deployment } from "./deployment.ts";
 import { journaliser } from "./audit.ts";
 import { t, tf } from "./langue.ts";
+import { renommer } from "./processus.ts";
 
 /**
  * Installe OpenClaw pour les employés, depuis l'interface, sans droits
@@ -17,9 +18,8 @@ import { t, tf } from "./langue.ts";
  * (`install-cli.sh`, docs.openclaw.ai/install/installer), refait ici pas à pas
  * plutôt que d'exécuter un script téléchargé :
  *
- *  1. un Node officiel (dernière version 24 LTS publiée par nodejs.org, ou celle
- *     du profil), dont l'archive est vérifiée contre `SHASUMS256.txt` avant
- *     d'être ouverte ;
+ *  1. un Node officiel (24.21.0 LTS, épinglé avec ses empreintes, ou la version
+ *     du profil), dont l'archive est vérifiée avant d'être ouverte ;
  *  2. OpenClaw installé par le npm de ce Node, dans ce même dossier, à la
  *     version qu'Helix a éprouvée (ou celle du profil), avec l'autorisation de
  *     scripts d'installation limitée au seul paquet `openclaw` (npm 11.16+) ;
@@ -85,7 +85,7 @@ function plateformeNode(pour: "openclaw" | "atelier" = "openclaw"): { dossier: s
     return { dossier: `darwin-${a}`, cleIndex: `osx-${a}-tar`, extension: ".tar.gz" };
   }
   if (platform() === "linux") return { dossier: `linux-${a}`, cleIndex: `linux-${a}`, extension: ".tar.gz" };
-  return { erreur: t("L'installation automatique d'OpenClaw est prévue pour macOS et Linux (sous Windows, OpenClaw demande WSL).") };
+  return { erreur: t("L'installation automatique d'OpenClaw n'existe que pour macOS et Linux (sous Windows, OpenClaw demande WSL).") };
 }
 
 /** Le Node privé : `node.exe` à la racine de son dossier sous Windows, dans `bin/` ailleurs. */
@@ -135,29 +135,49 @@ async function telecharger(url: string, delaiMs: number): Promise<Response> {
   try {
     return await fetch(url, { signal: AbortSignal.timeout(delaiMs) });
   } catch {
-    throw new Error(`${new URL(url).host} est injoignable : vérifiez l'accès à internet de cette machine.`);
+    throw new Error(tf("{0} est injoignable : vérifiez l'accès à internet de cette machine.", new URL(url).host));
   }
 }
 
-/** Dernière version 24 LTS publiée, 24.16 au moins (plancher d'OpenClaw), sauf version imposée. */
-async function versionNode(cleIndex: string): Promise<string> {
-  const imposee = deployment().openclaw?.node;
-  if (imposee) return imposee.replace(/^v/, "");
-  const r = await telecharger("https://nodejs.org/dist/index.json", 20_000);
-  if (!r.ok) throw new Error(`nodejs.org a répondu ${r.status}.`);
-  const liste = (await r.json()) as { version: string; lts: string | false; files: string[] }[];
-  const retenue = liste.find((v) => {
-    const [maj = 0, min = 0] = v.version.replace(/^v/, "").split(".").map(Number);
-    return maj === 24 && min >= 16 && v.lts && v.files.includes(cleIndex);
-  });
-  if (!retenue) throw new Error("Aucune version de Node 24 compatible n'est publiée pour cette machine.");
-  return retenue.version.replace(/^v/, "");
+/*
+ * Node épinglé, avec l'empreinte SHA-256 de chaque archive écrite ici (revue
+ * de sécurité du 27/09/2026, relevées ce jour-là dans `SHASUMS256.txt` de
+ * nodejs.org) : avant, Helix prenait la dernière 24 LTS publiée et son
+ * empreinte sur le même serveur. Une version imposée par le profil
+ * (`openclaw.node`) reste possible : c'est alors l'exploitant qui la choisit,
+ * et son empreinte est lue dans `SHASUMS256.txt`.
+ */
+const NODE_EPINGLE = "24.21.0";
+const EMPREINTES_NODE: Record<string, string> = {
+  "node-v24.21.0-darwin-arm64.tar.gz": "bed7eea5325e1108f32ce5228ddd6a5f0f08a499ee42aa7442aea583702f6057",
+  "node-v24.21.0-darwin-x64.tar.gz": "1462cb3b3046b815cf8ea436d3da450ec1a9f11dac7e5a46b0ada5305d7e8097",
+  "node-v24.21.0-linux-x64.tar.gz": "6e1db87ef58b8819e5d5402eff1536491b18edd8eb7bee5ef7897876e88dc5ff",
+  "node-v24.21.0-linux-arm64.tar.gz": "724282c3b43aec998aa9527380465b45d229e021b58035f5f4f63095eabfe5d5",
+  "node-v24.21.0-win-x64.zip": "158f7685b44de51f6c0df1d153526cbcd3e1bc739a8dfc607721cef75de9e541",
+  "node-v24.21.0-win-arm64.zip": "8779b1bde1d39f8d420e3b57aa657b39891af434d3de44a919044cec06785921",
+};
+
+const versionNode = (): string => deployment().openclaw?.node?.replace(/^v/, "") || NODE_EPINGLE;
+
+/*
+ * Une installation à la fois (revue de sécurité du 27/09/2026) : l'atelier et
+ * deux serveurs d'outils pouvaient la demander ensemble, et chacune effaçait
+ * puis remettait le dossier de Node sous l'autre, en train de s'en servir.
+ */
+const nodeEnCours = new Map<string, Promise<string>>();
+function installerNode(pour: "openclaw" | "atelier" = "openclaw"): Promise<string> {
+  let enCoursIci = nodeEnCours.get(pour);
+  if (!enCoursIci) {
+    enCoursIci = installerNodeUneFois(pour).finally(() => nodeEnCours.delete(pour));
+    nodeEnCours.set(pour, enCoursIci);
+  }
+  return enCoursIci;
 }
 
-async function installerNode(pour: "openclaw" | "atelier" = "openclaw"): Promise<string> {
+async function installerNodeUneFois(pour: "openclaw" | "atelier"): Promise<string> {
   const p = plateformeNode(pour);
   if ("erreur" in p) throw new Error(p.erreur);
-  const version = await versionNode(p.cleIndex);
+  const version = versionNode();
   const nom = `node-v${version}-${p.dossier}`;
   const dossierNode = join(racine(), nom);
   const lien = join(racine(), "node");
@@ -167,17 +187,20 @@ async function installerNode(pour: "openclaw" | "atelier" = "openclaw"): Promise
   }
 
   const base = `https://nodejs.org/dist/v${version}`;
-  const sommes = await telecharger(`${base}/SHASUMS256.txt`, 20_000);
-  if (!sommes.ok) throw new Error(`Empreintes de Node introuvables (${sommes.status}).`);
-  const attendue = (await sommes.text())
-    .split("\n")
-    .map((l) => l.trim().split(/\s+/))
-    .find(([, f]) => f === `${nom}${p.extension}`)?.[0];
+  let attendue: string | undefined = version === NODE_EPINGLE ? EMPREINTES_NODE[`${nom}${p.extension}`] : undefined;
+  if (version !== NODE_EPINGLE) {
+    const sommes = await telecharger(`${base}/SHASUMS256.txt`, 20_000);
+    if (!sommes.ok) throw new Error(tf("Empreintes de Node introuvables ({0}).", sommes.status));
+    attendue = (await sommes.text())
+      .split("\n")
+      .map((l) => l.trim().split(/\s+/))
+      .find(([, f]) => f === `${nom}${p.extension}`)?.[0];
+  }
   if (!attendue) throw new Error(t("Empreinte de l'archive de Node introuvable."));
 
   const archive = join(tmpdir(), `helix-${nom}-${Date.now()}${p.extension}`);
   const r = await telecharger(`${base}/${nom}${p.extension}`, 10 * 60_000);
-  if (!r.ok || !r.body) throw new Error(`Téléchargement de Node impossible (${r.status}).`);
+  if (!r.ok || !r.body) throw new Error(tf("Téléchargement de Node impossible ({0}).", r.status));
   const total = Number(r.headers.get("content-length") ?? 0);
   const empreinte = createHash("sha256");
   let recu = 0;
@@ -191,11 +214,11 @@ async function installerNode(pour: "openclaw" | "atelier" = "openclaw"): Promise
     await pipeline(flux, createWriteStream(archive, { mode: 0o600 }));
   } catch {
     rmSync(archive, { force: true });
-    throw new Error("Le téléchargement de Node s'est interrompu : vérifiez la connexion, puis réessayez.");
+    throw new Error(t("Le téléchargement de Node s'est interrompu : vérifiez la connexion, puis réessayez."));
   }
   if (empreinte.digest("hex") !== attendue) {
     rmSync(archive, { force: true });
-    throw new Error("L'archive de Node ne correspond pas à son empreinte officielle : installation arrêtée.");
+    throw new Error(t("L'archive de Node ne correspond pas à son empreinte officielle : installation arrêtée."));
   }
 
   mkdirSync(racine(), { recursive: true, mode: 0o700 });
@@ -209,9 +232,17 @@ async function installerNode(pour: "openclaw" | "atelier" = "openclaw"): Promise
     rmSync(provisoire, { recursive: true, force: true });
     throw new Error(tf("Extraction de Node impossible : {0}", extraction.erreur.slice(-200)));
   }
-  rmSync(dossierNode, { recursive: true, force: true });
-  renameSync(join(provisoire, nom), dossierNode);
-  rmSync(provisoire, { recursive: true, force: true });
+  // Déjà posé entre-temps (autre processus) : on garde celui en place, on ne l'efface pas sous qui s'en sert.
+  if (existsSync(executableNode(dossierNode))) {
+    rmSync(provisoire, { recursive: true, force: true });
+  } else {
+    rmSync(dossierNode, { recursive: true, force: true });
+    try {
+      renommer(join(provisoire, nom), dossierNode);
+    } finally {
+      rmSync(provisoire, { recursive: true, force: true });
+    }
+  }
   relier(lien, nom);
   return version;
 }

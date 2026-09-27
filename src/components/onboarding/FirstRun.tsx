@@ -16,7 +16,7 @@ import { branding } from "@/config/branding";
 import { useProvision } from "@/hooks/useProvision";
 import { isDesktopApp } from "@/lib/instance";
 import { cn } from "@/lib/cn";
-import { t } from "@/lib/i18n";
+import { t, tf } from "@/lib/i18n";
 
 /**
  * Première mise en route : aucun modèle n'est disponible.
@@ -167,7 +167,7 @@ export function FirstRun({ onReady }: { onReady: () => void }) {
         )}
 
         <p className="max-w-md text-xs leading-relaxed text-muted-foreground">
-          {t("Le paquet vient de l'éditeur, et son empreinte est vérifiée avant installation. Vous n'aurez jamais à le lancer vous-même :")}{" "}{branding.name}{" "}{t("le démarre et l'arrête avec lui.")}
+          {t("Le paquet vient de l'éditeur, et son empreinte est vérifiée avant installation. Vous n'aurez jamais à le lancer vous-même :")}{" "}{branding.name}{" "}{t("le démarre quand il en a besoin et, en partant, décharge les modèles qu'il a chargés.")}
         </p>
       </Shell>
     );
@@ -207,7 +207,7 @@ export function FirstRun({ onReady }: { onReady: () => void }) {
         <div className="mt-1.5 flex items-baseline justify-between gap-3">
           <span className="font-medium text-foreground">{recommended.label}</span>
           <span className="text-xs text-muted-foreground">
-            environ {recommended.downloadGb}{" "}{t("Go")}
+            {tf("environ {0} Go", recommended.downloadGb)}
           </span>
         </div>
         <p className="mt-1 text-sm text-muted-foreground">{recommended.description}</p>
@@ -255,7 +255,7 @@ export function FirstRun({ onReady }: { onReady: () => void }) {
           </Button>
         ) : (
           <Button icon={Download} disabled={busy} onClick={() => start()}>
-            {busy ? "Installation en cours..." : t("Installer et démarrer")}
+            {busy ? t("Installation en cours...") : t("Installer et démarrer")}
           </Button>
         )}
       </div>

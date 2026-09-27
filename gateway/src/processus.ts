@@ -1,3 +1,4 @@
+import { existsSync, renameSync } from "node:fs";
 import { syncBuiltinESMExports } from "node:module";
 import { promisify } from "node:util";
 // L'objet du module lui-même (modifiable), pas son espace de noms : c'est lui que lisent les autres modules.
@@ -35,7 +36,8 @@ export function cacherLesConsoles(): void {
     if (typeof original !== "function") return;
     const corriger = (args: unknown[]): unknown[] => {
       const a = [...args];
-      const i = avecArguments && Array.isArray(a[1]) ? 2 : 1;
+      // `spawn(cmd, undefined, options)` aussi : les options sont en troisième place.
+      const i = avecArguments && (Array.isArray(a[1]) || ((a[1] === undefined || a[1] === null) && a.length > 2)) ? 2 : 1;
       if (estOptions(a[i])) a[i] = avecDefaut(a[i] as Record<string, unknown>);
       else if (a[i] === undefined || a[i] === null) a[i] = { windowsHide: true };
       // Un rappel à la place des options : les options s'intercalent, le rappel suit.
@@ -93,9 +95,53 @@ export function arreterPidArbre(pid: number, signal: NodeJS.Signals = "SIGTERM")
   }
 }
 
+/**
+ * Renomme, en réessayant sous Windows : juste après une extraction, l'antivirus
+ * (Defender) inspecte les `.exe`, `.dll` et `.pyd` et tient le dossier quelques
+ * secondes ; le renommage échouait alors en EPERM (audit du 27/09/2026).
+ * Jusqu'à 10 s, puis l'erreur telle quelle. Ailleurs, un renommage simple.
+ */
+export function renommer(de: string, vers: string): void {
+  const attente = new Int32Array(new SharedArrayBuffer(4));
+  for (let essai = 0; ; essai++) {
+    try {
+      renameSync(de, vers);
+      return;
+    } catch (err) {
+      const code = (err as NodeJS.ErrnoException).code;
+      if (process.platform !== "win32" || essai >= 20 || (code !== "EPERM" && code !== "EACCES" && code !== "EBUSY")) throw err;
+      Atomics.wait(attente, 0, 0, 100 * Math.min(essai + 1, 10));
+    }
+  }
+}
+
+/*
+ * macOS : une application ouverte depuis le Finder ou le Dock ne reçoit que le
+ * PATH minimal du système (`/usr/bin:/bin:/usr/sbin:/sbin`). Les programmes de
+ * Homebrew (`npx`, `npm`, `node`, `python3`) y étaient introuvables, ou
+ * trouvés par leur chemin mais incapables de lancer `node` (`env: node`),
+ * et le serveur de fichiers de Cowork ne démarrait pas (revue du 27/09/2026).
+ * Leurs dossiers sont ajoutés à la fin du PATH, s'ils existent : ce qui est
+ * déjà dans le PATH garde la priorité.
+ */
+export function completerPathMacos(): void {
+  if (process.platform !== "darwin") return;
+  const actuel = (process.env.PATH ?? "").split(":").filter(Boolean);
+  const ajouts = ["/opt/homebrew/bin", "/opt/homebrew/sbin", "/usr/local/bin"].filter((d) => !actuel.includes(d) && existsSync(d));
+  if (ajouts.length > 0) process.env.PATH = [...actuel, ...ajouts].join(":");
+}
+
 /*
  * Posé dès l'import : index.ts importe ce module en premier, avant ceux qui
  * font `promisify(execFile)` à leur chargement et garderaient sinon la version
  * qui montre la console.
  */
 cacherLesConsoles();
+completerPathMacos();
+/*
+ * Windows : Python lit et écrit ses tuyaux dans la page de code ANSI
+ * (cp1252, cp936 en chinois) ; les documents de l'atelier sortaient avec des
+ * accents abîmés, ou plantaient sur certains caractères (audit du 27/09/2026).
+ * Le mode UTF-8 de Python, pour tout ce que la passerelle lance.
+ */
+if (process.platform === "win32") process.env.PYTHONUTF8 ??= "1";

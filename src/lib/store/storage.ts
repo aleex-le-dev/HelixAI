@@ -10,6 +10,7 @@
 import { COLLECTIONS, push, type Collection } from "./sync";
 import { ecrireSecret, lireSecret } from "@/lib/coffre";
 import { auGrand, ecrireGrand, lireGrand } from "./grandStockage";
+import { refuseesParLeNavigateur } from "./secours";
 
 const PREFIX = "helix:";
 
@@ -48,6 +49,8 @@ const AU_COFFRE = new Set(["identity:current"]);
 export function brut(key: string): string | null {
   if (AU_COFFRE.has(key)) return lireSecret(PREFIX + key) ?? null;
   if (auGrand(key)) return lireGrand(key);
+  const refusee = refuseesParLeNavigateur.get(PREFIX + key);
+  if (refusee !== undefined) return refusee;
   try {
     return localStorage.getItem(PREFIX + key);
   } catch {
@@ -78,8 +81,11 @@ export const storage = {
     }
     try {
       localStorage.setItem(PREFIX + key, JSON.stringify(value));
+      refuseesParLeNavigateur.delete(PREFIX + key);
     } catch {
-      return; // quota dépassé ou stockage indisponible
+      // Quota dépassé : gardée en mémoire, et envoyée quand même à l'instance (secours.ts).
+      refuseesParLeNavigateur.set(PREFIX + key, JSON.stringify(value));
+      console.warn(`[helix] stockage du navigateur plein : « ${key} » est gardé en mémoire et envoyé à l'instance.`);
     }
     const collection = collectionOf(key);
     if (collection) void push(collection);
@@ -97,6 +103,7 @@ export const storage = {
       return;
     }
     try {
+      refuseesParLeNavigateur.delete(PREFIX + key);
       localStorage.removeItem(PREFIX + key);
     } catch {
       return;

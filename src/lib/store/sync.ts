@@ -1,6 +1,7 @@
 import { apiFetch } from "@/lib/endpoint";
 import { retenirGroupes } from "@/lib/store/identity";
 import { auGrand, ecrireGrand, grandIllisible, grandRelu, lireGrand, noterReleve } from "@/lib/store/grandStockage";
+import { refuseesParLeNavigateur } from "./secours";
 
 /**
  * Synchronisation multi-postes.
@@ -77,7 +78,7 @@ function readLocal(collection: Collection): unknown {
   }
   try {
     // Les Chats, dans l'application de bureau, vivent dans le grand stockage (grandStockage.ts).
-    const raw = auGrand(collection) ? lireGrand(collection) : localStorage.getItem(localKey(collection));
+    const raw = auGrand(collection) ? lireGrand(collection) : (refuseesParLeNavigateur.get(localKey(collection)) ?? localStorage.getItem(localKey(collection)));
     return raw ? JSON.parse(raw) : null;
   } catch {
     return null;
@@ -100,6 +101,8 @@ function writeLocal(collection: Collection, value: unknown): boolean {
       return true;
     }
     localStorage.setItem(localKey(collection), JSON.stringify(value));
+    // Gardée pour de bon : ce que la mémoire tenait à sa place (secours.ts) n'a plus lieu d'être.
+    refuseesParLeNavigateur.delete(localKey(collection));
     return true;
   } catch {
     return false;

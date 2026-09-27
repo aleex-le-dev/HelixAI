@@ -161,6 +161,8 @@ export function nomsEtAdresses(): { noms: string[]; ips: string[] } {
 export function cartesUtiles(): { carte: string; ip: string; genre: GenreDAdresse }[] {
   const trouvees: { carte: string; ip: string; genre: GenreDAdresse }[] = [];
   for (const [nom, cartes] of Object.entries(networkInterfaces())) {
+    // Réseaux virtuels de cette machine (Docker, machines virtuelles) : aucun collègue ne les joint (revue Linux du 27/09/2026).
+    if (/^(docker\d|virbr\d|br-|veth|vmnet|vboxnet|lxcbr|lxdbr|cni|flannel|podman)/i.test(nom)) continue;
     for (const carte of cartes ?? []) {
       if (carte.internal || carte.family !== "IPv4") continue;
       // 169.254.x.x : adresse d'auto-configuration, signe qu'il n'y a pas de réseau.

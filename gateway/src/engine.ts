@@ -1,14 +1,16 @@
 import { execFile, execFileSync } from "node:child_process";
 import { promisify } from "node:util";
 import { createHash } from "node:crypto";
-import { createWriteStream, existsSync, mkdirSync, readFileSync } from "node:fs";
+import { createWriteStream, existsSync, mkdirSync, readFileSync, statSync } from "node:fs";
 import { mkdtemp, rm, access, mkdir } from "node:fs/promises";
 import { constants } from "node:fs";
 import { tmpdir, homedir } from "node:os";
-import { join } from "node:path";
+import { isAbsolute, join, resolve, sep } from "node:path";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { t, tf } from "./langue.ts";
+import { workspace } from "./mcp.ts";
+import { tarDuSysteme } from "./pythonPrive.ts";
 
 const exec = promisify(execFile);
 
@@ -72,7 +74,7 @@ async function telecharger(
   algorithme: "sha256" | "sha512" = "sha256",
 ): Promise<string> {
   const res = await fetch(paquet.url, { signal: AbortSignal.timeout(30 * 60_000) });
-  if (!res.ok || !res.body) throw new Error(`Téléchargement impossible (HTTP ${res.status}).`);
+  if (!res.ok || !res.body) throw new Error(tf("Téléchargement impossible (HTTP {0}).", res.status));
 
   const total = Number(res.headers.get("content-length") ?? 0);
   const hash = createHash(algorithme);
@@ -244,33 +246,70 @@ export async function installerMoteur(
  * (lmstudio.ai/install.sh et install.ps1), mais sans exécuter de script
  * téléchargé :
  *
- *  1. la version courante est lue dans le script officiel (une ligne,
- *     vérifiée par une expression stricte) ;
- *  2. l'archive vient du dépôt de l'éditeur, et **son empreinte SHA-512**, que
- *     l'éditeur publie à côté, est vérifiée avant ouverture ;
+ *  1. la version est épinglée ici, avec l'empreinte SHA-512 de chaque archive
+ *     (relevée dans les fichiers `.sha512` que l'éditeur publie) ;
+ *  2. l'archive vient du dépôt de l'éditeur, et son empreinte est vérifiée
+ *     avant ouverture ;
  *  3. l'archive est ouverte par `tar` (celui de Windows lui-même, pas un autre
  *     trouvé dans le PATH), puis `llmster bootstrap` pose `lms` dans
  *     `~/.lmstudio/bin`, pour ce compte seulement : ni droits
  *     d'administration, ni fenêtre, ni PATH modifié.
  *
- * Limite dite : l'empreinte vient du même serveur que l'archive. Elle écarte
- * un fichier abîmé ou coupé en route, pas un serveur de l'éditeur compromis.
- * Sur macOS, l'empreinte vient d'un catalogue tiers (Homebrew). Pas encore
- * essayé sur une vraie machine Windows ni Linux.
+ * Limite dite : l'empreinte a été relevée sur le même serveur que l'archive,
+ * mais une fois, le 27/09/2026, et écrite ici : un serveur compromis ensuite
+ * ne peut plus faire installer autre chose. Sur macOS, l'empreinte vient d'un
+ * catalogue tiers (Homebrew). Essayé dans un Ubuntu 24.04 (conteneur), pas
+ * encore sur une vraie machine Windows ni Linux.
  */
 
-const SCRIPT_OFFICIEL = process.platform === "win32" ? "https://lmstudio.ai/install.ps1" : "https://lmstudio.ai/install.sh";
+/*
+ * Version épinglée et empreintes SHA-512 écrites ici (revue de sécurité du
+ * 27/09/2026), relevées ce jour-là dans les fichiers `.sha512` de l'éditeur :
+ * plus rien n'est lu en ligne pour décider quoi installer, et une archive
+ * changée sur le serveur, même avec une empreinte changée à côté, est refusée.
+ * Passer à une version plus récente, c'est relever ses empreintes et les
+ * écrire ici. L'empreinte de `linux-x64.full` est celle vérifiée par
+ * l'installation réelle dans un Ubuntu 24.04 le même jour.
+ */
+const LLMSTER_VERSION = "0.0.25-1";
+const LLMSTER: Record<string, { sha512: string; octets: number }> = {
+  "0.0.25-1-linux-x64.full": { sha512: "4d119af740379fc7509894d761a85183420a6dd3cb994596a1b6e4b37208a5d3e8cb94ffe583115b1473a6722bab5fffc09b90eb22c755f5dde1458774ab4951", octets: 1_005_168_404 },
+  "0.0.25-1-linux-x64.full+cuda12": { sha512: "179e05cee62c1e1f61f1c6480179b1e21df63af64ffa3a949a94f026afc4552d7a36db7208345e65f21f040d864c1603bf6cd1c0292e4751d696bee5679db007", octets: 1_105_623_572 },
+  "0.0.25-1-linux-arm64.full": { sha512: "9743cfce0fd1e2b76f4fcbef6fbe4ed68f4e953781c0eba5c5db33308209f007939f3f946995618f22f8c4bb977919408c23a5cbbb369f530e2c92738f6891bc", octets: 1_257_501_655 },
+  "0.0.25-1-win32-x64.full": { sha512: "a17bfd052ea7a63182c4cd39b0619982e8027d19f6b00d0207207c8fa308540e502251662886a8ce8191a2bd0eb9132a48ee4991e784ebb5474d62ed3103fffe", octets: 868_484_756 },
+  "0.0.25-1-win32-arm64.full": { sha512: "fde8717b0ec91758a5dbd3e2ef15d7d8cbe26d4190fedde258c9c38846fc7c79e320c75bf3e0793c53163a3460f5259f3036016929ea38098f7abeedb7e5e15b", octets: 279_979_911 },
+};
 const DEPOT_LLMSTER = "https://llmster.lmstudio.ai/download";
 
 /** Le dossier de LM Studio pour ce compte : `~/.lmstudio`, ou celui que désigne `~/.lmstudio-home-pointer`. */
 export function dossierLmStudio(): string {
+  const habituel = join(homedir(), ".lmstudio");
   try {
     const pointe = readFileSync(join(homedir(), ".lmstudio-home-pointer"), "utf8").trim();
-    if (pointe) return pointe;
+    /*
+     * Le pointeur n'est suivi que vers un dossier local sûr (revue de sécurité
+     * du 27/09/2026) : chemin absolu, pas un partage réseau (`\\serveur`, qui
+     * enverrait les identifiants Windows ailleurs), un vrai dossier, à ce
+     * compte sous macOS et Linux, et hors des dossiers que les agents peuvent
+     * écrire. Sinon, l'emplacement habituel : c'est `bin/lms` de ce dossier
+     * que la passerelle lance.
+     */
+    if (pointe && isAbsolute(pointe) && !/^[\\/]{2}/.test(pointe)) {
+      const st = statSync(pointe);
+      const aMoi = process.platform === "win32" || typeof process.getuid !== "function" || st.uid === process.getuid();
+      if (st.isDirectory() && aMoi && !espaceEcrivable(pointe)) return pointe;
+    }
   } catch {
-    /* pas de pointeur : l'emplacement habituel */
+    /* pas de pointeur, ou illisible : l'emplacement habituel */
   }
-  return join(homedir(), ".lmstudio");
+  return habituel;
+}
+
+/** Le dossier est-il dans l'espace de travail des agents, ou le contient-il ? */
+function espaceEcrivable(dossier: string): boolean {
+  const a = resolve(dossier).toLowerCase();
+  const b = resolve(workspace()).toLowerCase();
+  return a === b || a.startsWith(b + sep) || b.startsWith(a + sep);
 }
 
 export const lmsDeLlmster = (): string => join(dossierLmStudio(), "bin", process.platform === "win32" ? "lms.exe" : "lms");
@@ -291,16 +330,6 @@ export function preparerDossiersLlmster(): void {
   } catch {
     /* dossier du moteur en lecture seule : le chargement le dira */
   }
-}
-
-/** Version courante de llmster, lue dans le script officiel. */
-async function versionLlmster(): Promise<string> {
-  const res = await fetch(SCRIPT_OFFICIEL, { signal: AbortSignal.timeout(20_000) });
-  if (!res.ok) throw new Error(tf("Le site de LM Studio ne répond pas (HTTP {0}).", res.status));
-  const texte = await res.text();
-  const version = /^\s*\$?APP_VERSION\s*=\s*["']([0-9]+\.[0-9]+\.[0-9]+-[0-9]+)["']\s*$/m.exec(texte)?.[1];
-  if (!version) throw new Error(t("La version du moteur de LM Studio est introuvable dans son installateur officiel."));
-  return version;
 }
 
 /** Pilote NVIDIA assez récent pour la version CUDA 12 du moteur (même seuil que l'installateur officiel : 550.54.14). */
@@ -352,9 +381,6 @@ function bibliothequesManquantes(): string[] {
   return ["libatomic.so.1"].filter((b) => !liste.includes(b));
 }
 
-/** `tar` du système : sous Windows, celui de Windows (celui de Git ne sait pas lire `C:`). */
-const tarDuSysteme = () =>
-  process.platform === "win32" ? join(process.env.SystemRoot ?? "C:\\Windows", "System32", "tar.exe") : "tar";
 
 async function installerLlmster(onProgress: (p: EngineProgress) => void): Promise<string> {
   const manquantes = bibliothequesManquantes();
@@ -368,23 +394,11 @@ async function installerLlmster(onProgress: (p: EngineProgress) => void): Promis
   }
 
   onProgress({ phase: "resolution", message: t("Recherche de la dernière version...") });
-  const version = await versionLlmster();
+  const version = LLMSTER_VERSION;
   const { nom, extension } = nomLlmster(version);
-
-  // L'empreinte publiée par l'éditeur : `<archive>.sha512`, sinon `<nom>.sha512` (les deux formes de son installateur).
-  let attendue: string | null = null;
-  for (const fichier of [`${nom}${extension}.sha512`, `${nom}.sha512`]) {
-    try {
-      const r = await fetch(`${DEPOT_LLMSTER}/${fichier}`, { signal: AbortSignal.timeout(20_000) });
-      if (!r.ok) continue;
-      attendue = /\b([0-9a-f]{128})\b/i.exec(await r.text())?.[1]?.toLowerCase() ?? null;
-      if (attendue) break;
-    } catch {
-      /* forme suivante */
-    }
-  }
-  // Sans empreinte, rien n'est installé : c'est la règle du projet, sans exception.
-  if (!attendue) throw new Error(t("L'éditeur ne publie pas d'empreinte pour ce moteur : installation interrompue."));
+  // Sans empreinte écrite ici, rien n'est installé : c'est la règle du projet, sans exception.
+  const attendue = LLMSTER[nom]?.sha512;
+  if (!attendue) throw new Error(tf("Le moteur de LM Studio n'existe pas pour ce processeur ({0}).", process.arch));
 
   const travail = await mkdtemp(join(tmpdir(), "helix-moteur-"));
   try {

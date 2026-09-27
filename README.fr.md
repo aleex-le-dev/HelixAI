@@ -36,20 +36,27 @@ et modèles restent sur ses machines, et rien n'est vendu ni loué.
 
 ## Installation
 
-Aucune version signée n'est encore publiée. Tant que l'application n'est pas signée et
-notariée par Apple, construisez-la depuis les sources (ci-dessous) : quelques minutes.
+Téléchargez le paquet de votre système dans la
+[publication 0.27.0](https://github.com/medhiclb/HelixAI/releases/tag/v0.27.0) (dépôt privé : connectez-vous à GitHub
+avec un compte qui y a accès). Empreintes : [`SHA256SUMS.txt`](https://github.com/medhiclb/HelixAI/releases/download/v0.27.0/SHA256SUMS.txt).
 
-| Plateforme | État |
-|---|---|
-| **macOS (Apple Silicon)** | Construit et utilisé tous les jours. Depuis les sources, puis `npm run package` |
-| **Windows 10/11 (x64)** | Installateur construit (`npx electron-builder --win nsis --x64`), **pas encore essayé sur un vrai PC Windows**. Non signé : SmartScreen avertit |
-| **Linux (x64)** | `.deb` et AppImage construits (`npx electron-builder --linux AppImage deb --x64`), **pas encore essayés sur une vraie machine Linux**. Préférez le `.deb` sur Ubuntu 24.04 |
+| Système | Téléchargement | État |
+|---|---|---|
+| **macOS (Apple Silicon)** | [Helix-0.27.0-arm64.dmg](https://github.com/medhiclb/HelixAI/releases/download/v0.27.0/Helix-0.27.0-arm64.dmg) | Utilisé tous les jours. Pas encore signé par Apple : la première fois, Réglages Système, Confidentialité et sécurité, « Ouvrir quand même » |
+| **Windows 10/11 (x64)** | [Helix-Setup-0.27.0-x64.exe](https://github.com/medhiclb/HelixAI/releases/download/v0.27.0/Helix-Setup-0.27.0-x64.exe) | Construit, **pas encore essayé sur un vrai PC Windows**. Non signé : SmartScreen avertit (« Informations complémentaires », « Exécuter quand même ») |
+| **Ubuntu, Debian (x64)** | [helix-plateforme_0.27.0_amd64.deb](https://github.com/medhiclb/HelixAI/releases/download/v0.27.0/helix-plateforme_0.27.0_amd64.deb) | Installé et lancé dans un Ubuntu 24.04 vierge, en conteneur (passerelle, atelier, moteur, un modèle, un Chat), **pas encore sur une vraie machine Linux**. `sudo apt install ./helix-plateforme_0.27.0_amd64.deb` |
+| **Autres Linux (x64)** | [Helix-0.27.0.AppImage](https://github.com/medhiclb/HelixAI/releases/download/v0.27.0/Helix-0.27.0.AppImage) | Construit, pas essayé. Sur Ubuntu 24.04, préférez le `.deb` (l'AppImage y démarre sans le bac à sable de Chromium) |
 
-Les modèles tournent dans [LM Studio](https://lmstudio.ai), que l'écran de première
-installation installe pour vous : l'application sur macOS, son moteur sans interface
-(llmster) sur Windows et Linux, chaque fois avec son empreinte publiée vérifiée. La mise
-à jour d'un clic n'existe que sur macOS ; sur Windows et Linux, installez le nouveau
-paquet par-dessus l'ancien.
+Au premier lancement, Helix installe lui-même ce qu'il lui faut : [LM Studio](https://lmstudio.ai)
+(l'application sur macOS, empreinte tirée de Homebrew ; son moteur sans interface llmster sur
+Windows et Linux, empreinte publiée par LM Studio), puis le modèle adapté à la machine.
+Python et Node ne sont pas demandés : s'ils manquent, Helix pose les siens (version épinglée,
+empreinte vérifiée). La mise à jour d'un clic n'existe que sur macOS ; sur Windows et Linux,
+installez le nouveau paquet par-dessus l'ancien (vos données restent).
+
+Pour construire depuis les sources : `npm install`, `npm run build`, puis `npm run package`
+(macOS), `npx electron-builder --win nsis --x64` (Windows) ou
+`npx electron-builder --linux AppImage deb --x64` (Linux).
 
 ## Fonctions
 
@@ -85,7 +92,7 @@ paquet par-dessus l'ancien.
 - **Réunions** : enregistrement ou import, transcription et compte rendu sur la machine, bot de réunion.
 - **Import** de votre historique depuis ChatGPT, Claude, Claude Code, Codex et Cursor.
 - **Équipes** : comptes, groupes, partage, double authentification, journal d'audit,
-  export RGPD, données chiffrées sur le disque. Mises à jour d'un clic depuis l'instance,
+  export RGPD, données chiffrées sur le disque. Mises à jour d'un clic depuis l'instance (macOS),
   installées seulement si elles portent la signature de l'éditeur.
 - **Marque blanche** : nom du produit, logo et couleurs viennent d'un seul fichier de configuration.
 
@@ -115,7 +122,7 @@ paquet par-dessus l'ancien.
 - macOS 14 ou plus récent sur puce Apple, 16 Go de mémoire conseillés
 - Node.js 20 ou plus récent, et npm
 - [LM Studio](https://lmstudio.ai) : au premier lancement, Helix installe le modèle adapté à la machine
-- Facultatif : [OpenCode](https://opencode.ai) pour Helix Code, Python 3 pour les documents de Cowork
+- Facultatif : [OpenCode](https://opencode.ai) pour Helix Code. Python et Node ne sont pas demandés : s'ils manquent, Helix pose les siens (version épinglée, empreinte vérifiée)
 
 ### Lancer
 

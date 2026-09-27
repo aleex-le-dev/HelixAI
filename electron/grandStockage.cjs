@@ -18,6 +18,21 @@ const path = require("node:path");
 const { safeStorage } = require("electron");
 const { chiffrementSur } = require("./chiffrementPoste.cjs");
 
+/** Renomme, en réessayant sous Windows quand un antivirus tient le fichier un instant (EPERM, EBUSY). */
+function renommer(de, vers) {
+  const attente = new Int32Array(new SharedArrayBuffer(4));
+  for (let essai = 0; ; essai++) {
+    try {
+      fs.renameSync(de, vers);
+      return;
+    } catch (err) {
+      if (process.platform !== "win32" || essai >= 20 || !["EPERM", "EACCES", "EBUSY"].includes(err && err.code)) throw err;
+      Atomics.wait(attente, 0, 0, 50 * Math.min(essai + 1, 10));
+    }
+  }
+}
+
+
 const CLES = new Set(["sessions"]);
 /** Copies gardées quand une collection rétrécit brutalement (voir `poser`). */
 const COPIES_MAX = 3;
@@ -161,7 +176,7 @@ function poser(cle, valeur) {
   garderSiReduction(cle, texte);
   const tmp = `${chemin(cle)}.tmp`;
   fs.writeFileSync(tmp, safeStorage.encryptString(texte), { mode: 0o600 });
-  fs.renameSync(tmp, chemin(cle));
+  renommer(tmp, chemin(cle));
   return true;
 }
 

@@ -36,19 +36,27 @@ sold or rented.
 
 ## Installation
 
-No signed build is published yet. Until the app is signed and notarised by Apple,
-build it from source (below); it takes a few minutes.
+Download the package for your system from the
+[0.27.0 release](https://github.com/medhiclb/HelixAI/releases/tag/v0.27.0) (private repository: sign in to GitHub
+with an account that has access). Checksums: [`SHA256SUMS.txt`](https://github.com/medhiclb/HelixAI/releases/download/v0.27.0/SHA256SUMS.txt).
 
-| Platform | Status |
-|---|---|
-| **macOS (Apple Silicon)** | Built and used daily. Build from source, then `npm run package` |
-| **Windows 10/11 (x64)** | Installer built (`npx electron-builder --win nsis --x64`), **not yet tried on a real Windows PC**. Unsigned: SmartScreen warns |
-| **Linux (x64)** | `.deb` and AppImage built (`npx electron-builder --linux AppImage deb --x64`), **not yet tried on a real Linux machine**. Prefer the `.deb` on Ubuntu 24.04 |
+| Platform | Download | Status |
+|---|---|---|
+| **macOS (Apple Silicon)** | [Helix-0.27.0-arm64.dmg](https://github.com/medhiclb/HelixAI/releases/download/v0.27.0/Helix-0.27.0-arm64.dmg) | Used daily. Not signed by Apple yet: the first time, System Settings, Privacy & Security, "Open Anyway" |
+| **Windows 10/11 (x64)** | [Helix-Setup-0.27.0-x64.exe](https://github.com/medhiclb/HelixAI/releases/download/v0.27.0/Helix-Setup-0.27.0-x64.exe) | Built, **not yet tried on a real Windows PC**. Unsigned: SmartScreen warns ("More info", "Run anyway") |
+| **Ubuntu, Debian (x64)** | [helix-plateforme_0.27.0_amd64.deb](https://github.com/medhiclb/HelixAI/releases/download/v0.27.0/helix-plateforme_0.27.0_amd64.deb) | Installed and run in a clean Ubuntu 24.04 container (gateway, workshop, engine, a model, a Chat), **not yet on a real Linux machine**. `sudo apt install ./helix-plateforme_0.27.0_amd64.deb` |
+| **Other Linux (x64)** | [Helix-0.27.0.AppImage](https://github.com/medhiclb/HelixAI/releases/download/v0.27.0/Helix-0.27.0.AppImage) | Built, not tried. On Ubuntu 24.04 prefer the `.deb` (the AppImage starts there without Chromium's sandbox) |
 
-Models run in [LM Studio](https://lmstudio.ai), which the first-run screen installs for
-you: the app on macOS, its headless engine (llmster) on Windows and Linux, each time with
-its published checksum verified. One-click updates exist on macOS only; on Windows and
-Linux, install the new package over the old one.
+On first launch, Helix installs what it needs by itself: [LM Studio](https://lmstudio.ai)
+(the app on macOS, with the checksum from Homebrew; its headless engine llmster on Windows
+and Linux, with the checksum published by LM Studio), then the model suited to the machine.
+Python and Node are not required: when missing, Helix installs its own (pinned,
+checksum verified). One-click updates exist on macOS only; on Windows and Linux, install
+the new package over the old one (your data stays).
+
+To build from source: `npm install`, `npm run build`, then `npm run package` (macOS),
+`npx electron-builder --win nsis --x64` (Windows) or
+`npx electron-builder --linux AppImage deb --x64` (Linux).
 
 ## Features
 
@@ -84,7 +92,7 @@ Linux, install the new package over the old one.
 - **Meetings**: record or import, transcription and minutes on the machine, meeting bot.
 - **Import** your history from ChatGPT, Claude, Claude Code, Codex and Cursor.
 - **Teams**: accounts, groups, sharing, two-factor authentication, audit log, GDPR export,
-  data encrypted at rest. One-click updates from the instance, installed only if they carry
+  data encrypted at rest. One-click updates from the instance (macOS), installed only if they carry
   the publisher's signature.
 - **White label**: the product name, logo and colours come from one configuration file.
 
@@ -114,7 +122,7 @@ Linux, install the new package over the old one.
 - macOS 14 or later on Apple Silicon, 16 GB of memory recommended
 - Node.js 20 or later and npm
 - [LM Studio](https://lmstudio.ai): on first launch, Helix installs the model that suits the machine
-- Optional: [OpenCode](https://opencode.ai) for Helix Code, Python 3 for Cowork documents
+- Optional: [OpenCode](https://opencode.ai) for Helix Code. Python and Node are not required: when missing, Helix installs its own (pinned, checksum verified)
 
 ### Run
 

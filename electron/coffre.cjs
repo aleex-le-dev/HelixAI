@@ -21,6 +21,21 @@ const path = require("node:path");
 const { safeStorage } = require("electron");
 const { chiffrementSur } = require("./chiffrementPoste.cjs");
 
+/** Renomme, en réessayant sous Windows quand un antivirus tient le fichier un instant (EPERM, EBUSY). */
+function renommer(de, vers) {
+  const attente = new Int32Array(new SharedArrayBuffer(4));
+  for (let essai = 0; ; essai++) {
+    try {
+      fs.renameSync(de, vers);
+      return;
+    } catch (err) {
+      if (process.platform !== "win32" || essai >= 20 || !["EPERM", "EACCES", "EBUSY"].includes(err && err.code)) throw err;
+      Atomics.wait(attente, 0, 0, 50 * Math.min(essai + 1, 10));
+    }
+  }
+}
+
+
 function fichier() {
   return path.join(process.env.HELIX_DATA_DIR ?? path.join(os.homedir(), ".helix"), "secrets.enc");
 }
@@ -66,7 +81,7 @@ function ecrire(valeurs) {
     const provisoire = `${chemin}.${process.pid}.tmp`;
     fs.writeFileSync(provisoire, safeStorage.encryptString(JSON.stringify(valeurs)), { mode: 0o600 });
     fs.chmodSync(provisoire, 0o600);
-    fs.renameSync(provisoire, chemin);
+    renommer(provisoire, chemin);
     return true;
   } catch (err) {
     console.error("[helix] coffre non écrit :", err instanceof Error ? err.message : err);

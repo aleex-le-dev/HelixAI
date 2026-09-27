@@ -29,7 +29,18 @@ const { app } = require("electron");
 const MARQUE = "# Ajouté par HelixAI (ligne de commande helix)";
 const dossierLanceur = () => path.join(os.homedir(), ".local", "bin");
 const lanceur = () => path.join(dossierLanceur(), "helix");
-const profil = () => path.join(os.homedir(), process.platform === "darwin" ? ".zprofile" : ".profile");
+/*
+ * Le fichier que lit vraiment le shell de connexion (revue Linux du
+ * 27/09/2026) : zsh lit `~/.zprofile`, bash `~/.bash_profile` s'il existe, et
+ * sinon `~/.profile`. Écrire toujours dans `~/.profile` ne servait à rien aux
+ * utilisateurs de zsh.
+ */
+function profil() {
+  const maison = os.homedir();
+  if (process.platform === "darwin" || /zsh$/.test(process.env.SHELL ?? "")) return path.join(maison, ".zprofile");
+  const bash = path.join(maison, ".bash_profile");
+  return fs.existsSync(bash) ? bash : path.join(maison, ".profile");
+}
 
 /** Le script livré : dans le paquet, ou dans le dépôt en développement. */
 function script() {

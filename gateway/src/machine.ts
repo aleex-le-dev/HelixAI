@@ -239,13 +239,19 @@ function disqueLibreGo(): number {
  *    encore faite. On le dit, et on propose le bureau Linux en attendant.
  *  - Sinon, pas de machine à part : on dit pourquoi.
  */
+/** Installer Docker, selon le système : sous Linux, le paquet du système plutôt que Docker Desktop (revue du 27/09/2026). */
+const conseilDocker = (): string =>
+  process.platform === "linux"
+    ? t("Docker n'est pas installé : c'est lui qui fait tourner la machine. Installez-le (sudo apt install docker.io, ou sudo dnf install docker), ajoutez votre compte au groupe docker, puis revenez ici.")
+    : t("Docker n'est pas installé : c'est lui qui fait tourner la machine. Installez Docker Desktop (docker.com), puis revenez ici.");
+
 function conseiller(hw: Hardware, disque: number, docker: DiagnosticMachine["docker"], installee: boolean): Pick<DiagnosticMachine, "conseil" | "raison" | "obstacles"> {
   const obstacles: string[] = [];
   if (hw.totalMemoryGb < 12) obstacles.push(tf("{0} Go de mémoire : il en faut 12 au moins pour faire tourner la machine à côté du modèle.", hw.totalMemoryGb));
   // Déjà installée : elle n'a plus besoin que d'un peu de marge pour travailler.
   if (!installee && disque < 12) obstacles.push(tf("{0} Go libres sur le disque : il en faut 12 (la machine en occupe environ 8).", disque));
   if (installee && disque < 2) obstacles.push(tf("{0} Go libres sur le disque : la machine a besoin d'un peu de place pour travailler. Libérez de l'espace.", disque));
-  if (docker === "absent") obstacles.push(t("Docker n'est pas installé : c'est lui qui fait tourner la machine. Installez Docker Desktop (docker.com), puis revenez ici."));
+  if (docker === "absent") obstacles.push(conseilDocker());
 
   if (obstacles.length > 0) {
     return {
@@ -416,9 +422,15 @@ export function demarrerMachine(qui = "systeme"): Promise<void> {
       return;
     }
     const docker = await trouverDocker();
-    if (!docker) throw new Error(t("Docker n'est pas installé : c'est lui qui fait tourner la machine. Installez Docker Desktop (docker.com), puis revenez ici."));
+    if (!docker) throw new Error(conseilDocker());
     progression = { etape: "docker", message: t("Démarrage de Docker...") };
-    if (!(await allumerDocker(docker))) throw new Error(t("Docker ne répond pas. Ouvrez Docker Desktop, attendez qu'il soit prêt, puis réessayez."));
+    if (!(await allumerDocker(docker))) {
+      throw new Error(
+        process.platform === "linux"
+          ? t("Docker ne répond pas. Démarrez son service (sudo systemctl start docker) ; si c'est un refus d'accès, ajoutez votre compte au groupe docker (sudo usermod -aG docker $USER), puis fermez et rouvrez la session.")
+          : t("Docker ne répond pas. Ouvrez Docker Desktop, attendez qu'il soit prêt, puis réessayez."),
+      );
+    }
 
     if (!(await imagePresente(docker, IMAGE))) {
       if (!(await imagePresente(docker, IMAGE_BASE))) {

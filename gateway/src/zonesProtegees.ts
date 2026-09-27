@@ -1,5 +1,5 @@
 import { realpathSync } from "node:fs";
-import { homedir } from "node:os";
+import { homedir, hostname } from "node:os";
 import { basename, dirname, isAbsolute, join, resolve, sep } from "node:path";
 
 /**
@@ -97,7 +97,19 @@ function calculerZones(): string[] {
      * réunion), les jetons de gh et de gcloud, les identifiants de Windows
      * (`Microsoft\Credentials`, `Protect`).
      */
+    /*
+     * LM Studio et son moteur sans interface : `bin/lms` est lancé par la
+     * passerelle, et `~/.lmstudio-home-pointer` dit où le chercher. Écrits par
+     * un agent, ils feraient exécuter un programme choisi par lui (revue de
+     * sécurité du 27/09/2026).
+     */
+    join(maison, ".lmstudio"),
+    join(maison, ".lmstudio-home-pointer"),
+    join(maison, ".cache", "lm-studio"),
     join(maison, ".local", "share", "keyrings"),
+    // KDE : le portefeuille. Ubuntu : Firefox, Thunderbird, Chromium sont des snaps, leurs profils vivent dans `~/snap`.
+    join(maison, ".local", "share", "kwalletd"),
+    join(maison, "snap"),
     join(maison, ".mozilla"),
     join(maison, ".thunderbird"),
     join(maison, ".pki"),
@@ -129,8 +141,26 @@ const replier = (chemin: string) => chemin.normalize("NFC").toLowerCase();
  * données secondaire (`fichier:flux`, un deux-points après la lettre du
  * disque). Aucun n'a d'usage légitime ici : refusés comme une zone.
  */
-const douteuxSousWindows = (chemin: string): boolean =>
-  process.platform === "win32" && (/^[\\/]{2}/.test(chemin) || chemin.slice(2).includes(":"));
+function douteuxSousWindows(chemin: string): boolean {
+  if (process.platform !== "win32") return false;
+  // Chemins de périphérique (`\\?\`, `\\.\`) : aucun usage ici.
+  if (/^[\\/]{2}[?.][\\/]/.test(chemin)) return true;
+  /*
+   * Un partage réseau (`\\serveur\partage`) est permis : c'est souvent là que
+   * vivent les documents d'une PME, et un lecteur réseau (`Z:`) y mène une
+   * fois résolu (audit Windows du 27/09/2026). Pas les partages
+   * d'administration (`C$`), ni ceux de cette machine elle-même, qui
+   * rouvriraient le disque local par un détour.
+   */
+  const unc = /^[\\/]{2}([^\\/]+)[\\/]([^\\/]+)/.exec(chemin);
+  if (unc) {
+    const hote = unc[1]!.toLowerCase();
+    if (["localhost", "127.0.0.1", "::1", hostname().toLowerCase()].includes(hote) || unc[2]!.endsWith("$")) return true;
+    return chemin.slice(2).includes(":");
+  }
+  // Un flux de données secondaire (`fichier:flux`) : un deux-points après la lettre du disque.
+  return chemin.slice(2).includes(":");
+}
 
 /** Ce chemin (absolu, déjà réel de préférence) est-il dans une zone protégée ? */
 export function estProtege(chemin: string): boolean {

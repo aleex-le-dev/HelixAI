@@ -377,7 +377,8 @@ ACTIONS = {
 
 
 def principal():
-    demande = json.load(sys.stdin)
+    # En UTF-8 explicitement : sous Windows, Python lit sinon l'entrée dans la page de code ANSI, et les accents sortaient abîmés (audit du 27/09/2026).
+    demande = json.loads(sys.stdin.buffer.read().decode("utf-8"))
     action = demande.get("action")
     fonction = ACTIONS.get(action)
     if fonction is None:

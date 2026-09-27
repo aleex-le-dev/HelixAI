@@ -246,9 +246,9 @@ const trouverNode = () => localiser("node", cheminsUsuels("node"));
 
 /*
  * Comment installer ce qui manque, selon le système : la commande exacte, que
- * la personne lance elle-même (Helix ne passe pas administrateur). Python et
- * Node ne sont pas posés par Helix : leurs licences (PSF, et celle de npm)
- * ne sont pas dans la liste des licences admises (CLAUDE.md).
+ * la personne lance elle-même (Helix ne passe pas administrateur). Elle n'est
+ * donnée que là où Helix ne sait pas poser Python (pythonPrive.ts) ni Node
+ * (installationOpenClaw.ts) lui-même.
  */
 const commentPython = (): string =>
   process.platform === "win32"
@@ -294,8 +294,23 @@ async function pythonPourVenv(installer: boolean, avancer?: (pourcent: number) =
 }
 
 /** Un script JavaScript (npm sous Windows) se lance par Node ; le reste, tel quel. */
+/*
+ * Par le Node auquel ce script appartient, s'il est là (`node.exe` à côté de
+ * `node_modules` sous Windows, `bin/node` ailleurs) : npm suit les versions de
+ * Node, pas celle d'Electron (audit Windows du 27/09/2026). Sinon, le Node de
+ * l'application.
+ */
+function nodeDuScript(script: string): string {
+  const racineNpm = dirname(dirname(dirname(script))); // …/node_modules/npm/bin/npm-cli.js → …/node_modules
+  const racine = dirname(racineNpm);
+  const candidats =
+    process.platform === "win32"
+      ? [join(racine, "node.exe")]
+      : [join(racine, "bin", "node"), join(dirname(racine), "bin", "node")]; // …/lib/node_modules → …/bin/node
+  return candidats.find((c) => existsSync(c)) ?? process.execPath;
+}
 const commandeDe = (commande: string, args: string[]): [string, string[]] =>
-  commande.endsWith(".js") ? [process.execPath, [commande, ...args]] : [commande, args];
+  commande.endsWith(".js") ? [nodeDuScript(commande), [commande, ...args]] : [commande, args];
 
 /** Première ligne de `<outil> --version`, ou `null` si l'outil ne répond pas. */
 async function versionDe(chemin: string, args: string[] = ["--version"]): Promise<string | null> {
@@ -400,6 +415,10 @@ async function optionnels(): Promise<OutilOptionnel[]> {
     (await localiser("soffice", [
       "/Applications/LibreOffice.app/Contents/MacOS/soffice",
       join(homedir(), "Applications", "LibreOffice.app", "Contents", "MacOS", "soffice"),
+      // Windows : l'installateur de LibreOffice ne l'ajoute pas au PATH.
+      ...(process.platform === "win32"
+        ? [process.env.ProgramFiles, process.env["ProgramFiles(x86)"]].filter((d): d is string => Boolean(d)).map((d) => join(d, "LibreOffice", "program", "soffice.exe"))
+        : []),
       ...cheminsUsuels("soffice"),
     ])) !== null;
 
@@ -418,7 +437,11 @@ async function optionnels(): Promise<OutilOptionnel[]> {
       present: libreoffice,
       apport:
         "Convertit un document d'un format à l'autre, par exemple un Word ou un classeur Excel en PDF fidèle à la mise en page.",
-      obtention: "Facultatif. À installer soi-même depuis le site de LibreOffice ou avec Homebrew.",
+      // Le texte reste en français ici : l'écran le traduit (src/i18n/instance.ts).
+      obtention:
+        process.platform === "darwin"
+          ? "Facultatif. À installer soi-même depuis le site de LibreOffice ou avec Homebrew."
+          : "Facultatif. À installer soi-même depuis le site de LibreOffice, ou par le gestionnaire de paquets du système.",
     },
     {
       id: "poppler",
@@ -426,7 +449,12 @@ async function optionnels(): Promise<OutilOptionnel[]> {
       present: poppler,
       apport:
         "Transforme une page de PDF en image et en extrait le texte, y compris quand la mise en page est complexe.",
-      obtention: "Facultatif. À installer soi-même avec Homebrew (paquet poppler).",
+      obtention:
+        process.platform === "darwin"
+          ? "Facultatif. À installer soi-même avec Homebrew (paquet poppler)."
+          : process.platform === "win32"
+            ? "Facultatif. À installer soi-même (Poppler pour Windows), puis à ajouter au PATH."
+            : "Facultatif. À installer soi-même par le gestionnaire de paquets (paquet poppler-utils).",
     },
   ];
 }

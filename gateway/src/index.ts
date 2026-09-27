@@ -550,6 +550,9 @@ const CONDITIONS_MOTEUR = {
   version: "2026-08-23",
 };
 
+/** Une installation du moteur à la fois (revue de sécurité du 27/09/2026). */
+let moteurEnInstallation = false;
+
 async function handleEngineInstall(
   req: http.IncomingMessage,
   res: http.ServerResponse,
@@ -557,6 +560,11 @@ async function handleEngineInstall(
 ): Promise<void> {
   const qui = await demandeur(req, url);
   if (!qui) return send(res, 401, sansSeance());
+  // Installer un logiciel sur la machine de l'instance, et en accepter les conditions pour l'entreprise : l'administrateur.
+  if (!(await estAdministrateur(qui.userId))) {
+    return send(res, 403, { error: { message: t("Seul l'administrateur de l'instance installe le moteur des modèles.") } });
+  }
+  if (moteurEnInstallation) return send(res, 409, { error: { message: t("Le moteur est déjà en cours d'installation.") } });
   const body = (await readJson(req).catch(() => ({}))) as { conditionsAcceptees?: unknown };
   // Même règle que partout : seul un `true` explicite vaut accord.
   if (body.conditionsAcceptees !== true) {
@@ -569,6 +577,7 @@ async function handleEngineInstall(
   }
   journaliser("moteur.conditions_acceptees", qui.userId, CONDITIONS_MOTEUR);
 
+  moteurEnInstallation = true;
   void installerMoteur((p) =>
     setProvisionState({
       phase:
@@ -605,7 +614,10 @@ async function handleEngineInstall(
         message: t("L'installation du moteur a échoué."),
         error: err instanceof Error ? err.message : String(err),
       }),
-    );
+    )
+    .finally(() => {
+      moteurEnInstallation = false;
+    });
 
   send(res, 202, { started: true, state: getProvisionState() });
 }
@@ -3027,7 +3039,8 @@ async function handleMcpStatus(res: http.ServerResponse): Promise<void> {
 }
 
 /** Dossier personnel du compte qui fait tourner l'instance. */
-const homedirDeLHote = (): string => toutLePoste()[0];
+// Le dossier personnel seul : `toutLePoste()` interroge aussi chaque disque (D: à Z: sous Windows), et un lecteur réseau hors ligne gelait la requête (audit du 27/09/2026).
+const homedirDeLHote = (): string => dossierPersonnel();
 
 /**
  * Change l'espace de travail de Cowork.
@@ -3062,6 +3075,17 @@ async function handleWorkspace(
   const toutLeposte = body.portee === "poste";
   if (!body.dossier && !toutLeposte) {
     return send(res, 400, { error: { message: t("`dossier` ou `portee` est requis.") } });
+  }
+
+  /*
+   * L'administrateur seul (revue de sécurité du 27/09/2026) : sur une instance
+   * partagée, le dossier de l'équipe vaut pour tout le monde, et « Tout mon
+   * poste » ouvre le dossier personnel du compte hôte. Un membre qui ne
+   * confirmait que son propre mot de passe pouvait ensuite y faire écrire ses
+   * agents, jusqu'aux réglages d'autres logiciels qui lancent des programmes.
+   */
+  if ((instancePartagee() || toutLeposte) && !(await estAdministrateur(qui.userId))) {
+    return send(res, 403, { error: { message: t("Seul l'administrateur de l'instance choisit le dossier de l'équipe.") } });
   }
 
   /*
@@ -4855,7 +4879,7 @@ const handler: http.RequestListener = (req, res) => {
     url = new URL(req.url ?? "/", "http://localhost");
   } catch {
     res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" });
-    res.end(JSON.stringify({ error: { message: "Requête illisible." } }));
+    res.end(JSON.stringify({ error: { message: t("Requête illisible.") } }));
     return;
   }
   const path = url.pathname.replace(/\/+$/, "") || "/";

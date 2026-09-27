@@ -13,8 +13,9 @@ const { safeStorage } = require("electron");
 function chiffrementSur() {
   try {
     if (!safeStorage.isEncryptionAvailable()) return false;
+    // Seulement les vrais trousseaux ; « basic_text » et « unknown » ne protègent rien (revue du 27/09/2026).
     if (process.platform === "linux" && typeof safeStorage.getSelectedStorageBackend === "function") {
-      return safeStorage.getSelectedStorageBackend() !== "basic_text";
+      return ["gnome_libsecret", "kwallet", "kwallet5", "kwallet6"].includes(safeStorage.getSelectedStorageBackend());
     }
     return true;
   } catch {

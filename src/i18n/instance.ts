@@ -40,4 +40,8 @@ export const PHRASES_DE_LINSTANCE = [
     "Transforme une page de PDF en image et en extrait le texte, y compris quand la mise en page est complexe.",
   ),
   t("Facultatif. À installer soi-même depuis le site de LibreOffice ou avec Homebrew."),
+  t("Facultatif. À installer soi-même depuis le site de LibreOffice, ou par le gestionnaire de paquets du système."),
+  t("Facultatif. À installer soi-même avec Homebrew (paquet poppler)."),
+  t("Facultatif. À installer soi-même (Poppler pour Windows), puis à ajouter au PATH."),
+  t("Facultatif. À installer soi-même par le gestionnaire de paquets (paquet poppler-utils)."),
 ];

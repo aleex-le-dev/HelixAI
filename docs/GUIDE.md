@@ -67,8 +67,10 @@ electron-builder), qui se passe de libfuse2. Le `.deb` tire les bibliothèques d
 (`libatomic1`, `libgomp1`) et recommande `python3`, `python3-venv` et `unzip` : apt les
 installe avec lui. Il pose aussi le bac à sable de Chromium et son profil AppArmor, que
 l'AppImage n'a pas (sur Ubuntu 24.04, l'AppImage démarre sans bac à sable).
-**Seul macOS a été éprouvé sur une vraie machine** ; les paquets Windows et Linux sont
-construits et leur contenu vérifié, pas encore installés sur un vrai PC. L'installeur embarque
+**Seul macOS a été éprouvé sur une vraie machine.** L'installateur Windows n'a jamais tourné ;
+le `.deb` a été installé et lancé dans un Ubuntu 24.04 vierge (conteneur Docker, écran virtuel :
+passerelle, atelier avec le Python et le Node de Helix, moteur llmster, un modèle, un Chat),
+pas sur une vraie machine Linux. L'installeur embarque
 l'interface, la passerelle compilée (`dist-gateway/index.cjs`) et l'icône. La
 passerelle tourne dans le runtime Node d'Electron : **lancer Helix et converser
 ne demande aucune installation de Node**.
@@ -78,7 +80,7 @@ machine :
 
 | Capacité | Ce qu'elle exige | Sans cela |
 |---|---|---|
-| Outils fichiers (MCP) | `npx` (donc Node/npm) sur le poste | Le serveur de fichiers ne démarre pas, l'agent n'a pas d'outils |
+| Outils fichiers (MCP) | `npx` | Sans lui (ou sous Windows, où c'est un `.cmd`), Helix le lance par un vrai Node : celui du système, sinon son Node officiel, posé au besoin (nodejs.org, empreinte vérifiée). Hors ligne et sans Node : pas d'outils |
 | Écran Code | `opencode` installé (`~/.opencode/bin/opencode` ou dans le `PATH`) | L'écran Code signale que le moteur est absent |
 | Modèles locaux | LM Studio | L'écran de mise en route l'installe, sans intervention : l'application sur macOS, son moteur sans interface (llmster) sur Windows et Linux |
 
@@ -292,9 +294,9 @@ limite, l'agent est invité à conclure et à rendre compte plutôt que d'être 
 net. Le barème complet est dans [`ARCHITECTURE.md`](../ARCHITECTURE.md), ADR-012.
 
 Serveur par défaut : accès **fichiers** limité à un espace de travail explicite. Il est
-lancé par `npx -y @modelcontextprotocol/server-filesystem <espace>`, ce qui suppose
-`npx` disponible sur la machine et, au tout premier lancement, un accès au registre npm
-pour récupérer ce paquet.
+lancé par `npx -y @modelcontextprotocol/server-filesystem <espace>` : le `npx` de la
+machine, sinon celui du Node que Helix pose (27/09/2026), et, au tout premier lancement,
+un accès au registre npm pour récupérer ce paquet.
 
 ```bash
 HELIX_WORKSPACE=/chemin/vers/dossier npm run gateway
@@ -468,6 +470,9 @@ C'est le cœur de la promesse Helix, et il vaut mieux le dire exactement.
 | `registry.npmjs.org` | `npm install`, puis au premier démarrage du serveur d'outils, lancé par `npx` | Récupérer le code du serveur MCP fichiers, qui n'est pas empaqueté |
 | `formulae.brew.sh` | Bouton « Installer le moteur » | Lire l'adresse et l'empreinte SHA-256 de la version courante de LM Studio |
 | `installers.lmstudio.ai` | Idem | Télécharger LM Studio. L'empreinte du paquet est vérifiée avant ouverture, et l'adresse est refusée si elle ne vient pas de ce domaine |
+| `lmstudio.ai`, puis `llmster.lmstudio.ai` | Idem, sous Windows et Linux | Lire la version courante dans le script d'installation officiel (lu, jamais exécuté), puis télécharger le moteur sans interface et son empreinte SHA-512, vérifiée avant ouverture |
+| `github.com` (python-build-standalone) | Atelier, dictée ou entraînement, sur une machine sans Python qui convienne | CPython 3.12.14 autonome, publication épinglée, empreinte SHA-256 écrite dans le code |
+| `nodejs.org` | Atelier sans npm sur la machine, ou premier serveur d'outils sans `npx` | Le même Node officiel que pour OpenClaw, archive vérifiée par son empreinte |
 | Catalogue de modèles de LM Studio (HuggingFace) | Téléchargement d'un modèle (`lms get`) | Récupérer les poids. Ce trafic est le fait de LM Studio, que Helix pilote en ligne de commande |
 | `registry.npmjs.org`, via OpenCode | Premier usage de l'écran Code | OpenCode charge l'adaptateur `@ai-sdk/openai-compatible` déclaré dans la configuration écrite par Helix |
 | `pypi.org` et `registry.npmjs.org` | Bouton « Préparer l'atelier » de Cowork | Télécharger les bibliothèques bureautiques (Word, Excel, PowerPoint, PDF). La liste des paquets est figée dans le code de la passerelle, l'utilisateur la voit avant d'accepter |
@@ -853,7 +858,8 @@ l'agent d'orchestration par défaut. Aucun tiret cadratin dans les textes affich
   son propriétaire ;
 - **Ligne de commande `helix`** (25/09/2026) : Chat et Helix Code dans un terminal,
   avec les outils et la barrière d'approbation de l'instance (voir « Ligne de
-  commande » plus haut). Pas encore livrée avec l'application empaquetée. Les
+  commande » plus haut). Livrée avec l'application empaquetée depuis le 25/09/2026
+  (macOS, et le `.deb` sous Linux ; pas sous Windows ni avec l'AppImage). Les
   connecteurs (serveurs MCP, courrier, Drive…) marchent aussi dans Helix Code depuis
   le 25/09/2026, derrière la même barrière : vérifié avec un serveur MCP d'essai
   sans compte, pas encore avec un vrai connecteur à compte ;

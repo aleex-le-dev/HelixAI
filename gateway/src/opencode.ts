@@ -41,11 +41,28 @@ import { arreterArbre } from "./processus.ts";
  * installée pour son propre usage. C'est aussi ce qui permet d'essayer une
  * nouvelle version avant de l'adopter.
  */
-const CANDIDATES = [
-  ...(process.env.HELIX_OPENCODE_BIN ? [process.env.HELIX_OPENCODE_BIN] : []),
-  `${homedir()}/.opencode/bin/opencode`,
-  "opencode",
-];
+/*
+ * Sous Windows (audit du 27/09/2026) : `opencode.exe`, jamais le `.cmd` que
+ * pose npm (Node refuse de le lancer sans interpréteur de commandes). Les
+ * emplacements de scoop et de l'installation npm (paquet de la plateforme,
+ * disposition relevée dans le paquet `opencode-ai`, pas essayée sur un vrai
+ * Windows).
+ */
+const CANDIDATES =
+  process.platform === "win32"
+    ? [
+        ...(process.env.HELIX_OPENCODE_BIN ? [process.env.HELIX_OPENCODE_BIN] : []),
+        join(homedir(), ".opencode", "bin", "opencode.exe"),
+        join(homedir(), "scoop", "shims", "opencode.exe"),
+        ...(process.env.APPDATA
+          ? [
+              join(process.env.APPDATA, "npm", "node_modules", "opencode-ai", "node_modules", `opencode-windows-${process.arch === "arm64" ? "arm64" : "x64"}`, "bin", "opencode.exe"),
+              join(process.env.APPDATA, "npm", "node_modules", `opencode-windows-${process.arch === "arm64" ? "arm64" : "x64"}`, "bin", "opencode.exe"),
+            ]
+          : []),
+        "opencode.exe",
+      ]
+    : [...(process.env.HELIX_OPENCODE_BIN ? [process.env.HELIX_OPENCODE_BIN] : []), `${homedir()}/.opencode/bin/opencode`, "opencode"];
 
 /**
  * Mot de passe du serveur OpenCode, tiré à chaque démarrage de la passerelle.
@@ -1102,7 +1119,13 @@ export function validerDossier(chemin: string, usage: UsageDossier = "code"): { 
   }
 
   const cible = replier(resolu);
-  for (const interdit of INTERDITS) {
+  /*
+   * Linux : les clés USB (`/run/media/<compte>`, Fedora, Arch) et les partages
+   * montés par GNOME (`/run/user/<uid>/gvfs`) vivent sous `/run`, qui reste
+   * interdit pour le reste (audit Linux du 27/09/2026).
+   */
+  const montageLinux = process.platform === "linux" && (/^\/run\/media\/[^/]+\/./.test(resolu) || /^\/run\/user\/\d+\/gvfs\/./.test(resolu));
+  for (const interdit of montageLinux ? INTERDITS.filter((i) => i !== "/run") : INTERDITS) {
     const organe = replier(interdit);
 
     // Le dossier EST un organe du système, ou se trouve à l'intérieur.

@@ -2190,6 +2190,10 @@ console.log("\n11 quater. Relecture du 27/09/2026 : moteur local réservé, donn
   verifier("un membre n'ajoute pas un moteur de la machine de l'instance", ajout.status === 403, ajout.status);
   const parAdmin = await appel("/helix/fournisseurs/essayer", { method: "POST", headers: { ...seanceAdmin, "Content-Type": "application/json" }, body: JSON.stringify({ fournisseur: "compatible", adresse: "http://127.0.0.1:9/v1", cle: "x" }) });
   verifier("l'administrateur, lui, peut essayer un moteur de sa machine", parAdmin.status !== 403 && parAdmin.status !== 401, parAdmin.status);
+  const poste = await appel("/helix/mcp/workspace", { method: "POST", headers: json, body: JSON.stringify({ portee: "poste", motDePasse: "Temoin2PasseSolide!77" }) });
+  verifier("un membre n'ouvre pas « Tout mon poste » (dossier personnel du compte hôte) aux agents", poste.status === 403, poste.status);
+  const moteurMembre = await appel("/helix/provision/moteur", { method: "POST", headers: json, body: JSON.stringify({ conditionsAcceptees: true }) });
+  verifier("un membre n'installe pas le moteur des modèles sur la machine de l'instance", moteurMembre.status === 403, moteurMembre.status);
 
   // Un fichier de groupes abîmé : la synchronisation et les droits continuent, rien n'est écrit par-dessus.
   const { readFileSync: lireF, writeFileSync: ecrireF, existsSync: existe } = await import("node:fs");
@@ -2298,6 +2302,30 @@ console.log("\n11 quinquies. Windows et Linux : ce qui se vérifie depuis ce pos
     const m = await import("./gateway/src/pythonPrive.ts");
     try { await m.assurerPythonPrive(); console.log("ACCEPTEE"); } catch (e) { console.log("REFUS", e.message.slice(0, 60), m.pythonPrive() === null); }`, { HELIX_DATA_DIR: d4 });
   verifier("Python posé par Helix : une archive à la mauvaise empreinte est refusée, rien n'est installé", /REFUS .*empreinte.* true/.test(piegee), piegee.slice(0, 200));
+
+  // Revue de sécurité du 27/09/2026 (nuit) : ce qu'un membre ne doit plus pouvoir faire, et les installations épinglées.
+  const d5 = dossierNeuf(join(tmpdir(), "helix-pointeur-"));
+  const pointeur = essai(`const fs = await import("node:fs"); const os = await import("node:os");
+    const e = await import("./gateway/src/engine.ts"); const z = await import("./gateway/src/zonesProtegees.ts");
+    const p = os.homedir() + "/.lmstudio-home-pointer";
+    fs.mkdirSync(os.homedir() + "/ailleurs"); fs.writeFileSync(p, "//serveur/partage"); const unc = e.dossierLmStudio();
+    fs.writeFileSync(p, "relatif/bin"); const rel = e.dossierLmStudio();
+    fs.writeFileSync(p, os.homedir() + "/ailleurs"); const ok = e.dossierLmStudio();
+    console.log([unc.endsWith("/.lmstudio"), rel.endsWith("/.lmstudio"), ok.endsWith("/ailleurs"), z.estProtege(p), z.estProtege(os.homedir() + "/.lmstudio/bin/lms"), z.estProtege(os.homedir() + "/snap/firefox/common/.mozilla")].join(","));`, { HOME: d5, HELIX_DATA_DIR: join(d5, "donnees") });
+  verifier("pointeur de LM Studio : ni partage réseau ni chemin relatif ; le pointeur, `lms` et les profils snap sont des zones protégées", pointeur.trim().endsWith("true,true,true,true,true,true"), pointeur.slice(-200));
+  const d6 = dossierNeuf(join(tmpdir(), "helix-cle-lien-"));
+  ecrireF(join(d6, "c.json"), JSON.stringify({ chiffrement: "fichier" }));
+  (await import("node:fs")).symlinkSync("/Volumes/disque-absent-helix/cle", join(d6, ".cle"));
+  const cleLien = essai(`const m = await import("./gateway/src/secret.ts"); try { m.cleDonnees(); console.log("ACCEPTEE"); } catch (e) { console.log("REFUS", e.message.includes("stack") ? "PILE" : "propre"); }`, { HELIX_CONFIG: join(d6, "c.json"), HELIX_DATA_DIR: d6 });
+  verifier("clé de données : un lien vers un disque absent fait refuser le démarrage (ni boucle, ni écriture en clair)", cleLien.includes("REFUS propre"), cleLien.slice(0, 160));
+  const sourceMoteur = readFileSync(join(RACINE, "gateway", "src", "engine.ts"), "utf8");
+  const sourceNode = readFileSync(join(RACINE, "gateway", "src", "installationOpenClaw.ts"), "utf8");
+  verifier("moteur llmster : version épinglée, une empreinte SHA-512 écrite par archive, rien lu en ligne pour choisir", /const LLMSTER_VERSION = "[\d.]+-\d+"/.test(sourceMoteur) && (sourceMoteur.match(/sha512: "[0-9a-f]{128}"/g) ?? []).length === 5 && !/install\.sh/.test(sourceMoteur.replace(/\/\*[\s\S]*?\*\//g, "")), "non épinglé");
+  verifier("Node de Helix : version épinglée, une empreinte SHA-256 par archive", /const NODE_EPINGLE = "\d+\.\d+\.\d+"/.test(sourceNode) && (sourceNode.match(/"node-v[\d.]+-[a-z0-9-]+\.(tar\.gz|zip)": "[0-9a-f]{64}"/g) ?? []).length === 6, "non épinglé");
+  const { pathToFileURL: versUrlCode } = await import("node:url");
+  const { outilDe: traduire } = await import(versUrlCode(join(RACINE, "gateway", "src", "permissionsCode.ts")).href);
+  const motif = traduire({ id: "g", sessionID: "s", permission: "glob", patterns: ["src/**/*.ts"], metadata: {} }, "/projet");
+  verifier("Helix Code : un motif relatif se juge dans le dossier du projet, pas dans celui de la passerelle", motif.args.path === "/projet/src/**/*.ts", String(motif.args.path));
 }
 
 console.log("\n12. Deviner un mot de passe");

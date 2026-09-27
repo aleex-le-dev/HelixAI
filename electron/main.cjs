@@ -87,7 +87,23 @@ let fenetrePrincipaleOuverte = false;
 /** « Quitter » a été demandé : fermer la fenêtre ne doit plus seulement la cacher. */
 let quitterVraiment = false;
 /** Langue de l'écran, que l'interface donne au démarrage : pour les quelques textes de ce processus. */
-let langueEcran = ["fr", "en", "zh"].includes(app.getLocale().slice(0, 2)) ? app.getLocale().slice(0, 2) : "fr";
+// Relue une fois l'application prête (sous Windows, `getLocale` n'est fiable qu'ensuite), puis donnée par l'interface.
+let langueEcran = "fr";
+/*
+ * Le nom affiché : `app.getName()` vaut « helix-plateforme » sous Windows et
+ * Linux (le nom du paquet npm ; sur macOS, celui du paquet de l'application).
+ * Le nom du produit est lu dans le package.json livré (`nomAffiche`) ; le
+ * nom interne reste, lui, celui du dossier du profil (revue Linux du 27/09/2026).
+ */
+const NOM_AFFICHE = (() => {
+  try {
+    const nom = require("../package.json").nomAffiche;
+    if (typeof nom === "string" && nom.trim()) return nom.trim();
+  } catch {
+    /* paquet sans nom affiché : le nom de l'application */
+  }
+  return app.getName();
+})();
 /** Arrêt volontaire : empêche le redémarrage automatique à la fermeture. */
 let arretDemande = false;
 let redemarrages = 0;
@@ -152,14 +168,23 @@ async function startGateway() {
       ELECTRON_RUN_AS_NODE: "1",
       HELIX_GATEWAY_PORT: String(GATEWAY_PORT),
       // Marque blanche : les messages de la passerelle disent le nom du produit livré.
-      HELIX_NOM_PRODUIT: app.getName(),
+      HELIX_NOM_PRODUIT: NOM_AFFICHE,
       // Le banc d'essai des pages : adresse sur la boucle locale et clé, pour la passerelle seule.
       ...(rendu ? { HELIX_RENDU_URL: rendu.url, HELIX_RENDU_CLE: rendu.cle } : {}),
     },
     // Le canal (`ipc`) sert à demander l'arrêt : sous Windows, il n'y a pas de signal (voir stopGateway).
     stdio: ["ignore", "pipe", "pipe", "ipc"],
     windowsHide: true,
+    /*
+     * Le dossier personnel, pas celui de l'installation (audit Windows du
+     * 27/09/2026) : sinon chaque programme lancé par la passerelle (dont le
+     * moteur, qui survit à Helix) tenait le dossier d'installation ouvert, et
+     * la désinstallation le laissait derrière elle.
+     */
+    cwd: os.homedir(),
   });
+  // Un envoi sur un canal déjà fermé émet une erreur : écoutée, elle ne fait pas planter l'application en quittant.
+  enfant.on("error", (err) => console.error("[helix] passerelle :", err?.message ?? err));
   gateway = enfant;
 
   enfant.stdout.on("data", (b) => process.stdout.write(`[passerelle] ${b}`));
@@ -232,7 +257,7 @@ function stopGateway() {
        * par le canal ; au bout de 4 s, l'arbre entier est abattu.
        */
       try {
-        enfant.send({ type: "arret" });
+        if (enfant.connected) enfant.send({ type: "arret" }, () => {});
       } catch {
         /* canal déjà fermé */
       }
@@ -981,6 +1006,8 @@ function createWindow() {
 /** Rouvre la fenêtre, où qu'elle soit : cachée, réduite, ou fermée (macOS). */
 function montrerFenetre() {
   if (!mainWindow || mainWindow.isDestroyed()) {
+    // Encore au démarrage (passerelle en route) : la fenêtre va s'ouvrir d'elle-même, pas deux fois.
+    if (!fenetrePrincipaleOuverte) return;
     createWindow();
     return;
   }
@@ -1096,6 +1123,16 @@ function installerVerificationCertificats() {
 
 app.whenReady().then(async () => {
   if (!instanceUnique) return;
+  {
+    const l = app.getLocale().slice(0, 2);
+    if (["fr", "en", "zh"].includes(l) && langueEcran === "fr") langueEcran = l;
+  }
+  /*
+   * Windows : le même identifiant que les raccourcis posés par l'installateur,
+   * sans quoi les notifications ne s'affichent pas et l'icône épinglée se
+   * sépare de celle de l'application ouverte (audit du 27/09/2026).
+   */
+  if (process.platform === "win32") app.setAppUserModelId("fr.helix.plateforme");
   /*
    * L'application se déclare auprès du système comme ouvrant les liens
    * `helix:`. Sur macOS c'est le paquet livré qui le déclare (CFBundleURLTypes,
@@ -1117,7 +1154,7 @@ app.whenReady().then(async () => {
   // Windows et Linux : l'icône d'abord, avant les étapes qui peuvent ouvrir et fermer des fenêtres de service.
   if (process.platform !== "darwin") {
     zone = installerZoneNotification({
-      nom: app.getName(),
+      nom: NOM_AFFICHE,
       icone: path.join(__dirname, "..", "build", "icon.png"),
       langue: langueEcran,
       montrer: montrerFenetre,
@@ -1195,6 +1232,18 @@ app.on("before-quit", (event) => {
     void arreterTousLesBots().finally(() => app.quit());
     return;
   }
+  /*
+   * Sous Windows, on attend que la passerelle se soit arrêtée (au plus 5 s) :
+   * Electron quittait aussitôt, et l'arrêt de secours (`taskkill` de tout
+   * l'arbre) n'avait pas le temps de partir (audit du 27/09/2026).
+   */
+  if (process.platform === "win32" && gateway && !arretWindowsFait) {
+    event.preventDefault();
+    arretWindowsFait = true;
+    void stopGateway().finally(() => app.quit());
+    return;
+  }
   stopGateway();
 });
+let arretWindowsFait = false;
 process.on("exit", stopGateway);

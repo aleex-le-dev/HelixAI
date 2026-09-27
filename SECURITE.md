@@ -3110,8 +3110,9 @@ l'instance de l'extérieur. Tout est rejoué par `npm run securite`
 
 Avant la première construction pour ces deux systèmes, un agent a relu le code pour ce qui
 n'y tient pas. Tout ce qui touche à la sécurité est corrigé ; ce qui se vérifie depuis un Mac
-l'est par `npm run securite` (section 11 quinquies). **Rien n'a encore tourné sur un vrai
-Windows ni un vrai Linux.**
+l'est par `npm run securite` (section 11 quinquies). **Rien n'a tourné sur un vrai Windows** ;
+le `.deb` a été installé et lancé dans un Ubuntu 24.04 vierge (conteneur Docker, processeur x64
+émulé, écran virtuel), pas sur une vraie machine Linux.
 
 | Trouvé | Correctif | Vérifié |
 |---|---|---|
@@ -3120,12 +3121,41 @@ Windows ni un vrai Linux.**
 | **Linux sans trousseau** : Chromium chiffre avec une clé écrite dans son code (`basic_text`) et se dit chiffré. | Tenu pour non chiffré (`chiffrementPoste.cjs`) : le coffre et le grand stockage le disent et retombent sur le stockage du navigateur. | Relu, pas essayé sur Linux |
 | **Zones protégées** : rien de `AppData` (profil de Helix, jetons de gh et gcloud, identifiants de Windows), ni trousseaux GNOME, Firefox, Thunderbird, certificats de Chromium, Flatpak. Noms courts (`MEDHI~1`) non développés. | Ajoutés ; chemin réel natif sous Windows ; chemins réseau, de périphérique et flux secondaires (`fichier:flux`) refusés. | 6 chemins vérifiés |
 | **Dossiers système** acceptés comme dossier de travail (`C:\Windows`, `C:\`, `/etc`, `/root`). | Liste propre à chaque système, séparateur du système, racine de disque reconnue partout. | Relu, pas essayé hors macOS |
-| **Arrêt** : sous Windows, `kill()` tuait net la passerelle, qui laissait OpenCode, OpenClaw, l'entraînement et LM Studio derrière. | Arrêt demandé par un canal, puis `taskkill /T /F` ; les processus lancés par la passerelle s'arrêtent avec tout leur arbre ; canal coupé, la passerelle s'arrête aussi. | Relu |
+| **Arrêt** : sous Windows, `kill()` tuait net la passerelle, qui laissait OpenCode, OpenClaw, l'entraînement et LM Studio derrière. | Arrêt demandé par un canal, puis `taskkill /T /F` ; le moteur llmster, partagé comme LM Studio sur macOS, reste allumé (seuls les modèles chargés par Helix sont déchargés) ; les processus lancés par la passerelle s'arrêtent avec tout leur arbre ; canal coupé, la passerelle s'arrête aussi. | Relu |
 | **Consoles** : chaque programme lancé ouvrait une fenêtre noire. | `windowsHide` par défaut pour tout le processus (`processus.ts`), `promisify` compris. | Windows simulé : les 5 formes d'appel |
-| **Moteur LM Studio** sous Windows et Linux | Archive officielle de llmster et son empreinte SHA-512 publiée par l'éditeur, vérifiée avant ouverture ; aucun script téléchargé n'est exécuté. **Limite** : l'empreinte vient du même serveur que l'archive (sur macOS, d'un catalogue tiers). | Version et empreinte lues en ligne ; installation pas essayée |
+| **Moteur LM Studio** sous Windows et Linux | Archive officielle de llmster et son empreinte SHA-512 publiée par l'éditeur, vérifiée avant ouverture ; aucun script téléchargé n'est exécuté. **Limite** : l'empreinte vient du même serveur que l'archive (sur macOS, d'un catalogue tiers). | Installé dans un Ubuntu 24.04 vierge (Docker) : empreinte vérifiée, modèle chargé, un Chat ; pas essayé sous Windows |
+| **Python** absent ou sans `venv` (dictée, documents, entraînement fermés) | Helix pose CPython 3.12.14 autonome (`pythonPrive.ts`), décidé par Medhi le 27/09/2026 : publication épinglée, empreintes SHA-256 écrites dans le code, archive effacée sans être ouverte si l'empreinte diffère, Python vérifié (venv, ssl) avant usage. | 2 contrôles ; posé sur ce Mac et dans l'Ubuntu, atelier complet installé avec lui |
+| **`npx` absent** (serveur de fichiers de Cowork), ou `.cmd` sous Windows | `npx` lancé par un vrai Node : celui du système, sinon le Node officiel de Helix, posé au besoin (empreinte vérifiée contre `SHASUMS256.txt`), dossier en tête du PATH ; scripts d'installation toujours refusés. | Ubuntu : Node posé, serveur de fichiers démarré (14 outils) |
+| **Essai dans Ubuntu 24.04** : trois bibliothèques manquaient au `.deb` ; l'application se fermait au démarrage (une fenêtre de service fermée avant la fenêtre principale) ; llmster ne chargeait aucun modèle (dossier `.internal/temp` absent). | Dépendances ajoutées ; on ne quitte qu'une fois la fenêtre principale ouverte ; dossier créé à l'installation et à chaque démarrage du moteur. | Refait dans le même Ubuntu : application ouverte, modèle chargé, Chat |
 | **AppImage** sur Ubuntu 24.04 : démarre sans le bac à sable de Chromium (`--no-sandbox` ajouté par son lanceur, faute d'espaces de noms). | Un `.deb` est construit aussi, avec le bac à sable et son profil AppArmor : c'est lui à conseiller sur Ubuntu et Debian. | Contenu du `.deb` relu |
 
 Restent, dits comme tels : l'installateur Windows n'est pas signé (SmartScreen avertit) ; une
-clé de moteur local ajoutée par un membre avant le 27/09 reste utilisable ; OpenClaw, la ligne
-de commande, les essais de code en bac à sable et la mise à jour d'un clic n'existent pas sous
-Windows ; le contrôle de l'écran de la machine elle-même reste réservé à macOS.
+clé de moteur local ajoutée par un membre avant le 27/09 reste utilisable ; OpenClaw et la ligne
+de commande n'existent pas sous Windows ; les essais de code en bac à sable et la mise à jour
+d'un clic n'existent ni sous Windows ni sous Linux ; pas de ligne de commande avec l'AppImage ;
+le contrôle de l'écran de la machine elle-même reste réservé à macOS.
+
+### 29.3 Relecture par cinq agents (nuit du 27 septembre 2026)
+
+Demandée par Medhi avant la publication. Cinq agents en lecture seule, chacun sur un angle
+(Windows, Linux et paquets, sécurité des installations, régressions sur macOS, documentation et
+règles de l'écran) ; chaque constat relu, corrigé, et vérifié par `npm run securite` (432
+contrôles, tous réussis, 7 de plus en section 11 quater et 11 quinquies).
+
+| Trouvé | Correctif |
+|---|---|
+| **Élevé** : un membre pouvait faire exécuter par l'instance un programme de son choix. Il ouvrait « Tout mon poste » (son mot de passe seul), puis faisait écrire par ses agents `~/.lmstudio-home-pointer`, que la passerelle suivait pour lancer `lms`. | Dossier de l'équipe et « Tout mon poste » réservés à l'administrateur ; `~/.lmstudio`, le pointeur et `~/.cache/lm-studio` en zones protégées ; le pointeur n'est suivi que vers un dossier local, absolu, à ce compte, hors de l'espace des agents. |
+| La clé de données en fichier bouclait jusqu'au débordement de pile (lien vers un disque absent), puis l'instance écrivait en clair. | `lstat` au lieu de `existsSync`, une seule relecture, nom provisoire tiré au sort, et refus de démarrer si la clé ne peut pas être créée. |
+| Le moteur llmster et le Node de Helix n'étaient pas épinglés (version lue en ligne, empreinte prise sur le même serveur à chaque fois). | Versions épinglées (llmster 0.0.25-1, Node 24.21.0) et empreintes écrites dans le code, comme Python. |
+| Deux installations de Node pouvaient se croiser et s'effacer l'une l'autre. | Une à la fois ; un Node déjà posé n'est jamais effacé sous qui s'en sert. |
+| Installation du moteur ouverte à tout membre, sans garde contre deux installations. | Administrateur seul, une à la fois. |
+| Archive de Python dans le dossier temporaire commun, `tar` pris dans le PATH, pas de plafond de taille. | Dossier à soi (0700), écriture exclusive, `tar` du système par son chemin, téléchargement coupé au-delà de la taille attendue. |
+| Linux : un trousseau « inconnu » tenu pour sûr ; profils de navigateurs en snap (Firefox d'Ubuntu) et portefeuille KDE lisibles. | Liste blanche des trousseaux ; `~/snap` et `~/.local/share/kwalletd` en zones protégées. |
+| Windows : Helix Code refusait presque toute opération sur un fichier (`C:\…` pris pour un chemin relatif) ; documents de l'atelier aux accents abîmés (Python lit en ANSI) ; lecteurs réseau refusés ; OpenCode introuvable ; renommages sans reprise sous antivirus ; l'arrêt de secours n'avait pas le temps de partir. | Chemins jugés par `isAbsolute` ; UTF-8 imposé à Python ; partages réseau permis (pas ceux d'administration ni de la machine elle-même) ; emplacements Windows d'OpenCode et commande d'installation adaptée ; renommages réessayés ; Electron attend l'arrêt de la passerelle. |
+| macOS : l'application ouverte depuis le Finder ne voyait pas Homebrew (`npx`, `npm`) : pas d'outils fichiers dans Cowork. | Les dossiers de Homebrew ajoutés à la fin du PATH de la passerelle ; `npx` lancé par son chemin, avec un Node 18 ou plus récent, sinon celui de Helix. |
+| Sessions de connexion déplacées à tort (trousseau verrouillé, fichier tenu un instant). | Déplacées seulement si le fichier est vraiment abîmé ; sinon, en mémoire, sans rien écrire par-dessus. |
+
+Restent, dits comme tels : une erreur non rattrapée est notée sans arrêter l'instance (choix
+fait au test d'intrusion : une requête ne doit pas arrêter l'instance d'une équipe), au prix
+d'un état qui peut rester incomplet jusqu'au redémarrage ; les images et vidéos ne sont pas
+proposées sur un Linux plus ancien qu'Ubuntu 24.04 (le moteur publié y demande la glibc 2.38).

@@ -1,5 +1,6 @@
 {
   "name": "helix-plateforme",
+  "nomAffiche": "Helix",
   "private": true,
   "version": "0.27.0",
   "license": "AGPL-3.0-only",
@@ -104,7 +105,8 @@
       ],
       "category": "Office",
       "synopsis": "Plateforme d'IA locale et souveraine",
-      "syncDesktopName": true
+      "syncDesktopName": true,
+      "icon": "build/icons"
     },
     "nsis": {
       "oneClick": true,
@@ -117,7 +119,8 @@
       ],
       "deleteAppDataOnUninstall": false,
       "createDesktopShortcut": true,
-      "createStartMenuShortcut": true
+      "createStartMenuShortcut": true,
+      "artifactName": "Helix-Setup-${version}-${arch}.${ext}"
     },
     "deb": {
       "depends": [

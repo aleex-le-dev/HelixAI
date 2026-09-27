@@ -883,7 +883,8 @@ export async function verifierOutil(
         ...(typeof args.url === "string" ? { url: args.url } : {}),
         ...(employe ? { employe } : {}),
         // Ce que l'accord couvre : cet appel seul, ou les suivants au même endroit.
-        unique: toujours || !porteeParDossier(outil),
+        // Une commande, une adresse, un appel sans chemin : mot pour mot, la carte ne promet pas plus (revue du 27/09/2026).
+        unique: toujours || !porteeParDossier(outil) || !chemin(args) || ["code__bash", "code__webfetch", "code__websearch", "code__codesearch"].includes(outil),
         ...(chemins(args).length > 1 ? { cibles: chemins(args).slice(0, 50) } : {}),
         /*
          * Hors fichiers, la carte montre ce que l'outil recevra (un connecteur,

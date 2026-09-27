@@ -24,7 +24,7 @@ import { chiffrerOctets, dechiffrerOctets } from "./secret.ts";
 import { t, tf } from "./langue.ts";
 import empreintesPaquets from "./entrainement-paquets.json" with { type: "json" };
 import { arreterArbre } from "./processus.ts";
-import { assurerPythonPrive, pythonPrive, pythonPriveInstallable } from "./pythonPrive.ts";
+import { assurerPythonPrive, pythonPrive, pythonPriveInstallable, tarDuSysteme } from "./pythonPrive.ts";
 
 const exec = promisify(execFile);
 
@@ -914,7 +914,7 @@ export function installer(qui: string): Promise<void> {
           tr.total = LLAMACPP.taille;
         });
         mkdirSync(join(racineMoteur(), "llama.cpp"), { recursive: true });
-        await exec("tar", ["-xzf", archive, "-C", join(racineMoteur(), "llama.cpp")], { timeout: 5 * 60_000 });
+        await exec(tarDuSysteme(), ["-xzf", archive, "-C", join(racineMoteur(), "llama.cpp")], { timeout: 5 * 60_000 });
         rmSync(archive, { force: true });
       }
     }

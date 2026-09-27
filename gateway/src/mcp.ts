@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { homedir } from "node:os";
 import { delimiter, join, dirname } from "node:path";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -276,13 +277,31 @@ async function resoudreNpx(): Promise<{ command: string; prefixe: string[]; path
       .filter(Boolean)
       .map((d) => join(d, nom))
       .find((c) => existsSync(c));
-  if (process.platform !== "win32" && (dansLePath("npx") || ["/opt/homebrew/bin/npx", "/usr/local/bin/npx"].some((c) => existsSync(c)))) {
-    return { command: "npx", prefixe: [] };
-  }
-  if (process.platform === "win32") {
+  /*
+   * Le Node du système, seulement s'il est assez récent (revue Linux du
+   * 27/09/2026 : `apt install nodejs` donne Node 12 sur Ubuntu 22.04, où les
+   * serveurs d'outils ne démarrent pas).
+   */
+  const assezRecent = (node: string) => {
+    try {
+      const v = /v(\d+)/.exec(execFileSync(node, ["--version"], { encoding: "utf8", timeout: 10_000, stdio: ["ignore", "pipe", "ignore"] }))?.[1];
+      return Number(v) >= 18;
+    } catch {
+      return false;
+    }
+  };
+  if (process.platform !== "win32") {
+    /*
+     * Par son chemin complet, son dossier en tête du PATH (revue du
+     * 27/09/2026) : une application ouverte depuis le Finder n'a pas celui de
+     * Homebrew, et `npx` y échouait (« env: node »).
+     */
+    const npx = dansLePath("npx") ?? ["/opt/homebrew/bin/npx", "/usr/local/bin/npx"].find((c) => existsSync(c));
+    if (npx && assezRecent(join(dirname(npx), "node"))) return { command: npx, prefixe: [], path: dirname(npx) };
+  } else {
     const node = dansLePath("node.exe");
     const script = node ? join(dirname(node), "node_modules", "npm", "bin", "npx-cli.js") : null;
-    if (node && script && existsSync(script)) return { command: node, prefixe: [script] };
+    if (node && script && existsSync(script) && assezRecent(node)) return { command: node, prefixe: [script], path: dirname(node) };
   }
   let prive = npxPrive();
   if (!prive && nodePriveInstallable() === null) {

@@ -7,6 +7,7 @@ import {
   chmodSync,
   readdirSync,
 } from "node:fs";
+import { randomBytes } from "node:crypto";
 import { join, dirname } from "node:path";
 import { homedir } from "node:os";
 import { deployment } from "./deployment.ts";
@@ -251,7 +252,8 @@ class JsonStore implements Store {
    */
   async write(collection: StoredCollection, value: unknown): Promise<void> {
     const file = this.path(collection);
-    const temp = `${file}.tmp`;
+    // Un nom à chaque écriture : deux écritures proches ne se partagent plus le même fichier provisoire (audit Windows du 27/09/2026).
+    const temp = `${file}.${process.pid}.${randomBytes(4).toString("hex")}.tmp`;
     const envelope: Envelope = { value: chiffrer(value, collection), revision: Date.now() };
     mkdirSync(dirname(file), { recursive: true, mode: 0o700 });
     // 600 dès l'écriture : ces fichiers ne regardent que le compte hôte.

@@ -1,11 +1,12 @@
 import { createHash } from "node:crypto";
 import { execFile } from "node:child_process";
-import { createWriteStream, existsSync, mkdirSync, renameSync, rmSync } from "node:fs";
-import { homedir, tmpdir } from "node:os";
+import { createWriteStream, existsSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { homedir } from "node:os";
 import { join } from "node:path";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { t, tf } from "./langue.ts";
+import { renommer } from "./processus.ts";
 
 /**
  * Le Python que Helix pose lui-même, quand la machine n'en a pas un qui
@@ -52,6 +53,16 @@ function cible(): string | null {
   if (process.platform === "linux") return `${arch}-unknown-linux-gnu`;
   if (process.platform === "darwin") return `${arch}-apple-darwin`;
   return null;
+}
+
+/**
+ * Le `tar` du système, par son chemin : sous Windows celui de Windows (celui de
+ * Git ne sait pas lire `C:`), ailleurs `/usr/bin/tar` ou `/bin/tar`, pas le
+ * premier `tar` venu du PATH.
+ */
+export function tarDuSysteme(): string {
+  if (process.platform === "win32") return join(process.env.SystemRoot ?? "C:\\Windows", "System32", "tar.exe");
+  return ["/usr/bin/tar", "/bin/tar"].find((c) => existsSync(c)) ?? "tar";
 }
 
 const racine = () => join(process.env.HELIX_DATA_DIR ?? join(homedir(), ".helix", "data"), "python-moteur");
@@ -107,40 +118,54 @@ async function installer(avancer?: (pourcent: number) => void): Promise<string> 
   if (!reponse.ok || !reponse.body) throw new Error(tf("Téléchargement de Python impossible (HTTP {0}).", reponse.status));
 
   mkdirSync(racine(), { recursive: true, mode: 0o700 });
-  const archive = join(tmpdir(), `helix-python-${Date.now()}.tar.gz`);
+  /*
+   * Dans un dossier à soi (0700), pas dans le dossier temporaire commun : sur
+   * une machine à plusieurs comptes, un autre compte ne peut pas substituer
+   * l'archive entre la vérification et l'ouverture (revue du 27/09/2026).
+   */
+  const travail = mkdtempSync(join(racine(), ".telechargement-"));
+  const archive = join(travail, "python.tar.gz");
   const empreinte = createHash("sha256");
   let recu = 0;
   const flux = Readable.fromWeb(reponse.body as import("node:stream/web").ReadableStream<Uint8Array>);
   flux.on("data", (morceau: Buffer) => {
     empreinte.update(morceau);
     recu += morceau.length;
+    // Plus gros qu'annoncé : ce n'est pas le bon fichier, inutile d'aller au bout.
+    if (recu > attendu.octets) flux.destroy(new Error("trop gros"));
     avancer?.(Math.min(99, Math.round((recu / attendu.octets) * 100)));
   });
   try {
-    await pipeline(flux, createWriteStream(archive, { mode: 0o600 }));
+    await pipeline(flux, createWriteStream(archive, { mode: 0o600, flags: "wx" }));
   } catch {
-    rmSync(archive, { force: true });
+    rmSync(travail, { recursive: true, force: true });
     throw new Error(t("Le téléchargement de Python s'est interrompu : vérifiez la connexion, puis réessayez."));
   }
   if (empreinte.digest("hex") !== attendu.sha256) {
-    rmSync(archive, { force: true });
+    rmSync(travail, { recursive: true, force: true });
     throw new Error(t("L'archive de Python ne correspond pas à son empreinte : elle a été effacée sans être ouverte."));
   }
 
   // Ouverte à côté, puis mise en place d'un coup : un arrêt au milieu ne laisse pas un Python à moitié posé.
   const provisoire = join(racine(), `.extraction-${Date.now()}`);
   mkdirSync(provisoire, { recursive: true });
-  const tar = process.platform === "win32" ? join(process.env.SystemRoot ?? "C:\\Windows", "System32", "tar.exe") : "tar";
+  const tar = tarDuSysteme();
   const sortie = await new Promise<string | null>((resolve) =>
     execFile(tar, ["-xzf", archive, "-C", provisoire], { timeout: 10 * 60_000 }, (err, _o, e) => resolve(err ? String(e || err.message) : null)),
   );
-  rmSync(archive, { force: true });
+  rmSync(travail, { recursive: true, force: true });
   if (sortie !== null || !existsSync(executable(provisoire))) {
     rmSync(provisoire, { recursive: true, force: true });
-    throw new Error(tf("Python n'a pas pu être ouvert : {0}", (sortie ?? t("archive incomplète")).slice(-200)));
+    throw new Error(tf("Python n'a pas pu être décompressé : {0}", (sortie ?? t("archive incomplète")).slice(-200)));
   }
   rmSync(dossierVersion(), { recursive: true, force: true });
-  renameSync(provisoire, dossierVersion());
+  try {
+    renommer(provisoire, dossierVersion());
+  } catch (err) {
+    // Sous Windows, un antivirus peut tenir le dossier : on ne laisse pas 100 Mo derrière soi.
+    rmSync(provisoire, { recursive: true, force: true });
+    throw err;
+  }
 
   // Vérifié avant d'être rendu : il doit démarrer, et savoir créer un environnement.
   const exe = executable(dossierVersion());

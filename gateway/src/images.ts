@@ -268,12 +268,34 @@ function moteurPour(hw: Hardware, versionMac: number | null): Moteur | null {
     }
     return { id: "win-vulkan", version: T908, archive: REL(T908, "sd-master-88411ef-bin-win-vulkan-x64.zip"), sha256: "e9d089361a00bd30b1e23cc39d2a98745536688acbf5e9e68ce2498a548d07e1", taille: 32_000_000, lent: true };
   }
-  if (hw.platform === "linux" && hw.arch === "x64") {
+  /*
+   * Le programme Linux publié est construit sur Ubuntu 24.04 : il demande la
+   * glibc 2.38 (relevé le 27/09/2026 dans `sd-cli` et `libggml-base.so`). Sur
+   * Ubuntu 22.04 ou Debian 12 (2.35, 2.36), il ne démarrerait pas, et on ne
+   * l'apprendrait qu'après plusieurs gigaoctets de modèles : il n'est pas
+   * proposé, et l'écran dit pourquoi (`glibcTropAncienne`).
+   */
+  if (hw.platform === "linux" && hw.arch === "x64" && !glibcTropAncienne()) {
     return { id: "linux-vulkan", version: T908, archive: REL(T908, "sd-master-88411ef-bin-Linux-Ubuntu-24.04-x86_64-vulkan.zip"), sha256: "3f898579f384a97368fed42daebc4ed81e65798c633ed09b84cb27812a65ba33", taille: 39_000_000, lent: vram < 4, delester: vram > 0 && vram < 10 };
   }
   return null;
 }
 
+
+/** La glibc de ce Linux est-elle plus ancienne que 2.38 ? (faux ailleurs, ou si on ne sait pas la lire) */
+function glibcTropAncienne(): boolean {
+  if (process.platform !== "linux") return false;
+  try {
+    const v = (process.report?.getReport() as { header?: { glibcVersionRuntime?: string } } | undefined)?.header?.glibcVersionRuntime;
+    const [maj = 0, min = 0] = String(v ?? "").split(".").map(Number);
+    return Boolean(v) && (maj < 2 || (maj === 2 && min < 38));
+  } catch {
+    return false;
+  }
+}
+
+const RAISON_GLIBC = () =>
+  t("Le moteur d'images publié pour Linux demande un système récent (glibc 2.38 : Ubuntu 24.04, Debian 13, Fedora 39 ou plus récents). Ce système est plus ancien.");
 
 /* ------------------------------------------------------------------ */
 /* Emplacements                                                        */
@@ -408,7 +430,7 @@ export async function etatImages(): Promise<EtatImages> {
   });
   const possible = modeles.some((m) => m.possible);
   let raison: string;
-  if (!moteur) raison = t("Aucun moteur d'images n'est publié pour ce système (Mac à puce Apple sous macOS 15 ou plus, Windows ou Linux 64 bits).");
+  if (!moteur) raison = glibcTropAncienne() ? RAISON_GLIBC() : t("Aucun moteur d'images n'est publié pour ce système (Mac à puce Apple sous macOS 15 ou plus, Windows ou Linux 64 bits).");
   else if (!possible) raison = tf("{0} Go de mémoire : il en faut 8 au moins pour créer des images sur cette machine.", hw.totalMemoryGb);
   else if (moteur.lent) raison = t("Sans carte graphique reconnue, l'image est calculée par le processeur : comptez plusieurs minutes par image.");
   else raison = t("Les images sont créées sur cette machine, par un modèle ouvert : rien ne part sur internet.");
@@ -973,7 +995,7 @@ export async function etatVideos(): Promise<Omit<EtatImages, "actif" | "modeles"
   });
   const possible = modeles.some((m) => m.possible);
   let raison: string;
-  if (!moteur) raison = t("Aucun moteur vidéo n'est publié pour ce système (Mac à puce Apple sous macOS 15 ou plus, Windows ou Linux 64 bits).");
+  if (!moteur) raison = glibcTropAncienne() ? RAISON_GLIBC() : t("Aucun moteur vidéo n'est publié pour ce système (Mac à puce Apple sous macOS 15 ou plus, Windows ou Linux 64 bits).");
   else if (moteur.lent) raison = t("Sans carte graphique reconnue, la vidéo n'est pas proposée : le processeur y passerait des heures.");
   // Sur un PC, c'est la mémoire de la carte graphique qui compte, pas la mémoire vive (revue du 27/09/2026).
   else if (!possible && hw.appleSilicon) raison = tf("{0} Go de mémoire : il en faut 16 au moins pour créer des vidéos sur cette machine.", hw.totalMemoryGb);

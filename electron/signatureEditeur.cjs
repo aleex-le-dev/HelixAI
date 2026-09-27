@@ -28,7 +28,13 @@
  */
 
 const crypto = require("node:crypto");
-const fs = require("node:fs");
+/*
+ * `original-fs` dans Electron : son `fs` ouvre les archives `.asar` comme des
+ * dossiers, et le relevé ne lisait pas les octets signés (hors d'Electron) ;
+ * toute mise à jour était refusée, « son contenu a changé depuis sa
+ * signature » (premier essai réel, 27/09/2026).
+ */
+const fs = process.versions.electron ? require("original-fs") : require("node:fs");
 const path = require("node:path");
 
 const FICHIER_SIGNATURE = "helix-signature.json";

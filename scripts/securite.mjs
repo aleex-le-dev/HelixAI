@@ -682,6 +682,17 @@ console.log("\n5. Navigateur et origine");
 }
 
 /* ------------------------------------------------------------------------- */
+/*
+ * La signature de l'éditeur se relève avec `original-fs` dans Electron : son
+ * `fs` ouvre les `.asar` comme des dossiers, et toute mise à jour d'un clic
+ * était refusée (premier essai réel, 27/09/2026).
+ */
+{
+  const { readFileSync } = await import("node:fs");
+  const source = readFileSync(new URL("../electron/signatureEditeur.cjs", import.meta.url), "utf8");
+  verifier("la signature de l'éditeur est relevée sans la vue asar d'Electron (original-fs)", /require\("original-fs"\)/.test(source), "require(\"original-fs\") absent");
+}
+
 console.log("\n6. Chemins détournés");
 for (const chemin of ["../../../../etc/passwd", "/etc/passwd", "..%2F..%2Fetc%2Fpasswd", "~/.ssh/id_rsa"]) {
   const r = await appel(`/helix/espace/fichier?chemin=${encodeURIComponent(chemin)}`, { headers: avecSeance });

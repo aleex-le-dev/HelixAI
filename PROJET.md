@@ -2856,6 +2856,19 @@ de Medhi, rendue neutre. Logique vérifiée sans réseau (`scripts/essai-source-
 **À faire (demandé par Medhi le 27/09/2026) : OpenCode installé par Helix.** L'écran Code
 affiche aujourd'hui la commande à lancer ; OpenCode est sous licence MIT, il peut s'installer
 comme le moteur (version épinglée, empreinte écrite dans le code).
+
+**Trouvé le 27/09/2026 au premier vrai essai de mise à jour d'un clic (0.27.0 vers 0.27.1, par
+GitHub, sur ce Mac) : toute mise à jour était refusée.** La fenêtre « Nouvelle version » est bien
+apparue, l'archive s'est téléchargée, puis « la mise à jour a été refusée : son contenu a changé
+depuis sa signature ». Cause : dans Electron, `fs` ouvre les archives `.asar` comme des
+dossiers ; le vérificateur de la signature de l'éditeur ne relisait donc pas les octets signés
+(relevés hors d'Electron). Le défaut valait aussi pour une mise à jour servie par une instance,
+jamais essayée entre deux versions. Correctif : `original-fs` dans Electron
+(`electron/signatureEditeur.cjs`), reproduit puis vérifié dans Electron même, et contrôlé par
+`npm run securite` (434 contrôles). Rien de faux n'a été installé : le refus était le bon
+réflexe. Les installations en 0.27.0 et dans la première 0.27.1 (publiée quelques minutes) ne
+peuvent pas se mettre à jour d'un clic : une réinstallation, une fois (commande `curl` du
+README). La 0.27.1 publiée a été refaite avec le correctif.
 - Réponses en français à un message en anglais : la consigne française disait « tu réponds en
   français ». Le modèle répond maintenant dans la langue du dernier message, agents compris ;
   la langue de base est l'anglais (interface, passerelle, zone de notification) quand celle du

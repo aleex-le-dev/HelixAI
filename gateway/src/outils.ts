@@ -9,6 +9,10 @@ import * as drive from "./drive.ts";
 import * as slack from "./slack.ts";
 import * as bibliotheque from "./bibliotheque.ts";
 import * as controleWeb from "./controleWeb.ts";
+import { definirEspaceDeTravail } from "./approbation.ts";
+
+// La barrière juge un déplacement « vers un dossier » comme `adapterFichiers` l'exécute, depuis le même dossier de travail.
+definirEspaceDeTravail(workspace);
 
 /**
  * Les outils de l'instance, rangés par famille, et le seul endroit qui les

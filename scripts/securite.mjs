@@ -196,6 +196,8 @@ await new Promise((ok) => fauxModele.listen(PORT_EMBED, "127.0.0.1", ok));
     [
       "#!/usr/bin/env node",
       'const a = process.argv.slice(2);',
+      // Ajouté le 27/09/2026 (section 7 ter) : l'environnement reçu, pour vérifier que les secrets de l'hôte n'arrivent pas chez OpenClaw.
+      'require("node:fs").writeFileSync(require("node:path").join(__dirname, "..", "..", "env-openclaw.json"), JSON.stringify(process.env));',
       'if (a[0] === "gateway" && a[1] === "run") {',
       '  const port = Number(a[a.indexOf("--port") + 1]);',
       '  require("node:http").createServer((q, r) => r.end("ok")).listen(port, "127.0.0.1");',
@@ -247,6 +249,14 @@ await new Promise((ok) => fauxModele.listen(PORT_EMBED, "127.0.0.1", ok));
     }),
   );
 }
+/*
+ * Les modules de la passerelle que la batterie charge chez elle, et les
+ * programmes qu'elle lance sans leur donner d'environnement propre, lisent ce
+ * profil et ce dossier de données, jamais `~/.helix/data` ni le trousseau
+ * (27/09/2026). Chaque passerelle d'essai reçoit les siens plus bas.
+ */
+process.env.HELIX_CONFIG = join(AUX, "profil.json");
+process.env.HELIX_DATA_DIR = DONNEES;
 
 /*
  * Un faux OpenCode (scripts/faux-opencode.mjs, section 6 ter) : la batterie ne
@@ -274,6 +284,12 @@ const FAUX_CODEX = join(AUX, "codex-essai");
   chmodSync(FAUX_CODEX, 0o755);
 }
 const CANARI = "canari-secret-de-l-hote-7731";
+/*
+ * Un secret de l'hôte sous un nom ordinaire, sans le préfixe `HELIX_` que
+ * certains filtres retiraient d'office (test d'intrusion du 27/09/2026) : il
+ * ne doit arriver ni chez OpenCode, ni chez Codex, ni chez OpenClaw.
+ */
+const CANARI_HOTE = "canari-secret-aws-de-l-hote-9043";
 const PROJET_A = mkdtempSync(join(tmpdir(), "helix-securite-projet-a-"));
 const PROJET_B = mkdtempSync(join(tmpdir(), "helix-securite-projet-b-"));
 
@@ -285,6 +301,7 @@ const passerelle = spawn(process.execPath, [join(RACINE, "gateway", "src", "inde
     HELIX_CODEX_BIN: FAUX_CODEX,
     HELIX_BUREAU: "1",
     HELIX_CANARI_SECRET: CANARI,
+    AWS_SECRET_ACCESS_KEY: CANARI_HOTE,
     HELIX_CODE_DIR: PROJET_A,
     HELIX_CONFIG: join(AUX, "profil.json"),
     HELIX_GATEWAY_PORT: String(PORT),
@@ -987,7 +1004,14 @@ console.log("\n6 ter. Helix Code : la session à sa propriétaire, les outils d'
   })();
   const vu = await (await fetch(`http://127.0.0.1:${portFaux}/essai/env`)).json().catch(() => ({ env: {}, enfant: {} }));
   const env = vu.env ?? {};
-  verifier("environnement d'OpenCode : ni HELIX_TOKEN ni les secrets de l'hôte", !("HELIX_TOKEN" in env) && !Object.values(env).includes(CANARI) && !("HELIX_CANARI_SECRET" in env), Object.keys(env).join(",").slice(0, 160));
+  verifier("environnement d'OpenCode : ni HELIX_TOKEN ni les secrets de l'hôte", !("HELIX_TOKEN" in env) && !Object.values(env).includes(CANARI) && !Object.values(env).includes(CANARI_HOTE) && !("HELIX_CANARI_SECRET" in env), Object.keys(env).join(",").slice(0, 160));
+  /*
+   * Test d'intrusion du 27/09/2026 : sans cette variable, OpenCode lit les
+   * `opencode.json` et les dossiers `.opencode` du projet (greffons, agents,
+   * serveurs MCP). Essayé avec le vrai OpenCode 1.18.32 (SECURITE.md § 35) :
+   * un greffon d'un dépôt cloné s'exécutait à l'ouverture d'une session.
+   */
+  verifier("environnement d'OpenCode : les réglages du projet ne sont pas lus (OPENCODE_DISABLE_PROJECT_CONFIG)", env.OPENCODE_DISABLE_PROJECT_CONFIG === "true", String(env.OPENCODE_DISABLE_PROJECT_CONFIG));
   const enfant = vu.enfant ?? {};
   const secrets = Object.entries(enfant).filter(([k, v]) => v && (k === "OPENCODE_SERVER_PASSWORD" || k.startsWith("HELIX_OPENCODE_") || v === JETON));
   verifier("environnement d'une commande lancée par OpenCode : ni mot de passe du serveur, ni jeton, ni clés", Object.keys(env).includes("OPENCODE_SERVER_PASSWORD") && secrets.length === 0, secrets.map(([k]) => k).join(",") || "greffon absent");
@@ -1060,6 +1084,68 @@ console.log("\n6 ter. Helix Code : la session à sa propriétaire, les outils d'
   const p4 = await permission({ permission: "read", patterns: ["lisezmoi.txt"], metadata: { filepath: join(realpathSync(PROJET_A), "lisezmoi.txt") } });
   const r4 = await reponseDe(p4);
   verifier("lire dans le projet, au niveau « Demander avant de modifier » : accordé sans carte", r4?.reply === "once", JSON.stringify(r4));
+
+  /*
+   * Test d'intrusion du 27/09/2026 : un `apply_patch` de plusieurs fichiers.
+   * OpenCode 1.18.32 le demande sous `edit`, `patterns` relatifs à la racine
+   * du dépôt, `metadata.filepath` = les noms joints par des virgules, et les
+   * chemins absolus (destination d'un « Move to » comprise) dans
+   * `metadata.files` (lu dans son code). Helix jugeait `filepath` comme un
+   * seul chemin : le deuxième fichier, ou la destination d'un déplacement
+   * passant par un lien du projet, échappait au refus des zones protégées.
+   */
+  {
+    const { symlinkSync, unlinkSync } = await import("node:fs");
+    const projetA = realpathSync(PROJET_A);
+    const lien = join(projetA, "lien-donnees");
+    symlinkSync(DONNEES, lien);
+    const cartesCode = async () => ((await (await appel("/helix/approbation", { headers: avecSeance })).json().catch(() => ({}))).enAttente ?? []).filter((d) => d.detail?.surface === "code");
+    const p5 = await permission({
+      permission: "edit",
+      patterns: ["a.txt", "b.txt"],
+      metadata: {
+        filepath: "a.txt, b.txt",
+        diff: "",
+        files: [
+          { filePath: join(projetA, "a.txt"), relativePath: "a.txt", type: "add" },
+          { filePath: join(projetA, "b.txt"), relativePath: "lien-donnees/instance-token", type: "move", movePath: join(lien, "instance-token") },
+        ],
+      },
+    });
+    const r5 = await reponseDe(p5);
+    const cartes5 = await cartesCode();
+    verifier(
+      "apply_patch de deux fichiers, dont un déplacé dans une zone protégée par un lien du projet : refus sans carte",
+      r5?.reply === "reject" && cartes5.length === 0,
+      `${JSON.stringify(r5)} cartes=${cartes5.length} ${cartes5[0]?.resume ?? ""}`,
+    );
+    // Sans le correctif, une carte attend : on la refuse pour ne pas gêner la suite.
+    for (const c of cartes5) await appel("/helix/approbation/repondre", { method: "POST", headers: avecSeance, body: JSON.stringify({ id: c.id, accord: false }) });
+    await reponseDe(p5);
+
+    const p6 = await permission({
+      permission: "edit",
+      patterns: ["a.txt", "sous/c.txt"],
+      metadata: {
+        filepath: "a.txt, sous/c.txt",
+        diff: "",
+        files: [
+          { filePath: join(projetA, "a.txt"), relativePath: "a.txt", type: "add" },
+          { filePath: join(projetA, "sous", "c.txt"), relativePath: "sous/c.txt", type: "add" },
+        ],
+      },
+    });
+    const carte6 = await carteDe(avecSeance);
+    verifier(
+      "apply_patch de deux fichiers du projet : une carte qui dit « 2 fichiers » et les nomme tous les deux",
+      /2 fichiers/.test(carte6?.resume ?? "") && (carte6?.detail?.cibles ?? []).length === 2,
+      `${carte6?.resume} ${JSON.stringify(carte6?.detail?.cibles ?? [])}`,
+    );
+    await appel("/helix/approbation/repondre", { method: "POST", headers: avecSeance, body: JSON.stringify({ id: carte6?.id, accord: true }) });
+    const r6 = await reponseDe(p6);
+    verifier("et l'accord revient à OpenCode (« once »)", r6?.reply === "once", JSON.stringify(r6));
+    unlinkSync(lien);
+  }
 
   /*
    * L'écran qui quitte une session de Code puis y revient (27/09/2026, vu par
@@ -1469,6 +1555,16 @@ console.log("\n7 ter. Employés OpenClaw et bases de connaissances : ce qui est 
         appels.includes(`memory reset --agent helix-${perso?.id} --yes`) && appels.includes(`memory forget --agent helix-${perso?.id} --session`),
       `${vide.status} ${JSON.stringify(corpsVide).slice(0, 120)}`,
     );
+    {
+      // Test d'intrusion du 27/09/2026 : OpenClaw recevait tout l'environnement de la passerelle, moins les `HELIX_*`.
+      const envOc = existsSync(join(AUX, "env-openclaw.json")) ? JSON.parse(readFileSync(join(AUX, "env-openclaw.json"), "utf8")) : null;
+      const fuites = envOc ? Object.entries(envOc).filter(([k, v]) => v === CANARI_HOTE || v === CANARI || v === JETON || k.startsWith("HELIX_")).map(([k]) => k) : ["(environnement non relevé)"];
+      verifier(
+        "OpenClaw des employés : aucun secret de l'hôte dans son environnement (liste fermée), ses propres réglages y sont",
+        fuites.length === 0 && Boolean(envOc?.OPENCLAW_STATE_DIR) && Boolean(envOc?.PATH),
+        fuites.join(","),
+      );
+    }
     verifier(
       "la copie mise de côté est chiffrée, sans le mot de contrôle en clair, et ses fiches de poste sont toujours là",
       copie.subarray(0, 5).toString("latin1") === "HLXF1" && !copie.includes("ZEBRE") && existsSync(join(espacePerso, "SOUL.md")),
@@ -2192,6 +2288,7 @@ console.log("\n7 sexies. Réponse partie en boucle : coupée, et dite (27/09/202
   // Poste Windows sans carte NVIDIA (simulé) : chargé au processeur, et l'échantillonnage de Qwen3.5 posé ; un Mac ne change pas.
   const { spawnSync } = await import("node:child_process");
   const dossierEssai = mkdtempSync(join(tmpdir(), "helix-chargement-"));
+  (await import("node:fs")).writeFileSync(join(dossierEssai, "c.json"), JSON.stringify({ chiffrement: "fichier" }));
   const charger = (plateforme, env = {}) => {
     const r = spawnSync(
       process.execPath,
@@ -2689,6 +2786,12 @@ console.log("\n7 nonies. Codex avec le compte ChatGPT : le propriétaire du post
     const zones = await import(versUrlC(join(RACINE, "gateway", "src", "zonesProtegees.ts")).href);
     const { homedir: maison } = await import("node:os");
     verifier("~/.codex reste une zone protégée pour les agents de Helix", zones.estProtege(join(maison(), ".codex", "auth.json")), "non protégé");
+    // Test d'intrusion du 27/09/2026 : les greffons que relit l'OpenCode de Helix, et les clés de fournisseurs de la personne.
+    verifier(
+      "~/.opencode (greffons relus par l'agent de code) et ~/.local/share/opencode (auth.json) sont des zones protégées",
+      zones.estProtege(join(maison(), ".opencode", "plugin", "x.js")) && zones.estProtege(join(maison(), ".local", "share", "opencode", "auth.json")),
+      "non protégé",
+    );
   }
 
   // --- Sur l'instance : un membre, l'API développeur, des jetons dans l'adresse. ---
@@ -3757,6 +3860,19 @@ console.log("\n11 quater. Relecture du 27/09/2026 : moteur local réservé, donn
   verifier("un membre n'ouvre pas « Tout mon poste » (dossier personnel du compte hôte) aux agents", poste.status === 403, poste.status);
   const moteurMembre = await appel("/helix/provision/moteur", { method: "POST", headers: json, body: JSON.stringify({ conditionsAcceptees: true }) });
   verifier("un membre n'installe pas le moteur des modèles sur la machine de l'instance", moteurMembre.status === 403, moteurMembre.status);
+  /*
+   * Test d'intrusion du 27/09/2026 : un membre activait le contrôle de l'écran
+   * de la machine avec son propre mot de passe, et recevait ensuite les cartes
+   * de ses propres clics. Mot de passe faux exprès : sans le correctif, rien ne
+   * s'active, et aucune capture n'est tentée sur ce poste.
+   */
+  const ecranMembre = await appel("/helix/computer/mode", { method: "POST", headers: json, body: JSON.stringify({ mode: "hote", password: "pas-le-bon-mot-9" }) });
+  const corpsEcran = await ecranMembre.json().catch(() => ({}));
+  verifier(
+    "un membre n'active pas le contrôle de l'écran de la machine de l'instance (403, avant même le mot de passe)",
+    ecranMembre.status === 403 && corpsEcran.error?.code === "ecran_administrateur",
+    `${ecranMembre.status} ${JSON.stringify(corpsEcran).slice(0, 100)}`,
+  );
 
   // Un fichier de groupes abîmé : la synchronisation et les droits continuent, rien n'est écrit par-dessus.
   const { readFileSync: lireF, writeFileSync: ecrireF, existsSync: existe } = await import("node:fs");
@@ -3814,7 +3930,7 @@ console.log("\n11 quinquies. Windows et Linux : ce qui se vérifie depuis ce pos
 
   // Instance partagée : le certificat est fabriqué sans openssl (Windows n'en a pas), et sert vraiment.
   const d1 = dossierNeuf(join(tmpdir(), "helix-tls-"));
-  ecrireF(join(d1, "helix.config.json"), JSON.stringify({ share: true }));
+  ecrireF(join(d1, "helix.config.json"), JSON.stringify({ chiffrement: "fichier", share: true }));
   const tlsSortie = essai(
     `const { tlsMaterial } = await import("./gateway/src/tls.ts");
      const https = (await import("node:https")).default;
@@ -4324,6 +4440,106 @@ console.log("\n11 septies. Petit modèle qui code : Helix répare, relance, vér
   rmSync(PROFIL3, { force: true });
 }
 
+console.log("\n11 octies. Contrôle de l'écran : une instance ouverte aux collègues n'est plus le poste de quelqu'un (27/09/2026)");
+{
+  /*
+   * Test d'intrusion du 27/09/2026 : seul `share` du profil fermait le réglage
+   * du contrôle de l'écran depuis l'interface. Une instance ouverte par
+   * l'interrupteur de l'écran (ou `HELIX_GATEWAY_HOST`) écoute sur le réseau
+   * sans `share` : un collègue pouvait l'activer, et un choix fait avant
+   * l'ouverture restait actif (captures de l'écran sans carte). Le module est
+   * chargé dans deux processus à part, l'un sur la boucle locale, l'autre
+   * « sur le réseau » : aucune passerelle n'écoute pour de vrai hors de la
+   * boucle locale, et rien ne touche à l'écran de ce poste.
+   */
+  const { writeFileSync: ecrire } = await import("node:fs");
+  const { pathToFileURL } = await import("node:url");
+  const ICI = mkdtempSync(join(tmpdir(), "helix-securite-ecran-"));
+  const profil = join(ICI, "profil.json");
+  ecrire(profil, JSON.stringify({ chiffrement: "fichier", backends: [{ id: "lmstudio", enabled: false }, { id: "exo", enabled: false }] }));
+  const script = [
+    `const r = await import(${JSON.stringify(pathToFileURL(join(RACINE, "gateway", "src", "reglagesEcran.ts")).href)});`,
+    "await r.chargerReglagesEcran();",
+    "const avant = r.configEcran().mode;",
+    "const modifiable = r.modeModifiable('hote').ok;",
+    "if (process.argv[1] === 'choisir') await r.definirModeEcran('hote', 'essai');",
+    "console.log(JSON.stringify({ avant, modifiable, apres: r.configEcran().mode }));",
+    "process.exit(0);",
+  ].join("\n");
+  const lancer = (hote, quoi) => {
+    try {
+      const sortie = execFileSync(process.execPath, ["--no-warnings", "--input-type=module", "-e", script, quoi], {
+        env: { ...process.env, HELIX_DATA_DIR: join(ICI, "donnees"), HELIX_CONFIG: profil, HELIX_GATEWAY_HOST: hote },
+        encoding: "utf8",
+        timeout: 30_000,
+      });
+      return JSON.parse(sortie.trim().split("\n").pop());
+    } catch (err) {
+      return { erreur: String(err).slice(0, 200) };
+    }
+  };
+  const local = lancer("127.0.0.1", "choisir");
+  verifier("poste fermé au réseau : le contrôle de l'écran s'active depuis l'interface (témoin)", local.modifiable === true && local.apres === "hote", JSON.stringify(local));
+  const reseau = lancer("0.0.0.0", "lire");
+  verifier(
+    "même poste ouvert aux collègues : le choix fait avant ne vaut plus, et l'interface ne peut plus l'activer",
+    reseau.avant === "desactive" && reseau.modifiable === false,
+    JSON.stringify(reseau),
+  );
+  rmSync(ICI, { recursive: true, force: true });
+}
+
+/* ------------------------------------------------------------------------- */
+console.log("\n11 nonies. Barrière : un accord pour un déplacement ne couvre que son dossier d'arrivée (27/09/2026)");
+{
+  /*
+   * Test d'intrusion du 27/09/2026 : `move_file` vers un dossier existant y
+   * range le fichier (outils.ts), mais la portée de l'accord prenait le parent
+   * de la destination. « Déplacer a.pdf vers Archive », accordé, couvrait
+   * « déplacer b.pdf vers Public » sans carte. Dans un processus à part, avec
+   * un dossier de données neuf (niveau « Demander avant de modifier ») : la
+   * barrière elle-même, sans modèle ni serveur de fichiers.
+   */
+  const { mkdirSync: creer, writeFileSync: ecrire } = await import("node:fs");
+  const { pathToFileURL } = await import("node:url");
+  const ICI = mkdtempSync(join(tmpdir(), "helix-securite-portee-"));
+  const ESPACE_P = join(ICI, "espace");
+  for (const d of ["Archive", "Public"]) creer(join(ESPACE_P, d), { recursive: true });
+  ecrire(join(ESPACE_P, "a.pdf"), "a");
+  ecrire(join(ESPACE_P, "b.pdf"), "b");
+  const script = [
+    `const a = await import(${JSON.stringify(pathToFileURL(join(RACINE, "gateway", "src", "approbation.ts")).href)});`,
+    "const ctx = a.ouvrirDemande();",
+    "const cartes = [];",
+    "a.surEvenement((e) => { if (e.type === 'approbation_demandee') { cartes.push(e.resume); setTimeout(() => a.repondre(e.id, true, 'outil', e.pour), 10); } });",
+    `const ws = ${JSON.stringify(ESPACE_P)};`,
+    // Chemins absolus : la barrière est chargée seule, sans le dossier de travail que lui donne outils.ts.
+    "await a.verifierOutil(ctx, 'fichiers__move_file', { source: ws + '/a.pdf', destination: ws + '/Archive' }, 'u1');",
+    "await a.verifierOutil(ctx, 'fichiers__move_file', { source: ws + '/b.pdf', destination: ws + '/Public' }, 'u1');",
+    "await a.verifierOutil(ctx, 'fichiers__move_file', { source: ws + '/a.pdf', destination: ws + '/Archive' }, 'u1');",
+    "console.log(JSON.stringify({ cartes: cartes.length }));",
+    "process.exit(0);",
+  ].join("\n");
+  let vu = {};
+  try {
+    const sortie = execFileSync(process.execPath, ["--no-warnings", "--input-type=module", "-e", script], {
+      env: { ...process.env, HELIX_DATA_DIR: join(ICI, "donnees"), HELIX_WORKSPACE: ESPACE_P, HELIX_CONFIG: join(AUX, "profil.json") },
+      encoding: "utf8",
+      timeout: 30_000,
+    });
+    vu = JSON.parse(sortie.trim().split("\n").pop());
+  } catch (err) {
+    vu = { erreur: String(err).slice(0, 200) };
+  }
+  verifier(
+    "déplacer vers Archive (accordé), puis vers Public : une seconde carte ; le même déplacement redit ne redemande pas",
+    vu.cartes === 2,
+    JSON.stringify(vu),
+  );
+  rmSync(ICI, { recursive: true, force: true });
+}
+
+/* ------------------------------------------------------------------------- */
 console.log("\n12. Deviner un mot de passe");
 {
   let bloque = false;

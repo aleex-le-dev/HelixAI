@@ -3926,6 +3926,16 @@ async function handleComputerMode(
   const possible = modeModifiable(body.mode);
   if (!possible.ok) return send(res, 403, { error: { message: possible.raison } });
   if (body.mode !== "desactive") {
+    /*
+     * Activer, c'est donner la souris et le clavier de cette machine à un
+     * agent : l'administrateur seul, comme « Tout mon poste » (relecture du
+     * 27/09/2026). Test d'intrusion du même jour : un membre l'activait avec
+     * son propre mot de passe, et c'est à lui qu'allaient ensuite les cartes.
+     * Avant le mot de passe : un membre n'a rien à essayer ici.
+     */
+    if (!(await estAdministrateur(qui.userId))) {
+      return send(res, 403, { error: { message: t("Seul l'administrateur de l'instance peut activer le contrôle de l'écran."), code: "ecran_administrateur" } });
+    }
     const refus = await confirmerIdentite(qui.userId, body.password, body.code);
     if (refus) return send(res, refus.statut, { error: { message: refus.reason } });
   }

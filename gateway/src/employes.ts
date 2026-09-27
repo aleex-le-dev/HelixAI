@@ -735,16 +735,35 @@ export function connaitrePasserelle(p: { url: string; jeton: string }): void {
   passerelle = p;
 }
 
+/**
+ * Variables de l'hôte transmises à OpenClaw, et rien d'autre : ce qu'un
+ * programme Node attend (chemins, compte, langue, dossier temporaire), le
+ * mandataire réseau et les certificats d'une entreprise (ses canaux sortent
+ * par là), et sous Windows ce sans quoi un processus ne démarre pas.
+ *
+ * Test d'intrusion du 27/09/2026 : OpenClaw recevait tout `process.env` de la
+ * passerelle, moins les `HELIX_*` et `ELECTRON_*`. Vérifié avec le faux
+ * OpenClaw de la batterie : une clé de l'hôte (`AWS_SECRET_ACCESS_KEY`) lui
+ * arrivait. C'est l'environnement des commandes d'un employé « libre » (`exec`,
+ * dont la sortie part au modèle) et celui où OpenClaw cherche ses clés de
+ * fournisseurs (`OPENAI_API_KEY`, `GEMINI_API_KEY`…). OpenCode et Codex ont
+ * déjà leur liste fermée ; OpenClaw était le seul à tout recevoir.
+ */
+const TRANSMISES_OPENCLAW = ["HOME", "USER", "LOGNAME", "SHELL", "LANG", "TZ", "TERM", "TMPDIR",
+  "HTTPS_PROXY", "HTTP_PROXY", "NO_PROXY", "https_proxy", "http_proxy", "no_proxy", "SSL_CERT_FILE", "SSL_CERT_DIR", "NODE_EXTRA_CA_CERTS",
+  "SystemRoot", "SYSTEMROOT", "APPDATA", "LOCALAPPDATA", "USERPROFILE", "TEMP", "TMP", "ComSpec", "PATHEXT", "windir"];
+
 function envOpenClaw(moteur: Moteur): NodeJS.ProcessEnv {
-  const env: NodeJS.ProcessEnv = {
-    ...process.env,
+  const env: NodeJS.ProcessEnv = {};
+  for (const [nom, valeur] of Object.entries(process.env)) {
+    if (valeur !== undefined && (TRANSMISES_OPENCLAW.includes(nom) || nom.startsWith("LC_"))) env[nom] = valeur;
+  }
+  Object.assign(env, {
     // Le Node qui accompagne l'installation d'OpenClaw, pas celui d'Electron.
     PATH: `${dirname(moteur.bin)}:${process.env.PATH ?? "/usr/bin:/bin"}`,
     OPENCLAW_STATE_DIR: dossier(),
     OPENCLAW_CONFIG_PATH: fichierConfig(),
-  };
-  // Rien d'Helix n'a à fuiter vers OpenClaw.
-  for (const k of Object.keys(env)) if (k.startsWith("HELIX_") || k.startsWith("ELECTRON_")) delete env[k];
+  });
   // Les jetons des canaux passent par l'environnement : la configuration ne porte que leur référence.
   for (const [id, parType] of Object.entries(secretsCanaux)) {
     for (const [type, champs] of Object.entries(parType)) {

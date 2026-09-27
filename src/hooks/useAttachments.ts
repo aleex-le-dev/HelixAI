@@ -13,12 +13,31 @@ import { t, tf } from "@/lib/i18n";
 export function useAttachments(modelUid?: string) {
   const [pieces, setPieces] = useState<Attachment[]>([]);
   const [erreurs, setErreurs] = useState<AttachmentError[]>([]);
+  /*
+   * Fichiers en cours de lecture (27/09/2026) : l'extraction d'un PDF prend
+   * plusieurs secondes sur un PC modeste. Sans cet état, la puce n'apparaissait
+   * qu'à la fin, et une question envoyée entre-temps partait sans le fichier.
+   */
+  const [enLecture, setEnLecture] = useState<string[]>([]);
   const { models } = useModels();
 
   const ajouter = useCallback(async (fichiers: File[]) => {
-    const { pieces: lues, erreurs: refus } = await lireFichiers(fichiers);
-    setPieces((actuelles) => [...actuelles, ...lues]);
-    setErreurs(refus);
+    const noms = fichiers.map((f) => f.name);
+    setEnLecture((actuels) => [...actuels, ...noms]);
+    try {
+      const { pieces: lues, erreurs: refus } = await lireFichiers(fichiers);
+      setPieces((actuelles) => [...actuelles, ...lues]);
+      setErreurs(refus);
+    } finally {
+      setEnLecture((actuels) => {
+        const reste = [...actuels];
+        for (const nom of noms) {
+          const i = reste.indexOf(nom);
+          if (i >= 0) reste.splice(i, 1);
+        }
+        return reste;
+      });
+    }
   }, []);
 
   const retirer = useCallback((index: number) => {
@@ -42,9 +61,9 @@ export function useAttachments(modelUid?: string) {
 
   const avertissementImage =
     !voitLesImages && pieces.some((p) => p.type === "image")
-      ? tf("{0} ne sait pas lire les images. Choisissez un modèle de vision, ", modele?.id ?? "Ce modèle") +
+      ? tf("{0} ne sait pas lire les images. Choisissez un modèle de vision, ", modele?.id ?? t("Ce modèle")) +
         t("sinon il répondra sans avoir vu la vôtre.")
       : null;
 
-  return { pieces, erreurs, avertissementImage, ajouter, retirer, vider };
+  return { pieces, erreurs, enLecture, avertissementImage, ajouter, retirer, vider };
 }

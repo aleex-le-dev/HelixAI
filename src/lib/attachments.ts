@@ -12,15 +12,19 @@
  *  - une image doit être *vue*, ce que seul un modèle de vision sait faire.
  */
 
-import { extraireTexte, DocumentIllisible, EXTENSIONS_DOCUMENTS, ANCIENS_FORMATS } from "./documents";
+import { extraireTexteDetaille, DocumentIllisible, EXTENSIONS_DOCUMENTS, ANCIENS_FORMATS } from "./documents";
+import { decoderTexte, ressembleATexte } from "./decodage";
 import { EXTRACTION_MAX } from "./televersement";
-import { t, tf } from "@/lib/i18n";
+import { t, tf, taille } from "@/lib/i18n";
 
 /*
  * Ce qui borne vraiment une pièce jointe, ce n'est pas la taille du fichier,
- * c'est ce que le modèle peut lire d'un coup (`CARACTERES_MAX`). Un fichier
- * texte se lit donc quelle que soit sa taille (seul son début est pris, et
- * l'écran le dit) ; une photo trop grande est réduite, pas refusée.
+ * c'est ce que le modèle peut lire d'un coup. L'écran en garde au plus
+ * `CARACTERES_MAX` ; l'instance mesure ensuite la place du modèle chargé et
+ * lit en parties ce qui ne tient pas (gateway/src/documentsJoints.ts,
+ * 27/09/2026). Un fichier texte se lit donc quelle que soit sa taille (seul
+ * son début est pris, et l'écran le dit) ; une photo trop grande est réduite,
+ * pas refusée.
  */
 /** Photo de téléphone, capture d'écran 5K : acceptées, puis réduites. */
 const IMAGE_MAX = 50 * 1024 * 1024;
@@ -39,13 +43,16 @@ const CARACTERES_MAX = 200_000;
 
 const EXTENSIONS_TEXTE = [
   "txt", "md", "markdown", "csv", "tsv", "json", "yaml", "yml", "xml", "html",
-  "css", "js", "jsx", "ts", "tsx", "py", "rb", "go", "rs", "java", "kt", "c",
+  "htm", "css", "js", "jsx", "ts", "tsx", "py", "rb", "go", "rs", "java", "kt", "c",
   "h", "cpp", "cs", "php", "sh", "sql", "log", "ini", "conf", "env",
+  // Ajoutées le 27/09/2026 : sous-titres, courriels enregistrés, LaTeX, scripts Windows, réglages.
+  "srt", "vtt", "eml", "tex", "rtf", "toml", "bat", "cmd", "ps1", "vb", "lua", "r", "swift", "dart",
+  "scala", "pl", "properties", "cfg", "gradle", "svg", "ics", "vcf", "jsonl", "ndjson",
 ];
 
 export type Attachment =
-  | { type: "texte"; nom: string; contenu: string; tronque: boolean }
-  | { type: "image"; nom: string; dataUrl: string };
+  | { type: "texte"; nom: string; contenu: string; tronque: boolean; taille: number }
+  | { type: "image"; nom: string; dataUrl: string; taille: number };
 
 export interface AttachmentError {
   nom: string;
@@ -63,7 +70,22 @@ export const ACCEPT = [
   "image/jpeg",
   "image/webp",
   "image/gif",
+  "text/*",
 ].join(",");
+
+/** Un RTF est du texte balisé : on retire les commandes, il reste ce qu'on lit. */
+function texteDuRtf(rtf: string): string {
+  return rtf
+    .replace(/\\'([0-9a-f]{2})/gi, (_, h: string) => new TextDecoder("windows-1252").decode(new Uint8Array([parseInt(h, 16)])))
+    .replace(/\\u(-?\d+)\??/g, (_, n: string) => String.fromCharCode((Number(n) + 65536) % 65536))
+    .replace(/\\(par|line)\b ?/g, "\n")
+    .replace(/\\tab\b ?/g, "\t")
+    .replace(/\{\\\*[^{}]*\}/g, "")
+    .replace(/\\[a-z]+-?\d* ?/gi, "")
+    .replace(/[{}]/g, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
 
 /**
  * Lit les fichiers choisis. Les refus sont renvoyés à part : dire *pourquoi*
@@ -90,63 +112,82 @@ export async function lireFichiers(
       if (fichier.size > TAILLE_MAX_DOCUMENT) {
         erreurs.push({
           nom: fichier.name,
-          raison: `trop volumineux (${Math.round(fichier.size / 1024 / 1024)} Mo, maximum 100 Mo)`,
+          raison: tf("trop volumineux ({0}, maximum {1})", taille(fichier.size), taille(TAILLE_MAX_DOCUMENT)),
         });
         continue;
       }
       try {
-        const brut = await extraireTexte(fichier, ext || "pdf");
+        const { texte: brut, coupe } = await extraireTexteDetaille(fichier, ext || "pdf");
         pieces.push({
           type: "texte",
           nom: fichier.name,
           contenu: brut.slice(0, CARACTERES_MAX),
-          tronque: brut.length > CARACTERES_MAX,
+          tronque: coupe || brut.length > CARACTERES_MAX,
+          taille: fichier.size,
         });
       } catch (err) {
         erreurs.push({
           nom: fichier.name,
-          raison: err instanceof DocumentIllisible ? err.message : "document illisible",
+          raison: err instanceof DocumentIllisible ? err.message : t("document illisible"),
         });
       }
       continue;
     }
 
-    if (fichier.type.startsWith("image/")) {
+    // Par le type, ou par l'extension quand le système n'en donne pas (fréquent sous Windows).
+    const image = (fichier.type.startsWith("image/") && !/svg/.test(fichier.type)) || (!fichier.type && ["png", "jpg", "jpeg", "webp", "gif", "bmp"].includes(ext));
+    if (image) {
       if (fichier.size > IMAGE_MAX) {
         erreurs.push({
           nom: fichier.name,
-          raison: `image trop lourde (${Math.round(fichier.size / 1024 / 1024)} Mo, maximum 50 Mo)`,
+          raison: tf("image trop lourde ({0}, maximum {1})", taille(fichier.size), taille(IMAGE_MAX)),
         });
         continue;
       }
       try {
-        pieces.push({ type: "image", nom: fichier.name, dataUrl: await imagePourLeModele(fichier) });
+        pieces.push({ type: "image", nom: fichier.name, dataUrl: await imagePourLeModele(fichier), taille: fichier.size });
       } catch {
-        erreurs.push({ nom: fichier.name, raison: "image illisible (formats lus : PNG, JPEG, WebP, GIF)" });
+        erreurs.push({
+          nom: fichier.name,
+          raison: t("image illisible (formats lus : PNG, JPEG, WebP, GIF). Une photo HEIC d'iPhone se convertit en JPEG avant d'être jointe."),
+        });
       }
-      continue;
-    }
-
-    if (!EXTENSIONS_TEXTE.includes(ext) && !fichier.type.startsWith("text/")) {
-      erreurs.push({
-        nom: fichier.name,
-        raison: t("format non pris en charge (texte, PDF, Word, Excel, PowerPoint, OpenDocument et images)"),
-      });
       continue;
     }
 
     try {
       // Seul le début est lu : un journal de 2 Go n'a pas à passer par la mémoire pour en garder 200 000 caractères.
       const debut = fichier.slice(0, CARACTERES_MAX * 4);
-      const brut = await debut.text();
+      const octets = new Uint8Array(await debut.arrayBuffer());
+      /*
+       * Extension inconnue, ou rien que Windows ne sache nommer (il donne
+       * souvent un type vide) : on regarde les octets. Du texte est pris,
+       * quel que soit son nom ; un binaire est refusé en le disant.
+       */
+      const connu = EXTENSIONS_TEXTE.includes(ext) || fichier.type.startsWith("text/");
+      if (!connu && !ressembleATexte(octets)) {
+        erreurs.push({
+          nom: fichier.name,
+          raison: t("format non pris en charge (texte, PDF, Word, Excel, PowerPoint, OpenDocument et images)"),
+        });
+        continue;
+      }
+      const coupe = fichier.size > debut.size;
+      let brut = decoderTexte(octets, coupe);
+      if (ext === "rtf" || brut.startsWith("{\\rtf")) brut = texteDuRtf(brut);
+      if (!brut.trim()) {
+        erreurs.push({ nom: fichier.name, raison: t("fichier vide") });
+        continue;
+      }
       pieces.push({
         type: "texte",
         nom: fichier.name,
         contenu: brut.slice(0, CARACTERES_MAX),
-        tronque: brut.length > CARACTERES_MAX || fichier.size > debut.size,
+        tronque: brut.length > CARACTERES_MAX || coupe,
+        taille: fichier.size,
       });
     } catch {
-      erreurs.push({ nom: fichier.name, raison: "fichier illisible" });
+      erreurs.push({ nom: fichier.name, raison: t("fichier illisible") });
     }
   }
 
@@ -191,17 +232,35 @@ function enDataUrl(fichier: File): Promise<string> {
   });
 }
 
-/** Les documents texte, mis en forme pour être ajoutés à la question. */
-export function contexteTexte(pieces: Attachment[]): string {
-  const documents = pieces.filter((p): p is Extract<Attachment, { type: "texte" }> => p.type === "texte");
-  if (documents.length === 0) return "";
+/** Un document tel qu'il part avec la question, et tel que l'écran le garde pour les questions suivantes. */
+export interface DocumentEnvoye {
+  nom: string;
+  contenu: string;
+  tronque: boolean;
+}
 
-  return documents
-    .map(
-      (d) =>
-        `--- Document joint : ${d.nom}${d.tronque ? t(" (début du fichier)") : ""} ---\n${d.contenu}`,
-    )
-    .join("\n\n");
+/**
+ * Un document dans sa balise, longueur écrite (27/09/2026). L'instance le
+ * reconnaît sans ambiguïté, même quand le fichier contient lui-même
+ * « </document> », mesure la place qu'il prendra et le lit en parties s'il ne
+ * tient pas (gateway/src/documentsJoints.ts). Une instance plus ancienne le
+ * transmet tel quel : balisé, avec son nom, le modèle le lit aussi.
+ */
+export function enveloppe(d: DocumentEnvoye): string {
+  const nom = d.nom.replace(/["<>\n\r]/g, "'").slice(0, 300);
+  return `<document nom="${nom}" caracteres="${d.contenu.length}"${d.tronque ? ` coupe="oui"` : ""}>\n${d.contenu}\n</document>`;
+}
+
+/** Les documents texte des pièces jointes. */
+export function documentsDe(pieces: Attachment[]): DocumentEnvoye[] {
+  return pieces
+    .filter((p): p is Extract<Attachment, { type: "texte" }> => p.type === "texte")
+    .map((d) => ({ nom: d.nom, contenu: d.contenu, tronque: d.tronque }));
+}
+
+/** Les documents, mis en forme pour être ajoutés à la question. */
+export function contexteTexte(documents: DocumentEnvoye[]): string {
+  return documents.map(enveloppe).join("\n\n");
 }
 
 export const images = (pieces: Attachment[]) =>

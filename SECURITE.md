@@ -3443,3 +3443,73 @@ Windows, vidage d'un texte que Helix n'a pas copié ou d'une clé remplacée dep
 direct à `navigator.clipboard` dans l'interface) ; dans Electron 44 même, avec le vrai
 préchargement : copie directe refusée, canal et parcours de l'aide réussis. **Pas essayé** :
 Windows et Linux réels (Wayland en particulier), l'application empaquetée.
+
+## 30. Codex avec le compte ChatGPT du propriétaire du poste (27 septembre 2026)
+
+Décidé par Medhi le 27/09/2026 (PROJET.md § 3.14) : l'écran Code peut travailler avec le
+programme `codex` officiel d'OpenAI, installé et connecté par la personne, pour elle seule. Ce qui
+est en jeu : l'abonnement ChatGPT d'une personne (les conditions d'OpenAI interdisent de le mettre
+à la disposition d'autrui), ses jetons de connexion (`~/.codex`, à traiter « comme un mot de
+passe » selon OpenAI), et un agent qui agit hors de la barrière d'approbation de Helix.
+
+**Qui.** `gateway/src/codexGarde.ts`, `refusCodex`, appliqué par `gateway/src/codex.ts` à chaque
+route `/helix/codex*` (séance exigée d'abord, liste `EXECUTION` d'index.ts). Refusé, dans cet
+ordre :
+
+| Cas | Réponse | Pourquoi |
+|---|---|---|
+| clé de l'API développeur (§ 23) | 403 | elle n'ouvre déjà que `/v1/*` ; redit ici pour qu'un élargissement ne l'oublie pas |
+| jeton d'instance, de séance ou billet dans l'adresse | 400 | l'écran les met en en-têtes ; un script de la machine (bash de l'agent, employé) qui passerait par `?session=` est écarté, comme pour l'import des logiciels du poste (§ 22) |
+| passerelle hors application de bureau (`HELIX_BUREAU` absent, posé par `electron/main.cjs`) | 403 | un serveur n'est le poste de personne |
+| instance partagée (`share`, ou écoute sur le réseau) | 403 | l'abonnement du serveur servirait à tous |
+| requête hors boucle locale | 403 | un poste rattaché parle à une instance distante, dont le `codex` n'est pas le sien |
+| compte qui n'administre pas l'instance | 403 | sur un poste autonome, l'administrateur est celui qui l'a mise en route (roles.ts) |
+
+`GET /helix/codex` répond « non proposé » à ces cas **sans lancer `codex`** : l'état du compte
+ChatGPT d'une autre personne ne regarde pas celle qui demande. Un employé OpenClaw, une tâche
+programmée ou l'agent de code n'ont pas de séance et Codex n'est un outil nulle part
+(ni `outilsCode.ts`, ni les outils du Chat).
+
+**Les jetons.** Helix ne lit **aucun fichier** pour Codex : il cherche un exécutable par son
+chemin (jamais sous `~/.codex`), et demande le reste au programme (`codex --version`,
+`codex login status`, dont la première ligne est masquée par `masquer` avant d'être rendue). La
+connexion est `codex login` : le navigateur de la personne s'ouvre chez OpenAI, la sortie du
+programme (qui porte l'adresse de connexion) est ignorée, Helix attend la fin et relit l'état.
+`~/.codex` reste une zone protégée pour les agents de Helix (zonesProtegees.ts).
+
+**L'environnement de `codex`.** Une liste fermée (chemins, langue, compte, dossier temporaire,
+`CODEX_HOME`, mandataire réseau, variables sans lesquelles Windows ne lance rien). Ni le jeton de
+l'instance, ni les clés de la passerelle, ni `OPENAI_API_KEY` / `CODEX_API_KEY`, qui feraient
+facturer une clé à la place de l'abonnement connecté.
+
+**Le bac à sable.** `codex exec` fixe `approval_policy = never` : il ne demande rien, et ce qu'il
+fait lui-même ne passe par aucune carte. Il reçoit donc un bac à sable jamais plus large que le
+niveau de Helix (`bacASable`) : « tout » → `workspace-write` avec le réseau des commandes coupé,
+« modifications » → `read-only`, « chaque » → refus (409). `danger-full-access` et
+`--dangerously-bypass-approvals-and-sandbox` ne sont jamais passés. Le réglage part par
+`-c sandbox_mode=…` en plus de `--sandbox` : `codex exec resume` refuse `--sandbox`, et une reprise
+sans réglage retombait sur `workspace-write` (openai/codex #40149). La demande part sur l'entrée
+standard, jamais dans la ligne de commande (lisible par `ps`) ; l'identifiant de reprise n'est
+accepté que s'il est un UUID, rendu par cette passerelle, pour la même personne, et la reprise
+reste dans le dossier de la session. Le dossier est validé comme pour OpenCode (`validerDossier`,
+« code »). Une tâche à la fois, une heure au plus, arrêtée quand l'écran se ferme.
+
+**Ce qui sort de la machine**, dit à l'écran tant que Codex est choisi : la demande et ce que Codex
+lit partent chez OpenAI (États-Unis), sous les limites de l'abonnement ; Helix ne borne pas ce que
+Codex lit sur le poste (son bac à sable borne l'écriture). Au journal : `code.codex_connexion` et
+`code.codex_tache` (dossier, bac à sable, reprise), jamais le texte de la demande.
+
+**Vérifié** : `npm run securite`, 42 contrôles de plus (517, 0 échec) : les routes sans jeton
+(401) et sans séance (401) ; section 7 nonies, avec un faux `codex` (`scripts/faux-codex.mjs`,
+qui note ses arguments, son dossier, son PID et les variables reçues) : chaque barrière de
+`refusCodex` une à une, le poste rattaché ; la correspondance des niveaux et les arguments (jamais
+d'accès complet, identifiant fabriqué refusé) ; la conversion du flux et le masquage d'une clé
+dans une erreur ; aucune lecture de fichier ni chemin `.codex` dans le code des deux modules,
+`~/.codex` protégé ; un membre (non proposé, 403, `codex` jamais lancé), une clé d'API (403), des
+jetons dans l'adresse (400) ; pour le propriétaire : détection et version, tâche refusée tant que
+pas connecté, connexion par `codex login` puis relecture ; une tâche en lecture seule dans le
+dossier du projet, demande sur l'entrée standard, aucun secret dans l'environnement de `codex` ni
+dans la réponse ; la reprise, une session inconnue ou fabriquée (400), un dossier du système
+(400) ; « tout » et « chaque » ; un `turn.failed` ; une seule tâche à la fois, l'arrêt refusé à un
+membre et fait pour le propriétaire (processus fini) ; le journal sans le texte. **Pas essayé** :
+le vrai `codex`, un vrai compte ChatGPT, Windows.

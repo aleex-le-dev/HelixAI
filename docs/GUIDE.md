@@ -515,7 +515,13 @@ dans `helix.config.json`, ou un fournisseur dont une personne a branché la clé
 modèle affiche où il tourne, et aucun modèle cloud n'est choisi d'office. Un employé au
 palier Étendu consulte le web (recherche DuckDuckGo, pages lues) ; un employé branché
 sur une messagerie échange avec ses serveurs (Telegram, WhatsApp, Discord, Slack,
-Mattermost). Le **bot de réunion** entre dans une réunion Google Meet
+Mattermost). Dans l'écran Code, le **propriétaire du poste** peut choisir **Codex**
+(27/09/2026, PROJET.md § 3.14) : c'est alors le programme `codex` d'OpenAI, installé et
+connecté par la personne, qui parle à OpenAI lui-même, aux États-Unis, avec le compte
+ChatGPT de la personne. Il y envoie la demande et ce qu'il lit sur le poste pour la
+traiter ; la connexion (`codex login`) se fait dans le navigateur, chez OpenAI. Helix ne
+voit passer ni ce trafic ni aucun jeton, ne lit rien dans `~/.codex`, et n'installe pas
+Codex. Hors de ce choix, rien ne part chez OpenAI. Le **bot de réunion** entre dans une réunion Google Meet
 (meet.google.com) quand quelqu'un l'y envoie : le son y est capté, puis transcrit sur la
 machine ; rien ne part chez un service d'enregistrement. C'est un
 choix explicite, jamais un défaut. La configuration d'OpenCode écrite par Helix

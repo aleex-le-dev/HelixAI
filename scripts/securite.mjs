@@ -243,6 +243,20 @@ const FAUX_OPENCODE = join(AUX, "opencode");
   writeFileSync(FAUX_OPENCODE, `#!/bin/sh\nexec "${process.execPath}" "${join(RACINE, "scripts", "faux-opencode.mjs")}" "$@"\n`);
   chmodSync(FAUX_OPENCODE, 0o755);
 }
+/*
+ * Un faux `codex` (scripts/faux-codex.mjs, section 7 nonies, 27/09/2026) : la
+ * batterie ne lance jamais le vrai, peut-être connecté au compte ChatGPT de
+ * quelqu'un sur ce poste. Son dossier d'essai lui est donné par l'enveloppe :
+ * la passerelle ne transmet à `codex` qu'une liste fermée de variables.
+ */
+const AUX_CODEX = join(AUX, "codex");
+const FAUX_CODEX = join(AUX, "codex-essai");
+{
+  const { mkdirSync, writeFileSync, chmodSync } = await import("node:fs");
+  mkdirSync(AUX_CODEX, { recursive: true });
+  writeFileSync(FAUX_CODEX, `#!/bin/sh\nFAUX_CODEX_AUX="${AUX_CODEX}" exec "${process.execPath}" "${join(RACINE, "scripts", "faux-codex.mjs")}" "$@"\n`);
+  chmodSync(FAUX_CODEX, 0o755);
+}
 const CANARI = "canari-secret-de-l-hote-7731";
 const PROJET_A = mkdtempSync(join(tmpdir(), "helix-securite-projet-a-"));
 const PROJET_B = mkdtempSync(join(tmpdir(), "helix-securite-projet-b-"));
@@ -251,6 +265,9 @@ const passerelle = spawn(process.execPath, [join(RACINE, "gateway", "src", "inde
   env: {
     ...process.env,
     HELIX_OPENCODE_BIN: FAUX_OPENCODE,
+    // Codex : le faux programme, et une installation de bureau comme celle que lance electron/main.cjs.
+    HELIX_CODEX_BIN: FAUX_CODEX,
+    HELIX_BUREAU: "1",
     HELIX_CANARI_SECRET: CANARI,
     HELIX_CODE_DIR: PROJET_A,
     HELIX_CONFIG: join(AUX, "profil.json"),
@@ -315,6 +332,8 @@ const ROUTES = [
   ["GET", "/helix/google/client"], ["POST", "/helix/google/client"], ["POST", "/helix/google/client/effacer"],
   ["GET", "/helix/agenda/google"], ["POST", "/helix/agenda/google/connecter"], ["POST", "/helix/agenda/google/code"],
   ["POST", "/helix/agenda/google/oublier"],
+  // Ajoutées le 27/09/2026 : Codex avec le compte ChatGPT du propriétaire (codex.ts).
+  ["GET", "/helix/codex"], ["POST", "/helix/codex/connexion"], ["POST", "/helix/codex/tache"], ["POST", "/helix/codex/arreter"],
 ];
 for (const [methode, chemin] of ROUTES) {
   const r = await appel(chemin, { method: methode, headers: { "Content-Type": "application/json" }, body: methode === "POST" ? "{}" : undefined });
@@ -357,6 +376,8 @@ const SEANCE_REQUISE = [
   ["POST", "/helix/entrainement/lancer"], ["POST", "/helix/entrainement/publier"], ["POST", "/helix/entrainement/supprimer"],
   // Ajoutés le 26/09/2026 : clés d'API personnelles (clesApi.ts).
   ["GET", "/helix/cles-api"], ["POST", "/helix/cles-api"], ["POST", "/helix/cles-api/cle_x"], ["POST", "/helix/cles-api/cle_x/revoquer"],
+  // Ajoutés le 27/09/2026 : Codex (codex.ts).
+  ["GET", "/helix/codex"], ["POST", "/helix/codex/connexion"], ["POST", "/helix/codex/connexion/annuler"], ["POST", "/helix/codex/tache"], ["POST", "/helix/codex/arreter"],
 ];
 for (const [methode, chemin] of SEANCE_REQUISE) {
   const r = await appel(chemin, { method: methode, headers: avecJeton, body: methode === "POST" ? "{}" : undefined });
@@ -2331,6 +2352,245 @@ console.log("\n7 octies. Documents joints : lus par le modèle, en entier ou en 
       d.ressembleATexte(Uint8Array.from(utf16)) && d.ressembleATexte(cp1252) && !d.ressembleATexte(png),
     JSON.stringify([d.decoderTexte(Uint8Array.from(utf16)).slice(0, 20), d.decoderTexte(cp1252).slice(0, 20), d.decoderTexte(Uint8Array.from(coupeAuMilieu), true), d.ressembleATexte(png)]),
   );
+}
+
+/* ------------------------------------------------------------------------- */
+console.log("\n7 nonies. Codex avec le compte ChatGPT : le propriétaire du poste seul, un bac à sable jamais plus large que Helix, rien lu dans ~/.codex (27/09/2026)");
+{
+  /*
+   * Un faux `codex` (scripts/faux-codex.mjs) : la batterie ne lance jamais le
+   * vrai et ne se connecte à aucun compte. La passerelle de la batterie se
+   * croit sur une installation de bureau (`HELIX_BUREAU`, posé ici comme le
+   * fait electron/main.cjs) : c'est le seul cas où Codex est proposé.
+   */
+  const { readFileSync: lire, existsSync: existe, realpathSync: reelF } = await import("node:fs");
+  const { pathToFileURL: versUrlC } = await import("node:url");
+  const garde = await import(versUrlC(join(RACINE, "gateway", "src", "codexGarde.ts")).href);
+  const appels = () => (existe(join(AUX_CODEX, "appels.jsonl")) ? lire(join(AUX_CODEX, "appels.jsonl"), "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l)) : []);
+  const poster = (chemin, corps, entetes = avecSeance) => appel(chemin, { method: "POST", headers: { ...entetes, "Content-Type": "application/json" }, body: JSON.stringify(corps ?? {}) });
+  /*
+   * Une collègue neuve : celle des sections précédentes a effacé son compte
+   * (section 7 quater). Inscrite par la propriétaire, mot de passe provisoire
+   * remplacé par le sien, comme l'écran « Équipe ».
+   */
+  const creeM = await (await poster("/helix/auth/create", { fullName: "Membre Codex", email: "membre-codex@example.test", password: "Provisoire3Passe!22" })).json().catch(() => ({}));
+  const connexionM = await (await poster("/helix/auth/mot-de-passe-provisoire", { accountId: creeM.account?.id, password: "Provisoire3Passe!22", nouveau: "Membre3PasseSolide!68" }, avecJeton)).json().catch(() => ({}));
+  const avecSeanceM = { ...avecJeton, "X-Helix-Session": connexionM.session?.token };
+  verifier("Codex : une collègue (membre, pas administratrice) a sa séance", Boolean(connexionM.session?.token), JSON.stringify(connexionM).slice(0, 80));
+  /** Les évènements d'une tâche, lus dans le flux de la réponse. */
+  const evenements = (texte) => texte.split("\n\n").flatMap((b) => b.split("\n").filter((l) => l.startsWith("data:")).map((l) => { try { return JSON.parse(l.slice(5)); } catch { return null; } })).filter(Boolean);
+
+  // --- Qui : la décision, barrière par barrière (codexGarde.ts). ---
+  const permis = { bureau: true, partagee: false, depuisCePoste: true, jetonsDansAdresse: false, parCleApi: false, administrateur: true };
+  verifier("Codex : le propriétaire, sur son poste de bureau, depuis l'application → permis", garde.refusCodex(permis) === null, JSON.stringify(garde.refusCodex(permis)));
+  for (const [champ, valeur, code] of [["parCleApi", true, "cle"], ["jetonsDansAdresse", true, "adresse"], ["bureau", false, "bureau"], ["partagee", true, "partagee"], ["depuisCePoste", false, "distant"], ["administrateur", false, "membre"]]) {
+    const r = garde.refusCodex({ ...permis, [champ]: valeur });
+    verifier(`Codex refusé : ${champ} = ${valeur} (${code})`, r?.code === code && typeof r.message === "string" && r.message.length > 10, JSON.stringify(r));
+  }
+  verifier("Codex refusé pour un poste rattaché : requête venue du réseau vers une instance partagée", garde.refusCodex({ ...permis, partagee: true, depuisCePoste: false }) !== null, "permis");
+
+  // --- Le bac à sable : jamais plus large que le niveau de Helix. ---
+  verifier(
+    "bac à sable : « tout » → écriture dans le projet, « modifications » → lecture seule, « chaque » → pas de Codex",
+    garde.bacASable("tout") === "workspace-write" && garde.bacASable("modifications") === "read-only" && garde.bacASable("chaque") === null,
+    `${garde.bacASable("tout")} ${garde.bacASable("modifications")} ${garde.bacASable("chaque")}`,
+  );
+  const neuve = garde.argumentsTache("read-only");
+  const reprise = garde.argumentsTache("read-only", "0199a213-81c0-7800-8aa1-bbab2a035a53");
+  verifier(
+    "arguments : --json, lecture seule par --sandbox et -c (la reprise n'accepte que -c), jamais d'accès complet ni d'approbation contournée, demande sur l'entrée standard",
+    neuve.join(" ").includes("exec --json") && neuve.includes("--sandbox") && neuve.includes('sandbox_mode="read-only"') && neuve.includes('approval_policy="never"') && neuve.at(-1) === "-" &&
+      reprise.includes("resume") && !reprise.includes("--sandbox") && reprise.includes('sandbox_mode="read-only"') && reprise.at(-1) === "-" &&
+      ![...neuve, ...reprise].some((a) => /danger|bypass|full-auto/.test(a)),
+    `${neuve.join(" ")} | ${reprise.join(" ")}`,
+  );
+  let injection = false;
+  try { garde.argumentsTache("read-only", "--dangerously-bypass-approvals-and-sandbox"); } catch { injection = true; }
+  verifier("arguments : un identifiant de session qui n'est pas un UUID n'arrive jamais sur la ligne de commande", injection, "accepté");
+
+  // --- La conversion du flux (codexGarde.ts, traduireCodex). ---
+  {
+    const etat = garde.etatTraduction();
+    const lignes = [
+      { type: "thread.started", thread_id: "0199a213-81c0-7800-8aa1-bbab2a035a53" },
+      { type: "turn.started" },
+      { type: "item.started", item: { id: "item_1", type: "command_execution", command: "bash -lc ls", status: "in_progress" } },
+      { type: "item.completed", item: { id: "item_1", type: "command_execution", command: "bash -lc ls", aggregated_output: "a\n", exit_code: 0, status: "completed" } },
+      { type: "item.completed", item: { id: "item_2", type: "command_execution", command: "rm -rf x", aggregated_output: "", exit_code: null, status: "declined" } },
+      { type: "item.completed", item: { id: "item_3", type: "file_change", changes: [{ path: "/p/a.ts", kind: "add" }, { path: "/p/b.ts", kind: "update" }], status: "completed" } },
+      { type: "item.completed", item: { id: "item_4", type: "agent_message", text: "Fini." } },
+      { type: "item.completed", item: { id: "item_5", type: "reasoning", text: "Je réfléchis." } },
+      { type: "item.completed", item: { id: "item_6", type: "todo_list", items: [{ text: "Un", completed: true }] } },
+      { type: "item.completed", item: { id: "item_7", type: "tout_nouveau_genre" } },
+      { type: "turn.completed", usage: { input_tokens: 10, cached_input_tokens: 4, output_tokens: 3, reasoning_output_tokens: 1 } },
+    ];
+    const e = lignes.flatMap((l) => garde.traduireCodex(l, etat));
+    const genre = (k) => e.filter((x) => x.kind === k);
+    verifier(
+      "flux : session, étape, commande (début, fin réussie), commande refusée par le bac à sable, deux fichiers (écrit, modifié), message, raisonnement, tâches, consommation, fin",
+      genre("session")[0]?.id === "0199a213-81c0-7800-8aa1-bbab2a035a53" && genre("etape").length === 1 &&
+        e.some((x) => x.kind === "tool_start" && x.tool === "bash" && x.input.command === "bash -lc ls") &&
+        e.some((x) => x.kind === "tool_end" && x.callID === "item_1" && x.ok === true) &&
+        e.some((x) => x.kind === "tool_end" && x.callID === "item_2" && x.ok === false) &&
+        e.some((x) => x.kind === "tool_start" && x.tool === "write" && x.input.filePath === "/p/a.ts") &&
+        e.some((x) => x.kind === "tool_start" && x.tool === "edit" && x.input.filePath === "/p/b.ts") &&
+        genre("text")[0]?.text === "Fini." && genre("reasoning")[0]?.text === "Je réfléchis." &&
+        e.some((x) => x.kind === "tool_start" && x.tool === "todowrite" && x.input.todos?.[0]?.status === "completed") &&
+        genre("usage")[0]?.entree === 10 && genre("usage")[0]?.sortie === 3 && e.at(-1).kind === "done" &&
+        genre("tool_start").filter((x) => x.callID === "item_1").length === 1,
+      JSON.stringify(e).slice(0, 300),
+    );
+    const echec = garde.traduireCodex({ type: "turn.failed", error: { message: "clé sk-proj-ABCDEFGHIJKLMNOP refusée" } }, garde.etatTraduction());
+    verifier("flux : un échec devient une erreur, et ce qui ressemble à une clé y est masqué", echec[0]?.kind === "error" && !echec[0].message.includes("sk-proj-ABCDEFGH") && echec[0].message.includes("[masqué]"), JSON.stringify(echec));
+  }
+
+  // --- Aucune lecture de ~/.codex : le module ne lit aucun fichier, et ~/.codex reste protégé. ---
+  {
+    const sansCommentaires = (f) => lire(join(RACINE, "gateway", "src", f), "utf8").replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:])\/\/.*$/gm, "$1");
+    const code = sansCommentaires("codex.ts") + sansCommentaires("codexGarde.ts");
+    verifier(
+      "codex.ts : aucune lecture de fichier (readFile, createReadStream, openSync), aucun chemin « .codex » ni « auth.json » dans le code",
+      !/readFile|createReadStream|openSync|\bopen\(/.test(code) && !/\.codex\b|auth\.json/.test(code),
+      (code.match(/readFile\w*|createReadStream|openSync|\.codex\b|auth\.json/g) ?? []).join(", "),
+    );
+    const zones = await import(versUrlC(join(RACINE, "gateway", "src", "zonesProtegees.ts")).href);
+    const { homedir: maison } = await import("node:os");
+    verifier("~/.codex reste une zone protégée pour les agents de Helix", zones.estProtege(join(maison(), ".codex", "auth.json")), "non protégé");
+  }
+
+  // --- Sur l'instance : un membre, l'API développeur, des jetons dans l'adresse. ---
+  const avantMembre = appels().length;
+  const etatB = await (await appel("/helix/codex", { headers: avecSeanceM })).json().catch(() => ({}));
+  const tacheB = await poster("/helix/codex/tache", { texte: "liste mes fichiers" }, avecSeanceM);
+  const connexionB = await poster("/helix/codex/connexion", {}, avecSeanceM);
+  verifier(
+    "un membre : Codex non proposé, tâche et connexion refusées (403), et `codex` n'est même pas lancé pour lui",
+    etatB.propose === false && etatB.refus?.code === "membre" && etatB.installe === false && tacheB.status === 403 && connexionB.status === 403 && appels().length === avantMembre,
+    `${JSON.stringify(etatB).slice(0, 120)} ${tacheB.status} ${connexionB.status} appels ${appels().length - avantMembre}`,
+  );
+  {
+    const motDePasse = "Mot2PasseSolide!42";
+    const cle = (await (await poster("/helix/cles-api", { nom: "Script Codex", jours: 30, motDePasse })).json().catch(() => ({}))).secret;
+    const parCle = await appel("/helix/codex/tache", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${cle}` }, body: JSON.stringify({ texte: "x" }) });
+    const parCleEtat = await appel("/helix/codex", { headers: { Authorization: `Bearer ${cle}` } });
+    verifier("l'API développeur : une clé n'atteint pas Codex (403), ni sa tâche ni son état", Boolean(cle) && parCle.status === 403 && parCleEtat.status === 403, `${parCle.status} ${parCleEtat.status}`);
+  }
+  {
+    const r = await appel(`/helix/codex/tache?session=${encodeURIComponent(SEANCE)}`, { method: "POST", headers: { ...avecJeton, "Content-Type": "application/json" }, body: JSON.stringify({ texte: "x" }) });
+    const r2 = await appel(`/helix/codex/connexion?token=${encodeURIComponent(JETON)}`, { method: "POST", headers: avecSeance, body: "{}" });
+    verifier("jetons dans l'adresse (le bash d'un agent, un lien) : refusé (400), comme l'import depuis les logiciels du poste", r.status === 400 && r2.status === 400, `${r.status} ${r2.status}`);
+  }
+
+  // --- Le propriétaire : détection, connexion par `codex login`, puis relecture. ---
+  const etat0 = await (await appel("/helix/codex?relire=1", { headers: avecSeance })).json().catch(() => ({}));
+  verifier(
+    "le propriétaire : codex trouvé, sa version lue, pas encore connecté ; la commande d'installation officielle est donnée",
+    etat0.propose === true && etat0.installe === true && etat0.version === "0.150.0-essai" && etat0.connecte === false && etat0.installation?.commandes?.includes("npm install -g @openai/codex"),
+    JSON.stringify(etat0).slice(0, 200),
+  );
+  const tacheSansConnexion = await poster("/helix/codex/tache", { texte: "bonjour" });
+  verifier("pas connecté : la tâche est refusée (409), rien n'est lancé", tacheSansConnexion.status === 409 && !appels().some((a) => a.args[0] === "exec"), tacheSansConnexion.status);
+  const lancee = await poster("/helix/codex/connexion", {});
+  let etat1 = {};
+  for (let i = 0; i < 40; i++) {
+    await attendre(150);
+    etat1 = await (await appel("/helix/codex?relire=1", { headers: avecSeance })).json().catch(() => ({}));
+    if (etat1.connecte && !etat1.connexionEnCours) break;
+  }
+  verifier(
+    "connexion : `codex login` lancé (202), l'état relu ensuite dit « connecté par ChatGPT »",
+    lancee.status === 202 && appels().some((a) => a.args.join(" ") === "login") && etat1.connecte === true && etat1.mode === "chatgpt" && etat1.connexionEnCours === false,
+    `${lancee.status} ${JSON.stringify(etat1).slice(0, 160)}`,
+  );
+
+  // --- Une tâche, au niveau d'approbation courant. ---
+  const niveauAvant = (await (await appel("/helix/approbation", { headers: avecSeance })).json().catch(() => ({}))).niveau ?? "modifications";
+  await poster("/helix/approbation/niveau", { niveau: "modifications" });
+  const r1 = await poster("/helix/codex/tache", { texte: "Résume ce dossier-essai", dossier: PROJET_A });
+  const brut1 = await r1.text();
+  const ev1 = evenements(brut1);
+  const exec1 = appels().filter((a) => a.args[0] === "exec").at(-1);
+  verifier(
+    "tâche : le flux JSON de Codex devient celui de l'écran Code (début, session, commande, fichiers, tâches, message, consommation, fin)",
+    r1.status === 200 && (r1.headers.get("content-type") ?? "").includes("text/event-stream") &&
+      ev1[0]?.kind === "debut" && ev1[0].bac === "read-only" &&
+      ev1.some((e) => e.kind === "session") && ev1.some((e) => e.kind === "tool_start" && e.tool === "bash") &&
+      ev1.some((e) => e.kind === "tool_start" && e.tool === "write") && ev1.some((e) => e.kind === "tool_start" && e.tool === "todowrite") &&
+      ev1.some((e) => e.kind === "text" && e.text.includes("Résume ce dossier-essai")) && ev1.some((e) => e.kind === "usage") && ev1.at(-1)?.kind === "done",
+    `${r1.status} ${brut1.slice(0, 200)}`,
+  );
+  verifier(
+    "tâche : lancée dans le dossier du projet, en lecture seule au niveau « modifications », la demande par l'entrée standard (pas dans la ligne de commande)",
+    Boolean(exec1) && reelF(exec1.cwd) === reelF(PROJET_A) && exec1.args.includes('sandbox_mode="read-only"') && exec1.args.includes("--json") &&
+      exec1.demande === "Résume ce dossier-essai" && !exec1.args.some((a) => a.includes("dossier-essai")),
+    JSON.stringify(exec1).slice(0, 240),
+  );
+  verifier(
+    "l'environnement de `codex` : aucun secret de l'hôte (jeton d'instance, canari, clés de la passerelle), ni clé d'API qui détournerait la facturation",
+    appels().every((a) => a.secrets.length === 0) && !appels().some((a) => a.env.includes("HELIX_CANARI_SECRET")),
+    JSON.stringify(appels().map((a) => a.secrets)),
+  );
+  verifier("rien de la connexion ni du jeton de l'instance dans ce que rend la passerelle", !brut1.includes(JETON) && !brut1.includes(CANARI) && !JSON.stringify(etat1).includes(JETON), "trouvé");
+
+  // Reprise : la même session, dans son dossier ; un identifiant inconnu est refusé.
+  const session = ev1.find((e) => e.kind === "session")?.id;
+  const r2 = await poster("/helix/codex/tache", { texte: "Et la suite ?", session });
+  const ev2 = evenements(await r2.text());
+  const exec2 = appels().filter((a) => a.args[0] === "exec").at(-1);
+  verifier(
+    "reprise : `codex exec resume <session>`, bac à sable redonné par -c, dans le dossier de la session",
+    r2.status === 200 && ev2[0]?.reprise === true && exec2.args.includes("resume") && exec2.args.includes(session) && exec2.args.includes('sandbox_mode="read-only"') && reelF(exec2.cwd) === reelF(PROJET_A),
+    `${r2.status} ${JSON.stringify(exec2?.args)}`,
+  );
+  const inconnue = await poster("/helix/codex/tache", { texte: "x", session: "11111111-2222-3333-4444-555555555555" });
+  const fabriquee = await poster("/helix/codex/tache", { texte: "x", session: "--dangerously-bypass-approvals-and-sandbox" });
+  verifier("reprise : une session inconnue ou un identifiant fabriqué → 400", inconnue.status === 400 && fabriquee.status === 400, `${inconnue.status} ${fabriquee.status}`);
+  const horsProjet = await poster("/helix/codex/tache", { texte: "x", dossier: "/etc" });
+  verifier("un dossier du système n'est pas accepté comme projet (400)", horsProjet.status === 400, horsProjet.status);
+
+  // Le niveau de Helix décide du bac à sable.
+  await poster("/helix/approbation/niveau", { niveau: "tout" });
+  await (await poster("/helix/codex/tache", { texte: "Écris les notes" })).text();
+  const exec3 = appels().filter((a) => a.args[0] === "exec").at(-1);
+  await poster("/helix/approbation/niveau", { niveau: "chaque" });
+  const auNiveauChaque = await poster("/helix/codex/tache", { texte: "x" });
+  const etatChaque = await (await appel("/helix/codex", { headers: avecSeance })).json().catch(() => ({}));
+  verifier(
+    "niveau « tout » → workspace-write ; « chaque » → Codex refusé (409), l'écran le sait (bac : null)",
+    exec3.args.includes('sandbox_mode="workspace-write"') && !exec3.args.some((a) => /danger/.test(a)) && auNiveauChaque.status === 409 && etatChaque.bac === null,
+    `${JSON.stringify(exec3?.args)} ${auNiveauChaque.status} ${etatChaque.bac}`,
+  );
+  await poster("/helix/approbation/niveau", { niveau: "modifications" });
+
+  // Échec de Codex (limite d'abonnement, par exemple) : dit à l'écran.
+  const ev4 = evenements(await (await poster("/helix/codex/tache", { texte: "echec-essai" })).text());
+  verifier("un échec de Codex (turn.failed) arrive à l'écran comme une erreur", ev4.some((e) => e.kind === "error" && e.message.includes("limite")), JSON.stringify(ev4).slice(0, 160));
+
+  // Arrêt sur demande : le processus s'arrête, le flux se ferme.
+  const enCours = poster("/helix/codex/tache", { texte: "attente-longue" });
+  let pid;
+  for (let i = 0; i < 40 && !pid; i++) {
+    await attendre(100);
+    pid = appels().filter((a) => a.args[0] === "exec" && a.demande === "attente-longue").at(-1)?.pid;
+  }
+  const deuxieme = await poster("/helix/codex/tache", { texte: "en même temps" });
+  const arretB = await poster("/helix/codex/arreter", {}, avecSeanceM);
+  const arret = await poster("/helix/codex/arreter", {});
+  const reponse = await enCours;
+  const ev5 = evenements(await reponse.text());
+  await attendre(300);
+  let vivant = true;
+  try { process.kill(pid, 0); } catch { vivant = false; }
+  verifier(
+    "une tâche à la fois (409) ; un membre ne l'arrête pas (403) ; le propriétaire l'arrête : processus fini, flux fermé avec « arrêté »",
+    Boolean(pid) && deuxieme.status === 409 && arretB.status === 403 && arret.status === 200 && ev5.some((e) => e.kind === "fin") && ev5.at(-1)?.kind === "done" && !vivant,
+    `pid ${pid} ${deuxieme.status} ${arretB.status} ${arret.status} vivant ${vivant} ${JSON.stringify(ev5.slice(-2))}`,
+  );
+
+  // Au journal : les tâches, jamais leur texte.
+  const audit = await (await appel("/helix/audit", { headers: avecSeance })).text();
+  verifier("journal : les tâches Codex y sont (dossier, bac à sable), jamais la demande", audit.includes("code.codex_tache") && audit.includes("code.codex_connexion") && !audit.includes("Résume ce dossier-essai"), audit.slice(0, 120));
+  if (niveauAvant !== "modifications") await poster("/helix/approbation/niveau", { niveau: niveauAvant });
 }
 
 /* ------------------------------------------------------------------------- */

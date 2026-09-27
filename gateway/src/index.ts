@@ -165,6 +165,7 @@ import * as computer from "./computer.ts";
 import * as approbation from "./approbation.ts";
 import * as usage from "./usage.ts";
 import { installerOpencode } from "./opencodePrive.ts";
+import { routeCodex, arreterCodex, surLeBureau, depuisLaBoucle } from "./codex.ts";
 import {
   oublierOpencode,
   opencodeEnFond,
@@ -1472,6 +1473,12 @@ const EXECUTION: { methode: string; chemin: string }[] = [
    * `handleCodeEvents`.
    */
   { methode: "GET", chemin: "/helix/code/events" },
+  // Codex avec le compte ChatGPT du propriétaire du poste (codex.ts, 27/09/2026) : la séance, puis ses propres barrières.
+  { methode: "GET", chemin: "/helix/codex" },
+  { methode: "POST", chemin: "/helix/codex/connexion" },
+  { methode: "POST", chemin: "/helix/codex/connexion/annuler" },
+  { methode: "POST", chemin: "/helix/codex/tache" },
+  { methode: "POST", chemin: "/helix/codex/arreter" },
   // Préparer l'atelier installe des logiciels ; le vérifier écrit des fichiers
   // d'essai. Le jeton d'instance seul ne suffit donc pas.
   { methode: "POST", chemin: "/helix/atelier/preparer" },
@@ -5303,6 +5310,29 @@ const traiter = (
       if (!sessionID) return send(res, 400, { error: { message: t("`sessionID` requis.") } });
       return handleCodeEvents(req, res, sessionID, url);
     }
+    /*
+     * Codex, second moteur de l'écran Code, réservé au propriétaire du poste
+     * (codex.ts, codexGarde.ts ; PROJET.md § 3.14, décidé le 27/09/2026). Ce
+     * que la passerelle sait de la requête est établi ici, jamais lu dans la
+     * requête elle-même.
+     */
+    if (path === "/helix/codex" || path.startsWith("/helix/codex/")) {
+      return avecSeance(req, res, url, async (qui) =>
+        routeCodex(req, res, path, {
+          userId: qui.userId,
+          contexte: {
+            bureau: surLeBureau(),
+            partagee: instancePartagee(),
+            depuisCePoste: depuisLaBoucle(req),
+            jetonsDansAdresse: ["token", "session", "flux"].some((p) => url.searchParams.has(p)),
+            parCleApi: parCleApi.has(req),
+            administrateur: await estAdministrateur(qui.userId),
+          },
+          lireCorps: () => readJson(req, 1024 * 1024),
+          envoyer: (status, corps) => send(res, status, corps),
+        }),
+      );
+    }
     if (req.method === "GET" && path === "/helix/computer") return avecSeance(req, res, url, (qui) => handleComputerStatus(res, qui));
     if (req.method === "POST" && path === "/helix/computer/action")
       return handleComputerAction(req, res, url);
@@ -5577,6 +5607,7 @@ function arreterProprement(): void {
   if (arretEnCours) return;
   arretEnCours = true;
   stopCodeServer();
+  arreterCodex();
   // Un entraînement orphelin garderait plusieurs Go de mémoire graphique.
   entrainement.arreterEnPartant();
   stopLmStudioIfStarted();

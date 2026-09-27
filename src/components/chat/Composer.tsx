@@ -52,6 +52,8 @@ interface ComposerProps {
   onCreerVideo?: () => void;
   /** Pastille affichée à côté du « + » (outil choisi dans le menu, par exemple « Image »). */
   accessoire?: ReactNode;
+  /** Le moteur choisit lui-même son modèle (Codex, écran Code) : ni modèle ni niveau à proposer. */
+  sansModele?: boolean;
 }
 
 /**
@@ -78,6 +80,7 @@ export function Composer({
   onCreerImage,
   onCreerVideo,
   accessoire,
+  sansModele = false,
 }: ComposerProps) {
   const [menuPlus, setMenuPlus] = useState(false);
   const areaRef = useRef<HTMLTextAreaElement>(null);
@@ -348,8 +351,8 @@ export function Composer({
             )}
             {accessoire}
             <div className="ml-auto flex items-center gap-0.5">
-              <ModelBehaviorPicker value={modelUid} onChange={onModelChange} />
-              <ReasoningPicker value={effort} onChange={onEffortChange} />
+              {!sansModele && <ModelBehaviorPicker value={modelUid} onChange={onModelChange} />}
+              {!sansModele && <ReasoningPicker value={effort} onChange={onEffortChange} />}
               {/* Sans champ contrôlé, il n'y aurait nulle part où écrire la dictée. */}
               {controlled && onChange && <BoutonDictee onTexte={insererDictee} />}
               {busy ? (

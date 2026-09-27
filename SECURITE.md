@@ -3263,3 +3263,13 @@ l'empreinte ne correspond pas (essayé avec une empreinte falsifiée) ; `tar` du
 chemin ; l'exécutable doit dire sa version avant d'être mis en place. Il est ensuite préféré aux
 autres OpenCode de la machine (version connue). **Limite** : l'empreinte vient du même hébergeur
 que l'archive, relevée une fois puis écrite ici.
+
+### 29.9 Electron 44 (27 septembre 2026, 0.27.3)
+
+Electron 33.4.11 (fin de maintenance) portait une trentaine de failles publiées, dont, pour ce qui
+concerne Helix : contournement de l'isolation de contexte par `Function.prototype.bind`, lecture
+d'une autre origine par un protocole personnalisé `supportFetchAPI` sans `corsEnabled` (Helix
+déclare `corsEnabled`, mais le correctif est dans le moteur), injection d'options de ligne de
+commande par `webPreferences`, plusieurs « use-after-free ». Passage à Electron 44.4.5, version
+épinglée (`--save-exact`) ; `npm audit` : 0 faille. La batterie (435 contrôles) passe sur la
+nouvelle version ; l'application a été lancée et un Chat a répondu sur macOS.

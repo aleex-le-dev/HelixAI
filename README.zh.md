@@ -12,7 +12,7 @@
 
 <p align="center">
   <img alt="License: AGPL-3.0" src="https://img.shields.io/badge/license-AGPL--3.0-blue" />
-  <img alt="Version 0.27.2" src="https://img.shields.io/badge/version-0.27.2-informational" />
+  <img alt="Version 2026.9.27" src="https://img.shields.io/badge/version-2026.9.27-informational" />
   <img alt="Platforms: macOS, Windows, Linux" src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey" />
   <img alt="Interface: English, French, Chinese" src="https://img.shields.io/badge/interface-EN%20%C2%B7%20FR%20%C2%B7%20ZH-success" />
 </p>
@@ -33,14 +33,14 @@ HelixAI 将 Chat、智能体、编程、知识库和模型微调整合到一个*
 
 ## 安装
 
-请在[最新发布页](https://github.com/medhiclb/HelixAI/releases/tag/v0.27.2)下载适合您系统的安装包。SHA-256 校验值：[`SHA256SUMS.txt`](https://github.com/medhiclb/HelixAI/releases/download/v0.27.2/SHA256SUMS.txt)。
+请在[最新发布页](https://github.com/medhiclb/HelixAI/releases/tag/v2026.9.27)下载适合您系统的安装包。SHA-256 校验值：[`SHA256SUMS.txt`](https://github.com/medhiclb/HelixAI/releases/download/v2026.9.27/SHA256SUMS.txt)。
 
 | 系统 | 下载 | 安装方法 |
 |---|---|---|
-| **macOS**（Apple 芯片） | [Helix-0.27.2-arm64.dmg](https://github.com/medhiclb/HelixAI/releases/download/v0.27.2/Helix-0.27.2-arm64.dmg) | 打开磁盘映像，将 Helix 拖入“应用程序”。首次启动时：系统设置 › 隐私与安全性 › “仍要打开” |
-| **Windows 10/11**（x64） | [Helix-Setup-0.27.2-x64.exe](https://github.com/medhiclb/HelixAI/releases/download/v0.27.2/Helix-Setup-0.27.2-x64.exe) | 运行安装程序（无需管理员权限）。如出现 SmartScreen：“更多信息” › “仍要运行” |
-| **Ubuntu、Debian**（x64） | [helix-plateforme_0.27.2_amd64.deb](https://github.com/medhiclb/HelixAI/releases/download/v0.27.2/helix-plateforme_0.27.2_amd64.deb) | `sudo apt install ./helix-plateforme_0.27.2_amd64.deb` |
-| **其他 Linux**（x64） | [Helix-0.27.2.AppImage](https://github.com/medhiclb/HelixAI/releases/download/v0.27.2/Helix-0.27.2.AppImage) | `chmod +x Helix-0.27.2.AppImage`，然后运行。在 Ubuntu 24.04 上建议使用 `.deb` |
+| **macOS**（Apple 芯片） | [Helix-2026.9.27-arm64.dmg](https://github.com/medhiclb/HelixAI/releases/download/v2026.9.27/Helix-2026.9.27-arm64.dmg) | 打开磁盘映像，将 Helix 拖入“应用程序”。首次启动时：系统设置 › 隐私与安全性 › “仍要打开” |
+| **Windows 10/11**（x64） | [Helix-Setup-2026.9.27-x64.exe](https://github.com/medhiclb/HelixAI/releases/download/v2026.9.27/Helix-Setup-2026.9.27-x64.exe) | 运行安装程序（无需管理员权限）。如出现 SmartScreen：“更多信息” › “仍要运行” |
+| **Ubuntu、Debian**（x64） | [helix-plateforme_2026.9.27_amd64.deb](https://github.com/medhiclb/HelixAI/releases/download/v2026.9.27/helix-plateforme_2026.9.27_amd64.deb) | `sudo apt install ./helix-plateforme_2026.9.27_amd64.deb` |
+| **其他 Linux**（x64） | [Helix-2026.9.27.AppImage](https://github.com/medhiclb/HelixAI/releases/download/v2026.9.27/Helix-2026.9.27.AppImage) | `chmod +x Helix-2026.9.27.AppImage`，然后运行。在 Ubuntu 24.04 上建议使用 `.deb` |
 
 首次启动时，Helix 会自动完成所需的安装：[LM Studio](https://lmstudio.ai) 的无界面引擎（版本固定，校验值已验证；若本机已在使用 LM Studio 应用，则直接使用该应用）以及最适合本机的模型。若缺少 Python、Node 以及 Helix Code 所需的 [OpenCode](https://github.com/anomalyco/opencode)，可一键安装（版本固定，校验值已验证）。新版本会在应用内提示：macOS 上一键安装；在 Windows 和 Linux 上，会提供新安装包，覆盖旧版本安装即可，数据会保留。
 

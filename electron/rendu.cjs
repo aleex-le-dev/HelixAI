@@ -174,8 +174,15 @@ async function rendre(fichier, racine) {
   ses.setPermissionRequestHandler((_wc, _permission, callback) => callback(false));
   ses.setPermissionCheckHandler(() => false);
   let service = null;
-  fenetre.webContents.on("console-message", (_e, niveau, message) => {
-    if (niveau >= 3 || /error|uncaught/i.test(String(message))) console_.push(String(message).slice(0, 300));
+  /*
+   * Depuis Electron 35, le niveau et le message sont dans l'événement (le niveau
+   * en mot : « error ») ; avant, en arguments (le niveau en nombre, 3 pour une
+   * erreur). Les deux sont lus : passage à Electron 44 le 27/09/2026.
+   */
+  fenetre.webContents.on("console-message", (e, ancienNiveau, ancienMessage) => {
+    const niveau = e && e.level !== undefined ? e.level : ancienNiveau;
+    const message = String(e && e.message !== undefined ? e.message : ancienMessage);
+    if (niveau === "error" || niveau >= 3 || /error|uncaught/i.test(message)) console_.push(message.slice(0, 300));
   });
   ses.webRequest.onErrorOccurred((d) => {
     /*

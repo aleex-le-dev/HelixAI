@@ -139,8 +139,9 @@ export const branding: Branding = {
   urls: {
     instance: "https://app.helix-agence.fr",
     marketing: "https://helix-agence.fr",
-    releases: "https://github.com/helix-agence/helix/releases",
-    sourceCode: "https://github.com/helix-agence/helix",
+    // Le dépôt public (27/09/2026) ; « latest » mène toujours à la dernière version publiée.
+    releases: "https://github.com/medhiclb/HelixAI/releases/latest",
+    sourceCode: "https://github.com/medhiclb/HelixAI",
     dpoEmail: "dpo@helix-agence.fr",
     supportEmail: "support@helix-agence.fr",
   },

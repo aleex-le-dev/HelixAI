@@ -84,7 +84,12 @@ export function FenetreMiseAJour() {
   };
 
   return (
-    <Modal open onClose={enCours ? () => undefined : plusTard} size="sm">
+    /*
+     * Un clic à côté ou Échap : fermée pour cette fois seulement. Seul « Plus
+     * tard » la tait pour cette version : un clic par mégarde la faisait
+     * disparaître jusqu'à la suivante (essai du 27/09/2026).
+     */
+    <Modal open onClose={enCours ? () => undefined : () => setFermee(true)} size="sm">
       <div className="space-y-4 p-6">
         <div>
           <h2 className="text-lg font-semibold text-foreground">{tf("{0} {1} est disponible", branding.name, version)}</h2>

@@ -10,7 +10,7 @@ refaite à l'envers.
 
 | | |
 |---|---|
-| Version | 0.27.2 (`package.json`) |
+| Version | 2026.9.27 (`package.json`) |
 | Dernière mise à jour | 27 septembre 2026 |
 | Documents liés | [ARCHITECTURE.md](ARCHITECTURE.md), [SECURITE.md](SECURITE.md), [SCREENS.md](SCREENS.md), [SIGNATURE.md](SIGNATURE.md), [README.md](README.md), [docs/GUIDE.md](docs/GUIDE.md) |
 
@@ -2873,6 +2873,32 @@ Windows et Linux ont l'hélice dans un carré arrondi qui remplit l'icône, au t
 petites tailles (neuf tailles dans le `.ico`, de 16 à 256 px), et la fenêtre prend l'icône de
 son système. macOS ne change pas. **Pas vérifié sur un vrai PC** : Windows garde parfois
 l'ancienne icône en cache après une mise à jour (redémarrer l'explorateur la rafraîchit).
+
+**Fait le 27/09/2026 (0.27.3) : Electron 44.4.5, au lieu de 33.4.11.** Relevé par `npm audit` en
+préparant le dépôt public : Electron 33 n'est plus maintenu, et une trentaine de failles
+publiées le touchent, dont plusieurs graves qui concernent Helix (contournement de
+l'isolation de contexte, protocole personnalisé `supportFetchAPI` lisible d'une autre
+origine, alors que l'interface est servie par `helix://`). Passage à la dernière version
+stable (Chromium 152, Node 24.21 pour la passerelle), épinglée. Un seul changement d'API
+touchait le code : l'événement `console-message` (`electron/rendu.cjs`), lu dans ses deux
+formes. Electron 44 ne télécharge plus son binaire à l'installation : `node
+node_modules/electron/install.js` (empreintes vérifiées par l'éditeur). `npm audit` : 0 faille,
+outils de développement compris. **Vérifié sur ce Mac** : paquet construit et signé, démarrage,
+coffre et Chats du poste relus, deux Chats qui répondent (modèle local). **Pas vérifié** :
+Windows et Linux sur Electron 44 (construits, pas lancés).
+Aussi : la fenêtre « Nouvelle version » ne se ferme plus « pour cette version » sur un clic à
+côté ou Échap (vu à l'essai : un clic par mégarde la faisait disparaître jusqu'à la suivante),
+seulement sur « Plus tard ».
+
+**Décidé par Medhi le 27/09/2026 : la version est la date de publication, année.mois.jour.**
+« 0.27.3 qui correspond à rien », puis « met la date du jour » : la première est la
+**2026.9.27**. Toujours croissant (plus récente que 0.27.x : la fenêtre « Nouvelle version »
+compare bien). Limite : une version par jour ; une seconde publication le même jour prendrait la
+date du lendemain (un numéro ne peut pas redescendre). OpenClaw, regardé à la demande de
+Medhi, numérote année.mois.n° ; Medhi a préféré le jour. Ne pas revenir aux 0.x.
+Aussi : les liens « Code source » et « Voir les versions publiées » des réglages menaient à
+un ancien dépôt (`helix-agence/helix`) ; ils mènent au dépôt public et à sa dernière
+publication.
 
 **Trouvé le 27/09/2026 au premier vrai essai de mise à jour d'un clic (0.27.0 vers 0.27.1, par
 GitHub, sur ce Mac) : toute mise à jour était refusée.** La fenêtre « Nouvelle version » est bien

@@ -328,6 +328,8 @@ for (let i = 0; i < 60; i++) {
   }
 }
 
+/** Ce qu'une section relève pour une autre, plus bas (13 ter lit l'environnement vu par le faux OpenCode en 6 ter). */
+const RELEVES = {};
 let reussis = 0;
 const echecs = [];
 function verifier(nom, condition, obtenu) {
@@ -1004,6 +1006,8 @@ console.log("\n6 ter. Helix Code : la session à sa propriétaire, les outils d'
   })();
   const vu = await (await fetch(`http://127.0.0.1:${portFaux}/essai/env`)).json().catch(() => ({ env: {}, enfant: {} }));
   const env = vu.env ?? {};
+  // Gardé pour la section 13 ter (réglages globaux du compte, 28/09/2026).
+  RELEVES.opencode = vu;
   verifier("environnement d'OpenCode : ni HELIX_TOKEN ni les secrets de l'hôte", !("HELIX_TOKEN" in env) && !Object.values(env).includes(CANARI) && !Object.values(env).includes(CANARI_HOTE) && !("HELIX_CANARI_SECRET" in env), Object.keys(env).join(",").slice(0, 160));
   /*
    * Test d'intrusion du 27/09/2026 : sans cette variable, OpenCode lit les
@@ -4808,6 +4812,97 @@ console.log("\n13. Modèles branchés par une clé : faux fournisseurs, Chat, ou
     else if (/^[A-K]\. /.test(ligne)) console.log(`  ${ligne}`);
   }
   verifier("clés : l'essai des fournisseurs s'est déroulé jusqu'au bout", essai.status === 0 || lignes.some((l) => /vérification\(s\) réussie\(s\)/.test(l)), `${essai.status} ${essai.error?.message ?? ""} ${lignes.slice(-6).join(" ")}`);
+}
+
+/*
+ * Seconde tournée sur ce que font les agents et les modèles (28/09/2026,
+ * SECURITE.md § 37). Chaque contrôle échoue sur le code d'avant son correctif.
+ */
+console.log("\n13 ter. Seconde tournée : agents et outils (28/09/2026)");
+{
+  /*
+   * 1. Les réglages globaux du compte ne passent plus par-dessus ceux de Helix.
+   * Essayé avec le vrai OpenCode 1.18.32 (HOME jetable, aucun modèle) : un
+   * `~/.config/opencode/opencode.json` donnant `bash`, `edit` et
+   * `external_directory` à « allow » pour l'agent `build` l'emportait sur les
+   * « ask » et le « deny » de Helix, et un greffon de `~/.opencode/plugin`
+   * s'exécutait. La batterie ne lance pas le vrai OpenCode : elle lit ce que
+   * le faux a reçu (section 6 ter) : deux dossiers vides à Helix à la place de
+   * ceux de la personne ; et ce que reçoivent ses commandes.
+   */
+  const { homedir } = await import("node:os");
+  const vu = RELEVES.opencode ?? { env: {}, enfant: {} };
+  const env = vu.env ?? {};
+  const enfant = vu.enfant ?? {};
+  const dansDonnees = (v) => typeof v === "string" && v.startsWith(join(DONNEES, "opencode") + "/");
+  verifier(
+    "OpenCode : ni `~/.config/opencode` ni `~/.opencode` du compte (XDG_CONFIG_HOME et OPENCODE_TEST_HOME dans les données de l'instance)",
+    dansDonnees(env.XDG_CONFIG_HOME) && dansDonnees(env.OPENCODE_TEST_HOME) && env.XDG_CONFIG_HOME !== env.OPENCODE_TEST_HOME,
+    `${env.XDG_CONFIG_HOME} | ${env.OPENCODE_TEST_HOME}`,
+  );
+  const attendu = process.env.XDG_CONFIG_HOME || join(homedir(), ".config");
+  verifier(
+    "OpenCode : ses commandes retrouvent le XDG_CONFIG_HOME de la personne, sans le dossier privé",
+    enfant.XDG_CONFIG_HOME === attendu && !enfant.OPENCODE_TEST_HOME,
+    `${enfant.XDG_CONFIG_HOME} | ${enfant.OPENCODE_TEST_HOME}`,
+  );
+
+  /*
+   * 2. La barrière juge le champ que l'outil lit. `move_file` ne lit que
+   * `source` et `destination`, les outils bureautiques que `chemin` : un
+   * `path` en plus décidait de la portée et de la carte. La barrière seule,
+   * dans un processus à part, niveau « Demander avant de modifier ».
+   */
+  const { mkdirSync: creer, writeFileSync: ecrire } = await import("node:fs");
+  const { pathToFileURL } = await import("node:url");
+  const ICI = mkdtempSync(join(tmpdir(), "helix-securite-portee-champ-"));
+  const ws = join(ICI, "espace");
+  for (const d of ["Public", "Secret"]) creer(join(ws, d), { recursive: true });
+  ecrire(join(ws, "Public", "a.txt"), "a");
+  ecrire(join(ws, "Secret", "contrat.pdf"), "c");
+  const script = [
+    `const a = await import(${JSON.stringify(pathToFileURL(join(RACINE, "gateway", "src", "approbation.ts")).href)});`,
+    "const cartes = [];",
+    "a.surEvenement((e) => { if (e.type === 'approbation_demandee') { cartes.push({ resume: e.resume, detail: e.detail }); setTimeout(() => a.repondre(e.id, true, 'outil', e.pour), 10); } });",
+    `const ws = ${JSON.stringify(ws)};`,
+    "let ctx = a.ouvrirDemande();",
+    "await a.verifierOutil(ctx, 'fichiers__move_file', { source: ws + '/Public/a.txt', destination: ws + '/Public/b.txt' }, 'u1');",
+    "const n1 = cartes.length;",
+    "await a.verifierOutil(ctx, 'fichiers__move_file', { path: ws + '/Public/leurre.txt', source: ws + '/Secret/contrat.pdf', destination: ws + '/Public/c.pdf' }, 'u1');",
+    "const deplacement = cartes.slice(n1);",
+    "a.fermerDemande(ctx);",
+    "ctx = a.ouvrirDemande();",
+    "await a.verifierOutil(ctx, 'fichiers__write_file', { path: ws + '/Public/note.txt', content: 'x' }, 'u1');",
+    "const n2 = cartes.length;",
+    "await a.verifierOutil(ctx, 'bureau__creer_document', { path: ws + '/Public/x.docx', chemin: ws + '/Secret/rapport', titre: 't' }, 'u1');",
+    "const bureau = cartes.slice(n2);",
+    "console.log(JSON.stringify({ deplacement, bureau }));",
+    "process.exit(0);",
+  ].join("\n");
+  let lu = {};
+  try {
+    const sortie = execFileSync(process.execPath, ["--no-warnings", "--input-type=module", "-e", script], {
+      env: { ...process.env, HELIX_DATA_DIR: join(ICI, "donnees"), HELIX_WORKSPACE: ws, HELIX_CONFIG: join(AUX, "profil.json") },
+      encoding: "utf8",
+      timeout: 30_000,
+    });
+    lu = JSON.parse(sortie.trim().split("\n").pop());
+  } catch (err) {
+    lu = { erreur: String(err).slice(0, 200) };
+  }
+  const dep = lu.deplacement ?? [];
+  verifier(
+    "barrière : un `path` que move_file ignore ne couvre pas un déplacement depuis un autre dossier ; la carte nomme le fichier déplacé et sa destination",
+    dep.length === 1 && dep[0].resume.includes("Secret/contrat.pdf") && !dep[0].resume.includes("leurre") && Boolean(dep[0].detail?.cible?.endsWith("Secret/contrat.pdf")) && Boolean(dep[0].detail?.destination?.endsWith("Public/c.pdf")),
+    JSON.stringify(lu).slice(0, 300),
+  );
+  const bur = lu.bureau ?? [];
+  verifier(
+    "barrière : un `path` que l'outil bureautique ignore ne couvre pas un document créé dans un autre dossier",
+    bur.length === 1 && bur[0].resume.includes("Secret/rapport") && Boolean(bur[0].detail?.cible?.endsWith("Secret/rapport")),
+    JSON.stringify(lu.bureau ?? lu).slice(0, 300),
+  );
+  rmSync(ICI, { recursive: true, force: true });
 }
 
 /*

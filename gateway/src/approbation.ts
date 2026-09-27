@@ -254,9 +254,26 @@ function abreger(chemin: string): string {
     : chemin;
 }
 
-/** Premier chemin désigné par les arguments, quel que soit le nom du champ. */
-function chemin(args: Record<string, unknown>): string | null {
-  for (const cle of ["path", "chemin", "source", "paths"]) {
+/** Les champs où un outil reçoit un chemin. */
+const CLES_CHEMIN = ["path", "chemin", "source", "paths"];
+
+/**
+ * Le chemin sur lequel l'outil agit vraiment : celui du champ qu'il lit.
+ *
+ * Seconde tournée du 28/09/2026 : la barrière prenait le premier champ
+ * rempli, `path` d'abord, quel que soit l'outil. Or `move_file` ne lit que
+ * `source` et `destination`, les outils bureautiques que `chemin` (bureau.ts) :
+ * un `path` en plus, que l'outil ignore, décidait de la carte et de la portée.
+ * Essayé sur la barrière seule : « déplacer Secret/contrat.pdf » accompagné
+ * d'un `path` dans Public passait sans carte après un renommage accordé dans
+ * Public, et une carte neuve annonçait le déplacement du leurre, pas celui du
+ * contrat ; un document créé dans Secret passait de même sur une écriture
+ * accordée dans Public.
+ */
+function chemin(args: Record<string, unknown>, outil = ""): string | null {
+  const nom = outil.includes("__") ? outil.slice(outil.indexOf("__") + 2) : outil;
+  const premier = outil.startsWith("bureau__") ? "chemin" : nom === "move_file" ? "source" : "";
+  for (const cle of premier ? [premier, ...CLES_CHEMIN.filter((c) => c !== premier)] : CLES_CHEMIN) {
     const valeur = args[cle];
     if (typeof valeur === "string" && valeur) return valeur;
     if (Array.isArray(valeur) && typeof valeur[0] === "string") return valeur[0];
@@ -275,7 +292,7 @@ const texteOu = (valeur: unknown, defaut: string) =>
  * utilisateur qui ne comprend pas finit par tout approuver par lassitude.
  */
 export function resumerOutil(outil: string, args: Record<string, unknown>): string {
-  const cible = chemin(args);
+  const cible = chemin(args, outil);
   const ou = cible ? abreger(cible) : "un emplacement non précisé";
 
   // Outils livrés de l'agent de code (permissionsCode.ts) : la carte dit la commande, le fichier ou l'adresse.
@@ -684,11 +701,23 @@ export function fermerDemande(id: string): void {
 const porteeParDossier = (outil: string) =>
   !outil.includes("__") || outil.startsWith(`${SERVEUR_FICHIERS}__`) || outil.startsWith("bureau__") || outil.startsWith("code__");
 
-/** Tous les chemins désignés (un `read_multiple_files` en porte plusieurs). */
-function chemins(args: Record<string, unknown>): string[] {
-  if (Array.isArray(args.paths)) return args.paths.filter((p): p is string => typeof p === "string" && p.length > 0);
-  const un = chemin(args);
-  return un ? [un] : [];
+/**
+ * Tous les chemins désignés, par tous les champs de chemin (un
+ * `read_multiple_files` en porte plusieurs). Un champ que l'outil ignore
+ * entre quand même dans la portée : il ne peut qu'ajouter un dossier à la clé,
+ * donc faire redemander, jamais se substituer au vrai (voir `chemin`). Le
+ * chemin que l'outil lit vient en tête.
+ */
+function chemins(args: Record<string, unknown>, outil = ""): string[] {
+  const liste: string[] = [];
+  const vrai = chemin(args, outil);
+  if (vrai) liste.push(vrai);
+  for (const cle of CLES_CHEMIN) {
+    const v = args[cle];
+    if (typeof v === "string" && v) liste.push(v);
+    else if (Array.isArray(v)) liste.push(...v.filter((p): p is string => typeof p === "string" && p.length > 0));
+  }
+  return [...new Set(liste)];
 }
 
 /**
@@ -721,7 +750,7 @@ function dossierDArrivee(destination: string): string {
 
 /** Clé de portée : ce que couvre une réponse déjà donnée. */
 function portee(outil: string, args: Record<string, unknown>, courant: Niveau): string {
-  const cible = chemin(args);
+  const cible = chemin(args, outil);
   /*
    * Sans chemin, l'outil lui-même est la portée : approuver un brouillon ne
    * doit pas couvrir l'outil d'un connecteur qui, lui non plus, n'a pas de
@@ -737,7 +766,7 @@ function portee(outil: string, args: Record<string, unknown>, courant: Niveau): 
   }
   if (!porteeParDossier(outil) || !cible) return `${outil}|${JSON.stringify(args)}`;
   // Plusieurs fichiers : tous leurs dossiers entrent dans la clé (le premier seul laissait passer les autres).
-  const dossier = [...new Set(chemins(args).map((c) => dirname(c)))].sort().join("+");
+  const dossier = [...new Set(chemins(args, outil).map((c) => dirname(c)))].sort().join("+");
 
   /*
    * Un déplacement a deux extrémités. Autoriser « sortir un fichier de
@@ -896,7 +925,7 @@ export async function verifierOutil(
   }
 
   // Le journal dit ce que l'agent a voulu toucher, jamais ce qu'il y a dedans.
-  journaliser("outil.demande", qui, { outil, cible: chemin(args), niveau: courant, ...(employe ? { employe } : {}) });
+  journaliser("outil.demande", qui, { outil, cible: chemin(args, outil), niveau: courant, ...(employe ? { employe } : {}) });
 
   const { issue, par } = await demander(
     {
@@ -905,7 +934,9 @@ export async function verifierOutil(
       pour: qui,
       detail: {
         outil,
-        cible: chemin(args),
+        cible: chemin(args, outil),
+        // Où un déplacement dépose le fichier : l'écran le montre hors du français, où il ne lit pas `resume`.
+        ...(typeof args.destination === "string" && args.destination ? { destination: args.destination } : {}),
         niveau: courant,
         portee: cle,
         surface: origine,
@@ -915,8 +946,8 @@ export async function verifierOutil(
         ...(employe ? { employe } : {}),
         // Ce que l'accord couvre : cet appel seul, ou les suivants au même endroit.
         // Une commande, une adresse, un appel sans chemin : mot pour mot, la carte ne promet pas plus (revue du 27/09/2026).
-        unique: toujours || !porteeParDossier(outil) || !chemin(args) || ["code__bash", "code__webfetch", "code__websearch", "code__codesearch"].includes(outil),
-        ...(chemins(args).length > 1 ? { cibles: chemins(args).slice(0, 50) } : {}),
+        unique: toujours || !porteeParDossier(outil) || !chemin(args, outil) || ["code__bash", "code__webfetch", "code__websearch", "code__codesearch"].includes(outil),
+        ...(chemins(args, outil).length > 1 ? { cibles: chemins(args, outil).slice(0, 50) } : {}),
         /*
          * Hors fichiers, la carte montre ce que l'outil recevra (un connecteur,
          * un événement, une tâche) : le nom de l'outil ne dit pas ce qui part.
@@ -935,7 +966,7 @@ export async function verifierOutil(
   // travaillait figure dans le détail. Sans réponse, personne n'a décidé.
   journaliser(accord ? "outil.approuve" : "outil.refuse", par ?? "personne", {
     outil,
-    cible: chemin(args),
+    cible: chemin(args, outil),
     issue,
     pour: qui,
   });

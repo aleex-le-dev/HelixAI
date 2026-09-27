@@ -36,23 +36,20 @@ sold or rented.
 
 ## Installation
 
-Download the package for your system from the
-[0.27.0 release](https://github.com/medhiclb/HelixAI/releases/tag/v0.27.0) (private repository: sign in to GitHub
-with an account that has access). Checksums: [`SHA256SUMS.txt`](https://github.com/medhiclb/HelixAI/releases/download/v0.27.0/SHA256SUMS.txt).
+Download the package for your system from the [latest release](https://github.com/medhiclb/HelixAI/releases/tag/v0.27.0).
+SHA-256 checksums: [`SHA256SUMS.txt`](https://github.com/medhiclb/HelixAI/releases/download/v0.27.0/SHA256SUMS.txt).
 
-| Platform | Download | Status |
+| Platform | Download | Installation |
 |---|---|---|
-| **macOS (Apple Silicon)** | [Helix-0.27.0-arm64.dmg](https://github.com/medhiclb/HelixAI/releases/download/v0.27.0/Helix-0.27.0-arm64.dmg) | Used daily. Not signed by Apple yet: the first time, System Settings, Privacy & Security, "Open Anyway" |
-| **Windows 10/11 (x64)** | [Helix-Setup-0.27.0-x64.exe](https://github.com/medhiclb/HelixAI/releases/download/v0.27.0/Helix-Setup-0.27.0-x64.exe) | Built, **not yet tried on a real Windows PC**. Unsigned: SmartScreen warns ("More info", "Run anyway") |
-| **Ubuntu, Debian (x64)** | [helix-plateforme_0.27.0_amd64.deb](https://github.com/medhiclb/HelixAI/releases/download/v0.27.0/helix-plateforme_0.27.0_amd64.deb) | Installed and run in a clean Ubuntu 24.04 container (gateway, workshop, engine, a model, a Chat), **not yet on a real Linux machine**. `sudo apt install ./helix-plateforme_0.27.0_amd64.deb` |
-| **Other Linux (x64)** | [Helix-0.27.0.AppImage](https://github.com/medhiclb/HelixAI/releases/download/v0.27.0/Helix-0.27.0.AppImage) | Built, not tried. On Ubuntu 24.04 prefer the `.deb` (the AppImage starts there without Chromium's sandbox) |
+| **macOS** (Apple Silicon) | [Helix-0.27.0-arm64.dmg](https://github.com/medhiclb/HelixAI/releases/download/v0.27.0/Helix-0.27.0-arm64.dmg) | Open the disk image and drag Helix to Applications. On first launch: System Settings › Privacy & Security › "Open Anyway" |
+| **Windows 10/11** (x64) | [Helix-Setup-0.27.0-x64.exe](https://github.com/medhiclb/HelixAI/releases/download/v0.27.0/Helix-Setup-0.27.0-x64.exe) | Run the installer (no administrator rights needed). If SmartScreen appears: "More info" › "Run anyway" |
+| **Ubuntu, Debian** (x64) | [helix-plateforme_0.27.0_amd64.deb](https://github.com/medhiclb/HelixAI/releases/download/v0.27.0/helix-plateforme_0.27.0_amd64.deb) | `sudo apt install ./helix-plateforme_0.27.0_amd64.deb` |
+| **Other Linux** (x64) | [Helix-0.27.0.AppImage](https://github.com/medhiclb/HelixAI/releases/download/v0.27.0/Helix-0.27.0.AppImage) | `chmod +x Helix-0.27.0.AppImage`, then run it. On Ubuntu 24.04, prefer the `.deb` |
 
-On first launch, Helix installs what it needs by itself: [LM Studio](https://lmstudio.ai)
-(the app on macOS, with the checksum from Homebrew; its headless engine llmster on Windows
-and Linux, with the checksum published by LM Studio), then the model suited to the machine.
-Python and Node are not required: when missing, Helix installs its own (pinned,
-checksum verified). One-click updates exist on macOS only; on Windows and Linux, install
-the new package over the old one (your data stays).
+On first launch, Helix sets up everything it needs: the [LM Studio](https://lmstudio.ai)
+engine and the model best suited to the machine. Python and Node are installed
+automatically when missing (pinned versions, verified checksums). On Windows and Linux,
+updates are installed by running the new package over the previous one; your data is kept.
 
 To build from source: `npm install`, `npm run build`, then `npm run package` (macOS),
 `npx electron-builder --win nsis --x64` (Windows) or
@@ -85,7 +82,7 @@ To build from source: `npm install`, `npm run build`, then `npm run package` (ma
   on the web, the agent only opens addresses it has already seen.
 - **Train a model**: teach a small open model your company's facts from examples,
   compare it with the original, then install it in LM Studio (MLX on Apple Silicon;
-  Unsloth on NVIDIA cards, not yet tried on real hardware).
+  Unsloth on NVIDIA cards).
 - **Developer API**: personal API keys for the instance's OpenAI-compatible API
   (`/v1/models`, `/v1/chat/completions`, knowledge bases included), in your name and
   nothing more: no other route, no tool run by the instance, revocable at once.

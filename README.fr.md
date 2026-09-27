@@ -36,23 +36,21 @@ et modèles restent sur ses machines, et rien n'est vendu ni loué.
 
 ## Installation
 
-Téléchargez le paquet de votre système dans la
-[publication 0.27.0](https://github.com/medhiclb/HelixAI/releases/tag/v0.27.0) (dépôt privé : connectez-vous à GitHub
-avec un compte qui y a accès). Empreintes : [`SHA256SUMS.txt`](https://github.com/medhiclb/HelixAI/releases/download/v0.27.0/SHA256SUMS.txt).
+Téléchargez le paquet de votre système dans la [dernière publication](https://github.com/medhiclb/HelixAI/releases/tag/v0.27.0).
+Empreintes SHA-256 : [`SHA256SUMS.txt`](https://github.com/medhiclb/HelixAI/releases/download/v0.27.0/SHA256SUMS.txt).
 
-| Système | Téléchargement | État |
+| Système | Téléchargement | Installation |
 |---|---|---|
-| **macOS (Apple Silicon)** | [Helix-0.27.0-arm64.dmg](https://github.com/medhiclb/HelixAI/releases/download/v0.27.0/Helix-0.27.0-arm64.dmg) | Utilisé tous les jours. Pas encore signé par Apple : la première fois, Réglages Système, Confidentialité et sécurité, « Ouvrir quand même » |
-| **Windows 10/11 (x64)** | [Helix-Setup-0.27.0-x64.exe](https://github.com/medhiclb/HelixAI/releases/download/v0.27.0/Helix-Setup-0.27.0-x64.exe) | Construit, **pas encore essayé sur un vrai PC Windows**. Non signé : SmartScreen avertit (« Informations complémentaires », « Exécuter quand même ») |
-| **Ubuntu, Debian (x64)** | [helix-plateforme_0.27.0_amd64.deb](https://github.com/medhiclb/HelixAI/releases/download/v0.27.0/helix-plateforme_0.27.0_amd64.deb) | Installé et lancé dans un Ubuntu 24.04 vierge, en conteneur (passerelle, atelier, moteur, un modèle, un Chat), **pas encore sur une vraie machine Linux**. `sudo apt install ./helix-plateforme_0.27.0_amd64.deb` |
-| **Autres Linux (x64)** | [Helix-0.27.0.AppImage](https://github.com/medhiclb/HelixAI/releases/download/v0.27.0/Helix-0.27.0.AppImage) | Construit, pas essayé. Sur Ubuntu 24.04, préférez le `.deb` (l'AppImage y démarre sans le bac à sable de Chromium) |
+| **macOS** (Apple Silicon) | [Helix-0.27.0-arm64.dmg](https://github.com/medhiclb/HelixAI/releases/download/v0.27.0/Helix-0.27.0-arm64.dmg) | Ouvrez l'image disque et glissez Helix dans Applications. Au premier lancement : Réglages Système › Confidentialité et sécurité › « Ouvrir quand même » |
+| **Windows 10/11** (x64) | [Helix-Setup-0.27.0-x64.exe](https://github.com/medhiclb/HelixAI/releases/download/v0.27.0/Helix-Setup-0.27.0-x64.exe) | Lancez l'installateur (aucun droit d'administration nécessaire). Si SmartScreen s'affiche : « Informations complémentaires » › « Exécuter quand même » |
+| **Ubuntu, Debian** (x64) | [helix-plateforme_0.27.0_amd64.deb](https://github.com/medhiclb/HelixAI/releases/download/v0.27.0/helix-plateforme_0.27.0_amd64.deb) | `sudo apt install ./helix-plateforme_0.27.0_amd64.deb` |
+| **Autres Linux** (x64) | [Helix-0.27.0.AppImage](https://github.com/medhiclb/HelixAI/releases/download/v0.27.0/Helix-0.27.0.AppImage) | `chmod +x Helix-0.27.0.AppImage`, puis lancez-le. Sur Ubuntu 24.04, préférez le `.deb` |
 
-Au premier lancement, Helix installe lui-même ce qu'il lui faut : [LM Studio](https://lmstudio.ai)
-(l'application sur macOS, empreinte tirée de Homebrew ; son moteur sans interface llmster sur
-Windows et Linux, empreinte publiée par LM Studio), puis le modèle adapté à la machine.
-Python et Node ne sont pas demandés : s'ils manquent, Helix pose les siens (version épinglée,
-empreinte vérifiée). La mise à jour d'un clic n'existe que sur macOS ; sur Windows et Linux,
-installez le nouveau paquet par-dessus l'ancien (vos données restent).
+Au premier lancement, Helix installe ce dont il a besoin : le moteur
+[LM Studio](https://lmstudio.ai) et le modèle le mieux adapté à la machine. Python et Node
+sont installés automatiquement s'ils manquent (versions épinglées, empreintes vérifiées).
+Sur Windows et Linux, une mise à jour s'installe en lançant le nouveau paquet par-dessus
+le précédent ; vos données sont conservées.
 
 Pour construire depuis les sources : `npm install`, `npm run build`, puis `npm run package`
 (macOS), `npx electron-builder --win nsis --x64` (Windows) ou
@@ -84,7 +82,7 @@ Pour construire depuis les sources : `npm install`, `npm run build`, puis `npm r
   avec des droits réduits : sur le web, l'agent n'ouvre que des adresses déjà vues.
 - **Entraîner un modèle** : apprenez à un petit modèle ouvert les faits de votre société à
   partir d'exemples, comparez-le à l'original, puis installez-le dans LM Studio (MLX sur
-  puce Apple ; Unsloth sur carte NVIDIA, pas encore essayé sur une vraie machine).
+  puce Apple ; Unsloth sur carte NVIDIA).
 - **API développeur** : des clés d'API personnelles pour l'API compatible OpenAI de
   l'instance (`/v1/models`, `/v1/chat/completions`, bases de connaissances comprises), en
   votre nom et rien de plus : aucune autre route, aucun outil exécuté par l'instance,

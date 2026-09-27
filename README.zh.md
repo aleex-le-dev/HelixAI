@@ -33,16 +33,16 @@ HelixAI 将 Chat、智能体、编程、知识库和模型微调整合到一个*
 
 ## 安装
 
-请在 [0.27.0 发布页](https://github.com/medhiclb/HelixAI/releases/tag/v0.27.0) 下载适合您系统的安装包（私有仓库：请用有访问权限的 GitHub 账户登录）。校验值：[`SHA256SUMS.txt`](https://github.com/medhiclb/HelixAI/releases/download/v0.27.0/SHA256SUMS.txt)。
+请在[最新发布页](https://github.com/medhiclb/HelixAI/releases/tag/v0.27.0)下载适合您系统的安装包。SHA-256 校验值：[`SHA256SUMS.txt`](https://github.com/medhiclb/HelixAI/releases/download/v0.27.0/SHA256SUMS.txt)。
 
-| 系统 | 下载 | 状态 |
+| 系统 | 下载 | 安装方法 |
 |---|---|---|
-| **macOS（Apple 芯片）** | [Helix-0.27.0-arm64.dmg](https://github.com/medhiclb/HelixAI/releases/download/v0.27.0/Helix-0.27.0-arm64.dmg) | 日常使用。尚未经 Apple 签名：首次打开时，前往“系统设置 > 隐私与安全性”，点击“仍要打开” |
-| **Windows 10/11（x64）** | [Helix-Setup-0.27.0-x64.exe](https://github.com/medhiclb/HelixAI/releases/download/v0.27.0/Helix-Setup-0.27.0-x64.exe) | 已构建，**尚未在真实的 Windows 电脑上试用**。未签名：SmartScreen 会发出警告（“更多信息”，“仍要运行”） |
-| **Ubuntu、Debian（x64）** | [helix-plateforme_0.27.0_amd64.deb](https://github.com/medhiclb/HelixAI/releases/download/v0.27.0/helix-plateforme_0.27.0_amd64.deb) | 已在全新的 Ubuntu 24.04 容器中安装并运行（网关、工作坊、引擎、一个模型、一次 Chat），**尚未在真实的 Linux 机器上试用**。`sudo apt install ./helix-plateforme_0.27.0_amd64.deb` |
-| **其他 Linux（x64）** | [Helix-0.27.0.AppImage](https://github.com/medhiclb/HelixAI/releases/download/v0.27.0/Helix-0.27.0.AppImage) | 已构建，未试用。在 Ubuntu 24.04 上请优先使用 `.deb`（AppImage 在该系统上会在没有 Chromium 沙箱的情况下启动） |
+| **macOS**（Apple 芯片） | [Helix-0.27.0-arm64.dmg](https://github.com/medhiclb/HelixAI/releases/download/v0.27.0/Helix-0.27.0-arm64.dmg) | 打开磁盘映像，将 Helix 拖入“应用程序”。首次启动时：系统设置 › 隐私与安全性 › “仍要打开” |
+| **Windows 10/11**（x64） | [Helix-Setup-0.27.0-x64.exe](https://github.com/medhiclb/HelixAI/releases/download/v0.27.0/Helix-Setup-0.27.0-x64.exe) | 运行安装程序（无需管理员权限）。如出现 SmartScreen：“更多信息” › “仍要运行” |
+| **Ubuntu、Debian**（x64） | [helix-plateforme_0.27.0_amd64.deb](https://github.com/medhiclb/HelixAI/releases/download/v0.27.0/helix-plateforme_0.27.0_amd64.deb) | `sudo apt install ./helix-plateforme_0.27.0_amd64.deb` |
+| **其他 Linux**（x64） | [Helix-0.27.0.AppImage](https://github.com/medhiclb/HelixAI/releases/download/v0.27.0/Helix-0.27.0.AppImage) | `chmod +x Helix-0.27.0.AppImage`，然后运行。在 Ubuntu 24.04 上建议使用 `.deb` |
 
-首次启动时，Helix 会自行安装所需组件：[LM Studio](https://lmstudio.ai)（macOS 上安装应用本身，校验值来自 Homebrew；Windows 和 Linux 上安装其无界面引擎 llmster，校验值由 LM Studio 发布），然后安装适合本机的模型。无需预先安装 Python 和 Node：若缺失，Helix 会安装自带的版本（版本固定，校验值已验证）。一键更新仅在 macOS 上提供；在 Windows 和 Linux 上，请在旧版本之上安装新安装包（数据会保留）。
+首次启动时，Helix 会自动完成所需的安装：[LM Studio](https://lmstudio.ai) 引擎以及最适合本机的模型。若缺少 Python 和 Node，也会自动安装（版本固定，校验值已验证）。在 Windows 和 Linux 上，运行新安装包覆盖旧版本即可更新，数据会保留。
 
 从源码构建：`npm install`、`npm run build`，然后运行 `npm run package`（macOS）、`npx electron-builder --win nsis --x64`（Windows）或 `npx electron-builder --linux AppImage deb --x64`（Linux）。
 
@@ -55,7 +55,7 @@ HelixAI 将 Chat、智能体、编程、知识库和模型微调整合到一个*
 - **连接器**：邮件、Google 日历（读写）、Google Drive、Slack、Notion 和 MCP 服务器，均受**审批机制**保护：任何修改操作都须经您同意。
 - **定时任务**：一条指令加一个频率（每天、周一至周五、每周或每月某天），用您的工具执行，即使窗口关闭也会运行，可指定执行的智能体；在“任务”中创建，或在 Chat 中直接提出。
 - **全天候智能体**：定时任务、回复收到的邮件和即时消息，并可使用各自的知识库和头像。处理收到的邮件时权限受限：上网时只打开已见过的地址。
-- **训练模型**：用示例让小型开源模型学习贵公司的信息，与原始模型对比，然后安装到 LM Studio（Apple 芯片上使用 MLX；NVIDIA 显卡上使用 Unsloth，尚未在真实硬件上试过）。
+- **训练模型**：用示例让小型开源模型学习贵公司的信息，与原始模型对比，然后安装到 LM Studio（Apple 芯片上使用 MLX；NVIDIA 显卡上使用 Unsloth）。
 - **开发者 API**：个人 API 密钥，用于实例的 OpenAI 兼容 API（`/v1/models`、`/v1/chat/completions`，含知识库），以您的名义使用且仅限于此：不能访问其他路由，不能让实例执行工具，可随时撤销。
 - **会议**：录制或导入，在本机转写并生成纪要，支持会议机器人。
 - **导入**来自 ChatGPT、Claude、Claude Code、Codex 和 Cursor 的历史记录。

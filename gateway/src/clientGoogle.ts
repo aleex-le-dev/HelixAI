@@ -2,7 +2,7 @@ import { db } from "./db.ts";
 import { chiffrer, dechiffrer } from "./secret.ts";
 import { deployment } from "./deployment.ts";
 import { journaliser } from "./audit.ts";
-import { t } from "./langue.ts";
+import { t, tf } from "./langue.ts";
 
 /**
  * Le client OAuth Google de l'instance, partagé par Google Drive (drive.ts) et
@@ -93,4 +93,54 @@ export async function effacerClientGoogle(qui: string): Promise<{ ok: boolean; m
   cache = null;
   journaliser("google.client_efface", qui, {});
   return { ok: true, message: t("Application Google retirée de cette instance.") };
+}
+
+/* ------------------------------------------------------------------ */
+/* Qui se sert encore de l'accès Google                                */
+/* ------------------------------------------------------------------ */
+
+/*
+ * Tournée des connecteurs du 28/09/2026. Débrancher un service Google le
+ * révoquait chez Google (`/revoke`). Or la révocation ne vise pas un jeton
+ * seul : « Revocation removes all OAuth 2.0 scopes previously granted to a
+ * project, invalidating any issued access or refresh tokens for all clients
+ * registered under that project »
+ * (https://developers.google.com/identity/protocols/oauth2/native-app, lu le
+ * 28/09/2026). Débrancher Sheets coupait donc aussi Drive, Agenda, Slides,
+ * YouTube, Docs, Forms et une boîte Gmail branchée par Google, qui restaient
+ * affichés « Connecté » jusqu'au premier refus de Google. De même, une
+ * connexion refusée à la relecture des portées (une case décochée) révoquait
+ * tout.
+ *
+ * Chaque module qui garde un accès Google se déclare ici. Tant qu'un autre est
+ * branché, on ne révoque pas : on efface le jeton de l'instance, et l'écran dit
+ * pourquoi l'accès reste accordé chez Google. Le dernier débranché révoque.
+ * On ne sait pas toujours quel compte Google est branché (Sheets n'a pas de
+ * « qui suis-je ») : dans le doute, on ne coupe rien à un autre service.
+ */
+const usages = new Map<string, { nom: string; actif: () => Promise<boolean> }>();
+
+/** Déclaré une fois au chargement du module : `actif` dit si ce service garde un accès Google utilisable. */
+export function declarerUsageGoogle(cle: string, nom: string, actif: () => Promise<boolean> | boolean): void {
+  usages.set(cle, { nom, actif: async () => actif() });
+}
+
+/** Les services Google encore branchés, hors `sauf`, par leur nom : une révocation les couperait. */
+export async function autresUsagesGoogle(sauf: string): Promise<string[]> {
+  const noms: string[] = [];
+  for (const [cle, u] of usages) {
+    if (cle === sauf) continue;
+    // Illisible : compté comme branché, pour ne rien couper à l'aveugle.
+    if (await u.actif().catch(() => true)) noms.push(u.nom);
+  }
+  return noms;
+}
+
+/** Le message d'un débranchement sans révocation, parce que d'autres services Google s'en servent encore. */
+export function messageSansRevocationGoogle(service: string, autres: string[]): string {
+  return tf(
+    "{0} a été débranché de cette instance, et son accès effacé. Il n'est pas révoqué chez Google, qui le retirerait aussi à ce qui reste branché avec la même application Google : {1}. Il le sera au débranchement du dernier service Google.",
+    service,
+    autres.join(", "),
+  );
 }

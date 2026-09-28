@@ -894,6 +894,34 @@ une fenêtre Electron cachée et dans le navigateur intégré, contre une passer
 `vite` : fr, en, ja, clair et sombre, 1440 et 375 px, états « application à enregistrer »,
 « cases », « en attente », « connecté », « débranché ».
 
+**Tournée des connecteurs natifs du 28/09/2026 (Google, Microsoft 365, Dropbox, réseaux
+sociaux).** Demandée par Medhi (« je veux vraiment aucun bug »). Confrontés à la documentation
+du jour : Google (boucle locale, révocation), Microsoft (adresse de retour `localhost`, port
+ignoré, `offline_access` accordé implicitement avec toute permission déléguée : ne pas le
+déclarer est juste), Dropbox (PKCE), TikTok (desktop, joker de port, défi en hexadécimal), X
+(envoi d'image en JSON base 64). Bugs trouvés et corrigés :
+- **Débrancher un service Google coupait tous les autres.** Google révoque tout ce que le projet
+  a reçu de la personne, pas un jeton seul (« Revocation removes all OAuth 2.0 scopes previously
+  granted to a project »). Débrancher Sheets (ou une connexion refusée à la relecture des
+  portées) coupait Drive, Agenda, Slides, YouTube, Docs, Forms et une boîte Gmail de la même
+  application, qui restaient affichés « Connecté ». Désormais chaque service Google se déclare
+  (`clientGoogle.ts`, `declarerUsageGoogle`) ; tant qu'un autre est branché, on efface le jeton
+  de l'instance sans révoquer, et l'écran dit pourquoi ; le dernier débranché révoque.
+- Le message « l'accès a été révoqué » s'affichait chez LinkedIn et Instagram, qui n'ont pas de
+  révocation : il n'est plus dit que si le fournisseur l'a confirmé.
+- Le retour d'autorisation par la boucle locale (Google, TikTok, Microsoft 365) arrivait hors de
+  toute requête : page et message de l'écran en anglais pour tout le monde (défaut relevé plus
+  haut, § Docs/Dropbox). Il suit maintenant la langue de qui a cliqué (`langue.ts`,
+  `dansLaLangue`).
+- `drive.ts` et `agendaGoogle.ts` : messages de l'écran traduits (ils restaient en français), et
+  ils renvoient à Paramètres, Connecteurs plutôt qu'au seul `helix.config.json`.
+- Liste des connecteurs : « Google Agenda, iCloud, Nextcloud… » n'était pas traduit.
+Vu marcher, contre un faux Google et une passerelle jetable (`scripts/essai-natifs.mjs`,
+section I, et le navigateur intégré, en français et en anglais) : Drive et Agenda de bout en
+bout, les outils proposés au modèle quand le service est branché et plus après, leurs schémas
+JSON, LinkedIn et Microsoft 365 branchés depuis l'écran puis débranchés. Pas essayé : les vrais
+services (aucun compte, aucune application de développeur).
+
 ### 3.6 Découpage des tâches lourdes
 
 Ajouté en septembre 2026, après mesure. Un modèle de 8 milliards de paramètres perd le

@@ -2,7 +2,7 @@ import http from "node:http";
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { db, type StoredCollection } from "./db.ts";
 import { chiffrer, dechiffrer, chiffrementActif } from "./secret.ts";
-import { clientGoogle } from "./clientGoogle.ts";
+import { autresUsagesGoogle, clientGoogle, declarerUsageGoogle, messageSansRevocationGoogle } from "./clientGoogle.ts";
 import { journaliser } from "./audit.ts";
 import {
   requeteHttps,
@@ -13,7 +13,7 @@ import {
   dateFrancaise,
   type ReponseHttps,
 } from "./clientHttps.ts";
-import { t, tf } from "./langue.ts";
+import { dansLaLangue, langue, t, tf } from "./langue.ts";
 
 /**
  * Connecteur Google Drive de Helix, en lecture seule.
@@ -166,8 +166,12 @@ class ErreurDrive extends Error {
   }
 }
 
-const RECONNECTER =
-  "Reconnectez Google Drive dans Paramètres, Connecteurs, puis recommencez.";
+/*
+ * Les messages de ce module s'affichent aussi à l'écran (connexion, état) :
+ * traduits depuis la tournée des connecteurs du 28/09/2026, ils arrivaient en
+ * français sur un écran anglais, chinois ou japonais.
+ */
+const reconnecter = () => t("Reconnectez Google Drive dans Paramètres, Connecteurs, puis recommencez.");
 
 /* ------------------------- identifiants du client OAuth ----------------------- */
 
@@ -313,32 +317,33 @@ function erreurJetons(json: Record<string, unknown>): ErreurDrive {
   if (code === "invalid_grant") {
     return new ErreurDrive(
       "acces",
-      "Google a refusé l'accès enregistré : il a été révoqué, ou il a expiré. Un projet Google Cloud " +
-        "resté en mode « Test » voit ses accès expirer au bout de sept jours. " +
-        RECONNECTER,
+      `${t("Google a refusé l'accès enregistré : il a été révoqué, ou il a expiré. Un projet Google Cloud resté en mode « Test » voit ses accès expirer au bout de sept jours.")} ${reconnecter()}`,
     );
   }
+  /*
+   * L'application Google se saisit à l'écran depuis le 26/09/2026
+   * (clientGoogle.ts) : ces deux messages renvoyaient encore au seul fichier
+   * helix.config.json (tournée des connecteurs du 28/09/2026).
+   */
   if (code === "invalid_client" || code === "unauthorized_client") {
     return new ErreurDrive(
       "config",
-      "Google ne reconnaît pas le client OAuth de cette instance (identifiant ou secret). Vérifiez la " +
-        "rubrique « google » de helix.config.json.",
+      t("Google ne reconnaît pas l'application Google de cette instance (identifiant ou secret). Vérifiez-la dans Paramètres, Connecteurs (ou la rubrique « google » de helix.config.json si elle y est fixée)."),
     );
   }
   if (code === "invalid_request" && /client_secret/i.test(detail)) {
     return new ErreurDrive(
       "config",
-      "Google exige le secret du client OAuth. Ajoutez « clientSecret » dans la rubrique « google » de " +
-        "helix.config.json, puis redémarrez l'instance.",
+      t("Google exige le secret de l'application Google : enregistrez-la de nouveau avec son secret dans Paramètres, Connecteurs (ou ajoutez « clientSecret » dans la rubrique « google » de helix.config.json, puis redémarrez l'instance)."),
     );
   }
   if (code === "admin_policy_enforced") {
     return new ErreurDrive(
       "acces",
-      "L'administrateur de votre domaine Google bloque l'accès de cette application au Drive.",
+      t("L'administrateur de votre domaine Google bloque l'accès de cette application au Drive."),
     );
   }
-  return new ErreurDrive("api", "Google a refusé l'échange d'autorisation.");
+  return new ErreurDrive("api", t("Google a refusé l'échange d'autorisation."));
 }
 
 /**
@@ -353,23 +358,23 @@ async function jetonValide(): Promise<string> {
 
   actualisationEnCours = (async () => {
     await charger();
-    if (!cache) throw new ErreurDrive("acces", "Aucun Google Drive n'est connecté.");
+    if (!cache) throw new ErreurDrive("acces", t("Aucun Google Drive n'est connecté."));
     if (cache.perdu) {
-      throw new ErreurDrive("acces", `L'accès à Google Drive a été perdu. ${RECONNECTER}`);
+      throw new ErreurDrive("acces", `${t("L'accès à Google Drive a été perdu.")} ${reconnecter()}`);
     }
     const id = identifiants();
     if (!id.ok) {
-      throw new ErreurDrive("config", "Le client OAuth Google n'est plus configuré sur cette instance.");
+      throw new ErreurDrive("config", t("Le client OAuth Google n'est plus configuré sur cette instance."));
     }
     if (id.clientId !== cache.clientId) {
       throw new ErreurDrive(
         "acces",
-        `Le client OAuth Google de l'instance a changé depuis la connexion du Drive. ${RECONNECTER}`,
+        `${t("Le client OAuth Google de l'instance a changé depuis la connexion du Drive.")} ${reconnecter()}`,
       );
     }
     const clair = dechiffrer(cache.secret);
     if (typeof clair !== "string" || !clair) {
-      throw new ErreurDrive("acces", `Le jeton enregistré est illisible. ${RECONNECTER}`);
+      throw new ErreurDrive("acces", `${t("Le jeton enregistré est illisible.")} ${reconnecter()}`);
     }
 
     const parametres = new URLSearchParams({
@@ -415,41 +420,39 @@ function erreurApi(statut: number, json: Record<string, unknown>): ErreurDrive {
   if (a("accessNotConfigured") || a("SERVICE_DISABLED")) {
     return new ErreurDrive(
       "config",
-      "L'API Google Drive n'est pas activée dans le projet Google Cloud de ce client OAuth. Dans la " +
-        "console Google Cloud, ouvrez « API et services », puis « Bibliothèque », cherchez « Google " +
-        "Drive API » et activez-la. L'activation peut demander quelques minutes.",
+      t("L'API Google Drive n'est pas activée dans le projet Google Cloud de ce client OAuth. Dans la console Google Cloud, ouvrez « API et services », puis « Bibliothèque », cherchez « Google Drive API » et activez-la. L'activation peut demander quelques minutes."),
     );
   }
   if (a("insufficientPermissions") || a("ACCESS_TOKEN_SCOPE_INSUFFICIENT")) {
     return new ErreurDrive(
       "acces",
-      `L'autorisation accordée ne couvre pas la lecture du Drive. ${RECONNECTER}`,
+      `${t("L'autorisation accordée ne couvre pas la lecture du Drive.")} ${reconnecter()}`,
     );
   }
   if (statut === 429 || a("rateLimitExceeded") || a("userRateLimitExceeded") || a("RESOURCE_EXHAUSTED")) {
     return new ErreurDrive(
       "quota",
-      "Google limite momentanément le nombre de requêtes. Réessaie dans une minute.",
+      t("Google limite momentanément le nombre de requêtes. Réessaie dans une minute."),
     );
   }
   if (a("domainPolicy") || a("appNotAuthorizedToFile")) {
     return new ErreurDrive(
       "acces",
-      "L'administrateur de votre domaine Google bloque l'accès de cette application à ce fichier.",
+      t("L'administrateur de votre domaine Google bloque l'accès de cette application à ce fichier."),
     );
   }
   if (statut === 404) {
     return new ErreurDrive(
       "introuvable",
-      "Fichier introuvable, ou inaccessible avec le compte Google connecté. Vérifie l'identifiant.",
+      t("Fichier introuvable, ou inaccessible avec le compte Google connecté. Vérifie l'identifiant."),
     );
   }
-  if (statut === 403) return new ErreurDrive("acces", "Google refuse l'accès à cet élément du Drive.");
-  if (statut >= 500) return new ErreurDrive("api", "Google Drive est momentanément indisponible.");
+  if (statut === 403) return new ErreurDrive("acces", t("Google refuse l'accès à cet élément du Drive."));
+  if (statut >= 500) return new ErreurDrive("api", t("Google Drive est momentanément indisponible."));
   if (statut >= 300 && statut < 400) {
-    return new ErreurDrive("api", "Google Drive a répondu de façon inattendue (redirection refusée).");
+    return new ErreurDrive("api", t("Google Drive a répondu de façon inattendue (redirection refusée)."));
   }
-  return new ErreurDrive("api", `Google Drive a refusé la requête (code ${statut}).`);
+  return new ErreurDrive("api", tf("Google Drive a refusé la requête (code {0}).", statut));
 }
 
 /**
@@ -489,7 +492,7 @@ async function api(
     reponse = await emettre();
     if (reponse.statut === 401) {
       await marquerPerdu();
-      throw new ErreurDrive("acces", `Google refuse désormais l'accès enregistré. ${RECONNECTER}`);
+      throw new ErreurDrive("acces", `${t("Google refuse désormais l'accès enregistré.")} ${reconnecter()}`);
     }
   }
   if (reponse.statut !== 200) throw erreurApi(reponse.statut, lireJson(reponse));
@@ -500,7 +503,7 @@ async function apiJson(chemin: string, parametres: URLSearchParams): Promise<Rec
   const reponse = await api(chemin, parametres, "json");
   const json = lireJson(reponse);
   if (Object.keys(json).length === 0) {
-    throw new ErreurDrive("api", "Google Drive a renvoyé une réponse illisible.");
+    throw new ErreurDrive("api", t("Google Drive a renvoyé une réponse illisible."));
   }
   return json;
 }
@@ -677,7 +680,7 @@ function echapperHtml(texte: string): string {
  */
 function pageRetour(res: http.ServerResponse, statut: number, titre: string, message: string): void {
   const corps =
-    '<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Google Drive</title></head>' +
+    `<!doctype html><html lang="${langue()}"><head><meta charset="utf-8"><title>Google Drive</title></head>` +
     '<body style="font-family:system-ui,sans-serif;max-width:34rem;margin:4rem auto;padding:0 1rem;line-height:1.5">' +
     `<h1 style="font-size:1.25rem">${echapperHtml(titre)}</h1><p>${echapperHtml(message)}</p>` +
     "</body></html>";
@@ -707,16 +710,14 @@ export async function demarrer(qui: string): Promise<{ ok: boolean; message: str
       ok: false,
       message:
         id.manque === "identifiant"
-          ? "Aucune application Google n'est enregistrée sur cette instance : renseignez-la dans Paramètres, Connecteurs (ou « google » dans helix.config.json)."
-          : "L'identifiant du client OAuth Google de helix.config.json n'a pas la bonne forme : il se termine par « .apps.googleusercontent.com ».",
+          ? t("Aucune application Google n'est enregistrée sur cette instance : renseignez-la dans Paramètres, Connecteurs (ou « google » dans helix.config.json).")
+          : t("L'identifiant du client OAuth Google de helix.config.json n'a pas la bonne forme : il se termine par « .apps.googleusercontent.com »."),
     };
   }
   if (!chiffrementActif()) {
     return {
       ok: false,
-      message:
-        "Le chiffrement des données n'est pas actif sur cette machine : l'accès au Drive ne sera pas " +
-        "enregistré en clair. Réglez « chiffrement » dans helix.config.json, puis recommencez.",
+      message: t("Le chiffrement des données n'est pas actif sur cette machine : l'accès au Drive ne sera pas enregistré en clair. Réglez « chiffrement » dans helix.config.json, puis recommencez."),
     };
   }
   if (flux?.echangeEnCours) {
@@ -728,6 +729,7 @@ export async function demarrer(qui: string): Promise<{ ok: boolean; message: str
   const etat = base64url(randomBytes(32));
   const verificateur = base64url(randomBytes(48));
   const defi = base64url(createHash("sha256").update(verificateur).digest());
+  const langueDemande = langue();
 
   const serveur = http.createServer((req, res) => {
     const adresse = new URL(req.url ?? "/", "http://127.0.0.1");
@@ -735,16 +737,19 @@ export async function demarrer(qui: string): Promise<{ ok: boolean; message: str
       res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" }).end("Introuvable.");
       return;
     }
-    void recevoir(adresse.searchParams, null).then(
-      (r) =>
-        pageRetour(
-          res,
-          r.ok ? 200 : 400,
-          r.ok ? "Google Drive est connecté" : "La connexion n'a pas abouti",
-          r.ok ? `${r.message} Vous pouvez fermer cet onglet.` : r.message,
-        ),
-      () => pageRetour(res, 500, "La connexion n'a pas abouti", "Erreur inattendue."),
-    );
+    // Hors de toute requête de l'application : dans la langue de la demande (langue.ts, `dansLaLangue`).
+    dansLaLangue(langueDemande, () => {
+      void recevoir(adresse.searchParams, null).then(
+        (r) =>
+          pageRetour(
+            res,
+            r.ok ? 200 : 400,
+            r.ok ? tf("{0} est connecté", SERVICE) : t("La connexion n'a pas abouti"),
+            r.ok ? `${r.message} ${t("Vous pouvez fermer cet onglet.")}` : r.message,
+          ),
+        () => pageRetour(res, 500, t("La connexion n'a pas abouti"), t("Erreur inattendue.")),
+      );
+    });
   });
   // Pas de délai de maintien : chaque requête du navigateur se referme.
   serveur.keepAliveTimeout = 1000;
@@ -771,7 +776,7 @@ export async function demarrer(qui: string): Promise<{ ok: boolean; message: str
     qui,
     echangeEnCours: false,
     minuterie: setTimeout(() => {
-      conclure(false, "Le délai de dix minutes est dépassé : rien n'a été enregistré. Recommencez.");
+      dansLaLangue(langueDemande, () => conclure(false, t("Le délai de dix minutes est dépassé : rien n'a été enregistré. Recommencez.")));
     }, LIMITES.fluxMs),
   };
   // La minuterie ne doit pas empêcher la passerelle de s'arrêter.
@@ -830,14 +835,14 @@ async function recevoir(
     return conclure(
       false,
       erreur === "access_denied"
-        ? "Vous avez refusé l'accès dans Google : rien n'a été enregistré."
-        : "Google a interrompu l'autorisation : rien n'a été enregistré. Recommencez.",
+        ? t("Vous avez refusé l'accès dans Google : rien n'a été enregistré.")
+        : t("Google a interrompu l'autorisation : rien n'a été enregistré. Recommencez."),
     );
   }
 
   const code = parametres.get("code") ?? "";
   if (!code || code.length > 2048) {
-    return conclure(false, "La réponse de Google ne contient pas de code d'autorisation. Recommencez.");
+    return conclure(false, t("La réponse de Google ne contient pas de code d'autorisation. Recommencez."));
   }
   if (flux.echangeEnCours) return { ok: false, message: t("La connexion est déjà en train d'aboutir.") };
   flux.echangeEnCours = true;
@@ -862,7 +867,7 @@ async function recevoir(
  */
 async function echanger(code: string, verificateur: string, redirection: string, qui: string): Promise<string> {
   const id = identifiants();
-  if (!id.ok) throw new ErreurDrive("config", "Le client OAuth Google n'est plus configuré sur cette instance.");
+  if (!id.ok) throw new ErreurDrive("config", t("Le client OAuth Google n'est plus configuré sur cette instance."));
 
   const parametres = new URLSearchParams({
     client_id: id.clientId,
@@ -878,7 +883,7 @@ async function echanger(code: string, verificateur: string, redirection: string,
     const e = erreurJetons(json);
     // Ici, invalid_grant veut dire « code expiré ou déjà utilisé ».
     if (json.error === "invalid_grant") {
-      throw new ErreurDrive("acces", "Le code d'autorisation a expiré ou a déjà servi. Recommencez la connexion.");
+      throw new ErreurDrive("acces", t("Le code d'autorisation a expiré ou a déjà servi. Recommencez la connexion."));
     }
     throw e;
   }
@@ -887,7 +892,8 @@ async function echanger(code: string, verificateur: string, redirection: string,
   const actualisation = typeof json.refresh_token === "string" ? json.refresh_token : "";
   const accordees = typeof json.scope === "string" ? json.scope.split(/\s+/).filter(Boolean) : [];
 
-  const revoquer = () => pointDeJetons("/revoke", new URLSearchParams({ token: actualisation || acces })).catch(() => null);
+  // Pas de révocation si un autre service Google (ou le Drive déjà branché) s'en sert : Google leur retirerait aussi l'accès (clientGoogle.ts).
+  const revoquer = async () => ((await autresUsagesGoogle("")).length > 0 ? null : pointDeJetons("/revoke", new URLSearchParams({ token: actualisation || acces })).catch(() => null));
 
   /*
    * Portée : exactement ce qui a été demandé. L'écran de consentement de
@@ -899,23 +905,23 @@ async function echanger(code: string, verificateur: string, redirection: string,
     await revoquer();
     throw new ErreurDrive(
       "acces",
-      "L'accès aux fichiers Drive n'a pas été accordé : la case correspondante était décochée dans la " +
-        "fenêtre Google. Recommencez en la laissant cochée.",
+      t("L'accès aux fichiers Drive n'a pas été accordé : la case correspondante était décochée dans la fenêtre Google. Recommencez en la laissant cochée."),
     );
   }
   const enTrop = accordees.filter((p) => p !== PORTEE);
   if (enTrop.length > 0) {
     await revoquer();
+    // « Rien n'a été gardé » plutôt que « révoqué » : la révocation n'a pas lieu quand un autre service Google s'en sert (clientGoogle.ts).
     throw new ErreurDrive(
       "acces",
-      "Google a accordé plus que la lecture du Drive. Par prudence, rien n'a été enregistré et l'accès a été révoqué.",
+      t("Google a accordé plus que la lecture du Drive. Par prudence, rien n'a été enregistré."),
     );
   }
   if (!actualisation) {
     await revoquer();
     throw new ErreurDrive(
       "api",
-      "Google n'a pas remis d'accès durable (jeton d'actualisation). Recommencez la connexion.",
+      t("Google n'a pas remis d'accès durable (jeton d'actualisation). Recommencez la connexion."),
     );
   }
 
@@ -950,7 +956,7 @@ async function echanger(code: string, verificateur: string, redirection: string,
   if (!compte) {
     jetonAcces = null;
     await revoquer();
-    throw new ErreurDrive("api", "Google Drive n'a pas indiqué le compte connecté. Recommencez.");
+    throw new ErreurDrive("api", t("Google Drive n'a pas indiqué le compte connecté. Recommencez."));
   }
 
   const enregistre: CompteEnregistre = {
@@ -964,7 +970,7 @@ async function echanger(code: string, verificateur: string, redirection: string,
   cache = enregistre;
   chargementEnCours = null;
   journaliser("drive.branche", qui, { compte });
-  return `Google Drive connecté en lecture seule : ${compte}.`;
+  return tf("Google Drive connecté en lecture seule : {0}.", compte);
 }
 
 /**
@@ -1042,8 +1048,10 @@ export async function oublier(qui: string): Promise<{ ok: true; message: string 
   fermerFlux();
   issue = null;
   const avant = cache ?? null;
+  // Google révoque tout ce que le projet a reçu de la personne : pas tant qu'un autre service Google s'en sert (clientGoogle.ts).
+  const autres = avant ? await autresUsagesGoogle("drive") : [];
   let revoque = false;
-  if (avant) {
+  if (avant && autres.length === 0) {
     const clair = dechiffrer(avant.secret);
     if (typeof clair === "string" && clair) {
       const r = await pointDeJetons("/revoke", new URLSearchParams({ token: clair })).catch(() => null);
@@ -1055,22 +1063,29 @@ export async function oublier(qui: string): Promise<{ ok: true; message: string 
   chargementEnCours = null;
   jetonAcces = null;
   journaliser("drive.debranche", qui, { compte: avant?.compte ?? null, revoque });
+  // Traduits depuis la tournée des connecteurs du 28/09/2026 : ces phrases s'affichaient en français sur un écran anglais.
   return {
     ok: true,
     message: !avant
-      ? "Aucun Google Drive n'était connecté."
+      ? t("Aucun Google Drive n'était connecté.")
       : revoque
-        ? "Google Drive a été débranché, et l'accès révoqué chez Google."
-        : "Google Drive a été débranché de cette instance. Google n'a pas confirmé la révocation : " +
-          "retirez l'accès depuis votre compte Google, rubrique Sécurité, « Vos connexions à des " +
-          "applications et services tiers ».",
+        ? t("Google Drive a été débranché, et l'accès révoqué chez Google.")
+        : autres.length > 0
+          ? messageSansRevocationGoogle("Google Drive", autres)
+          : t("Google Drive a été débranché de cette instance. Google n'a pas confirmé la révocation : retirez l'accès depuis votre compte Google, rubrique Sécurité, « Vos connexions à des applications et services tiers »."),
   };
 }
 
 function messageUtilisateur(err: unknown): string {
   if (err instanceof ErreurDrive || err instanceof ErreurTransport) return err.message;
-  return "La connexion à Google Drive a échoué.";
+  return t("La connexion à Google Drive a échoué.");
 }
+
+// Drive garde un accès du projet Google de l'instance : une révocation ailleurs le couperait (clientGoogle.ts).
+declarerUsageGoogle("drive", "Google Drive", async () => {
+  await charger();
+  return utilisable(cache);
+});
 
 /* ---------------------------------- outils ------------------------------------ */
 

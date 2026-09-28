@@ -3,9 +3,9 @@ import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypt
 import { db, type StoredCollection } from "./db.ts";
 import { chiffrer, dechiffrer, chiffrementActif, estChiffreLie } from "./secret.ts";
 import { journaliser } from "./audit.ts";
-import { clientGoogle } from "./clientGoogle.ts";
+import { autresUsagesGoogle, clientGoogle, declarerUsageGoogle, messageSansRevocationGoogle } from "./clientGoogle.ts";
 import { requeteHttps, ErreurTransport, type DemandeHttps, type ReponseHttps } from "./clientHttps.ts";
-import { t, tf } from "./langue.ts";
+import { dansLaLangue, langue, t, tf, type Langue } from "./langue.ts";
 // Google Docs, Google Forms et Dropbox (28/09/2026) : leurs définitions et ce qui leur est propre vivent à part.
 import { definitionsDocuments, identiteDropbox, revoquerDropbox } from "./natifs/documents.ts";
 import { DEFINITIONS_PROJETS, identiteProjet, revocationProjet } from "./natifs/projetsRegles.ts";
@@ -743,6 +743,15 @@ export function connecte(id: IdNatif): boolean {
   return utilisable(id) !== null;
 }
 
+// Les services Google d'ici gardent un accès du projet Google de l'instance : une révocation les couperait tous (clientGoogle.ts).
+for (const id of IDS_NATIFS) {
+  if (!DEFINITIONS[id].google) continue;
+  declarerUsageGoogle(`natif.${id}`, DEFINITIONS[id].nom, async () => {
+    await charger();
+    return utilisable(id) !== null;
+  });
+}
+
 /** Synchrone : une option (écriture, page d'entreprise) a-t-elle été accordée ? */
 export function aChoisi(id: IdNatif, choix: Choix["id"]): boolean {
   const c = connecte(id) ? magasin!.comptes[id] : null;
@@ -874,6 +883,8 @@ interface Flux {
   serveur6?: http.Server | null;
   minuterie: ReturnType<typeof setTimeout>;
   echangeEnCours: boolean;
+  /** La langue de la demande : le retour arrive hors de toute requête de l'application. */
+  langue: Langue;
 }
 
 const flux = new Map<IdNatif, Flux>();
@@ -927,7 +938,8 @@ function pageBoucle(res: http.ServerResponse, statut: number, titre: string, mes
     "X-Frame-Options": "DENY",
   });
   res.end(
-    '<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Connexion</title></head>' +
+    // Langue et titre de la demande (tournée des connecteurs du 28/09/2026) : la page disait « fr » et « Connexion » à tous.
+    `<!doctype html><html lang="${langue()}"><head><meta charset="utf-8"><title>${echapperHtml(titre)}</title></head>` +
       '<body style="font-family:system-ui,sans-serif;max-width:34rem;margin:4rem auto;padding:0 1rem;line-height:1.5">' +
       `<h1 style="font-size:1.25rem">${echapperHtml(titre)}</h1><p>${echapperHtml(message)}</p></body></html>`,
   );
@@ -1004,6 +1016,7 @@ export async function demarrer(brutId: unknown, qui: string, base: string, brutC
 
   const etat = PREFIXE_ETAT + base64url(randomBytes(32));
   const verificateur = base64url(randomBytes(48));
+  const langueDemande = langue();
   let redirection: string;
   let serveur: http.Server | null = null;
   let serveur6: http.Server | null = null;
@@ -1015,10 +1028,13 @@ export async function demarrer(brutId: unknown, qui: string, base: string, brutC
         res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" }).end("Introuvable.");
         return;
       }
-      void recevoir(adresse.searchParams, null).then(
-        (r) => pageBoucle(res, r.ok ? 200 : 400, r.ok ? tf("{0} est connecté", def.nom) : t("La connexion n'a pas abouti"), r.ok ? `${r.message} ${t("Vous pouvez fermer cet onglet.")}` : r.message),
-        () => pageBoucle(res, 500, t("La connexion n'a pas abouti"), t("Erreur inattendue.")),
-      );
+      // La page de retour aussi, dans la langue de la demande (langue.ts, `dansLaLangue`).
+      dansLaLangue(langueDemande, () => {
+        void recevoir(adresse.searchParams, null).then(
+          (r) => pageBoucle(res, r.ok ? 200 : 400, r.ok ? tf("{0} est connecté", def.nom) : t("La connexion n'a pas abouti"), r.ok ? `${r.message} ${t("Vous pouvez fermer cet onglet.")}` : r.message),
+          () => pageBoucle(res, 500, t("La connexion n'a pas abouti"), t("Erreur inattendue.")),
+        );
+      });
     };
     serveur = http.createServer(repondre);
     serveur.keepAliveTimeout = 1000;
@@ -1063,7 +1079,8 @@ export async function demarrer(brutId: unknown, qui: string, base: string, brutC
     serveur,
     serveur6,
     echangeEnCours: false,
-    minuterie: setTimeout(() => conclure(id, false, t("Le délai de dix minutes est dépassé : rien n'a été enregistré. Recommencez.")), LIMITES.fluxMs),
+    langue: langueDemande,
+    minuterie: setTimeout(() => dansLaLangue(langueDemande, () => conclure(id, false, t("Le délai de dix minutes est dépassé : rien n'a été enregistré. Recommencez."))), LIMITES.fluxMs),
   };
   f.minuterie.unref?.();
   flux.set(id, f);
@@ -1093,6 +1110,11 @@ export async function recevoir(parametres: URLSearchParams, quiCollage: string |
   const f = [...flux.values()].find((x) => memeEtat(recu, x.etat));
   // Un `state` inconnu n'annule rien : ce serait donner à n'importe qui le moyen d'interrompre.
   if (!f) return { ok: false, message: t("Cette réponse ne correspond à aucune demande de connexion en cours : elle est ignorée.") };
+  // Dans la langue de qui a cliqué « Se connecter » : c'est lui qui lira le message à l'écran (langue.ts, `dansLaLangue`).
+  return dansLaLangue(f.langue, () => recevoirFlux(f, parametres, quiCollage));
+}
+
+async function recevoirFlux(f: Flux, parametres: URLSearchParams, quiCollage: string | null): Promise<{ ok: boolean; message: string; nom?: string }> {
   const def = DEFINITIONS[f.id];
   const erreur = parametres.get("error");
   if (erreur) {
@@ -1176,7 +1198,18 @@ async function echanger(f: Flux, code: string, qui: string): Promise<string> {
   if (typeof json.open_id === "string") ids.openId = json.open_id.slice(0, 100);
   if (json.user_id !== undefined) ids.utilisateur = String(json.user_id).slice(0, 40);
 
-  const revoquer = () => revocation(id, jetons).catch(() => false);
+  const revoquer = () => revocation(id, jetons, true).catch(() => false);
+  /*
+   * Tournée des connecteurs du 28/09/2026 : le message disait toujours
+   * « l'accès a été révoqué », y compris chez LinkedIn et Instagram, qui n'ont
+   * pas de révocation, et chez Google quand un autre service s'en sert encore
+   * (clientGoogle.ts). Il ne le dit plus que si le fournisseur l'a confirmé.
+   */
+  const trop = async () => {
+    const revoque = await revoquer();
+    const base = tf("{0} a accordé plus que ce qui était demandé. Par prudence, rien n'a été enregistré.", def.nom);
+    return revoque ? `${base} ${tf("L'accès a été révoqué chez {0}.", def.nom)}` : base;
+  };
 
   // Jeton court de Meta : échangé contre celui de 60 jours, qui seul vaut la peine d'être gardé.
   if (id === "facebook" || id === "instagram") {
@@ -1202,10 +1235,7 @@ async function echanger(f: Flux, code: string, qui: string): Promise<string> {
   }
   if (def.sansPortees) {
     // Mailchimp n'a pas de portées : rien à relire, et rien ne doit revenir.
-    if (accordees.length > 0) {
-      await revoquer();
-      throw new ErreurNatif("portee", tf("{0} a accordé plus que ce qui était demandé. Par prudence, rien n'a été enregistré et l'accès a été révoqué.", def.nom));
-    }
+    if (accordees.length > 0) throw new ErreurNatif("portee", await trop());
   } else if (accordees.length === 0) {
     /*
      * Les quatre documentations disent rendre les portées accordées : leur
@@ -1230,8 +1260,11 @@ async function echanger(f: Flux, code: string, qui: string): Promise<string> {
   const demandees = f.portees.map(forme);
   const enTrop = recues.filter((p) => !demandees.includes(p) && !implicites.includes(p));
   if (enTrop.length > 0) {
-    await revoquer();
-    throw new ErreurNatif("portee", def.messages ? def.messages.enTrop(enTrop.map((p) => texteCourt(p, 80))) : tf("{0} a accordé plus que ce qui était demandé. Par prudence, rien n'a été enregistré et l'accès a été révoqué.", def.nom));
+    if (def.messages) {
+      await revoquer();
+      throw new ErreurNatif("portee", def.messages.enTrop(enTrop.map((p) => texteCourt(p, 80))));
+    }
+    throw new ErreurNatif("portee", await trop());
   }
 
   // L'essai : lire le compte avec ce jeton. Rien n'est gardé s'il échoue.
@@ -1341,10 +1374,16 @@ async function identite(id: IdNatif, acces: string, client: { clientId: string; 
   }
 }
 
-/** Révoque chez le fournisseur quand il le permet. Rend vrai s'il l'a confirmé. */
-async function revocation(id: IdNatif, j: JetonsClairs): Promise<boolean> {
+/**
+ * Révoque chez le fournisseur quand il le permet. Rend vrai s'il l'a confirmé.
+ * `echec` : la connexion en cours n'aboutit pas ; le compte déjà branché pour
+ * ce service, s'il y en a un, compte alors parmi ceux à ne pas couper.
+ */
+async function revocation(id: IdNatif, j: JetonsClairs, echec = false): Promise<boolean> {
   const client = clientDe(id);
   if (DEFINITIONS[id].google) {
+    // Google révoque tout ce que le projet a reçu de la personne (clientGoogle.ts, `autresUsagesGoogle`) : pas tant qu'un autre service s'en sert.
+    if ((await autresUsagesGoogle(echec ? "" : `natif.${id}`)).length > 0) return false;
     const r = await envoyer(id, { methode: "POST", hote: "oauth2.googleapis.com", chemin: "/revoke", entetes: FORM, corps: formulaire({ token: j.actualisation ?? j.acces }), octets: LIMITES.jetons });
     return r.statut === 200;
   }
@@ -1387,6 +1426,8 @@ export async function oublier(brutId: unknown, qui: string): Promise<{ ok: boole
   fermerFlux(id);
   issues.delete(id);
   const avant = magasin!.comptes[id];
+  // Services Google : la révocation couperait aussi les autres (clientGoogle.ts) ; lus avant d'effacer celui-ci.
+  const autresGoogle = def.google && avant ? await autresUsagesGoogle(`natif.${id}`) : [];
   let revoque = false;
   if (avant) {
     const j = jetonsDe(id, avant);
@@ -1400,7 +1441,9 @@ export async function oublier(brutId: unknown, qui: string): Promise<{ ok: boole
     ok: true,
     message: revoque
       ? tf("{0} a été débranché, et l'accès révoqué chez {0}.", def.nom)
-      : def.messages
+      : autresGoogle.length > 0
+        ? messageSansRevocationGoogle(def.nom, autresGoogle)
+        : def.messages
         ? def.messages.debranche()
         : tf("{0} a été débranché de cette instance. {0} n'a pas confirmé la révocation : retirez aussi l'accès de l'application dans les réglages de votre compte {0}.", def.nom),
   };

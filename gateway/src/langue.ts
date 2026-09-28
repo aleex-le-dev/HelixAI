@@ -77,6 +77,18 @@ export function avecLangueDe<T>(
   return contexte.run(normaliser(brut ?? undefined), travail);
 }
 
+/**
+ * Exécute un travail dans une langue retenue plus tôt. Tournée des connecteurs
+ * du 28/09/2026 : le retour d'une autorisation (Google, TikTok, Microsoft 365)
+ * arrive sur un port de la boucle locale, hors de toute requête de
+ * l'application ; le message rangé pour l'écran était donc en anglais, même
+ * pour qui avait cliqué « Se connecter » en français. La langue de la demande
+ * est retenue au départ, et le retour s'y exécute.
+ */
+export function dansLaLangue<T>(l: Langue, travail: () => T): T {
+  return contexte.run(l, travail);
+}
+
 /** La langue de la requête en cours, anglais hors requête (langue de base du produit). */
 export function langue(): Langue {
   return contexte.getStore() ?? "en";

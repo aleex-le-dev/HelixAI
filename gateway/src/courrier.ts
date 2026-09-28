@@ -9,6 +9,7 @@ import {
   type JetonsCourrier,
 } from "./courrierOauth.ts";
 import { chiffrer, dechiffrer, chiffrementActif } from "./secret.ts";
+import { clientGoogle, declarerUsageGoogle } from "./clientGoogle.ts";
 import { randomBytes } from "node:crypto";
 import { nomProduit, NomProduit } from "./marque.ts";
 import { envoyerSmtp, verifierSmtp, ErreurSmtp } from "./smtp.ts";
@@ -1764,6 +1765,32 @@ export async function charger(): Promise<boolean> {
   cache = compte;
   return compte !== null;
 }
+
+/*
+ * Une boîte Gmail branchée par « Se connecter » avec Google garde un accès du
+ * projet Google Cloud de son application. Si c'est le projet de l'application
+ * Google de l'instance (Drive, Agenda, Sheets…), débrancher l'un de ceux-là
+ * et révoquer chez Google couperait aussi la boîte (tournée des connecteurs
+ * du 28/09/2026, clientGoogle.ts). Le projet se lit dans l'identifiant :
+ * « <numéro du projet>-<…>.apps.googleusercontent.com ».
+ */
+const projetGoogle = (clientId: string): string => /^(\d+)-/.exec(clientId)?.[1] ?? "";
+declarerUsageGoogle("courrier", "Gmail", async () => {
+  await charger();
+  if (!cache?.oauth) return false;
+  const brut = dechiffrer(cache.oauth);
+  // Illisible : compté comme branché, pour ne rien couper à l'aveugle.
+  if (typeof brut !== "string") return true;
+  let jetons: Partial<JetonsCourrier>;
+  try {
+    jetons = JSON.parse(brut) as Partial<JetonsCourrier>;
+  } catch {
+    return true;
+  }
+  if (jetons.fournisseur !== "google") return false;
+  const instance = clientGoogle();
+  return !instance.ok || projetGoogle(String(jetons.clientId ?? "")) === projetGoogle(instance.clientId);
+});
 
 function compteComplet(enregistre: CompteEnregistre): CompteCourrier {
   const clair = dechiffrer(enregistre.secret);

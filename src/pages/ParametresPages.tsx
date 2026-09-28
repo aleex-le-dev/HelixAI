@@ -989,7 +989,8 @@ export function McpSettings() {
     {
       id: "agenda",
       label: t("Agenda"),
-      description: agendaPret ? t("Agenda connecté") : "Google Agenda, iCloud, Nextcloud...",
+      // Traduit (tournée des connecteurs du 28/09/2026) : « Google Agenda » s'appelle « Google Calendar » en anglais.
+      description: agendaPret ? t("Agenda connecté") : t("Google Agenda, iCloud, Nextcloud..."),
       categorie: CATEGORIE,
       marque: "googleAgenda",
       connecte: agendaPret,

@@ -87,6 +87,9 @@ const G_SCOPES = {
   slides: "https://www.googleapis.com/auth/presentations.readonly",
   youtube: "https://www.googleapis.com/auth/youtube.readonly",
   TROP: "https://www.googleapis.com/auth/spreadsheets.readonly https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/drive",
+  // Section I : Google Drive et Google Agenda, sur la même application Google.
+  drive: "https://www.googleapis.com/auth/drive.readonly",
+  agenda: "https://www.googleapis.com/auth/calendar.readonly",
 };
 const IG = "17841400000000000";
 /*
@@ -96,6 +99,10 @@ const IG = "17841400000000000";
  */
 
 const recues = [];
+/** Google : quand chaque jeton a été émis, et la dernière révocation (une horloge, pas des millisecondes). */
+const emisGoogle = new Map();
+let horlogeGoogle = 0;
+let revocationGoogle = 0;
 const controle = { tiktok401: false, uploadAilleurs: false, postPiege: false, deuxPages: false, x401: false, postPiegeX: false, x402moi: false };
 /** Demandes reçues par le faux modèle (section G). */
 const auModele = [];
@@ -125,6 +132,9 @@ function fauxModele(req, res, demande) {
   else if (/PUBLIE-LONG/.test(texteQuestion)) delta = { role: "assistant", tool_calls: [{ index: 0, id: "appel-2", type: "function", function: { name: "facebook__publier", arguments: JSON.stringify({ page: "Page Essai", message: "Premier paragraphe du post, sans surprise. ".repeat(12) + "FIN-DU-POST-CLI" }) } }] };
   else if (/ECRIT-APPEL/.test(texteQuestion)) delta = { role: "assistant", content: 'Je regarde. <tool_call>{"name":"facebook__pages","arguments":{}}</tool_call>' };
   else if (/RESUME-X/.test(texteQuestion)) delta = { role: "assistant", tool_calls: [{ index: 0, id: "appel-x", type: "function", function: { name: "x__publications", arguments: "{}" } }] };
+  // Section I : lire le Drive, l'agenda Google.
+  else if (/DRIVE-RECENTS/.test(texteQuestion)) delta = { role: "assistant", tool_calls: [{ index: 0, id: "appel-d", type: "function", function: { name: "drive__recents", arguments: "{}" } }] };
+  else if (/AGENDA-PROCHAINS/.test(texteQuestion)) delta = { role: "assistant", tool_calls: [{ index: 0, id: "appel-a", type: "function", function: { name: "agenda__prochains", arguments: "{}" } }] };
   else if (/RESUME-PAGE/.test(texteQuestion)) delta = { role: "assistant", tool_calls: [{ index: 0, id: "appel-1", type: "function", function: { name: "facebook__publications", arguments: JSON.stringify({ page: "Page Essai" }) } }] };
   else delta = { role: "assistant", content: "Rien à faire." };
   const fin = delta.tool_calls ? "tool_calls" : "stop";
@@ -160,22 +170,37 @@ const faux = serveurHttp(async (req, res) => {
   const p = url.pathname;
 
   // ---- Google ----
+  /*
+   * Tournée des connecteurs du 28/09/2026 : comme le vrai Google, une
+   * révocation retire tout ce que le projet a reçu, « invalidating any issued
+   * access or refresh tokens for all clients registered under that project »
+   * (https://developers.google.com/identity/protocols/oauth2/native-app). Un
+   * jeton émis avant la dernière révocation ne vaut plus rien.
+   */
+  const googleValide = (jeton) => (emisGoogle.get(jeton) ?? 0) > revocationGoogle;
+  const bearerGoogle = auth.replace(/^Bearer /, "");
+  if (/googleapis\.com$/.test(hote) && hote !== "oauth2.googleapis.com" && !googleValide(bearerGoogle)) return reponse(res, 401, { error: { code: 401, status: "UNAUTHENTICATED" } });
   if (hote === "oauth2.googleapis.com") {
+    const emettre = (jeton) => (emisGoogle.set(jeton, ++horlogeGoogle), jeton);
     if (p === "/token") {
       if (f.get("client_id") !== APPS.google.id || f.get("client_secret") !== APPS.google.secret) return reponse(res, 401, { error: "invalid_client" });
       if (f.get("grant_type") === "refresh_token") {
+        if (!googleValide(f.get("refresh_token") ?? "")) return reponse(res, 400, { error: "invalid_grant", error_description: "Token has been expired or revoked." });
         const svc = (f.get("refresh_token") ?? "").replace("ACTU-", "");
-        return reponse(res, 200, { access_token: `ACCES-${svc}-2`, expires_in: 3600, scope: G_SCOPES[svc] });
+        return reponse(res, 200, { access_token: emettre(`ACCES-${svc}-2`), expires_in: 3600, scope: G_SCOPES[svc] });
       }
       const code = f.get("code") ?? "";
       const svc = code.replace("CODE-", "");
       if (!f.get("code_verifier")) return reponse(res, 400, { error: "invalid_grant" });
       if (!G_SCOPES[svc]) return reponse(res, 400, { error: "invalid_grant" });
       const nom = svc === "TROP" ? "sheets" : svc;
-      return reponse(res, 200, { access_token: `ACCES-${nom}-1`, refresh_token: `ACTU-${nom}`, expires_in: 3600, scope: G_SCOPES[svc], token_type: "Bearer" });
+      return reponse(res, 200, { access_token: emettre(`ACCES-${nom}-1`), refresh_token: emettre(`ACTU-${nom}`), expires_in: 3600, scope: G_SCOPES[svc], token_type: "Bearer" });
     }
     if (p === "/tokeninfo") return reponse(res, 200, { aud: APPS.google.id, scope: "…", expires_in: 3000 });
-    if (p === "/revoke") return reponse(res, 200, {});
+    if (p === "/revoke") {
+      revocationGoogle = ++horlogeGoogle;
+      return reponse(res, 200, {});
+    }
   }
   if (hote === "sheets.googleapis.com" && auth.startsWith("Bearer ACCES-sheets")) {
     if (req.method === "GET" && /^\/v4\/spreadsheets\/[A-Za-z0-9_-]+$/.test(p)) return reponse(res, 200, { properties: { title: "Budget essai" }, sheets: [{ properties: { title: "Ventes" } }] });
@@ -185,6 +210,14 @@ const faux = serveurHttp(async (req, res) => {
   }
   if (hote === "slides.googleapis.com" && auth.startsWith("Bearer ACCES-slides")) {
     return reponse(res, 200, { title: "Plan essai", slides: [{ pageElements: [{ shape: { text: { textElements: [{ textRun: { content: "Bonjour diapositive" } }] } } }] }] });
+  }
+  if (hote === "www.googleapis.com" && auth.startsWith("Bearer ACCES-drive")) {
+    if (p === "/drive/v3/about") return reponse(res, 200, { user: { displayName: "Alice Essai", emailAddress: "alice@exemple.test" } });
+    if (p === "/drive/v3/files") return reponse(res, 200, { files: [{ id: "1FichierEssaiDrive0123456789", name: "Devis Durand.txt", mimeType: "text/plain", modifiedTime: "2026-09-27T10:00:00Z", webViewLink: "https://drive.google.com/file/d/1FichierEssaiDrive0123456789/view" }] });
+  }
+  if (hote === "www.googleapis.com" && auth.startsWith("Bearer ACCES-agenda")) {
+    if (p === "/calendar/v3/users/me/calendarList") return reponse(res, 200, { items: [{ id: "alice@exemple.test", summary: "Alice Essai", primary: true, accessRole: "owner" }] });
+    if (/^\/calendar\/v3\/calendars\/[^/]+\/events$/.test(p) && req.method === "GET") return reponse(res, 200, { items: [{ id: "evt1", summary: "Réunion essai", start: { dateTime: "2026-09-29T09:00:00+02:00" }, end: { dateTime: "2026-09-29T10:00:00+02:00" } }] });
   }
   if (hote === "www.googleapis.com" && auth.startsWith("Bearer ACCES-youtube")) {
     if (p === "/youtube/v3/channels") return reponse(res, 200, { items: [{ id: "UCabcdefghijklmnopqrstuv", snippet: { title: "Chaîne essai", publishedAt: "2024-01-01T00:00:00Z" }, statistics: { subscriberCount: "12", viewCount: "340", videoCount: "2" }, contentDetails: { relatedPlaylists: { uploads: "UUabcdefghijklmnopqrstuv" } } }] });
@@ -342,6 +375,18 @@ remplacerTransportPourEssais(async (d) => {
   const r = await fetchOrigine("http://127.0.0.1:${PORT_FAUX}" + d.chemin, { method: d.methode, headers: { ...(d.entetes ?? {}), "x-hote": d.hote }, body: d.corps, redirect: "manual" });
   return { statut: r.status, entetes: Object.fromEntries(r.headers), corps: Buffer.from(await r.arrayBuffer()), tronque: false };
 });
+/*
+ * Google Drive et Google Agenda (section I, tournée des connecteurs du
+ * 28/09/2026) ne passent pas par ce transport mais par le client HTTPS commun
+ * (clientHttps.ts, \`https.request\`) : il est dévié lui aussi vers le faux
+ * serveur, l'hôte visé dans l'en-tête x-hote. Aucune autre sortie en https.
+ */
+import https from "node:https";
+import http from "node:http";
+https.request = (options, rappel) => {
+  const o = typeof options === "string" || options instanceof URL ? new URL(options) : options;
+  return http.request({ host: "127.0.0.1", port: ${PORT_FAUX}, path: o.path ?? o.pathname, method: o.method ?? "GET", headers: { ...(o.headers ?? {}), "x-hote": o.host ?? o.hostname } }, rappel);
+};
 // Aucune autre sortie : seule la boucle locale reste joignable.
 globalThis.fetch = (entree, options) => {
   const a = new URL(typeof entree === "string" || entree instanceof URL ? String(entree) : entree.url);
@@ -544,11 +589,29 @@ console.log("\nD. Retour vérifié : portée relue, compte lu, puis seulement en
   const verif = new URLSearchParams(echange?.corps ?? "").get("code_verifier") ?? "";
   const defi = createHash("sha256").update(verif).digest("base64url");
   verifier("Sheets branché, et le vérificateur PKCE envoyé correspond au défi de l'autorisation", rS.statut === 200 && defi === s.p.get("code_challenge"), `${rS.statut} ${rS.page.slice(0, 120)}`);
+  /*
+   * Tournée des connecteurs du 28/09/2026 : le retour arrive sur la boucle
+   * locale, sans la langue de l'application ; la page et le message rangé pour
+   * l'écran étaient en anglais pour qui avait cliqué « Se connecter » en français.
+   */
+  const issueS = (await service("sheets"))?.issue?.message ?? "";
+  verifier("retour par la boucle locale : la page et le message montré à l'écran sont dans la langue de la demande (français)", /Google Sheets est connecté/.test(rS.page) && /fermer cet onglet/.test(rS.page) && /^Google Sheets connecté/.test(issueS), `${rS.page.replace(/<[^>]+>/g, " ").slice(0, 200)} | ${issueS}`);
   for (const id of ["slides", "youtube"]) {
     const d = await depart(id);
     const r = await retour(d, `CODE-${id}`);
     verifier(`${id} branché par la boucle locale`, r.statut === 200, `${r.statut} ${r.page.slice(0, 160)}`);
   }
+  /*
+   * Tournée des connecteurs du 28/09/2026 : une connexion refusée à la relecture
+   * des portées révoquait chez Google, ce qui coupait aussi les services Google
+   * déjà branchés (le faux Google, comme le vrai, retire tout au projet).
+   */
+  const avantTrop2 = recues.filter((x) => x.hote === "oauth2.googleapis.com" && x.chemin === "/revoke").length;
+  const trop2 = await depart("sheets", ["ecriture"]);
+  const rTrop2 = await retour(trop2, "CODE-TROP");
+  const revoque2 = recues.filter((x) => x.hote === "oauth2.googleapis.com" && x.chemin === "/revoke").length > avantTrop2;
+  const encore = await Promise.all(["sheets", "slides", "youtube"].map(service));
+  verifier("Google accorde trop alors que Sheets, Slides et YouTube sont branchés : refusé, sans révocation qui les couperait, et ils restent branchés", rTrop2.statut === 400 && !revoque2 && encore.every((s) => s?.configure === true) && !/révoqué/.test(rTrop2.page), `${rTrop2.statut} ${revoque2} ${rTrop2.page.replace(/<[^>]+>/g, " ").slice(0, 200)}`);
 
   const moins = await depart("linkedin", ["ecriture", "page"]);
   const rMoins = await retour(moins, "CODE-MOINS");
@@ -794,6 +857,76 @@ console.log("\nG. Un appel recopié d'une publication lue n'est pas un appel du 
   verifier("ligne de commande : la carte d'un post montre le texte entier, pas seulement son début", Boolean(carteCli) && /FIN-DU-POST-CLI/.test(vuDansLeTerminal), `${carteCli ? "carte posée" : "aucune carte"} ; terminal : ${vuDansLeTerminal.slice(-400)}`);
 }
 
+/*
+ * Tournée des connecteurs du 28/09/2026. Google Drive et Google Agenda
+ * n'avaient jamais été essayés de bout en bout, même contre un faux Google :
+ * seulement leurs routes. Ils partagent l'application Google de Sheets,
+ * Slides et YouTube, et donc leur sort chez Google quand l'un est révoqué.
+ * Et le Chat : ce que le modèle reçoit comme outils, et leurs schémas.
+ */
+console.log("\nI. Google Drive et Google Agenda, sur la même application Google ; outils proposés au modèle");
+{
+  const chat = (question) =>
+    appel("/v1/chat/completions", { method: "POST", headers: A, body: JSON.stringify({ model: "essai-injection", stream: true, tools: true, messages: [{ role: "user", content: question }] }) }).then((r) => r.text());
+  const commencer = async (chemin) => {
+    const r = await poster(chemin, A, {});
+    const j = await r.json().catch(() => ({}));
+    const u = typeof j.url === "string" ? new URL(j.url) : null;
+    return { statut: r.status, j, p: u?.searchParams ?? new URLSearchParams() };
+  };
+  const revocations = () => recues.filter((x) => x.hote === "oauth2.googleapis.com" && x.chemin === "/revoke").length;
+  const outilsDuModele = async (question) => {
+    const avant = auModele.length;
+    const flux = await chat(question);
+    const tools = Array.isArray(auModele[avant]?.tools) ? auModele[avant].tools : [];
+    return { flux, tools, noms: tools.map((o) => o?.function?.name) };
+  };
+
+  const d = await commencer("/helix/drive/connecter");
+  verifier("Drive : autorisation chez Google, drive.readonly seule, PKCE S256, retour sur la boucle locale", d.statut === 200 && d.p.get("scope") === G_SCOPES.drive && d.p.get("code_challenge_method") === "S256" && /^http:\/\/127\.0\.0\.1:\d+\/$/.test(d.p.get("redirect_uri") ?? ""), JSON.stringify(d.j).slice(0, 200));
+  const rD = await retour(d, "CODE-drive");
+  const eD = await (await appel("/helix/drive", { headers: A })).json();
+  verifier("Drive branché par la boucle locale ; la page et le message de l'écran sont en français, la langue de la demande", rD.statut === 200 && eD.configure === true && eD.compte === "alice@exemple.test" && /^Google Drive connecté en lecture seule/.test(eD.issue?.message ?? "") && /fermer cet onglet/.test(rD.page), `${rD.statut} ${rD.page.replace(/<[^>]+>/g, " ").slice(0, 160)} | ${JSON.stringify(eD).slice(0, 200)}`);
+  const ag = await commencer("/helix/agenda/google/connecter");
+  const rA = await retour(ag, "CODE-agenda");
+  const eA = await (await appel("/helix/agenda/google", { headers: A })).json();
+  verifier("Google Agenda branché en lecture par la boucle locale, message en français", rA.statut === 200 && eA.configure === true && /^Google Agenda connecté en lecture seule/.test(eA.issue?.message ?? ""), `${rA.statut} ${JSON.stringify(eA).slice(0, 200)}`);
+
+  const m = await outilsDuModele("DRIVE-RECENTS : quels fichiers ai-je modifiés ?");
+  verifier("Chat : le modèle reçoit les outils du Drive, de l'agenda Google et des services natifs branchés", ["drive__recents", "drive__lire", "agenda__prochains", "sheets__lire", "slides__lire", "youtube__chaine", "linkedin__publier", "tiktok__publier_video", "x__publier"].every((n) => m.noms.includes(n)), m.noms.join(", ").slice(0, 500));
+  const typeSur = (s, profondeur = 0) =>
+    profondeur < 6 &&
+    s !== null &&
+    typeof s === "object" &&
+    (typeof s.type === "string" || (Array.isArray(s.type) && s.type.length > 0) || Array.isArray(s.enum)) &&
+    (s.type !== "array" || typeSur(s.items, profondeur + 1)) &&
+    (s.type !== "object" || !s.properties || Object.values(s.properties).every((x) => typeSur(x, profondeur + 1)));
+  const schemaSur = (o) => {
+    const f = o?.function;
+    const p = f?.parameters;
+    if (o?.type !== "function" || !/^[A-Za-z0-9_-]{1,64}$/.test(f?.name ?? "") || typeof f?.description !== "string" || !f.description.trim()) return false;
+    if (p?.type !== "object" || !p.properties || typeof p.properties !== "object" || Array.isArray(p.properties)) return false;
+    const cles = Object.keys(p.properties);
+    if (p.required !== undefined && (!Array.isArray(p.required) || !p.required.every((r) => cles.includes(r)))) return false;
+    return Object.values(p.properties).every((x) => typeSur(x));
+  };
+  const fautifs = m.tools.filter((o) => !schemaSur(o)).map((o) => o?.function?.name);
+  verifier("Chat : chaque outil proposé a un schéma JSON valide (nom, description, objet, propriétés typées, « required » parmi elles), sans doublon", m.tools.length > 20 && fautifs.length === 0 && new Set(m.noms).size === m.noms.length, `${m.tools.length} outil(s) ; fautifs : ${fautifs.join(", ")}`);
+  verifier("Chat : le Drive est lu par un vrai appel, et le fichier revient au modèle", /Devis Durand/.test(m.flux) && recues.some((x) => x.hote === "www.googleapis.com" && x.chemin.startsWith("/drive/v3/files")), m.flux.slice(-300));
+  const fluxAgenda = await chat("AGENDA-PROCHAINS : mes rendez-vous ?");
+  verifier("Chat : l'agenda Google est lu par un vrai appel", /Réunion essai/.test(fluxAgenda), fluxAgenda.slice(-300));
+
+  const revAvant = revocations();
+  const oD = await (await poster("/helix/drive/oublier", A, {})).json();
+  verifier("Drive débranché pendant que l'agenda, Sheets, Slides et YouTube restent branchés : pas de révocation chez Google (elle les couperait), et le message le dit, en français", revocations() === revAvant && /pas révoqué chez Google/.test(oD.message ?? "") && /Google Agenda/.test(oD.message ?? "") && /Google Sheets/.test(oD.message ?? "") && oD.etat?.configure === false, oD.message);
+  const fluxApres = await chat("AGENDA-PROCHAINS : et maintenant ?");
+  verifier("l'agenda Google répond encore après le débranchement du Drive", /Réunion essai/.test(fluxApres), fluxApres.slice(-300));
+  const oA = await (await poster("/helix/agenda/google/oublier", A, {})).json();
+  verifier("Google Agenda débranché à son tour : toujours pas de révocation tant que Sheets, Slides et YouTube restent branchés", revocations() === revAvant && /pas révoqué chez Google/.test(oA.message ?? "") && /YouTube/.test(oA.message ?? "") && oA.etat?.configure === false, oA.message);
+  const m2 = await outilsDuModele("Rien de spécial.");
+  verifier("Chat : après débranchement, plus aucun outil du Drive ni de l'agenda n'est proposé ; ceux des services encore branchés le sont", m2.noms.length > 0 && !m2.noms.some((n) => /^(drive|agenda)__/.test(n ?? "")) && m2.noms.includes("sheets__lire"), m2.noms.join(", ").slice(0, 300));
+}
+
 passerelle.kill();
 await attendre(600);
 
@@ -939,6 +1072,14 @@ await avecLangueDe({ "x-helix-langue": "fr" }, new URL("http://essai/"), async (
 });
 sortie.apres = (await n.etat("http://127.0.0.1")).filter((s) => s.configure).map((s) => s.id);
 sortie.outilsApres = o.toolsForModel().map((x) => x.function.name);
+// Tournée des connecteurs du 28/09/2026 : Sheets débranché, Slides et YouTube, sur la même application Google, doivent encore marcher.
+sortie.slidesApresSheets = await appeler("slides__lire", { presentation: "1AbCdEfGhIjKlMnOpQrStUvWxYz0123456789" });
+await avecLangueDe({ "x-helix-langue": "fr" }, new URL("http://essai/"), async () => {
+  sortie.oubli_youtube = await n.oublier("youtube", A.userId);
+  sortie.slidesApresYoutube = await appeler("slides__lire", { presentation: "1AbCdEfGhIjKlMnOpQrStUvWxYz0123456789" });
+  sortie.oubli_slides = await n.oublier("slides", A.userId);
+});
+sortie.apresGoogle = (await n.etat("http://127.0.0.1")).filter((s) => s.configure).map((s) => s.id);
 console.log("RESULTAT " + JSON.stringify(sortie));
 process.exit(0);
 `,
@@ -1030,9 +1171,19 @@ process.exit(0);
   verifier("LinkedIn : le même post lancé trois fois en même temps ne part qu'une fois", memes.length === 1 && (r.memeTexte ?? []).filter((x) => x.ok).length === 1, `${memes.length} publication(s) : ${(r.memeTexte ?? []).map((x) => x.ok).join(",")}`);
   const publiesIg = apres.filter((x) => x.hote === "graph.instagram.com" && x.chemin === `/v25.0/${IG}/media_publish`).length;
   verifier("Instagram : douze publications lancées en même temps ne dépassent pas dix dans l'heure", publiesIg <= 10 && (r.rafale ?? []).some((x) => x.ok === false && /10 écritures/.test(x.content)), `${publiesIg} publication(s) Instagram`);
-  verifier("débrancher : révoqué chez Google, Meta et TikTok", ["oubli_sheets", "oubli_facebook", "oubli_tiktok"].every((k) => r[k]?.ok && /révoqué/.test(r[k]?.message ?? "")) && apres.some((x) => x.methode === "DELETE" && x.chemin.startsWith("/v25.0/me/permissions")) && apres.some((x) => x.chemin === "/v2/oauth/revoke/"), ["oubli_sheets", "oubli_facebook", "oubli_tiktok"].map((k) => r[k]?.message).join(" | "));
+  verifier("débrancher : révoqué chez Meta et TikTok", ["oubli_facebook", "oubli_tiktok"].every((k) => r[k]?.ok && /révoqué/.test(r[k]?.message ?? "")) && apres.some((x) => x.methode === "DELETE" && x.chemin.startsWith("/v25.0/me/permissions")) && apres.some((x) => x.chemin === "/v2/oauth/revoke/"), ["oubli_facebook", "oubli_tiktok"].map((k) => r[k]?.message).join(" | "));
   verifier("débrancher LinkedIn, Instagram : sans révocation documentée, l'écran dit où retirer l'accès", /réglages de votre compte/.test(r.oubli_linkedin?.message ?? "") && /réglages de votre compte/.test(r.oubli_instagram?.message ?? ""), r.oubli_linkedin?.message);
   verifier("après débranchement : plus de service ni d'outil de ces services", r.apres?.join(",") === "slides,youtube" && !r.outilsApres?.some((x) => /^(sheets|linkedin|facebook|instagram|tiktok|x)__/.test(x)), `${r.apres} ${r.outilsApres}`);
+  /*
+   * Tournée des connecteurs du 28/09/2026 : chez Google, révoquer retire tout ce
+   * que le projet a reçu (le faux Google le fait aussi). Débrancher Sheets
+   * révoquait, et Slides et YouTube, affichés « Connecté », ne marchaient plus.
+   */
+  const revG = apres.map((x, i) => ({ ...x, i })).filter((x) => x.hote === "oauth2.googleapis.com" && x.chemin === "/revoke");
+  const lectureSlides = apres.map((x, i) => ({ ...x, i })).filter((x) => x.hote === "slides.googleapis.com");
+  verifier("Google : débrancher Sheets pendant que Slides et YouTube restent branchés ne révoque rien chez Google, et le message dit pourquoi", r.oubli_sheets?.ok === true && /pas révoqué chez Google/.test(r.oubli_sheets?.message ?? "") && /Google Slides/.test(r.oubli_sheets?.message ?? "") && /YouTube/.test(r.oubli_sheets?.message ?? ""), r.oubli_sheets?.message);
+  verifier("Google : Slides lit encore après le débranchement de Sheets, puis de YouTube", r.slidesApresSheets?.ok === true && /Bonjour diapositive/.test(r.slidesApresSheets?.content ?? "") && r.slidesApresYoutube?.ok === true, `${r.slidesApresSheets?.content} | ${r.slidesApresYoutube?.content}`);
+  verifier("Google : le dernier service Google débranché (Slides) révoque, une seule fois, après la dernière lecture", revG.length === 1 && /révoqué chez Google Slides/.test(r.oubli_slides?.message ?? "") && revG[0].i > (lectureSlides.at(-1)?.i ?? Infinity) && (r.apresGoogle ?? []).length === 0, `${revG.length} révocation(s) ; ${r.oubli_youtube?.message} | ${r.oubli_slides?.message} ; ${r.apresGoogle}`);
 
   // ---- X (§ 42) ----
   lu("x__profil", /@orga_essai[\s\S]*Abonnés : 1\s234/);

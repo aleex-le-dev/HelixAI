@@ -5702,6 +5702,39 @@ console.log("\n14 bis. Seconde tournée de l'audit : dépendances npm à date fi
   );
   verifier("Epoch AI : THIRD_PARTY_NOTICES.md porte l'attribution et les modifications", /Auteur\*\* : Epoch AI/.test(notices) && /Modifications\*\* :/.test(notices) && notices.includes("https://epoch.ai/benchmarks/use-this-data"), "attribution absente");
 
+  /*
+   * Logos des services et des fournisseurs (28/09/2026) : les fichiers officiels
+   * de scripts/marques/ n'ont pas bougé depuis le relevé (empreintes), marques.ts
+   * en est bien tiré, chaque marque et chaque refus est dans les mentions, et
+   * le dessin ne passe ni par du HTML injecté ni par le réseau.
+   */
+  const marquesSources = JSON.parse(src("scripts", "marques", "sources.json"));
+  let marquesAJour = "";
+  try {
+    marquesAJour = execFileSync(process.execPath, [join(RACINE, "scripts", "gen-marques.cjs"), "--verifier"], { cwd: RACINE, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+  } catch (e) {
+    marquesAJour = "";
+    verifier("logos : fichiers officiels conformes à leurs empreintes, marques.ts engendré depuis eux", false, String(e.stderr ?? e.message).trim().slice(0, 300));
+  }
+  if (marquesAJour) verifier("logos : fichiers officiels conformes à leurs empreintes, marques.ts engendré depuis eux", /à jour/.test(marquesAJour), marquesAJour.trim());
+  const sectionLogos = notices.slice(notices.indexOf("## 4 bis. Marques et logos"), notices.indexOf("## 5. Paquets npm"));
+  const clesAbsentes = [...Object.keys(marquesSources.marques), ...Object.keys(marquesSources.neutres)].filter(
+    (c) => !sectionLogos.includes(`\`${c}\``) && !sectionLogos.includes(`**${c}**`),
+  );
+  const pagesAbsentes = Object.values(marquesSources.marques).filter((m) => !m.page || !sectionLogos.includes(m.page)).map((m) => m.titre);
+  verifier(
+    "THIRD_PARTY_NOTICES.md : section « Marques et logos » (propriété des sociétés, usage limité à désigner le service), chaque logo avec sa page de marque et la date du relevé, chaque icône neutre avec sa raison",
+    sectionLogos.length > 1000 && /appartiennent à leurs sociétés/.test(sectionLogos) && /relevé\s+le 28\/09\/2026/.test(sectionLogos) && clesAbsentes.length === 0 && pagesAbsentes.length === 0,
+    [...clesAbsentes, ...pagesAbsentes].join(", ") || "section absente",
+  );
+  const marquesTs = src("src", "components", "ui", "marques.ts");
+  const tuile = src("src", "components", "settings", "TuileService.tsx");
+  verifier(
+    "logos : dessinés depuis des données embarquées, sans HTML injecté ni adresse externe",
+    !/https?:|url\((?!#)/.test(marquesTs) && !/dangerouslySetInnerHTML|<img|fetch\(/.test(tuile) && /EXCEPTION ASSUMÉE À LA RÈGLE DES TOKENS/.test(marquesTs),
+    "marques.ts ou LogoMarque",
+  );
+
   // Prix publiés : chaque ligne rattachée à un fournisseur qui a sa page officielle et sa date.
   const prix = await import(versUrl(join(RACINE, "gateway", "src", "prixPublies.ts")).href);
   const pages = new Map(prix.FOURNISSEURS_PRIX.map((f) => [f.id, f]));

@@ -1,6 +1,8 @@
 import { useMemo, useState } from "react";
-import { ExternalLink, Table2, ChartScatter } from "lucide-react";
+import { ExternalLink, Table2, ChartScatter, Cpu } from "lucide-react";
 import { Modal } from "@/components/ui/Modal";
+import { LogoMarque } from "@/components/settings/TuileService";
+import { marqueDuModele } from "@/components/settings/marquesConnecteurs";
 import {
   MODELES_NOTES,
   SOURCE_NOTES,
@@ -499,7 +501,10 @@ export function ComparerModeles({
            */}
           {actuel && (
             <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 rounded-xl bg-muted px-3.5 py-2.5 text-sm">
-              <span className="font-medium text-foreground">{actuel.modele.id}</span>
+              <span className="inline-flex items-center gap-2 font-medium text-foreground">
+                <LogoMarque marque={marqueDuModele(actuel.modele.id)} icone={Cpu} taille={16} />
+                {actuel.modele.id}
+              </span>
               {actuel.note ? (
                 <>
                   {actuel.note.nom !== actuel.modele.id && (
@@ -564,6 +569,9 @@ export function ComparerModeles({
                 return (
                   <tr key={m.nom} className={cn("border-b border-border/60", servi && "bg-muted/60")}>
                     <td className="py-2 pr-3 text-foreground">
+                      <span className="mr-2 inline-flex align-[-3px]">
+                        <LogoMarque marque={marqueDuModele(m.nom)} icone={Cpu} taille={16} />
+                      </span>
                       {m.nom}
                       {servi && (
                         <span className="ml-2 rounded-full bg-accent/15 px-1.5 py-0.5 text-[10px] font-medium text-foreground">

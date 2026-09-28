@@ -680,11 +680,17 @@ cliquait sur l'un quand le formulaire était sur l'autre. Il affichait par
 ailleurs « Google connecté » avec l'adresse du compte local, sans aucune
 connexion réelle. Son adresse redirige vers Connecteurs.
 
-Les logos sont les tracés CC0 de Simple Icons, recopiés dans
-`src/components/ui/marques.ts`. Slack et Outlook ont une icône neutre : ces deux
-sociétés ont demandé le retrait de leur logo des bibliothèques d'icônes. Les
-couleurs de marque sont en hexadécimal, entorse assumée à la règle des tokens :
-ce sont des données imposées par ces sociétés, pas des couleurs d'interface.
+Les logos sont les fichiers officiels des kits de marque (28/09/2026), en
+couleur, avec leur version pour fond sombre quand la société en livre une :
+`scripts/marques/` (fichiers, page de marque, règle d'usage, empreintes), tirés
+dans `src/components/ui/marques.ts` par `scripts/gen-marques.cjs`. Les mêmes
+logos servent au sélecteur de modèles, aux clés d'API (Modèles cloud) et à
+« Comparer les modèles ». Slack, LinkedIn, YouTube, Facebook, Instagram,
+TikTok, Asana, HubSpot, Intercom, Airtable, Box, PayPal, Square et Tavily
+gardent une icône neutre, pour la raison donnée dans
+`scripts/marques/sources.json` et THIRD_PARTY_NOTICES.md § 4 bis. Les couleurs
+de marque sont en hexadécimal, entorse assumée à la règle des tokens : ce sont
+des données imposées par ces sociétés, pas des couleurs d'interface.
 
 **API développeur** (`src/components/settings/ClesApi.tsx`, 26/09/2026). ✅ Données
 réelles de l'instance (`/helix/cles-api`). En haut : ce qu'une clé permet, et

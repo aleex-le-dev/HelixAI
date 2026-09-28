@@ -813,6 +813,20 @@ process.exit(0);
 faux.close();
 for (const d of [DONNEES, AUX, ESPACE]) rmSync(d, { recursive: true, force: true });
 
+/*
+ * Zoom accorde les portées déclarées dans l'application : l'aide de l'écran doit
+ * nommer toutes celles que l'instance demande. Elle en oubliait quatre sur dix
+ * (docs:read:list_file_collaborators, my_notes:read:content, agentic_search:*),
+ * relevé le 28/09/2026.
+ */
+console.log("\nH. L'aide de l'écran nomme les portées que l'instance demande");
+{
+  const { REGLES_MCP } = await import(pathToFileURL(join(RACINE, "gateway", "src", "natifs", "projetsRegles.ts")).href);
+  const ecran = readFileSync(join(RACINE, "src", "components", "settings", "ConnecteurProjets.tsx"), "utf8");
+  const oubliees = [...REGLES_MCP.zoom.lecture, ...REGLES_MCP.zoom.ecriture].filter((p) => !ecran.includes(p));
+  verifier("Zoom : chaque portée demandée (lecture et écriture) figure dans l'aide pour créer l'application", oubliees.length === 0, oubliees.join(", "));
+}
+
 console.log(`\n${reussis} vérification(s) réussie(s), ${echecs.length} échec(s).`);
 if (echecs.length) {
   console.log("Échecs :");

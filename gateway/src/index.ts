@@ -478,6 +478,24 @@ async function handleChat(
       },
     });
   }
+  /*
+   * La recherche sur le web du Chat (rechercheWeb.ts) fait sortir des requêtes
+   * de l'instance, vers DuckDuckGo et les pages qu'elle lit, au nom de qui la
+   * demande : une séance, comme `tools: true`. Tournée finale de la
+   * 2026.928.6 (SECURITE.md § 53) : `tools: false, web: true` suffisait avec
+   * le seul jeton d'instance (un poste sans séance, un compte désactivé, un
+   * programme qui détient le jeton), et l'instance cherchait et ouvrait pour
+   * lui les adresses écrites dans « son » message, sans que personne ne soit
+   * nommé au journal. Un employé OpenClaw ou OpenCode n'a pas de séance : il
+   * n'y a pas droit non plus.
+   */
+  if (body.web === true && !qui) {
+    return send(res, 401, {
+      error: {
+        message: t("La recherche sur le web du Chat demande une séance ouverte. Reconnectez-vous."),
+      },
+    });
+  }
 
   /*
    * Un employé OpenClaw converse avec le modèle par cette même route, sans

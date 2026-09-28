@@ -43,7 +43,7 @@ async function identifiantsSmtp(
 }
 import { journaliser } from "./audit.ts";
 import { t, tf } from "./langue.ts";
-import { jusquaStabilite } from "./texteBrut.ts";
+import { parcourirBalises } from "./texteBrut.ts";
 
 /**
  * Connecteur courrier de Helix, en IMAP.
@@ -1355,6 +1355,9 @@ interface Extraction {
   notes: string[];
 }
 
+const BLOCS_MAIL = new Set(["script", "style"]);
+const RETOURS_MAIL = new Set(["br", "/p", "/div", "/tr", "/h1", "/h2", "/h3", "/h4", "/h5", "/h6", "/li", "/blockquote"]);
+
 /** Retire les balises d'un HTML pour en tirer un texte lisible. */
 function depouillerHtml(html: string): string {
   const entites: Record<string, string> = {
@@ -1375,15 +1378,18 @@ function depouillerHtml(html: string): string {
     acirc: "â",
     euro: "€",
   };
-  // Jusqu'à ce qu'il ne reste plus rien à retirer (texteBrut.ts) : `<scr<script>ipt>` ne laisse rien.
-  return jusquaStabilite(html, (s) =>
-    s
-      .replace(/<!--[\s\S]*?-->/g, "")
-      .replace(/<(script|style)\b[\s\S]*?<\/\1>/gi, "")
-      .replace(/<\/(p|div|tr|h[1-6]|li|blockquote)\s*>/gi, "\n")
-      .replace(/<br\s*\/?>/gi, "\n")
-      .replace(/<li\b[^>]*>/gi, "- ")
-      .replace(/<[^>]+>/g, ""),
+  /*
+   * En temps linéaire (texteBrut.ts, `parcourirBalises`), et le texte rendu ne
+   * contient plus aucune balise complète (`<scr<script>ipt>` ne recompose rien).
+   * Tournée finale de la 2026.928.6 (SECURITE.md § 53) : les expressions
+   * d'avant coûtaient le carré de la taille d'un mail fait de `<` sans `>` ;
+   * une tranche de lecture (256 Ko) arrêtait la passerelle une demi-minute, et
+   * n'importe qui peut écrire à la boîte de l'organisation.
+   */
+  return parcourirBalises(
+    html,
+    (nom) => (nom === "li" ? "- " : RETOURS_MAIL.has(nom) ? "\n" : ""),
+    { ignores: BLOCS_MAIL },
   )
     .replace(/&#x([0-9a-f]+);/gi, (_t, h: string) => String.fromCodePoint(parseInt(h, 16)))
     .replace(/&#(\d+);/g, (_t, d: string) => String.fromCodePoint(Number(d)))

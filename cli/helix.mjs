@@ -281,6 +281,14 @@ async function appel(ctx, chemin, { methode = "GET", corps, seance = true, signa
       method: methode,
       headers: {
         Authorization: `Bearer ${ctx.jeton}`,
+        /*
+         * La ligne de commande parle français (cli/textes.mjs) : les messages de
+         * l'instance aussi. Sans cet en-tête, l'instance répond en anglais à qui
+         * ne dit pas sa langue (décidé le 27/09/2026, gateway/src/langue.ts), et
+         * le terminal mêlait les deux langues (« Files », « Choose your own
+         * password… » au milieu du français ; essai-cli.mjs échouait depuis).
+         */
+        "X-Helix-Langue": "fr",
         ...(corps !== undefined ? { "Content-Type": "application/json" } : {}),
         ...(seance && ctx.seance ? { "X-Helix-Session": ctx.seance } : {}),
         ...(entetes ?? {}),

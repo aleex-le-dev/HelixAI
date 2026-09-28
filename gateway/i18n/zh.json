@@ -672,6 +672,7 @@
   "La personne a refusé les actions d'écran pour cette demande. Arrête-toi : n'essaie pas autrement, explique ce qui n'a pas été fait.": "对方拒绝了本次请求的屏幕操作。请停止：不要换其他方式尝试，说明哪些未完成。",
   "La préparation du paquet a échoué : {0}": "安装包准备失败：{0}",
   "La recherche ne répond pas pour l'instant (DuckDuckGo freine les recherches trop rapprochées) : réessaie dans quelques minutes, ou ouvre une adresse déjà vue.": "搜索暂时无响应（DuckDuckGo 会限制过于频繁的搜索）：请几分钟后再试，或打开已见过的地址。",
+  "La recherche sur le web du Chat demande une séance ouverte. Reconnectez-vous.": "在聊天中搜索网络需要已登录的会话。请重新登录。",
   "La rédaction s'est arrêtée à la partie {0} (« {1} ») : {2}. Les parties suivantes n'ont pas été rédigées.": "撰写在第 {0} 部分（“{1}”）停止：{2}。后续部分未撰写。",
   "La réflexion de {0} ne finissait pas (plus de 40 000 jetons) : elle a été arrêtée. Relancez la question avec un niveau de réflexion plus bas, ou choisissez un autre modèle.": "{0} 的思考无法结束（超过 40,000 个词元）：已被停止。请用更低的思考级别重新提问，或选择其他模型。",
   "La réponse de {0} est partie en boucle (le même motif répété sans fin) : elle a été arrêtée, et ce qui s'affiche au-dessus n'est pas une réponse. Relancez la question ; si cela recommence, choisissez le niveau de réflexion « Aucun » ou un autre modèle.": "{0} 的回答陷入了循环（同一片段无休止地重复）：已被停止，上方显示的内容并不是回答。请重新提问；如果再次出现，请选择“无”思考级别或其他模型。",

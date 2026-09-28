@@ -2,6 +2,7 @@ import { extname } from "node:path";
 import { aChoisi, appelerApi, connecte, envoyer, ErreurNatif, type IdNatif, type ReponseApi } from "../oauthNatif.ts";
 import { borner, critereSur, dateFrancaise, minuitLocal } from "../clientHttps.ts";
 import { lireZip } from "../relecture.ts";
+import { parcourirBalises } from "../texteBrut.ts";
 import type { Genre } from "../outilsNatifs.ts";
 import { hoteTelechargement, type ServiceMicrosoft } from "./microsoftBase.ts";
 
@@ -82,11 +83,15 @@ const assembler = (entete: string, lignes: string[]) => {
   }
   return corps.trimEnd();
 };
-/** Le texte d'un corps HTML (message Teams) : balises retirées, entités courantes rendues. */
+/**
+ * Le texte d'un corps HTML (message Teams) : balises retirées, entités courantes
+ * rendues. En temps linéaire (texteBrut.ts, `parcourirBalises`, SECURITE.md
+ * § 53) : les expressions d'avant coûtaient le carré de la taille d'un message
+ * fait de `<` sans `>`, écrit par n'importe quel membre d'une équipe.
+ */
+const RETOURS_TEAMS = new Set(["br", "/p", "/div", "/li"]);
 const sansHtml = (html: string) =>
-  html
-    .replace(/<(br|\/p|\/div|\/li)[^>]*>/gi, "\n")
-    .replace(/<[^>]+>/g, "")
+  parcourirBalises(html, (nom) => (RETOURS_TEAMS.has(nom) ? "\n" : ""))
     .replace(/&nbsp;/g, " ")
     .replace(/&lt;/g, "<")
     .replace(/&gt;/g, ">")
@@ -536,14 +541,36 @@ async function sharepointSites(args: Record<string, unknown>): Promise<Resultat>
 
 const TEXTES: Record<string, true> = { ".txt": true, ".md": true, ".csv": true, ".json": true, ".xml": true, ".log": true, ".tsv": true };
 
-/** Le texte d'un document Word : les paragraphes de `word/document.xml`, lus avec la borne contre les bombes ZIP (relecture.ts). */
+/**
+ * Le texte d'un document Word : les paragraphes de `word/document.xml`, lus avec
+ * la borne contre les bombes ZIP (relecture.ts). Seul le texte des `<w:t>`
+ * compte, une tabulation pour `<w:tab/>`, un paragraphe par `</w:p>`.
+ *
+ * En temps linéaire (texteBrut.ts, `parcourirBalises`, SECURITE.md § 53) :
+ * `/<w:t(?:\s[^>]*)?>…/g` coûtait le carré de la taille d'un paragraphe fait de
+ * `<w:t ` sans `>`, et `document.xml` peut faire 16 Mo : un fichier déposé dans
+ * un OneDrive ou un SharePoint partagé arrêtait la passerelle.
+ */
 export function texteWord(octets: Buffer): string {
   const doc = lireZip(octets, ["word/document.xml"]).get("word/document.xml");
   if (!doc) return "";
   const entites = (s: string) => s.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&amp;/g, "&");
-  return doc
-    .split(/<\/w:p>/)
-    .map((p) => entites([...p.matchAll(/<w:t(?:\s[^>]*)?>([^<]*)<\/w:t>|<w:tab\/>/g)].map((m) => m[1] ?? "\t").join("")).trim())
+  let dansTexte = false;
+  const brut = parcourirBalises(
+    doc,
+    (nom, interieur) => {
+      if (nom === "w:t") dansTexte = !interieur.trimEnd().endsWith("/");
+      else if (nom === "/w:t") dansTexte = false;
+      else if (nom === "w:tab") return "\t";
+      // Un paragraphe par ligne : le texte lu ne porte plus de retour à la ligne à lui (les retours du XML ne sont pas du texte).
+      else if (nom === "/w:p") return "\n";
+      return "";
+    },
+    { surTexte: (t) => (dansTexte ? t.replace(/[\r\n]/g, "") : "") },
+  );
+  return brut
+    .split("\n")
+    .map((p) => entites(p).trim())
     .filter(Boolean)
     .join("\n");
 }

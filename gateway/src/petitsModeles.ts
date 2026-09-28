@@ -383,9 +383,19 @@ export function appelsDansLeTexte(texte: string, proposes: string[], plafond = 8
   }
   if (appels.length === 0 && balises.length === 0 && /<function=/.test(texte)) ajouterXml(texte);
   if (appels.length === 0 && balises.length === 0) {
-    // Toute la réponse est un appel (éventuellement dans un bloc ```json).
-    const nu = texte.trim().replace(/^```(?:json)?\s*|\s*```$/g, "");
-    if (/^\{[\s\S]*"(name|tool)"\s*:[\s\S]*\}$/.test(nu)) ajouterJson(nu);
+    /*
+     * Toute la réponse est un appel (éventuellement dans un bloc ```json).
+     * Sans expression à double `[\s\S]*` ni `\s*```$` (tournée finale de la
+     * 2026.928.6, SECURITE.md § 53) : sur un texte lu qui commence par `{`, porte
+     * beaucoup de `"name":` ou une longue suite de blancs, elles coûtaient le
+     * carré de sa taille (80 000 blancs : 6 s), à chaque appel relu par
+     * `appelsLus`.
+     */
+    let nu = texte.trim();
+    const ouverture = /^```(?:json)?/.exec(nu);
+    if (ouverture) nu = nu.slice(ouverture[0].length).trimStart();
+    if (nu.endsWith("```")) nu = nu.slice(0, -3).trimEnd();
+    if (nu.startsWith("{") && nu.endsWith("}") && /"(name|tool)"\s*:/.test(nu)) ajouterJson(nu);
   }
   return appels.slice(0, plafond);
 }
@@ -444,27 +454,93 @@ export function appelsLus(messages: unknown[], proposes: string[]): Set<string> 
   return vus;
 }
 
-/** Les objets JSON d'un texte qui commencent par `{"name"` ou `{"tool"`, refermés à leur accolade (chaînes comprises). */
+/**
+ * Les objets JSON d'un texte qui portent une clé `"name"` ou `"tool"`, **où
+ * qu'elle soit dans l'objet**, refermés à leur accolade (chaînes comprises).
+ *
+ * Tournée finale de la 2026.928.6 (SECURITE.md § 53) : seuls les objets qui
+ * commençaient par `{"name"` étaient relevés. Or la réponse du modèle faite
+ * d'un seul objet est lancée comme un appel quel que soit l'ordre de ses clés
+ * (`appelsDansLeTexte`). Un message Telegram, une page web ou un mail lu qui
+ * écrivait `{"arguments": {…}, "name": "telegram__envoyer"}` n'était donc pas
+ * reconnu comme lu : recopié seul par le modèle, il partait comme un appel
+ * « du modèle » (une carte pour un envoi, rien pour une lecture ou au niveau
+ * « Tout approuver ») ; avec la recherche sur le web, un vrai appel qui le
+ * répétait n'était pas refusé non plus. Essayé avec les pièces seules.
+ *
+ * On part donc de chaque clé `"name"` / `"tool"` et on remonte à l'accolade
+ * qui ouvre son objet (`ouvertureDe`), puis on le referme en avançant. Le
+ * travail est borné par un budget de caractères parcourus, proportionnel au
+ * texte : un texte fait pour épuiser ce budget est dit comme limite (§ 53).
+ */
 function objetsAppel(texte: string): string[] {
   const trouves: string[] = [];
-  for (const m of texte.matchAll(/\{\s*"(?:name|tool)"\s*:/g)) {
-    let profondeur = 0;
-    let dansChaine = false;
-    for (let i = m.index!; i < Math.min(texte.length, m.index! + 100_000); i++) {
-      const c = texte[i];
-      if (dansChaine) {
-        if (c === "\\") i++;
-        else if (c === '"') dansChaine = false;
-      } else if (c === '"') dansChaine = true;
-      else if (c === "{") profondeur++;
-      else if (c === "}" && --profondeur === 0) {
-        trouves.push(texte.slice(m.index!, i + 1));
-        break;
-      }
+  const debuts = new Set<number>();
+  const budget = { reste: 4 * texte.length + 2_000_000 };
+  for (const m of texte.matchAll(/"(?:name|tool)"\s*:/g)) {
+    if (budget.reste <= 0) break;
+    const debut = ouvertureDe(texte, m.index!, budget);
+    if (debut < 0 || debuts.has(debut)) continue;
+    debuts.add(debut);
+    const objet = objetDepuis(texte, debut, budget);
+    /*
+     * Pas de nombre maximal d'objets (il y en avait un, 200) : deux cents
+     * objets `{"name": …}` ordinaires placés avant l'appel suffisaient à le
+     * cacher. Chaque objet relevé sera relu (JSON.parse) : sa longueur est
+     * décomptée du même budget.
+     */
+    if (objet) {
+      budget.reste -= objet.length;
+      trouves.push(objet);
     }
-    if (trouves.length >= 200) break;
   }
   return trouves;
+}
+
+/**
+ * L'accolade qui ouvre l'objet dont `position` (le guillemet d'une clé) fait
+ * partie, en remontant, chaînes comprises : un guillemet précédé d'un nombre
+ * impair de barres obliques inverses est échappé. -1 s'il n'y en a pas à moins
+ * de 100 000 caractères, ou si la clé est directement dans un tableau.
+ */
+function ouvertureDe(texte: string, position: number, budget: { reste: number }): number {
+  let profondeur = 0;
+  let dansChaine = false;
+  const borne = Math.max(0, position - 100_000);
+  for (let i = position - 1; i >= borne; i--) {
+    budget.reste--;
+    const c = texte[i];
+    if (c === '"') {
+      let barres = 0;
+      for (let j = i - 1; j >= borne && texte[j] === "\\"; j--) barres++;
+      if (barres % 2 === 0) dansChaine = !dansChaine;
+      continue;
+    }
+    if (dansChaine) continue;
+    if (c === "}" || c === "]") profondeur++;
+    else if (c === "{" || c === "[") {
+      if (profondeur === 0) return c === "{" ? i : -1;
+      profondeur--;
+    }
+  }
+  return -1;
+}
+
+/** L'objet qui commence à `debut` (une accolade), refermé à son accolade, chaînes comprises ; null s'il ne se referme pas à 100 000 caractères. */
+function objetDepuis(texte: string, debut: number, budget: { reste: number }): string | null {
+  let profondeur = 0;
+  let dansChaine = false;
+  for (let i = debut; i < Math.min(texte.length, debut + 100_000); i++) {
+    budget.reste--;
+    const c = texte[i];
+    if (dansChaine) {
+      if (c === "\\") i++;
+      else if (c === '"') dansChaine = false;
+    } else if (c === '"') dansChaine = true;
+    else if (c === "{") profondeur++;
+    else if (c === "}" && --profondeur === 0) return texte.slice(debut, i + 1);
+  }
+  return null;
 }
 
 function essayerValeur(t: string): unknown {

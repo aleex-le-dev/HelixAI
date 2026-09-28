@@ -127,6 +127,8 @@ export const dossierBases = (): string => join(racine(), "sessions");
 export const fichierSessions = (): string => join(racine(), "sessions.json");
 const fichierReplis = () => join(racine(), "replis.log");
 const cheminEnveloppe = () => join(racine(), "shell-code");
+/** Le dossier mis en tête du PATH d'une commande réécrite : il n'y a là que le `rtk` de Helix (`ecrireRtkDesCommandes`). */
+const dossierChemin = () => join(racine(), "chemin");
 
 /** Même forme que les identifiants de session acceptés par la passerelle : aucun `.` ni `/`, donc un nom de fichier sûr. */
 const SESSION = /^[A-Za-z0-9_-]{1,64}$/;
@@ -294,6 +296,7 @@ export function ecrireEnveloppe(): string | null {
   mkdirSync(racine(), { recursive: true, mode: 0o700 });
   mkdirSync(dossierBases(), { recursive: true, mode: 0o700 });
   const rtk = rtkUtilise();
+  ecrireRtkDesCommandes(rtk);
   const script = [
     "#!/bin/sh",
     "# Écrit par la passerelle Helix (gateway/src/rtk.ts) : ne pas modifier, réécrit à chaque démarrage de l'agent de code.",
@@ -301,6 +304,7 @@ export function ecrireEnveloppe(): string | null {
     `REEL=${litteral(shellReel())}`,
     `RTK=${litteral(rtk)}`,
     `JOURNAL=${litteral(fichierReplis())}`,
+    `CHEMIN=${litteral(dossierChemin())}`,
     'if [ "$#" -eq 2 ] && [ "$1" = "-c" ] && [ -n "${HELIX_RTK_DB:-}" ]; then',
     '  if [ -x "$RTK" ]; then',
     '    REECRITE=$(RTK_TELEMETRY_DISABLED=1 RTK_RECALL=0 RTK_DB_PATH="$HELIX_RTK_DB" "$RTK" rewrite "$2" 2>/dev/null)',
@@ -308,7 +312,7 @@ export function ecrireEnveloppe(): string | null {
     '    case "$CODE" in',
     "      0|3)",
     '        if [ -n "$REECRITE" ]; then',
-    '          RTK_TELEMETRY_DISABLED=1; RTK_RECALL=0; RTK_DB_PATH="$HELIX_RTK_DB"; PATH="${RTK%/*}:$PATH"',
+    '          RTK_TELEMETRY_DISABLED=1; RTK_RECALL=0; RTK_DB_PATH="$HELIX_RTK_DB"; PATH="$CHEMIN:$PATH"',
     "          export RTK_TELEMETRY_DISABLED RTK_RECALL RTK_DB_PATH PATH",
     '          exec "$REEL" -c "$REECRITE"',
     "        fi",
@@ -327,6 +331,62 @@ export function ecrireEnveloppe(): string | null {
   writeFileSync(chemin, script, { encoding: "utf8", mode: 0o700 });
   chmodSync(chemin, 0o700);
   return chemin;
+}
+
+/**
+ * Sous-commandes de RTK qu'une commande de l'agent ne lance pas : elles
+ * changent sa configuration ou sa confiance (`trust`, `untrust`, `init`,
+ * `config`, `telemetry`, `hook`), ou lisent l'historique de Claude Code de la
+ * personne (`discover`, `session`, `learn`, `cc-economics`), hors du projet.
+ */
+const SOUS_COMMANDES_REFUSEES = ["trust", "untrust", "init", "config", "telemetry", "hook", "discover", "session", "learn", "cc-economics"];
+
+/**
+ * Le `rtk` que trouve une commande réécrite (le dossier `chemin`, en tête de
+ * son PATH), à la place du vrai.
+ *
+ * Tournée finale de la 2026.928.6 (SECURITE.md § 53). Les filtres d'un projet
+ * (`.rtk/filters.toml`) ne devaient valoir qu'après `rtk trust`. Mais RTK
+ * 0.50.0 les applique sans cela quand la commande porte
+ * `RTK_TRUST_PROJECT_FILTERS=1` et une variable d'intégration continue
+ * (`GITHUB_ACTIONS`, `GITLAB_CI`, `JENKINS_URL`, `BUILDKITE`), et une commande
+ * réécrite avait le vrai `rtk` dans son PATH : `rtk trust --yes` y marchait,
+ * pour de bon (la confiance est gardée dans les réglages de RTK de la
+ * personne, hors de Helix). Essayé avec le vrai RTK : un dépôt dont le filtre
+ * retire tout et écrit « tous les tests passent » faisait lire cette phrase au
+ * modèle à la place d'un échec, après `GITHUB_ACTIONS=true
+ * RTK_TRUST_PROJECT_FILTERS=1 make test`.
+ *
+ * Ce `rtk`-ci retire `RTK_TRUST_PROJECT_FILTERS`, remet la télémétrie et la
+ * copie des sorties coupées (une commande pouvait les rallumer en les
+ * écrivant devant `rtk`), refuse les sous-commandes ci-dessus, puis passe la
+ * main au vrai. Une commande qui nommerait le vrai par son chemin, dans les
+ * données de Helix, le montre en entier sur sa carte.
+ */
+function ecrireRtkDesCommandes(rtk: string): void {
+  mkdirSync(dossierChemin(), { recursive: true, mode: 0o700 });
+  const script = [
+    "#!/bin/sh",
+    "# Écrit par la passerelle Helix (gateway/src/rtk.ts) : le rtk que trouvent les commandes réécrites de l'agent de code.",
+    `VRAI=${litteral(rtk)}`,
+    "unset RTK_TRUST_PROJECT_FILTERS",
+    "RTK_TELEMETRY_DISABLED=1; RTK_RECALL=0",
+    "export RTK_TELEMETRY_DISABLED RTK_RECALL",
+    'for ARG in "$@"; do',
+    '  case "$ARG" in',
+    "    -*) continue ;;",
+    `    ${SOUS_COMMANDES_REFUSEES.join("|")})`,
+    "      printf 'rtk %s : refusé dans Helix Code (réglages et confiance de RTK, historique de la personne).\\n' \"$ARG\" >&2",
+    "      exit 126 ;;",
+    "  esac",
+    "  break",
+    "done",
+    'exec "$VRAI" "$@"',
+    "",
+  ].join("\n");
+  const chemin = join(dossierChemin(), "rtk");
+  writeFileSync(chemin, script, { encoding: "utf8", mode: 0o700 });
+  chmodSync(chemin, 0o700);
 }
 
 /* ── Les sessions où RTK sert ─────────────────────────────────────────── */

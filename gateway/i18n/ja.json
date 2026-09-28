@@ -672,6 +672,7 @@
   "La personne a refusé les actions d'écran pour cette demande. Arrête-toi : n'essaie pas autrement, explique ce qui n'a pas été fait.": "この依頼では、ユーザーが画面操作を拒否しました。ここで止めてください。別の方法を試さず、実行しなかった内容を説明してください。",
   "La préparation du paquet a échoué : {0}": "パッケージの準備に失敗しました：{0}",
   "La recherche ne répond pas pour l'instant (DuckDuckGo freine les recherches trop rapprochées) : réessaie dans quelques minutes, ou ouvre une adresse déjà vue.": "現在、検索が応答しません（DuckDuckGo は短時間に続く検索を制限しています）。数分後にもう一度試すか、すでに見たアドレスを開いてください。",
+  "La recherche sur le web du Chat demande une séance ouverte. Reconnectez-vous.": "チャットでのウェブ検索には、ログイン中のセッションが必要です。もう一度ログインしてください。",
   "La rédaction s'est arrêtée à la partie {0} (« {1} ») : {2}. Les parties suivantes n'ont pas été rédigées.": "パート {0}（「{1}」）で執筆が止まりました：{2}。以降のパートは執筆されていません。",
   "La réflexion de {0} ne finissait pas (plus de 40 000 jetons) : elle a été arrêtée. Relancez la question avec un niveau de réflexion plus bas, ou choisissez un autre modèle.": "{0} の推論が終わりませんでした（40,000 トークン超）ので、停止しました。推論レベルを下げて質問し直すか、別のモデルを選んでください。",
   "La réponse de {0} est partie en boucle (le même motif répété sans fin) : elle a été arrêtée, et ce qui s'affiche au-dessus n'est pas une réponse. Relancez la question ; si cela recommence, choisissez le niveau de réflexion « Aucun » ou un autre modèle.": "{0} の応答がループしました（同じパターンが延々と繰り返されました）ので、停止しました。上に表示されている内容は回答ではありません。質問し直してください。繰り返す場合は、推論レベルを「なし」にするか、別のモデルを選んでください。",

@@ -11,6 +11,8 @@ import * as natifs from "./outilsNatifs.ts";
 import * as bibliotheque from "./bibliotheque.ts";
 import * as controleWeb from "./controleWeb.ts";
 import { definirEspaceDeTravail } from "./approbation.ts";
+import { estAdministrateur } from "./roles.ts";
+import { estEcritureMcpProjet } from "./natifs/projetsRegles.ts";
 
 // La barrière juge un déplacement « vers un dossier » comme `adapterFichiers` l'exécute, depuis le même dossier de travail.
 definirEspaceDeTravail(workspace);
@@ -65,7 +67,8 @@ export function outilsDeFamille(famille: Famille): DefinitionOutil[] {
       return bibliotheque.toolsForModel();
     case "fichiers": {
       // Les serveurs MCP de l'instance : le serveur de fichiers, et ceux du catalogue ; plus le contrôle du code web.
-      const mcp = outilsMcp();
+      // Sans les écritures de Trello, Monday, ClickUp, Todoist, Calendly et Zoom : un employé ne parle pas au nom de l'organisation (SECURITE.md § 48).
+      const mcp = outilsMcp().filter((o) => !estEcritureMcpProjet(o.function.name));
       return mcp.length > 0 ? [...mcp, ...controleWeb.toolsForModel()] : mcp;
     }
   }
@@ -118,6 +121,14 @@ export async function executerOutil(
     case "fichiers":
       // Le contrôle du code web est de l'instance, pas d'un serveur MCP.
       if (nom.startsWith("controle__")) return controleWeb.callTool(nom, args);
+      /*
+       * Écrire dans Trello, Monday, ClickUp, Todoist, Calendly ou Zoom : au nom
+       * de l'organisation, donc l'administrateur seul, vérifié au moment d'agir
+       * (SECURITE.md § 48), comme les publications natives.
+       */
+      if (estEcritureMcpProjet(nom) && !(pour?.userId && (await estAdministrateur(pour.userId)))) {
+        return { ok: false, content: "Refusé : écrire par ce connecteur, au nom de l'organisation, est réservé à l'administrateur de l'instance. Dis-le à l'utilisateur ; rien n'a été fait." };
+      }
       return appelerMcp(nom, adapterFichiers(nom, args));
   }
 }

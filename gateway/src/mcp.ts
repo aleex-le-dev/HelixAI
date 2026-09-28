@@ -12,6 +12,7 @@ import { deployment } from "./deployment.ts";
 import { t, tf } from "./langue.ts";
 import { cheminProtegeDans, filtrerResultat } from "./zonesProtegees.ts";
 import { assurerNodePrive, DEPENDANCES_NPM_AVANT, nodePriveInstallable, npxPrive } from "./installationOpenClaw.ts";
+import { retenirOutils } from "./natifs/projetsRegles.ts";
 
 /**
  * Gestionnaire de serveurs MCP auto-hébergés (ARCHITECTURE.md, ADR-004).
@@ -255,7 +256,12 @@ async function demarrerDistant(
   const listed = await client.listTools();
   entry.client = client;
   entry.error = undefined;
-  entry.tools = listed.tools.map((t) => ({
+  /*
+   * Trello, Monday, ClickUp, Todoist, Calendly, Zoom (SECURITE.md § 48) : les
+   * lectures sont relevées, les écritures retirées si l'administrateur ne les
+   * a pas cochées. Un autre serveur passe tel quel.
+   */
+  entry.tools = retenirOutils(id, listed.tools, (nom) => qualify(id, nom)).map((t) => ({
     name: qualify(id, t.name),
     serverId: id,
     toolName: t.name,

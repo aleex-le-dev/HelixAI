@@ -22,6 +22,8 @@ import {
   type IdNatif,
   type ReponseApi,
 } from "./oauthNatif.ts";
+// Brevo et Mailchimp (SECURITE.md § 48) : leurs outils vivent à part, mêmes gardes que ceux-ci.
+import * as projets from "./natifs/projets.ts";
 
 /**
  * Les outils de l'agent pour Google Sheets, Google Slides, YouTube, LinkedIn,
@@ -67,6 +69,8 @@ const PREFIXES: Record<string, IdNatif> = {
   instagram__: "instagram",
   tiktok__: "tiktok",
   x__: "x",
+  brevo__: "brevo",
+  mailchimp__: "mailchimp",
 };
 
 /** Préfixes réservés : aucun connecteur ajouté ne peut les prendre (connecteurs.ts, `IDS_RESERVES`). */
@@ -215,6 +219,7 @@ export function toolsForModel(): Outil[] {
       );
     }
   }
+  outils.push(...projets.toolsForModel());
   return outils;
 }
 
@@ -372,6 +377,7 @@ async function executer(nom: string, args: Record<string, unknown>): Promise<Res
     case "x__publier":
       return xPublier(args);
   }
+  if (nom.startsWith("brevo__") || nom.startsWith("mailchimp__")) return projets.executer(nom, args, sousGarde);
   return refus(`Outil inconnu : ${nom}.`);
 }
 

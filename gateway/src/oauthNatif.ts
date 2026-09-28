@@ -6,6 +6,7 @@ import { journaliser } from "./audit.ts";
 import { clientGoogle } from "./clientGoogle.ts";
 import { requeteHttps, ErreurTransport, type DemandeHttps, type ReponseHttps } from "./clientHttps.ts";
 import { t, tf } from "./langue.ts";
+import { DEFINITIONS_PROJETS, identiteProjet, revocationProjet } from "./natifs/projetsRegles.ts";
 
 /**
  * Connexions natives de 2026.928.2 : Google Sheets, Google Slides, YouTube,
@@ -68,18 +69,20 @@ import { t, tf } from "./langue.ts";
  * (section H de scripts/essai-natifs.mjs).
  */
 
-export type IdNatif = "sheets" | "slides" | "youtube" | "linkedin" | "facebook" | "instagram" | "tiktok" | "x";
-export const IDS_NATIFS: IdNatif[] = ["sheets", "slides", "youtube", "linkedin", "facebook", "instagram", "tiktok", "x"];
+// Brevo et Mailchimp (28/09/2026, natifs/projetsRegles.ts, SECURITE.md § 48).
+export type IdNatif = "sheets" | "slides" | "youtube" | "linkedin" | "facebook" | "instagram" | "tiktok" | "x" | "brevo" | "mailchimp";
+export const IDS_NATIFS: IdNatif[] = ["sheets", "slides", "youtube", "linkedin", "facebook", "instagram", "tiktok", "x", "brevo", "mailchimp"];
 export const estIdNatif = (v: unknown): v is IdNatif => typeof v === "string" && (IDS_NATIFS as string[]).includes(v);
 
 /** Une option cochée à la connexion : des portées de plus, et dit si elles demandent une revue chez le fournisseur. */
 export interface Choix {
-  id: "ecriture" | "page";
+  /** `envoi` : envoyer une campagne (Brevo, Mailchimp), en plus des brouillons. */
+  id: "ecriture" | "page" | "envoi";
   portees: string[];
   revue: boolean;
 }
 
-interface Definition {
+export interface Definition {
   id: IdNatif;
   nom: string;
   google: boolean;
@@ -113,6 +116,10 @@ interface Definition {
    * passerelle, à l'écoute sur la boucle locale par défaut (config.ts).
    */
   sansLocalhost?: boolean;
+  /** Le fournisseur n'a pas de portées (Mailchimp) : aucune n'est demandée ni relue ; la lecture seule est tenue par les outils. */
+  sansPortees?: boolean;
+  /** Hôtes de l'API qui dépendent du compte (Mailchimp : `<dc>.api.mailchimp.com`), de cette forme seulement. */
+  motifHote?: RegExp;
   extras: Record<string, string>;
   /** Hôtes que ce service a le droit de joindre. Aucun autre, quoi qu'on demande. */
   hotes: string[];
@@ -425,6 +432,7 @@ export const DEFINITIONS: Record<IdNatif, Definition> = {
       "https://docs.x.com/x-api/fundamentals/rate-limits",
     ],
   },
+  ...DEFINITIONS_PROJETS,
 };
 
 const AGENT = "Connecteur-Natif/1";
@@ -482,7 +490,7 @@ export async function envoyer(
   d: { methode: DemandeHttps["methode"]; hote: string; chemin: string; entetes?: Record<string, string>; corps?: string | Buffer; octets?: number; delaiTotalMs?: number },
 ): Promise<ReponseApi> {
   const def = DEFINITIONS[id];
-  if (!def.hotes.includes(d.hote)) throw new ErreurNatif("config", `Hôte non autorisé pour ${def.nom}.`);
+  if (!def.hotes.includes(d.hote) && !def.motifHote?.test(d.hote)) throw new ErreurNatif("config", `Hôte non autorisé pour ${def.nom}.`);
   const r = await transport(
     {
       methode: d.methode,
@@ -919,7 +927,8 @@ export async function demarrer(brutId: unknown, qui: string, base: string, brutC
   const demandes = Array.isArray(brutChoix) ? brutChoix.filter((c): c is string => typeof c === "string") : [];
   const choix = def.choix.filter((c) => demandes.includes(c.id));
   // La page d'une entreprise LinkedIn sans écriture : on lit, on ne publie pas.
-  const portees = [...def.lecture, ...choix.flatMap((c) => (c.id === "page" && !demandes.includes("ecriture") ? c.portees.filter((p) => !p.startsWith("w_")) : c.portees))];
+  // Sans doublon : chez Brevo, un brouillon et un envoi demandent la même portée.
+  const portees = [...new Set([...def.lecture, ...choix.flatMap((c) => (c.id === "page" && !demandes.includes("ecriture") ? c.portees.filter((p) => !p.startsWith("w_")) : c.portees))])];
 
   const etat = PREFIXE_ETAT + base64url(randomBytes(32));
   const verificateur = base64url(randomBytes(48));
@@ -975,7 +984,7 @@ export async function demarrer(brutId: unknown, qui: string, base: string, brutC
     [def.cleClient]: client.clientId,
     redirect_uri: redirection,
     response_type: "code",
-    scope: portees.join(def.separateur),
+    ...(def.sansPortees ? {} : { scope: portees.join(def.separateur) }),
     state: etat,
     ...def.extras,
   });
@@ -1100,7 +1109,13 @@ async function echanger(f: Flux, code: string, qui: string): Promise<string> {
   } else {
     accordees = decouper(json.scope ?? json.permissions);
   }
-  if (accordees.length === 0) {
+  if (def.sansPortees) {
+    // Mailchimp n'a pas de portées : rien à relire, et rien ne doit revenir.
+    if (accordees.length > 0) {
+      await revoquer();
+      throw new ErreurNatif("portee", tf("{0} a accordé plus que ce qui était demandé. Par prudence, rien n'a été enregistré et l'accès a été révoqué.", def.nom));
+    }
+  } else if (accordees.length === 0) {
     /*
      * Les quatre documentations disent rendre les portées accordées : leur
      * absence est une anomalie, pas un accord. X ne l'écrit pas dans sa page ;
@@ -1111,7 +1126,7 @@ async function echanger(f: Flux, code: string, qui: string): Promise<string> {
     await revoquer();
     throw new ErreurNatif("portee", t("Le service n'a pas dit quels accès il accordait : rien n'a été enregistré."));
   }
-  const manquantes = f.portees.filter((p) => !accordees.includes(p));
+  const manquantes = def.sansPortees ? [] : f.portees.filter((p) => !accordees.includes(p));
   if (manquantes.length > 0) {
     await revoquer();
     throw new ErreurNatif("portee", tf("Tous les accès demandés n'ont pas été accordés dans {0} (une case décochée, ou une permission que l'application n'a pas). Rien n'a été enregistré.", def.nom));
@@ -1213,6 +1228,9 @@ async function identite(id: IdNatif, acces: string, client: { clientId: string; 
       const pseudo = texteCourt(u.username, 50);
       return { compte: pseudo ? `@${pseudo}` : texteCourt(u.name) || "X", ids: { utilisateur: u.id } };
     }
+    case "brevo":
+    case "mailchimp":
+      return identiteProjet(id, acces, envoyer, echec);
   }
 }
 
@@ -1246,6 +1264,7 @@ async function revocation(id: IdNatif, j: JetonsClairs): Promise<boolean> {
     }
     return tous;
   }
+  if ((id === "brevo" || id === "mailchimp") && client.ok) return revocationProjet(id, j, client, envoyer);
   // LinkedIn et Instagram : pas de révocation documentée pour ces parcours ; l'écran dit où retirer l'accès.
   return false;
 }

@@ -3,6 +3,7 @@ import { chiffrer, dechiffrer } from "./secret.ts";
 import { db, type StoredCollection } from "./db.ts";
 import { journaliser } from "./audit.ts";
 import { nomProduit } from "./marque.ts";
+import { clientPublic } from "./natifs/projetsRegles.ts";
 
 /**
  * Autorisation OAuth des services distants, pour le bouton « Se connecter ».
@@ -69,6 +70,9 @@ interface Autorisation {
   /** Adresse de retour telle qu'elle a été enregistrée auprès du service. */
   retour?: string;
   depuis?: string;
+  /** Trello, Monday, ClickUp, Todoist, Calendly, Zoom (natifs/projetsRegles.ts) : l'écriture cochée, et les portées demandées. */
+  ecriture?: boolean;
+  portees?: string;
 }
 
 let enMemoire: Autorisation[] | null = null;
@@ -155,7 +159,8 @@ export class FournisseurAutorisation {
       redirect_uris: [this.retour],
       grant_types: ["authorization_code", "refresh_token"],
       response_types: ["code"],
-      token_endpoint_auth_method: "client_secret_post",
+      // ClickUp et Calendly n'enregistrent qu'un client public, sans secret, que PKCE protège (natifs/projetsRegles.ts).
+      token_endpoint_auth_method: clientPublic(this.id) ? "none" : "client_secret_post",
     };
   }
 
@@ -271,4 +276,13 @@ export async function retoursEnregistres(): Promise<Map<string, string>> {
 /** Note qui a lancé l'autorisation, pour que le journal puisse le dire. */
 export async function noterDemandeur(id: string, url: string, qui: string): Promise<void> {
   await majeur(id, { url, pour: qui });
+}
+
+/** Trello, Monday… (SECURITE.md § 48) : l'écriture cochée et les portées demandées, relues au retour et au démarrage. */
+export async function noterChoix(id: string, url: string, ecriture: boolean, portees: string | undefined): Promise<void> {
+  await majeur(id, { url, ecriture, portees });
+}
+export async function choixDe(id: string): Promise<{ ecriture: boolean; portees?: string }> {
+  const a = (await lire()).find((x) => x.id === id);
+  return { ecriture: a?.ecriture === true, ...(a?.portees ? { portees: a.portees } : {}) };
 }

@@ -22,14 +22,17 @@ import * as outilsNatifs from "./outilsNatifs.ts";
 import * as computer from "./computer.ts";
 import { nomProduit } from "./marque.ts";
 import {
+  choixDe,
   connecteurDuRetour,
   depuis as oauthDepuis,
+  noterChoix,
   FournisseurAutorisation,
   noterDemandeur,
   oublier as oublierOauth,
   retoursEnregistres,
 } from "./oauthMcp.ts";
 import { auth } from "@modelcontextprotocol/sdk/client/auth.js";
+import { definirEcriture, estMcpProjet, porteesDemandees, porteesEnTrop } from "./natifs/projetsRegles.ts";
 import { t, tf } from "./langue.ts";
 
 /**
@@ -94,6 +97,12 @@ export interface EntreeCatalogue {
   oauth?: "auto" | "appli";
   /** Où créer l'application, quand `oauth` vaut « appli ». */
   console?: string;
+  /**
+   * Lecture seule par défaut, l'écriture se coche à la connexion, et elle est
+   * réservée à l'administrateur (Trello, Monday, ClickUp, Todoist, Calendly,
+   * Zoom : natifs/projetsRegles.ts, SECURITE.md § 48).
+   */
+  ecritureAuChoix?: true;
   secrets: ChampSecret[];
   /** Page où l'utilisateur va chercher son secret, ou la documentation du service. */
   documentation?: string;
@@ -296,7 +305,81 @@ export const CATALOGUE: EntreeCatalogue[] = [
     secrets: [],
   },
 
+  /*
+   * ---- Projets et rendez-vous (28/09/2026, SECURITE.md § 48) ----
+   * Les serveurs officiels des éditeurs, en lecture seule tant que
+   * l'administrateur n'a pas coché l'écriture ; sources et portées dans
+   * natifs/projetsRegles.ts. Zoom est plus bas : il veut une application.
+   */
+  {
+    id: "trello",
+    label: "Trello",
+    description: "Tableaux, listes et cartes Trello : lire, et écrire après votre accord si l'administrateur l'a permis.",
+    categorie: "Travail en équipe",
+    url: "https://mcp.trello.com/v1",
+    oauth: "auto",
+    ecritureAuChoix: true,
+    documentation: "https://support.atlassian.com/trello/docs/connect-trello-to-ai-assistants-with-trello-mcp/",
+    secrets: [],
+  },
+  {
+    id: "monday",
+    label: "Monday",
+    description: "Tableaux, éléments et mises à jour monday.com : lire, et écrire après votre accord si l'administrateur l'a permis.",
+    categorie: "Travail en équipe",
+    url: "https://mcp.monday.com/mcp",
+    oauth: "auto",
+    ecritureAuChoix: true,
+    documentation: "https://developer.monday.com/api-reference/docs/mondaycom-mcp",
+    secrets: [],
+  },
+  {
+    id: "clickup",
+    label: "ClickUp",
+    description: "Tâches, listes et documents ClickUp : lire, et écrire après votre accord si l'administrateur l'a permis.",
+    categorie: "Travail en équipe",
+    url: "https://mcp.clickup.com/mcp",
+    oauth: "auto",
+    ecritureAuChoix: true,
+    documentation: "https://developer.clickup.com/docs/connect-an-ai-assistant-to-clickups-mcp-server",
+    secrets: [],
+  },
+  {
+    id: "todoist",
+    label: "Todoist",
+    description: "Tâches, projets et étiquettes Todoist : lire, et écrire après votre accord si l'administrateur l'a permis.",
+    categorie: "Travail en équipe",
+    url: "https://ai.todoist.net/mcp",
+    oauth: "auto",
+    ecritureAuChoix: true,
+    documentation: "https://github.com/Doist/todoist-mcp",
+    secrets: [],
+  },
+  {
+    id: "calendly",
+    label: "Calendly",
+    description: "Types de rendez-vous, disponibilités et rendez-vous pris sur Calendly : lire, et agir après votre accord si l'administrateur l'a permis.",
+    categorie: "Travail en équipe",
+    url: "https://mcp.calendly.com",
+    oauth: "auto",
+    ecritureAuChoix: true,
+    documentation: "https://developer.calendly.com/docs/mcp/calendly-mcp-server",
+    secrets: [],
+  },
+
   /* ---- Services distants qui veulent une application déclarée chez eux ---- */
+  {
+    id: "zoom",
+    label: "Zoom",
+    description: "Réunions, enregistrements et résumés Zoom : lire, et créer ou modifier une réunion après votre accord si l'administrateur l'a permis.",
+    categorie: "Travail en équipe",
+    url: "https://mcp.zoom.us/mcp/zoom/streamable",
+    oauth: "appli",
+    ecritureAuChoix: true,
+    console: "https://marketplace.zoom.us/develop/create",
+    documentation: "https://developers.zoom.us/docs/mcp/servers/connect-to-zoom-mcp-servers/",
+    secrets: [],
+  },
   {
     id: "github",
     label: "GitHub",
@@ -793,6 +876,8 @@ export async function charger(): Promise<void> {
     listeIllisible = false;
     for (const c of enMemoire) {
       try {
+        // L'écriture cochée à la connexion, avant que le serveur ne liste ses outils (SECURITE.md § 48).
+        if (estMcpProjet(c.id)) definirEcriture(c.id, (await choixDe(c.id)).ecriture);
         declarer(versConfig(c));
       } catch (err) {
         console.error(
@@ -924,7 +1009,7 @@ const ID_VALIDE = /^[a-z0-9][a-z0-9_-]{0,31}$/;
  * nommé « linkedin » aurait apporté des `linkedin__profil` que la barrière
  * range parmi les lectures.
  */
-const IDS_RESERVES = new Set(["courrier", "agenda", "drive", "slack", "bureau", "ecran", "bibliotheque", "reunions", "controle", "code", "connaissances", "taches", "machine", "helix", "web", "sheets", "slides", "youtube", "linkedin", "facebook", "instagram", "tiktok", "x"]);
+const IDS_RESERVES = new Set(["courrier", "agenda", "drive", "slack", "bureau", "ecran", "bibliotheque", "reunions", "controle", "code", "connaissances", "taches", "machine", "helix", "web", "sheets", "slides", "youtube", "linkedin", "facebook", "instagram", "tiktok", "x", "brevo", "mailchimp"]);
 
 /**
  * Ce que la requête a le droit d'apporter, selon le régime de l'instance.
@@ -1222,6 +1307,7 @@ export async function retirer(id: string, qui: string): Promise<Resultat> {
    * fermée : le jeton resterait valable chez le fournisseur.
    */
   if (connecteur.url) await oublierOauth(id, qui);
+  definirEcriture(id, false);
 
   journaliser("connecteur.retire", qui, { connecteur: id });
 
@@ -1252,6 +1338,8 @@ export async function connecter(
   qui: string,
   base: string,
   identifiants?: { clientId?: unknown; clientSecret?: unknown },
+  /** Trello, Monday… : l'administrateur a coché l'écriture (SECURITE.md § 48). */
+  ecriture?: unknown,
 ): Promise<{ ok: true; pret?: true; adresse?: string; message: string } | { ok: false; message: string }> {
   await charger();
   const entree = entreeCatalogue(id);
@@ -1278,7 +1366,20 @@ export async function connecter(
   memoriserRetour(id, retour);
   await noterDemandeur(id, entree.url, qui);
 
+  /*
+   * Projets et rendez-vous (SECURITE.md § 48) : les portées de lecture, et
+   * celles d'écriture si elles sont cochées, demandées explicitement (sans
+   * elles, le SDK demanderait toutes celles que le service publie), et
+   * retenues pour être relues au retour.
+   */
+  const projet = estMcpProjet(id);
+  const avecEcriture = projet && ecriture === true;
+  const portees = projet ? porteesDemandees(id, avecEcriture) : undefined;
+  if (projet) await noterChoix(id, entree.url, avecEcriture, portees);
+
   const fournisseur = new FournisseurAutorisation(id, entree.url, retour);
+  // Un accès gardé d'une connexion précédente aurait les portées d'alors : on redemande.
+  if (projet) await fournisseur.invalidateCredentials("tokens");
 
   /*
    * Service qui n'accepte pas l'enregistrement dynamique : une personne a créé
@@ -1309,7 +1410,7 @@ export async function connecter(
 
   let resultat: string;
   try {
-    resultat = await auth(fournisseur as never, { serverUrl: entree.url });
+    resultat = await auth(fournisseur as never, { serverUrl: entree.url, ...(portees ? { scope: portees } : {}) });
   } catch (err) {
     return {
       ok: false,
@@ -1318,6 +1419,7 @@ export async function connecter(
   }
 
   if (resultat === "AUTHORIZED") {
+    if (projet) definirEcriture(id, avecEcriture);
     const r = await brancherDistant(entree, qui);
     return r.ok ? { ok: true, pret: true, message: r.message } : r;
   }
@@ -1353,10 +1455,12 @@ export async function acheverAutorisation(
   if (!entree?.url) return { ok: false, message: t("Connecteur inconnu.") };
 
   const fournisseur = new FournisseurAutorisation(attendu.id, entree.url, attendu.retour);
+  const choix = estMcpProjet(attendu.id) ? await choixDe(attendu.id) : null;
   try {
     const resultat = await auth(fournisseur as never, {
       serverUrl: entree.url,
       authorizationCode: code,
+      ...(choix?.portees ? { scope: choix.portees } : {}),
     });
     if (resultat !== "AUTHORIZED") {
       return { ok: false, message: tf("{0} n'a pas accordé l'autorisation.", entree.label) };
@@ -1366,6 +1470,21 @@ export async function acheverAutorisation(
       ok: false,
       message: tf("Échange refusé par {0} : {1}", entree.label, err instanceof Error ? err.message : String(err)),
     };
+  }
+
+  /*
+   * Projets et rendez-vous (SECURITE.md § 48) : la portée accordée est relue.
+   * Un accès qui déborde de ce qui a été demandé (l'écriture sans l'avoir
+   * cochée, par exemple) n'est pas gardé : règle du § 40.
+   */
+  if (choix) {
+    const enTrop = porteesEnTrop(choix.portees, ((await fournisseur.tokens()) ?? {}).scope);
+    if (enTrop.length > 0) {
+      await oublierOauth(attendu.id, attendu.pour ?? "systeme");
+      journaliser("connecteur.retire", attendu.pour ?? "systeme", { connecteur: attendu.id, motif: "portee en trop" });
+      return { ok: false, message: tf("{0} a accordé plus que ce qui était demandé ({1}). Par prudence, rien n'a été enregistré : retirez aussi l'accès dans les réglages de votre compte {0}.", entree.label, enTrop.slice(0, 10).join(", ")) };
+    }
+    definirEcriture(attendu.id, choix.ecriture);
   }
 
   memoriserRetour(attendu.id, attendu.retour);
@@ -1526,14 +1645,14 @@ export async function groupes(): Promise<GroupeOutils[]> {
 
   // Sheets, Slides, YouTube et réseaux sociaux (outilsNatifs.ts) : un groupe par service branché, lu à la même source que chat.ts.
   const natifs = outilsNatifs.toolsForModel();
-  const NOMS: Record<string, string> = { sheets: "Google Sheets", slides: "Google Slides", youtube: "YouTube", linkedin: "LinkedIn", facebook: "Facebook", instagram: "Instagram", tiktok: "TikTok", x: "X" };
+  const NOMS: Record<string, string> = { sheets: "Google Sheets", slides: "Google Slides", youtube: "YouTube", linkedin: "LinkedIn", facebook: "Facebook", instagram: "Instagram", tiktok: "TikTok", x: "X", brevo: "Brevo", mailchimp: "Mailchimp" };
   for (const [id, label] of Object.entries(NOMS)) {
     const n = natifs.filter((o) => o.function.name.startsWith(`${id}__`)).length;
     if (n === 0) continue;
     liste.push({
       id,
       label,
-      description: natifs.some((o) => o.function.name.startsWith(`${id}__`) && /__(publier|ecrire|ajouter)/.test(o.function.name))
+      description: natifs.some((o) => o.function.name.startsWith(`${id}__`) && /__(publier|ecrire|ajouter|creer|envoyer)/.test(o.function.name))
         ? "Lire, et écrire ou publier après votre accord, à chaque fois."
         : "Lire, sans rien modifier.",
       actif: true,

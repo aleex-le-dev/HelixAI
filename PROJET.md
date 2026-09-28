@@ -608,6 +608,73 @@ la réponse de jetons contient-elle `scope` (sinon la connexion est refusée, et
 crédit (l'outil suppose 402) ; X exige-t-il les droits « Read and write » de l'application en
 plus de `tweet.write`.
 
+**Fait le 28/09/2026 : Microsoft 365 par Microsoft Graph, branche `connecteurs-microsoft`.**
+Demandé par Medhi : Outlook (mails et agenda), OneDrive et SharePoint (fichiers), Excel, Word et
+Teams, avec une seule application Entra créée par l'administrateur (identifiant, secret
+facultatif, annuaire ou « common »). Même modèle et mêmes règles que les connecteurs natifs
+ci-dessus (SECURITE.md §§ 40 à 43, et § 44 pour celui-ci). Fichiers à lui :
+`gateway/src/natifs/microsoftBase.ts` (définition, portées, sources, noms des outils, phrases des
+cartes ; n'importe que `langue.ts`), `gateway/src/natifs/microsoft.ts` (les outils),
+`src/components/settings/ConnecteurMicrosoft.tsx` (le panneau), `scripts/essai-microsoft.mjs`
+(faux Microsoft) ; les registres communs n'ont reçu que des ajouts courts (`oauthNatif.ts` :
+des champs facultatifs de `Definition`, sans effet sur les huit autres ; `outilsNatifs.ts`,
+`approbation.ts`, `connecteurs.ts`, `index.ts`, `natifs.ts`, `ParametresPages.tsx`, `aide.ts`,
+`securite.mjs` section 16 bis ; `relecture.ts` exporte `lireZip`).
+
+**Décision : une seule connexion, pas six.** Chez Microsoft, le consentement s'accumule par
+application et par personne, et un jeton porte ce qui a été consenti, pas seulement ce qu'on
+vient de demander (documentation citée dans `microsoftBase.ts`). Six connexions sur la même
+application auraient donné six jetons aux mêmes pouvoirs : l'écran aurait dit « Outlook, lecture
+seule » d'un jeton qui écrit dans les classeurs. Il y a donc une connexion `microsoft`, où l'on
+coche les services et l'écriture ; six lignes dans la liste (clés `outlook`, `onedrive`,
+`sharepoint`, `excel`, `word`, `teams`, icônes neutres en attendant les logos, posés par un
+autre travail) ouvrent le même panneau. La portée rendue est relue ; ce qui déborde des cases
+cochées fait refuser la connexion, avec le nom de la permission et où la retirer dans Entra.
+
+| Service | Lecture | En plus, si « écrire » est coché | Consentement de l'administrateur |
+|---|---|---|---|
+| toujours | `User.Read`, `offline_access` | | non |
+| Outlook | `Mail.Read`, `Calendars.Read` : lire, chercher les mails, lire l'agenda | `Mail.ReadWrite` (brouillon), `Mail.Send` (envoyer), `Calendars.ReadWrite` (créer un événement) | non |
+| OneDrive | `Files.Read` : lister, chercher, lire | (rien) | non |
+| SharePoint | `Sites.Read.All` : sites, lister, chercher, lire | (rien) | **oui** |
+| Excel | `Files.Read` : lire une plage | `Files.ReadWrite` : écrire une plage, en valeurs | non |
+| Word | `Files.Read` : lire un .docx | (rien) | non |
+| Teams | `Team.ReadBasic.All`, `Channel.ReadBasic.All`, `ChannelMessage.Read.All` | `ChannelMessage.Send` : poster | **oui** (`ChannelMessage.Read.All`) |
+
+Jamais demandés : `Files.Read.All`, `Files.ReadWrite.All` (administrateur, et tout ce que la
+personne peut lire), `Sites.ReadWrite.All`, `Chat.*`, `.default`. Beaucoup d'organisations
+interdisent aux personnes de consentir : l'administrateur de l'annuaire consent alors pour tout,
+dans le portail ; l'écran le dit, et liste exactement les permissions à déclarer selon les cases.
+
+Autres choix : retour sur la boucle locale sous le nom `http://localhost/microsoft` (Microsoft
+ignore le port de « localhost » ; il conseille 127.0.0.1 mais son portail refuse de le saisir en
+http), écouté sur 127.0.0.1 et ::1 ; PKCE S256 ; application « Client public » sans secret ou
+« Web » avec secret, les deux acceptées ; le téléchargement d'un fichier suit l'adresse
+pré-authentifiée que Graph donne, seulement vers `*.sharepoint.com`, sans le jeton (les comptes
+Microsoft personnels ne sont donc pas pris en charge) ; Excel écrit en `values`, jamais en
+`formulas`, et un texte qui commence par « = », « + », « - », « @ » reçoit l'apostrophe et le
+format texte ; mails et messages Teams en texte brut ; pièces jointes par `fichierDuDossier`
+(trois, 2 Mo chacune) ; dix écritures par heure pour Microsoft 365 entier (une connexion) ;
+débrancher efface les jetons et dit où couper l'accès dans Entra, car Microsoft n'a pas de
+révocation pour une application.
+
+**Pas encore essayé avec un vrai annuaire Entra, ni un vrai compte Microsoft 365** : tout est
+vérifié contre un faux Microsoft (OAuth et Graph) écrit d'après la documentation lue le
+28/09/2026 (`scripts/essai-microsoft.mjs`, 98 contrôles, repris par `npm run securite`,
+section 16 bis). Règle du § 3.16 : l'écran, l'aide et les README ne le disent pas. Points
+incertains, à vérifier sur le vrai service : **la réponse de jetons porte-t-elle `scope`** (la
+page le dit facultatif ; son absence fait refuser la connexion) et **sous quelle forme**
+(préfixée, encodée) ; un jeton demandé avec des portées précises porte-t-il aussi les portées
+consenties avant (si oui, décocher un service exige de retirer sa permission dans Entra, et
+l'écran le dit) ; `http://localhost/microsoft` accepté avec le port ajouté par l'instance ;
+l'apostrophe devant « = » dans `values` (Excel l'avale-t-il comme le préfixe qu'il est à la
+saisie, ou l'écrit-il) et le format `@` appliqué dans le même appel ; la relecture des
+`formulas` dans la réponse du PATCH ; `$search` sur les mails sans `ConsistencyLevel` ; les
+codes AADSTS reconnus au retour (65001, 90094, 50011, 700016, 50194). Le panneau a été vu dans
+une fenêtre Electron cachée et dans le navigateur intégré, contre une passerelle jetable et
+`vite` : fr, en, ja, clair et sombre, 1440 et 375 px, états « application à enregistrer »,
+« cases », « en attente », « connecté », « débranché ».
+
 ### 3.6 Découpage des tâches lourdes
 
 Ajouté en septembre 2026, après mesure. Un modèle de 8 milliards de paramètres perd le
@@ -3034,6 +3101,15 @@ vérifiés contre de faux serveurs, SECURITE.md § 41) et Google Drive et Slack 
 sur une vraie carte NVIDIA (Unsloth) ; le Mac virtuel (Lume) de bout en bout ; les modèles
 d'images et de vidéo marqués `verifie: false` (`images.ts`) et les modèles de conversation
 conseillés sans avoir été essayés (`provision.ts`) ; le japonais relu par un locuteur natif.
+
+**Microsoft 365 (28/09/2026, branche `connecteurs-microsoft`, § 3.5)** : créer l'application
+dans un vrai annuaire Entra (les deux plateformes, « Client public » puis « Web »), déclarer
+`http://localhost/microsoft`, se connecter avec Outlook seul, puis avec les six services et
+l'écriture (consentement de l'administrateur pour SharePoint et Teams) ; lire un mail, un
+fichier, un classeur, un document Word, un canal ; envoyer un mail avec une pièce jointe,
+créer un événement, écrire une plage contenant « =1+1 » (doit rester du texte), poster dans un
+canal ; laisser expirer le jeton d'accès (une heure) ; débrancher et vérifier l'accès dans
+« Applications d'entreprise ».
 
 ### Ce qui reste à faire
 

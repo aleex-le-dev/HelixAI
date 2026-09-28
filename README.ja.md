@@ -45,7 +45,7 @@
 </p>
 
 <p align="center">
-  <img src="docs/images/demo.gif" alt="仕入先の見積書を添付したチャットでの質問。回答には、引用した社内ハンドブックの箇所が添えられています" width="900" />
+  <img src="docs/images/ja/demo.gif" alt="仕入先の見積書を添付したチャットでの質問。回答には、引用した社内ハンドブックの箇所が添えられています" width="900" />
 </p>
 
 <p align="center"><sub>添付した仕入先の見積書についての質問に、会社のナレッジベースをもとに出典付きで回答しています。</sub></p>
@@ -77,32 +77,32 @@
 
 <table>
   <tr>
-    <td width="50%"><img src="docs/images/chat.png" alt="ナレッジベースをもとに回答するチャット。PDF が添付され、回答の下に引用元が表示されています" /></td>
-    <td width="50%"><img src="docs/images/home.png" alt="ホーム画面。最近のチャットと、マシン上のモデルが表示されています" /></td>
+    <td width="50%"><img src="docs/images/ja/chat.png" alt="ナレッジベースをもとに回答するチャット。見積書が添付され、回答の下に引用元が表示されています" /></td>
+    <td width="50%"><img src="docs/images/ja/home.png" alt="ホーム画面。最近のチャットと、マシン上のモデルが表示されています" /></td>
   </tr>
   <tr>
     <td align="center">ナレッジベースと添付ファイルを使ったチャットと、その出典</td>
     <td align="center">ホーム</td>
   </tr>
   <tr>
-    <td><img src="docs/images/code.png" alt="作業中の Helix Code：タスクリスト、ファイルの読み取りと編集、実行中のテストコマンド" /></td>
-    <td><img src="docs/images/agents.png" alt="常時稼働のエージェントと、スケジュールされたミッションのレポート" /></td>
+    <td><img src="docs/images/ja/code.png" alt="作業中の Helix Code：タスクリスト、ファイルの読み取りと編集、実行中のテストコマンド" /></td>
+    <td><img src="docs/images/ja/agents.png" alt="常時稼働のエージェントと、スケジュールされたミッションのレポート" /></td>
   </tr>
   <tr>
     <td align="center">作業中の Helix Code</td>
     <td align="center">常時稼働のエージェントとミッションのレポート</td>
   </tr>
   <tr>
-    <td><img src="docs/images/compare.png" alt="モデルを比較：Epoch AI の能力スコアと発行元の価格" /></td>
-    <td><img src="docs/images/usage.png" alt="自分の使用量：モデルごとのリクエスト、トークン、費用。ローカルモデルには API 料金がかかりません" /></td>
+    <td><img src="docs/images/ja/compare.png" alt="モデルを比較：Epoch AI の能力スコアと発行元の価格" /></td>
+    <td><img src="docs/images/ja/usage.png" alt="自分の使用量：モデルごとのリクエスト、トークン、費用。ローカルモデルには API 料金がかかりません" /></td>
   </tr>
   <tr>
     <td align="center">モデルを比較（スコアと価格）</td>
     <td align="center">自分の使用量</td>
   </tr>
   <tr>
-    <td><img src="docs/images/knowledge.png" alt="ナレッジベースと、インデックス化された文書" /></td>
-    <td><img src="docs/images/training.png" alt="モデルをトレーニング：質問と回答の例" /></td>
+    <td><img src="docs/images/ja/knowledge.png" alt="ナレッジベースと、インデックス化された文書" /></td>
+    <td><img src="docs/images/ja/training.png" alt="モデルをトレーニング：質問と回答の例" /></td>
   </tr>
   <tr>
     <td align="center">ナレッジベース</td>

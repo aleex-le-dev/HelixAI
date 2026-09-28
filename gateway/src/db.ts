@@ -79,6 +79,8 @@ export const COLLECTIONS_INTERNES = [
    * de l'organisation ne se recopie sur aucun poste.
    */
   "connecteursNatifs",
+  // Stripe, Shopify, WooCommerce, Salesforce, Pipedrive, Zendesk (natifs/commerce.ts) : clés et jetons, même raison.
+  "connecteursCommerce",
   // Tâches programmées (tachesProgrammees.ts) : exécutées par l'instance, jamais recopiées sur les postes.
   "tachesProgrammees",
   "connecteurs",

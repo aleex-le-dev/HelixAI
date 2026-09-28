@@ -922,9 +922,9 @@ const ID_VALIDE = /^[a-z0-9][a-z0-9_-]{0,31}$/;
 /*
  * Et ceux des connexions natives (outilsNatifs.ts, 28/09/2026) : un serveur
  * nommé « linkedin » aurait apporté des `linkedin__profil` que la barrière
- * range parmi les lectures.
+ * range parmi les lectures. Et ceux du commerce (natifs/commerce.ts, § 47).
  */
-const IDS_RESERVES = new Set(["courrier", "agenda", "drive", "slack", "bureau", "ecran", "bibliotheque", "reunions", "controle", "code", "connaissances", "taches", "machine", "helix", "web", "sheets", "slides", "youtube", "linkedin", "facebook", "instagram", "tiktok", "x"]);
+const IDS_RESERVES = new Set(["courrier", "agenda", "drive", "slack", "bureau", "ecran", "bibliotheque", "reunions", "controle", "code", "connaissances", "taches", "machine", "helix", "web", "sheets", "slides", "youtube", "linkedin", "facebook", "instagram", "tiktok", "x", "stripe", "shopify", "woocommerce", "salesforce", "pipedrive", "zendesk"]);
 
 /**
  * Ce que la requête a le droit d'apporter, selon le régime de l'instance.
@@ -1526,14 +1526,14 @@ export async function groupes(): Promise<GroupeOutils[]> {
 
   // Sheets, Slides, YouTube et réseaux sociaux (outilsNatifs.ts) : un groupe par service branché, lu à la même source que chat.ts.
   const natifs = outilsNatifs.toolsForModel();
-  const NOMS: Record<string, string> = { sheets: "Google Sheets", slides: "Google Slides", youtube: "YouTube", linkedin: "LinkedIn", facebook: "Facebook", instagram: "Instagram", tiktok: "TikTok", x: "X" };
+  const NOMS: Record<string, string> = { sheets: "Google Sheets", slides: "Google Slides", youtube: "YouTube", linkedin: "LinkedIn", facebook: "Facebook", instagram: "Instagram", tiktok: "TikTok", x: "X", stripe: "Stripe", shopify: "Shopify", woocommerce: "WooCommerce", salesforce: "Salesforce", pipedrive: "Pipedrive", zendesk: "Zendesk" };
   for (const [id, label] of Object.entries(NOMS)) {
     const n = natifs.filter((o) => o.function.name.startsWith(`${id}__`)).length;
     if (n === 0) continue;
     liste.push({
       id,
       label,
-      description: natifs.some((o) => o.function.name.startsWith(`${id}__`) && /__(publier|ecrire|ajouter)/.test(o.function.name))
+      description: natifs.some((o) => o.function.name.startsWith(`${id}__`) && /__(publier|ecrire|ajouter|noter|repondre)/.test(o.function.name))
         ? "Lire, et écrire ou publier après votre accord, à chaque fois."
         : "Lire, sans rien modifier.",
       actif: true,

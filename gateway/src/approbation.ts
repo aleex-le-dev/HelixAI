@@ -4,6 +4,7 @@ import { homedir } from "node:os";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { journaliser } from "./audit.ts";
 import { apercuEnvoi, envoiSansAccord, presenterMessage } from "./courrier.ts";
+import { ECRITURES_COMMERCE, LECTURES_COMMERCE, resumeCommerce } from "./natifs/commerce.ts";
 
 /**
  * Approbation des actions de l'agent.
@@ -224,6 +225,8 @@ export const LECTURES_NATIVES = new Set([
   // X (ex-Twitter), ajouté le 28/09/2026 sur le même modèle (SECURITE.md § 42).
   "x__profil",
   "x__publications",
+  // Commerce et relation client (natifs/commerce.ts, SECURITE.md § 47).
+  ...LECTURES_COMMERCE,
 ]);
 export const ECRITURES_NATIVES = new Set([
   "sheets__ecrire",
@@ -233,6 +236,8 @@ export const ECRITURES_NATIVES = new Set([
   "instagram__publier",
   "tiktok__publier_video",
   "x__publier",
+  // Une note Salesforce ou Pipedrive, une réponse Zendesk : une carte à chaque fois (§ 47).
+  ...ECRITURES_COMMERCE,
 ]);
 
 const TOUJOURS_CONFIRMER = new Set(["agenda__supprimer", "taches__programmer", ...ECRITURES_NATIVES]);
@@ -563,7 +568,7 @@ function resumeNatif(outil: string, args: Record<string, unknown>): string | nul
       return `publier sur X, au nom du compte connecté, le post${extrait(args.texte)}${typeof args.image === "string" && args.image ? `, avec l'image ${abreger(args.image).slice(0, 200)}` : ""}${lien ? " (il contient une adresse, que X facture plus cher)" : ""} (une publication ne se reprend pas)`;
     }
   }
-  return null;
+  return resumeCommerce(outil, args);
 }
 
 /* ------------------------------------------------------------------ */

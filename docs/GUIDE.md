@@ -3,7 +3,7 @@
 Plateforme d'agents IA **open source**, en marque blanche, en logiciel de bureau :
 chaque organisation installe sa propre instance, chez elle. Elle réunit une interface
 React, une **passerelle modèles** locale (`gateway/`) et une enveloppe **Electron** qui
-lance la passerelle au démarrage. Interface en **français, anglais et chinois**, au
+lance la passerelle au démarrage. Interface en **français, anglais, chinois et japonais**, au
 choix de chacun (Réglages, Préférences).
 
 Contributions : [CONTRIBUTING.md](../CONTRIBUTING.md) et [CLA.md](../CLA.md).
@@ -1041,7 +1041,7 @@ l'agent d'orchestration par défaut. Aucun tiret cadratin dans les textes affich
   saisir. Demande une préparation unique par l'administrateur de
   l'organisation ; un compte personnel garde le mot de passe d'application, et
   l'écran le dit (0.24.0) ;
-- **trois langues** : français, anglais, chinois. Le choix se fait dans
+- **quatre langues** : français, anglais, chinois, japonais. Le choix se fait dans
   Réglages, Préférences, vaut pour ce poste, et recharge la page pour que tout
   change d'un coup. 1 842 phrases en 0.25.0 ; le 25/09/2026, 2 301 dans
   l'interface et 650 dans la passerelle ; le 28/09/2026, 2 945 et 966, traduites à

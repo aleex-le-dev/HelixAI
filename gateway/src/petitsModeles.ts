@@ -436,6 +436,8 @@ export function appelsLus(messages: unknown[], proposes: string[]): Set<string> 
       }
       // Un objet `{"name": …, "arguments": …}` au milieu du texte : la réponse qui ne serait que lui vaut un appel.
       for (const objetJson of objetsAppel(texte)) for (const a of appelsDansLeTexte(objetJson, proposes, 1)) vus.add(empreinteAppel(a));
+      // Le XML de Qwen3.5 hors d'une balise `<tool_call>` : `appelsDansLeTexte` ne le lit que s'il n'y a aucune balise.
+      for (const m of texte.matchAll(/<function=[^>\s]+>[\s\S]*?(?:<\/function>|$)/g)) for (const a of appelsDansLeTexte(m[0], proposes, 10_000)) vus.add(empreinteAppel(a));
     }
   }
   return vus;

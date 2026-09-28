@@ -341,7 +341,13 @@ function Badge({ children }: { children: string }) {
  * En japonais (28/09/2026), « チャット » prend 52 px contre 29 pour « Chat » :
  * les trois pastilles se coupaient, « Cowork » et « Code » compris. Une marge
  * intérieure de 4 px au lieu de 8, pour le japonais seulement, rend les 24 px
- * qui manquaient ; les autres langues gardent leur dessin.
+ * qui manquaient.
+ *
+ * Avec Plus Jakarta Sans (28/09/2026, à la place de Satoshi), plus large, les
+ * trois mots se coupaient aussi en français, en grand écran comme en petit
+ * (vu par Medhi) : mesurés dans Electron à 13 px, « Chat », « Cowork » et
+ * « Code » demandent 114,7 px ; il en restait 110. Une marge de 6 px au lieu
+ * de 8 rend 12 px : 122 px de place, les mots entiers, sans baisser la taille.
  */
 function PrimaryItem({ item }: { item: NavItem }) {
   const Icon = item.icon;
@@ -352,7 +358,7 @@ function PrimaryItem({ item }: { item: NavItem }) {
       title={item.label}
       className={({ isActive }) =>
         cn(
-          "flex min-w-0 grow items-center justify-center gap-1 rounded-xl px-2 py-1.5 [:lang(ja)_&]:px-1",
+          "flex min-w-0 grow items-center justify-center gap-1 rounded-xl px-1.5 py-1.5 [:lang(ja)_&]:px-1",
           "text-[13px] font-medium transition-colors",
           isActive
             ? "border border-sidebar-border bg-sidebar-active text-foreground shadow-sm"

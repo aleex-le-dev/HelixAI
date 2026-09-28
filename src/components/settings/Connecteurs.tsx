@@ -172,7 +172,16 @@ export function Connecteurs({ maison = [] }: { maison?: ServiceMaison[] } = {}) 
   useEffect(() => {
     recharger();
     window.addEventListener(CONNECTEURS_CHANGE, recharger);
-    return () => window.removeEventListener(CONNECTEURS_CHANGE, recharger);
+    /*
+     * Et dans l'autre sens (28/09/2026) : un serveur éteint par sa bascule, dans
+     * « Détail des serveurs » plus bas sur le même écran, restait affiché
+     * allumé, vert, avec ses outils, dans la liste des connecteurs.
+     */
+    window.addEventListener(MCP_CHANGE, recharger);
+    return () => {
+      window.removeEventListener(CONNECTEURS_CHANGE, recharger);
+      window.removeEventListener(MCP_CHANGE, recharger);
+    };
   }, [recharger]);
 
   // Le sondage de l'autorisation en cours s'arrête avec l'écran.

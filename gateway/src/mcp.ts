@@ -215,6 +215,12 @@ interface Live {
   arrete?: boolean;
   /** Relances après un arrêt inattendu, pour ne pas relancer en boucle un serveur qui plante au démarrage. */
   relances?: number[];
+  /**
+   * Pourquoi il est arrêté, s'il l'est de lui-même : dit dans la langue de qui
+   * lit l'état (`status`), pas figé dans celle du moment où il s'est arrêté,
+   * souvent hors de toute requête, donc en anglais.
+   */
+  arret?: "relance" | "boucle";
 }
 
 const servers = new Map<string, Live>();
@@ -431,6 +437,7 @@ async function demarrerDistant(id: string, entry: Live): Promise<{ ok: boolean; 
   }
   entry.client = client;
   entry.error = undefined;
+  entry.arret = undefined;
   retenirListe(id, entry, liste);
   console.log(`[mcp] ${entry.config.label} branché à distance (${entry.tools.length} outils)`);
   return { ok: true };
@@ -583,6 +590,7 @@ async function demarrer(id: string, entry: Live): Promise<{ ok: boolean; error?:
     }
     entry.client = client;
     entry.error = undefined;
+    entry.arret = undefined;
     retenirListe(id, entry, liste);
     client.onclose = () => arretInattendu(id, client);
     console.log(`[mcp] ${entry.config.label} démarré (${entry.tools.length} outils)`);
@@ -598,6 +606,7 @@ async function demarrer(id: string, entry: Live): Promise<{ ok: boolean; error?:
       entry.pid = undefined;
     }
     entry.error = masquer(err instanceof Error ? err.message : String(err), entry.config.env);
+    entry.arret = undefined;
     /*
      * Les outils ne sont pas effacés : un premier démarrage n'en a pas encore
      * (et `stopServer` les efface), et une relance manquée après une connexion
@@ -651,12 +660,14 @@ function arretInattendu(id: string, client: Client): void {
   const maintenant = Date.now();
   entry.relances = (entry.relances ?? []).filter((d) => maintenant - d < 10 * 60_000);
   if (entry.relances.length >= 3) {
-    entry.error = t("Le serveur s'est arrêté trois fois en dix minutes : il n'est plus relancé de lui-même. Il le sera au prochain appel d'un de ses outils.");
+    entry.error = undefined;
+    entry.arret = "boucle";
     console.error(`[mcp] ${id} : arrêté trois fois en dix minutes, plus de relance automatique`);
     return;
   }
   entry.relances.push(maintenant);
-  entry.error = t("Le serveur s'est arrêté de lui-même : il est relancé.");
+  entry.error = undefined;
+  entry.arret = "relance";
   console.error(`[mcp] ${id} : arrêt inattendu, relance dans une seconde`);
   setTimeout(() => {
     if (!entry.arrete && !entry.client && servers.get(id) === entry) void startServer(id);
@@ -667,6 +678,7 @@ export async function stopServer(id: string): Promise<void> {
   const entry = servers.get(id);
   if (!entry) return;
   entry.arrete = true;
+  entry.arret = undefined;
   if (entry.demarrage) await entry.demarrage.catch(() => undefined);
   const client = entry.client;
   const pid = entry.pid;
@@ -758,7 +770,12 @@ export function status(): McpServerStatus[] {
         : t(s.config.description),
     running: Boolean(s.client),
     toolCount: s.tools.length,
-    error: s.error,
+    error:
+      s.arret === "boucle"
+        ? t("Le serveur s'est arrêté trois fois en dix minutes : il n'est plus relancé de lui-même. Il le sera au prochain appel d'un de ses outils.")
+        : s.arret === "relance"
+          ? t("Le serveur s'est arrêté de lui-même : il est relancé.")
+          : s.error,
     tools: s.tools.map((t) => ({ name: t.toolName, description: t.description })),
   }));
 }

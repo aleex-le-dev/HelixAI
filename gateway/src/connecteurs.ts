@@ -1380,7 +1380,11 @@ export async function ajouter(brut: unknown, qui: string): Promise<Resultat> {
   const outils = mcpStatus().find((s) => s.id === verdict.id)?.toolCount ?? 0;
   return {
     ok: true,
-    message: tf("« {0} » est connecté : {1} outil(s) disponibles pour vos agents.", verdict.label, outils),
+    // Une phrase par nombre, comme pour les services distants (28/09/2026) : « outil(s) » restait tel quel en chinois et en japonais.
+    message:
+      outils > 1
+        ? tf("« {0} » est connecté : {1} outils disponibles pour vos agents.", t(verdict.label), outils)
+        : tf("« {0} » est connecté : {1} outil disponible pour vos agents.", t(verdict.label), outils),
   };
 }
 

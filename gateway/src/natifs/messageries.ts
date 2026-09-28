@@ -1128,6 +1128,20 @@ const numeroDe = (v: unknown) => {
 };
 const parametresDe = (v: unknown) => (Array.isArray(v) ? v.map((x) => (typeof x === "string" || typeof x === "number" ? String(x) : "")) : []);
 
+/**
+ * Le texte d'un modèle WhatsApp tel que la carte l'a montré, par appel. Le
+ * texte d'un modèle vit chez Meta et peut changer entre la carte et l'envoi
+ * (modifié dans le gestionnaire, ou relu entre-temps par un autre appel) :
+ * l'envoi exige que le texte relu chez Meta, rempli, soit celui-là, mot pour mot.
+ */
+const montres = new Map<string, { texte: string; quand: number }>();
+const cleMontre = (args: Record<string, unknown>) => createHash("sha256").update(JSON.stringify([numeroDe(args.numero), String(args.modele ?? ""), String(args.langue ?? ""), parametresDe(args.parametres)])).digest("hex");
+function noterMontre(args: Record<string, unknown>, texte: string): void {
+  const limite = Date.now() - LIMITES.doublonMs;
+  for (const [k, v] of montres) if (v.quand < limite || montres.size > 200) montres.delete(k);
+  montres.set(cleMontre(args), { texte, quand: Date.now() });
+}
+
 /** Le destinataire tel qu'il est connu de l'instance, et, pour un modèle WhatsApp, le texte qui partira. Synchrone. */
 export function apercu(outil: string, args: Record<string, unknown>): { destinataire: string; texteFinal?: string; fenetre?: string } | null {
   if (!magasin) return null;
@@ -1150,7 +1164,10 @@ export function apercu(outil: string, args: Record<string, unknown>): { destinat
       const fenetre = f.ouverte && f.jusqua ? `fenêtre de 24 h ouverte jusqu'au ${dateFrancaise(f.jusqua)}` : "fenêtre de 24 h fermée";
       if (outil === "whatsapp__envoyer") return { destinataire, fenetre };
       const m = modelesWhatsApp.get(cleModele(String(args.modele ?? ""), String(args.langue ?? "")));
-      return { destinataire, fenetre, texteFinal: m ? rendreModele(m, parametresDe(args.parametres)) : "(modèle inconnu : l'envoi sera refusé)" };
+      if (!m) return { destinataire, fenetre, texteFinal: "(modèle inconnu : l'envoi sera refusé)" };
+      const texteFinal = rendreModele(m, parametresDe(args.parametres));
+      noterMontre(args, texteFinal);
+      return { destinataire, fenetre, texteFinal };
     }
   }
   return null;
@@ -1368,17 +1385,19 @@ async function executer(nom: string, args: Record<string, unknown>): Promise<Res
       if (!n) return refus("Refusé : numéro illisible (format international attendu, +33612345678). Rien n'a été envoyé.");
       const vu = modelesWhatsApp.get(cleModele(String(args.modele ?? ""), String(args.langue ?? "")));
       if (!vu) return refus("Refusé : modèle inconnu. Appelle d'abord whatsapp__modeles, puis reprends le nom et la langue exacts. Rien n'a été envoyé.");
+      const montre = montres.get(cleMontre(args));
       // Relus chez Meta au moment d'agir : un modèle retiré, suspendu ou modifié depuis la carte ne part pas.
       const frais = (await lireModeles()).find((m) => m.nom === vu.nom && m.langue === vu.langue);
       if (!frais) return refus("Refusé : ce modèle n'est plus approuvé par Meta. Rien n'a été envoyé.");
-      if (frais.corps !== vu.corps || frais.entete !== vu.entete || frais.pied !== vu.pied) return refus("Refusé : le texte de ce modèle a changé chez Meta depuis la carte d'accord. Rien n'a été envoyé ; propose-le de nouveau.");
       if (frais.autresVariables) return refus("Refusé : ce modèle a un en-tête ou des boutons à remplir, ce que ce connecteur ne sait pas faire. Rien n'a été envoyé.");
       const vars = variablesDe(frais.corps);
-      const parametres = parametresDe(args.parametres).map((p) => p.trim());
-      if (parametres.length !== vars.length || parametres.some((p) => !p || p.length > 1000 || /[\n\t]| {5,}/.test(p))) {
+      const parametres = parametresDe(args.parametres);
+      // Pas de retour à la ligne, de tabulation ni de longue suite d'espaces dans une valeur (règle des variables de Meta).
+      if (parametres.length !== vars.length || parametres.some((p) => !p.trim() || p.length > 1000 || /[\n\t]| {5,}/.test(p))) {
         return refus(`Refusé : ce modèle attend ${vars.length} valeur(s) (${vars.join(", ") || "aucune"}), chacune sur une ligne, sans tabulation. Rien n'a été envoyé.`);
       }
       const texte = rendreModele(frais, parametres);
+      if (!montre || montre.texte !== texte) return refus("Refusé : le texte de ce modèle, tel que Meta le donne maintenant, n'est pas celui que la carte d'accord a montré (le modèle a changé chez Meta). Rien n'a été envoyé ; propose-le de nouveau.");
       const nommes = vars.some((v) => !/^\d+$/.test(v));
       const composants = vars.length ? [{ type: "body", parameters: vars.map((v, i) => ({ type: "text", text: parametres[i], ...(nommes ? { parameter_name: v } : {}) })) }] : [];
       return sousGarde("whatsapp", n, texte, async () => {

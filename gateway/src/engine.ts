@@ -1,7 +1,7 @@
 import { execFile, execFileSync } from "node:child_process";
 import { promisify } from "node:util";
 import { createHash } from "node:crypto";
-import { createWriteStream, existsSync, mkdirSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { createWriteStream, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { mkdtemp, rm, mkdir } from "node:fs/promises";
 import { homedir } from "node:os";
 import { isAbsolute, join, resolve, sep } from "node:path";
@@ -274,10 +274,16 @@ export function dossierLmStudio(): string {
      * écrire. Sinon, l'emplacement habituel : c'est `bin/lms` de ce dossier
      * que la passerelle lance.
      */
-    if (pointe && isAbsolute(pointe) && !/^[\\/]{2}/.test(pointe)) {
+    /*
+     * Ni un lien, et l'espace des agents comparé au chemin réel (test
+     * d'intrusion du 28/09/2026, SECURITE.md § 58) : un pointeur vers
+     * `D:\Modeles\LM Studio`, où `LM Studio` était un lien vers l'espace des
+     * agents, était suivi, la comparaison se faisant sur le chemin écrit.
+     */
+    if (pointe && isAbsolute(pointe) && !/^[\\/]{2}/.test(pointe) && !lstatSync(pointe).isSymbolicLink()) {
       const st = statSync(pointe);
       const aMoi = process.platform === "win32" || typeof process.getuid !== "function" || st.uid === process.getuid();
-      if (st.isDirectory() && aMoi && !espaceEcrivable(pointe)) return pointe;
+      if (st.isDirectory() && aMoi && !espaceEcrivable(pointe) && !espaceEcrivable(realpathSync(pointe))) return pointe;
     }
   } catch {
     /* pas de pointeur, ou illisible : l'emplacement habituel */

@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
-import { accessSync, constants, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmdirSync, rmSync, statSync, statfsSync, writeFileSync } from "node:fs";
+import { accessSync, constants, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, renameSync, rmdirSync, rmSync, statSync, statfsSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, join, resolve, sep } from "node:path";
 import { t, tf } from "./langue.ts";
@@ -85,6 +85,15 @@ function ancetreExistant(chemin: string): string {
     c = parent;
   }
   return c;
+}
+
+/** Ce chemin est-il un lien symbolique (ou une jonction sous Windows) ? Absent : non. */
+function estUnLien(chemin: string): boolean {
+  try {
+    return lstatSync(chemin).isSymbolicLink();
+  } catch {
+    return false;
+  }
 }
 
 /** Place libre sur le disque de ce chemin, en octets (null si illisible). */
@@ -215,6 +224,17 @@ export function validerEmplacement(brut: unknown, moteur: MoteurLocal, creer: bo
 
   const dossier = join(choisi, sousDossier(moteur));
   const existant = ancetreExistant(choisi);
+  /*
+   * Le sous-dossier lui-même ne doit pas être un lien (test d'intrusion du
+   * 28/09/2026, SECURITE.md § 58). Les contrôles ci-dessus portent sur le
+   * chemin réel du dossier choisi ; un `LM Studio` ou `modeles-llamacpp` déjà
+   * posé là en lien symbolique menait ailleurs sans repasser par eux : essayé,
+   * le pointeur était écrit vers un lien qui aboutissait dans l'espace des
+   * agents (d'où la passerelle aurait lancé `bin/lms`), et les modèles du
+   * moteur ouvert allaient dans les données de l'instance. Un lien ne sert à
+   * rien ici : refusé, avant et après la création.
+   */
+  if (estUnLien(dossier)) return refus(tf("{0} est un lien symbolique : choisissez un dossier où il n'y en a pas.", dossier));
   try {
     if (!statSync(existant).isDirectory()) return refus(t("Ce chemin mène à un fichier, pas à un dossier."));
     if (existsSync(dossier) && !statSync(dossier).isDirectory()) return refus(tf("{0} existe déjà et n'est pas un dossier.", dossier));
@@ -242,6 +262,11 @@ export function validerEmplacement(brut: unknown, moteur: MoteurLocal, creer: bo
     return refus(tf("Le dossier n'a pas pu être créé ({0}).", (err as NodeJS.ErrnoException).code ?? String(err)));
   }
   const annuler = () => retirerCrees(dossier, cree);
+  // Un lien posé entre le contrôle et la création, ou un chemin réel qui n'est plus le chemin écrit : rien n'est retenu.
+  if (estUnLien(dossier) || replier(cheminReel(dossier)) !== replier(dossier)) {
+    annuler();
+    return refus(tf("{0} est un lien symbolique : choisissez un dossier où il n'y en a pas.", dossier));
+  }
   try {
     const st = statSync(dossier);
     // Comme `dossierLmStudio` (engine.ts) : un dossier d'un autre compte n'est pas suivi.

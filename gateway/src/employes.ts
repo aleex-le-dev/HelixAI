@@ -1350,7 +1350,7 @@ async function arreterOrphelin(): Promise<void> {
   const commande = commandeLigneDeProcessus(pid, process.platform, process.env);
   const ps = await executer(commande.fichier, commande.args, process.env, 15_000);
   // OpenClaw se renomme « openclaw-gateway » : sa ligne de commande ne porte plus ses arguments.
-  if (!ps.ok || !estPasserelleOpenClaw(ps.sortie, process.platform)) return;
+  if (!ps.ok || !estPasserelleOpenClaw(ps.sortie, process.platform, portOpenClaw())) return;
   /*
    * Tout son arbre : sous Windows, `process.kill` n'arrête que ce numéro-là,
    * et le Node que le lanceur d'OpenClaw relance pour lui-même gardait le port.

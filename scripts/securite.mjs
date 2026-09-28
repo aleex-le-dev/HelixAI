@@ -7667,6 +7667,44 @@ console.log("\n24. OpenClaw natif sous Windows : installation, lancement sans cm
   verifier("windows : l'essai s'est déroulé jusqu'au bout", essai.status === 0, `${essai.status} ${essai.error?.message ?? ""} ${lignes.slice(-6).join(" ")}`);
 }
 
+/*
+ * 25. Test d'intrusion final de la 2026.928.6 (28/09/2026, SECURITE.md § 58) :
+ * déplacer un dossier qui contient une zone protégée, sous-dossier des
+ * modèles posé en lien symbolique, port du moteur ouvert tenu par un autre
+ * programme. `scripts/essai-intrusion-928-6.mjs` les rejoue contre des
+ * passerelles jetables ; ici, en plus, ce qui ne se rejoue pas sans Windows.
+ */
+console.log("\n25. Test d'intrusion final de la 2026.928.6 : zones, emplacement des modèles, port du moteur ouvert, Windows");
+{
+  const { spawnSync: lancerEssai } = await import("node:child_process");
+  const essai = lancerEssai(process.execPath, [join(RACINE, "scripts", "essai-intrusion-928-6.mjs")], { encoding: "utf8", timeout: 5 * 60_000 });
+  const lignes = `${essai.stdout ?? ""}${essai.stderr ?? ""}`.split("\n");
+  for (const ligne of lignes) {
+    const ok = /^\s+✓ (.*)$/.exec(ligne);
+    const ko = /^\s+✗ (.*?)(?:  —  obtenu : .*)?$/.exec(ligne);
+    if (ok) verifier(`intrusion : ${ok[1]}`, true, "");
+    else if (ko) verifier(`intrusion : ${ko[1]}`, false, ligne.split("  —  obtenu : ")[1] ?? "");
+    else if (/^[A-G]\. /.test(ligne)) console.log(`  ${ligne}`);
+  }
+  verifier("intrusion : l'essai s'est déroulé jusqu'au bout", essai.status === 0, `${essai.status} ${essai.error?.message ?? ""} ${lignes.slice(-6).join(" ")}`);
+
+  // Windows : l'OpenClaw personnel (port 18789) n'est pas pris pour celui de Helix, même numéro de processus réutilisé.
+  const P = await import(join(RACINE, "gateway", "src", "plateformeOpenClaw.ts"));
+  const ligneHelix = '"C:\\Users\\A\\.helix\\data\\openclaw-moteur\\node\\node.exe" "C:\\Users\\A\\.helix\\data\\openclaw-moteur\\node\\node_modules\\openclaw\\openclaw.mjs" gateway run --port 18800';
+  const lignePerso = '"C:\\Program Files\\nodejs\\node.exe" "C:\\Users\\A\\AppData\\Roaming\\npm\\node_modules\\openclaw\\openclaw.mjs" gateway run --port 18789';
+  verifier(
+    "windows : l'orphelin n'est arrêté que s'il écoute le port de Helix (pas l'OpenClaw personnel sur 18789)",
+    P.estPasserelleOpenClaw(ligneHelix, "win32", 18800) && !P.estPasserelleOpenClaw(lignePerso, "win32", 18800) && !P.estPasserelleOpenClaw(ligneHelix.replace("18800", "188000"), "win32", 18800),
+    "mauvais verdict",
+  );
+  const srcEmployes = readFileSync(join(RACINE, "gateway", "src", "employes.ts"), "utf8");
+  verifier("windows : l'arrêt de l'orphelin passe le port de Helix à la reconnaissance", /estPasserelleOpenClaw\(ps\.sortie, process\.platform, portOpenClaw\(\)\)/.test(srcEmployes), "employes.ts");
+  const srcPasserelle = readFileSync(join(RACINE, "electron", "passerelle.cjs"), "utf8");
+  verifier("windows : l'application arrête la passerelle par le taskkill de System32, pas par le PATH", !/spawn\("taskkill"/.test(srcPasserelle) && /"System32", "taskkill\.exe"/.test(srcPasserelle), "electron/passerelle.cjs");
+  const srcBackends = readFileSync(join(RACINE, "gateway", "src", "backends.ts"), "utf8");
+  verifier("moteur ouvert : la découverte ne l'interroge (avec sa clé) que s'il a été reconnu à l'écoute", /backend\.kind === "llamacpp" && !llamaSur\) throw/.test(srcBackends), "backends.ts");
+}
+
 console.log(`\n${reussis} vérification(s) réussie(s), ${echecs.length} échec(s).`);
 if (echecs.length) {
   console.log("Échecs :");

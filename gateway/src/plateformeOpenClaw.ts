@@ -387,9 +387,17 @@ export function commandeLigneDeProcessus(pid: number, p: NodeJS.Platform, env: E
  * arguments ; Windows ne renomme pas un processus, la ligne reste
  * `node.exe …\openclaw.mjs gateway run --port …`.
  */
-export function estPasserelleOpenClaw(ligne: string, p: NodeJS.Platform): boolean {
+export function estPasserelleOpenClaw(ligne: string, p: NodeJS.Platform, port?: number): boolean {
   if (p !== "win32") return ligne.includes("openclaw");
-  return /openclaw/i.test(ligne) && /\bgateway\b/i.test(ligne);
+  if (!/openclaw/i.test(ligne) || !/\bgateway\b/i.test(ligne)) return false;
+  /*
+   * Et sur le port de Helix, quand on le connaît (test d'intrusion du
+   * 28/09/2026, SECURITE.md § 58) : l'OpenClaw personnel de la personne
+   * (`gateway run --port 18789`) a la même ligne, et un numéro de processus
+   * noté par Helix, puis réutilisé par lui après un redémarrage, l'aurait fait
+   * arrêter. Sous Windows la ligne garde ses arguments : on peut le distinguer.
+   */
+  return port === undefined || new RegExp(`--port[=\\s]+"?${port}"?(\\s|$)`).test(ligne);
 }
 
 /**

@@ -37,6 +37,7 @@
  */
 
 const os = require("node:os");
+const path = require("node:path");
 const { spawn } = require("node:child_process");
 const { utilityProcess } = require("electron");
 
@@ -93,7 +94,14 @@ function arreterPasserelle(enfant) {
       envoyerALaPasserelle(enfant, { type: "arret" });
       setTimeout(() => {
         if (!enfant.helixArretee && enfant.pid) {
-          spawn("taskkill", ["/pid", String(enfant.pid), "/T", "/F"], { stdio: "ignore", windowsHide: true });
+          /*
+           * Par son chemin dans System32, pas par le PATH (test d'intrusion du
+           * 28/09/2026, SECURITE.md § 58) : comme gateway/src/processus.ts,
+           * un `taskkill.exe` posé plus tôt dans le PATH, ou dans le dossier
+           * courant, que Windows regarde d'abord, aurait été lancé à sa place.
+           */
+          const taskkill = path.join(process.env.SystemRoot || process.env.windir || "C:\\Windows", "System32", "taskkill.exe");
+          spawn(taskkill, ["/pid", String(enfant.pid), "/T", "/F"], { stdio: "ignore", windowsHide: true });
         }
       }, 4000).unref?.();
     } else {

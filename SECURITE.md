@@ -5853,3 +5853,46 @@ qui fait l'aller-retour par un fichier (le faux modèle le fait à coup sûr) ; 
 de 2 Mo mesurée en entier (extrapolé de 200 000 `<`) ; l'application empaquetée. `essai-cli.mjs` garde
 un échec qui précède cette version (déjà là sur la `v2026.928.5`) : un compte créé par un collègue doit
 choisir son mot de passe à la première connexion, et l'essai attend encore « Connecté » au terminal.
+
+## 54. Moteur ouvert llama.cpp sur Mac Intel (28 septembre 2026)
+
+Demandé par Medhi le 28/09/2026. Les Mac Intel n'avaient plus de moteur (LM Studio ne publie plus
+pour eux ; chemin Homebrew retiré le 27/09, § 3.9 de PROJET.md). Helix y pose llama.cpp
+(`gateway/src/llamaCpp.ts`, `llamaCppBase.ts`), et publie pour la première fois une application
+Intel (`Helix-<version>-x64.dmg`, partie `macIntel` du manifeste de mise à jour).
+
+### 54.1 Ce qui est posé
+
+| Élément | Origine | Vérification |
+|---|---|---|
+| Moteur `llama-server` | archive `llama-b11146-bin-macos-x64.tar.gz` de ggml-org (b11146 = v0.5.0 du 23/09/2026, MIT), 11 Mo | SHA-256 écrite dans le code (relevée dans l'API de GitHub et recalculée) ; essayé (`--version`) avant d'être mis en place |
+| Modèles | fichiers GGUF des dépôts `Qwen/Qwen3-*-GGUF` (Apache 2.0), révision figée (hash de commit) | SHA-256 écrite dans le code (identifiant LFS de Hugging Face) ; un fichier n'a son nom définitif qu'après vérification ; empreinte fausse : effacé sans être ouvert |
+
+Pas de Qwen3.5 sous llama.cpp : c'est avec ce moteur, au processeur, qu'il rendait une réponse
+illisible sur le PC de Medhi (PROJET.md, 27/09/2026).
+
+### 54.2 Le serveur
+
+| Risque | Tenu par | Contrôle |
+|---|---|---|
+| Un autre programme ou une page web se sert du modèle, ou charge et décharge des modèles (API du routeur) | écoute sur 127.0.0.1 seulement ; clé exigée à chaque requête (`--api-key-file`, fichier 0600 tiré au hasard, jamais en argument de ligne de commande) | section 19 ; `essai-llamacpp.mjs` (401 sans clé, `lsof`) |
+| Le modèle reçoit les secrets de l'instance | environnement réduit à HOME, TMPDIR, LANG, USER, un PATH système et `LLAMA_CACHE` (dossier vide à Helix) | section 19 |
+| Le serveur va sur le réseau (téléchargements `-hf`) | `--offline` ; pas d'interface web (`--no-webui`) | section 19 ; essai (pas de page HTML) |
+| Les modèles d'autres logiciels apparaissent | cache du routeur dans un dossier vide à Helix, liste des modèles écrite par Helix (`modeles.ini`) | essai (un seul modèle listé) |
+| Un serveur reste après la passerelle | arrêté avec elle (par son PID) ; un serveur resté d'une passerelle tuée est réutilisé s'il répond avec la clé, jamais doublé | essai (aucun `llama-server` après l'arrêt) |
+| Le port est pris par un autre programme | pas de second serveur ; dit au journal (`HELIX_LLAMACPP_PORT` pour un autre port) | revu |
+
+### 54.3 Essayé
+
+`scripts/essai-llamacpp.mjs`, 26 contrôles réussis le 28/09/2026 sur un Mac à puce Apple
+(`HELIX_MOTEUR=llamacpp`, archive arm64 de la même publication) : téléchargement réel du moteur et de
+Qwen3 1.7B, coupure puis reprise (requête `Range`), empreinte, essai de santé, réponses en flux avec
+et sans réflexion, appel d'outil, arrêt. `npm run securite`, section 19.
+
+### 54.4 Pas essayé
+
+Le binaire Intel lui-même (Rosetta absente du Mac d'essai : « Bad CPU type »), donc aucun Mac Intel
+réel ; l'application Intel empaquetée ; Qwen3 4B, 8B et 30B A3B sous llama.cpp (seul le 1.7B a été
+téléchargé et chargé ; les empreintes des autres sont celles de Hugging Face, pas recalculées) ; la
+vitesse au processeur d'un Mac Intel ; la mise en veille du modèle après vingt minutes
+(`sleep-idle-seconds`).

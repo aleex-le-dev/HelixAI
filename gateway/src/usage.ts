@@ -60,7 +60,7 @@ import { fournisseurDuBackend, prixPublie, type Devise } from "./prixPublies.ts"
  * dit explicitement, plutôt que de le supposer.
  */
 export function estLocal(kind: BackendKind | string | undefined): boolean {
-  return kind === "lmstudio" || kind === "exo";
+  return kind === "lmstudio" || kind === "llamacpp" || kind === "exo";
 }
 
 /* ------------------------------------------------------------------ */

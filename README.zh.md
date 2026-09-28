@@ -30,6 +30,7 @@
 
 <p align="center">
   <a href="https://github.com/medhiclb/HelixAI/releases/download/v2026.928.6/Helix-2026.928.6-arm64.dmg"><img alt="下载 macOS 版（Apple 芯片）" src="https://img.shields.io/badge/macOS-Apple%20Silicon-111111?style=for-the-badge&logo=apple&logoColor=white" /></a>
+  <a href="https://github.com/medhiclb/HelixAI/releases/download/v2026.928.6/Helix-2026.928.6-x64.dmg"><img alt="下载 macOS 版（Intel）" src="https://img.shields.io/badge/macOS-Intel-111111?style=for-the-badge&logo=apple&logoColor=white" /></a>
   <a href="https://github.com/medhiclb/HelixAI/releases/download/v2026.928.6/Helix-Setup-2026.928.6-x64.exe"><img alt="下载 Windows 版（x64）" src="https://img.shields.io/badge/Windows-x64-0a5fb4?style=for-the-badge&logo=windows&logoColor=white" /></a>
   <a href="https://github.com/medhiclb/HelixAI/releases/download/v2026.928.6/helix-plateforme_2026.928.6_amd64.deb"><img alt="下载 Ubuntu 和 Debian 版（.deb）" src="https://img.shields.io/badge/Ubuntu%20%2F%20Debian-.deb-c2410c?style=for-the-badge&logo=ubuntu&logoColor=white" /></a>
   <a href="https://github.com/medhiclb/HelixAI/releases/download/v2026.928.6/Helix-2026.928.6.AppImage"><img alt="下载 Linux 版（AppImage）" src="https://img.shields.io/badge/Linux-AppImage-3f3f46?style=for-the-badge&logo=linux&logoColor=white" /></a>
@@ -103,6 +104,7 @@
 | 系统 | 下载 | 安装方法 |
 |---|---|---|
 | **macOS**（Apple 芯片） | [Helix-2026.928.6-arm64.dmg](https://github.com/medhiclb/HelixAI/releases/download/v2026.928.6/Helix-2026.928.6-arm64.dmg) | 打开磁盘映像，将 Helix 拖入“应用程序”。首次启动时：系统设置 › 隐私与安全性 › “仍要打开” |
+| **macOS**（Intel） | [Helix-2026.928.6-x64.dmg](https://github.com/medhiclb/HelixAI/releases/download/v2026.928.6/Helix-2026.928.6-x64.dmg) | 同上。本地模型由 Helix 自行安装的 llama.cpp 运行。 |
 | **Windows 10/11**（x64） | [Helix-Setup-2026.928.6-x64.exe](https://github.com/medhiclb/HelixAI/releases/download/v2026.928.6/Helix-Setup-2026.928.6-x64.exe) | 运行安装程序（无需管理员权限）。如出现 SmartScreen：“更多信息” › “仍要运行” |
 | **Ubuntu、Debian**（x64） | [helix-plateforme_2026.928.6_amd64.deb](https://github.com/medhiclb/HelixAI/releases/download/v2026.928.6/helix-plateforme_2026.928.6_amd64.deb) | `sudo apt install ./helix-plateforme_2026.928.6_amd64.deb` |
 | **其他 Linux**（x64） | [Helix-2026.928.6.AppImage](https://github.com/medhiclb/HelixAI/releases/download/v2026.928.6/Helix-2026.928.6.AppImage) | `chmod +x Helix-2026.928.6.AppImage`，然后运行。在 Ubuntu 24.04 上建议使用 `.deb` |
@@ -140,7 +142,7 @@ Windows 上暂不提供：全天候智能体（OpenClaw 在 Windows 上需要 WS
 
 ## 从源码构建
 
-前提条件：macOS（Apple 芯片）、Windows 10/11 或 Linux（x64），Node.js 22.18 或更高版本以及 npm。Node 仅用于构建和开发：网关直接运行其 TypeScript，安装后的应用既不需要 Node，也不需要 Python。
+前提条件：macOS（Apple 芯片或 Intel）、Windows 10/11 或 Linux（x64），Node.js 22.18 或更高版本以及 npm。Node 仅用于构建和开发：网关直接运行其 TypeScript，安装后的应用既不需要 Node，也不需要 Python。
 
 ```bash
 git clone https://github.com/medhiclb/HelixAI

@@ -6,6 +6,8 @@
  *  - `mac` : l'archive macOS (`Helix-<version>-arm64-mac.zip` de `npm run
  *    package`), son empreinte SHA-512 (base64, la forme d'electron-updater) et
  *    sa taille. La signature de l'éditeur est dans l'application elle-même ;
+ *  - `macIntel` (28/09/2026) : la même chose pour les Mac Intel
+ *    (`Helix-<version>-x64-mac.zip`, `electron-builder --mac --x64`) ;
  *  - `windows` (27/09/2026) : l'installateur NSIS (`Helix-Setup-<version>-x64.exe`),
  *    son empreinte SHA-512, sa taille, et la signature de l'éditeur sur le
  *    tout (electron/signatureEditeur.cjs, `signerInstallateur`), faite avec la
@@ -45,6 +47,13 @@ const zip = `Helix-${version}-arm64-mac.zip`;
 if (existsSync(join(dossier, zip))) {
   manifeste.mac = { fichier: zip, sha512: await empreinte(join(dossier, zip)), octets: statSync(join(dossier, zip)).size };
   console.log(`mac : ${zip} (${manifeste.mac.octets} octets)`);
+}
+
+// Mac Intel (28/09/2026) : sa propre archive, lue par les seuls Mac Intel (sourceGithub.cjs, `lireManifeste`).
+const zipIntel = `Helix-${version}-x64-mac.zip`;
+if (existsSync(join(dossier, zipIntel))) {
+  manifeste.macIntel = { fichier: zipIntel, sha512: await empreinte(join(dossier, zipIntel)), octets: statSync(join(dossier, zipIntel)).size };
+  console.log(`mac intel : ${zipIntel} (${manifeste.macIntel.octets} octets)`);
 }
 
 const exe = `Helix-Setup-${version}-x64.exe`;

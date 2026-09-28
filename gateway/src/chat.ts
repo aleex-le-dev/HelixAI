@@ -59,7 +59,7 @@ import {
   type Avancement,
   type Plan,
 } from "./plan.ts";
-import type { BackendConfig, ChatRequest, ModelInfo } from "./types.ts";
+import { moteurDeLaMachine, type BackendConfig, type ChatRequest, type ModelInfo } from "./types.ts";
 import { t, tf } from "./langue.ts";
 import { gardesDeFlux, type Degenerescence } from "./gardeBoucle.ts";
 import { contexteDuModele, echantillonnageLocal } from "./backends.ts";
@@ -506,6 +506,16 @@ function basePayload(
    * que l'appelant a fixé lui-même (OpenCode, un script par clé) est gardé.
    * Qwen3.5 réfléchit d'office : sans niveau connu, c'est le profil qui réfléchit.
    */
+  /*
+   * Qwen3 servi par le moteur ouvert (Mac Intel, 28/09/2026) : le profil
+   * « réflexion » de Qwen est posé pour tout le serveur (llamaCpp.ts) ; sans
+   * réflexion, Qwen conseille une autre température et un autre top_p (fiche
+   * de Qwen/Qwen3-4B-GGUF). Ce que l'appelant a fixé lui-même est gardé.
+   */
+  if (model.backendKind === "llamacpp" && !(model.reasoning ? niveauEffort(effort).raisonner : true)) {
+    if (payload.temperature === undefined) payload.temperature = 0.7;
+    if (payload.top_p === undefined) payload.top_p = 0.8;
+  }
   if (model.backendKind === "lmstudio") {
     const reflechit = model.reasoning ? niveauEffort(effort).raisonner : true;
     for (const [champ, valeur] of Object.entries(echantillonnageLocal(model.id, reflechit))) {
@@ -1142,9 +1152,10 @@ export async function handleChatRequest(
     interfaceHelix || !Array.isArray(body.tools) || body.tools.length === 0
       ? null
       : suivreAppelModele(req.headers, model.id, backend, JSON.stringify(body.messages).length + JSON.stringify(body.tools).length);
-  if (model.backendKind === "lmstudio" && model.loaded === false) {
+  if (moteurDeLaMachine(model.backendKind) && model.loaded === false) {
     signaler({ type: "statut", message: tf("Chargement de {0} en mémoire...", model.id) });
     attente?.chargement(true);
+    // LM Studio par `lms load`, le moteur ouvert (Mac Intel) par son routeur (`loadModel`, backends.ts).
     const charge = await loadModel(model.id, { auto: !body.model });
     attente?.chargement(false);
     invalidate();
@@ -1343,7 +1354,7 @@ export async function handleChatRequest(
       progression: (message) => signaler({ type: "statut", message }),
       // L'historique sera raccourci plus bas (`tenirDansLaPlace`) : seulement pour l'écran de Helix, taille connue.
       historiqueCoupe:
-        !callerTools && interfaceHelix && (model.backendKind === "lmstudio" || Boolean(backend.contexte) || Boolean(model.contextePublie)),
+        !callerTools && interfaceHelix && (moteurDeLaMachine(model.backendKind) || Boolean(backend.contexte) || Boolean(model.contextePublie)),
     });
     if (arret.signal.aborted) {
       res.end();
@@ -1391,7 +1402,7 @@ export async function handleChatRequest(
        * plus simple, relus par le modèle chaque fois qu'il en a perdu le début.
        */
       const outils = compacterOutils(callerTools);
-      payload.tools = model.backendKind === "lmstudio" ? outils.map(adapterPourMoteurLocal) : outils;
+      payload.tools = moteurDeLaMachine(model.backendKind) ? outils.map(adapterPourMoteurLocal) : outils;
     } else if (callerTools) {
       console.log(`[chat] ${repetitions} actions identiques de suite : outils retirés pour cette réponse.`);
     }
@@ -1477,7 +1488,7 @@ export async function handleChatRequest(
    * raccourci sur une supposition.
    */
   const reflechit = Boolean(model.reasoning) && niveauEffort(body.effort).raisonner;
-  const tailleConnue = model.backendKind === "lmstudio" || Boolean(backend.contexte) || Boolean(model.contextePublie);
+  const tailleConnue = moteurDeLaMachine(model.backendKind) || Boolean(backend.contexte) || Boolean(model.contextePublie);
   const contexteConversation = tailleConnue ? await contexteDuModele(model, backend) : 0;
   const budgetConversation = contexteConversation
     ? placeDeLaConversation(contexteConversation, reflechit, tools && tools.length > 0 ? jetonsEstimes(JSON.stringify(tools)) : 0)
@@ -1588,7 +1599,7 @@ export async function handleChatRequest(
       if (tools && tools.length > 0) {
         // Mêmes précautions que pour les outils d'un appelant : un serveur MCP
         // branché peut, lui aussi, déclarer de très grandes bornes.
-        payload.tools = model.backendKind === "lmstudio" ? tools.map(adapterPourMoteurLocal) : tools;
+        payload.tools = moteurDeLaMachine(model.backendKind) ? tools.map(adapterPourMoteurLocal) : tools;
         payload.tool_choice = "auto";
       }
 

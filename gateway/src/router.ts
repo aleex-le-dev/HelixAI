@@ -1,6 +1,6 @@
 import { discover, backendById } from "./backends.ts";
 import { pinnedModel } from "./deployment.ts";
-import type { BackendConfig, ModelInfo, Role } from "./types.ts";
+import { moteurDeLaMachine, type BackendConfig, type ModelInfo, type Role } from "./types.ts";
 // Ces refus s'affichent tels quels dans le Chat : ils suivent la langue de la personne.
 import { t, tf } from "./langue.ts";
 import { estDefaillant } from "./santeModeles.ts";
@@ -12,7 +12,7 @@ import { estDefaillant } from "./santeModeles.ts";
  * « aucun modèle ».
  */
 function sansDefaillants(list: ModelInfo[]): ModelInfo[] {
-  const sains = list.filter((m) => !(m.backendKind === "lmstudio" && estDefaillant(m.id)));
+  const sains = list.filter((m) => !(moteurDeLaMachine(m.backendKind) && estDefaillant(m.id)));
   return sains.length > 0 ? sains : list;
 }
 

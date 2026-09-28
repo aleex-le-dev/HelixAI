@@ -1762,6 +1762,35 @@ revenir aux icônes neutres sans une demande d'une société ou de Medhi.
 
 ---
 
+### 3.19 Mac Intel : llama.cpp, posé par Helix (28/09/2026)
+
+**Demande de Medhi, 28/09/2026** : « un moteur automatique pour les Mac Intel, avec llama.cpp : go ».
+Depuis le 27/09, un Mac Intel n'avait aucun moteur local (LM Studio ne publie plus pour eux, et le
+chemin Homebrew sans empreinte avait été retiré). Aucune application Intel n'était d'ailleurs
+publiée : `electron-builder` ne fabriquait que l'arm64.
+
+**Décidé :**
+- Sur Mac Intel, le moteur est **llama.cpp** (MIT) : `llama-server` en mode routeur, posé dans
+  `<données>/llamacpp/` à une version épinglée (b11146 = v0.5.0), sur 127.0.0.1 avec une clé,
+  sans réseau ni interface web. LM Studio y est coupé : un seul moteur local à la fois. Ailleurs,
+  `HELIX_MOTEUR=llamacpp` le choisit (c'est ainsi qu'il a été essayé).
+- **Modèles** : seulement les Qwen3 déjà essayés avec Helix (1.7B, 4B, 8B, 30B A3B), en GGUF publiés
+  par Qwen lui-même, révision et empreinte figées ; le choix suit la même règle que sous LM Studio
+  (le mieux noté qui tient sur la machine, puis les replis), à la taille réelle du fichier GGUF.
+  Pas de Qwen3.5 (réponse illisible sous llama.cpp au processeur, 27/09). Pas de modèle d'écran.
+- **Rien à accepter** à l'installation (licence MIT) : l'écran de mise en route n'a pas la case des
+  conditions de LM Studio.
+- **Publication** : une application Intel (`Helix-<version>-x64.dmg` et `-x64-mac.zip`), avec sa
+  propre partie `macIntel` dans le manifeste de mise à jour ; un Mac ne lit que la sienne.
+
+**Essayé** (le 28/09/2026, sur le Mac à puce Apple de Medhi, archive arm64 de la même publication) :
+`scripts/essai-llamacpp.mjs`, 26/26 : installation par la route de l'administrateur, choix du modèle,
+téléchargement coupé puis repris, empreinte, chargement, essai de santé, Chat en flux avec et sans
+réflexion, appel d'outil, clé exigée, écoute locale, arrêt avec la passerelle.
+**Pas essayé** : un vrai Mac Intel (Rosetta absente, le binaire Intel ne démarre pas ici),
+l'application Intel empaquetée, les modèles 4B, 8B et 30B sous llama.cpp, la vitesse au processeur.
+Détail de sécurité : SECURITE.md § 54.
+
 ## 4. Sécurité
 
 Le détail est dans [SECURITE.md](SECURITE.md). Voici ce qu'il faut avoir en tête.

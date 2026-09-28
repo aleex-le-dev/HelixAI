@@ -1,5 +1,6 @@
 import { deployment } from "./deployment.ts";
 import { ouverteDepuisLEcran } from "./reseau.ts";
+import { cleLlamaCpp, moteurOuvert, urlLlamaCpp } from "./llamaCppBase.ts";
 import type { BackendConfig, Role } from "./types.ts";
 
 /** Port d'écoute de la passerelle. */
@@ -58,8 +59,29 @@ const BASE_BACKENDS: BackendConfig[] = [
     baseUrl: process.env.HELIX_LMSTUDIO_URL ?? "http://localhost:1234/v1",
     kind: "lmstudio",
     priority: 10,
-    enabled: true,
+    // Coupé là où sert le moteur ouvert (Mac Intel) : un seul moteur local à la fois (llamaCppBase.ts).
+    enabled: !moteurOuvert(),
   },
+  /*
+   * Le moteur ouvert, llama.cpp (MIT), posé et démarré par Helix
+   * (llamaCpp.ts, 28/09/2026) : sur 127.0.0.1, avec une clé tirée pour
+   * cette machine. Ses modèles sont chargés à 32 768 jetons, comme ceux de
+   * LM Studio sur une machine de 36 Go ou moins (`optionsDeChargement`).
+   */
+  ...(moteurOuvert()
+    ? [
+        {
+          id: "llamacpp",
+          label: "llama.cpp",
+          baseUrl: urlLlamaCpp(),
+          kind: "llamacpp" as const,
+          priority: 10,
+          apiKey: cleLlamaCpp(),
+          enabled: true,
+          contexte: 32_768,
+        },
+      ]
+    : []),
 ];
 
 /**

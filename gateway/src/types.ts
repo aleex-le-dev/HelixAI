@@ -4,7 +4,16 @@ export type Role = "chat" | "code" | "vision" | "gui" | "embed";
 export const ROLES: Role[] = ["chat", "code", "vision", "gui", "embed"];
 
 /** Type de backend d'inférence. */
-export type BackendKind = "lmstudio" | "exo" | "openai-compatible";
+export type BackendKind = "lmstudio" | "llamacpp" | "exo" | "openai-compatible";
+
+/**
+ * Un moteur de modèles posé sur cette machine par Helix : LM Studio, ou
+ * llama.cpp sur un Mac Intel (llamaCpp.ts, 28/09/2026). Ce qui vaut pour « le
+ * modèle local » (outils allégés, taille de conversation connue, essai de
+ * santé, découpage des tâches) vaut pour les deux ; ce qui passe par `lms`
+ * reste à LM Studio seul.
+ */
+export const moteurDeLaMachine = (kind: BackendKind | string | undefined): boolean => kind === "lmstudio" || kind === "llamacpp";
 
 export interface BackendConfig {
   id: string;

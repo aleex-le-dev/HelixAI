@@ -87,10 +87,15 @@ function analyser(brut) {
  * Le manifeste de la mise à jour macOS (`helix-mise-a-jour.json`, écrit à la
  * publication par scripts/manifeste-mise-a-jour.mjs), vérifié champ par champ :
  * version, archive .zip, empreinte SHA-512 (base64), taille.
+ *
+ * Deux parties depuis le 28/09/2026 : `mac` pour les puces Apple, `macIntel`
+ * pour les Mac Intel (première version publiée pour eux, avec le moteur
+ * llama.cpp). Un Mac ne lit que la sienne : l'archive de l'autre processeur ne
+ * démarrerait pas (Intel) ou passerait par Rosetta (puce Apple).
  */
-function lireManifeste(brut, versionAttendue) {
+function lireManifeste(brut, versionAttendue, arch = "arm64") {
   const m = analyser(brut);
-  const mac = m && m.mac;
+  const mac = m && (arch === "x64" ? m.macIntel : m.mac);
   if (!m || m.version !== versionAttendue || !mac) return null;
   if (typeof mac.fichier !== "string" || !/^[\w.-]+\.zip$/.test(mac.fichier)) return null;
   if (typeof mac.sha512 !== "string" || !/^[A-Za-z0-9+/]{86}==$/.test(mac.sha512)) return null;

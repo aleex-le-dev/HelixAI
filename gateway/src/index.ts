@@ -47,7 +47,6 @@ import {
 } from "./mcp.ts";
 import {
   detectHardware,
-  recommend,
   recommendVision,
   adaptesALaMachine,
   CATALOG,
@@ -57,7 +56,11 @@ import {
   setProvisionState,
   onProvisionChange,
   verifierModeleEnPlace,
+  catalogueOuvert,
+  conseilPourLaMachine,
 } from "./provision.ts";
+import { moteurOuvert } from "./llamaCppBase.ts";
+import { arreterLlama, installerLlamaCpp, llamaCppInstalle, menageLlama } from "./llamaCpp.ts";
 import { estDefaillant, etatSurCetteMachine } from "./santeModeles.ts";
 import { deployment, autoProvisionEnabled } from "./deployment.ts";
 import { etat as etatRechercheWeb } from "./rechercheWeb.ts";
@@ -221,7 +224,7 @@ import {
   type SessionCode as SessionCodeInscrite,
 } from "./sessionsCode.ts";
 import { nouveauTourCode } from "./permissionsCode.ts";
-import type { ChatRequest } from "./types.ts";
+import { moteurDeLaMachine, type ChatRequest } from "./types.ts";
 
 /* --------------------------------- utilitaires --------------------------------- */
 
@@ -378,7 +381,7 @@ async function handleModels(
   // Un modèle local qui a mal répondu sur cette machine : le sélecteur l'avertit (santeModeles.ts, 27/09/2026).
   send(res, 200, {
     models: list.map((m) => {
-      const etat = m.backendKind === "lmstudio" ? etatSurCetteMachine(m.id) : undefined;
+      const etat = moteurDeLaMachine(m.backendKind) ? etatSurCetteMachine(m.id) : undefined;
       return etat ? { ...m, surCetteMachine: etat } : m;
     }),
   });
@@ -605,20 +608,24 @@ async function handleProvisionStatus(res: http.ServerResponse): Promise<void> {
    * de mise en route le dit comme pour un poste piloté par l'intégrateur.
    */
   const lmStudioActif = backendById("lmstudio")?.enabled === true;
+  // Mac Intel : le moteur ouvert, llama.cpp (llamaCpp.ts, 28/09/2026), à la place de LM Studio.
+  const ouvert = moteurOuvert();
   send(res, 200, {
     hardware,
-    recommended: recommend(hardware),
-    catalog: CATALOG,
+    recommended: conseilPourLaMachine(hardware),
+    catalog: ouvert ? catalogueOuvert() : CATALOG,
+    // Le moteur que l'écran de mise en route présente : LM Studio (conditions à accepter) ou llama.cpp (MIT, rien à accepter).
+    moteur: ouvert ? "llamacpp" : "lmstudio",
     hasChatModel: chatModels.length > 0,
     /*
      * Helix a besoin d'un moteur pour faire tourner les modèles. Sans lui, il
      * n'y a rien à télécharger ni à charger : l'écran de mise en route doit le
      * dire et guider, au lieu de proposer une installation qui échouera.
      */
-    moteurInstalle: lmStudioActif && (await findLms()) !== null && !moteurAPoser(),
+    moteurInstalle: ouvert ? llamaCppInstalle() : lmStudioActif && (await findLms()) !== null && !moteurAPoser(),
     // Installation pilotée par l'intégrateur : l'écran de mise en route ne
     // propose rien, les modèles sont ceux du profil client.
-    managed: !autoProvisionEnabled() || !lmStudioActif,
+    managed: !autoProvisionEnabled() || (!lmStudioActif && !ouvert),
     client: deployment().client ?? null,
     state: getProvisionState(),
     /*
@@ -670,6 +677,7 @@ async function handleEngineInstall(
   if (moteurEnInstallation) return send(res, 409, { error: { message: t("Le moteur est déjà en cours d'installation.") } });
   // Déploiement piloté par l'intégrateur : les modèles sont ceux du profil client, l'écran ne propose rien (revue du 27/09/2026).
   if (!autoProvisionEnabled()) return send(res, 403, { error: { message: t("Sur ce poste, les modèles sont préparés par l'intégrateur.") } });
+  if (moteurOuvert()) return installerMoteurOuvert(qui.userId, res);
   const body = (await readJson(req).catch(() => ({}))) as { conditionsAcceptees?: unknown };
   // Même règle que partout : seul un `true` explicite vaut accord.
   if (body.conditionsAcceptees !== true) {
@@ -750,6 +758,36 @@ async function handleEngineInstall(
       moteurEnInstallation = false;
     });
 
+  send(res, 202, { started: true, state: getProvisionState() });
+}
+
+/**
+ * Mac Intel : llama.cpp, logiciel libre (MIT), sans conditions à accepter
+ * pour s'en servir. Puis, comme pour LM Studio, le modèle adapté à la machine
+ * dans la foulée : « installer Helix » reste une seule opération.
+ */
+function installerMoteurOuvert(userId: string, res: http.ServerResponse): void {
+  journaliser("moteur.llamacpp_installation", userId, {});
+  moteurEnInstallation = true;
+  void installerLlamaCpp((a) => setProvisionState({ phase: "downloading", message: a.message, percent: a.percent }))
+    .then(async () => {
+      invalidate();
+      setProvisionState({ phase: "checking", message: t("Choix du modèle adapté à votre machine..."), percent: undefined });
+      await ensureLocalModel();
+      invalidate();
+      dicteeEnFond();
+      codeEnFond();
+    })
+    .catch((err: unknown) =>
+      setProvisionState({
+        phase: "error",
+        message: t("L'installation du moteur a échoué."),
+        error: err instanceof Error ? err.message : String(err),
+      }),
+    )
+    .finally(() => {
+      moteurEnInstallation = false;
+    });
   send(res, 202, { started: true, state: getProvisionState() });
 }
 
@@ -5100,7 +5138,7 @@ async function handleEmployes(
         ...(m.sizeBytes ? { taille: m.sizeBytes } : {}),
         ...(m.params ? { params: m.params } : {}),
         ...(m.entraine ? { entraine: true } : {}),
-        ...(m.backendKind === "lmstudio" && estDefaillant(m.id) ? { defaillant: true } : {}),
+        ...(moteurDeLaMachine(m.backendKind) && estDefaillant(m.id) ? { defaillant: true } : {}),
         // Une clé personnelle : la sienne (la route ne montre jamais celle d'une autre personne).
         ...(m.proprietaire ? { personnel: true } : {}),
       })),
@@ -5927,6 +5965,8 @@ function arreterProprement(): void {
   // Un entraînement orphelin garderait plusieurs Go de mémoire graphique.
   entrainement.arreterEnPartant();
   stopLmStudioIfStarted();
+  // Le moteur ouvert (Mac Intel) s'arrête avec la passerelle qui l'a lancé : il garderait le modèle en mémoire.
+  arreterLlama();
   employes.arreterEmployes();
   // La machine de l'agent garderait 3 Go de mémoire après la fermeture.
   if (configEcran().mode === "sandbox") arreterMachineEnPartant();
@@ -6149,6 +6189,8 @@ void preparerMagasin().then(() => server.listen(PORT, HOST, () => {
   setTimeout(() => {
     void verifierModeleEnPlace().catch((err: unknown) => console.error("[helix] essai du modèle en place", err));
   }, 15_000).unref();
+  // Mac Intel : les fichiers laissés par un modèle retiré du catalogue du moteur ouvert (llamaCpp.ts).
+  if (moteurOuvert()) menageLlama();
 
   /*
    * Les connecteurs branchés se redéclarent **avant** le démarrage automatique :

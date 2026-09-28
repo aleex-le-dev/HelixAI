@@ -315,6 +315,8 @@ const cheminConfig = (): string => join(dossierConfig(), "opencode.json");
  * trois quarts pour la demande et l'historique avant le résumé.
  */
 function limiteDe(m: ModelInfo): { context: number; output: number } | undefined {
+  // Le moteur ouvert (Mac Intel) charge toujours à 32 768 jetons (llamaCpp.ts).
+  if (m.backendKind === "llamacpp") return { context: 32_768, output: 8192 };
   if (m.backendKind !== "lmstudio") return undefined;
   const options = optionsDeChargement();
   const i = options.indexOf("--context-length");

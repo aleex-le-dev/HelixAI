@@ -123,6 +123,8 @@ empreintes, est dans `gateway/src/atelier-paquets.json`, `gateway/src/entraineme
 | llmster 0.0.25-1 (moteur de LM Studio) | conditions d'Element Labs, propriétaires | Sans objet : jamais redistribué | Acceptées par la personne à l'installation. |
 | OpenCode 1.18.32, Node 24.21.0, OpenClaw 2026.9.4 | MIT (npm : Artistic-2.0) | Oui | |
 | RTK 0.50.0 (`gateway/src/rtk.ts`, Helix Code) | Apache-2.0 (© RTK AI Labs, github.com/rtk-ai/rtk) | Oui | Archive officielle de la publication, empreinte SHA-256 écrite dans le code, posée dans les données de Helix (macOS et Linux). Télémétrie coupée à chaque appel (`RTK_TELEMETRY_DISABLED=1`) ; SECURITE.md § 50. |
+| llama.cpp b11146 = v0.5.0 (`gateway/src/llamaCpp.ts`, Mac Intel) | MIT (© The ggml authors, github.com/ggml-org/llama.cpp) | Oui | Archive officielle de la publication (`llama-b11146-bin-macos-x64.tar.gz`), empreinte SHA-256 écrite dans le code, posée dans les données de Helix ; son fichier LICENSE est posé avec elle. SECURITE.md § 54. |
+| Qwen3 1.7B, 4B, 8B, 30B A3B en GGUF (Mac Intel) | Apache 2.0 (© Alibaba Cloud, dépôts `Qwen/Qwen3-*-GGUF`) | Oui | Fichiers publiés par Qwen, révision figée, empreinte SHA-256 écrite dans le code. |
 | Serveurs d'outils lancés par `npx` | MIT ou Apache-2.0 (projet MCP : Apache-2.0 pour le nouveau code, MIT pour l'ancien) | Oui | `exa-mcp-server` ne déclare pas de licence dans son paquet ; son dépôt est sous MIT. |
 | Modèles de conversation, d'images, de vidéo, de dictée et d'entraînement | Apache-2.0 ou MIT | Oui | Règle du projet ; relevé au § 32 de SECURITE.md. |
 

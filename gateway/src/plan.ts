@@ -1,4 +1,5 @@
 import { tf } from "./langue.ts";
+import { moteurDeLaMachine } from "./types.ts";
 /**
  * Découpage d'une demande en étapes courtes.
  *
@@ -613,7 +614,7 @@ export function strategie(model: {
    * retire l'initiative, alors qu'il n'en avait pas besoin.
    */
   if (taille === null) {
-    const local = model.backendKind === "lmstudio";
+    const local = moteurDeLaMachine(model.backendKind);
     return {
       decoupe: local,
       budgetParEtape: 8,
@@ -621,7 +622,7 @@ export function strategie(model: {
       // sans quoi on l'arrêterait en pleine tâche pour rien.
       budgetDirect: local ? 30 : 50,
       raison:
-        model.backendKind === "lmstudio"
+        local
           ? "taille inconnue sur moteur local : découpage proposé au modèle, par prudence"
           : "taille inconnue sur moteur distant : supposé capable, pas de découpage",
     };

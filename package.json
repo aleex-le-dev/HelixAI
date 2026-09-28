@@ -117,7 +117,8 @@
         "NSSystemAdministrationUsageDescription": "Helix a besoin de l'Accessibilité pour déplacer la souris et saisir au clavier, uniquement pour les actions que vous approuvez.",
         "NSMicrophoneUsageDescription": "Helix utilise le micro pour la dictée et l'enregistrement des réunions. Le son est transcrit par votre instance, sans service extérieur."
       },
-      "icon": "build/icon.png"
+      "icon": "build/icon.png",
+      "artifactName": "${productName}-${version}-${arch}-mac.${ext}"
     },
     "win": {
       "target": [
@@ -175,6 +176,9 @@
     "toolsets": {
       "appimage": "1.0.3",
       "nsis": "1.2.1"
+    },
+    "dmg": {
+      "artifactName": "${productName}-${version}-${arch}.${ext}"
     }
   },
   "devDependencies": {

@@ -24,6 +24,11 @@ verifier("manifeste d'une autre version refusé", s.lireManifeste(JSON.stringify
 verifier("chemin dans le nom refusé", s.lireManifeste(JSON.stringify({ ...bon, mac: { ...bon.mac, fichier: "../x.zip" } }), "0.27.1") === null);
 verifier("empreinte mal formée refusée", s.lireManifeste(JSON.stringify({ ...bon, mac: { ...bon.mac, sha512: "abc" } }), "0.27.1") === null);
 verifier("JSON abîmé refusé", s.lireManifeste("{", "0.27.1") === null);
+// Mac Intel (28/09/2026) : sa propre partie, jamais celle des puces Apple.
+const intel = { ...bon, macIntel: { ...bon.mac, fichier: "Helix-0.27.1-x64-mac.zip" } };
+verifier("Mac Intel : lit la partie `macIntel`", s.lireManifeste(JSON.stringify(intel), "0.27.1", "x64")?.files[0].url === "Helix-0.27.1-x64-mac.zip");
+verifier("Mac Intel : sans partie `macIntel`, rien (pas l'archive pour puce Apple)", s.lireManifeste(JSON.stringify(bon), "0.27.1", "x64") === null);
+verifier("puce Apple : garde la partie `mac` quand `macIntel` existe", s.lireManifeste(JSON.stringify(intel), "0.27.1", "arm64")?.files[0].url === "Helix-0.27.1-arm64-mac.zip");
 // La partie Windows (27/09/2026) : signée par une clé d'essai, tirée ici, jamais la vraie.
 const { generateKeyPairSync, createPublicKey } = await import("node:crypto");
 const sig = require("../electron/signatureEditeur.cjs");

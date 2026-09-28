@@ -31,6 +31,7 @@
 
 <p align="center">
   <a href="https://github.com/medhiclb/HelixAI/releases/download/v2026.928.6/Helix-2026.928.6-arm64.dmg"><img alt="Télécharger pour macOS (puce Apple)" src="https://img.shields.io/badge/macOS-puce%20Apple-111111?style=for-the-badge&logo=apple&logoColor=white" /></a>
+  <a href="https://github.com/medhiclb/HelixAI/releases/download/v2026.928.6/Helix-2026.928.6-x64.dmg"><img alt="Télécharger pour macOS (Intel)" src="https://img.shields.io/badge/macOS-Intel-111111?style=for-the-badge&logo=apple&logoColor=white" /></a>
   <a href="https://github.com/medhiclb/HelixAI/releases/download/v2026.928.6/Helix-Setup-2026.928.6-x64.exe"><img alt="Télécharger pour Windows (x64)" src="https://img.shields.io/badge/Windows-x64-0a5fb4?style=for-the-badge&logo=windows&logoColor=white" /></a>
   <a href="https://github.com/medhiclb/HelixAI/releases/download/v2026.928.6/helix-plateforme_2026.928.6_amd64.deb"><img alt="Télécharger pour Ubuntu et Debian (.deb)" src="https://img.shields.io/badge/Ubuntu%20%2F%20Debian-.deb-c2410c?style=for-the-badge&logo=ubuntu&logoColor=white" /></a>
   <a href="https://github.com/medhiclb/HelixAI/releases/download/v2026.928.6/Helix-2026.928.6.AppImage"><img alt="Télécharger pour Linux (AppImage)" src="https://img.shields.io/badge/Linux-AppImage-3f3f46?style=for-the-badge&logo=linux&logoColor=white" /></a>
@@ -122,6 +123,7 @@ Empreintes SHA-256 : [`SHA256SUMS.txt`](https://github.com/medhiclb/HelixAI/rele
 | Système | Téléchargement | Installation |
 |---|---|---|
 | **macOS** (puce Apple) | [Helix-2026.928.6-arm64.dmg](https://github.com/medhiclb/HelixAI/releases/download/v2026.928.6/Helix-2026.928.6-arm64.dmg) | Ouvrez l'image disque et glissez Helix dans Applications. Au premier lancement : Réglages Système › Confidentialité et sécurité › « Ouvrir quand même » |
+| **macOS** (Intel) | [Helix-2026.928.6-x64.dmg](https://github.com/medhiclb/HelixAI/releases/download/v2026.928.6/Helix-2026.928.6-x64.dmg) | Comme ci-dessus. Les modèles locaux tournent avec llama.cpp, que Helix installe lui-même. |
 | **Windows 10/11** (x64) | [Helix-Setup-2026.928.6-x64.exe](https://github.com/medhiclb/HelixAI/releases/download/v2026.928.6/Helix-Setup-2026.928.6-x64.exe) | Lancez l'installateur (aucun droit d'administration nécessaire). Si SmartScreen s'affiche : « Informations complémentaires » › « Exécuter quand même » |
 | **Ubuntu, Debian** (x64) | [helix-plateforme_2026.928.6_amd64.deb](https://github.com/medhiclb/HelixAI/releases/download/v2026.928.6/helix-plateforme_2026.928.6_amd64.deb) | `sudo apt install ./helix-plateforme_2026.928.6_amd64.deb` |
 | **Autres Linux** (x64) | [Helix-2026.928.6.AppImage](https://github.com/medhiclb/HelixAI/releases/download/v2026.928.6/Helix-2026.928.6.AppImage) | `chmod +x Helix-2026.928.6.AppImage`, puis lancez-le. Sur Ubuntu 24.04, préférez le `.deb` |
@@ -206,7 +208,7 @@ commande `helix`.
 
 ## Construire depuis les sources
 
-Prérequis : macOS (puce Apple), Windows 10/11 ou Linux (x64), Node.js 22.18 ou plus récent et
+Prérequis : macOS (puce Apple ou Intel), Windows 10/11 ou Linux (x64), Node.js 22.18 ou plus récent et
 npm. Node ne sert qu'à construire et développer : la passerelle exécute directement son
 TypeScript, et l'application installée ne demande ni Node ni Python.
 

@@ -2,7 +2,7 @@ import { redirectionPour, refusSortie } from "./sortieReseau.ts";
 import { models, resolve } from "./router.ts";
 import { backendById, loadModel } from "./backends.ts";
 import * as usage from "./usage.ts";
-import type { ModelInfo } from "./types.ts";
+import { moteurDeLaMachine, type ModelInfo } from "./types.ts";
 import { appliquerCorrection, correctionPour, messageDuFournisseur } from "./modelesCloud.ts";
 import { t, tf } from "./langue.ts";
 
@@ -67,7 +67,7 @@ export async function completer(
    * réglages (backends.ts, `optionsDeChargement`), comme le Chat, au lieu de
    * laisser LM Studio le charger seul avec les siens (27/09/2026).
    */
-  if (model.backendKind === "lmstudio" && model.loaded === false) {
+  if (moteurDeLaMachine(model.backendKind) && model.loaded === false) {
     const charge = await loadModel(model.id);
     if (!charge.ok) return { ok: false, message: charge.message };
   }
@@ -88,8 +88,8 @@ export async function completer(
     temperature: 0.2,
     max_tokens: options.maxTokens ?? 2048,
     // Qwen3.5 et suivants : `/no_think` n'y fait plus rien, LM Studio suit ce champ (chat.ts).
-    ...(backend.kind === "lmstudio" && /qwen3/i.test(model.id) ? { reasoning_effort: "none" } : {}),
-    ...(options.schema && backend.kind === "lmstudio"
+    ...(moteurDeLaMachine(backend.kind) && /qwen3/i.test(model.id) ? { reasoning_effort: "none" } : {}),
+    ...(options.schema && moteurDeLaMachine(backend.kind)
       ? { response_format: { type: "json_schema", json_schema: { name: options.schema.nom, strict: true, schema: options.schema.schema } } }
       : {}),
   };

@@ -9,8 +9,10 @@ import { noteDuModele } from "./notesModeles.ts";
 import { dossierLmStudio, moteurAPoser, preparerDossiersLlmster } from "./engine.ts";
 import { aEssayer, essayerModele, estDefaillant, nomDuModele, noterCoupure, noterEssai, type Verdict } from "./santeModeles.ts";
 import { autoProvisionEnabled } from "./deployment.ts";
+import { cleLlamaCpp, moteurOuvert, urlLlamaCpp } from "./llamaCppBase.ts";
+import { chargerModeleLlama, installerModeleLlama, llamaCppInstalle, modelesLlamaCpp, MODELES_GGUF } from "./llamaCpp.ts";
 import { invalidate, resolve } from "./router.ts";
-import type { ModelInfo } from "./types.ts";
+import { moteurDeLaMachine, type ModelInfo } from "./types.ts";
 
 /**
  * Provisionnement automatique du modèle local (ARCHITECTURE.md, ADR-009).
@@ -345,6 +347,11 @@ export function replis(hw: Hardware, catalogue: CatalogEntry[], depart: CatalogE
  * chaque autre éditeur pour converser, et le meilleur pour piloter l'écran.
  */
 export function adaptesALaMachine(hw: Hardware): (CatalogEntry & { role: "chat" | "gui"; recommande: boolean })[] {
+  // Mac Intel : ce que le moteur ouvert sait poser, et aucun modèle d'écran (llamaCpp.ts).
+  if (moteurOuvert()) {
+    const conseil = best(hw, catalogueOuvert()).key;
+    return classement(hw, catalogueOuvert(), false).map((e) => ({ ...e, role: "chat" as const, recommande: e.key === conseil }));
+  }
   const conseilChat = best(hw, CATALOG).key;
   const conseilEcran = best(hw, VISION_CATALOG).key;
   /*
@@ -630,6 +637,14 @@ async function essaiReussi(lms: string, choice: CatalogEntry, suivant: CatalogEn
  */
 export async function verifierModeleEnPlace(): Promise<void> {
   if (enCours || !autoProvisionEnabled()) return;
+  if (moteurOuvert()) {
+    const conseil = best(detectHardware(), catalogueOuvert());
+    if (!aEssayer(conseil.key) || !modelesLlamaCpp().includes(conseil.key)) return;
+    console.log(`[helix] ${conseil.key} n'a jamais été essayé sur cette machine : essai au démarrage.`);
+    await ensureLocalModel();
+    invalidate();
+    return;
+  }
   if (!backendById("lmstudio")?.enabled || !(await lmStudioRepond())) return;
   const lms = await findLms();
   if (!lms || moteurAPoser()) return;
@@ -678,7 +693,7 @@ export async function relaisApresDefaillance(modele: string, auto: boolean): Pro
  * noté pour cette machine. La phrase rendue complète le message du Chat.
  */
 export async function apresCoupure(model: ModelInfo, auto: boolean): Promise<string> {
-  if (model.backendKind !== "lmstudio") return "";
+  if (!moteurDeLaMachine(model.backendKind)) return "";
   const etat = noterCoupure(model.id);
   if (etat === "douteux") return tf("Si cela se reproduit, {0} ne sera plus choisi d'office sur cette machine.", model.id);
   if (etat !== "defaillant") return "";
@@ -701,6 +716,8 @@ async function provision(
   requested?: string,
   catalogue: CatalogEntry[] = CATALOG,
 ): Promise<ProvisionState> {
+  // Mac Intel : le moteur ouvert, sans `lms` (llamaCpp.ts, 28/09/2026).
+  if (moteurOuvert()) return provisionOuverte(requested, catalogue);
   /*
    * LM Studio coupé par le profil (28/09/2026) : rien à installer, et `lms`
    * n'est pas lancé. Avant, une demande de mise en route cherchait quand même
@@ -929,6 +946,119 @@ async function provision(
     };
   }
 
+  setState({
+    phase: "error",
+    message: echec?.message ?? t("Aucun modèle n'a pu être chargé sur cette machine."),
+    error: echec?.error,
+  });
+  return state;
+}
+
+
+/* ── Le moteur ouvert (llama.cpp), sur un Mac Intel ─────────────────────── */
+
+/**
+ * Les modèles du catalogue que le moteur ouvert sait poser (llamaCpp.ts), à
+ * la taille de leur fichier GGUF : c'est elle que `tientSur` doit juger, pas
+ * celle du paquet de LM Studio (Qwen3 1.7B : 1,8 Go en Q8_0 contre 1,2).
+ * Copiés avec leurs accesseurs : la description se calcule à la lecture,
+ * dans la langue de la personne (`decrire`).
+ */
+export function catalogueOuvert(catalogue: CatalogEntry[] = CATALOG): CatalogEntry[] {
+  return catalogue
+    .filter((e) => MODELES_GGUF[e.key])
+    .map((e) => {
+      const copie = Object.defineProperties({}, Object.getOwnPropertyDescriptors(e)) as CatalogEntry;
+      copie.downloadGb = Math.round(MODELES_GGUF[e.key]!.octets / 1e8) / 10;
+      return copie;
+    });
+}
+
+/** Le modèle conseillé pour cette machine, avec le moteur qui y sert. */
+export function conseilPourLaMachine(hw: Hardware): CatalogEntry {
+  return moteurOuvert() ? best(hw, catalogueOuvert()) : recommend(hw);
+}
+
+/**
+ * Même parcours que pour LM Studio, par llama.cpp : le mieux noté qui tient
+ * sur la machine, téléchargé (vérifié par son empreinte), chargé, puis passé
+ * à l'essai de santé ; s'il se charge mal ou répond mal, le suivant.
+ */
+async function provisionOuverte(requested: string | undefined, catalogue: CatalogEntry[]): Promise<ProvisionState> {
+  if (catalogue === VISION_CATALOG) {
+    setState({
+      phase: "error",
+      message: t("Aucun modèle pour piloter l'écran n'est proposé avec le moteur de ce Mac."),
+      error: t("Branchez un modèle qui voit les images par une clé d'un fournisseur."),
+    });
+    return state;
+  }
+  if (!llamaCppInstalle()) {
+    setState({
+      phase: "error",
+      message: t("Le moteur des modèles n'est pas encore installé sur ce Mac."),
+      error: t("Installez-le depuis l'écran de mise en route."),
+    });
+    return state;
+  }
+  const liste = catalogueOuvert(catalogue);
+  const hw = detectHardware();
+  const start = (requested ? liste.find((c) => c.key === requested) : undefined) ?? best(hw, liste);
+  const candidates = replis(hw, liste, start);
+  const suivantDe = (apres: CatalogEntry): CatalogEntry | undefined =>
+    candidates.slice(candidates.indexOf(apres) + 1).find((c) => !estDefaillant(c.key));
+  const url = urlLlamaCpp();
+  const cle = cleLlamaCpp();
+
+  let echec: { message: string; error?: string } | null = null;
+  for (const choice of candidates) {
+    if (choice !== start && estDefaillant(choice.key)) continue;
+    setState({ phase: "checking", message: t("Vérification des modèles disponibles..."), model: choice.key, percent: undefined, error: undefined });
+
+    if (!modelesLlamaCpp().includes(choice.key)) {
+      setState({ phase: "downloading", message: tf("Téléchargement de {0} (~{1} Go)...", choice.label, choice.downloadGb), percent: 0 });
+      try {
+        await installerModeleLlama(choice.key, (a) =>
+          setState({ phase: "downloading", message: tf("Téléchargement de {0}... {1}%", choice.label, a.percent ?? 0), percent: a.percent }),
+        );
+      } catch (err) {
+        // Réseau, disque plein, empreinte fausse : un autre modèle n'irait pas mieux, on le dit tout de suite.
+        setState({
+          phase: "error",
+          message: tf("Le téléchargement de {0} a échoué.", choice.label),
+          error: err instanceof Error ? err.message : String(err),
+        });
+        return state;
+      }
+    }
+
+    setState({ phase: "loading", message: tf("Chargement de {0} en mémoire...", choice.label), percent: undefined });
+    const charge = await chargerModeleLlama(choice.key);
+    if (!charge.ok) {
+      console.error(`[helix] llama.cpp : chargement de ${choice.key} refusé : ${charge.message}`);
+      echec = { message: t("Le chargement du modèle a échoué."), error: charge.message };
+      const suivant = suivantDe(choice);
+      if (suivant) setState({ phase: "checking", message: tf("{0} est trop lourd pour cette machine, essai d'un modèle plus léger...", choice.label) });
+      continue;
+    }
+
+    setState({ phase: "loading", message: tf("Vérification de {0} : une courte question d'essai...", choice.label), percent: undefined });
+    const verdict: Verdict = await essayerModele(url, choice.key, cle);
+    noterEssai(choice.key, verdict);
+    if (verdict.ok) {
+      setState({ phase: "ready", message: tf("{0} est prêt.", choice.label), percent: 100 });
+      return state;
+    }
+    invalidate();
+    echec = {
+      message: tf("{0} ne répond pas correctement sur cette machine.", choice.label),
+      error: t("Aucun autre modèle adapté à cette machine ne reste à essayer. Choisissez-en un dans le sélecteur de modèles du Chat, ou branchez un modèle par une clé."),
+    };
+    const suivant = suivantDe(choice);
+    if (suivant) {
+      setState({ phase: "checking", message: tf("{0} ne répond pas correctement sur cette machine, essai de {1}...", choice.label, suivant.label) });
+    }
+  }
   setState({
     phase: "error",
     message: echec?.message ?? t("Aucun modèle n'a pu être chargé sur cette machine."),

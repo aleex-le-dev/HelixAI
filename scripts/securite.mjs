@@ -7420,6 +7420,28 @@ console.log("\n18 bis. Tournée finale des écrans : aide, rubriques des connect
   verifier("Chat, sources du web : « N autre(s) résultat(s)… » aligné à gauche quand il passe sur deux lignes", /className="inline-flex items-center gap-1 text-left text-xs text-muted-foreground hover:text-foreground"/.test(sourceMessages), "MessageList.tsx");
 }
 
+console.log("\n19. Moteur ouvert llama.cpp (Mac Intel) : épinglé, local, sous clé, sans les secrets de la passerelle");
+{
+  const src = readFileSync(join(RACINE, "gateway", "src", "llamaCpp.ts"), "utf8");
+  const base = readFileSync(join(RACINE, "gateway", "src", "llamaCppBase.ts"), "utf8");
+  const config = readFileSync(join(RACINE, "gateway", "src", "config.ts"), "utf8");
+  const sha = [...src.matchAll(/sha256: "([0-9a-f]+)"/g)].map((m) => m[1]);
+  verifier("chaque archive et chaque modèle a une empreinte SHA-256 écrite (64 caractères hexadécimaux)", sha.length === 6 && sha.every((h) => h.length === 64), sha.length);
+  const revisions = [...src.matchAll(/revision: "([0-9a-f]+)"/g)].map((m) => m[1]);
+  verifier("chaque modèle vient d'une révision figée (hash de commit), jamais de `main`", revisions.length === 4 && revisions.every((r) => r.length === 40), revisions.join(","));
+  verifier("modèles publiés par Qwen lui-même (Apache 2.0), aucun Qwen3.5 sous llama.cpp", /depot: "Qwen\/Qwen3-1\.7B-GGUF"/.test(src) && !/Qwen3\.5/.test(src.replace(/\/\*[\s\S]*?\*\//g, "")), "MODELES_GGUF");
+  verifier("le serveur n'écoute que sur 127.0.0.1", /"--host", "127\.0\.0\.1"/.test(src) && !/0\.0\.0\.0/.test(src), "llamaCpp.ts");
+  verifier("le serveur exige une clé, lue dans un fichier 0600, jamais passée en argument", /"--api-key-file", fichierCleLlamaCpp\(\)/.test(src) && !/"--api-key",/.test(src) && /mode: 0o600/.test(base), "llamaCpp.ts, llamaCppBase.ts");
+  verifier("ni interface web, ni réseau pour le serveur (`--no-webui`, `--offline`)", /"--no-webui"/.test(src) && /"--offline"/.test(src), "llamaCpp.ts");
+  verifier("le serveur ne reçoit pas l'environnement de la passerelle (clés, jetons) : seulement HOME, TMPDIR, LANG, USER et un PATH système", /function envServeur[\s\S]{0,400}PATH: "\/usr\/bin:\/bin:\/usr\/sbin:\/sbin"/.test(src) && !/\.\.\.process\.env/.test(src), "envServeur");
+  verifier("un téléchargement vérifié : empreinte fausse, fichier effacé sans être ouvert ; nom définitif seulement après vérification", /empreinte\.digest\("hex"\) !== attendu\.sha256/.test(src) && /renommer\(partiel, destination\)/.test(src), "telechargerVerifie");
+  verifier("LM Studio coupé là où sert le moteur ouvert (un seul moteur local)", /enabled: !moteurOuvert\(\)/.test(config), "config.ts");
+  verifier("hors Mac Intel, le moteur ouvert ne sert que sur demande explicite (`HELIX_MOTEUR=llamacpp`)", /return process\.arch === "x64";/.test(base) && /if \(process\.platform !== "darwin"\) return false;/.test(base), "moteurOuvert");
+  const statut = await (await fetch(`${G}/helix/provision`, { headers: avecSeance })).json().catch(() => ({}));
+  const attendu = process.platform === "darwin" && process.arch === "x64" ? "llamacpp" : "lmstudio";
+  verifier(`l'écran de mise en route présente le moteur de cette machine (${attendu})`, statut.moteur === attendu, statut.moteur);
+}
+
 console.log(`\n${reussis} vérification(s) réussie(s), ${echecs.length} échec(s).`);
 if (echecs.length) {
   console.log("Échecs :");

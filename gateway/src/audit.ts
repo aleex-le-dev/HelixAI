@@ -132,6 +132,7 @@ export type AuditAction =
   | "dictee.installee"
   /** Installation de LM Studio : qui a accepté ses conditions, et lesquelles. */
   | "moteur.conditions_acceptees"
+  | "moteur.llamacpp_installation"
   | "code.opencode_installe"
   /*
    * Codex avec le compte ChatGPT du propriétaire (codex.ts, 27/09/2026) : qui

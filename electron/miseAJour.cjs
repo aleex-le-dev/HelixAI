@@ -137,7 +137,7 @@ async function verifierGithub() {
     if (process.platform === "darwin") {
       if (manifeste) {
         const lu = await net.fetch(manifeste.browser_download_url, { headers: { "User-Agent": "Helix" } });
-        annonce = lu.ok ? sourceGithub.lireManifeste(await lu.text(), version) : null;
+        annonce = lu.ok ? sourceGithub.lireManifeste(await lu.text(), version, process.arch) : null;
         // L'archive décrite doit être dans la même publication.
         if (annonce && !fichiers.some((f) => f.name === annonce.files[0].url)) annonce = null;
       }

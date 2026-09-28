@@ -99,6 +99,12 @@ export function FirstRun({ onReady }: { onReady: () => void }) {
    * des installations s'arrêtent.
    */
   if (!status.moteurInstalle) {
+    /*
+     * Mac Intel : le moteur est llama.cpp, logiciel libre (MIT), que Helix
+     * pose lui-même (llamaCpp.ts, 28/09/2026). Rien à accepter : la licence
+     * MIT ne pose aucune condition à qui s'en sert.
+     */
+    const ouvert = status.moteur === "llamacpp";
     return (
       <Shell>
         <LogoMark size={52} animated />
@@ -106,8 +112,17 @@ export function FirstRun({ onReady }: { onReady: () => void }) {
           {t("Préparation de")}{" "}{branding.name}
         </h1>
         <p className="max-w-md text-sm leading-relaxed text-muted-foreground">
-          {t("Il manque le moteur qui fait tourner les modèles : LM Studio, d'Element Labs.")}
-          {" "}{branding.name}{" "}{t("l'installe lui-même : rien à télécharger ni à glisser. Comptez quelques minutes selon votre connexion (0,3 à 1,3 Go selon le système). Les modèles tournent ensuite sur cette machine, sans rien envoyer à l'éditeur.")}
+          {ouvert ? (
+            <>
+              {t("Il manque le moteur qui fait tourner les modèles : llama.cpp, un logiciel libre.")}
+              {" "}{branding.name}{" "}{t("l'installe lui-même, puis le modèle adapté à ce Mac : rien à télécharger ni à glisser. Comptez quelques minutes selon votre connexion (11 Mo pour le moteur, 2 à 5 Go pour le modèle). Les modèles tournent ensuite sur cette machine, sans rien envoyer à personne.")}
+            </>
+          ) : (
+            <>
+              {t("Il manque le moteur qui fait tourner les modèles : LM Studio, d'Element Labs.")}
+              {" "}{branding.name}{" "}{t("l'installe lui-même : rien à télécharger ni à glisser. Comptez quelques minutes selon votre connexion (0,3 à 1,3 Go selon le système). Les modèles tournent ensuite sur cette machine, sans rien envoyer à l'éditeur.")}
+            </>
+          )}
         </p>
 
         {busy || state.phase === "ready" ? (
@@ -128,6 +143,12 @@ export function FirstRun({ onReady }: { onReady: () => void }) {
                 />
               </div>
             )}
+          </div>
+        ) : ouvert ? (
+          <div className="flex w-full max-w-md flex-col items-center gap-3">
+            <Button icon={Download} onClick={() => void installerMoteur()}>
+              {t("Installer le moteur")}
+            </Button>
           </div>
         ) : (
           <div className="flex w-full max-w-md flex-col items-center gap-3">
@@ -167,6 +188,7 @@ export function FirstRun({ onReady }: { onReady: () => void }) {
             {state.error && (
               <p className="mt-1 text-xs text-muted-foreground">{state.error}</p>
             )}
+            {!ouvert && (
             <p className="mt-2 text-xs text-muted-foreground">
               {t("Vous pouvez aussi l'installer vous-même depuis")}{" "}
               <a
@@ -179,6 +201,7 @@ export function FirstRun({ onReady }: { onReady: () => void }) {
               </a>
               {t(", l'ouvrir une fois, puis revenir ici.")}
             </p>
+            )}
             <Button className="mt-2" size="sm" variant="ghost" icon={RefreshCw} onClick={refresh}>
               {t("Vérifier à nouveau")}
             </Button>

@@ -85,7 +85,7 @@ machine :
 |---|---|---|
 | Outils fichiers (MCP) | `npx` | Sans lui (ou sous Windows, où c'est un `.cmd`), Helix le lance par un vrai Node : celui du système, sinon son Node officiel, posé au besoin (nodejs.org, empreinte vérifiée). Hors ligne et sans Node : pas d'outils |
 | Écran Code | OpenCode : celui que Helix pose seul, en arrière-plan, depuis le 27/09/2026 (1.18.32, empreinte SHA-256 écrite dans le code, `<données>/opencode/`), sinon `HELIX_OPENCODE_BIN`, `~/.opencode/bin/opencode` ou le `PATH`. Codex, second moteur facultatif, n'est jamais installé par Helix | Hors ligne, ou sur un poste rattaché : l'écran Code propose « Installer OpenCode » (administrateur), et rappelle la commande manuelle |
-| Modèles locaux | LM Studio | L'écran de mise en route l'installe, sans intervention : son moteur sans interface (llmster 0.0.25-1, empreinte SHA-512 écrite dans le code) sur Mac à puce Apple, Windows et Linux ; sur un Mac où l'application LM Studio a déjà servi, c'est elle qui sert (Mac Intel : l'application) |
+| Modèles locaux | LM Studio | L'écran de mise en route l'installe, sans intervention : son moteur sans interface (llmster 0.0.25-1, empreinte SHA-512 écrite dans le code) sur Mac à puce Apple, Windows et Linux ; sur un Mac où l'application LM Studio a déjà servi, c'est elle qui sert ; sur Mac Intel, llama.cpp à la place (moteur ouvert, MIT, b11146, `<données>/llamacpp/`, modèles Qwen3 GGUF épinglés ; `HELIX_MOTEUR=llamacpp` le choisit ailleurs sur macOS) |
 
 Avec un modèle local, l'écran Code peut attendre une ou deux minutes avant le premier
 mot : le modèle lit d'abord toute la demande, et la relit s'il l'a perdue parce qu'un
@@ -228,7 +228,7 @@ Toutes exigent le jeton d'instance, sauf `GET /` et `GET /health`. Celles marqu�
 | `POST /v1/chat/completions` | OpenAI-compatible. Accepte en plus `role`, `effort`, `tools` et `connaissances` ; accepte aussi une clé d'API seule (voir « Clés d'API ») | si `tools: true` |
 | `POST /helix/models/load` | Charge un modèle en mémoire | oui |
 | `GET /helix/provision`, `GET /helix/provision/stream` | État et progression de la mise en route | non |
-| `POST /helix/provision/moteur` | Installe le moteur de LM Studio (llmster sur Mac à puce Apple, Windows et Linux ; l'application sur Mac Intel) ; administrateur seul, une installation à la fois, conditions de LM Studio acceptées | oui |
+| `POST /helix/provision/moteur` | Installe le moteur de LM Studio (llmster sur Mac à puce Apple, Windows et Linux ; llama.cpp sur Mac Intel, sans conditions à accepter) ; administrateur seul, une installation à la fois, conditions de LM Studio acceptées | oui |
 | `POST /helix/provision/start` | Télécharge et charge un modèle du catalogue | oui |
 | `POST /helix/auth/create`, `POST /helix/auth/verify` | Création de compte, connexion | voir ci-dessous |
 | `POST /helix/auth/premier-mot-de-passe` | Premier mot de passe d'un compte créé avant 0.9.0, une seule fois | non |
@@ -321,6 +321,8 @@ auto-signé (`<données>/tls/instance-cert.pem`, à donner à `curl --cacert`). 
 | `HELIX_CAPTURE_LARGEUR` | Largeur de la capture envoyée au modèle | `1024` |
 | `HELIX_CUA_URL`, `HELIX_CUA_CONTAINER`, `HELIX_CUA_KEY` | Serveur cua du mode `sandbox` | `http://127.0.0.1:8000` |
 | `HELIX_APPS_DIR` | Où installer l'application LM Studio (Mac Intel seulement : ailleurs, c'est llmster, dans `~/.lmstudio`) | `/Applications`, sinon `~/Applications` |
+| `HELIX_MOTEUR` | Moteur local : `llamacpp` (llama.cpp, d'office sur Mac Intel, sur demande ailleurs sur macOS) ou `lmstudio` | selon la machine |
+| `HELIX_LLAMACPP_PORT` | Port du serveur llama.cpp, sur 127.0.0.1 | `8795` |
 | `HELIX_GATEWAY_URL` | Cible du proxy Vite en développement | `http://localhost:8787` |
 | `VITE_GATEWAY_URL` | Instance imposée à la construction de l'interface | aucune |
 

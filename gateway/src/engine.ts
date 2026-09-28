@@ -33,6 +33,11 @@ const exec = promisify(execFile);
  * puce Apple (`depends_on arch: arm64`, relevé le 27/09/2026), qu'un Mac Intel
  * ne peut pas lancer. L'installation y est donc refusée, avec la raison
  * (audit de la chaîne d'approvisionnement du 27/09/2026).
+ *
+ * Depuis le 28/09/2026, ces Mac ont le moteur ouvert, llama.cpp, posé par
+ * Helix à la place de LM Studio (llamaCpp.ts) : la route d'installation du
+ * moteur n'arrive plus ici pour eux, sauf si `HELIX_MOTEUR=lmstudio` le
+ * demande, et le refus ci-dessous reste alors vrai.
  */
 
 export interface EngineProgress {

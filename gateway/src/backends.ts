@@ -4,6 +4,8 @@ import { existsSync } from "node:fs";
 import { promisify } from "node:util";
 import { homedir, totalmem } from "node:os";
 import { join } from "node:path";
+import { assurerServeurLlama, chargerModeleLlama, dechargerModeleLlama, infoGguf } from "./llamaCpp.ts";
+import { cleLlamaCpp, moteurOuvert, urlLlamaCpp } from "./llamaCppBase.ts";
 import { applicationLmStudio, lmsDeLlmster, moteurAPoser, moteurSansInterface, preparerDossiersLlmster } from "./engine.ts";
 import { BACKENDS, classifyRoles, isReasoningModel, tousLesBackends } from "./config.ts";
 import type { BackendConfig, BackendStatus, ModelInfo } from "./types.ts";
@@ -432,6 +434,8 @@ export async function discover(): Promise<Discovery> {
   // Un backend LM Studio activé mais muet : on tente de le réveiller avant de
   // conclure qu'il n'y a aucun modèle.
   if (enabled.some((b) => b.id === "lmstudio")) await ensureLmStudioServer();
+  // Le moteur ouvert (Mac Intel, llamaCpp.ts) : démarré s'il a de quoi servir.
+  if (enabled.some((b) => b.kind === "llamacpp")) await assurerServeurLlama();
 
   /*
    * `lms` seulement si une source LM Studio est activée : ses réponses ne
@@ -507,6 +511,8 @@ export async function discover(): Promise<Discovery> {
           return {
             ...toModelInfo(m.id, backend, lmMeta),
             ...(backend.kind === "lmstudio" ? { loaded: charge(m.id) } : {}),
+            // Le routeur de llama.cpp dit lui-même ce qui est en mémoire (`status.value`).
+            ...(backend.kind === "llamacpp" ? { loaded: (m.status as { value?: unknown } | undefined)?.value === "loaded" } : {}),
             ...(capacites ?? {}),
             ...(publie && publie >= 1024 ? { contextePublie: Math.floor(publie) } : {}),
           };
@@ -590,7 +596,8 @@ function toModelInfo(
   backend: BackendConfig,
   lmMeta: Map<string, Partial<ModelInfo>>,
 ): ModelInfo {
-  const extra = backend.kind === "lmstudio" ? lmMeta.get(id) ?? {} : {};
+  const extra: Partial<ModelInfo> =
+    backend.kind === "lmstudio" ? lmMeta.get(id) ?? {} : backend.kind === "llamacpp" ? (infoGguf(id) ?? {}) : {};
   /*
    * Ce que LM Studio déclare l'emporte sur ce que le nom laisse deviner.
    *
@@ -904,6 +911,7 @@ export async function libererPourImage(octets: number): Promise<number> {
  * un autre modèle.
  */
 export async function loadModel(modelKey: string, options: { auto?: boolean } = {}): Promise<{ ok: boolean; message: string }> {
+  if (moteurOuvert()) return chargerSurMoteurOuvert(modelKey, options);
   const essaye = aEssayer(modelKey) && !/embed|nomic|rerank|bge-|e5-/i.test(modelKey);
   const r = await chargerModele(modelKey);
   if (!r.ok || !r.neuf || !essaye) return r;
@@ -913,6 +921,25 @@ export async function loadModel(modelKey: string, options: { auto?: boolean } = 
   const lms = await findLms();
   if (lms) await exec(lms, ["unload", modelKey], { timeout: 30_000 }).catch(() => {});
   chargesParHelix.delete(modelKey);
+  const relais = await relaisApresDefaillance(modelKey, options.auto === true);
+  return {
+    ok: false,
+    message: `${tf("{0} ne répond pas correctement sur cette machine (réponse d'essai illisible) : il a été déchargé.", modelKey)} ${relais} ${t("Renvoyez votre message.")}`,
+  };
+}
+
+/**
+ * Mac Intel (llamaCpp.ts, 28/09/2026) : le routeur de llama.cpp charge le
+ * modèle, et le premier chargement sur cette machine passe l'essai de santé,
+ * comme sous LM Studio. Raté : déchargé, et le relais est dit.
+ */
+async function chargerSurMoteurOuvert(modelKey: string, options: { auto?: boolean }): Promise<{ ok: boolean; message: string }> {
+  const r = await chargerModeleLlama(modelKey);
+  if (!r.ok || !aEssayer(modelKey)) return r;
+  const verdict = await essayerModele(urlLlamaCpp(), modelKey, cleLlamaCpp());
+  noterEssai(modelKey, verdict);
+  if (verdict.ok) return r;
+  await dechargerModeleLlama(modelKey);
   const relais = await relaisApresDefaillance(modelKey, options.auto === true);
   return {
     ok: false,

@@ -303,9 +303,10 @@ try {
     const seanceAvant = readFileSync(SEANCE, "utf8");
     const t = terminal(["connexion", "--compte", "pty@example.test"], [
       ["Mot de passe de Pty", `${secret}\r`, 20],
-      ["Connecté", "", 20],
+      // Un compte créé par un collègue choisit d'abord son propre mot de passe (règle de l'instance) : le terminal le dit.
+      ["Choisissez votre propre mot de passe", "", 20],
     ]);
-    verifier("connexion au terminal : aboutit", t.ok, t.manque + "\n" + t.sortie);
+    verifier("connexion au terminal : un compte créé par un collègue est invité à choisir son propre mot de passe", t.ok, t.manque + "\n" + t.sortie);
     verifier("le mot de passe tapé ne s'affiche pas", !t.sortie.includes(secret), t.sortie);
     // On revient sur le compte principal pour la suite.
     writeFileSync(SEANCE, seanceAvant, { mode: 0o600 });

@@ -2069,12 +2069,12 @@ crasher ».
 - **Mac Intel** : la page ne montre que le catalogue GGUF épinglé du moteur ouvert (quatre Qwen3),
   inchangé : aucun GGUF ajouté, faute d'avoir épinglé révision et empreinte de chacun.
 
-**Relevé en passant, pas corrigé** (hors de cette demande, et cela changerait le conseil) : les
+**Relevé en passant, puis corrigé le même jour** (le conseil change, et c'est voulu : Medhi ne veut pas de modèle qui sature la machine) : les
 tailles de plusieurs fiches existantes sont plus petites que celles que LM Studio publie
 aujourd'hui (Qwen3.5 9B : 6 Go au catalogue, 7 chez LM Studio ; Qwen3.5 4B : 3 et 3,75 ;
 Ministral 3 8B : 5,5 et 6,5 ; OLMo 3 7B Think : 4,5 et 6, et son cache ignore les couches à
 fenêtre glissante, 1,5 Gio de plus ; Magistral Small : 14 et 15,35 ; Qwen3-VL 2B : 2 et 3).
-Sur une carte NVIDIA de 8 Go, Qwen3.5 9B à 7 Go ne passerait plus `tientSur`.
+Sur une carte NVIDIA de 8 Go, Qwen3.5 9B à 7 Go ne passe plus `tientSur` : il n'y est plus conseillé. Les fiches portent désormais les tailles de LM Studio.
 
 **Vu marcher** (28/09/2026, serveur de développement contre une passerelle jetable, faux `lms`,
 faux serveur à la place de LM Studio, fr et en, 1280 et 375 px) : la page, les filtres, la

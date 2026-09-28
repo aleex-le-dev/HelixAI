@@ -192,9 +192,11 @@ function noterEnAttente(collection: Collection, attente: boolean): void {
   }
 }
 
-type AvecId = { id: unknown; updatedAt?: unknown };
 const aUnId = (o: unknown): o is AvecId => typeof o === "object" && o !== null && "id" in o;
-const quand = (o: AvecId) => (typeof o.updatedAt === "string" ? Date.parse(o.updatedAt) || 0 : 0);
+type AvecId = { id: unknown; updatedAt?: unknown; modifieLe?: unknown };
+const date = (v: unknown) => (typeof v === "string" ? Date.parse(v) || 0 : 0);
+/** La modification la plus récente d'un élément : son contenu (`updatedAt`) ou le reste (`modifieLe`, sessions.ts). */
+const quand = (o: AvecId) => Math.max(date(o.updatedAt), date(o.modifieLe));
 
 /**
  * Fusion à trois : `depart` est ce que l'instance avait quand ce poste l'a lu
@@ -242,7 +244,13 @@ function fusionner(local: unknown, distant: unknown, depart?: unknown): unknown 
     const changeIci = avantLui !== undefined && JSON.stringify(l) !== avantLui;
     const changeEnFace = avantLui !== undefined && JSON.stringify(resultat[i]) !== avantLui;
     if (changeIci && !changeEnFace) resultat[i] = l;
-    else if (quand(l) > quand(resultat[i] as AvecId)) resultat[i] = l;
+    /*
+     * Né depuis le départ connu et présent des deux côtés : c'est l'écho de ce
+     * que ce poste a lui-même créé, et sa copie à lui est la plus avancée. À
+     * dates égales, elle l'emporte (28/09/2026 : un Chat créé puis écrit dans
+     * la même milliseconde perdait sa question face à sa propre copie vide).
+     */
+    else if (Array.isArray(depart) && avantLui === undefined ? quand(l) >= quand(resultat[i] as AvecId) : quand(l) > quand(resultat[i] as AvecId)) resultat[i] = l;
   }
   return resultat;
 }
@@ -452,6 +460,8 @@ async function pousser(collection: Collection, reprise = false): Promise<boolean
       derniersConnus.set(collection, value);
     }
     noterEnAttente(collection, !res.ok);
+    // Même règle que la relève : une erreur de serveur dit l'instance injoignable, et son retour fera repartir l'envoi.
+    if (res.status >= 500) online = false;
     return res.ok;
   } catch {
     online = false;
@@ -481,7 +491,18 @@ export function relireMaintenant(): Promise<void> {
 async function refresh(): Promise<void> {
   try {
     const res = await apiFetch(`/helix/data`);
-    if (!res.ok) return;
+    if (!res.ok) {
+      /*
+       * Une erreur de serveur ici vient de ce qui se tient devant l'instance
+       * (proxy du serveur de développement, relais d'une instance d'entreprise)
+       * quand elle ne répond plus : c'est une coupure, comme un réseau tombé
+       * (parcours du 28/09/2026). Sans cela, `online` restait vrai, le retour
+       * de l'instance passait inaperçu, et ce qui avait été modifié pendant la
+       * coupure (un Chat renommé, une question) ne repartait jamais vers elle.
+       */
+      if (res.status >= 500) online = false;
+      return;
+    }
     const { revisions: remote } = (await res.json()) as {
       revisions: Record<Collection, number>;
     };

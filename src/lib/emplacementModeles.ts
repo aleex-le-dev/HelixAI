@@ -53,15 +53,15 @@ export async function choisirEmplacement(dossier: string | null): Promise<{ depl
   return { deplacement: corps.deplacement === true };
 }
 
-/** Juge un dossier sans rien changer : le sous-dossier qui serait créé, et la place libre. */
-export async function verifierEmplacement(dossier: string): Promise<{ dossier: string; libre: number | null }> {
+/** Juge un dossier sans rien changer : le sous-dossier qui serait créé, et la place libre. `actuel` : c'est déjà l'emplacement retenu. */
+export async function verifierEmplacement(dossier: string): Promise<{ dossier: string; libre: number | null; actuel?: boolean }> {
   const r = await apiFetch("/helix/emplacement-modeles/verifier", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ dossier }),
   });
   if (!r.ok) throw new Error(await message(r));
-  return (await r.json()) as { dossier: string; libre: number | null };
+  return (await r.json()) as { dossier: string; libre: number | null; actuel?: boolean };
 }
 
 type Selecteur = (options?: { titre?: string; message?: string; bouton?: string }) => Promise<string | null>;

@@ -126,9 +126,41 @@ function lireManifesteWindows(brut, versionAttendue, clePubliquePem, identifiant
   return { ...description, signature: win.signature };
 }
 
+/**
+ * Les processeurs d'un exécutable macOS (Mach-O), lus dans ses premiers
+ * octets : `arm64`, `x64` (noms de `process.arch`). Vide si ce n'en est pas un.
+ *
+ * Pourquoi (relecture du 28/09/2026) : la première application pour Mac Intel
+ * part avec la 2026.928.6. Un Mac Intel rattaché à une instance tournant sur
+ * un Mac à puce Apple recevait d'elle l'archive de sa propre application, donc
+ * pour puce Apple : identifiant, version et signature de l'éditeur bons, elle
+ * s'installait, l'ancienne était effacée, et la nouvelle ne démarrait pas. Le
+ * processeur est désormais vérifié avant de rien remplacer (miseAJour.cjs).
+ */
+function processeursMachO(octets) {
+  const nom = (type) => (type === 0x0100000c ? "arm64" : type === 0x01000007 ? "x64" : null);
+  const trouves = new Set();
+  if (!octets || octets.length < 8) return trouves;
+  const magique = octets.readUInt32BE(0);
+  if (magique === 0xcffaedfe || magique === 0xcefaedfe) {
+    // Un seul processeur (MH_MAGIC_64 ou MH_MAGIC, écrits en petit-boutiste).
+    const n = nom(octets.readUInt32LE(4));
+    if (n) trouves.add(n);
+  } else if (magique === 0xcafebabe || magique === 0xcafebabf) {
+    // Binaire universel : l'en-tête est en gros-boutiste, une entrée par processeur (20 octets, 32 en 64 bits).
+    const taille = magique === 0xcafebabf ? 32 : 20;
+    const nombre = Math.min(octets.readUInt32BE(4), 16);
+    for (let i = 0; i < nombre && 8 + (i + 1) * taille <= octets.length; i++) {
+      const n = nom(octets.readUInt32BE(8 + i * taille));
+      if (n) trouves.add(n);
+    }
+  }
+  return trouves;
+}
+
 /** Le dépôt `propriétaire/nom`, s'il a la bonne forme. */
 function depotValide(depot) {
   return typeof depot === "string" && /^[A-Za-z0-9-]+\/[A-Za-z0-9._-]+$/.test(depot) ? depot : null;
 }
 
-module.exports = { plusRecente, choisirPaquet, manifesteDe, lireManifeste, lireManifesteWindows, depotValide, TAILLE_MANIFESTE_MAX };
+module.exports = { plusRecente, choisirPaquet, manifesteDe, lireManifeste, lireManifesteWindows, processeursMachO, depotValide, TAILLE_MANIFESTE_MAX };

@@ -101,7 +101,8 @@ export function EmplacementModeles({ reglages = false, onChange }: { reglages?: 
     setErreur(null);
     try {
       const v = await verifierEmplacement(dossier);
-      setAConfirmer({ choisi: dossier, dossier: v.dossier, libre: v.libre });
+      // Le dossier déjà retenu, rechoisi (28/09/2026) : rien à déplacer, pas de « Déplacer vers » ce même dossier.
+      if (!v.actuel) setAConfirmer({ choisi: dossier, dossier: v.dossier, libre: v.libre });
       setSaisie(false);
     } catch (err) {
       setErreur(err instanceof Error ? err.message : String(err));

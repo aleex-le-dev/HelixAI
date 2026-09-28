@@ -304,20 +304,23 @@ function demanderNodePrive() {
   if (!enfant || enfant.helixArretee) return Promise.resolve({ ok: false, erreur: "passerelle" });
   const id = ++numeroDemande;
   return new Promise((resolve) => {
-    const fin = setTimeout(() => {
-      reponsesPasserelle.delete(id);
-      resolve({ ok: false, erreur: "délai" });
-    }, 15 * 60_000);
-    reponsesPasserelle.set(id, (m) => {
+    const repondre = (m) => {
       clearTimeout(fin);
       reponsesPasserelle.delete(id);
+      enfant.removeListener("exit", surArret);
       resolve({ ok: m.ok === true, erreur: typeof m.erreur === "string" ? m.erreur : undefined });
-    });
-    if (!envoyerALaPasserelle(enfant, { type: "node-prive", id })) {
-      clearTimeout(fin);
-      reponsesPasserelle.delete(id);
-      resolve({ ok: false, erreur: "passerelle" });
-    }
+    };
+    /*
+     * La passerelle qui s'arrête pendant le téléchargement (plantage, relance
+     * par le superviseur) ne répondra jamais (relecture du 28/09/2026) : sans
+     * cela, l'écran de la ligne de commande attendait les quinze minutes du
+     * délai, bouton en « Installation... ».
+     */
+    const surArret = () => repondre({ ok: false, erreur: "passerelle" });
+    const fin = setTimeout(() => repondre({ ok: false, erreur: "délai" }), 15 * 60_000);
+    reponsesPasserelle.set(id, repondre);
+    enfant.once("exit", surArret);
+    if (!envoyerALaPasserelle(enfant, { type: "node-prive", id })) repondre({ ok: false, erreur: "passerelle" });
   });
 }
 

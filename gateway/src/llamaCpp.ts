@@ -455,14 +455,30 @@ async function portPrisParUnAutre(): Promise<boolean> {
  * et au moins un modèle posés). Rend vrai quand il répond.
  *
  * Un serveur laissé par une passerelle arrêtée brutalement répond encore avec
- * la même clé : il est gardé tel quel, plutôt qu'un second lancé à côté.
+ * la même clé : il est arrêté puis remplacé (`lancer`, 28/09/2026), jamais
+ * doublé d'un second lancé à côté.
  */
 export function assurerServeurLlama(): Promise<boolean> {
   // Pendant un déplacement des modèles, le serveur reste arrêté : il lirait un fichier en train de partir.
   if (deplacement || !moteurOuvert() || !llamaCppInstalle() || modelesLlamaCpp().length === 0) return Promise.resolve(false);
-  demarrage ??= lancer().finally(() => {
-    demarrage = null;
-  });
+  /*
+   * Jamais de rejet (revue du 28/09/2026) : `spawn` lève, au lieu d'émettre
+   * `error`, pour un binaire que le système ne sait pas lancer (ENOEXEC,
+   * vu sous macOS avec Node 24 ; « Bad CPU type », errno -86, sans doute
+   * aussi, pas essayé), et le préréglage ou le journal peuvent ne pas
+   * s'écrire (disque plein).
+   * La découverte (`discover`, backends.ts) attend cette promesse : rejetée,
+   * elle emportait la liste des modèles, donc le Chat et l'écran de mise en
+   * route, au lieu de dire « le moteur ne répond pas ».
+   */
+  demarrage ??= lancer()
+    .catch((err: unknown) => {
+      console.warn(`[helix] llama.cpp n'a pas pu démarrer : ${err instanceof Error ? err.message : String(err)}`);
+      return false;
+    })
+    .finally(() => {
+      demarrage = null;
+    });
   return demarrage;
 }
 
@@ -506,16 +522,76 @@ function ecouteurReconnu(): boolean {
 /** Le numéro de notre serveur, une fois reconnu à l'écoute : il n'y a plus à le relire tant qu'il tourne. */
 let reconnu: number | null = null;
 
+/**
+ * Le PID d'un `llama-server` posé par Helix qui écoute sur le port sans avoir
+ * été lancé par cette passerelle : celui d'une passerelle arrêtée net
+ * (revue du 28/09/2026). Reconnu comme `ecouteurReconnu`, au fichier qu'il
+ * exécute (lu par `lsof`), jamais à sa ligne de commande, qu'un programme
+ * choisit lui-même : on n'arrête que notre propre binaire.
+ */
+function orphelinSurLePort(): number | null {
+  const lsof = (args: string[]) =>
+    execFileSync("/usr/sbin/lsof", args, { encoding: "utf8", timeout: 15_000, stdio: ["ignore", "pipe", "ignore"] });
+  try {
+    const attendu = realpathSync(serveurLlamaCpp());
+    const pids = lsof(["-nP", "-a", `-iTCP:${portLlamaCpp()}`, "-sTCP:LISTEN", "-t"])
+      .split("\n")
+      .map(Number)
+      .filter((n) => Number.isInteger(n) && n > 0 && n !== process.pid && !(serveur && serveur.pid === n));
+    for (const pid of pids) {
+      const execute = lsof(["-nP", "-a", "-p", String(pid), "-d", "txt", "-Fn"])
+        .split("\n")
+        .some((l) => l.startsWith("n") && l.slice(1) === attendu);
+      if (execute) return pid;
+    }
+  } catch {
+    /* lsof muet, ou rien à lire : rien de reconnu */
+  }
+  return null;
+}
+
+const vivant = (pid: number): boolean => {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+/** Arrête l'orphelin reconnu, s'il y en a un, et attend qu'il soit parti (dix secondes au plus). Rend vrai si le port est libéré de lui. */
+async function arreterOrphelin(): Promise<boolean> {
+  const orphelin = orphelinSurLePort();
+  if (orphelin === null) return false;
+  console.log(`[helix] llama.cpp : serveur laissé par une passerelle précédente (PID ${orphelin}), arrêté.`);
+  try {
+    process.kill(orphelin, "SIGTERM");
+  } catch {
+    /* déjà parti */
+  }
+  for (let i = 0; i < 50 && vivant(orphelin); i++) await new Promise((r) => setTimeout(r, 200));
+  return !vivant(orphelin);
+}
+
 async function lancer(): Promise<boolean> {
   if (serveur && serveur.exitCode === null) {
     if (reconnu === serveur.pid) return llamaCppRepond();
     return attendreReponse(20_000);
   }
   if (await portPrisParUnAutre()) {
-    // Un serveur resté d'une passerelle arrêtée net : gardé s'il est bien le nôtre.
-    if (ecouteurReconnu()) return llamaCppRepond();
-    console.warn(`[helix] llama.cpp : le port ${portLlamaCpp()} est déjà pris par un autre programme, qui n'est pas le moteur de Helix : rien ne lui est envoyé (HELIX_LLAMACPP_PORT pour changer de port).`);
-    return false;
+    /*
+     * Un serveur resté d'une passerelle arrêtée net (28/09/2026) : il n'était
+     * ni arrêté en partant (le modèle restait en mémoire jusqu'au redémarrage
+     * de la machine) ni relancé pour voir un modèle posé depuis. S'il est bien
+     * le nôtre (test d'intrusion : reconnu au fichier qu'il exécute), il est
+     * arrêté par son PID et remplacé ; sinon rien ne lui est envoyé, clé comprise.
+     */
+    if (!(await arreterOrphelin())) {
+      // Le nôtre, mais il refuse de s'arrêter : gardé tel quel, comme avant, plutôt qu'un second à côté.
+      if (ecouteurReconnu()) return llamaCppRepond();
+      console.warn(`[helix] llama.cpp : le port ${portLlamaCpp()} est déjà pris par un autre programme, qui n'est pas le moteur de Helix : rien ne lui est envoyé (HELIX_LLAMACPP_PORT pour changer de port).`);
+      return false;
+    }
   }
   cleLlamaCpp();
   ecrirePreset();
@@ -581,8 +657,16 @@ async function rechargerListe(): Promise<void> {
   }
   // Seul un serveur lancé par cette passerelle est relancé ; un autre garde sa liste jusqu'au prochain démarrage.
   if (serveur) {
+    /*
+     * Relancé une fois l'ancien vraiment parti (28/09/2026), comme pour un
+     * déplacement. Une demi-seconde peut ne pas suffire à un routeur qui
+     * arrête ses modèles (pas mesuré) : l'ancien, qui répondait encore avec
+     * la même clé, était alors pris pour le nouveau, sans le modèle qu'on
+     * venait de poser.
+     */
+    const lui = serveur;
     arreterLlama();
-    await new Promise((r) => setTimeout(r, 500));
+    for (let i = 0; i < 50 && lui.exitCode === null && lui.signalCode === null; i++) await new Promise((r) => setTimeout(r, 200));
     await assurerServeurLlama();
   }
 }
@@ -592,14 +676,27 @@ interface EtatRouteur {
   status?: { value?: string; failed?: boolean; exit_code?: number };
 }
 
-async function etatDuModele(cle: string): Promise<EtatRouteur["status"] | null> {
+/**
+ * L'état de `cle` dans le routeur : `undefined` si sa liste n'a pas pu être
+ * lue, `null` s'il ne connaît pas ce modèle (liste lue, modèle absent).
+ */
+async function etatDuModele(cle: string): Promise<NonNullable<EtatRouteur["status"]> | null | undefined> {
   try {
     const r = await fetch(`${urlLlamaCpp().replace(/\/v1$/, "")}/models`, { headers: entetes(), signal: AbortSignal.timeout(5000) });
     const json = (await r.json()) as { data?: EtatRouteur[] };
-    return json.data?.find((m) => m.id === cle)?.status ?? null;
+    if (!r.ok || !Array.isArray(json.data)) return undefined;
+    const m = json.data.find((x) => x.id === cle);
+    return m ? (m.status ?? {}) : null;
   } catch {
-    return null;
+    return undefined;
   }
+}
+
+/** Ce que rend un chargement ; `moteur` : l'échec vient du moteur lui-même, pas du modèle (un autre modèle n'irait pas mieux). */
+export interface ChargementLlama {
+  ok: boolean;
+  message: string;
+  moteur?: true;
 }
 
 /**
@@ -609,8 +706,10 @@ async function etatDuModele(cle: string): Promise<EtatRouteur["status"] | null> 
  * 5 Go du disque prend plusieurs dizaines de secondes (estimation, pas une
  * mesure sur un Mac Intel).
  */
-export async function chargerModeleLlama(cle: string, delaiMs = 5 * 60_000): Promise<{ ok: boolean; message: string }> {
-  if (!(await assurerServeurLlama())) return { ok: false, message: t("Le moteur llama.cpp ne répond pas. Quittez l'application puis rouvrez-la ; si cela se répète, redémarrez la machine.") };
+export async function chargerModeleLlama(cle: string, delaiMs = 5 * 60_000): Promise<ChargementLlama> {
+  if (!(await assurerServeurLlama())) {
+    return { ok: false, moteur: true, message: t("Le moteur llama.cpp ne répond pas. Quittez l'application puis rouvrez-la ; si cela se répète, redémarrez la machine.") };
+  }
   const etat = await etatDuModele(cle);
   if (etat?.value === "loaded") return { ok: true, message: "" };
   if (etat?.value !== "loading") {
@@ -627,8 +726,18 @@ export async function chargerModeleLlama(cle: string, delaiMs = 5 * 60_000): Pro
     }
   }
   const fin = Date.now() + delaiMs;
+  /*
+   * Un routeur qui ne connaît pas ce modèle (28/09/2026) : sa liste n'a pas
+   * été relue (`rechargerListe` n'a pu ni la relire ni le relancer).
+   * L'attente durait alors cinq minutes, puis la mise en route téléchargeait
+   * le modèle suivant pour rien. Quinze secondes de grâce, puis c'est dit.
+   */
+  const inconnuJusqua = Date.now() + 15_000;
   while (Date.now() < fin) {
     const s = await etatDuModele(cle);
+    if (s === null && Date.now() > inconnuJusqua) {
+      return { ok: false, moteur: true, message: tf("Le moteur llama.cpp ne connaît pas encore {0}. Quittez l'application puis rouvrez-la : il relira la liste des modèles.", cle) };
+    }
     if (s?.value === "loaded") return { ok: true, message: "" };
     if (s?.failed) {
       return {
@@ -681,6 +790,21 @@ export function arreterLlama(): void {
  */
 export function menageLlama(): void {
   if (deplacement) return;
+  /*
+   * Le dossier de travail d'une installation du moteur coupée (passerelle
+   * arrêtée en plein téléchargement) : `poser` ne l'efface qu'en rendant la
+   * main, et chaque coupure en laissait un de plus, archive et contenu
+   * ouvert compris (28/09/2026). Rangé dans `<données>/llamacpp`, à Helix seul.
+   */
+  if (installationEnCours === null) {
+    try {
+      for (const nom of readdirSync(racineLlamaCpp())) {
+        if (nom.startsWith(".telechargement-")) rmSync(join(racineLlamaCpp(), nom), { recursive: true, force: true });
+      }
+    } catch {
+      /* pas encore de dossier */
+    }
+  }
   try {
     const connus = new Set(Object.values(MODELES_GGUF).flatMap((f) => [f.fichier, `${f.fichier}.partiel`]));
     for (const nom of readdirSync(dossierModeles())) {
@@ -786,6 +910,8 @@ async function deplacer(cible: string | null, avancer: (a: AvanceeLlama) => void
   const lui = serveur;
   arreterLlama();
   for (let i = 0; i < 50 && lui && lui.exitCode === null && lui.signalCode === null; i++) await new Promise((r) => setTimeout(r, 200));
+  // Celui d'une passerelle précédente aussi, s'il tourne encore (28/09/2026) : il lirait les mêmes fichiers.
+  await arreterOrphelin();
 
   mkdirSync(destination, { recursive: true, mode: 0o700 });
   for (const nom of noms) {

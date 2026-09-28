@@ -847,6 +847,7 @@
   "Le moteur llama.cpp n'est pas prévu pour ce système ({0}).": "llama.cpp エンジンはこのシステム（{0}）向けには用意されていません。",
   "Le moteur llama.cpp ne répond pas.": "llama.cpp エンジンが応答しません。",
   "Le moteur llama.cpp ne répond pas. Quittez l'application puis rouvrez-la ; si cela se répète, redémarrez la machine.": "llama.cpp エンジンが応答しません。アプリを終了して開き直してください。繰り返す場合はマシンを再起動してください。",
+  "Le moteur llama.cpp ne connaît pas encore {0}. Quittez l'application puis rouvrez-la : il relira la liste des modèles.": "llama.cpp エンジンはまだ {0} を認識していません。アプリを終了して開き直してください。モデルの一覧を読み直します。",
   "Le moteur n'a pas pu être décompressé : {0}": "エンジンを展開できませんでした：{0}",
   "Le moteur s'est installé dans {0}, et non à l'emplacement choisi ({1}). Revenez à l'emplacement habituel dans les réglages, Modèles locaux, puis réessayez : il n'y aura rien à retélécharger.": "エンジンは選んだ場所（{1}）ではなく {0} にインストールされました。設定の「ローカルモデル」で標準の場所に戻してから再試行してください。再ダウンロードは不要です。",
   "Le moteur s'est installé mais ne démarre pas sur cette machine.": "エンジンはインストールされましたが、このマシンでは起動しません。",
@@ -1284,5 +1285,8 @@
   "Wix": "Wix",
   "WooCommerce refuse cette clé : vérifiez la clé, le secret, et qu'elle a au moins l'autorisation « Lecture ». Si le site est derrière un pare-feu applicatif, l'en-tête Authorization peut être retiré en route.": "WooCommerce がこのキーを拒否しました。キーとシークレット、少なくとも「読み取り」権限があることを確認してください。サイトが WAF の背後にある場合、途中で Authorization ヘッダーが削除されることがあります。",
   "X refuse de lire le compte (code 402, paiement requis) : l'application X de l'organisation n'a probablement pas de crédits. Achetez-en dans la console de X (console.x.com), puis reconnectez-vous. Rien n'a été enregistré.": "X がアカウントの読み取りを拒否しました（コード 402、支払いが必要）。組織の X アプリにクレジットがない可能性があります。X のコンソール（console.x.com）でクレジットを購入してから、もう一度接続してください。何も保存されていません。",
-  "Zoom": "Zoom"
+  "Zoom": "Zoom",
+  "{0} n'a pas répondu dans le temps imparti.": "{0} が時間内に応答しませんでした。",
+  "Une préparation est déjà en cours. Attendez qu'elle se termine.": "準備はすでに進行中です。終わるまでお待ちください。",
+  "L'essai de transcription n'a rien rendu. La dictée n'est pas prête.": "文字起こしのテストで何も返されませんでした。音声入力はまだ使えません。"
 }

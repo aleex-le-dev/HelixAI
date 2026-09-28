@@ -69,6 +69,8 @@ export function useProvision() {
 
   /** `suivre`, pour `load` (défini après lui). */
   const suivreRef = useRef<() => void>(() => {});
+  /** `load`, pour `refusDit` (défini avant lui). */
+  const loadRef = useRef<() => void>(() => {});
 
   /*
    * Une demande refusée (membre non administrateur, installation déjà en
@@ -76,8 +78,20 @@ export function useProvision() {
    * faisait sinon rien de visible (revue du 27/09/2026).
    */
   const refusDit = useCallback(async (res: Response) => {
+    /*
+     * Acceptée : l'état est relu (28/09/2026). Le flux, ouvert juste avant la
+     * demande, dit d'abord l'état du moment ; si c'était l'échec précédent,
+     * il se refermait aussitôt, et la relecture qui suivait pouvait passer
+     * avant la demande : l'écran restait sur cet échec pendant que
+     * l'installation tournait. Relu après l'acceptation, l'état est « en
+     * cours » (provision.ts), et le suivi repart.
+     */
+    if (res.ok) {
+      loadRef.current();
+      return;
+    }
     // 409 : une installation tourne déjà, le flux ouvert la suit.
-    if (res.ok || res.status === 409) return;
+    if (res.status === 409) return;
     const corps = (await res.json().catch(() => ({}))) as { error?: { message?: string } };
     sourceRef.current?.();
     sourceRef.current = null;
@@ -101,6 +115,7 @@ export function useProvision() {
       .catch(() => setUnreachable(true));
   }, []);
 
+  loadRef.current = load;
   useEffect(load, [load]);
 
   /**

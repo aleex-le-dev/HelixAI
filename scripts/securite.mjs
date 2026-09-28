@@ -7522,7 +7522,7 @@ console.log("\n18 ter. Parcours à l'écran : synchronisation, Chat rechargé, i
   const sourceSync = lire("src", "lib", "store", "sync.ts");
   verifier(
     "synchronisation : les poussées d'une collection partent l'une après l'autre (deux PUT simultanés, même révision : le second refusé, la question du Chat perdue)",
-    /const enVol = new Map/.test(sourceSync) && /enFile\.get\(collection\) \?\?\s*courant/.test(sourceSync),
+    /const enVol = new Map/.test(sourceSync) && /const dejaEnFile = enFile\.get\(collection\);/.test(sourceSync) && /if \(dejaEnFile\) envoi = dejaEnFile;\s*else if \(!courant\) envoi = lancer\(collection\);/.test(sourceSync),
     "sync.ts, push",
   );
   verifier(
@@ -7703,6 +7703,101 @@ console.log("\n25. Test d'intrusion final de la 2026.928.6 : zones, emplacement 
   verifier("windows : l'application arrête la passerelle par le taskkill de System32, pas par le PATH", !/spawn\("taskkill"/.test(srcPasserelle) && /"System32", "taskkill\.exe"/.test(srcPasserelle), "electron/passerelle.cjs");
   const srcBackends = readFileSync(join(RACINE, "gateway", "src", "backends.ts"), "utf8");
   verifier("moteur ouvert : la découverte ne l'interroge (avec sa clé) que s'il a été reconnu à l'écoute", /backend\.kind === "llamacpp" && !llamaSur\) throw/.test(srcBackends), "backends.ts");
+}
+
+/*
+ * Revue de code finale de la 2026.928.6 (28/09/2026) : ce qui a été trouvé en
+ * relisant tout ce qui a changé depuis la 2026.928.5, rejoué ici sur le vrai
+ * code. Chaque contrôle échoue sur le code d'avant la correction.
+ */
+console.log("\n26. Revue finale de la 2026.928.6 : mise à jour d'un Mac Intel, file des envois de la synchronisation");
+{
+  const dossierRevue = mkdtempSync(join(tmpdir(), "helix-revue-"));
+  const { spawnSync } = await import("node:child_process");
+  try {
+    // 1. Une archive pour un autre processeur (Mac Intel servi par une instance sur puce Apple, ou l'inverse) ne remplace rien.
+    if (process.platform === "darwin") {
+      const dossier = join(dossierRevue, "doublure");
+      mkdirSync(join(dossier, "tmp"), { recursive: true });
+      const env = { ...process.env, TMPDIR: join(dossier, "tmp"), HELIX_DATA_DIR: join(dossier, "donnees") };
+      delete env.HELIX_SANS_MISE_A_JOUR;
+      let r = {};
+      try {
+        r = JSON.parse(execFileSync(process.execPath, [join(RACINE, "scripts", "doublure-mise-a-jour.cjs"), RACINE, dossier, "mac-autre-processeur"], { env, encoding: "utf8", timeout: 90_000 }).trim().split("\n").pop());
+      } catch (err) {
+        r = { plantage: String(err?.message ?? err).slice(0, 200) };
+      }
+      verifier("mise à jour macOS : l'application d'un autre processeur, signée par l'éditeur, n'est pas installée (l'ancienne était effacée, la nouvelle ne démarrait pas)", r.phase === "erreur" && Array.isArray(r.lances) && r.lances.length === 0 && r.restes === 0, JSON.stringify(r).slice(0, 240));
+    } else {
+      console.log("  · pas de macOS : mise à jour d'un autre processeur sautée");
+    }
+    const essaiSource = spawnSync(process.execPath, [join(RACINE, "scripts", "essai-source-github.mjs")], { encoding: "utf8", timeout: 60_000 });
+    verifier("mise à jour : le processeur se lit dans l'exécutable (Mach-O mince, universel, pas un exécutable), et l'essai de la source GitHub passe", essaiSource.status === 0 && /Mach-O universel : les deux/.test(essaiSource.stdout), `${essaiSource.status} ${(essaiSource.stdout ?? "").split("\n").filter((l) => l.startsWith("✗")).join(" | ")}`);
+
+    // 2. Synchronisation : une écriture faite entre la fin d'un envoi et le départ de celui qui attendait ne part pas en même temps que lui.
+    const { build } = await import("esbuild");
+    const { pathToFileURL: versUrl } = await import("node:url");
+    const { writeFileSync: ecrireFichier } = await import("node:fs");
+    await build({
+      stdin: { contents: 'export { startSync, stopSync, push } from "./src/lib/store/sync.ts";', resolveDir: RACINE, loader: "ts" },
+      bundle: true,
+      format: "esm",
+      platform: "browser",
+      outfile: join(dossierRevue, "sync.mjs"),
+      alias: { "@": join(RACINE, "src") },
+      define: { "import.meta.env": "{}", __HELIX_VERSION__: '"essai"' },
+      loader: { ".png": "empty", ".svg": "empty", ".css": "empty" },
+      logLevel: "error",
+    });
+    const harnais = `
+const magasin = new Map();
+globalThis.localStorage = { getItem: (k) => (magasin.has(k) ? magasin.get(k) : null), setItem: (k, v) => void magasin.set(k, String(v)), removeItem: (k) => void magasin.delete(k), key: (i) => [...magasin.keys()][i] ?? null, get length() { return magasin.size; }, clear: () => magasin.clear() };
+const cible = new EventTarget();
+globalThis.window = globalThis;
+globalThis.addEventListener = cible.addEventListener.bind(cible);
+globalThis.removeEventListener = cible.removeEventListener.bind(cible);
+globalThis.dispatchEvent = cible.dispatchEvent.bind(cible);
+globalThis.location = { protocol: "http:", search: "", href: "http://127.0.0.1/", hostname: "127.0.0.1" };
+localStorage.setItem("helix:session-token", "seance-essai");
+localStorage.setItem("helix:projects", "[]");
+let enCours = 0, max = 0, puts = 0, refus = 0, revision = 1;
+const reponse = (statut, corps) => new Response(JSON.stringify(corps), { status: statut, headers: { "Content-Type": "application/json" } });
+globalThis.fetch = async (url, init = {}) => {
+  const chemin = String(url).replace(/^\\/api/, "");
+  if (chemin === "/helix/data") return reponse(200, { revisions: { projects: revision } });
+  if (chemin === "/helix/data/projects") {
+    if ((init.method ?? "GET") === "GET") return reponse(200, { value: [], revision });
+    puts++; enCours++; max = Math.max(max, enCours);
+    await new Promise((r) => setTimeout(r, 30));
+    enCours--;
+    if (JSON.parse(init.body).base !== revision) { refus++; return reponse(409, { revision }); }
+    revision++;
+    return reponse(200, { revision });
+  }
+  return reponse(200, { value: null, revision: 0 });
+};
+const s = await import(${JSON.stringify(versUrl(join(dossierRevue, "sync.mjs")).href)});
+await s.startSync();
+s.stopSync();
+// Un envoi part, un second attend ; une troisième écriture arrive juste quand le premier se termine.
+const premier = s.push("projects");
+s.push("projects");
+premier.then(() => { s.push("projects"); });
+await new Promise((r) => setTimeout(r, 400));
+console.log("RESULTAT " + JSON.stringify({ max, puts, refus }));
+process.exit(0);
+`;
+    ecrireFichier(join(dossierRevue, "harnais.mjs"), harnais);
+    let r = {};
+    try {
+      r = JSON.parse(execFileSync(process.execPath, [join(dossierRevue, "harnais.mjs")], { encoding: "utf8", timeout: 30_000 }).match(/RESULTAT (.*)/)?.[1] ?? "{}");
+    } catch (err) {
+      r = { plantage: String(err?.stderr ?? err?.message ?? err).slice(0, 300) };
+    }
+    verifier("synchronisation : une écriture faite quand un envoi finit rejoint celui qui attendait (deux PUT simultanés, même révision, l'un refusé en 409)", r.max === 1 && r.refus === 0 && r.puts === 2, JSON.stringify(r));
+  } finally {
+    rmSync(dossierRevue, { recursive: true, force: true });
+  }
 }
 
 console.log(`\n${reussis} vérification(s) réussie(s), ${echecs.length} échec(s).`);

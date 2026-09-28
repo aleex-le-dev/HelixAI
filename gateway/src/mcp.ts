@@ -397,6 +397,48 @@ function masquer(texte: string, env?: Record<string, string>): string {
  * d'autorisation le dit clairement, plutôt que d'échouer sans motif — c'est
  * l'interface qui proposera alors « Se connecter ».
  */
+/*
+ * Deux renouvellements du même jeton n'en font qu'un (revue du 28/09/2026).
+ *
+ * Deux appels d'outil simultanés sur un jeton d'accès expiré (deux Chats, deux
+ * collègues) reçoivent chacun un 401, et le SDK renouvelle pour chacun, avec
+ * le même jeton d'actualisation. Chez un service qui le fait tourner (un seul
+ * usage : Atlassian, Linear…), le second renouvellement reçoit
+ * `invalid_grant`, et le SDK efface alors les jetons, y compris ceux que le
+ * premier venait d'obtenir : les deux appels échouaient, et le service restait
+ * à reconnecter (reproduit par scripts/essai-mcp.mjs, partie C). Le même
+ * renouvellement (même adresse, même corps, même en-tête d'identification)
+ * part donc une seule fois ; les suivants, pendant trente secondes, reçoivent
+ * la même réponse. Rien d'autre ne passe par ici : tout le reste va à `fetch`
+ * tel quel. En mémoire seulement, et oublié au bout de ces trente secondes.
+ */
+type ReponseGardee = { statut: number; texte: string; entetes: [string, string][] };
+const renouvellements = new Map<string, { quand: number; reponse: Promise<ReponseGardee> }>();
+const PARTAGE_RENOUVELLEMENT_MS = 30_000;
+
+const fetchAutorisation = async (entree: string | URL | Request, init?: RequestInit): Promise<Response> => {
+  const corps = init?.body;
+  const texte = typeof corps === "string" ? corps : corps instanceof URLSearchParams ? corps.toString() : null;
+  const methode = String(init?.method ?? (entree instanceof Request ? entree.method : "GET")).toUpperCase();
+  if (methode !== "POST" || texte === null || !texte.includes("grant_type") || new URLSearchParams(texte).get("grant_type") !== "refresh_token") {
+    return fetch(entree, init);
+  }
+  const maintenant = Date.now();
+  for (const [cle, r] of renouvellements) if (maintenant - r.quand > PARTAGE_RENOUVELLEMENT_MS) renouvellements.delete(cle);
+  const adresse = entree instanceof Request ? entree.url : String(entree);
+  const cle = `${adresse}\n${new Headers(init?.headers).get("authorization") ?? ""}\n${texte}`;
+  let enCours = renouvellements.get(cle);
+  if (!enCours) {
+    const reponse = fetch(entree, init).then(async (r) => ({ statut: r.status, texte: await r.text(), entetes: [...r.headers] as [string, string][] }));
+    enCours = { quand: maintenant, reponse };
+    renouvellements.set(cle, enCours);
+    // Une coupure réseau n'est pas une réponse : le suivant réessaie.
+    reponse.catch(() => renouvellements.delete(cle));
+  }
+  const r = await enCours.reponse;
+  return new Response(r.texte, { status: r.statut, headers: r.entetes });
+};
+
 async function demarrerDistant(id: string, entry: Live): Promise<{ ok: boolean; error?: string }> {
   const adresse = new URL(entry.config.url!);
   const locale = adresse.hostname === "127.0.0.1" || adresse.hostname === "localhost";
@@ -405,7 +447,7 @@ async function demarrerDistant(id: string, entry: Live): Promise<{ ok: boolean; 
     return { ok: false, error: entry.error };
   }
 
-  const autorisation = entry.config.auth ? { authProvider: entry.config.auth as never } : {};
+  const autorisation = entry.config.auth ? { authProvider: entry.config.auth as never, fetch: fetchAutorisation } : {};
   let client = nouveauClient(id);
   try {
     await client.connect(new StreamableHTTPClientTransport(adresse, autorisation));
@@ -876,6 +918,14 @@ export async function callTool(
       if (err instanceof McpError && err.code === ErrorCode.RequestTimeout) {
         return { ok: false, content: `${entry.config.label} n'a pas répondu à temps (${message}) : l'appel est abandonné. Il a pu être exécuté quand même : vérifie avant de le refaire.` };
       }
+      /*
+       * Un 401 reçu pendant qu'un autre appel venait de renouveler le jeton
+       * (revue du 28/09/2026) : le SDK le prend pour un refus après une
+       * autorisation réussie, alors que la demande était partie avec l'ancien
+       * jeton. Le service l'a refusée, donc rien n'a été exécuté : on la
+       * refait une fois, avec le jeton neuf.
+       */
+      if (err instanceof StreamableHTTPError && err.code === 401 && essai === 0) continue;
       /*
        * La connexion est perdue (serveur distant redémarré, session oubliée,
        * processus disparu). Mesuré le 28/09/2026 : chaque appel suivant

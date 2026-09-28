@@ -116,7 +116,7 @@ export function FirstRun({ onReady }: { onReady: () => void }) {
           {ouvert ? (
             <>
               {t("Il manque le moteur qui fait tourner les modèles : llama.cpp, un logiciel libre.")}
-              {" "}{branding.name}{" "}{t("l'installe lui-même, puis le modèle adapté à ce Mac : rien à télécharger ni à glisser. Comptez quelques minutes selon votre connexion (11 Mo pour le moteur, 2 à 5 Go pour le modèle). Les modèles tournent ensuite sur cette machine, sans rien envoyer à personne.")}
+              {" "}{branding.name}{" "}{t("l'installe lui-même, puis le modèle adapté à ce Mac : rien à télécharger ni à glisser. Comptez quelques minutes selon votre connexion (11 Mo pour le moteur, 2 à 19 Go pour le modèle selon la machine). Les modèles tournent ensuite sur cette machine, sans rien envoyer à personne.")}
             </>
           ) : (
             <>

@@ -1220,6 +1220,28 @@ process.exit(0);
   verifier("aucun jeton ni secret dans la sortie du second processus (hors du rendu contrôlé plus haut)", !SECRETS.test(sortieBrute.replace(ligne ?? "", "")), sortieBrute.match(SECRETS)?.[0]);
 }
 
+/*
+ * J. Ce que l'écran nomme (revue du 28/09/2026). Hors du français, la carte
+ * d'accord et les étapes du Chat commencent par le libellé de l'outil
+ * (src/lib/libellesOutils.ts) ; un outil natif sans libellé y montrait son nom
+ * interne, en français (« publier », « noter »). Les noms sont lus dans la
+ * barrière elle-même, chargée seule dans un processus à part.
+ */
+console.log("\nJ. Chaque outil natif a son libellé traduit à l'écran");
+{
+  const donneesJ = mkdtempSync(join(tmpdir(), "helix-natifs-libelles-"));
+  const listeNoms = execFileSync(
+    process.execPath,
+    ["--input-type=module", "-e", `const a = await import(${JSON.stringify(pathToFileURL(join(RACINE, "gateway", "src", "approbation.ts")).href)}); console.log(JSON.stringify([...a.LECTURES_NATIVES, ...a.ECRITURES_NATIVES]));`],
+    { env: { ...process.env, HELIX_DATA_DIR: donneesJ }, encoding: "utf8" },
+  );
+  rmSync(donneesJ, { recursive: true, force: true });
+  const noms = JSON.parse(listeNoms.trim().split("\n").pop() ?? "[]");
+  const libelles = readFileSync(join(RACINE, "src", "lib", "libellesOutils.ts"), "utf8");
+  const sansLibelle = noms.filter((n) => !new RegExp(`^\\s*${n}: t\\(`, "m").test(libelles));
+  verifier("chaque outil natif (lectures et écritures de la barrière) a un libellé dans libellesOutils.ts", noms.length > 80 && sansLibelle.length === 0, `${noms.length} outils ; sans libellé : ${sansLibelle.join(", ")}`);
+}
+
 faux.close();
 for (const d of [DONNEES, AUX, ESPACE]) rmSync(d, { recursive: true, force: true });
 

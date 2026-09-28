@@ -76,6 +76,7 @@ const verifier = (nom, ok, obtenu) => {
 
 let passerelle = null;
 let journal = "";
+const portsLlama = new Map();
 let G = "";
 let JETON = "";
 let DONNEES = "";
@@ -96,7 +97,8 @@ async function demarrer(moteur, donnees) {
       HELIX_GATEWAY_PORT: String(port),
       HELIX_WORKSPACE: ESPACE,
       HELIX_MOTEUR: moteur,
-      HELIX_LLAMACPP_PORT: String(await portLibre()),
+      // Le même d'un démarrage à l'autre, comme le port habituel (8795) : un serveur laissé par la passerelle précédente y est retrouvé.
+      HELIX_LLAMACPP_PORT: String(portsLlama.get(donnees) ?? portsLlama.set(donnees, await portLibre()).get(donnees)),
       HELIX_LMSTUDIO_URL: "http://127.0.0.1:9/v1",
       HELIX_EXO_URL: "http://127.0.0.1:9/v1",
       // Jamais l'application LM Studio de la machine (/Applications) : un dossier vide.
@@ -164,6 +166,58 @@ const auditDit = (action) => {
   }
 };
 
+/*
+ * Un faux `llama-server` (28/09/2026) : le routeur de llama.cpp en petit, pour
+ * essayer la mise en route sans rien télécharger. Il lit la clé et le
+ * préréglage que la passerelle lui donne, exige la clé, liste les modèles du
+ * préréglage avec leur état, charge (un à la fois), et répond « Bonjour ».
+ * Comme le vrai quand sa liste n'est pas relue, il ignore `?reload=1`.
+ */
+const FAUX_LLAMA_SERVER = `#!${process.execPath}
+const fs = require("node:fs");
+const http = require("node:http");
+const a = process.argv.slice(2);
+const arg = (n) => a[a.indexOf(n) + 1];
+if (a.includes("--version")) { console.log("version: 11146 (faux)"); process.exit(0); }
+const cle = fs.readFileSync(arg("--api-key-file"), "utf8").trim();
+const noms = fs.readFileSync(arg("--models-preset"), "utf8").split("\\n").map((l) => (/^\\[(.+)\\]$/.exec(l.trim()) || [])[1]).filter((n) => n && n !== "*");
+const etats = Object.fromEntries(noms.map((n) => [n, "unloaded"]));
+http.createServer((req, res) => {
+  const envoyer = (code, corps) => { res.writeHead(code, { "Content-Type": "application/json" }); res.end(JSON.stringify(corps)); };
+  let corps = "";
+  req.on("data", (m) => (corps += m));
+  req.on("end", () => {
+    if (req.headers.authorization !== "Bearer " + cle) return envoyer(401, { error: "clé" });
+    const chemin = req.url.split("?")[0];
+    if (req.method === "GET" && (chemin === "/models" || chemin === "/v1/models")) return envoyer(200, { data: noms.map((id) => ({ id, status: { value: etats[id] } })) });
+    const lu = corps ? JSON.parse(corps) : {};
+    if (chemin === "/models/load" && etats[lu.model]) { for (const n of noms) etats[n] = "unloaded"; etats[lu.model] = "loaded"; return envoyer(200, { success: true }); }
+    if (chemin === "/models/unload" && etats[lu.model]) { etats[lu.model] = "unloaded"; return envoyer(200, { success: true }); }
+    if (chemin === "/v1/chat/completions") return envoyer(200, { choices: [{ message: { role: "assistant", content: "Bonjour" } }] });
+    envoyer(404, { error: "inconnu" });
+  });
+}).listen(Number(arg("--port")), arg("--host"));
+`;
+/** Les faux `llama-server` de cet essai qui tournent (par leur chemin, jamais par leur nom seul). */
+function fauxServeurs() {
+  try {
+    return execFileSync("/bin/ps", ["-axo", "pid=,command="], { encoding: "utf8" })
+      .split("\n")
+      .filter((l) => l.includes(join(TMP, "donnees-b", "llamacpp", "b11146", "llama-server")))
+      .map((l) => Number(l.trim().split(/\s+/)[0]));
+  } catch {
+    return [];
+  }
+}
+const vivant = (pid) => {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
 let volume = null;
 /** Les volumes d'essai montés, démontés à la fin quoi qu'il arrive. */
 const volumes = [];
@@ -217,6 +271,15 @@ try {
   verifier("choix inscrit au journal d'audit", auditDit("moteur.emplacement"), "journal");
   verifier("le nouveau dossier de LM Studio devient une zone protégée (son bin/lms)", protege(join(attendu, "bin", "lms")) === "PROTEGE", protege(join(attendu, "bin", "lms")));
   verifier("le reste de l'autre disque n'est pas fermé aux agents", protege(join(DISQUE_D, "Documents", "devis.txt")) === "LIBRE", protege(join(DISQUE_D, "Documents", "devis.txt")));
+
+  // Rechoisir le même dossier (revue du 28/09/2026) : son sous-dossier est une zone protégée, il était refusé comme tel.
+  const memeD = await choisir(admin, DISQUE_D);
+  const verifMeme = await appel("/helix/emplacement-modeles/verifier", admin, { dossier: DISQUE_D });
+  verifier(
+    "rechoisir le dossier déjà retenu : accepté sans rien changer (200), pas « protégé »",
+    memeD.statut === 200 && memeD.json.dossier === attendu && readFileSync(POINTEUR, "utf8") === attendu && verifMeme.statut === 200 && verifMeme.json.actuel === true,
+    `${memeD.statut} ${JSON.stringify(memeD.json)} ${verifMeme.statut} ${JSON.stringify(verifMeme.json)}`,
+  );
 
   const ok2 = await choisir(admin, DISQUE_E);
   const attendu2 = join(DISQUE_E, "LM Studio");
@@ -307,6 +370,15 @@ try {
       }
       return d;
     };
+    // Le même dossier, rechoisi avec un modèle posé (revue du 28/09/2026) : il était refusé (« pas vide », « protégé »).
+    const vMeme = await appel("/helix/emplacement-modeles/verifier", s, { dossier: DISQUE_D });
+    const cMeme = await choisir(s, DISQUE_D);
+    verifier(
+      "modèles posés, même dossier rechoisi : rien à déplacer (200), rien ne bouge",
+      vMeme.statut === 200 && vMeme.json.actuel === true && cMeme.statut === 200 && !cMeme.json.deplacement && existsSync(join(modelesD, partiel)) && (await etat(s)).deplacement === null,
+      `${vMeme.statut} ${JSON.stringify(vMeme.json)} ${cMeme.statut} ${JSON.stringify(cMeme.json)}`,
+    );
+
     const d1 = await choisir(s, DISQUE_E);
     const modelesE = join(DISQUE_E, "modeles-llamacpp");
     const fin1 = await suivre();
@@ -405,10 +477,115 @@ try {
     mkdirSync(dirname(perso), { recursive: true });
     writeFileSync(perso, "à moi");
     writeFileSync(join(dirname(perso), "Ancien-Modele.gguf.partiel"), "reste");
+    // Le dossier de travail d'une installation du moteur coupée (28/09/2026) : il s'accumulait à chaque coupure.
+    const travailCoupe = join(DONNEES, "llamacpp", ".telechargement-essai");
+    mkdirSync(travailCoupe, { recursive: true });
+    writeFileSync(join(travailCoupe, "llama-b11146-bin-macos-x64.tar.gz.partiel"), randomBytes(1024));
     await arreter();
     await demarrer("llamacpp", DONNEES);
     await attendre(500);
     verifier("ménage au démarrage : un `.partiel` hors catalogue est effacé, un fichier d'une personne reste", existsSync(perso) && !existsSync(join(dirname(perso), "Ancien-Modele.gguf.partiel")), readdirSync(dirname(perso)).join(","));
+    verifier("ménage au démarrage : le dossier d'une installation du moteur coupée est effacé", !existsSync(travailCoupe), readdirSync(join(DONNEES, "llamacpp")).join(","));
+
+    /*
+     * Un moteur qui ne démarre pas (28/09/2026) : un faux `llama-server`,
+     * jamais un vrai, et un faux modèle posé sous son nom du catalogue. La
+     * mise en route doit s'arrêter en le disant, sans passer au modèle
+     * suivant (qu'elle téléchargeait, plusieurs Go, pour dire « trop lourd »).
+     */
+    const faux = join(DONNEES, "llamacpp", "b11146", "llama-server");
+    mkdirSync(dirname(faux), { recursive: true });
+    writeFileSync(faux, "#!/bin/sh\nexit 1\n", { mode: 0o755 });
+    const dossierModeles = (await etat(s)).dossier;
+    mkdirSync(dossierModeles, { recursive: true });
+    writeFileSync(join(dossierModeles, "Qwen3-8B-Q4_K_M.gguf"), "faux modèle");
+    const suivreMiseEnRoute = async () => {
+      let e = {};
+      for (let i = 0; i < 120; i++) {
+        e = (await appel("/helix/provision", s)).json.state ?? {};
+        if (e.phase === "error" || e.phase === "ready" || e.phase === "downloading") return e;
+        await attendre(250);
+      }
+      return e;
+    };
+    const lance = await appel("/helix/provision/start", s, { model: "qwen3-8b" });
+    const e1 = await suivreMiseEnRoute();
+    verifier(
+      "moteur qui ne démarre pas : la mise en route s'arrête et le dit, sans télécharger le modèle suivant",
+      lance.statut === 202 && e1.phase === "error" && /ne répond pas/.test(e1.error ?? "") && !readdirSync(dossierModeles).some((n) => n.endsWith(".partiel") && !n.startsWith("Qwen3-4B")) && !/Téléchargement de/.test(journal),
+      `${lance.statut} ${JSON.stringify(e1)} ${readdirSync(dossierModeles).join(",")}`,
+    );
+    /*
+     * Un binaire que le système ne sait pas lancer (en-tête Mach-O suivi
+     * d'octets au hasard) : `spawn` lève ENOEXEC au lieu d'émettre `error`.
+     * La découverte des modèles rejetait alors, et l'écran de mise en route
+     * avec elle.
+     */
+    writeFileSync(faux, Buffer.concat([Buffer.from([0xcf, 0xfa, 0xed, 0xfe, 0x07, 0x00, 0x00, 0x01]), randomBytes(4096)]), { mode: 0o755 });
+    await appel("/helix/provision/start", s, { model: "qwen3-8b" });
+    const e2 = await suivreMiseEnRoute();
+    const ecran = await appel("/helix/provision", s);
+    verifier(
+      "moteur que le système ne sait pas lancer : l'écran répond (200), la mise en route dit que le moteur ne répond pas",
+      ecran.statut === 200 && e2.phase === "error" && /ne répond pas/.test(e2.error ?? ""),
+      `${ecran.statut} ${JSON.stringify(e2)}`,
+    );
+    rmSync(join(dossierModeles, "Qwen3-8B-Q4_K_M.gguf"), { force: true });
+
+    /*
+     * La mise en route de bout en bout sur un emplacement choisi, avec un faux
+     * `llama-server` (un petit routeur écrit ici : liste, chargement, réponse
+     * « Bonjour » à l'essai de santé), et de faux modèles posés sous leur nom
+     * du catalogue : aucun téléchargement. Puis la passerelle tuée net : le
+     * serveur qu'elle laisse est arrêté et remplacé au redémarrage (il était
+     * gardé, ne voyait pas un modèle posé depuis, et survivait à Helix).
+     */
+    if (process.execPath.includes(" ")) {
+      console.log("  (Node dans un chemin avec espace : pas de faux llama-server par script, cette partie est sautée)");
+    } else {
+      writeFileSync(faux, FAUX_LLAMA_SERVER, { mode: 0o755 });
+      for (const n of readdirSync(dossierModeles)) if (n.endsWith(".partiel")) rmSync(join(dossierModeles, n));
+      const disqueG = join(TMP, "disque-g");
+      mkdirSync(disqueG);
+      const cg = await choisir(s, disqueG);
+      const modelesG = join(disqueG, "modeles-llamacpp");
+      writeFileSync(join(modelesG, "Qwen3-1.7B-Q8_0.gguf"), "faux modèle");
+      const suivrePret = async () => {
+        let e = {};
+        for (let i = 0; i < 240; i++) {
+          e = (await appel("/helix/provision", s)).json.state ?? {};
+          if (e.phase === "error" || e.phase === "ready") return e;
+          await attendre(250);
+        }
+        return e;
+      };
+      await appel("/helix/provision/start", s, { model: "qwen3-1.7b" });
+      const p1 = await suivrePret();
+      const statut1 = (await appel("/helix/provision", s)).json;
+      verifier(
+        "emplacement choisi puis mise en route : le modèle posé là est chargé, essayé, prêt, et le Chat a un modèle",
+        cg.statut === 200 && p1.phase === "ready" && statut1.hasChatModel === true && readFileSync(join(DONNEES, "llamacpp", "modeles.ini"), "utf8").includes(join(modelesG, "Qwen3-1.7B-Q8_0.gguf")),
+        `${cg.statut} ${JSON.stringify(p1)} ${statut1.hasChatModel}`,
+      );
+      const avant = fauxServeurs();
+      passerelle.kill("SIGKILL");
+      await attendre(1000);
+      verifier("passerelle tuée net : son llama-server reste (orphelin)", avant.length === 1 && vivant(avant[0]), avant.join(","));
+      writeFileSync(join(modelesG, "Qwen3-4B-Q4_K_M.gguf"), "faux modèle");
+      await demarrer("llamacpp", DONNEES);
+      await appel("/helix/provision/start", s, { model: "qwen3-4b" });
+      const p2 = await suivrePret();
+      const apres = fauxServeurs();
+      verifier(
+        "au redémarrage : l'orphelin est arrêté et remplacé, le modèle posé depuis est chargé et prêt",
+        p2.phase === "ready" && avant.every((pid) => !vivant(pid)) && apres.length === 1 && !avant.includes(apres[0]),
+        `${JSON.stringify(p2)} avant ${avant.join(",")} après ${apres.join(",")}`,
+      );
+      await arreter();
+      await attendre(1500);
+      verifier("il s'arrête avec la passerelle", fauxServeurs().length === 0, fauxServeurs().join(","));
+    }
+    rmSync(join(DONNEES, "llamacpp", "b11146"), { recursive: true, force: true });
     await arreter();
   }
 } catch (err) {
@@ -416,6 +593,13 @@ try {
   console.log(`  ✗ ${err instanceof Error ? err.stack : err}`);
 } finally {
   await arreter();
+  for (const pid of fauxServeurs()) {
+    try {
+      process.kill(pid, "SIGTERM");
+    } catch {
+      /* parti */
+    }
+  }
   for (const v of volumes) {
     try {
       execFileSync("/usr/bin/hdiutil", ["detach", v, "-force"], { stdio: "ignore" });

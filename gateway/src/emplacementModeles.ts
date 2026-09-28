@@ -284,6 +284,25 @@ export function validerEmplacement(brut: unknown, moteur: MoteurLocal, creer: bo
   return { ok: true, choisi, dossier, libre: placeLibre(dossier), cree };
 }
 
+/**
+ * Le dossier saisi est-il celui déjà retenu pour ce moteur ? Rend alors
+ * l'emplacement retenu (le sous-dossier), sinon null.
+ *
+ * Revue du 28/09/2026 : rechoisi (un second clic sur « Changer », le même
+ * disque), il était refusé par `validerEmplacement`, puisque son
+ * sous-dossier est devenu une zone protégée (« Ce dossier est protégé… »),
+ * et que celui du moteur ouvert n'est plus vide une fois un modèle posé.
+ * Rien ne change dans ce cas : il n'y a rien à juger ni à écrire.
+ */
+function dejaRetenu(brut: unknown, moteur: MoteurLocal): string | null {
+  if (typeof brut !== "string" || !brut.trim()) return null;
+  // LM Studio : seulement un pointeur suivi (un pointeur vers un dossier disparu se rechoisit pour être recréé).
+  const actuel = moteur === "llamacpp" ? emplacementLlamaChoisi() : pointeurNonSuivi() ? null : pointeurLmStudio();
+  if (!actuel) return null;
+  const dossier = join(cheminReel(resolve(brut.trim())), sousDossier(moteur));
+  return replier(dossier) === replier(actuel) ? actuel : null;
+}
+
 /** Retire les dossiers vides créés par `mkdirSync` (du plus profond jusqu'au premier créé), jamais un dossier plein. */
 function retirerCrees(dossier: string, premierCree: string | undefined): void {
   if (!premierCree) return;
@@ -450,6 +469,8 @@ function choisirLmStudio(brut: unknown): Issue {
     return { statut: 200, corps: { ok: true }, journal: { moteur: "lmstudio", dossier: dossierLmStudioHabituel(), avant } };
   }
 
+  const retenu = dejaRetenu(brut, "lmstudio");
+  if (retenu) return { statut: 200, corps: { ok: true, dossier: retenu, libre: placeLibre(retenu) } };
   const deja = lmStudioEnPlace();
   if (deja) {
     return {
@@ -497,11 +518,12 @@ function choisirLlama(brut: unknown): Issue {
   let cible: string | null = null;
   let cree: string | undefined;
   if (brut !== null) {
+    const retenu = dejaRetenu(brut, "llamacpp");
+    if (retenu) return { statut: 200, corps: { ok: true, dossier: retenu, libre: placeLibre(retenu) } };
     const v = validerEmplacement(brut, "llamacpp", true);
     if (!v.ok) return { statut: 400, corps: { error: { message: v.message } } };
     cible = v.dossier;
     cree = v.cree;
-    if (avant && replier(avant) === replier(cible)) return { statut: 200, corps: { ok: true, dossier: cible, libre: v.libre } };
   } else if (avant === null) {
     return { statut: 200, corps: { ok: true } };
   }
@@ -541,6 +563,8 @@ function choisirLlama(brut: unknown): Issue {
 /** Juge un dossier sans rien créer : la place libre, avant de confirmer un déplacement. */
 export function verifierEmplacement(moteur: MoteurLocal | null, brut: unknown): Issue {
   if (!moteur) return { statut: 409, corps: { error: { message: t("Aucun moteur de modèles local sur cette instance : il n'y a pas d'emplacement à choisir.") } } };
+  const retenu = dejaRetenu(brut, moteur);
+  if (retenu) return { statut: 200, corps: { ok: true, dossier: retenu, libre: placeLibre(retenu), actuel: true } };
   const v = validerEmplacement(brut, moteur, false);
   if (!v.ok) return { statut: 400, corps: { error: { message: v.message } } };
   return { statut: 200, corps: { ok: true, dossier: v.dossier, libre: v.libre } };

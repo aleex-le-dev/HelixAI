@@ -47,12 +47,24 @@ export function HomePage() {
   const [rechercheWeb, setRechercheWeb] = useState(false);
   const [etatWeb, setEtatWeb] = useState<EtatRechercheWeb | null | undefined>(undefined);
   useEffect(() => {
+    /*
+     * Relu toutes les 15 secondes tant que l'instance ne répond pas
+     * (28/09/2026) : lu une seule fois à l'ouverture de l'écran, un démarrage
+     * lent ou une coupure passagère laissait l'entrée du menu « + » grisée,
+     * « l'instance ne répond pas », jusqu'à ce qu'on quitte le Chat.
+     */
     let vivant = true;
-    void etatRechercheWeb().then((e) => {
-      if (vivant) setEtatWeb(e);
-    });
+    let minuterie: number | undefined;
+    const lire = () =>
+      void etatRechercheWeb().then((e) => {
+        if (!vivant) return;
+        setEtatWeb(e);
+        if (e === null) minuterie = window.setTimeout(lire, 15_000);
+      });
+    lire();
     return () => {
       vivant = false;
+      window.clearTimeout(minuterie);
     };
   }, []);
   const webActif = rechercheWeb && Boolean(etatWeb?.autorisee) && !modeImage;

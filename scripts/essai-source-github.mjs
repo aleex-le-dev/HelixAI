@@ -65,5 +65,19 @@ verifier("manifeste sans taille connue écarté", s.manifesteDe(m(undefined)) ==
 verifier("manifeste hors https écarté", s.manifesteDe(m(533, "http://exemple.test/helix-mise-a-jour.json")) === null);
 verifier("texte de manifeste plus gros qu'un manifeste refusé", s.lireManifeste(JSON.stringify({ ...bon, bourrage: "x".repeat(s.TAILLE_MANIFESTE_MAX) }), "0.27.1") === null && lireW(JSON.stringify({ ...JSON.parse(avecWin(windows(privee))), bourrage: "x".repeat(s.TAILLE_MANIFESTE_MAX) })) === null);
 verifier("dépôt mal formé refusé", s.depotValide("a/b;rm") === null && s.depotValide("medhiclb/HelixAI") === "medhiclb/HelixAI");
+// Processeur de l'exécutable (28/09/2026) : une archive pour puce Apple ne s'installe pas sur un Mac Intel, ni l'inverse.
+const mince = (type) => { const b = Buffer.alloc(32); b.writeUInt32BE(0xcffaedfe, 0); b.writeUInt32LE(type, 4); return b; };
+const universel = (...types) => { const b = Buffer.alloc(8 + 20 * types.length); b.writeUInt32BE(0xcafebabe, 0); b.writeUInt32BE(types.length, 4); types.forEach((t, i) => b.writeUInt32BE(t, 8 + i * 20)); return b; };
+const archs = (b) => [...s.processeursMachO(b)].sort().join(",");
+verifier("Mach-O puce Apple lu arm64", archs(mince(0x0100000c)) === "arm64");
+verifier("Mach-O Intel lu x64", archs(mince(0x01000007)) === "x64");
+verifier("Mach-O universel : les deux", archs(universel(0x01000007, 0x0100000c)) === "arm64,x64");
+verifier("pas un exécutable : rien", archs(Buffer.from("#!/bin/sh\necho\n")) === "" && archs(Buffer.alloc(0)) === "");
+{
+  // Le vrai binaire d'Electron de ce poste : son processeur y est.
+  const { existsSync, readFileSync } = await import("node:fs");
+  const electron = new URL("../node_modules/electron/dist/Electron.app/Contents/MacOS/Electron", import.meta.url);
+  if (process.platform === "darwin" && existsSync(electron)) verifier(`le binaire d'Electron de ce Mac porte ${process.arch}`, s.processeursMachO(readFileSync(electron).subarray(0, 4096)).has(process.arch));
+}
 console.log(echecs ? `${echecs} échec(s)` : "tout est bon");
 process.exit(echecs ? 1 : 0);

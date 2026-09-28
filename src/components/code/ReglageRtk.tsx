@@ -27,7 +27,21 @@ export function ReglageRtkCode({
   const [open, setOpen] = useState(false);
   const [etat, setEtat] = useState<EtatRtk | null>(null);
   useEffect(() => {
-    if (open) void fetchRtk(sessionId).then(setEtat);
+    if (!open) return;
+    /*
+     * La réponse d'une session quittée entre-temps n'écrase pas celle de la
+     * session affichée, et l'état relu d'une autre session n'est pas montré le
+     * temps de la lecture (28/09/2026) : les jetons épargnés sont ceux « de
+     * cette session ».
+     */
+    let vivant = true;
+    setEtat(null);
+    void fetchRtk(sessionId).then((r) => {
+      if (vivant) setEtat(r);
+    });
+    return () => {
+      vivant = false;
+    };
   }, [open, sessionId]);
 
   const ligne = (v: ReglageRtk, titre: string, description: string) => (
@@ -100,6 +114,16 @@ export function ReglageRtkCode({
  */
 export function EconomiesRtk({ sessionId, occupe }: { sessionId: string | null; occupe: boolean }) {
   const [jetons, setJetons] = useState(0);
+  /*
+   * Remis à zéro quand la session change (28/09/2026) : sans cela, « Nouvelle
+   * session » ou une autre session rouverte gardait sous sa saisie les jetons
+   * épargnés dans la précédente, jusqu'à la fin de son premier tour.
+   */
+  const [pour, setPour] = useState(sessionId);
+  if (pour !== sessionId) {
+    setPour(sessionId);
+    setJetons(0);
+  }
   useEffect(() => {
     if (!sessionId || occupe) return;
     let vivant = true;

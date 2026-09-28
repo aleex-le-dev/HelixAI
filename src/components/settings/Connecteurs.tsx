@@ -300,6 +300,23 @@ export function Connecteurs({ maison = [] }: { maison?: ServiceMaison[] } = {}) 
       void lireEtat().then((suite) => {
         if (!suite) return;
         setEtat(suite);
+        /*
+         * Un refus dans la page du service, ou un échec après l'accord
+         * (28/09/2026) : l'instance le dit, et on cesse d'attendre. Sans cela,
+         * « En attente de votre accord… » restait cinq minutes, puis le bouton
+         * revenait sans un mot. L'instance efface l'issue précédente quand
+         * « Se connecter » est cliqué (connecteurs.ts, `connecter`) : celle
+         * qu'on lit ici est donc celle de ce clic.
+         */
+        const issue = suite.issues?.[id];
+        if (issue && !issue.ok) {
+          if (sondage.current) clearInterval(sondage.current);
+          sondage.current = null;
+          setAttente(null);
+          setSucces(null);
+          setErreur(issue.message);
+          return;
+        }
         const vivant = suite.installes.find((c) => c.id === id);
         if (vivant?.running || tours > 150) {
           if (sondage.current) clearInterval(sondage.current);

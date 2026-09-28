@@ -719,6 +719,8 @@ tls.connect = (...a) => { if (a[0] && typeof a[0] === "object") a[0] = { ...a[0]
 syncBuiltinESMExports();
 const { ClientImap } = await import(${src("courrier.ts")});
 const co = await import(${src("courrierOauth.ts")});
+// Hors requête, la passerelle parle anglais (langue.ts) : l'essai lit les messages en français, comme l'écran d'un poste français.
+const { dansLaLangue } = await import(${src("langue.ts")});
 const BON = "ACCES-IMAP-BON";
 const sortie = { auths: 0 };
 const serveur = tls.createServer({ cert: m.cert, key: m.key }, (s) => {
@@ -770,6 +772,7 @@ const serveur = tls.createServer({ cert: m.cert, key: m.key }, (s) => {
 await new Promise((ok) => serveur.listen(0, "127.0.0.1", ok));
 const base = { serveur: "127.0.0.1", port: serveur.address().port, chiffrement: "tls", identifiant: "boite@example.test", motDePasse: "", adresse: "boite@example.test" };
 const jetons = (acces) => ({ fournisseur: "google", clientId: ${JSON.stringify(GOOGLE.id)}, clientSecret: ${JSON.stringify(GOOGLE.secret)}, refreshToken: "ACTU-courrier", accessToken: acces, expire: Date.now() + 3600_000 });
+await dansLaLangue("fr", async () => {
 const c1 = new ClientImap({ ...base, oauth: jetons(BON) });
 try { await c1.connecter(); sortie.total = await c1.ouvrir("INBOX"); } catch (e) { sortie.erreurBon = e.message; } finally { await c1.fermer(); }
 const c2 = new ClientImap({ ...base, oauth: jetons("ACCES-IMAP-REVOQUE") });
@@ -779,6 +782,7 @@ const perime = { fournisseur: "google", clientId: ${JSON.stringify(GOOGLE.id)}, 
 sortie.simultanes = (await Promise.all([co.accesValide(perime), co.accesValide(perime), co.accesValide(perime)])).map((r) => (r.ok ? r.acces : "ECHEC " + r.message));
 const panne = await co.accesValide({ ...perime, refreshToken: "ACTU-panne" });
 sortie.panne = panne.ok ? "ok" : panne.message;
+});
 serveur.close();
 console.log("RESULTAT " + JSON.stringify(sortie));
 process.exit(0);

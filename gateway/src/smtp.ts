@@ -1,6 +1,8 @@
 import { connect as connecterTls, type TLSSocket } from "node:tls";
 import { connect as connecterTcp, type Socket } from "node:net";
 import { NomProduit } from "./marque.ts";
+// Les refus du serveur d'envoi s'affichent à la configuration de la boîte : traduits (tournée des connecteurs du 28/09/2026).
+import { t, tf } from "./langue.ts";
 
 /**
  * Client SMTP minimal, pour envoyer un mail que la personne a autorisé.
@@ -68,9 +70,9 @@ class Session {
   private brancher(socket: TLSSocket | Socket): void {
     socket.setTimeout(DELAI_MS);
     socket.on("data", (b: Buffer) => this.recevoir(b.toString("latin1")));
-    socket.on("timeout", () => this.terminer(new ErreurSmtp("Le serveur d'envoi a cessé de répondre.")));
-    socket.on("error", () => this.terminer(new ErreurSmtp("La connexion au serveur d'envoi a été interrompue.")));
-    socket.on("close", () => this.terminer(new ErreurSmtp("Le serveur d'envoi a fermé la connexion.")));
+    socket.on("timeout", () => this.terminer(new ErreurSmtp(t("Le serveur d'envoi a cessé de répondre."))));
+    socket.on("error", () => this.terminer(new ErreurSmtp(t("La connexion au serveur d'envoi a été interrompue."))));
+    socket.on("close", () => this.terminer(new ErreurSmtp(t("Le serveur d'envoi a fermé la connexion."))));
   }
 
   private detacher(): void {
@@ -87,7 +89,7 @@ class Session {
 
   private recevoir(texte: string): void {
     this.tampon += texte;
-    if (this.tampon.length > LIGNE_MAX * 8) return this.terminer(new ErreurSmtp("Réponse du serveur d'envoi illisible."));
+    if (this.tampon.length > LIGNE_MAX * 8) return this.terminer(new ErreurSmtp(t("Réponse du serveur d'envoi illisible.")));
     let i: number;
     while ((i = this.tampon.indexOf("\r\n")) >= 0) {
       const ligne = this.tampon.slice(0, i);
@@ -118,7 +120,7 @@ class Session {
 
   /** Écrit une ligne de protocole. Jamais de retour à la ligne venu de l'extérieur. */
   async commande(ligne: string): Promise<Reponse> {
-    if (/[\r\n]/.test(ligne)) throw new ErreurSmtp("Commande d'envoi mal formée.");
+    if (/[\r\n]/.test(ligne)) throw new ErreurSmtp(t("Commande d'envoi mal formée."));
     const r = this.lire();
     this.socket.write(`${ligne}\r\n`);
     return r;
@@ -142,7 +144,7 @@ class Session {
      */
     if (this.recues.length > 0 || this.tampon.length > 0 || this.lignes.length > 0) {
       this.socket.destroy();
-      throw new ErreurSmtp("Le serveur d'envoi a répondu plus que demandé avant le chiffrement : connexion abandonnée par prudence.");
+      throw new ErreurSmtp(t("Le serveur d'envoi a répondu plus que demandé avant le chiffrement : connexion abandonnée par prudence."));
     }
     this.detacher();
     const brut = this.socket as Socket;
@@ -169,14 +171,14 @@ class Session {
 
 function traduire(e: Error): ErreurSmtp {
   const code = (e as NodeJS.ErrnoException).code ?? "";
-  if (code === "ENOTFOUND" || code === "EAI_AGAIN") return new ErreurSmtp("Serveur d'envoi introuvable : vérifiez son nom.");
-  if (code === "ECONNREFUSED") return new ErreurSmtp("Connexion refusée par le serveur d'envoi : vérifiez le serveur et le port.");
+  if (code === "ENOTFOUND" || code === "EAI_AGAIN") return new ErreurSmtp(t("Serveur d'envoi introuvable : vérifiez son nom."));
+  if (code === "ECONNREFUSED") return new ErreurSmtp(t("Connexion refusée par le serveur d'envoi : vérifiez le serveur et le port."));
   if (/certificat|certificate|self.signed|CERT_|DEPTH_ZERO|ERR_TLS/i.test(`${code} ${e.message}`)) {
     return new ErreurSmtp(
-      `Le certificat du serveur d'envoi n'est pas reconnu. ${NomProduit()} refuse de continuer plutôt que d'exposer votre mot de passe.`,
+      tf("Le certificat du serveur d'envoi n'est pas reconnu. {0} refuse de continuer plutôt que d'exposer votre mot de passe.", NomProduit()),
     );
   }
-  return new ErreurSmtp("La connexion au serveur d'envoi a échoué.");
+  return new ErreurSmtp(t("La connexion au serveur d'envoi a échoué."));
 }
 
 function ouvrir(s: ServeurSmtp): Promise<TLSSocket | Socket> {
@@ -187,7 +189,7 @@ function ouvrir(s: ServeurSmtp): Promise<TLSSocket | Socket> {
         : connecterTcp({ host: s.serveur, port: s.port });
     const minuteur = setTimeout(() => {
       socket.destroy();
-      ko(new ErreurSmtp("Le serveur d'envoi n'a pas répondu à temps."));
+      ko(new ErreurSmtp(t("Le serveur d'envoi n'a pas répondu à temps.")));
     }, 15_000);
     socket.once(s.chiffrement === "tls" ? "secureConnect" : "connect", () => {
       clearTimeout(minuteur);
@@ -208,24 +210,23 @@ const attendu = (r: Reponse, codes: number[], message: string) => {
 async function session(s: ServeurSmtp, domaine: string): Promise<Session> {
   const sess = new Session(await ouvrir(s));
   try {
-    attendu(await sess.lire(), [220], "Le serveur d'envoi a refusé la connexion.");
+    attendu(await sess.lire(), [220], t("Le serveur d'envoi a refusé la connexion."));
     let ehlo = await sess.commande(`EHLO ${domaine}`);
-    attendu(ehlo, [250], "Le serveur d'envoi ne répond pas comme un serveur SMTP.");
+    attendu(ehlo, [250], t("Le serveur d'envoi ne répond pas comme un serveur SMTP."));
     if (s.chiffrement === "starttls") {
       if (!ehlo.lignes.some((l) => /^STARTTLS\b/i.test(l))) {
         throw new ErreurSmtp(
-          "Ce serveur n'annonce pas STARTTLS sur ce port : le mot de passe partirait en clair. Choisissez le TLS direct (port 465).",
+          t("Ce serveur n'annonce pas STARTTLS sur ce port : le mot de passe partirait en clair. Choisissez le TLS direct (port 465)."),
         );
       }
-      attendu(await sess.commande("STARTTLS"), [220], "Le serveur d'envoi a refusé de passer en TLS.");
+      attendu(await sess.commande("STARTTLS"), [220], t("Le serveur d'envoi a refusé de passer en TLS."));
       await sess.passerEnTls(s.serveur);
       // Tout ce qui a été annoncé en clair est oublié et redemandé (RFC 3207).
       ehlo = await sess.commande(`EHLO ${domaine}`);
-      attendu(ehlo, [250], "Le serveur d'envoi ne répond plus après le passage en TLS.");
+      attendu(ehlo, [250], t("Le serveur d'envoi ne répond plus après le passage en TLS."));
     }
     const auth = ehlo.lignes.find((l) => /^AUTH\b/i.test(l))?.toUpperCase() ?? "";
-    const refus =
-      "Identifiant ou mot de passe refusé par le serveur d'envoi. Avec la validation en deux étapes, il faut un mot de passe d'application.";
+    const refus = t("Identifiant ou mot de passe refusé par le serveur d'envoi. Avec la validation en deux étapes, il faut un mot de passe d'application.");
     /*
      * XOAUTH2 d'abord quand un jeton est là. On ne vérifie pas que le serveur
      * l'annonce : Office 365 ne le liste pas toujours dans sa réponse EHLO
@@ -240,8 +241,7 @@ async function session(s: ServeurSmtp, domaine: string): Promise<Session> {
       attendu(
         await sess.commande(`AUTH XOAUTH2 ${jeton}`),
         [235],
-        "Le serveur d'envoi a refusé l'autorisation. Elle a peut-être été retirée : " +
-          "rebranchez la boîte dans Réglages, Connecteurs.",
+        t("Le serveur d'envoi a refusé l'autorisation. Elle a peut-être été retirée : rebranchez la boîte dans Paramètres, Connecteurs."),
       );
     } else if (/\bPLAIN\b/.test(auth)) {
       const jeton = Buffer.from(`\u0000${s.identifiant}\u0000${s.motDePasse}`, "utf8").toString("base64");
@@ -251,12 +251,12 @@ async function session(s: ServeurSmtp, domaine: string): Promise<Session> {
       attendu(await sess.commande(Buffer.from(s.identifiant, "utf8").toString("base64")), [334], refus);
       attendu(await sess.commande(Buffer.from(s.motDePasse, "utf8").toString("base64")), [235], refus);
     } else {
-      throw new ErreurSmtp("Ce serveur d'envoi n'accepte pas d'authentification par mot de passe sur cette connexion.");
+      throw new ErreurSmtp(t("Ce serveur d'envoi n'accepte pas d'authentification par mot de passe sur cette connexion."));
     }
     return sess;
   } catch (err) {
     sess.fermer();
-    throw err instanceof ErreurSmtp ? err : new ErreurSmtp("La connexion au serveur d'envoi a échoué.");
+    throw err instanceof ErreurSmtp ? err : new ErreurSmtp(t("La connexion au serveur d'envoi a échoué."));
   }
 }
 
@@ -277,19 +277,19 @@ const domaineDe = (adresse: string) => {
 
 /** Remet un message composé à ses destinataires. Rend le numéro de file du serveur, s'il en donne un. */
 export async function envoyerSmtp(s: ServeurSmtp, de: string, destinataires: string[], message: string): Promise<string> {
-  if (!adresseSmtp(de)) throw new ErreurSmtp("L'adresse d'envoi ne peut pas servir en SMTP.");
+  if (!adresseSmtp(de)) throw new ErreurSmtp(t("L'adresse d'envoi ne peut pas servir en SMTP."));
   const refusee = destinataires.find((d) => !adresseSmtp(d));
-  if (refusee) throw new ErreurSmtp(`L'adresse « ${refusee.slice(0, 80)} » ne peut pas recevoir de mail par ce serveur.`);
+  if (refusee) throw new ErreurSmtp(tf("L'adresse « {0} » ne peut pas recevoir de mail par ce serveur.", refusee.slice(0, 80)));
   const sess = await session(s, domaineDe(de));
   try {
-    attendu(await sess.commande(`MAIL FROM:<${de}>`), [250], "Le serveur d'envoi a refusé l'expéditeur : l'adresse ne correspond peut-être pas au compte.");
+    attendu(await sess.commande(`MAIL FROM:<${de}>`), [250], t("Le serveur d'envoi a refusé l'expéditeur : l'adresse ne correspond peut-être pas au compte."));
     for (const d of destinataires) {
       const r = await sess.commande(`RCPT TO:<${d}>`);
-      attendu(r, [250, 251], `Le serveur d'envoi a refusé le destinataire ${d}.`);
+      attendu(r, [250, 251], tf("Le serveur d'envoi a refusé le destinataire {0}.", d));
     }
-    attendu(await sess.commande("DATA"), [354], "Le serveur d'envoi a refusé le message.");
+    attendu(await sess.commande("DATA"), [354], t("Le serveur d'envoi a refusé le message."));
     const fin = await sess.donnees(message);
-    attendu(fin, [250], "Le serveur d'envoi n'a pas accepté le message.");
+    attendu(fin, [250], t("Le serveur d'envoi n'a pas accepté le message."));
     return fin.lignes.join(" ").slice(0, 200);
   } finally {
     sess.fermer();

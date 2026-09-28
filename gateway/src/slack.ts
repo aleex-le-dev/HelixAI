@@ -128,7 +128,8 @@ class ErreurSlack extends Error {
   }
 }
 
-const RECONNECTER = "Reconnectez Slack dans Paramètres, Connecteurs, avec un nouveau jeton.";
+// Une fonction, pour être dite dans la langue de qui lit (tournée des connecteurs du 28/09/2026).
+const reconnecter = () => t("Reconnectez Slack dans Paramètres, Connecteurs, avec un nouveau jeton.");
 
 /* ------------------------------- persistance ---------------------------------- */
 
@@ -210,7 +211,7 @@ async function appeler(
   methode: Methode,
   parametres: Record<string, string>,
 ): Promise<{ json: Record<string, unknown>; portees: string[] | null }> {
-  if (!METHODES.has(methode)) throw new ErreurSlack("api", "Méthode Slack non autorisée.");
+  if (!METHODES.has(methode)) throw new ErreurSlack("api", t("Méthode Slack non autorisée."));
   const chemin = `/api/${methode}?${new URLSearchParams(parametres).toString()}`;
 
   for (let essai = 0; essai < 2; essai++) {
@@ -237,12 +238,12 @@ async function appeler(
       }
       throw new ErreurSlack(
         "quota",
-        `Slack limite momentanément le nombre de requêtes : réessaie dans ${attente} seconde(s).`,
+        tf("Slack limite momentanément le nombre de requêtes : réessaie dans {0} seconde(s).", attente),
       );
     }
-    if (reponse.statut >= 500) throw new ErreurSlack("api", "Slack est momentanément indisponible.");
+    if (reponse.statut >= 500) throw new ErreurSlack("api", t("Slack est momentanément indisponible."));
     if (reponse.statut !== 200) {
-      throw new ErreurSlack("api", `Slack a répondu de façon inattendue (code ${reponse.statut}).`);
+      throw new ErreurSlack("api", tf("Slack a répondu de façon inattendue (code {0}).", reponse.statut));
     }
 
     let json: Record<string, unknown> = {};
@@ -250,7 +251,7 @@ async function appeler(
       const v = JSON.parse(reponse.corps.toString("utf8"));
       if (v && typeof v === "object") json = v as Record<string, unknown>;
     } catch {
-      throw new ErreurSlack("api", "Slack a renvoyé une réponse illisible.");
+      throw new ErreurSlack("api", t("Slack a renvoyé une réponse illisible."));
     }
     const entete = reponse.entetes["x-oauth-scopes"];
     const portees =
@@ -261,7 +262,7 @@ async function appeler(
     if (json.ok !== true) throw erreurSlack(json);
     return { json, portees };
   }
-  throw new ErreurSlack("quota", "Slack limite momentanément le nombre de requêtes.");
+  throw new ErreurSlack("quota", t("Slack limite momentanément le nombre de requêtes."));
 }
 
 /** Traduit une erreur de Slack. Jamais la réponse brute. */
@@ -275,14 +276,13 @@ function erreurSlack(json: Record<string, unknown>): ErreurSlack {
     case "account_inactive":
       return new ErreurSlack(
         "acces",
-        "Slack refuse le jeton : il a été révoqué ou régénéré, ou l'application a été désinstallée de l'espace.",
+        t("Slack refuse le jeton : il a été révoqué ou régénéré, ou l'application a été désinstallée de l'espace."),
       );
     case "missing_scope": {
       const manque = typeof json.needed === "string" && /^[a-z_.:,]{1,200}$/.test(json.needed) ? json.needed : "";
       return new ErreurSlack(
         "portee",
-        `Il manque à l'application Slack une autorisation${manque ? ` (${manque})` : ""}. Ajoutez-la dans ` +
-          "api.slack.com/apps, rubrique « OAuth & Permissions », réinstallez l'application, puis reconnectez Slack.",
+        tf("Il manque à l'application Slack une autorisation{0}. Ajoutez-la dans api.slack.com/apps, rubrique « OAuth & Permissions », réinstallez l'application, puis reconnectez Slack.", manque ? ` (${manque})` : ""),
       );
     }
     /*
@@ -293,29 +293,29 @@ function erreurSlack(json: Record<string, unknown>): ErreurSlack {
      * `token_revoked`, `account_inactive`.
      */
     case "no_permission":
-      return new ErreurSlack("salon", "Slack refuse à l'application l'accès à cet élément (règle de l'espace de travail). Le reste reste lisible.");
+      return new ErreurSlack("salon", t("Slack refuse à l'application l'accès à cet élément (règle de l'espace de travail). Le reste reste lisible."));
     case "not_in_channel":
       return new ErreurSlack(
         "salon",
-        "L'application n'est pas membre de ce salon. Pour qu'elle le lise, il faut l'y inviter depuis Slack.",
+        t("L'application n'est pas membre de ce salon. Pour qu'elle le lise, il faut l'y inviter depuis Slack."),
       );
     case "channel_not_found":
-      return new ErreurSlack("salon", "Salon introuvable, ou invisible pour l'application.");
+      return new ErreurSlack("salon", t("Salon introuvable, ou invisible pour l'application."));
     case "thread_not_found":
-      return new ErreurSlack("salon", "Fil de discussion introuvable dans ce salon.");
+      return new ErreurSlack("salon", t("Fil de discussion introuvable dans ce salon."));
     case "ratelimited":
-      return new ErreurSlack("quota", "Slack limite momentanément le nombre de requêtes. Réessaie dans une minute.");
+      return new ErreurSlack("quota", t("Slack limite momentanément le nombre de requêtes. Réessaie dans une minute."));
     default:
-      return new ErreurSlack("api", `Slack a refusé la requête${code ? ` (${code})` : ""}.`);
+      return new ErreurSlack("api", tf("Slack a refusé la requête{0}.", code ? ` (${code})` : ""));
   }
 }
 
 /** Jeton déchiffré le temps d'un appel d'outil, jamais retenu ailleurs. */
 function jeton(): string {
-  if (!cache) throw new ErreurSlack("acces", "Aucun Slack n'est connecté.");
+  if (!cache) throw new ErreurSlack("acces", t("Aucun Slack n'est connecté."));
   const clair = dechiffrer(cache.secret);
   if (typeof clair !== "string" || !clair) {
-    throw new ErreurSlack("acces", `Le jeton enregistré est illisible. ${RECONNECTER}`);
+    throw new ErreurSlack("acces", tf("Le jeton enregistré est illisible. {0}", reconnecter()));
   }
   return clair;
 }
@@ -327,7 +327,7 @@ async function appelerEnregistre(methode: Methode, parametres: Record<string, st
   } catch (err) {
     if (err instanceof ErreurSlack && err.categorie === "acces") {
       await marquerPerdu();
-      throw new ErreurSlack("acces", `${err.message} ${RECONNECTER}`);
+      throw new ErreurSlack("acces", `${err.message} ${reconnecter()}`);
     }
     throw err;
   }
@@ -379,8 +379,8 @@ async function salons(): Promise<Salon[]> {
 const nomSalon = (s: Salon) => `#${s.nom}${s.prive ? " (privé)" : ""}`;
 
 function inviter(): string {
-  const app = cache?.application ? `@${cache.application}` : "l'application";
-  return `Pour qu'un salon devienne lisible, un membre y tape « /invite ${app} » dans Slack.`;
+  const app = cache?.application ? `@${cache.application}` : t("l'application");
+  return tf("Pour qu'un salon devienne lisible, un membre y tape « /invite {0} » dans Slack.", app);
 }
 
 async function trouverSalon(demande: string): Promise<{ ok: true; salon: Salon } | { ok: false; message: string }> {
@@ -582,8 +582,7 @@ function validerJeton(brut: unknown): { ok: true; jeton: string } | { ok: false;
     return {
       ok: false,
       message:
-        "Ce jeton est un jeton d'utilisateur (xoxp-) : il lirait tout ce que voit la personne qui l'a créé, " +
-        "messages privés compris. Collez le « Bot User OAuth Token », qui commence par xoxb-.",
+        t("Ce jeton est un jeton d'utilisateur (xoxp-) : il lirait tout ce que voit la personne qui l'a créé, messages privés compris. Collez le « Bot User OAuth Token », qui commence par xoxb-."),
     };
   }
   if (j.startsWith("xapp-")) {
@@ -596,8 +595,7 @@ function validerJeton(brut: unknown): { ok: true; jeton: string } | { ok: false;
     return {
       ok: false,
       message:
-        "Ce jeton provient de la rotation des jetons, qui les fait expirer toutes les douze heures. " +
-        "Désactivez la rotation dans l'application Slack et collez le jeton xoxb- obtenu.",
+        t("Ce jeton provient de la rotation des jetons, qui les fait expirer toutes les douze heures. Désactivez la rotation dans l'application Slack et collez le jeton xoxb- obtenu."),
     };
   }
   if (!/^xoxb-[A-Za-z0-9-]{20,250}$/.test(j)) {
@@ -621,8 +619,7 @@ export async function configurer(
     return {
       ok: false,
       message:
-        "Le chiffrement des données n'est pas actif sur cette machine : le jeton Slack ne sera pas " +
-        "enregistré en clair. Réglez « chiffrement » dans helix.config.json, puis recommencez.",
+        t("Le chiffrement des données n'est pas actif sur cette machine : le jeton Slack ne sera pas enregistré en clair. Réglez « chiffrement » dans helix.config.json, puis recommencez."),
     };
   }
 
@@ -648,8 +645,7 @@ export async function configurer(
       return {
         ok: false,
         message:
-          `Ce jeton permet davantage que la lecture (${ecriture.join(", ")}). Retirez ces autorisations dans ` +
-          "api.slack.com/apps, rubrique « OAuth & Permissions », réinstallez l'application, puis recollez le jeton.",
+          tf("Ce jeton permet davantage que la lecture ({0}). Retirez ces autorisations dans api.slack.com/apps, rubrique « OAuth & Permissions », réinstallez l'application, puis recollez le jeton.", ecriture.join(", ")),
       };
     }
     const manquantes = PORTEES_REQUISES.filter((p) => !essai.portees!.includes(p));
@@ -657,8 +653,7 @@ export async function configurer(
       return {
         ok: false,
         message:
-          `Il manque à l'application les autorisations ${manquantes.join(", ")}. Ajoutez-les dans ` +
-          "api.slack.com/apps, rubrique « OAuth & Permissions », réinstallez l'application, puis recollez le jeton.",
+          tf("Il manque à l'application les autorisations {0}. Ajoutez-les dans api.slack.com/apps, rubrique « OAuth & Permissions », réinstallez l'application, puis recollez le jeton.", manquantes.join(", ")),
       };
     }
 
@@ -686,11 +681,11 @@ export async function configurer(
 
     const salonsTexte =
       liste.length > 0
-        ? `Salons lisibles : ${liste.map(nomSalon).join(", ")}.`
-        : "L'application n'est encore membre d'aucun salon.";
+        ? tf("Salons lisibles : {0}.", liste.map(nomSalon).join(", "))
+        : t("L'application n'est encore membre d'aucun salon.");
     const sansNoms = essai.portees.includes("users:read")
       ? ""
-      : " Sans l'autorisation users:read, les auteurs apparaîtront sous leur identifiant Slack.";
+      : ` ${t("Sans l'autorisation users:read, les auteurs apparaîtront sous leur identifiant Slack.")}`;
     return {
       ok: true,
       message: tf("Slack connecté en lecture seule, espace « {0} ». {1} {2}{3}", enregistre.espace, salonsTexte, inviter(), sansNoms),
@@ -719,16 +714,14 @@ export async function oublier(qui: string): Promise<{ ok: true; message: string 
   return {
     ok: true,
     message: avant
-      ? "Slack a été débranché : le jeton est effacé de cette instance. Il reste valable chez Slack tant " +
-        "que l'application y est installée ; pour l'annuler, désinstallez l'application ou régénérez son " +
-        "jeton depuis api.slack.com/apps."
-      : "Aucun Slack n'était connecté.",
+      ? t("Slack a été débranché : le jeton est effacé de cette instance. Il reste valable chez Slack tant que l'application y est installée ; pour l'annuler, désinstallez l'application ou régénérez son jeton depuis api.slack.com/apps.")
+      : t("Aucun Slack n'était connecté."),
   };
 }
 
 function messageUtilisateur(err: unknown): string {
   if (err instanceof ErreurSlack || err instanceof ErreurTransport) return err.message;
-  return "La connexion à Slack a échoué.";
+  return t("La connexion à Slack a échoué.");
 }
 
 /* ---------------------------------- outils ------------------------------------ */

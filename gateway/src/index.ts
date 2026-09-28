@@ -322,7 +322,8 @@ async function readJson(req: http.IncomingMessage, max = CORPS_MAX): Promise<unk
  * nécessaire tant que l'appelant n'est pas authentifié.
  */
 async function handleHealth(res: http.ServerResponse, authorised: boolean): Promise<void> {
-  const { backends, models: found } = await discover();
+  // Sans attendre le réveil de LM Studio : l'application attend cette réponse pour ouvrir sa fenêtre (backends.ts, `discover`).
+  const { backends, models: found } = await discover({ attendreLmStudio: false });
   const online = backends.some((b) => b.online);
 
   if (!authorised) {

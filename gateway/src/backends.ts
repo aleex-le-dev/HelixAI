@@ -102,10 +102,12 @@ interface LmsModelEntry {
  * répondu : c'est lui, et non la liste du serveur, qui dit ce qui est chargé
  * (voir `discover`).
  */
-async function lmStudioMetadata(): Promise<{ meta: Map<string, Partial<ModelInfo>>; enMemoireLu: boolean }> {
+async function lmStudioMetadata(): Promise<{ meta: Map<string, Partial<ModelInfo>>; enMemoireLu: boolean; alias: Map<string, string> }> {
   const meta = new Map<string, Partial<ModelInfo>>();
+  /** Nom servi → modèle téléchargé, quand un chargement porte un autre nom que le sien (voir plus bas). */
+  const alias = new Map<string, string>();
   const lms = await findLms();
-  if (!lms) return { meta, enMemoireLu: false };
+  if (!lms) return { meta, enMemoireLu: false, alias };
 
   /** `null` : la commande n'a pas répondu, ce qui ne dit rien de la mémoire. */
   const parse = async (args: string[]): Promise<LmsModelEntry[] | null> => {
@@ -146,10 +148,21 @@ async function lmStudioMetadata(): Promise<{ meta: Map<string, Partial<ModelInfo
     };
     meta.set(key, charge);
     // Une seconde copie (« qwen3-8b:2 ») est servie sous son propre nom : elle est chargée elle aussi.
-    if (entry.identifier && entry.identifier !== key) meta.set(entry.identifier, charge);
+    if (entry.identifier && entry.identifier !== key) {
+      meta.set(entry.identifier, charge);
+      /*
+       * Le même chargement sous un autre nom, pas une copie (essai Windows du
+       * 28/09/2026) : la mise en route charge le modèle par son nom du
+       * catalogue (`lms load qwen3-1.7b`), que le moteur sans interface range
+       * sous « qwen/qwen3-1.7b » et sert sous les deux noms. Le sélecteur du
+       * Chat le montrait deux fois, « en mémoire » les deux fois. Noté ici
+       * pour que la découverte n'en garde qu'un.
+       */
+      if (!/:\d+$/.test(entry.identifier)) alias.set(entry.identifier, key);
+    }
   }
 
-  return { meta, enMemoireLu: enMemoire !== null };
+  return { meta, enMemoireLu: enMemoire !== null, alias };
 }
 
 async function fetchJson(
@@ -259,7 +272,25 @@ async function serviceLmStudioEnMarche(lms: string): Promise<boolean> {
   }
 }
 
-export async function ensureLmStudioServer(): Promise<boolean> {
+/*
+ * Un seul démarrage à la fois (essai Windows du 28/09/2026, application
+ * rouverte le lendemain) : `daemon up` peut prendre plus de trente secondes,
+ * et la garde de `dernierEssai` ne tenait plus. La découverte du démarrage,
+ * la sonde de l'application (`/health`) et l'écran lançaient chacun leur
+ * `lms server start` (trois « démarrage... » en deux secondes au journal) ;
+ * or un `server start` sur un serveur qui tourne le redémarre, et coupe ce
+ * qu'il sert. Les appels suivants attendent le démarrage en cours.
+ */
+let demarrageServeur: Promise<boolean> | null = null;
+
+export function ensureLmStudioServer(): Promise<boolean> {
+  demarrageServeur ??= demarrerServeurLmStudio().finally(() => {
+    demarrageServeur = null;
+  });
+  return demarrageServeur;
+}
+
+async function demarrerServeurLmStudio(): Promise<boolean> {
   if (!LMSTUDIO_URL) return false;
   // Avant tout, même serveur déjà en marche : sans ce dossier, llmster ne charge aucun modèle (engine.ts).
   preparerDossiersLlmster();
@@ -515,15 +546,35 @@ async function listeDistante(backend: BackendConfig): Promise<ModeleDistant[]> {
   return modeles;
 }
 
-/** Interroge tous les backends activés et agrège leurs modèles. */
-export async function discover(): Promise<Discovery> {
+/**
+ * Interroge tous les backends activés et agrège leurs modèles.
+ *
+ * `attendreLmStudio` (vrai par défaut) : un LM Studio muet est réveillé, et
+ * la découverte attend qu'il réponde. Faux pour la sonde `/health` (essai
+ * Windows du 28/09/2026) : l'application rouverte le lendemain, service de
+ * LM Studio arrêté, la sonde attendait `daemon up` (70 s mesurées), et
+ * l'application, qui attend une réponse à cette sonde avant d'ouvrir sa
+ * fenêtre (main.cjs, `startGateway`, un peu plus d'une minute au plus),
+ * restait sans fenêtre tout ce temps. Le réveil est alors lancé sans être
+ * attendu, et LM Studio compte comme éteint pour cette réponse ; `lms` n'est
+ * pas appelé tant que le serveur ne répond pas : `lms ls` lèverait le service
+ * lui-même, depuis la passerelle, en même temps que l'application.
+ */
+export async function discover(options: { attendreLmStudio?: boolean } = {}): Promise<Discovery> {
   const enabled = tousLesBackends()
     .filter((b) => b.enabled)
     .sort((a, b) => a.priority - b.priority);
 
   // Un backend LM Studio activé mais muet : on tente de le réveiller avant de
   // conclure qu'il n'y a aucun modèle.
-  if (enabled.some((b) => b.id === "lmstudio")) await ensureLmStudioServer();
+  let lmStudioEnReveil = false;
+  if (enabled.some((b) => b.id === "lmstudio")) {
+    if (options.attendreLmStudio !== false) await ensureLmStudioServer();
+    else if (!(await lmStudioRepond())) {
+      lmStudioEnReveil = true;
+      void ensureLmStudioServer().catch(() => false);
+    }
+  }
   // Le moteur ouvert (Mac Intel, llamaCpp.ts) : démarré s'il a de quoi servir.
   /*
    * Faux s'il n'est pas reconnu à l'écoute (un autre programme sur son port,
@@ -539,9 +590,9 @@ export async function discover(): Promise<Discovery> {
    * découverte, et interrogeait le LM Studio de la machine (vu dans la batterie
    * de sécurité, qui tournait à côté d'un LM Studio en service).
    */
-  const { meta: lmMeta, enMemoireLu } = enabled.some((b) => b.kind === "lmstudio")
+  const { meta: lmMeta, enMemoireLu, alias: aliasLm } = enabled.some((b) => b.kind === "lmstudio") && !lmStudioEnReveil
     ? await lmStudioMetadata()
-    : { meta: new Map<string, Partial<ModelInfo>>(), enMemoireLu: false };
+    : { meta: new Map<string, Partial<ModelInfo>>(), enMemoireLu: false, alias: new Map<string, string>() };
 
   const results = await Promise.all(
     enabled.map(async (backend): Promise<{ status: BackendStatus; models: ModelInfo[] }> => {
@@ -634,6 +685,18 @@ export async function discover(): Promise<Discovery> {
             if (deja.has(cle)) continue;
             if (info.nature === "embedding" || /embed/i.test(cle)) continue;
             models.push(toModelInfo(cle, backend, lmMeta));
+          }
+          /*
+           * Un chargement servi sous deux noms (`alias`, lmStudioMetadata) :
+           * seul le nom du modèle téléchargé reste. C'est lui que LM Studio
+           * sert depuis le chargement en cours (essai Windows du 28/09/2026 :
+           * réponse en 4 s, sans second chargement), et lui qu'on retrouve
+           * après un redémarrage, où l'autre nom n'existe plus.
+           */
+          for (const [nomServi, cle] of aliasLm) {
+            if (!models.some((m) => m.id === cle)) continue;
+            const i = models.findIndex((m) => m.id === nomServi);
+            if (i >= 0) models.splice(i, 1);
           }
         }
         return {

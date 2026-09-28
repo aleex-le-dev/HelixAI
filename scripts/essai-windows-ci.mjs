@@ -121,6 +121,8 @@ writeFileSync(CONFIG, JSON.stringify({ chiffrement: "fichier" }));
 const LMSTUDIO = join(homedir(), ".lmstudio");
 
 let application = null;
+/** La sortie du lancement en cours de l'application. */
+let sortieApplication = "";
 const journalApplication = createWriteStream(join(SORTIE, "application.log"), { flags: "w" });
 
 function lancerApplication() {
@@ -141,8 +143,13 @@ function lancerApplication() {
     },
     stdio: ["ignore", "pipe", "pipe"],
   });
-  application.stdout.on("data", (b) => journalApplication.write(b));
-  application.stderr.on("data", (b) => journalApplication.write(b));
+  sortieApplication = "";
+  const garder = (b) => {
+    journalApplication.write(b);
+    sortieApplication += b;
+  };
+  application.stdout.on("data", garder);
+  application.stderr.on("data", garder);
   application.on("exit", (code, signal) => dire(`L'application s'est arrêtée (code ${code ?? signal}).`));
 }
 
@@ -281,6 +288,12 @@ async function etapes() {
   /* 4. Une question au Chat */
   dire("4. Une question au Chat, modèle local, en flux");
   if (!(await questionAuChat("1"))) return;
+  const lmsExe = join(LMSTUDIO, "bin", "lms.exe");
+  // Ce que le moteur dit lui-même de ses modèles : les noms sous lesquels il les range et les sert.
+  for (const [nom, args] of [["lms-ls.json", ["ls", "--json"]], ["lms-ps.json", ["ps", "--json"]]]) {
+    const r = spawnSync(lmsExe, args, { encoding: "utf8", timeout: 60_000, windowsHide: true });
+    writeFileSync(join(SORTIE, nom), `${r.stdout ?? ""}${r.stderr ? `\n-- stderr --\n${r.stderr}` : ""}`);
+  }
 
   /*
    * 5. Le lendemain : l'application quittée, la machine redémarrée (le
@@ -292,7 +305,6 @@ async function etapes() {
   dire("5. Quitter, arrêter le service de LM Studio (comme un redémarrage), rouvrir");
   arreterApplication();
   await attendre(3000);
-  const lmsExe = join(LMSTUDIO, "bin", "lms.exe");
   const bas = spawnSync(lmsExe, ["daemon", "down"], { encoding: "utf8", timeout: 60_000, windowsHide: true });
   dire(`   lms daemon down : code ${bas.status} ${String(bas.stdout ?? "").trim().slice(0, 200)} ${String(bas.stderr ?? "").trim().slice(0, 200)}`);
   const statut = spawnSync(lmsExe, ["daemon", "status", "--json"], { encoding: "utf8", timeout: 30_000, windowsHide: true });
@@ -302,11 +314,26 @@ async function etapes() {
     () => true,
   );
   verifier("le serveur de LM Studio ne répond plus (service arrêté)", serveurEteint, "il répond encore");
+  const rouverte = Date.now();
   if (!(await demarrerEtAttendre())) return;
+  /*
+   * L'application n'ouvre sa fenêtre qu'une fois sa passerelle vue à
+   * `/health`, chaque sonde attendant 1,2 s au plus (main.cjs, `ping`). La
+   * sonde doit donc répondre vite pendant que le service de LM Studio se
+   * relève : elle attendait sa levée (70 s mesurées le 28/09/2026), et la
+   * fenêtre ne s'ouvrait qu'au bout d'une minute.
+   */
+  const t1 = Date.now();
+  const sonde = await fetch(`${G}/health`, { signal: AbortSignal.timeout(10_000) }).then((r) => r.ok, () => false);
+  const dureeSonde = Date.now() - t1;
+  verifier("pendant le réveil de LM Studio, /health répond sans l'attendre (moins de 3 s)", sonde && dureeSonde < 3000, `${sonde} en ${dureeSonde} ms`);
   // La séance survit à la fermeture de l'application, comme pour une personne qui rouvre Helix.
   const relu = await appel("/helix/provision");
   verifier("la séance ouverte hier sert encore", relu.statut === 200, `${relu.statut} ${relu.texte.slice(0, 200)}`);
   if (!(await questionAuChat("2", 3 * 60_000))) return;
+  // Au-delà de ce que l'application attend (40 sondes), elle a soit vu sa passerelle, soit abandonné en le disant.
+  await attendre(Math.max(0, 70_000 - (Date.now() - rouverte)));
+  verifier("l'application a vu sa passerelle à temps pour ouvrir sa fenêtre", !/la passerelle n'a pas démarré à temps/.test(sortieApplication), "« la passerelle n'a pas démarré à temps » dans sa sortie");
 }
 
 /** Nom comparable d'un modèle, sans source ni éditeur (« lmstudio/qwen/qwen3-1.7b » → « qwen3-1.7b »), comme santeModeles.ts. */
@@ -315,6 +342,7 @@ const nomDuModele = (id) => (String(id).toLowerCase().split("/").pop() ?? "").re
 /** Lance l'application et attend sa passerelle (/health). */
 async function demarrerEtAttendre() {
   lancerApplication();
+  const t0 = Date.now();
   let sante = null;
   for (let i = 0; i < 360 && !sante; i++) {
     if (application.exitCode !== null) break;
@@ -326,7 +354,7 @@ async function demarrerEtAttendre() {
     }
   }
   if (!verifier("la passerelle de l'application répond sur 127.0.0.1:8787/health", Boolean(sante), "aucune réponse au bout du délai")) return false;
-  dire(`   /health : ${JSON.stringify(sante).slice(0, 300)}`);
+  dire(`   /health en ${((Date.now() - t0) / 1000).toFixed(1)} s après le lancement : ${JSON.stringify(sante).slice(0, 300)}`);
   return true;
 }
 

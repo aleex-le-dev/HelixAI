@@ -318,6 +318,12 @@ export function LoginPage({ onSignedIn }: { onSignedIn: () => void }) {
   const create = () =>
     enTravail(async () => {
       if (!fullName.trim() || !email.trim() || !nouveauValide) return;
+      /*
+       * Même garde que le bouton (28/09/2026) : Entrée dans la confirmation du
+       * mot de passe passait outre le code d'invitation manquant, et l'instance
+       * refusait alors la création avec un message qui ne parlait pas du code.
+       */
+      if (codeRequis && !invitationSaisie) return;
       const { account, inscription } = await createAccount({
         fullName,
         email,

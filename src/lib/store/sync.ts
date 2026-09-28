@@ -390,11 +390,19 @@ function lancer(collection: Collection): Promise<boolean> {
 export function push(collection: Collection): Promise<boolean> {
   ecrituresLocales.set(collection, (ecrituresLocales.get(collection) ?? 0) + 1);
   const courant = enVol.get(collection);
+  /*
+   * La file d'abord (relecture du 28/09/2026) : entre la fin d'un envoi (qui
+   * retire `enVol`) et le départ de celui qui attendait (qui retire `enFile`),
+   * quelques micro-tâches passent. Une écriture faite là voyait `enVol` vide et
+   * lançait un second PUT en même temps que celui de la file : les deux
+   * portaient la même révision, et l'un revenait en 409.
+   */
+  const dejaEnFile = enFile.get(collection);
   let envoi: Promise<boolean>;
-  if (!courant) envoi = lancer(collection);
+  if (dejaEnFile) envoi = dejaEnFile;
+  else if (!courant) envoi = lancer(collection);
   else {
     envoi =
-      enFile.get(collection) ??
       courant
         .catch(() => false)
         .then(() => {

@@ -67,7 +67,10 @@ export function InviteOutils({
       ? tf("Connecteur branché : {0}.", branches[0]!)
       : branches.length === 2
         ? tf("Connecteurs branchés : {0} et {1}.", branches[0]!, branches[1]!)
-        : tf("Connecteurs branchés : {0}, {1} et {2} autres.", branches[0]!, branches[1]!, branches.length - 2);
+        : branches.length === 3
+          ? // Trois : les trois noms, plutôt que « et 1 autres » (relecture du 28/09/2026).
+            tf("Connecteurs branchés : {0}, {1} et {2}.", branches[0]!, branches[1]!, branches[2]!)
+          : tf("Connecteurs branchés : {0}, {1} et {2} autres.", branches[0]!, branches[1]!, branches.length - 2);
 
   return (
     <InfoBox tone="muted" className="mt-2" leading={<Wrench size={15} strokeWidth={1.75} />}>

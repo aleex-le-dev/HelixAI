@@ -31,38 +31,67 @@ interface NavEntry {
   icon: LucideIcon;
 }
 
-/** Sous-navigation « Personnel » des parametres. */
-export const settingsNav: NavEntry[] = [
-  { label: t("Profil"), path: "/parametres/profil", icon: User },
-  { label: t("Préférences"), path: "/parametres/preferences", icon: Palette },
-  { label: t("Sécurité"), path: "/parametres/securite", icon: Shield },
-  { label: t("Personnalisation de l'IA"), path: "/parametres/personnalisation", icon: Brain },
-  { label: t("Bot Recorder"), path: "/parametres/bot-recorder", icon: CalendarClock },
-  // Le chemin reste « mcp » : c'est un lien que des postes ont pu mettre en
-  // favori, et le renommer casserait ce qui marche pour un gain nul.
-  // Une seule entrée pour tout ce qui se branche : courrier, agenda, services.
-  // « Intégrations » a été retirée, elle menait à un second écran du même objet.
-  { label: t("Connecteurs"), path: "/parametres/mcp", icon: Blocks },
-  // Le moteur et les modèles de la machine : où ils sont, la place qu'il reste (28/09/2026).
-  { label: t("Modèles locaux"), path: "/parametres/modeles-locaux", icon: HardDrive },
-  { label: t("Modèles cloud"), path: "/parametres/modeles", icon: Cloud },
-  { label: t("Entraîner un modèle"), path: "/parametres/entrainement", icon: GraduationCap },
-  { label: t("Contrôle de l'écran"), path: "/parametres/ecran", icon: MonitorCog },
-  { label: t("API développeur"), path: "/parametres/api", icon: CodeXml },
-  { label: t("Mon usage"), path: "/parametres/usage", icon: Activity },
-  /*
-   * Rangée juste après « Mon usage » : on regarde ce qu'on consomme, puis ce
-   * que cela coûterait. Absente quand le module est éteint, ce qui est le cas
-   * de toute installation en marque blanche.
-   */
-  ...(features.abonnement
-    ? [{ label: t("Abonnement"), path: "/parametres/abonnement", icon: CreditCard }]
-    : []),
-  { label: t("Confidentialité"), path: "/parametres/confidentialite", icon: Lock },
-  { label: t("Installer les apps"), path: "/parametres/apps", icon: Download },
-  { label: t("Importer depuis d'autres IA"), path: "/parametres/importer", icon: FileInput },
-  // En dernier (27/09/2026) : on y vient quand quelque chose ne va pas, pas pour régler.
-  { label: t("Signaler un problème"), path: "/parametres/signaler", icon: Bug },
+interface NavGroup {
+  title: string;
+  entries: NavEntry[];
+}
+
+/*
+ * Sous-navigation des parametres, rangée par thème (28/09/2026) : les seize
+ * entrées d'un seul bloc « Personnel » se lisaient mal, on ne savait plus où
+ * chercher.
+ */
+export const settingsGroups: NavGroup[] = [
+  {
+    title: t("Compte"),
+    entries: [
+      { label: t("Profil"), path: "/parametres/profil", icon: User },
+      { label: t("Préférences"), path: "/parametres/preferences", icon: Palette },
+      { label: t("Sécurité"), path: "/parametres/securite", icon: Shield },
+      { label: t("Confidentialité"), path: "/parametres/confidentialite", icon: Lock },
+      { label: t("Mon usage"), path: "/parametres/usage", icon: Activity },
+      /*
+       * Rangée juste après « Mon usage » : on regarde ce qu'on consomme, puis ce
+       * que cela coûterait. Absente quand le module est éteint, ce qui est le cas
+       * de toute installation en marque blanche.
+       */
+      ...(features.abonnement
+        ? [{ label: t("Abonnement"), path: "/parametres/abonnement", icon: CreditCard }]
+        : []),
+    ],
+  },
+  {
+    title: t("IA et modèles"),
+    entries: [
+      { label: t("Personnalisation de l'IA"), path: "/parametres/personnalisation", icon: Brain },
+      // Le moteur et les modèles de la machine : où ils sont, la place qu'il reste (28/09/2026).
+      { label: t("Modèles locaux"), path: "/parametres/modeles-locaux", icon: HardDrive },
+      { label: t("Modèles cloud"), path: "/parametres/modeles", icon: Cloud },
+      { label: t("Entraîner un modèle"), path: "/parametres/entrainement", icon: GraduationCap },
+    ],
+  },
+  {
+    title: t("Outils"),
+    entries: [
+      // Le chemin reste « mcp » : c'est un lien que des postes ont pu mettre en
+      // favori, et le renommer casserait ce qui marche pour un gain nul.
+      // Une seule entrée pour tout ce qui se branche : courrier, agenda, services.
+      // « Intégrations » a été retirée, elle menait à un second écran du même objet.
+      { label: t("Connecteurs"), path: "/parametres/mcp", icon: Blocks },
+      { label: t("Bot Recorder"), path: "/parametres/bot-recorder", icon: CalendarClock },
+      { label: t("Contrôle de l'écran"), path: "/parametres/ecran", icon: MonitorCog },
+      { label: t("API développeur"), path: "/parametres/api", icon: CodeXml },
+    ],
+  },
+  {
+    title: t("Applications et aide"),
+    entries: [
+      { label: t("Installer les apps"), path: "/parametres/apps", icon: Download },
+      { label: t("Importer depuis d'autres IA"), path: "/parametres/importer", icon: FileInput },
+      // En dernier (27/09/2026) : on y vient quand quelque chose ne va pas, pas pour régler.
+      { label: t("Signaler un problème"), path: "/parametres/signaler", icon: Bug },
+    ],
+  },
 ];
 
 function SettingsNav() {
@@ -70,9 +99,13 @@ function SettingsNav() {
   // dedans ne produisait rien, pas même un « aucun résultat ».
   const [recherche, setRecherche] = useState("");
   const terme = recherche.trim().toLowerCase();
-  const visibles = terme
-    ? settingsNav.filter((e) => e.label.toLowerCase().includes(terme))
-    : settingsNav;
+  // Un groupe sans entrée correspondante disparaît avec son titre.
+  const groupes = settingsGroups
+    .map((g) => ({
+      ...g,
+      entries: terme ? g.entries.filter((e) => e.label.toLowerCase().includes(terme)) : g.entries,
+    }))
+    .filter((g) => g.entries.length > 0);
 
   /*
    * Fenêtre étroite (27/09/2026) : la liste de 248 px laissait 40 px aux
@@ -101,32 +134,45 @@ function SettingsNav() {
           onChange={(event) => setRecherche(event.target.value)}
         />
       </div>
-      <p className="hidden px-2 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground md:block">
-        {t("Personnel")}
-      </p>
-      {visibles.length === 0 && (
+      {groupes.length === 0 && (
         <p className="px-2 py-2 text-sm text-muted-foreground">{t("Aucun réglage trouvé.")}</p>
       )}
-      {visibles.map((e) => {
-        const Icon = e.icon;
-        return (
-          <NavLink
-            key={e.path}
-            to={e.path}
-            className={({ isActive }) =>
-              cn(
-                "flex shrink-0 items-center gap-2.5 whitespace-nowrap rounded-lg px-3 py-2 text-sm transition-colors md:whitespace-normal",
-                isActive
-                  ? "bg-muted font-medium text-foreground"
-                  : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
-              )
-            }
+      {/*
+       * Sous 768 px la liste est une rangée qui défile : les titres de groupe
+       * n'y ont pas de place, les entrées s'enchaînent dans le même ordre.
+       */}
+      {groupes.map((g, i) => (
+        <div key={g.title} className="contents md:flex md:flex-col md:gap-0.5">
+          <p
+            className={cn(
+              "hidden px-2 pb-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground md:block",
+              i === 0 ? "pt-2" : "mt-3 border-t border-border pt-4",
+            )}
           >
-            <Icon size={17} strokeWidth={1.75} />
-            {e.label}
-          </NavLink>
-        );
-      })}
+            {g.title}
+          </p>
+          {g.entries.map((e) => {
+            const Icon = e.icon;
+            return (
+              <NavLink
+                key={e.path}
+                to={e.path}
+                className={({ isActive }) =>
+                  cn(
+                    "flex shrink-0 items-center gap-2.5 whitespace-nowrap rounded-lg px-3 py-2 text-sm transition-colors md:whitespace-normal",
+                    isActive
+                      ? "bg-muted font-medium text-foreground"
+                      : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+                  )
+                }
+              >
+                <Icon size={17} strokeWidth={1.75} />
+                {e.label}
+              </NavLink>
+            );
+          })}
+        </div>
+      ))}
     </aside>
   );
 }

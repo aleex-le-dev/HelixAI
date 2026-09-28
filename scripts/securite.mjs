@@ -2725,7 +2725,10 @@ console.log("\n7 septies. Essai du modèle sur cette machine : celui qui répond
    * depuis le 27/09/2026 : avec les notes d'Epoch AI, un modèle noté passe
    * devant un modèle sans note, et sur 16 Go Qwen3 8B (noté) n'est plus
    * derrière Qwen3.5 4B (non noté). Sur 8 Go, où aucun modèle noté ne tient,
-   * Qwen3.5 4B est toujours le conseillé, et Qwen3 4B le suivant.
+   * Qwen3.5 4B est toujours le conseillé, et Qwen3 4B le suivant. Le poste
+   * déjà installé (B) passe à 12 Go le 29/09/2026 : à sa vraie taille, Qwen3.5
+   * 4B ne tient plus sur 8 Go avec son cache, et c'est Qwen3.5 2B qui y est
+   * conseillé.
    */
   /*
    * Tout se joue dans un processus à part : importer ici un module de la
@@ -2818,7 +2821,9 @@ console.log("\n7 septies. Essai du modèle sur cette machine : celui qui répond
     sortie.A2 = { phase: a2.phase, message: a2.message, model: a2.model };
 
     // B. Poste déjà installé (le PC de Medhi) : Qwen3.5 4B en mémoire, jamais essayé ; essai au démarrage.
-    // Qwen3 4B installé aussi, mais il ne tient plus sur 8 Go avec 32 768 jetons (28/09/2026) : c'est Qwen3.5 2B qui prend le relais.
+    // 12 Go et non plus 8 (29/09/2026) : à sa vraie taille (3,75 Go), Qwen3.5 4B n'est plus conseillé sur 8 Go, où c'est Qwen3.5 2B.
+    // Sur 12 Go, Qwen3 4B (4,5 Gio de cache) tient et suit Qwen3.5 4B ; Ministral 3 3B, pas installé, n'est pas téléchargé.
+    os.totalmem = () => 12 * 1024 ** 3;
     process.env.HELIX_DATA_DIR = mkdtempSync(join(ici, "b-"));
     poser(["qwen/qwen3.5-4b"], ["qwen/qwen3.5-4b", "qwen3-4b", "qwen/qwen3.5-2b"]);
     const hw = p.detectHardware();
@@ -2826,11 +2831,12 @@ console.log("\n7 septies. Essai du modèle sur cette machine : celui qui répond
     await enFr(() => p.verifierModeleEnPlace());
     const b = p.getProvisionState();
     sortie.B = { avant, apres: p.recommend(hw).key, phase: b.phase, model: b.model, messages: [...messages], appels: appels(), charges: charges(),
-      qwen35: s.ficheDe("qwen/qwen3.5-4b"), qwen3: s.ficheDe("qwen/qwen3.5-2b"), qwen3Dense: s.ficheDe("qwen3-4b"),
+      qwen35: s.ficheDe("qwen/qwen3.5-4b"), qwen3: s.ficheDe("qwen3-4b"), qwen35Petit: s.ficheDe("qwen/qwen3.5-2b"),
       recommandes: p.adaptesALaMachine(hw).filter((e) => e.recommande && e.role === "chat").map((e) => e.key) };
     messages.length = 0;
     await enFr(() => p.verifierModeleEnPlace());
     sortie.B2 = { appels: appels().slice(sortie.B.appels.length), messages: [...messages] };
+    os.totalmem = () => 8 * 1024 ** 3;
 
     // C. En cours d'usage : deux réponses coupées en boucle, en « Auto ».
     const modele = { id: "essai-chat", uid: "lmstudio/essai-chat", backendId: "lmstudio", backendLabel: "LM Studio", backendKind: "lmstudio", roles: ["chat"] };
@@ -2912,10 +2918,10 @@ console.log("\n7 septies. Essai du modèle sur cette machine : celui qui répond
     JSON.stringify(essaisCasse),
   );
   verifier(
-    "poste déjà installé (Windows 8 Go simulé, Qwen3.5 4B en mémoire) : essai au démarrage, Qwen3.5 4B écarté, Qwen3.5 2B chargé et retenu, sans réinstaller ; Qwen3 4B, qui ne tient pas avec 32 768 jetons, n'est pas essayé",
-    B.avant === "qwen/qwen3.5-4b" && B.phase === "ready" && B.model === "qwen/qwen3.5-2b" && B.qwen35?.etat === "defaillant" && B.qwen35?.raison === "boucle" && B.qwen3?.etat === "valide" && !B.qwen3Dense &&
-      JSON.stringify(B.appels) === JSON.stringify(["unload qwen/qwen3.5-4b", "load qwen/qwen3.5-2b"]) &&
-      B.messages?.some((m) => m.includes("Qwen3.5 4B ne répond pas correctement sur cette machine, essai de Qwen3.5 2B")),
+    "poste déjà installé (Windows 12 Go simulé, Qwen3.5 4B en mémoire) : essai au démarrage, Qwen3.5 4B écarté, Qwen3 4B chargé et retenu, sans rien télécharger ; Qwen3.5 2B n'est pas essayé",
+    B.avant === "qwen/qwen3.5-4b" && B.phase === "ready" && B.model === "qwen3-4b" && B.qwen35?.etat === "defaillant" && B.qwen35?.raison === "boucle" && B.qwen3?.etat === "valide" && !B.qwen35Petit &&
+      JSON.stringify(B.appels) === JSON.stringify(["unload qwen/qwen3.5-4b", "load qwen3-4b"]) &&
+      B.messages?.some((m) => m.includes("Qwen3.5 4B ne répond pas correctement sur cette machine, essai de Qwen3 4B")),
     JSON.stringify(e.B ?? e).slice(0, 700),
   );
   verifier(
@@ -5192,12 +5198,12 @@ console.log("\n13 quinquies. Seconde tournée du 28/09/2026 : régressions entre
   const pc = (go) => ({ platform: "win32", arch: "x64", totalMemoryGb: go, cpuCount: 8, appleSilicon: false });
   const fiche = (cle) => prov.CATALOG.find((e) => e.key === cle);
   verifier(
-    "mémoire : sur un PC de 8 Go sans carte, Qwen3.5 4B tient avec 32 768 jetons, Qwen3 4B et Ministral 3 3B (4,5 et 3,25 Gio de cache) non",
-    prov.tientSur(pc(8), fiche("qwen/qwen3.5-4b")) && !prov.tientSur(pc(8), fiche("qwen3-4b")) && !prov.tientSur(pc(8), fiche("mistralai/ministral-3-3b")),
-    ["qwen/qwen3.5-4b", "qwen3-4b", "mistralai/ministral-3-3b"].map((k) => `${k}:${prov.tientSur(pc(8), fiche(k))}`).join(" "),
+    "mémoire : sur un PC de 8 Go sans carte, Qwen3.5 2B tient avec 32 768 jetons ; Qwen3.5 4B (3,75 Go), Qwen3 4B et Ministral 3 3B (4,5 et 3,25 Gio de cache) non",
+    prov.tientSur(pc(8), fiche("qwen/qwen3.5-2b")) && !prov.tientSur(pc(8), fiche("qwen/qwen3.5-4b")) && !prov.tientSur(pc(8), fiche("qwen3-4b")) && !prov.tientSur(pc(8), fiche("mistralai/ministral-3-3b")),
+    ["qwen/qwen3.5-2b", "qwen/qwen3.5-4b", "qwen3-4b", "mistralai/ministral-3-3b"].map((k) => `${k}:${prov.tientSur(pc(8), fiche(k))}`).join(" "),
   );
   const replis8 = prov.replis(pc(8), prov.CATALOG, prov.recommend(pc(8))).map((e) => e.key);
-  verifier("mémoire : sur 8 Go, les replis de Qwen3.5 4B ne passent plus par des modèles qui ne tiennent pas", !replis8.includes("qwen3-4b") && !replis8.includes("mistralai/ministral-3-3b"), replis8.join(" > "));
+  verifier("mémoire : sur 8 Go, les replis du modèle conseillé ne passent plus par des modèles qui ne tiennent pas", !replis8.includes("qwen3-4b") && !replis8.includes("mistralai/ministral-3-3b"), replis8.join(" > "));
   verifier(
     "mémoire : sur 16 Go sans carte, le conseil reste Qwen3 8B (5 Go de poids, 4,5 Gio de cache) ; une carte NVIDIA garde l'ancienne règle",
     prov.recommend(pc(16)).key === "qwen3-8b" && prov.tientSur({ ...pc(16), gpuVramGb: 8 }, fiche("qwen3-8b")),

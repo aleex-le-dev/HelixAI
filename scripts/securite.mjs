@@ -6104,6 +6104,91 @@ console.log("\n15 septies. Tournée de la 2026.928.3 : logos, mentions, X");
   verifier("Comparer les modèles : dans les colonnes « Sur votre machine » et « Cloud, prix non relevé », les noms s'écrivent à droite des points (centrés au-dessus, un nom descendu tombait sur le point suivant)", /x=\{cx \+ 12\}/.test(bande) && /textAnchor="start"/.test(bande) && /Math\.max\(py \+ 4, precedent \+ 14\)/.test(comparer), "noms centrés sur les points");
 }
 
+/*
+ * Projets et rendez-vous (28/09/2026, SECURITE.md § 48) : Trello, Monday,
+ * ClickUp, Todoist, Calendly et Zoom par les serveurs MCP de leurs éditeurs,
+ * Brevo et Mailchimp en connexions natives (gateway/src/natifs/projets.ts,
+ * projetsRegles.ts). Les pièces seules d'abord, dans un processus à part pour
+ * la barrière (sans projets.ts, elle doit échouer fermé) ; puis, de bout en
+ * bout, scripts/essai-projets.mjs, contre de faux serveurs, repris ici sous
+ * « projets : ».
+ */
+console.log("\n16 sexies. Projets et rendez-vous : Trello, Monday, ClickUp, Todoist, Calendly, Zoom, Brevo, Mailchimp");
+{
+  const { pathToFileURL: versUrl } = await import("node:url");
+  const src = (f) => JSON.stringify(versUrl(join(RACINE, "gateway", "src", f)).href);
+  // La barrière chargée seule : ni projets.ts, ni aperçu de campagne inscrit.
+  const sonde = `const ap = await import(${src("approbation.ts")});
+const r = await import(${src("natifs/projetsRegles.ts")});
+const sortie = {};
+sortie.lectures = ["brevo__compte", "brevo__campagnes", "mailchimp__audiences", "mailchimp__campagne"].map((o) => [ap.modifie(o), ap.demandeToujours(o)]);
+sortie.ecritures = ["brevo__creer_brouillon", "brevo__envoyer_campagne", "mailchimp__creer_brouillon", "mailchimp__envoyer_campagne"].map((o) => ap.demandeToujours(o));
+// Un outil MCP de la famille que la liste de ses outils n'a pas reconnu comme lecture : écriture, carte à chaque fois.
+sortie.inconnus = ["trello__get_boards", "zoom__create_meeting", "monday__all_monday_api", "calendly__whatever"].map((o) => ap.demandeToujours(o));
+r.retenirOutils("trello", [{ name: "get_boards", annotations: { readOnlyHint: true } }, { name: "create_card" }], (n) => "trello__" + n);
+sortie.apresListe = [ap.modifie("trello__get_boards"), ap.demandeToujours("trello__get_boards"), ap.demandeToujours("trello__create_card")];
+sortie.horsFamille = ap.demandeToujours("notion__create_page");
+ap.definirNiveau("tout", "essai");
+const v = await Promise.race([ap.verifierOutil(null, "brevo__envoyer_campagne", { campagne: 11 }, "quelquun"), new Promise((ok) => setTimeout(() => ok("attente"), 500))]);
+sortie.sansApercu = { verdict: v, cartes: ap.enAttente("outil").length };
+console.log("RENDU " + JSON.stringify(sortie));
+process.exit(0);`;
+  let rendu = {};
+  const dossier = mkdtempSync(join(tmpdir(), "helix-projets-barriere-"));
+  try {
+    const brut = execFileSync(process.execPath, ["--input-type=module", "-e", sonde], { env: { ...process.env, HELIX_DATA_DIR: join(dossier, "donnees"), HELIX_WORKSPACE: join(dossier, "espace") }, encoding: "utf8", timeout: 20_000, stdio: ["ignore", "pipe", "ignore"] });
+    rendu = JSON.parse(brut.split("\n").find((l) => l.startsWith("RENDU "))?.slice(6) ?? "{}");
+  } catch (e) {
+    rendu = { erreur: String(e.message).slice(0, 200) };
+  }
+  rmSync(dossier, { recursive: true, force: true });
+  verifier("Brevo et Mailchimp : lire ne demande rien au niveau « Demander avant de modifier »", (rendu.lectures ?? []).length === 4 && rendu.lectures.every(([m, d]) => !m && !d), JSON.stringify(rendu.lectures));
+  verifier("Brevo et Mailchimp : brouillon et envoi demandent une carte à chaque fois, à tout niveau", (rendu.ecritures ?? []).length === 4 && rendu.ecritures.every(Boolean), JSON.stringify(rendu.ecritures));
+  verifier("serveurs MCP de la famille : un outil non reconnu comme lecture demande une carte à chaque fois (la barrière seule échoue fermé)", (rendu.inconnus ?? []).length === 4 && rendu.inconnus.every(Boolean), JSON.stringify(rendu.inconnus));
+  verifier("serveurs MCP de la famille : une lecture reconnue à la liste des outils ne demande rien, l'écriture si ; un autre connecteur n'est pas touché", JSON.stringify(rendu.apresListe) === "[false,false,true]" && rendu.horsFamille === false, JSON.stringify(rendu));
+  verifier("envoyer une campagne sans aperçu préparé (barrière seule) : refusé sans carte, même au niveau « Tout approuver »", rendu.sansApercu?.verdict?.autorise === false && rendu.sansApercu?.cartes === 0, JSON.stringify(rendu.sansApercu));
+
+  const regles = await import(versUrl(join(RACINE, "gateway", "src", "natifs", "projetsRegles.ts")).href);
+  const cas = { get_board: "lecture", "find-tasks": "lecture", "user-info": "lecture", clickup_search: "lecture", addTasks: "ecriture", "complete-tasks": "ecriture", board_summary: "ecriture", get_and_move_card: "ecriture", resolve_assignees: "ecriture" };
+  const faux = Object.entries(cas).filter(([n, attendu]) => regles.classer({ name: n, annotations: n === "get_and_move_card" ? { readOnlyHint: true } : undefined }, n.startsWith("clickup") ? "clickup" : "") !== attendu);
+  verifier("classement des outils MCP : un verbe qui modifie l'emporte sur l'annotation « lecture », un nom sans verbe est une écriture, le nom du service en tête ne compte pas", faux.length === 0 && regles.classer({ name: "get_x", annotations: { readOnlyHint: false } }) === "ecriture", faux.map(([n]) => n).join(", "));
+  const demandees = Object.fromEntries(regles.IDS_MCP_PROJETS.map((id) => [id, regles.porteesDemandees(id, false) ?? ""]));
+  verifier("portées demandées sans écriture : aucune n'écrit ni ne supprime (Monday n'en publie pas, aucune demandée)", Object.values(demandees).every((s) => !/write|delete|read_write|update/.test(s)) && demandees.monday === "" && demandees.todoist === "data:read", JSON.stringify(demandees));
+  verifier("portées relues : ce qui déborde est vu, une réponse sans portée vaut la demande (RFC 6749 § 5.1)", regles.porteesEnTrop("data:read", "data:read_write").join() === "data:read_write" && regles.porteesEnTrop("read", undefined).length === 0 && regles.porteesEnTrop("read write", "write read").length === 0, "relecture");
+
+  const connecteurs = readFileSync(join(RACINE, "gateway", "src", "connecteurs.ts"), "utf8");
+  const reserves = connecteurs.match(/const IDS_RESERVES = new Set\(\[([^\]]*)\]\)/)?.[1] ?? "";
+  verifier("Brevo et Mailchimp : préfixes réservés aux connexions natives", ["brevo", "mailchimp"].every((p) => reserves.includes(`"${p}"`)), reserves);
+  const entrees = ["trello", "monday", "clickup", "todoist", "calendly", "zoom"].map((id) => new RegExp(`id: "${id}",[\\s\\S]{0,400}?url: "https://[^"]+"[\\s\\S]{0,120}?ecritureAuChoix: true`).test(connecteurs));
+  verifier("catalogue : les six serveurs des éditeurs, en https, écriture au choix", entrees.every(Boolean), JSON.stringify(entrees));
+  const index = readFileSync(join(RACINE, "gateway", "src", "index.ts"), "utf8");
+  verifier("brancher et débrancher un service de la famille : administrateur seul (route)", (index.match(/estMcpProjet\(body\.id\) && \(await reserveeALAdministration/g) ?? []).length === 2, "contrôle absent d'une route");
+  const outils = readFileSync(join(RACINE, "gateway", "src", "outils.ts"), "utf8");
+  const code = readFileSync(join(RACINE, "gateway", "src", "outilsCode.ts"), "utf8");
+  verifier("employés et agent de code : sans les écritures de la famille ; écrire vérifie l'administrateur au moment d'agir", /outilsMcp\(\)\.filter\(\(o\) => !estEcritureMcpProjet/.test(outils) && /!estEcritureMcpProjet\(o\.function\.name\)/.test(code) && /estEcritureMcpProjet\(nom\) && !\(pour\?\.userId && \(await estAdministrateur/.test(outils), "filtre absent");
+
+  const essai = await new Promise((fin) => {
+    const e = spawn(process.execPath, [join(RACINE, "scripts", "essai-projets.mjs")], { stdio: ["ignore", "pipe", "pipe"] });
+    let sortie = "";
+    e.stdout.on("data", (b) => (sortie += b));
+    e.stderr.on("data", (b) => (sortie += b));
+    const minuterie = setTimeout(() => e.kill(), 5 * 60_000);
+    e.on("close", (status) => {
+      clearTimeout(minuterie);
+      fin({ status, sortie });
+    });
+  });
+  const lignes = essai.sortie.split("\n");
+  for (const ligne of lignes) {
+    const ok = /^\s+✓ (.*)$/.exec(ligne);
+    const ko = /^\s+✗ (.*?)(?:  —  obtenu : .*)?$/.exec(ligne);
+    if (ok) verifier(`projets : ${ok[1]}`, true, "");
+    else if (ko) verifier(`projets : ${ko[1]}`, false, ligne.split("  —  obtenu : ")[1] ?? "");
+    else if (/^[A-H]\. /.test(ligne)) console.log(`  ${ligne}`);
+  }
+  verifier("projets : l'essai contre les faux services s'est déroulé jusqu'au bout", essai.status === 0 && lignes.some((l) => /vérification\(s\) réussie\(s\)/.test(l)), `${essai.status} ${lignes.slice(-6).join(" ")}`);
+}
+
 console.log(`\n${reussis} vérification(s) réussie(s), ${echecs.length} échec(s).`);
 if (echecs.length) {
   console.log("Échecs :");

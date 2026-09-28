@@ -80,6 +80,8 @@ const BASIC_X = Buffer.from(`${APPS.x.id}:${APPS.x.secret}`).toString("base64");
 /** Tout ce qui ne doit jamais apparaître en clair : secrets et jetons, et le secret de X en base 64. */
 const SECRETS = new RegExp(`(ACCES|ACTU|COURT|JETON-PAGE)-[A-Za-z0-9-]+|SECRET-[A-Z]+-DE-TEST|GOCSPX-SECRET-NATIF-DE-TEST|${BASIC_X.replace(/[+/=]/g, (c) => `\\${c}`)}`);
 const X_MOI = "1500000000000000001";
+/** Les services de cet essai (d'autres connexions natives ont leur propre essai). */
+const HUIT = ["sheets", "slides", "youtube", "linkedin", "facebook", "instagram", "tiktok", "x"];
 const G_SCOPES = {
   sheets: "https://www.googleapis.com/auth/spreadsheets.readonly https://www.googleapis.com/auth/spreadsheets",
   slides: "https://www.googleapis.com/auth/presentations.readonly",
@@ -443,7 +445,7 @@ console.log("\nA. Qui a le droit");
   const sans = await appel("/helix/natifs", { headers: avecJeton });
   verifier("état des connexions : sans séance → 401", sans.status === 401, sans.status);
   const vueB = await (await appel("/helix/natifs", { headers: B })).json();
-  verifier("un collègue voit l'état, et l'écran sait qu'il n'administre pas", Array.isArray(vueB.services) && vueB.services.length === 8 && vueB.administrateur === false, JSON.stringify(vueB).slice(0, 200));
+  verifier("un collègue voit l'état, et l'écran sait qu'il n'administre pas", Array.isArray(vueB.services) && HUIT.every((id) => vueB.services.some((s) => s.id === id)) && vueB.administrateur === false, JSON.stringify(vueB).slice(0, 200));
   for (const [suite, corps] of [["/application", { service: "linkedin", clientId: APPS.linkedin.id, clientSecret: APPS.linkedin.secret }], ["/connecter", { service: "sheets" }], ["/oublier", { service: "facebook" }]]) {
     const r = await poster(`/helix/natifs${suite}`, B, corps);
     verifier(`un collègue qui n'administre pas : ${suite} refusé (403)`, r.status === 403, r.status);
@@ -675,7 +677,8 @@ console.log("\nE. Jetons : jamais à l'écran, jamais en clair sur le disque, ja
 {
   for (const [nom, entetes] of [["administrateur", A], ["collègue", B]]) {
     const brut = await (await appel("/helix/natifs", { headers: entetes })).text();
-    const tous = JSON.parse(brut).services ?? [];
+    // Les huit de cet essai ; Brevo et Mailchimp (28/09/2026) ont le leur, scripts/essai-projets.mjs.
+    const tous = (JSON.parse(brut).services ?? []).filter((s) => HUIT.includes(s.id));
     verifier(`état (${nom}) : les huit services, branchés, sans aucun jeton ni secret`, tous.length === 8 && tous.every((s) => s.configure) && !SECRETS.test(brut), `${tous.filter((s) => !s.configure).map((s) => s.id)} ${brut.match(SECRETS)?.[0] ?? ""}`);
   }
   const outils = await (await appel("/helix/outils", { headers: A })).text();

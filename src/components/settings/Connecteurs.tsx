@@ -360,7 +360,7 @@ export function Connecteurs({ maison = [] }: { maison?: ServiceMaison[] } = {}) 
           marque={service.marque}
           icone={service.icone}
         />
-        <span className="min-w-0 flex-1">
+        <span className="min-w-[9rem] flex-1">
           <span className="block text-sm font-medium text-foreground">{service.label}</span>
           <span className="block text-xs text-muted-foreground">{service.description}</span>
         </span>
@@ -390,7 +390,11 @@ export function Connecteurs({ maison = [] }: { maison?: ServiceMaison[] } = {}) 
             id={entree.id}
             etat={branche && actif ? "actif" : branche ? "attention" : "eteint"}
           />
-          <div className="min-w-0 flex-1">
+          {/*
+            Une largeur minimale (28/09/2026) : sous 400 px, le texte se réduisait à un mot par
+            ligne et passait sous le bouton ; avec elle, c'est le bouton qui va à la ligne.
+          */}
+          <div className="min-w-[9rem] flex-1">
             <p className="flex items-center gap-1.5 text-sm font-medium text-foreground">
               {entree.label}
               {!entree.integre && (

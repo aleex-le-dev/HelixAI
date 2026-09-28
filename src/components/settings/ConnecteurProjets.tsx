@@ -27,16 +27,21 @@ function Lien({ href, children }: { href: string; children: ReactNode }) {
   );
 }
 
+/** Une commande à taper, sur sa propre ligne : deux commandes collées se liraient comme une seule. */
+function Commande({ children }: { children: ReactNode }) {
+  return <code className="mt-1 block w-fit max-w-full break-all rounded bg-muted px-1.5 py-0.5 text-foreground">{children}</code>;
+}
+
 /** Ce que fait le connecteur, et ce que la case « écriture » change, pour un serveur MCP de la famille. */
 export function AideMcpProjet({ id, nom }: { id: string; nom: string }) {
   return (
-    <div className="space-y-2 text-sm text-muted-foreground">
+    <div className="space-y-2 text-sm text-muted-foreground [overflow-wrap:anywhere]">
       <p>{tf("{0} se branche par le serveur de son éditeur : rien ne s'installe sur cette machine, et l'accord se donne dans la page de {0}.", nom)}</p>
       <p>{t("Sans rien cocher, vos agents lisent seulement. Si vous cochez l'écriture, ils peuvent aussi proposer de créer ou de modifier : chaque écriture vous est montrée en entier et n'a lieu qu'après votre accord, à chaque fois, quel que soit le niveau d'approbation. Seul l'administrateur de l'instance peut brancher ce service et y écrire.")}</p>
       {id === "clickup" && <p>{t("ClickUp limite ce branchement à 50 appels par jour en offre gratuite, 300 à partir de l'offre Unlimited.")}</p>}
       {id === "trello" && <p>{t("Trello branche un espace de travail par connexion : choisissez-le dans la page de Trello.")}</p>}
       {id === "zoom" && (
-        <ol className="list-decimal space-y-1 pl-5">
+        <ol className="list-decimal space-y-1 pl-5 [overflow-wrap:anywhere]">
           <li>
             {t("Zoom demande une application déclarée chez lui. Sur")} <Lien href="https://marketplace.zoom.us/develop/create">marketplace.zoom.us</Lien>
             {t(", « Develop », « Build App », choisissez « General App », gérée par l'utilisateur (« User-managed »).")}
@@ -55,27 +60,30 @@ export function GuideProjet({ id }: { id: "brevo" | "mailchimp" }) {
   if (id === "brevo")
     // https://developers.brevo.com/docs/oauth-quickstart et /docs/apps-getting-started, lus le 28/09/2026.
     return (
-      <ol className="list-decimal space-y-1 pl-5">
+      <ol className="list-decimal space-y-1 pl-5 [overflow-wrap:anywhere]">
         <li>
           {t("Brevo crée les applications avec son outil en ligne de commande (")}<Lien href="https://developers.brevo.com/docs/oauth-quickstart">developers.brevo.com</Lien>
-          {t(") : installez-le, puis connectez-le au compte Brevo de votre organisation.")}{" "}
-          <code>npm install -g @getbrevo/cli</code> <code>brevo login</code>
+          {t(") : installez-le, puis connectez-le au compte Brevo de votre organisation.")}
+          <Commande>npm install -g @getbrevo/cli</Commande>
+          <Commande>brevo login</Commande>
         </li>
         <li>
-          {t("Créez une application privée, réservée à votre organisation, avec l'adresse de retour ci-dessous, à l'identique :")} <code>brevo app init</code>
+          {t("Créez une application privée, réservée à votre organisation, avec l'adresse de retour ci-dessous, à l'identique :")}
+          <Commande>brevo app init</Commande>
         </li>
         <li>
-          {t("Dans le fichier app-config.json, « auth.scopes » : account:read, contacts:read, campaigns.email:read, et campaigns.email:write pour préparer des brouillons ou envoyer. Puis envoyez la configuration :")} <code>brevo app upload</code>
+          {t("Dans le fichier app-config.json, « auth.scopes » : account:read, contacts:read, campaigns.email:read, et campaigns.email:write pour préparer des brouillons ou envoyer. Puis envoyez la configuration :")}
+          <Commande>brevo app upload</Commande>
         </li>
         <li>
-          {t("L'identifiant et le secret sont écrits dans src/oauth/.env.local, et s'affichent aussi par la commande ci-dessous. Collez-les plus bas.")}{" "}
-          <code>brevo app credentials --app-id … --reveal-secret</code>
+          {t("L'identifiant et le secret sont écrits dans src/oauth/.env.local, et s'affichent aussi par la commande ci-dessous. Collez-les plus bas.")}
+          <Commande>brevo app credentials --app-id … --reveal-secret</Commande>
         </li>
       </ol>
     );
   // https://mailchimp.com/developer/marketing/guides/access-user-data-oauth-2/, lu le 28/09/2026.
   return (
-    <ol className="list-decimal space-y-1 pl-5">
+    <ol className="list-decimal space-y-1 pl-5 [overflow-wrap:anywhere]">
       <li>
         {t("Dans votre compte Mailchimp, ouvrez")} <Lien href="https://us1.admin.mailchimp.com/account/oauth2/">{t("« Registered apps »")}</Lien>
         {t(" (Profil, Extras), puis « Register An App » : un nom, votre entreprise, votre site.")}

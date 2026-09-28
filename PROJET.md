@@ -608,6 +608,63 @@ la réponse de jetons contient-elle `scope` (sinon la connexion est refusée, et
 crédit (l'outil suppose 402) ; X exige-t-il les droits « Read and write » de l'application en
 plus de `tweet.write`.
 
+**Fait le 28/09/2026 : projets et rendez-vous, branche `connecteurs-projets`.** Demandé par
+Medhi : Trello, Monday, ClickUp, Todoist, Calendly, Zoom, Brevo, Mailchimp, avec un ordre de choix
+imposé : un serveur MCP officiel distant avec OAuth d'abord (catalogue de `connecteurs.ts`, comme
+Notion ou Linear), sinon un connecteur natif, sinon une clé d'API d'administrateur. Code :
+`gateway/src/natifs/projetsRegles.ts` (règles, sans importation qui s'exécute, pour que la barrière,
+`mcp.ts` et `oauthNatif.ts` l'importent sans cycle), `gateway/src/natifs/projets.ts` (outils de Brevo
+et Mailchimp), ajouts courts dans les registres communs ; écran `ConnecteurProjets.tsx` ; essai
+`scripts/essai-projets.mjs` ; SECURITE.md § 48. Documentation lue le 28/09/2026, citée dans le code.
+
+| Service | Choix | Source | Lecture (sans rien cocher) | Si l'administrateur coche |
+|---|---|---|---|---|
+| Trello | MCP d'Atlassian, `https://mcp.trello.com/v1`, un clic | support.atlassian.com (Trello MCP), github.com/atlassian/trello-mcp-server | portées `read:*` et `offline_access` | `write:board:trello` |
+| Monday | MCP de monday.com, `https://mcp.monday.com/mcp`, un clic | developer.monday.com (Platform MCP) | aucune portée publiée : lectures reconnues outil par outil | les autres outils |
+| ClickUp | MCP de ClickUp, `https://mcp.clickup.com/mcp`, un clic (client public) | developer.clickup.com (MCP Server) | `read` | `write` |
+| Todoist | MCP de Doist, `https://ai.todoist.net/mcp`, un clic | github.com/Doist/todoist-mcp | `data:read` | `data:read_write` (jamais `data:delete`) |
+| Calendly | MCP de Calendly, `https://mcp.calendly.com`, un clic (client public) | developer.calendly.com (Calendly MCP) | `mcp:scheduling:read` | `mcp:scheduling:write` |
+| Zoom | MCP de Zoom, `https://mcp.zoom.us/mcp/zoom/streamable`, application « General app » à créer (pas d'enregistrement automatique) | developers.zoom.us (MCP), zoom/zoom-plugin (oauth-setup) | portées `*:read:*` | créer et modifier une réunion, déposer un document ; jamais supprimer |
+| Brevo | natif (OAuth 2.0, PKCE, application privée créée avec l'outil `brevo`) : son MCP n'a pas d'OAuth, seulement un jeton collé | developers.brevo.com (OAuth, MCP) | `account:read contacts:read campaigns.email:read` | brouillons, et envoi coché à part : `campaigns.email:write` |
+| Mailchimp | natif (OAuth 2, application déclarée dans le compte) : pas de MCP officiel pour l'API Marketing | mailchimp.com/developer (OAuth 2) | aucune portée chez Mailchimp : lectures seules proposées par Helix | brouillons, et envoi coché à part |
+
+Aucune clé d'API n'a été nécessaire. **Règles** : brancher et débrancher, administrateur seul (y
+compris pour les six serveurs MCP, contrairement au reste du catalogue) ; lecture par défaut ; la
+portée accordée est relue et ce qui déborde fait tout refuser ; pour les serveurs MCP, un outil
+n'est une lecture que s'il n'a aucun verbe qui modifie et qu'il le dit (annotation `readOnlyHint`)
+ou commence par un verbe de lecture ; tout le reste est une écriture, invisible sans la case, et
+sinon soumise à une carte à chaque appel, même au niveau « Tout approuver », avec ses arguments
+entiers, et réservée à l'administrateur au moment d'agir ; ni les employés OpenClaw ni l'agent de
+code n'ont ces écritures. Brevo et Mailchimp : brouillons et envoi se cochent séparément ; la carte
+d'un envoi est faite de la campagne relue chez le service (objet, expéditeur, listes, **nombre de
+destinataires**, texte extrait du HTML et liens), retenue par une empreinte, et rien ne part si la
+campagne a changé depuis ; Brevo n'envoie d'ici que vers des listes (un segment n'a pas de taille
+connue d'avance) ; dix brouillons ou envois par heure et par service, doublon refusé, issue
+incertaine (5xx) gardée. Clés de marque `trello`, `monday`, `clickup`, `todoist`, `calendly`, `zoom`,
+`brevo`, `mailchimp` : icônes neutres (`marquesConnecteurs.ts`, `ParametresPages.tsx`), les logos
+sont l'affaire d'un autre travail. Aucun tableau de connecteurs dans les README : pas touchés.
+Écran vu (fenêtre Electron cachée, passerelle jetable, faux services) : parcours de Trello et de
+Brevo jusqu'à « branché », formulaires en fr, en et ja, clair et sombre, 1440 et 375 px
+(SECURITE.md § 48.1).
+
+**Pas essayé avec de vrais comptes ni de vraies applications** (règle du § 3.16 : dit ici, pas à
+l'écran) : tout est vérifié contre de faux serveurs écrits d'après la documentation et les
+métadonnées publiées (`scripts/essai-projets.mjs`, 74 contrôles, repris par `npm run securite`,
+section 16 sexies ; les contrôles échouent quand on retire la relecture des portées, la carte des
+écritures MCP ou l'empreinte de la campagne, essayé). Les métadonnées OAuth publiques des six
+serveurs ont été lues le 28/09/2026 (sans compte). À essayer sur le poste, service par service :
+la connexion, une lecture, une écriture cochée, le refus d'une portée en trop. Points incertains :
+les vrais noms d'outils et leurs annotations (s'ils n'en ont pas et ne commencent pas par un verbe
+de lecture, ils sont pris pour des écritures : plus de cartes, jamais moins) ; Trello et Todoist
+acceptent-ils la seule portée de lecture (Todoist ne publie que `data:read_write` pour son MCP) ;
+Atlassian accepte-t-il une adresse de retour `http://127.0.0.1` pour Trello (ses administrateurs
+filtrent les domaines) ; Zoom accepte-t-il le paramètre `scope` ou accorde-t-il les portées de
+l'application (l'écran dit de n'y mettre que la lecture) ; Brevo rend-il d'autres portées que
+celles demandées (tolérées : `openid profile email offline_access`) et accepte-t-il
+`http://127.0.0.1` ; le vrai `recipient_count` de Mailchimp pour un segment ; les jetons des
+serveurs MCP ne sont pas révoqués chez le service quand on débranche (le SDK n'a pas de
+révocation ; même dette que le reste du catalogue).
+
 ### 3.6 Découpage des tâches lourdes
 
 Ajouté en septembre 2026, après mesure. Un modèle de 8 milliards de paramètres perd le
@@ -3034,6 +3091,8 @@ vérifiés contre de faux serveurs, SECURITE.md § 41) et Google Drive et Slack 
 sur une vraie carte NVIDIA (Unsloth) ; le Mac virtuel (Lume) de bout en bout ; les modèles
 d'images et de vidéo marqués `verifie: false` (`images.ts`) et les modèles de conversation
 conseillés sans avoir été essayés (`provision.ts`) ; le japonais relu par un locuteur natif.
+Et, depuis le 28/09/2026, les huit connecteurs « projets et rendez-vous » (Trello, Monday,
+ClickUp, Todoist, Calendly, Zoom, Brevo, Mailchimp : § 3.5, SECURITE.md § 48).
 
 ### Ce qui reste à faire
 

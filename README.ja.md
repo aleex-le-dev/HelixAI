@@ -160,7 +160,9 @@ Windows では提供していないもの：常時稼働のエージェント（
   作業し、Word、Excel、PowerPoint、PDF の文書を作成するエージェント。
 - **Helix Code**：プロジェクトフォルダーで動くコードエージェント（OpenCode ベース）。タスク、コマンド、
   編集したファイルをリアルタイムで表示するパネル付きです。**VS Code**（拡張機能を同梱）でも、
-  **`helix` コマンドライン**でターミナルからも使えます。
+  **`helix` コマンドライン**でターミナルからも使えます。macOS と Linux のクラウドモデルでは、コマンドの出力をまず
+  [RTK](https://github.com/rtk-ai/rtk) で短くしてトークンを節約します。承認カードには元のコマンドが
+  そのまま表示されます。
 - **コネクタ**：メール、Google カレンダー（読み書き）、Google ドライブ、Slack、Notion、MCP サーバー。
   すべて**承認の仕組み**を経由し、何かを変更する操作はあなたの了承なしには行われません。
 - **スケジュールタスク**：指示と頻度（毎日、月曜日から金曜日、週または月の特定の日）を設定すると、
@@ -257,6 +259,7 @@ helix code               # 現在のフォルダーでコードエージェン�
 
 多くのオープンソースの成果をもとに作られています。その一部：
 [OpenCode](https://github.com/anomalyco/opencode)、
+[RTK](https://github.com/rtk-ai/rtk)、
 [OpenClaw](https://github.com/openclaw/openclaw)、
 [stable-diffusion.cpp](https://github.com/leejet/stable-diffusion.cpp)、
 [MLX](https://github.com/ml-explore/mlx)、

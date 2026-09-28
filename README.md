@@ -159,7 +159,9 @@ line.
   (LibreOffice, browser) to produce Word, Excel, PowerPoint and PDF documents.
 - **Helix Code**: a coding agent on your project folder (built on OpenCode), with a live panel of
   its tasks, commands and edited files; also in **VS Code** (extension included) and in the
-  terminal with the **`helix` command line**.
+  terminal with the **`helix` command line**. On macOS and Linux, with a cloud model, the output of its
+  commands goes through [RTK](https://github.com/rtk-ai/rtk) first, to spend fewer tokens; the approval card
+  still shows the command as written.
 - **Connectors**: mail, Google Calendar (read and write), Google Drive, Slack, Notion and MCP
   servers, behind an **approval gate**: nothing that changes something happens without your
   go-ahead.
@@ -259,6 +261,7 @@ Index), licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)
 
 Built with open-source work, among others:
 [OpenCode](https://github.com/anomalyco/opencode),
+[RTK](https://github.com/rtk-ai/rtk),
 [OpenClaw](https://github.com/openclaw/openclaw),
 [stable-diffusion.cpp](https://github.com/leejet/stable-diffusion.cpp),
 [MLX](https://github.com/ml-explore/mlx),

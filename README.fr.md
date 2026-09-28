@@ -171,7 +171,9 @@ commande `helix`.
   virtuel (LibreOffice, navigateur) pour produire des documents Word, Excel, PowerPoint et PDF.
 - **Helix Code** : un agent de code sur le dossier de votre projet (bâti sur OpenCode), avec un
   panneau qui suit en direct ses tâches, ses commandes et les fichiers modifiés ; aussi dans
-  **VS Code** (extension fournie) et dans le terminal avec la **commande `helix`**.
+  **VS Code** (extension fournie) et dans le terminal avec la **commande `helix`**. Sur macOS et
+  Linux, avec un modèle cloud, la sortie de ses commandes passe d'abord par [RTK](https://github.com/rtk-ai/rtk), pour
+  consommer moins de jetons ; la carte d'accord montre toujours la commande telle qu'écrite.
 - **Connecteurs** : courrier, Google Agenda (lecture et écriture), Google Drive, Slack, Notion et
   serveurs MCP, derrière une **barrière d'approbation** : rien qui modifie quelque chose ne se
   fait sans votre accord.
@@ -277,6 +279,7 @@ même jour.
 
 Construit avec des travaux open source, entre autres :
 [OpenCode](https://github.com/anomalyco/opencode),
+[RTK](https://github.com/rtk-ai/rtk),
 [OpenClaw](https://github.com/openclaw/openclaw),
 [stable-diffusion.cpp](https://github.com/leejet/stable-diffusion.cpp),
 [MLX](https://github.com/ml-explore/mlx),

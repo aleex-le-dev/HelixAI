@@ -585,7 +585,8 @@ export function ComparerModeles({
                   <tr key={m.nom} className={cn("border-b border-border/60", servi && "bg-muted/60")}>
                     <td className="py-2 pr-3 text-foreground">
                       <span className="mr-2 inline-flex align-[-3px]">
-                        <LogoMarque marque={marqueDuModele(m.nom)} icone={Cpu} taille={16} degagement={8} />
+                        {/* Le nom d'abord ; sinon l'éditeur (« Muse Spark », de Meta, ne dit pas « Llama »). */}
+                        <LogoMarque marque={marqueDuModele(m.nom) ?? marqueDuModele(m.editeur ?? "")} icone={Cpu} taille={16} degagement={8} />
                       </span>
                       {m.nom}
                       {servi && (

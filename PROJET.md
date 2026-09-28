@@ -1736,6 +1736,30 @@ Ce qui a été décidé, et pourquoi :
   lui propose écrit dans `~/.codex` ou dans le projet (`.codex/hooks.json`) et réécrit avant
   l'approbation de Codex (documentation de RTK) : écartée.
 
+### 3.18 Logos : les vrais, sans attendre l'accord des marques (28/09/2026)
+
+**Décision de Medhi, 28/09/2026** : « Les logos, on s'en fout : mets les vrais. Si j'ai un souci,
+ils viendront me voir. » Medhi assume le risque lié aux marques. Désormais, **chaque service et
+chaque fournisseur de modèles affiché dans Helix porte son vrai logo, en couleur**, même quand
+la charte de la société demande un accord préalable, une licence écrite, une taille minimale ou
+un autre usage (ce que dit chaque charte reste écrit dans THIRD_PARTY_NOTICES.md § 4 bis, pour
+savoir quoi régler si une société se manifeste). Ce qui ne change pas :
+
+- **Aucune case « j'accepte les conditions » cochée à la place de Medhi.** Sans kit
+  téléchargeable librement, la source est, dans l'ordre : le fichier servi par le site officiel
+  (souvent l'icône du site), le dépôt officiel, puis une reproduction fidèle et non modifiée sur
+  Wikimedia Commons ou Simple Icons. Adresse exacte et empreinte dans `scripts/marques/sources.json`.
+- **Pas de retouche du dessin** : recadrage de la marge seulement, couleurs officielles, version
+  pour fond sombre quand elle existe ; sinon une pastille claire derrière le logo en thème sombre
+  (`pastille`), jamais une recoloration.
+- **Sécurité inchangée** : le générateur ne garde que des éléments de dessin, aucune adresse
+  externe, PNG intégrés en données ; `npm run securite` le vérifie, fichiers piégés compris.
+- YouTube : l'icône en petit dans la liste (`youtubeIcone`), le logo complet en grand dans son
+  panneau, comme avant.
+
+Les logos appartiennent à leurs sociétés et ne servent qu'à désigner la compatibilité ; ne pas
+revenir aux icônes neutres sans une demande d'une société ou de Medhi.
+
 ---
 
 ## 4. Sécurité
@@ -2393,6 +2417,26 @@ Medhi.
 Vu à l'écran (passerelle et interface jetables, ports 5391 et 5392) : le point
 devant le logo, Tavily à 22 px avec 10 px de marge ajoutés, les icônes Google
 de 2026 en clair et en sombre. Pas vu : l'application empaquetée.
+
+**Logos, troisième tournée (28/09/2026, branche `logos-3`).** Décision de Medhi
+(§ 3.18) : les vrais logos partout. 43 marques ajoutées (86 en tout, plus aucune
+neutre) : Slack, OpenAI, LinkedIn, TikTok, HubSpot, Intercom, Box, PayPal, Asana,
+Airtable, Square, monday.com, Mailchimp, Brevo, IONOS, DeepSeek, Qwen, Calendly,
+Groq, Gemma, Scaleway, OVHcloud, Meta (Llama), les six icônes Microsoft 365 de 2026,
+Stripe, Shopify, WooCommerce, Salesforce, Pipedrive, Zendesk, Discord, Zoom,
+WhatsApp, Mattermost, l'icône de YouTube, Z.ai (GLM) et MiniMax. Branchés dans
+la liste des connecteurs (réseaux, campagnes e-mail, messageries, commerce, projets,
+les six lignes Microsoft avec chacune son icône), la carte de Slack branché, les
+canaux des employés, les clés d'API (tous les fournisseurs sauf « compatible »),
+le sélecteur de modèles et « Comparer les modèles » (GPT et gpt-oss, DeepSeek, Qwen,
+Llama, Gemma, GLM, MiniMax en plus). Sources : kits sans case à cocher (TikTok,
+Discord, Shopify, YouTube), sinon fichiers servis par les sites officiels, dépôt
+officiel pour MiniMax, Wikimedia Commons pour Square seulement. Pastille claire en
+thème sombre pour Square, OVHcloud et PayPal. Le générateur ignore désormais les
+règles `@media (prefers-color-scheme)` (icônes de Scaleway, Zendesk) et refuse
+tout CSS hors règle (`@import`, bloc @ non géré). Restent sans logo, faute de
+fichier relevé : Phi (Microsoft), Granite (IBM), Nemotron (NVIDIA), OLMo (Ai2) dans
+les modèles.
 
 **Le sélecteur de modèles, un seul panneau (0.26.0).** Il y en avait deux :
 « comportement », puis « modèle précis » derrière un chevron. Deux défauts,

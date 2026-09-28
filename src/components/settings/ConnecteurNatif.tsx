@@ -52,8 +52,9 @@ function Lien({ href, children }: { href: string; children: ReactNode }) {
  * Le logo de YouTube, en tête de son panneau (décision de Medhi, 28/09/2026).
  *
  * La liste des connecteurs le montrerait à 22 px, sous les 100 px que la
- * charte impose (https://brand.youtube/youtube-logo/) : elle garde une icône
- * neutre, et le logo officiel ne paraît qu'ici, en grand. La charte des
+ * charte impose (https://brand.youtube/youtube-logo/) : le logo complet ne
+ * paraît qu'ici, en grand ; la liste montre l'icône de YouTube (`youtubeIcone`,
+ * troisième tournée des logos, 28/09/2026, décision de Medhi). La charte des
  * développeurs (https://developers.google.com/youtube/terms/branding-guidelines)
  * prévoit, pour une fonction qui se sert de l'API, le logo complet plutôt que
  * l'icône, placé à côté de cette fonction, sur un fond uni, et cliquable vers

@@ -133,8 +133,8 @@ const MARQUE_DU_MODELE: [RegExp, CleMarquePetite][] = [
   [/perplexity|sonar/i, "perplexity"],
   [/grok/i, "grok"],
   [/qwen|qwq/i, "qwen"],
-  [/llama/i, "meta"],
-  [/\bglm|chatglm|zai-org|z-ai/i, "zai"],
+  [/llama|\bmeta\b/i, "meta"],
+  [/\bglm|chatglm|zai-org|z-ai|zhipu|\bz\.ai\b/i, "zai"],
   [/minimax/i, "minimax"],
   [/gpt|openai|chatgpt|(^|[/:])o[1-9](-|$)/i, "openai"],
 ];

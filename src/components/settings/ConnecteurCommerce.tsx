@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
-import { Check, ExternalLink, KeyRound, Link2, Loader2, Lock, ShieldAlert, Trash2 } from "lucide-react";
+import { Check, ExternalLink, Link2, Loader2, Lock, ShieldAlert, Trash2 } from "lucide-react";
 import type { ServiceMaison } from "@/components/settings/Connecteurs";
 import type { CleMarquePetite } from "@/components/ui/marques";
 import { connecterCommerce, enregistrerCommerce, etatCommerce, oublierCommerce, type EtatCommerce, type EtatsCommerce, type IdCommerce } from "@/lib/commerce";
@@ -7,7 +7,8 @@ import { Card } from "@/components/settings/SettingsShell";
 import { Button } from "@/components/ui/Button";
 import { Field, Input } from "@/components/ui/Field";
 import { InfoBox } from "@/components/ui/InfoBox";
-import { ACopier } from "@/components/ui/ACopier";
+import { GuideApplication } from "@/components/settings/GuideApplication";
+import { guideApplication } from "@/lib/guidesApplications";
 import { branding } from "@/config/branding";
 import { formaterDate } from "@/lib/formats";
 import { t, tf } from "@/lib/i18n";
@@ -79,71 +80,12 @@ function Lien({ href, children }: { href: string; children: ReactNode }) {
   );
 }
 
-/** Comment créer la clé ou l'application, service par service. */
-function Guide({ id }: { id: IdCommerce }) {
-  switch (id) {
-    case "stripe":
-      // https://docs.stripe.com/keys/restricted-api-keys
-      return (
-        <ol className="list-decimal space-y-1 pl-5">
-          <li>
-            {t("Dans le Dashboard Stripe,")} <Lien href="https://dashboard.stripe.com/apikeys">{t("Clés API")}</Lien>
-            {t(" : « Créer une clé limitée ».")}
-          </li>
-          <li>{t("Donnez « Lecture » à PaymentIntents, Customers, Invoices et Subscriptions, et laissez « Aucune » partout ailleurs.")}</li>
-          <li>{t("Recopiez la clé, qui commence par rk_live_ (ou rk_test_ pour essayer en mode test). Une clé secrète (sk_…) est refusée : elle ouvre tout le compte.")}</li>
-        </ol>
-      );
-    case "shopify":
-      // https://shopify.dev/docs/apps/build/dev-dashboard/get-api-access-tokens
-      return (
-        <ol className="list-decimal space-y-1 pl-5">
-          <li>
-            {t("Sur")} <Lien href="https://dev.shopify.com/dashboard">dev.shopify.com</Lien>
-            {t(" (Dev Dashboard), avec un compte de la même organisation que la boutique : « Create app ».")}
-          </li>
-          <li>{t("Dans la version de l'application, portées d'accès : read_orders, read_products et read_inventory, rien d'autre. Publiez la version (« Release »).")}</li>
-          <li>{t("Installez l'application sur la boutique, puis recopiez le « Client ID » et le « Client secret » de ses réglages (« Settings »).")}</li>
-        </ol>
-      );
-    case "woocommerce":
-      // https://woocommerce.github.io/woocommerce-rest-api-docs/#authentication
-      return (
-        <ol className="list-decimal space-y-1 pl-5">
-          <li>{t("Dans l'administration WordPress : WooCommerce, Réglages, Avancé, API REST, « Ajouter une clé ».")}</li>
-          <li>{t("Autorisations : « Lecture ». Recopiez la clé client (ck_…) et le secret client (cs_…) : WooCommerce ne les montre qu'une fois.")}</li>
-          <li>{t("La boutique doit répondre en https, et les permaliens de WordPress ne doivent pas être « Simple ».")}</li>
-        </ol>
-      );
-    case "salesforce":
-      return (
-        <ol className="list-decimal space-y-1 pl-5">
-          <li>{t("Dans Setup (Configuration) : « External Client App Manager », « New External Client App ».")}</li>
-          <li>{t("Activez OAuth. « Callback URL » : l'adresse de retour ci-dessous, à l'identique. Portées : « Manage user data via APIs (api) » et « Perform requests at any time (refresh_token, offline_access) ». Cochez l'exigence de PKCE.")}</li>
-          <li>{t("Recopiez la « Consumer Key » et, si l'application en a un, le « Consumer Secret ».")}</li>
-        </ol>
-      );
-    case "pipedrive":
-      return (
-        <ol className="list-decimal space-y-1 pl-5">
-          <li>
-            {t("Sur")} <Lien href="https://developers.pipedrive.com">developers.pipedrive.com</Lien>
-            {t(" (Developer Hub) : « Create an app », de type « Private app ».")}
-          </li>
-          <li>{t("« Basic info » : un nom, et en « OAuth Callback URL » l'adresse de retour ci-dessous, à l'identique.")}</li>
-          <li>{t("« OAuth & access scopes » : Deals et Contacts en « Read only », ou en « Full access » pour ajouter des notes (cochez alors la case plus bas). Recopiez le « Client ID » et le « Client secret ».")}</li>
-        </ol>
-      );
-    case "zendesk":
-      return (
-        <ol className="list-decimal space-y-1 pl-5">
-          <li>{t("Dans le Centre d'administration de Zendesk : Applications et intégrations, API, Clients OAuth, « Ajouter un client OAuth ».")}</li>
-          <li>{t("Type de client : « Confidentiel ». URL de redirection : l'adresse de retour ci-dessous, à l'identique.")}</li>
-          <li>{t("Recopiez l'identifiant et le secret (Zendesk ne montre le secret qu'une fois), et indiquez le sous-domaine de votre compte.")}</li>
-        </ol>
-      );
-  }
-}
+/*
+ * Comment créer la clé ou l'application, service par service :
+ * lib/guidesApplications.ts depuis le 28/09/2026 (bouton vers la page exacte de
+ * la console, étapes dans son ordre, adresse de retour dans l'étape où on la
+ * colle, erreurs du service expliquées), affiché par GuideApplication.tsx.
+ */
 
 /** Ce que permet la connexion, et ce qui demande un examen du service. */
 function Portee({ id }: { id: IdCommerce }) {
@@ -294,6 +236,8 @@ export function ConnecteurCommerce({ id, onChange }: { id: IdCommerce; onChange?
     );
   const enregistrer = (valeurs: Parameters<typeof enregistrerCommerce>[1]) => agir(() => enregistrerCommerce(id, valeurs), vider);
   const oauth = etat.mode === "oauth";
+  // La boutique WooCommerce ou le sous-domaine Zendesk saisis : le bouton mène alors droit à leur console.
+  const guide = guideApplication(id, { retour: etat.retour, adresse: champs.adresse.trim() || etat.application.adresse || "" });
 
   /** Le formulaire de l'administrateur : une clé, des identifiants, ou l'application puis l'accord. */
   let formulaire: ReactNode;
@@ -335,10 +279,10 @@ export function ConnecteurCommerce({ id, onChange }: { id: IdCommerce; onChange?
         <Field label={t("Boutique Shopify")}>
           <Input {...champ("adresse")} placeholder="ma-boutique.myshopify.com" />
         </Field>
-        <Field label={tf("Identifiant de l'application {0}", etat.nom)}>
+        <Field label={tf("Identifiant de l'application {0}", etat.nom)} hint={guide?.champs?.identifiant}>
           <Input {...champ("clientId")} />
         </Field>
-        <Field label={t("Secret de l'application")} hint={t("Gardé chiffré sur l'instance, il n'en ressort jamais.")}>
+        <Field label={t("Secret de l'application")} hint={`${guide?.champs?.secret ? `${guide.champs.secret} ` : ""}${t("Gardé chiffré sur l'instance, il n'en ressort jamais.")}`}>
           <Input type="password" {...champ("secret")} />
         </Field>
         <div className="flex justify-end">
@@ -356,10 +300,10 @@ export function ConnecteurCommerce({ id, onChange }: { id: IdCommerce; onChange?
             <Input {...champ("adresse")} placeholder="societe.zendesk.com" />
           </Field>
         )}
-        <Field label={tf("Identifiant de l'application {0}", etat.nom)}>
+        <Field label={tf("Identifiant de l'application {0}", etat.nom)} hint={guide?.champs?.identifiant}>
           <Input {...champ("clientId")} />
         </Field>
-        <Field label={id === "salesforce" ? t("Secret de l'application, s'il y en a un") : t("Secret de l'application")} hint={t("Gardé chiffré sur l'instance, il n'en ressort jamais.")}>
+        <Field label={id === "salesforce" ? t("Secret de l'application, s'il y en a un") : t("Secret de l'application")} hint={`${guide?.champs?.secret ? `${guide.champs.secret} ` : ""}${t("Gardé chiffré sur l'instance, il n'en ressort jamais.")}`}>
           <Input type="password" {...champ("secret")} />
         </Field>
         {id === "salesforce" && (
@@ -427,21 +371,20 @@ export function ConnecteurCommerce({ id, onChange }: { id: IdCommerce; onChange?
           {tf("{0} n'accepte plus l'accès enregistré (révoqué, expiré, ou application changée). Reconnectez-vous.", etat.nom)}
         </InfoBox>
       )}
-      <InfoBox leading={<KeyRound size={15} strokeWidth={1.75} />}>
-        <div className="space-y-2 [overflow-wrap:anywhere]">
-          <p className="font-medium">{oauth || id === "shopify" ? t("Préparer l'application, une fois pour toute l'instance") : t("Créer la clé, une fois pour toute l'instance")}</p>
-          <Guide id={id} />
+      {guide && (
+        <GuideApplication
+          guide={guide}
+          retour={oauth ? etat.retour : undefined}
+          noteRetour={t("C'est l'adresse par laquelle ce navigateur atteint l'instance. Si le fournisseur exige https, ouvrez l'instance par une adresse en https.")}
+          titre={oauth || id === "shopify" ? t("Préparer l'application, une fois pour toute l'instance") : t("Créer la clé, une fois pour toute l'instance")}
+        />
+      )}
+      <InfoBox tone="muted">
+        <div className="space-y-1 [overflow-wrap:anywhere]">
           <p className="font-medium">{t("Ce que permet la connexion")}</p>
           <Portee id={id} />
-          <p className="text-xs">{t("Les libellés des consoles changent parfois : cherchez l'équivalent.")}</p>
         </div>
       </InfoBox>
-      {oauth && (
-        <div className="space-y-1">
-          <p className="text-sm font-medium text-foreground">{t("Adresse de retour à déclarer chez le fournisseur")}</p>
-          <ACopier valeur={etat.retour} libelle={t("l'adresse de retour")} note={t("C'est l'adresse par laquelle ce navigateur atteint l'instance. Si le fournisseur exige https, ouvrez l'instance par une adresse en https.")} />
-        </div>
-      )}
       {!admin ? (
         <InfoBox tone="warning" leading={<ShieldAlert size={15} strokeWidth={1.75} />}>
           {tf("Seul l'administrateur de l'instance peut brancher {0} : ce service agit au nom de toute l'organisation. Transmettez-lui ces étapes.", etat.nom)}

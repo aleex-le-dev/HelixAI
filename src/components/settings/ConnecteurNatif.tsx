@@ -18,14 +18,15 @@ import { FormulaireClientGoogle } from "@/components/settings/ClientGoogle";
 import { Button } from "@/components/ui/Button";
 import { Field, Input } from "@/components/ui/Field";
 import { InfoBox } from "@/components/ui/InfoBox";
-import { ACopier } from "@/components/ui/ACopier";
 import { LogoMarqueGrand } from "@/components/settings/TuileService";
-import { estNatifProjet, GuideProjet, libelleChoixProjet, pourquoiApplicationProjet, revueProjet } from "@/components/settings/ConnecteurProjets";
+import { estNatifProjet, libelleChoixProjet, pourquoiApplicationProjet, revueProjet } from "@/components/settings/ConnecteurProjets";
+import { GuideApplication } from "@/components/settings/GuideApplication";
+import { activerApisGoogle, API_GOOGLE, guideApplication, type ServiceGoogle } from "@/lib/guidesApplications";
 import { branding } from "@/config/branding";
 import { formaterDate } from "@/lib/formats";
 import { t, tf } from "@/lib/i18n";
 // Google Docs, Google Forms, Dropbox (28/09/2026) : leurs textes vivent à part.
-import { GuideDropbox, libelleChoixDocuments, revueDocuments } from "@/components/settings/ConnecteurNatifDocuments";
+import { libelleChoixDocuments, revueDocuments } from "@/components/settings/ConnecteurNatifDocuments";
 
 /**
  * Panneau d'un service branché nativement (gateway/src/oauthNatif.ts) :
@@ -39,7 +40,8 @@ import { GuideDropbox, libelleChoixDocuments, revueDocuments } from "@/component
  * libellés changent, et l'écran le dit.
  */
 
-const API_GOOGLE: Partial<Record<IdNatif, string>> = { sheets: "Google Sheets API", slides: "Google Slides API", youtube: "YouTube Data API v3", docs: "Google Docs API", forms: "Google Forms API" };
+/** Les services Google d'ici, et l'API que chacun demande d'activer (lib/guidesApplications.ts). */
+const SERVICE_GOOGLE: Partial<Record<IdNatif, ServiceGoogle>> = { sheets: "sheets", slides: "slides", youtube: "youtube", docs: "docs", forms: "forms" };
 
 function Lien({ href, children }: { href: string; children: ReactNode }) {
   return (
@@ -69,93 +71,15 @@ function LogoYouTube({ nom }: { nom: string }) {
   return <LogoMarqueGrand marque="youtube" hauteur={100} lien="https://www.youtube.com/" libelle={tf("Ouvrir {0}", nom)} />;
 }
 
-/**
- * Comment créer l'application, service par service.
- *
- * Revérifié le 28/09/2026 : Meta ne fait plus choisir un « type » d'app
- * (« Entreprise ») mais des cas d'usage (https://developers.facebook.com/docs/development/create-an-app) ;
+/*
+ * Comment créer l'application, service par service : lib/guidesApplications.ts
+ * depuis le 28/09/2026 (boutons vers la page exacte de la console, étapes dans
+ * son ordre, adresse de retour dans l'étape où on la colle, erreurs du
+ * fournisseur expliquées), affiché par GuideApplication.tsx. Meta ne fait plus
+ * choisir un « type » d'app mais des cas d'usage (https://developers.facebook.com/docs/development/create-an-app) :
  * les étapes de Facebook et d'Instagram les nomment, telles que la console les
  * affiche, en anglais.
  */
-function Guide({ id }: { id: IdNatif }) {
-  // Brevo et Mailchimp (28/09/2026) : leurs textes sont dans ConnecteurProjets.tsx.
-  if (estNatifProjet(id)) return <GuideProjet id={id} />;
-  switch (id) {
-    case "sheets":
-    case "slides":
-    case "youtube":
-    case "docs":
-    case "forms":
-      return (
-        <p className="text-sm text-muted-foreground">
-          {tf("Ce service utilise l'application Google de l'instance, la même que Drive et Agenda. Si elle existe déjà, il suffit d'activer « {0} » dans le même projet de la console Google Cloud (« API et services », « Bibliothèque »).", API_GOOGLE[id] ?? "")}
-        </p>
-      );
-    case "linkedin":
-      return (
-        <ol className="list-decimal space-y-1 pl-5">
-          <li>
-            {t("Sur")} <Lien href="https://www.linkedin.com/developers/apps">linkedin.com/developers/apps</Lien>
-            {t(", « Create app » : un nom, la page LinkedIn de votre entreprise (LinkedIn l'exige) et un logo.")}
-          </li>
-          <li>{t("Onglet « Products » : ajoutez « Sign In with LinkedIn using OpenID Connect » et « Share on LinkedIn ». Ces deux-là s'ajoutent tout de suite, sans examen.")}</li>
-          <li>{t("Onglet « Auth » : dans « Authorized redirect URLs », ajoutez l'adresse de retour ci-dessous, à l'identique. Recopiez ensuite le « Client ID » et le « Primary Client Secret ».")}</li>
-        </ol>
-      );
-    case "facebook":
-      return (
-        <ol className="list-decimal space-y-1 pl-5">
-          <li>
-            {t("Sur")} <Lien href="https://developers.facebook.com/apps">developers.facebook.com/apps</Lien>
-            {t(", « Créer une app » : choisissez le cas d'usage « Manage everything on your Page » (gérer tout sur votre Page). Meta ne demande plus de type d'app : il propose des cas d'usage, qu'on ne peut plus retirer ensuite.")}
-          </li>
-          <li>{t("Dans les paramètres de connexion de l'app (« Facebook Login for Business »), « URI de redirection OAuth valides » : l'adresse de retour ci-dessous, à l'identique.")}</li>
-          <li>{t("« Paramètres de l'app », « Général » : recopiez l'« ID de l'app » et la « Clé secrète ».")}</li>
-          <li>{t("La personne qui se connecte doit avoir un rôle dans l'application (« Rôles de l'app ») et gérer la Page.")}</li>
-        </ol>
-      );
-    case "instagram":
-      return (
-        <ol className="list-decimal space-y-1 pl-5">
-          <li>{t("Le compte Instagram doit être professionnel (Entreprise ou Créateur), dans les réglages de l'application Instagram.")}</li>
-          <li>
-            {t("Sur")} <Lien href="https://developers.facebook.com/apps">developers.facebook.com/apps</Lien>
-            {t(", créez une app avec le cas d'usage « Manage messaging and content on Instagram », puis ouvrez « API setup with Instagram login ». Recopiez l'« ID de l'app Instagram » et sa « Clé secrète » : ce ne sont pas ceux de Facebook.")}
-          </li>
-          <li>{t("« Configurer la connexion professionnelle Instagram » : adresse de redirection, l'adresse de retour ci-dessous, à l'identique.")}</li>
-          <li>{t("« Rôles de l'app » : ajoutez le compte Instagram comme testeur, puis acceptez l'invitation depuis Instagram.")}</li>
-        </ol>
-      );
-    case "tiktok":
-      return (
-        <ol className="list-decimal space-y-1 pl-5">
-          <li>
-            {t("Sur")} <Lien href="https://developers.tiktok.com/apps">developers.tiktok.com</Lien>
-            {t(", « Manage apps », « Connect an app ». Plateforme : « Desktop ».")}
-          </li>
-          <li>{t("Ajoutez « Login Kit », avec l'adresse de retour ci-dessous, et, pour publier, « Content Posting API » avec « Direct Post ».")}</li>
-          <li>{t("Portées à cocher : user.info.basic, user.info.stats, video.list, et video.publish pour publier.")}</li>
-          <li>{t("Recopiez la « Client key » et le « Client secret ». Pour essayer sans examen, créez un « Sandbox » et ajoutez-y votre compte TikTok comme compte cible.")}</li>
-        </ol>
-      );
-    case "x":
-      // D'après https://docs.x.com/x-api/getting-started/getting-access et https://docs.x.com/fundamentals/developer-apps (28/09/2026).
-      return (
-        <ol className="list-decimal space-y-1 pl-5">
-          <li>
-            {t("Sur")} <Lien href="https://console.x.com">console.x.com</Lien>
-            {t(", connectez-vous avec le compte X de votre organisation, acceptez l'accord des développeurs, puis créez une application (« New App ») : un nom, une description, l'usage prévu.")}
-          </li>
-          <li>{t("Achetez des crédits dans la même console : l'API de X se paie à l'usage (voir plus bas).")}</li>
-          <li>{t("Dans les réglages d'authentification de l'application, activez OAuth 2.0. Type d'application : « Web App » (elle a un secret) ou « Native App » (sans secret). Si la console demande les droits de l'application, choisissez « Read and write » pour pouvoir publier.")}</li>
-          <li>{t("« Callback URI » : l'adresse de retour ci-dessous, à l'identique. X refuse « localhost » : l'adresse montrée commence donc par 127.0.0.1.")}</li>
-          <li>{t("Recopiez le « Client ID » et, pour une « Web App », le « Client Secret ». Branchez de préférence le compte qui a créé l'application : X facture moins cher la lecture de ses propres posts.")}</li>
-        </ol>
-      );
-    case "dropbox":
-      return <GuideDropbox />;
-  }
-}
 
 /** Ce qui marche sans examen du fournisseur, et ce qui en demande un. */
 function Revue({ id }: { id: IdNatif }) {
@@ -337,9 +261,11 @@ export function ConnecteurNatif({ id, onChange }: { id: IdNatif; onChange?: () =
   // X accepte une application « publique », sans secret (oauthNatif.ts, `secretFacultatif`).
   // Dropbox aussi : PKCE suffit, le secret est facultatif (natifs/documents.ts).
   const secretFacultatif = id === "x" || id === "dropbox";
+  const guide = etat.google ? null : guideApplication(id, { retour: etat.retour });
+  const serviceGoogle = SERVICE_GOOGLE[id];
 
   const panneau = (
-    <Card className="space-y-3">
+    <Card className="space-y-3 max-sm:border-0 max-sm:bg-transparent max-sm:p-0">
       <div>
         <p className="font-medium text-foreground">{tf("{0} : se connecter", etat.nom)}</p>
         <p className="text-sm text-muted-foreground">
@@ -365,33 +291,55 @@ export function ConnecteurNatif({ id, onChange }: { id: IdNatif; onChange?: () =
           {tf("{0} n'accepte plus l'accès enregistré (révoqué, expiré, ou application changée). Reconnectez-vous.", etat.nom)}
         </InfoBox>
       )}
-      <InfoBox leading={<KeyRound size={15} strokeWidth={1.75} />}>
-        {/* 375 px : une adresse ou une portée d'un seul tenant (dropbox.com/developers/apps, account_info.read) sortait du cadre ; elle se coupe. */}
-        <div className="space-y-2 [overflow-wrap:anywhere]">
-          <p className="font-medium">{t("Préparer l'application, une fois pour toute l'instance")}</p>
-          <Guide id={id} />
+      {etat.google ? (
+        client?.disponible && serviceGoogle ? (
+          /*
+           * L'application Google de l'instance existe déjà (28/09/2026, point 6
+           * de la demande de Medhi) : on le dit, pour que personne ne crée une
+           * application de plus, et l'on donne l'activation de l'API de ce
+           * service, au cas où elle ne l'aurait pas été avec les autres.
+           */
+          <InfoBox leading={<KeyRound size={15} strokeWidth={1.75} />}>
+            <div className="space-y-2 [overflow-wrap:anywhere]">
+              <p className="font-medium">{t("L'application Google de l'instance sert aussi ici")}</p>
+              <p>{tf("Rien à créer : c'est la même application que pour Gmail, Agenda, Drive, Sheets, Slides, Docs, Forms et YouTube. Il faut seulement que « {0} » soit activée dans son projet, ce que fait le bouton d'activation des API quand il a servi.", API_GOOGLE[serviceGoogle].nom)}</p>
+              <a
+                href={activerApisGoogle([serviceGoogle])}
+                target="_blank"
+                rel="noreferrer noopener"
+                className="inline-flex min-h-8 max-w-full items-center gap-1.5 rounded-xl border border-border bg-card px-3 py-1.5 text-sm font-medium text-foreground transition-colors [overflow-wrap:break-word] hover:bg-muted"
+              >
+                <ExternalLink size={14} strokeWidth={1.75} className="shrink-0" />
+                <span className="min-w-0">{tf("Ouvrir l'activation de « {0} »", API_GOOGLE[serviceGoogle].nom)}</span>
+              </a>
+              <p className="text-xs">{t("Si Google répond « API has not been used in project… or it is disabled », c'est cette activation qui manque : faites-la, attendez quelques minutes, puis recommencez.")}</p>
+            </div>
+          </InfoBox>
+        ) : null
+      ) : guide ? (
+        <GuideApplication
+          guide={guide}
+          retour={etat.retour}
+          noteRetour={boucle ? t("Le port change à chaque connexion : déclarez-la avec l'astérisque.") : t("C'est l'adresse par laquelle ce navigateur atteint l'instance. Si le fournisseur exige https, ouvrez l'instance par une adresse en https.")}
+        />
+      ) : null}
+      <InfoBox tone="muted">
+        {/* 375 px : une portée d'un seul tenant (account_info.read) sortait du cadre ; elle se coupe. */}
+        <div className="space-y-1 [overflow-wrap:anywhere]">
           <p className="font-medium">{id === "x" ? t("Ce que permet chaque offre de X") : estNatifProjet(id) ? t("Ce que permet ce branchement") : t("Ce qui demande un examen du fournisseur")}</p>
           <Revue id={id} />
-          <p className="text-xs">{t("Les libellés des consoles changent parfois : cherchez l'équivalent.")}</p>
         </div>
       </InfoBox>
-
-      {!etat.google && (
-        <div className="space-y-1">
-          <p className="text-sm font-medium text-foreground">{t("Adresse de retour à déclarer chez le fournisseur")}</p>
-          <ACopier valeur={etat.retour} libelle={t("l'adresse de retour")} note={boucle ? t("Le port change à chaque connexion : déclarez-la avec l'astérisque.") : t("C'est l'adresse par laquelle ce navigateur atteint l'instance. Si le fournisseur exige https, ouvrez l'instance par une adresse en https.")} />
-        </div>
-      )}
 
       {!admin ? (
         <InfoBox tone="warning" leading={<ShieldAlert size={15} strokeWidth={1.75} />}>
           {tf("Seul l'administrateur de l'instance peut brancher {0} : ce service agit au nom de toute l'organisation. Transmettez-lui ces étapes.", etat.nom)}
         </InfoBox>
       ) : etat.google && !client?.disponible ? (
-        <FormulaireClientGoogle etat={client} api={API_GOOGLE[id] ?? ""} onEnregistre={() => void relire()} />
+        <FormulaireClientGoogle etat={client} api={serviceGoogle ? API_GOOGLE[serviceGoogle].nom : ""} onEnregistre={() => void relire()} />
       ) : !etat.application.disponible ? (
         <>
-          <Field label={tf("Identifiant de l'application {0}", etat.nom)}>
+          <Field label={tf("Identifiant de l'application {0}", etat.nom)} hint={guide?.champs?.identifiant}>
             <Input value={identifiant} onChange={(e) => setIdentifiant(e.target.value)} autoComplete="off" spellCheck={false} />
           </Field>
           <Field
@@ -401,7 +349,7 @@ export function ConnecteurNatif({ id, onChange }: { id: IdNatif; onChange?: () =
                 ? t("Vous pouvez le laisser vide : la connexion à Dropbox est protégée sans lui (PKCE). S'il est donné, il est gardé chiffré sur l'instance et n'en ressort jamais.")
                 : secretFacultatif
                   ? t("Laissez vide pour une « Native App » : X la protège sans secret. S'il est donné, il est gardé chiffré sur l'instance et n'en ressort jamais.")
-                  : t("Gardé chiffré sur l'instance, il n'en ressort jamais.")
+                  : `${guide?.champs?.secret ? `${guide.champs.secret} ` : ""}${t("Gardé chiffré sur l'instance, il n'en ressort jamais.")}`
             }
           >
             <Input type="password" value={secret} onChange={(e) => setSecret(e.target.value)} autoComplete="off" spellCheck={false} />

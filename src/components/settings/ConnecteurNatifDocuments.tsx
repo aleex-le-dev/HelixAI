@@ -1,4 +1,3 @@
-import { ExternalLink } from "lucide-react";
 import type { IdNatif } from "@/lib/natifs";
 import { t } from "@/lib/i18n";
 
@@ -13,23 +12,7 @@ import { t } from "@/lib/i18n";
  * le panneau le dit déjà.
  */
 
-/** Préparer l'application Dropbox, une fois pour l'instance. */
-export function GuideDropbox() {
-  return (
-    <ol className="list-decimal space-y-1 pl-5">
-      <li>
-        {t("Sur")}{" "}
-        <a className="underline" href="https://www.dropbox.com/developers/apps" target="_blank" rel="noreferrer noopener">
-          dropbox.com/developers/apps <ExternalLink size={11} className="inline" />
-        </a>
-        {t(", « Create app » : « Scoped access », puis « App folder » (un seul dossier, dans Applications) ou « Full Dropbox » (tout le Dropbox du compte), et un nom.")}
-      </li>
-      <li>{t("Onglet « Permissions » : cochez files.metadata.read et files.content.read, et files.content.write pour envoyer des fichiers (account_info.read l'est déjà), puis « Submit ».")}</li>
-      <li>{t("Onglet « Settings », rubrique « OAuth 2 » : dans « Redirect URIs », ajoutez l'adresse de retour ci-dessous, à l'identique. Laissez « Allow public clients » sur « Allow » si vous ne collez pas le secret.")}</li>
-      <li>{t("Recopiez l'« App key » et, si vous voulez, l'« App secret ».")}</li>
-    </ol>
-  );
-}
+// Préparer l'application Dropbox : lib/guidesApplications.ts (`guideDropbox`), depuis le 28/09/2026.
 
 /** Ce qui demande un examen du fournisseur. Traduit au rendu : la langue n'est pas connue au chargement du module. */
 export function revueDocuments(): Record<"docs" | "forms" | "dropbox", string> {

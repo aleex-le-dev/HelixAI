@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
-import { Check, ExternalLink, KeyRound, Link2, Loader2, Lock, Pencil, ShieldAlert, Trash2 } from "lucide-react";
+import { Check, ExternalLink, Link2, Loader2, Lock, Pencil, ShieldAlert, Trash2 } from "lucide-react";
 import type { CleMarquePetite } from "@/components/ui/marques";
 import {
   collerAdresseNatif,
@@ -17,7 +17,8 @@ import type { ServiceMaison } from "@/components/settings/Connecteurs";
 import { Button } from "@/components/ui/Button";
 import { Field, Input } from "@/components/ui/Field";
 import { InfoBox } from "@/components/ui/InfoBox";
-import { ACopier } from "@/components/ui/ACopier";
+import { GuideApplication } from "@/components/settings/GuideApplication";
+import { guideMicrosoft } from "@/lib/guidesApplications";
 import { branding } from "@/config/branding";
 import { formaterDate } from "@/lib/formats";
 import { t, tf } from "@/lib/i18n";
@@ -262,6 +263,7 @@ export function ConnecteurMicrosoft({ service, onChange }: { service: ServiceMic
   // Ce qu'il faut déclarer dans « Autorisations de l'API » : exactement ce que la connexion demandera.
   const portees = [...new Set([...etat.lecture.filter((p) => p !== "offline_access"), ...cochees.flatMap((c) => [...c.portees, ...(avecEcriture ? (c.ecriture ?? []) : [])])])];
   const consentement = cochees.some((c) => c.admin);
+  const guide = guideMicrosoft(etat.retour, portees);
   const lancer = () =>
     agir(
       () => connecterNatif("microsoft", choix),
@@ -287,32 +289,21 @@ export function ConnecteurMicrosoft({ service, onChange }: { service: ServiceMic
         </InfoBox>
       )}
 
-      <InfoBox className="max-sm:px-2" leading={<KeyRound size={15} strokeWidth={1.75} />}>
-        <div className="space-y-2">
-          <p className="font-medium">{t("Préparer l'application, une fois pour toute l'instance")}</p>
-          <ol className="list-decimal space-y-1 pl-4 sm:pl-5">
-            <li>
-              {t("Sur")} <Lien href="https://entra.microsoft.com">entra.microsoft.com</Lien>
-              {t(", avec un compte qui peut créer des applications : « Applications », « Inscriptions d'applications », « Nouvelle inscription ». Un nom au choix ; « Comptes dans cet annuaire d'organisation uniquement ».")}
-            </li>
-            <li>{t("« URI de redirection » : plateforme « Client public/natif (mobile et bureau) », et l'adresse de retour ci-dessous, à l'identique. Vous pouvez aussi choisir la plateforme « Web » avec la même adresse : l'application aura alors un secret.")}</li>
-            <li>{t("Sur la page « Vue d'ensemble » de l'application, recopiez l'« ID d'application (client) » et l'« ID de l'annuaire (locataire) ».")}</li>
-            <li>{t("Plateforme « Web » seulement : « Certificats et secrets », « Nouveau secret client », puis recopiez sa « Valeur » (pas son identifiant). Pour « Client public », pas de secret.")}</li>
-            {/*
-              La liste des permissions n'apparaît qu'une fois l'application enregistrée, avec les
-              cases : l'ancienne phrase renvoyait à une liste « plus bas » absente du premier écran (28/09/2026).
-            */}
-            <li>{t("« Autorisations de l'API », « Ajouter une autorisation », « Microsoft Graph », « Autorisations déléguées » : ajoutez exactement les permissions que cet écran liste une fois l'application enregistrée, selon les services que vous cochez. Rien de plus : une permission en trop fait refuser la connexion.")}</li>
-            <li>{t("Si la liste contient SharePoint ou Teams, ou si votre organisation interdit aux personnes de consentir elles-mêmes : un administrateur de l'annuaire clique sur « Accorder un consentement d'administrateur pour » votre organisation.")}</li>
-          </ol>
-          <p className="text-xs">{t("Les libellés du portail changent parfois : cherchez l'équivalent.")}</p>
-        </div>
-      </InfoBox>
-
-      <div className="space-y-1">
-        <p className="text-sm font-medium text-foreground">{t("Adresse de retour à déclarer dans l'application")}</p>
-        <ACopier valeur={etat.retour} libelle={t("l'adresse de retour")} note={t("Microsoft ignore le port de « localhost » : l'adresse se déclare telle quelle, sans port.")} />
-      </div>
+      {/*
+       * 28/09/2026 (Medhi : « tout doit être simple, pour tout ») : un bouton vers les
+       * inscriptions d'applications, les étapes dans l'ordre du portail Entra (libellés
+       * de 2026 : « Single tenant only », « Add Redirect URI »), l'adresse de retour dans
+       * l'étape où on la colle, les permissions copiables, et les codes AADSTS expliqués
+       * (lib/guidesApplications.ts, `guideMicrosoft`, sources citées).
+       */}
+      <GuideApplication
+        guide={{
+          ...guide,
+          etapes: guide.etapes.map((e) => (e.portees ? { ...e, notePortees: etat.application.disponible ? t("Selon les services cochés plus bas.") : t("Pour le service de cette ligne ; la liste suit les cases cochées une fois l'application enregistrée.") } : e)),
+        }}
+        retour={etat.retour}
+        noteRetour={t("Microsoft ignore le port de « localhost » : l'adresse se déclare telle quelle, sans port.")}
+      />
 
       {partage}
 
@@ -322,13 +313,13 @@ export function ConnecteurMicrosoft({ service, onChange }: { service: ServiceMic
         </InfoBox>
       ) : !etat.application.disponible ? (
         <>
-          <Field label={t("ID d'application (client)")}>
+          <Field label={t("ID d'application (client)")} hint={guide.champs?.identifiant}>
             <Input value={identifiant} onChange={(e) => setIdentifiant(e.target.value)} autoComplete="off" spellCheck={false} placeholder="00000000-0000-0000-0000-000000000000" />
           </Field>
-          <Field label={t("ID de l'annuaire (locataire)")} hint={t("Ou un domaine de l'organisation, ou « common » si l'application accepte plusieurs annuaires.")}>
+          <Field label={t("ID de l'annuaire (locataire)")} hint={guide.champs?.annuaire}>
             <Input value={annuaire} onChange={(e) => setAnnuaire(e.target.value)} autoComplete="off" spellCheck={false} placeholder="00000000-0000-0000-0000-000000000000" />
           </Field>
-          <Field label={t("Secret de l'application, pour la plateforme « Web » seulement")} hint={t("Laissez vide pour un « Client public » : Microsoft le protège sans secret. S'il est donné, il est gardé chiffré sur l'instance et n'en ressort jamais.")}>
+          <Field label={t("Secret de l'application, pour la plateforme « Web » seulement")} hint={t("Laissez vide pour « Mobile and desktop applications » : Microsoft la protège sans secret. Pour « Web » : « Certificates & secrets », « New client secret », sa « Value ». Gardé chiffré sur l'instance, il n'en ressort jamais.")}>
             <Input type="password" value={secret} onChange={(e) => setSecret(e.target.value)} autoComplete="off" spellCheck={false} />
           </Field>
           <div className="flex justify-end">

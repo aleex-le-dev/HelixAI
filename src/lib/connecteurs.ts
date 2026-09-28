@@ -74,6 +74,14 @@ export interface EtatConnecteurs {
    * Absent d'une instance plus ancienne.
    */
   issues?: Record<string, { ok: boolean; message: string; quand: string }>;
+  /**
+   * L'adresse de retour que « Se connecter » enverra au service (28/09/2026),
+   * montrée avant le premier essai pour les services à application déclarée.
+   * Absente d'une instance plus ancienne.
+   */
+  retour?: string;
+  /** La même, pour un service qui la veut autrement (Zoom : 127.0.0.1 plutôt que « localhost »). */
+  retours?: Record<string, string>;
 }
 
 export interface Resultat {

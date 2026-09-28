@@ -3357,6 +3357,30 @@ des 26 et 27/09 plus bas, qui gardent le détail. Tout ce qui suit est écrit et
 contre des doublures (faux moteur, faux fournisseurs, faux `codex`, faux OpenCode, Windows
 simulé) ; rien de cela n'a tourné sur la vraie machine.*
 
+**Parcours à l'écran du 28/09/2026 (2026.928.6)**, interface en serveur de développement
+contre une instance jetable et un faux modèle compatible OpenAI (flux, réflexion, appels
+d'outils, 429, 500, coupure), en français, anglais et japonais, clair et sombre, 1280 et
+375 px. Vu marcher : mise en route (poste autonome, premier compte), connexion, mot de passe
+refusé, Chat (flux, réflexion, arrêt, erreurs dites, outils avec carte d'accord, pièces PDF,
+image et texte, recherche web activée sans envoi, choix du modèle, Comparer, renommer,
+recherche), Cowork (accord refusé), Code (carte d'accord d'une commande, faux OpenCode),
+Tâches (colonne repliable, compte rendu : agrandir, copier, télécharger intercepté), agents
+(création avec son modèle, changement de modèle), Fichiers (import, recherche dans le
+contenu d'un PDF), Réunions (écran seul), Réglages (langue, thème, usage), deux onglets,
+rechargement pendant une réponse, passerelle coupée puis revenue. Corrigé ce jour-là :
+synchronisation (deux envois simultanés d'une collection, relecture pendant une écriture,
+coupure derrière un relais, renommage perdu après rechargement), question perdue au
+rechargement, « Ajouter un compte » sans issue, puces coupées à 375 px, tableau de
+Comparer, textes hors traduction, aide des Chats. **Pas essayé** : avec un vrai modèle, dans
+l'application de bureau (où le jeton d'instance reste dans l'adresse ; en serveur de
+développement, un rechargement à chaud le perd et déconnecte, sans conséquence hors
+développement), le parcours de l'invité sur un second poste (l'instance d'essai n'était pas
+ouverte au réseau ; le code a été créé directement dans ses données), un vrai envoi à
+DuckDuckGo, la dictée et la transcription (Whisper non installé), un téléchargement réel.
+En chinois, seul le taux de traduction a été relu, pas l'écran. Le Chat n'a ni « relancer »
+ni « modifier » une question envoyée, et pas d'export d'un Chat seul (l'export complet est
+dans Confidentialité) : fonctions absentes, pas des pannes.
+
 **PC Windows (processeur seul, 16 Go, llmster 0.0.25)**
 1. **Mise à jour** : installer 2026.928.1. Un poste installé avant 2026.927.3 n'a pas la clé
    de l'éditeur dans son application : « Télécharger » une fois encore, puis « Installer

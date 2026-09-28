@@ -4870,3 +4870,138 @@ de GitLab ; Gmail et Outlook par OAuth (pas de faux IMAP dans l'essai) ; la vari
 d'Exa sur la version épinglée ; les panneaux de Meta avec « Facebook Login for Business » et `scope`
 au lieu de `config_id` ; l'écran en chinois et en japonais (vus en français et en anglais) et dans
 l'application empaquetée.
+## 45. Google Docs, Forms et Dropbox (28 septembre 2026)
+
+Trois connexions natives de plus, demandées par Medhi, faites sur la branche
+`connecteurs-documents` sur le modèle des §§ 40 à 43, avec leurs corrections déjà en place.
+Code : `gateway/src/natifs/documents.ts` (définitions, outils, essai et révocation de Dropbox),
+quelques ajouts courts aux registres communs (`oauthNatif.ts`, `outilsNatifs.ts`,
+`approbation.ts`, `connecteurs.ts`). Documentation officielle lue le 28/09/2026 et citée dans le
+code. Contrôles : `scripts/essai-documents.mjs` (85, faux serveurs OAuth et fausses API, faux
+modèle, aucune sortie) et `scripts/securite.mjs`, section 16 ter, qui le relance sous
+« documents : ». **Rien n'a été essayé contre les vrais services** : ni compte Google
+Workspace, ni application Dropbox.
+
+### 45.1 Ce qui est tenu
+
+- **Portées minimales.** Docs : `documents.readonly` ; écrire se coche (`documents`). Forms :
+  `forms.body.readonly` et `forms.responses.readonly`, rien d'autre, aucune écriture proposée.
+  Dropbox : `account_info.read`, `files.metadata.read`, `files.content.read` ; envoyer se coche
+  (`files.content.write`). Ni `drive`, ni `drive.readonly` (restreintes), ni suppression, partage
+  ou équipe chez Dropbox. La portée rendue est relue : en trop (essayé : `drive` chez Google,
+  `files.permanent.delete` chez Dropbox) ou en moins, l'accès est révoqué et rien n'est gardé.
+- **`state` et PKCE.** Comme au § 40 : `state` de 32 octets préfixé `natif.`, une fois, dix
+  minutes, comparé à durée constante ; un `state` inventé, allongé ou porteur d'une erreur ne
+  mène à rien et n'annule pas la demande en cours ; un retour rejoué ne vaut plus rien. PKCE S256
+  chez Google et chez Dropbox ; le vérificateur ne quitte pas l'instance.
+- **Adresse de retour.** Docs et Forms : la boucle locale, comme Sheets. Dropbox veut l'adresse
+  exacte (« even localhost must be listed »), sans joker de port : la route publique de
+  l'instance (`/helix/oauth/retour`), aiguillée par le préfixe du `state`.
+- **Application Dropbox publique ou confidentielle.** Sans secret, PKCE seul (`client_id` dans le
+  corps) ; avec secret, `client_secret` dans le corps, comme l'exemple de Dropbox. Le secret est
+  chiffré au repos, jamais rendu. L'« App key » doit avoir la forme relevée (minuscules et
+  chiffres).
+- **Hôtes.** `docs.googleapis.com`, `forms.googleapis.com`, `oauth2.googleapis.com` ;
+  `api.dropboxapi.com`, `content.dropboxapi.com`. `envoyer` refuse tout autre hôte avant toute
+  connexion (essayé : même `www.googleapis.com` pour Docs).
+- **Qui a le droit.** Lire l'état : une séance ; brancher, débrancher, enregistrer l'application :
+  l'administrateur (403 pour un collègue, essayé). Écrire (`docs__creer`, `docs__ajouter_texte`,
+  `dropbox__envoyer`) : l'administrateur seulement, vérifié au moment d'agir ; un collègue et un
+  appel sans personne sont refusés, rien ne part (essayé). Préfixes `docs`, `forms`, `dropbox`
+  réservés (`IDS_RESERVES`) ; hors des familles des employés OpenClaw et de l'agent de code.
+- **Carte d'accord.** Les trois écritures sont dans `ECRITURES_NATIVES`, donc `TOUJOURS_CONFIRMER` :
+  une carte à chaque appel, même au niveau « Tout approuver », qui ne vaut que pour lui, avec les
+  arguments entiers (essayé : 35 000 caractères montrés jusqu'au dernier ; au-delà de ce que la
+  carte peut montrer, refusé sans carte). La phrase dit le document, le texte, ou le fichier, le
+  dossier et qu'un fichier du même nom n'est jamais remplacé. Essayé dans un vrai Chat avec le faux
+  modèle : un appel qu'il fait lui-même pose la carte ; refusée, rien n'est écrit.
+- **Appel recopié.** Un document Google ou un fichier Dropbox lu qui contient
+  `<tool_call>{"name":"docs__ajouter_texte",…}` ou `dropbox__envoyer`, recopié par le modèle dans
+  sa réponse, n'est pas lancé (`appelsLus`, § 41.1) : aucune carte, rien écrit ni envoyé, la
+  citation reste du texte (essayé pour les deux).
+- **Limites.** Dix écritures par heure et par service pour l'instance, doublon refusé, vérifiés et
+  réservés d'un seul tenant (`sousGarde`) : trois envois simultanés du même fichier en font un,
+  douze envois ensemble n'en font pas plus de dix. Un 503 garde la place : le même texte ou le
+  même fichier n'est pas renvoyé (essayé pour Docs et Dropbox). Texte d'un document : 50 000
+  caractères par appel ; lecture rendue par morceaux de 15 000.
+- **Contenu écrit.** Le texte ajouté à un document perd les caractères de commande et ceux qui
+  renversent l'ordre d'affichage (U+202A à U+202E, U+2066 à U+2069), que la carte retire aussi
+  de ce qu'elle montre : le document reçoit ce que la carte a montré (l'écart du § 41.3 pour les
+  posts ne se reproduit pas ici). Rien n'efface : on crée un document, ou on insère à la fin du
+  corps (`endOfSegmentLocation`), dans un nouveau paragraphe.
+- **Fichiers.** Un envoi vers Dropbox vient du dossier de travail seulement, par
+  `fichierDuDossier` : chemin réel, zones protégées, extension jugée sur le chemin réel (documents,
+  images, sons, vidéos, ZIP ; ni script ni exécutable), `O_NOFOLLOW`, `O_NONBLOCK`, un seul nom,
+  50 Mo, octets lus sur le fichier ouvert (essayé : `/etc/hosts`, un lien vers lui, un lien dur,
+  un script, 51 Mo, un dossier, un tube nommé : refusés, rien n'est envoyé). Envoi en `add`, sans
+  renommage, `strict_conflict` : un fichier du même nom n'est jamais remplacé (409 dit
+  simplement). Le nom déposé est celui que la carte a montré. L'argument d'en-tête
+  `Dropbox-API-Arg` échappe tout ce qui n'est pas ASCII (essayé : « /Équipe/Résumé été.txt »).
+- **Lecture Dropbox.** Chemin donné par le modèle : dans le Dropbox connecté, sans caractère de
+  commande, `.` et `..` refusés. La métadonnée d'abord : un dossier, plus d'1 Mo, une extension
+  qui n'est pas du texte ne sont pas téléchargés ; puis le fichier est lu par son identifiant
+  (`id:…`), pas par son nom ; un contenu qui n'est pas de l'UTF-8 est refusé.
+- **Jetons.** Chiffrés au repos, liés à leur place ; jamais rendus par une route, au journal, dans
+  la sortie de la passerelle, sur le disque en clair, ni au modèle (essayé, comme au § 40).
+  Dropbox : jeton d'accès de quelques heures, renouvelé une fois sur un 401. Débrancher révoque :
+  Google `/revoke` ; Dropbox `/2/auth/token/revoke`, qui éteint aussi le jeton d'actualisation ;
+  un jeton d'accès expiré est d'abord renouvelé, puis révoqué (essayé).
+
+### 45.2 Limites des fournisseurs relevées (documentation du 28/09/2026)
+
+Docs : lectures 3 000 par minute par projet, 300 par personne ; écritures 600 et 60. Forms :
+lectures 975 et 390 ; lister les réponses (« coûteux ») 450 et 180 ; aucune limite par jour.
+Dropbox : aucun chiffre publié ; 429 `too_many_requests` avec `Retry-After`, ou
+`too_many_write_operations` ; envoi simple 150 Mio au plus (on s'en tient à 50 Mo) ; une
+application en développement se relie à 500 comptes au plus, et doit passer en « production »
+(examen) dans les deux semaines qui suivent le 50e.
+
+### 45.3 Soupçons, non démontrés
+
+- **Portée large de Docs.** `documents` ouvre tous les documents du compte à l'écriture : Google
+  n'a pas de portée plus étroite pour un document qu'on désigne (`drive.file` ne voit que ce que
+  l'application a créé ou ouvert par un sélecteur). La carte et la règle de l'administrateur
+  sont la protection ; brancher un compte dédié à l'organisation (guide).
+- **Réponses de formulaires.** Elles portent souvent des données personnelles (courriel du
+  répondant, réponses libres) et vont au modèle de tout collègue qui les demande, comme le Drive.
+  L'écran conseille un compte de l'organisation.
+- **Envoi Dropbox « Full Dropbox ».** Un dossier de destination peut être partagé avec des
+  personnes extérieures : envoyer y revient à publier. La carte nomme le dossier ; Helix ne sait
+  pas s'il est partagé.
+- **Révocation Google partagée.** Comme au § 41.3 : révoquer Docs ou Forms peut retirer tout
+  l'accès de l'application au compte, donc Drive, Agenda, Sheets s'ils sont branchés avec le même.
+- **Limites en mémoire.** Comme au § 41.3 : elles repartent de zéro au redémarrage.
+
+### 45.4 Pas essayé
+
+Les vrais services : l'écran de consentement de Google pour Docs et Forms, un document à
+onglets réel, les réponses d'un vrai formulaire (grilles, fichiers envoyés, notes d'un
+questionnaire) ; la console de Dropbox (libellés, forme de l'« App key », « Allow public
+clients »), la présence de `scope` dans la réponse de jetons, le renouvellement sans secret, un
+envoi réel, un conflit réel, `files.content.write` seul pour `files/upload`, la révocation.
+L'écran n'a été vu que dans une fenêtre Electron cachée, sur `vite`, contre une passerelle jetable et
+de faux fournisseurs : pas dans l'application empaquetée, pas en chinois.
+
+### 45.5 Vu à l'écran (28/09/2026)
+
+Paramètres, Connecteurs, dans une fenêtre Electron cachée (le navigateur intégré était plein des
+onglets d'autres sessions), sur `vite`, contre une passerelle jetable (`"chiffrement": "fichier"`,
+dossier de données temporaire, LM Studio et exo éteints, transport des connexions natives envoyé à un
+faux Google et un faux Dropbox, `window.open` neutralisé : aucune page de fournisseur ouverte). Parcours
+complet en français : saisir l'« App key », cocher l'envoi, « Se connecter à Dropbox », attente, retour
+du faux Dropbox, « Connecté : Équipe Essai » ; même chose pour Google Docs ; débrancher Dropbox (en
+japonais, sombre, 375 px), le panneau de connexion revient. Panneaux Forms et Dropbox en fr, en et ja,
+clair et sombre, 1440 et 375 px : textes traduits, aucun débordement horizontal de la page, aucune
+erreur de console. Deux défauts vus à 375 px et corrigés dans `ConnecteurNatif.tsx` (valent pour tous
+les services natifs) : l'identifiant de l'application Google et les adresses du guide
+(`dropbox.com/developers/apps`, `account_info.read`) sortaient du panneau (ils se coupent désormais) ;
+le libellé du bouton « Se connecter à … », replié sur deux lignes, était coupé par sa hauteur fixe (le
+bouton grandit). Reste, et n'est pas de cette branche : sous 400 px, la colonne des panneaux est très
+étroite (§ 43.3).
+
+Vu aussi, déjà là avant cette branche et pour tous les services natifs : le message de réussite rangé
+au retour du fournisseur (`issue`, affiché ensuite dans le panneau) est écrit dans la langue de la
+requête de retour, qui vient du navigateur sans `X-Helix-Langue`, donc en anglais : « Dropbox connected:
+… » sur un écran français. Pas corrigé ici (la page publique de retour et `index.ts` seraient à
+reprendre ensemble) ; piste : retenir la langue de qui lance la connexion dans la demande (`Flux`) et
+traiter le retour dans cette langue.

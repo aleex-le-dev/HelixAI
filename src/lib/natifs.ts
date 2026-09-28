@@ -8,7 +8,8 @@ import { t, tf } from "@/lib/i18n";
  * l'instance le garde chiffré.
  */
 
-export type IdNatif = "sheets" | "slides" | "youtube" | "linkedin" | "facebook" | "instagram" | "tiktok" | "x";
+// Google Docs, Google Forms et Dropbox depuis le 28/09/2026 (gateway/src/natifs/documents.ts).
+export type IdNatif = "sheets" | "slides" | "youtube" | "linkedin" | "facebook" | "instagram" | "tiktok" | "x" | "docs" | "forms" | "dropbox";
 export type IdChoix = "ecriture" | "page";
 
 export interface EtatNatif {

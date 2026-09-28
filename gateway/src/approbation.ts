@@ -224,6 +224,13 @@ export const LECTURES_NATIVES = new Set([
   // X (ex-Twitter), ajouté le 28/09/2026 sur le même modèle (SECURITE.md § 42).
   "x__profil",
   "x__publications",
+  // Google Docs, Google Forms, Dropbox (natifs/documents.ts, 28/09/2026, SECURITE.md § 45).
+  "docs__lire",
+  "forms__lire",
+  "forms__reponses",
+  "dropbox__lister",
+  "dropbox__chercher",
+  "dropbox__lire",
 ]);
 export const ECRITURES_NATIVES = new Set([
   "sheets__ecrire",
@@ -233,6 +240,9 @@ export const ECRITURES_NATIVES = new Set([
   "instagram__publier",
   "tiktok__publier_video",
   "x__publier",
+  "docs__creer",
+  "docs__ajouter_texte",
+  "dropbox__envoyer",
 ]);
 
 const TOUJOURS_CONFIRMER = new Set(["agenda__supprimer", "taches__programmer", ...ECRITURES_NATIVES]);
@@ -562,6 +572,22 @@ function resumeNatif(outil: string, args: Record<string, unknown>): string | nul
       const lien = typeof args.texte === "string" && /https?:\/\/|www\./i.test(args.texte);
       return `publier sur X, au nom du compte connecté, le post${extrait(args.texte)}${typeof args.image === "string" && args.image ? `, avec l'image ${abreger(args.image).slice(0, 200)}` : ""}${lien ? " (il contient une adresse, que X facture plus cher)" : ""} (une publication ne se reprend pas)`;
     }
+    // Google Docs, Google Forms, Dropbox (natifs/documents.ts) : la carte dit où, et le détail montre le texte entier.
+    case "docs__lire":
+      return "lire un document Google Docs";
+    case "docs__creer":
+      return `créer dans le Google Docs du compte connecté le document « ${typeof args.titre === "string" ? args.titre.trim().slice(0, 150) : "?"} »${extrait(args.texte) ? `, avec le texte${extrait(args.texte)}` : ", vide"}`;
+    case "docs__ajouter_texte":
+      return `ajouter à la fin du document Google Docs ${typeof args.document === "string" ? args.document.trim().slice(0, 200) : "?"} le texte${extrait(args.texte)} (le reste du document n'est pas touché)`;
+    case "forms__lire":
+    case "forms__reponses":
+      return "lire un formulaire Google Forms et ses réponses";
+    case "dropbox__lister":
+    case "dropbox__chercher":
+    case "dropbox__lire":
+      return "consulter le Dropbox connecté";
+    case "dropbox__envoyer":
+      return `envoyer vers le Dropbox connecté le fichier ${typeof args.fichier === "string" ? abreger(args.fichier).slice(0, 200) : "?"} du dossier de travail, dans le dossier ${typeof args.dossier === "string" && args.dossier.trim() ? args.dossier.trim().slice(0, 200) : "racine"} (un fichier du même nom n'est jamais remplacé)`;
   }
   return null;
 }

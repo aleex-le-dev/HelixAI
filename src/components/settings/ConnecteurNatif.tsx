@@ -22,6 +22,8 @@ import { ACopier } from "@/components/ui/ACopier";
 import { LogoMarqueGrand } from "@/components/settings/TuileService";
 import { formaterDate } from "@/lib/formats";
 import { t, tf } from "@/lib/i18n";
+// Google Docs, Google Forms, Dropbox (28/09/2026) : leurs textes vivent à part.
+import { GuideDropbox, libelleChoixDocuments, revueDocuments } from "@/components/settings/ConnecteurNatifDocuments";
 
 /**
  * Panneau d'un service branché nativement (gateway/src/oauthNatif.ts) :
@@ -35,7 +37,7 @@ import { t, tf } from "@/lib/i18n";
  * libellés changent, et l'écran le dit.
  */
 
-const API_GOOGLE: Partial<Record<IdNatif, string>> = { sheets: "Google Sheets API", slides: "Google Slides API", youtube: "YouTube Data API v3" };
+const API_GOOGLE: Partial<Record<IdNatif, string>> = { sheets: "Google Sheets API", slides: "Google Slides API", youtube: "YouTube Data API v3", docs: "Google Docs API", forms: "Google Forms API" };
 
 function Lien({ href, children }: { href: string; children: ReactNode }) {
   return (
@@ -77,6 +79,8 @@ function Guide({ id }: { id: IdNatif }) {
     case "sheets":
     case "slides":
     case "youtube":
+    case "docs":
+    case "forms":
       return (
         <p className="text-sm text-muted-foreground">
           {tf("Ce service utilise l'application Google de l'instance, la même que Drive et Agenda. Si elle existe déjà, il suffit d'activer « {0} » dans le même projet de la console Google Cloud (« API et services », « Bibliothèque »).", API_GOOGLE[id] ?? "")}
@@ -143,12 +147,15 @@ function Guide({ id }: { id: IdNatif }) {
           <li>{t("Recopiez le « Client ID » et, pour une « Web App », le « Client Secret ». Branchez de préférence le compte qui a créé l'application : X facture moins cher la lecture de ses propres posts.")}</li>
         </ol>
       );
+    case "dropbox":
+      return <GuideDropbox />;
   }
 }
 
 /** Ce qui marche sans examen du fournisseur, et ce qui en demande un. */
 function Revue({ id }: { id: IdNatif }) {
   const texte: Record<IdNatif, string> = {
+    ...revueDocuments(),
     sheets: t("Aucun examen pour une application interne à votre Google Workspace. Écrire ouvre toutes les feuilles du compte : Google n'a pas d'accès plus étroit pour une application de bureau."),
     slides: t("Aucun examen pour une application interne à votre Google Workspace. Lecture seule."),
     youtube: t("Aucun examen pour une application interne à votre Google Workspace. Lecture seule : chaînes, vidéos, statistiques publiques. 10 000 unités de quota par jour, une lecture en coûte une."),
@@ -165,6 +172,8 @@ function Revue({ id }: { id: IdNatif }) {
 /** Traduit au rendu, pas au chargement du module : la langue n'est pas encore connue à ce moment-là. */
 function libelleChoix(id: IdNatif, c: IdChoix): string {
   if (c === "page") return t("Page d'entreprise : lire ses publications et statistiques, et y publier si la case du dessus est cochée.");
+  const documents = libelleChoixDocuments(id);
+  if (documents) return documents;
   if (id === "sheets") return t("Permettre aussi d'écrire dans les feuilles (remplacer une plage, ajouter des lignes).");
   if (id === "facebook") return t("Permettre de publier des posts sur les pages.");
   if (id === "instagram") return t("Permettre de publier des photos.");
@@ -304,7 +313,8 @@ export function ConnecteurNatif({ id, onChange }: { id: IdNatif; onChange?: () =
     );
   const boucle = etat.retour.startsWith("http://127.0.0.1") && !etat.retour.includes("/helix/oauth/retour");
   // X accepte une application « publique », sans secret (oauthNatif.ts, `secretFacultatif`).
-  const secretFacultatif = id === "x";
+  // Dropbox aussi : PKCE suffit, le secret est facultatif (natifs/documents.ts).
+  const secretFacultatif = id === "x" || id === "dropbox";
 
   const panneau = (
     <Card className="space-y-3">
@@ -321,7 +331,9 @@ export function ConnecteurNatif({ id, onChange }: { id: IdNatif; onChange?: () =
                  * empêche une application commune chez X, c'est la facture.
                  */
                 t("Avec l'application que votre organisation crée chez X, une fois. Le logiciel ne peut pas en fournir une commune : X facture chaque appel à l'application qui le fait, sur ses crédits.")
-              : tf("Avec l'application que votre organisation crée chez {0}, une fois. Le logiciel ne peut pas en fournir une commune : {0} examine les applications qui servent d'autres comptes que ceux de leur éditeur.", etat.nom)}
+              : id === "dropbox"
+                ? t("Avec l'application que votre organisation crée chez Dropbox, une fois. Le logiciel ne peut pas en fournir une commune : Dropbox limite une application à 500 comptes, et l'examine avant d'en relier plus de 50.")
+                : tf("Avec l'application que votre organisation crée chez {0}, une fois. Le logiciel ne peut pas en fournir une commune : {0} examine les applications qui servent d'autres comptes que ceux de leur éditeur.", etat.nom)}
         </p>
       </div>
       {etat.aReconnecter && (
@@ -330,7 +342,8 @@ export function ConnecteurNatif({ id, onChange }: { id: IdNatif; onChange?: () =
         </InfoBox>
       )}
       <InfoBox leading={<KeyRound size={15} strokeWidth={1.75} />}>
-        <div className="space-y-2">
+        {/* 375 px : une adresse ou une portée d'un seul tenant (dropbox.com/developers/apps, account_info.read) sortait du cadre ; elle se coupe. */}
+        <div className="space-y-2 [overflow-wrap:anywhere]">
           <p className="font-medium">{t("Préparer l'application, une fois pour toute l'instance")}</p>
           <Guide id={id} />
           <p className="font-medium">{id === "x" ? t("Ce que permet chaque offre de X") : t("Ce qui demande un examen du fournisseur")}</p>
@@ -358,8 +371,14 @@ export function ConnecteurNatif({ id, onChange }: { id: IdNatif; onChange?: () =
             <Input value={identifiant} onChange={(e) => setIdentifiant(e.target.value)} autoComplete="off" spellCheck={false} />
           </Field>
           <Field
-            label={secretFacultatif ? t("Secret de l'application, pour une « Web App » seulement") : t("Secret de l'application")}
-            hint={secretFacultatif ? t("Laissez vide pour une « Native App » : X la protège sans secret. S'il est donné, il est gardé chiffré sur l'instance et n'en ressort jamais.") : t("Gardé chiffré sur l'instance, il n'en ressort jamais.")}
+            label={id === "dropbox" ? t("« App secret », facultatif") : secretFacultatif ? t("Secret de l'application, pour une « Web App » seulement") : t("Secret de l'application")}
+            hint={
+              id === "dropbox"
+                ? t("Vous pouvez le laisser vide : la connexion à Dropbox est protégée sans lui (PKCE). S'il est donné, il est gardé chiffré sur l'instance et n'en ressort jamais.")
+                : secretFacultatif
+                  ? t("Laissez vide pour une « Native App » : X la protège sans secret. S'il est donné, il est gardé chiffré sur l'instance et n'en ressort jamais.")
+                  : t("Gardé chiffré sur l'instance, il n'en ressort jamais.")
+            }
           >
             <Input type="password" value={secret} onChange={(e) => setSecret(e.target.value)} autoComplete="off" spellCheck={false} />
           </Field>
@@ -394,7 +413,12 @@ export function ConnecteurNatif({ id, onChange }: { id: IdNatif; onChange?: () =
             </label>
           ))}
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <p className="text-xs text-muted-foreground">
+            {/*
+              * 375 px (vu le 28/09/2026 avec Google Forms) : l'identifiant Google, d'un seul
+              * tenant, sortait du panneau, et le libellé du bouton, replié sur deux lignes,
+              * était coupé par sa hauteur fixe. L'identifiant se coupe, le bouton grandit.
+              */}
+            <p className="min-w-0 break-all text-xs text-muted-foreground">
               {tf("Application : {0}", etat.application.identifiant ?? "")}
               {!etat.google && (
                 <>
@@ -405,7 +429,7 @@ export function ConnecteurNatif({ id, onChange }: { id: IdNatif; onChange?: () =
                 </>
               )}
             </p>
-            <Button size="sm" icon={enCours || attente ? Loader2 : Link2} disabled={enCours || attente} onClick={() => void lancer()}>
+            <Button size="sm" className="!h-auto min-h-8 max-w-full py-1.5 text-left" icon={enCours || attente ? Loader2 : Link2} disabled={enCours || attente} onClick={() => void lancer()}>
               {attente ? t("En attente de votre accord…") : tf("Se connecter à {0}", etat.nom)}
             </Button>
           </div>

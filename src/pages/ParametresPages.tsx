@@ -21,6 +21,8 @@ import {
   PlaySquare,
   Briefcase,
   Music2,
+  ClipboardList,
+  HardDrive,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { CleMarquePetite } from "@/components/ui/marques";
@@ -1038,6 +1040,14 @@ export function McpSettings() {
     ...([
       ["sheets", "Google Sheets", t("Lire vos feuilles, et y écrire après accord"), "googleSheets", CATEGORIE],
       ["slides", "Google Slides", t("Lire vos présentations"), "googleSlides", CATEGORIE],
+      /*
+       * Google Docs, Google Forms, Dropbox (28/09/2026, natifs/documents.ts) :
+       * icônes neutres en attendant les logos (clés de marque googleDocs,
+       * googleForms, dropbox), que pose un autre travail.
+       */
+      ["docs", "Google Docs", t("Lire vos documents, en créer et y ajouter du texte après accord"), FileText, CATEGORIE],
+      ["forms", "Google Forms", t("Lire vos formulaires et leurs réponses"), ClipboardList, CATEGORIE],
+      ["dropbox", "Dropbox", t("Lister, chercher, lire, et envoyer un fichier après accord"), HardDrive, CATEGORIE],
       ["youtube", "YouTube", t("Vidéos et statistiques d'une chaîne"), PlaySquare, t("Réseaux sociaux")],
       ["linkedin", "LinkedIn", t("Publier après accord, et lire une page d'entreprise"), Briefcase, t("Réseaux sociaux")],
       ["facebook", "Facebook", t("Pages : publications, réactions, publier après accord"), "facebook", t("Réseaux sociaux")],

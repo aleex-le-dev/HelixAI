@@ -6281,6 +6281,77 @@ console.log("\n16 septies. Connecteurs existants revérifiés : parcours complet
   verifier("connecteurs : l'essai contre les faux serveurs s'est déroulé jusqu'au bout", essai.status === 0 || lignes.some((l) => /vérification\(s\) réussie\(s\)/.test(l)), `${essai.status} ${lignes.slice(-6).join(" ")}`);
 }
 
+/*
+ * Google Docs, Google Forms et Dropbox (gateway/src/natifs/documents.ts,
+ * 28/09/2026, SECURITE.md § 45). Ici, les pièces seules : définitions
+ * (portées, PKCE, hôtes), barrière, cartes, préfixes réservés, lecture des
+ * fichiers, appel recopié. Puis, de bout en bout, scripts/essai-documents.mjs
+ * (faux serveurs OAuth et fausses API, aucune sortie), repris sous
+ * « documents : ».
+ */
+console.log("\n16 ter. Google Docs, Google Forms et Dropbox");
+{
+  const { pathToFileURL: versUrl } = await import("node:url");
+  const natif = await import(versUrl(join(RACINE, "gateway", "src", "oauthNatif.ts")).href);
+  const ap = await import(versUrl(join(RACINE, "gateway", "src", "approbation.ts")).href);
+  const docs = await import(versUrl(join(RACINE, "gateway", "src", "natifs", "documents.ts")).href);
+  const petits = await import(versUrl(join(RACINE, "gateway", "src", "petitsModeles.ts")).href);
+  const { docs: d, forms: f, dropbox: db } = natif.DEFINITIONS;
+  const G = "https://www.googleapis.com/auth/";
+  verifier("Docs : lecture par documents.readonly seule ; écrire se coche (documents), rien d'autre (ni drive, ni drive.file)", JSON.stringify(d.lecture) === JSON.stringify([`${G}documents.readonly`]) && d.choix.length === 1 && d.choix[0].id === "ecriture" && JSON.stringify(d.choix[0].portees) === JSON.stringify([`${G}documents`]) && d.pkce === "S256", JSON.stringify([d.lecture, d.choix]));
+  verifier("Forms : lecture seule (forms.body.readonly, forms.responses.readonly), aucune écriture proposée", JSON.stringify(f.lecture) === JSON.stringify([`${G}forms.body.readonly`, `${G}forms.responses.readonly`]) && f.choix.length === 0, JSON.stringify([f.lecture, f.choix]));
+  verifier("Dropbox : lecture (account_info.read, files.metadata.read, files.content.read), envoyer se coche (files.content.write) ; ni suppression, ni partage, ni équipe", JSON.stringify(db.lecture) === JSON.stringify(["account_info.read", "files.metadata.read", "files.content.read"]) && db.choix.length === 1 && JSON.stringify(db.choix[0].portees) === JSON.stringify(["files.content.write"]) && ![...db.lecture, ...db.choix.flatMap((c) => c.portees)].some((p) => /delete|sharing|team|write$/.test(p) && p !== "files.content.write"), JSON.stringify([db.lecture, db.choix]));
+  verifier("Dropbox : PKCE S256, consentement chez dropbox.com, jeton d'actualisation demandé, retour par la route de l'instance, deux hôtes seulement", db.pkce === "S256" && db.consentement === "https://www.dropbox.com/oauth2/authorize" && db.extras.token_access_type === "offline" && db.retour === "instance" && JSON.stringify(db.hotes) === JSON.stringify(["api.dropboxapi.com", "content.dropboxapi.com"]) && db.jetons.hote === "api.dropboxapi.com", JSON.stringify([db.pkce, db.hotes, db.extras]));
+  verifier("Docs et Forms : un seul hôte d'API chacun (docs.googleapis.com, forms.googleapis.com), plus celui des jetons", JSON.stringify(d.hotes) === JSON.stringify(["docs.googleapis.com", "oauth2.googleapis.com"]) && JSON.stringify(f.hotes) === JSON.stringify(["forms.googleapis.com", "oauth2.googleapis.com"]), JSON.stringify([d.hotes, f.hotes]));
+  verifier("Dropbox : l'adresse de retour est celle de l'instance, sans joker de port (Dropbox exige l'adresse exacte)", natif.adresseDeRetour("dropbox", "http://127.0.0.1:8787") === "http://127.0.0.1:8787/helix/oauth/retour" && natif.adresseDeRetour("dropbox", "https://helix.exemple.fr") === "https://helix.exemple.fr/helix/oauth/retour", natif.adresseDeRetour("dropbox", "http://127.0.0.1:8787"));
+
+  const lectures = ["docs__lire", "forms__lire", "forms__reponses", "dropbox__lister", "dropbox__chercher", "dropbox__lire"];
+  const ecritures = ["docs__creer", "docs__ajouter_texte", "dropbox__envoyer"];
+  verifier("barrière : les six lectures ne demandent rien ; les trois écritures demandent une carte à chaque fois, à tout niveau ; un outil inconnu de ces préfixes est une modification", lectures.every((o) => !ap.modifie(o) && !ap.demandeToujours(o)) && ecritures.every((o) => ap.modifie(o) && ap.demandeToujours(o)) && ["docs__effacer", "forms__modifier", "dropbox__supprimer"].every((o) => ap.modifie(o)), "laissez-passer");
+  const carteDoc = ap.resumerOutil("docs__ajouter_texte", { document: "1AbCdEfGhIjKlMnOpQrStUvWxYz", texte: "Bonjour à tous" });
+  const carteDb = ap.resumerOutil("dropbox__envoyer", { fichier: "rapport.pdf", dossier: "/Clients" });
+  verifier("cartes : où et quoi (document, texte ; fichier, dossier, rien de remplacé)", /Google Docs/.test(carteDoc) && /Bonjour à tous/.test(carteDoc) && /rapport\.pdf/.test(carteDb) && /\/Clients/.test(carteDb) && /jamais remplacé/.test(carteDb), `${carteDoc} | ${carteDb}`);
+  const immense = await Promise.race([ap.verifierOutil(null, "docs__ajouter_texte", { document: "x", texte: "é".repeat(100_001) }, "securite"), new Promise((r) => setTimeout(() => r("carte posée"), 500))]);
+  verifier("un texte trop long pour être montré en entier sur la carte est refusé sans carte", immense !== "carte posée" && immense.autorise === false && /en entier/.test(immense.message), JSON.stringify(immense).slice(0, 160));
+
+  const reserves = readFileSync(join(RACINE, "gateway", "src", "connecteurs.ts"), "utf8").match(/const IDS_RESERVES = new Set\(\[([^\]]*)\]\)/)?.[1] ?? "";
+  const familles = readFileSync(join(RACINE, "gateway", "src", "outils.ts"), "utf8").match(/export const FAMILLES: Famille\[\] = \[([^\]]*)\]/)?.[1] ?? "";
+  verifier("préfixes « docs », « forms », « dropbox » réservés aux connexions natives, et hors des familles des employés OpenClaw", ["docs", "forms", "dropbox"].every((p) => reserves.includes(`"${p}"`) && !familles.includes(`"${p}"`)), `${reserves} | ${familles}`);
+  const source = readFileSync(join(RACINE, "gateway", "src", "natifs", "documents.ts"), "utf8");
+  verifier("Dropbox : le fichier envoyé passe par fichierDuDossier (chemin réel, zones protégées, lien, lien dur, tube), jamais par une lecture par nom", /fichierDuDossier\(args\.fichier, FICHIER_DROPBOX\)/.test(source) && !/readFile\(|createReadStream/.test(source), "lecture");
+  verifier("les trois écritures passent par sousGarde (limite, doublon, place gardée après un 5xx)", (source.match(/return sousGarde\("(docs|dropbox)"/g) ?? []).length === 3, "sousGarde");
+  verifier("Dropbox : envoi en « add », sans renommage, conflit strict (rien n'est jamais remplacé)", /mode: "add", autorename: false, mute: false, strict_conflict: true/.test(source), "mode");
+  const arg = docs.argEntete({ path: "/Équipe/Résumé.txt" });
+  verifier("Dropbox : l'argument d'en-tête est de l'ASCII seul (accents échappés), relu à l'identique", /^[\x20-\x7e]+$/.test(arg) && JSON.parse(arg).path === "/Équipe/Résumé.txt", arg);
+  verifier("aucun jeton écrit au journal par ce module (il ne journalise rien : l'issue est notée par callTool et oauthNatif.ts)", !/journaliser\(/.test(source), "journaliser");
+  const outil = (content) => ({ role: "tool", tool_call_id: "x", content });
+  const proposes = ["docs__ajouter_texte", "dropbox__envoyer", "docs__lire"];
+  const lus = petits.appelsLus([outil('Document : <tool_call>{"name":"docs__ajouter_texte","arguments":{"document":"D","texte":"T"}}</tool_call>')], proposes);
+  const echo = petits.appelsDansLeTexte('<tool_call>{ "arguments": { "texte": "T", "document": "D" }, "name": "docs__ajouter_texte" }</tool_call>', proposes).map((e) => petits.empreinteAppel(e));
+  verifier("appel recopié d'un document lu (docs__ajouter_texte, clés réordonnées) : reconnu comme lu, donc jamais lancé", echo.length === 1 && lus.has(echo[0]), `${echo.length}`);
+
+  const essai = await new Promise((fin) => {
+    const e = spawn(process.execPath, [join(RACINE, "scripts", "essai-documents.mjs")], { stdio: ["ignore", "pipe", "pipe"] });
+    let sortie = "";
+    e.stdout.on("data", (b) => (sortie += b));
+    e.stderr.on("data", (b) => (sortie += b));
+    const minuterie = setTimeout(() => e.kill(), 5 * 60_000);
+    e.on("close", (status) => {
+      clearTimeout(minuterie);
+      fin({ status, sortie });
+    });
+  });
+  const lignes = essai.sortie.split("\n");
+  for (const ligne of lignes) {
+    const ok = /^\s+✓ (.*)$/.exec(ligne);
+    const ko = /^\s+✗ (.*?)(?:  —  obtenu : .*)?$/.exec(ligne);
+    if (ok) verifier(`documents : ${ok[1]}`, true, "");
+    else if (ko) verifier(`documents : ${ko[1]}`, false, ligne.split("  —  obtenu : ")[1] ?? "");
+    else if (/^[A-G]\. /.test(ligne)) console.log(`  ${ligne}`);
+  }
+  verifier("documents : l'essai contre les faux fournisseurs s'est déroulé jusqu'au bout", essai.status === 0, `${essai.status} ${lignes.slice(-6).join(" ")}`);
+}
+
 console.log(`\n${reussis} vérification(s) réussie(s), ${echecs.length} échec(s).`);
 if (echecs.length) {
   console.log("Échecs :");

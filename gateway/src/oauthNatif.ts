@@ -6,6 +6,8 @@ import { journaliser } from "./audit.ts";
 import { clientGoogle } from "./clientGoogle.ts";
 import { requeteHttps, ErreurTransport, type DemandeHttps, type ReponseHttps } from "./clientHttps.ts";
 import { t, tf } from "./langue.ts";
+// Google Docs, Google Forms et Dropbox (28/09/2026) : leurs définitions et ce qui leur est propre vivent à part.
+import { definitionsDocuments, identiteDropbox, revoquerDropbox } from "./natifs/documents.ts";
 
 /**
  * Connexions natives de 2026.928.2 : Google Sheets, Google Slides, YouTube,
@@ -68,8 +70,8 @@ import { t, tf } from "./langue.ts";
  * (section H de scripts/essai-natifs.mjs).
  */
 
-export type IdNatif = "sheets" | "slides" | "youtube" | "linkedin" | "facebook" | "instagram" | "tiktok" | "x";
-export const IDS_NATIFS: IdNatif[] = ["sheets", "slides", "youtube", "linkedin", "facebook", "instagram", "tiktok", "x"];
+export type IdNatif = "sheets" | "slides" | "youtube" | "linkedin" | "facebook" | "instagram" | "tiktok" | "x" | "docs" | "forms" | "dropbox";
+export const IDS_NATIFS: IdNatif[] = ["sheets", "slides", "youtube", "linkedin", "facebook", "instagram", "tiktok", "x", "docs", "forms", "dropbox"];
 export const estIdNatif = (v: unknown): v is IdNatif => typeof v === "string" && (IDS_NATIFS as string[]).includes(v);
 
 /** Une option cochée à la connexion : des portées de plus, et dit si elles demandent une revue chez le fournisseur. */
@@ -79,7 +81,7 @@ export interface Choix {
   revue: boolean;
 }
 
-interface Definition {
+export interface Definition {
   id: IdNatif;
   nom: string;
   google: boolean;
@@ -119,7 +121,7 @@ interface Definition {
   documentation: string[];
 }
 
-const GOOGLE_COMMUN = {
+export const GOOGLE_COMMUN = {
   google: true,
   consentement: "https://accounts.google.com/o/oauth2/v2/auth",
   jetons: { hote: "oauth2.googleapis.com", chemin: "/token", methode: "POST" as const },
@@ -425,6 +427,8 @@ export const DEFINITIONS: Record<IdNatif, Definition> = {
       "https://docs.x.com/x-api/fundamentals/rate-limits",
     ],
   },
+  // Google Docs, Google Forms, Dropbox : natifs/documents.ts (fonction hoistée, sans rien lire de ce module au chargement).
+  ...definitionsDocuments(GOOGLE_COMMUN),
 };
 
 const AGENT = "Connecteur-Natif/1";
@@ -464,6 +468,8 @@ export interface ReponseApi {
   statut: number;
   json: Record<string, unknown>;
   entetes: Record<string, string | string[] | undefined>;
+  /** Le corps tel que reçu : le contenu d'un fichier Dropbox n'est pas du JSON (natifs/documents.ts). */
+  brut: Buffer;
 }
 
 function lireJson(r: ReponseHttps): Record<string, unknown> {
@@ -498,7 +504,7 @@ export async function envoyer(
     },
     def.nom,
   );
-  return { statut: r.statut, json: lireJson(r), entetes: r.entetes as ReponseApi["entetes"] };
+  return { statut: r.statut, json: lireJson(r), entetes: r.entetes as ReponseApi["entetes"], brut: r.corps };
 }
 
 const formulaire = (p: Record<string, string>) => new URLSearchParams(p).toString();
@@ -1165,7 +1171,9 @@ async function identite(id: IdNatif, acces: string, client: { clientId: string; 
   const echec = (r: ReponseApi) => new ErreurNatif(r.statut === 401 || r.statut === 403 ? "acces" : "api", tf("{0} n'a pas laissé lire le compte avec l'accès accordé (code {1}). Rien n'a été enregistré.", DEFINITIONS[id].nom, r.statut));
   switch (id) {
     case "sheets":
-    case "slides": {
+    case "slides":
+    case "docs":
+    case "forms": {
       // Ni Sheets ni Slides n'ont de « qui suis-je » avec leur seule portée : on vérifie que le jeton est bien pour cette application.
       const r = await envoyer(id, { methode: "GET", hote: "oauth2.googleapis.com", chemin: `/tokeninfo?${formulaire({ access_token: acces })}` });
       if (r.statut !== 200 || r.json.aud !== client.clientId) throw echec(r);
@@ -1213,6 +1221,8 @@ async function identite(id: IdNatif, acces: string, client: { clientId: string; 
       const pseudo = texteCourt(u.username, 50);
       return { compte: pseudo ? `@${pseudo}` : texteCourt(u.name) || "X", ids: { utilisateur: u.id } };
     }
+    case "dropbox":
+      return identiteDropbox(acces);
   }
 }
 
@@ -1246,6 +1256,8 @@ async function revocation(id: IdNatif, j: JetonsClairs): Promise<boolean> {
     }
     return tous;
   }
+  // Dropbox : révoquer le jeton d'accès éteint aussi le jeton d'actualisation ; un jeton d'accès expiré est d'abord renouvelé.
+  if (id === "dropbox") return revoquerDropbox(j.acces, async () => (await rafraichir(id, j))?.acces ?? null);
   // LinkedIn et Instagram : pas de révocation documentée pour ces parcours ; l'écran dit où retirer l'accès.
   return false;
 }

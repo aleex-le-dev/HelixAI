@@ -195,10 +195,11 @@ export interface OutilListe {
  * chaque appel, administrateur seul, et invisible si l'écriture n'a pas été
  * cochée.
  */
-export function classer(o: OutilListe): "lecture" | "ecriture" {
+export function classer(o: OutilListe, serveur = ""): "lecture" | "ecriture" {
   const a = o.annotations ?? {};
   if (a.readOnlyHint === false || a.destructiveHint === true) return "ecriture";
-  const mots = motsDe(o.name);
+  // Un nom qui répète celui du service (`clickup_search`) se lit sans lui : c'est le verbe qui suit qui compte.
+  const mots = motsDe(o.name).replace(serveur ? new RegExp(`^${serveur}_`) : /^$/, "");
   if (!mots || ECRIT.test(mots)) return "ecriture";
   if (a.readOnlyHint === true || LIT.test(mots)) return "lecture";
   return "ecriture";
@@ -218,7 +219,7 @@ export function retenirOutils<T extends OutilListe>(serveur: string, outils: T[]
   for (const nom of [...lectures]) if (nom.startsWith(`${serveur}__`)) lectures.delete(nom);
   const gardes: T[] = [];
   for (const o of outils) {
-    if (classer(o) === "lecture") {
+    if (classer(o, serveur) === "lecture") {
       lectures.add(qualifier(o.name));
       gardes.push(o);
     } else if (ecritureAutorisee(serveur)) gardes.push(o);

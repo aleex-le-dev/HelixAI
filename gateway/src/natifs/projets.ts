@@ -186,9 +186,13 @@ function liensDuHtml(html: string): string[] {
   return [...liens].slice(0, 200);
 }
 const echapperHtml = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-/** Le contenu donné par le modèle : du HTML tel quel, sinon du texte mis en paragraphes, échappé. */
+/**
+ * Le contenu donné par le modèle : du HTML tel quel s'il en contient des
+ * balises connues, sinon du texte mis en paragraphes, échappé (« <nos> » dans
+ * une phrase reste lisible, il ne devient pas une balise).
+ */
 const enHtml = (contenu: string) =>
-  /<[a-z][\s\S]*>/i.test(contenu) ? contenu : contenu.split(/\n{2,}/).map((p) => `<p>${echapperHtml(p).replace(/\n/g, "<br>")}</p>`).join("\n");
+  /<\/?(p|div|br|h[1-6]|a|table|tr|td|span|strong|em|b|i|u|ul|ol|li|img|html|body|section|blockquote|hr)\b[^>]*>/i.test(contenu) ? contenu : contenu.split(/\n{2,}/).map((p) => `<p>${echapperHtml(p).replace(/\n/g, "<br>")}</p>`).join("\n");
 
 /* ------------------------------------------------------------------ */
 /* Lectures                                                            */

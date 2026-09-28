@@ -1480,7 +1480,8 @@ export async function acheverAutorisation(
   if (choix) {
     const enTrop = porteesEnTrop(choix.portees, ((await fournisseur.tokens()) ?? {}).scope);
     if (enTrop.length > 0) {
-      await oublierOauth(attendu.id, attendu.pour ?? "systeme");
+      // Le jeton seulement : l'application déclarée (Zoom) reste, pour qu'on puisse recommencer sans la recoller.
+      await fournisseur.invalidateCredentials("tokens");
       journaliser("connecteur.retire", attendu.pour ?? "systeme", { connecteur: attendu.id, motif: "portee en trop" });
       return { ok: false, message: tf("{0} a accordé plus que ce qui était demandé ({1}). Par prudence, rien n'a été enregistré : retirez aussi l'accès dans les réglages de votre compte {0}.", entree.label, enTrop.slice(0, 10).join(", ")) };
     }

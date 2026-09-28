@@ -23,7 +23,7 @@ import {
   Music2,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import type { CleMarque } from "@/components/ui/marques";
+import type { CleMarquePetite } from "@/components/ui/marques";
 import { useProfile } from "@/hooks/useProfile";
 import { useComputer } from "@/hooks/useComputer";
 import { runAction, installerModeleEcran, MODE_LABEL } from "@/lib/computer";
@@ -1025,10 +1025,13 @@ export function McpSettings() {
      * ConnecteurNatif.tsx). Sheets et Slides portent l'icône de produit de
      * Google, que sa charte permet dans une liste de services compatibles.
      * Les autres gardent une icône neutre (28/09/2026) : la charte de YouTube
-     * fixe une hauteur minimale de 100 px, LinkedIn réserve son logo aux
-     * boutons « Share » et « Follow », TikTok le soumet à son accord.
-     * Facebook et Instagram ont leur logo depuis que Medhi a accepté les
-     * conditions de Meta (28/09/2026). Les glyphes « marque » de Lucide (Youtube, Linkedin, Facebook,
+     * fixe une hauteur minimale de 100 px, que la ligne (22 px) n'atteint pas ;
+     * son logo officiel s'affiche donc en grand, à 100 px, en tête de son
+     * panneau seulement (LogoYouTube, ConnecteurNatif.tsx ; décision de Medhi
+     * du 28/09/2026), et le type CleMarquePetite interdit de le mettre dans
+     * cette liste. LinkedIn réserve son logo aux boutons « Share » et
+     * « Follow », TikTok le soumet à son accord. Facebook et Instagram ont leur
+     * logo depuis que Medhi a accepté les conditions de Meta (28/09/2026). Les glyphes « marque » de Lucide (Youtube, Linkedin, Facebook,
      * Instagram) ont été retirés aussi : ce sont des copies approximatives de
      * ces logos, précisément ce que les chartes interdisent.
      */
@@ -1042,7 +1045,7 @@ export function McpSettings() {
       ["tiktok", "TikTok", t("Vidéos, statistiques, publier après accord"), Music2, t("Réseaux sociaux")],
       // X : son logo officiel (kit de marque de X, noir sur fond clair, blanc sur fond sombre ; marques.ts).
       ["x", "X", t("Ex-Twitter : posts, statistiques, publier après accord"), "x", t("Réseaux sociaux")],
-    ] as [IdNatif, string, string, LucideIcon | CleMarque, string][]).map(([id, label, description, dessin, categorie]): ServiceMaison => {
+    ] as [IdNatif, string, string, LucideIcon | CleMarquePetite, string][]).map(([id, label, description, dessin, categorie]): ServiceMaison => {
       const e = natifs.find((s) => s.id === id);
       return {
         id,

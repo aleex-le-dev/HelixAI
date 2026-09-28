@@ -1134,7 +1134,9 @@ Fichiers de `gateway/src/`, regroupés par rôle :
 | Téléchargement de l'application | `telechargement.ts` (archive de l'application en cours, servie par billet) |
 | Types | `types.ts` |
 
-Côté application de bureau : `electron/main.cjs`, `preload.cjs`, `miseAJour.cjs`,
+Côté application de bureau : `electron/main.cjs`, `passerelle.cjs` (la passerelle dans un
+`utilityProcess` depuis le 28/09/2026, fusible RunAsNode fermé, SECURITE.md § 51 ; son canal
+côté passerelle : `gateway/src/canalApplication.ts`), `preload.cjs`, `miseAJour.cjs`,
 `sourceGithub.cjs` (publications GitHub, ADR-067), `textesMiseAJour.cjs` (messages de la
 mise à jour dans la langue de l'écran), `coffre.cjs` (secrets du poste dans le trousseau du
 système), `nomTrousseau.cjs` (macOS : la clé du trousseau au nom de « Helix », reprise de

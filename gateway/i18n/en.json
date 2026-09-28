@@ -845,6 +845,7 @@
   "Le moteur est installé, mais il n'a pas démarré.": "The engine is installed, but it did not start.",
   "Le moteur llama.cpp n'est pas prévu pour ce système ({0}).": "The llama.cpp engine is not provided for this system ({0}).",
   "Le moteur llama.cpp ne répond pas. Quittez l'application puis rouvrez-la ; si cela se répète, redémarrez la machine.": "The llama.cpp engine is not responding. Quit the app and reopen it; if this happens again, restart the machine.",
+  "Le moteur llama.cpp ne connaît pas encore {0}. Quittez l'application puis rouvrez-la : il relira la liste des modèles.": "The llama.cpp engine does not know {0} yet. Quit the app and reopen it: it will read the list of models again.",
   "Le moteur n'a pas pu être décompressé : {0}": "The engine could not be unpacked: {0}",
   "Le moteur s'est installé dans {0}, et non à l'emplacement choisi ({1}). Revenez à l'emplacement habituel dans les réglages, Modèles locaux, puis réessayez : il n'y aura rien à retélécharger.": "The engine was installed in {0}, not in the chosen location ({1}). Go back to the default location in Settings, Local models, then try again: there will be nothing to download again.",
   "Le moteur s'est installé mais ne démarre pas sur cette machine.": "The engine was installed but does not start on this machine.",
@@ -1282,5 +1283,8 @@
   "Wix": "Wix",
   "WooCommerce refuse cette clé : vérifiez la clé, le secret, et qu'elle a au moins l'autorisation « Lecture ». Si le site est derrière un pare-feu applicatif, l'en-tête Authorization peut être retiré en route.": "WooCommerce refuses this key: check the key, the secret, and that it has at least \"Read\" permission. If the site is behind a web application firewall, the Authorization header may be stripped on the way.",
   "X refuse de lire le compte (code 402, paiement requis) : l'application X de l'organisation n'a probablement pas de crédits. Achetez-en dans la console de X (console.x.com), puis reconnectez-vous. Rien n'a été enregistré.": "X refuses to read the account (code 402, payment required): your organisation's X app probably has no credits. Buy some in the X console (console.x.com), then connect again. Nothing was saved.",
-  "Zoom": "Zoom"
+  "Zoom": "Zoom",
+  "{0} n'a pas répondu dans le temps imparti.": "{0} did not respond in time.",
+  "Une préparation est déjà en cours. Attendez qu'elle se termine.": "A setup is already in progress. Wait for it to finish.",
+  "L'essai de transcription n'a rien rendu. La dictée n'est pas prête.": "The transcription test returned nothing. Dictation is not ready."
 }

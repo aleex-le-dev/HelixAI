@@ -15,6 +15,7 @@ import { constants, existsSync, readdirSync, readFileSync } from "node:fs";
 import { cpus, homedir, tmpdir, totalmem } from "node:os";
 import { dirname, join, delimiter } from "node:path";
 import { assurerNodePrive, nodePriveInstallable, npmPrive, npxPrive } from "./installationOpenClaw.ts";
+import { arreterArbre } from "./processus.ts";
 import { assurerPythonPrive, pythonPrive, pythonPriveInstallable, taillePythonPriveMo } from "./pythonPrive.ts";
 import paquetsFiges from "./atelier-paquets.json" with { type: "json" };
 
@@ -695,14 +696,21 @@ function lancer(
     enfant.stdout?.on("data", garder);
     enfant.stderr?.on("data", garder);
 
+    /*
+     * Revue du 28/09/2026 : tout l'arbre (`arreterArbre`), pas seulement le
+     * processus lancé. Sous Windows, `kill()` n'arrête que lui, et ce que pip
+     * ou npm avaient lancé (compilateur, script d'installation) continuait
+     * seul après le délai. Messages par `tf` : ils s'affichent à l'écran de
+     * préparation, et arrivaient en français dans toutes les langues.
+     */
     const minuterie = setTimeout(() => {
-      enfant.kill("SIGKILL");
-      reject(new Error(`${commande} n'a pas répondu dans le temps imparti.`));
+      arreterArbre(enfant, "SIGKILL");
+      reject(new Error(tf("{0} n'a pas répondu dans le temps imparti.", commande)));
     }, timeout);
 
     enfant.on("error", (err) => {
       clearTimeout(minuterie);
-      reject(new Error(`${commande} n'a pas pu être lancé : ${err.message}`));
+      reject(new Error(tf("{0} n'a pas pu être lancé : {1}", commande, err.message)));
     });
 
     enfant.on("close", (code) => {
@@ -727,7 +735,7 @@ export function preparationEnCours(): boolean {
 
 async function exclusif<T>(travail: () => Promise<T>): Promise<T> {
   if (enCours) {
-    throw new Error("Une préparation est déjà en cours. Attendez qu'elle se termine.");
+    throw new Error(t("Une préparation est déjà en cours. Attendez qu'elle se termine."));
   }
   const promesse = travail();
   enCours = promesse;
@@ -1666,7 +1674,7 @@ async function executerDictee(onProgres: (p: ProgresDictee) => void): Promise<Bi
     { timeout: 3 * 60_000, maxBuffer: 1024 * 1024, env: environnementHorsLigne() },
   );
   if (!stdout.includes("@@HELIX@@")) {
-    throw new Error("L'essai de transcription n'a rien rendu. La dictée n'est pas prête.");
+    throw new Error(t("L'essai de transcription n'a rien rendu. La dictée n'est pas prête."));
   }
 
   await writeFile(

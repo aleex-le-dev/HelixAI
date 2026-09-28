@@ -1412,7 +1412,10 @@ async function lancerProcessus(moteur: Moteur): Promise<void> {
   };
   p.stdout?.on("data", ecrire);
   p.stderr?.on("data", ecrire);
-  p.on("exit", () => {
+  let fini = false;
+  const surFin = () => {
+    if (fini) return;
+    fini = true;
     if (processus === p) {
       processus = null;
       rmSync(join(dossier(), ".pid"), { force: true });
@@ -1422,6 +1425,25 @@ async function lancerProcessus(moteur: Moteur): Promise<void> {
     tentatives += 1;
     const delai = Math.min(5_000 * 2 ** Math.min(tentatives - 1, 4), 60_000);
     setTimeout(() => void assurerMarche().catch(() => undefined), delai).unref?.();
+  };
+  p.on("exit", surFin);
+  /*
+   * Le lancement lui-même refusé (revue du 28/09/2026) : Node trouvé à la
+   * détection puis retiré, mis en quarantaine par l'antivirus, ou un OpenClaw
+   * mis à jour entre-temps. Node n'émet alors qu'« error » (et « close »),
+   * jamais « exit » (essayé sous Node 24 : ENOENT, `exitCode` -2). Sans cet
+   * écouteur, l'erreur remontait en exception non rattrapée, et `processus`
+   * restait ce processus mort : chaque démarrage suivant attendait son port
+   * dix secondes puis échouait, jusqu'au redémarrage de la passerelle. La
+   * détection est refaite à la relance, pour trouver le moteur là où il est.
+   * Un « error » d'un processus bien lancé (un arrêt refusé) ne change rien :
+   * son « exit » viendra.
+   */
+  p.on("error", (err) => {
+    console.warn(`[employes] OpenClaw : ${err.message}`);
+    if (p.pid !== undefined) return;
+    moteurCache = null;
+    surFin();
   });
   minuterieJournal ??= setInterval(() => void synchroniserJournal().catch(() => undefined), 5 * 60_000);
   minuterieJournal.unref?.();

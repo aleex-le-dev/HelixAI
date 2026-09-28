@@ -121,9 +121,12 @@ const fournisseur = (nom) =>
   });
 const PORT_LOCAL = await portLibre();
 const PORT_NUAGE = await portLibre();
-const serveurs = [fournisseur("local-essai"), fournisseur("nuage-essai")];
+// Un troisième : un modèle cloud branché par une clé personnelle (portée « moi », origine « cle »).
+const PORT_PERSO = await portLibre();
+const serveurs = [fournisseur("local-essai"), fournisseur("nuage-essai"), fournisseur("perso-essai")];
 await new Promise((ok) => serveurs[0].listen(PORT_LOCAL, "127.0.0.1", ok));
 await new Promise((ok) => serveurs[1].listen(PORT_NUAGE, "127.0.0.1", ok));
+await new Promise((ok) => serveurs[2].listen(PORT_PERSO, "127.0.0.1", ok));
 
 writeFileSync(
   join(TMP, "profil.json"),
@@ -238,6 +241,20 @@ try {
   verifier("modèle local, réglage par défaut (« cloud ») : sortie brute", /Changes not staged|On branch/.test(l.resultat), l.resultat);
   const tj = await tour({ modele: "local-essai", repere: "RTK-GIT", rtk: "toujours" });
   verifier("modèle local, « toujours » : RTK", /\* main/.test(tj.resultat) && !/Changes not staged/.test(tj.resultat), tj.resultat);
+
+  /*
+   * Revue du 28/09/2026 : la décision RTK demandait le modèle au routeur sans
+   * dire pour qui, et le routeur écarte alors les modèles de clé personnelle ;
+   * un tel modèle cloud partait sans RTK en réglage « cloud ».
+   */
+  console.log("\nModèle cloud d'une clé personnelle");
+  const cle = await json("/helix/fournisseurs", {
+    method: "POST",
+    body: JSON.stringify({ fournisseur: "compatible", adresse: `http://127.0.0.1:${PORT_PERSO}/v1`, cle: "cle-essai-perso", nom: "Perso d'essai", modeles: ["perso-essai"], portee: "moi" }),
+  });
+  verifier("clé personnelle branchée (portée « moi »)", cle.cle?.portee === "moi", JSON.stringify(cle));
+  const perso = await tour({ modele: "perso-essai", repere: "RTK-GIT" });
+  verifier("modèle cloud d'une clé personnelle, réglage par défaut (« cloud ») : RTK", /\* main/.test(perso.resultat) && !/Changes not staged/.test(perso.resultat), perso.resultat);
 
   console.log("\nRepli sans RTK");
   // Gardé pour l'essai de télémétrie, plus bas.

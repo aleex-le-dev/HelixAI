@@ -3232,7 +3232,8 @@ async function traiterCodePrompt(
    * plan.ts). Une application de gestion a déjà ses étapes (application.ts).
    */
   if (!preparee && !estQuestionSimple(body.text) && !estReplique(body.text)) {
-    const choix = await resolve({ model: reglageEnvoi.modele });
+    // Au nom de la propriétaire de la session : un modèle de clé personnelle est le sien (revue du 28/09/2026).
+    const choix = await resolve({ model: reglageEnvoi.modele, acces: notee.userId });
     const regime = "error" in choix ? null : strategie({ params: choix.model.params, sizeBytes: choix.model.sizeBytes, backendKind: choix.model.backendKind });
     if (regime?.decoupe) {
       const statut = (message: string) => publierStatutCode(body.sessionID!, { etat: "preparation", message });
@@ -3268,8 +3269,13 @@ async function traiterCodePrompt(
    * cloud, à la demande de Medhi (28/09/2026) ; avec un modèle local si la
    * personne l'a choisi. Décidé ici, avant l'envoi : la première commande
    * peut suivre de près. Les commandes passent toujours d'abord par la barrière.
+   *
+   * Au nom de la propriétaire de la session, comme `reglageCode` (revue du
+   * 28/09/2026) : sans `acces`, le routeur écarte les modèles branchés par clé
+   * personnelle, l'origine restait inconnue, et un modèle cloud de clé
+   * personnelle partait sans RTK en réglage « cloud ».
    */
-  const choixRtk = await resolve({ model: reglageEnvoi.modele });
+  const choixRtk = await resolve({ model: reglageEnvoi.modele, acces: notee.userId });
   const rtkActif = rtkPourDemande(lireReglageRtk(body.rtk), "error" in choixRtk ? undefined : choixRtk.model.origine);
   noterRtkSession(body.sessionID, rtkActif);
 
@@ -4035,18 +4041,16 @@ async function handleOauthRetour(
     return repondre(t("Autorisation refusée"), r.message, false, 400);
   }
   if (erreur) {
-    return repondre(
-      t("Autorisation refusée"),
-      /*
-       * Un message fixe, pas `error_description` : cette page est publique, et
-       * n'importe qui pouvait faire afficher son propre texte à l'adresse de
-       * l'instance (revue du 26/09/2026). Le code d'erreur, lui, est un mot du
-       * protocole, borné.
-       */
-      tf("Le service a refusé la demande (code : {0}). Recommencez depuis {1}.", erreur.replace(/[^a-z_]/gi, "").slice(0, 40) || "inconnu", nomProduit()),
-      false,
-      400,
-    );
+    /*
+     * Un message fixe, pas `error_description` : cette page est publique, et
+     * n'importe qui pouvait faire afficher son propre texte à l'adresse de
+     * l'instance (revue du 26/09/2026). Le code d'erreur, lui, est un mot du
+     * protocole, borné.
+     */
+    const refus = tf("Le service a refusé la demande (code : {0}). Recommencez depuis {1}.", erreur.replace(/[^a-z_]/gi, "").slice(0, 40) || "inconnu", nomProduit());
+    // L'écran des connecteurs qui attend l'accord le lit aussi, au lieu d'attendre cinq minutes (28/09/2026).
+    await connecteurs.refuserAutorisation(url.searchParams.get("state") ?? "", refus);
+    return repondre(t("Autorisation refusée"), refus, false, 400);
   }
 
   const code = url.searchParams.get("code");

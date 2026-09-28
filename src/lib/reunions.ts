@@ -120,7 +120,7 @@ export async function lireAudio(id: string): Promise<Blob> {
   const r = await apiFetch(chemin(id, "audio"));
   if (!r.ok) {
     const corps = (await r.json().catch(() => ({}))) as { error?: { message?: string } };
-    throw new Error(corps.error?.message ?? "Audio indisponible.");
+    throw new Error(corps.error?.message ?? t("Audio indisponible."));
   }
   return new Blob([await r.arrayBuffer()], { type: "audio/webm" });
 }

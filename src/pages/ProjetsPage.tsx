@@ -409,7 +409,7 @@ function MembersModal({
     setEnvoiEnCours(false);
 
     if (!result.ok) {
-      setFeedback({ ok: false, text: result.reason ?? "Invitation impossible." });
+      setFeedback({ ok: false, text: result.reason ?? t("Invitation impossible.") });
       return;
     }
     const invitee = email;

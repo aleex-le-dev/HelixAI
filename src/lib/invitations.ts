@@ -127,7 +127,7 @@ export async function inviter(
     };
     // Le code n'est rendu que si le mail n'a pas pu partir : c'est l'adresse qui dit que l'invitation existe.
     if (!res.ok || !corps.email) {
-      return { ok: false, message: corps.error?.message ?? "Invitation impossible." };
+      return { ok: false, message: corps.error?.message ?? t("Invitation impossible.") };
     }
     return { ok: true, valeur: corps as InvitationCreee };
   } catch {

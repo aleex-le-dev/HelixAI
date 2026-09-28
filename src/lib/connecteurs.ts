@@ -84,6 +84,8 @@ export interface GroupeOutils {
   actif: boolean;
   outils: number;
   obstacle?: string;
+  /** Service branché par quelqu'un, pas un outil livré d'office (connecteurs.ts, `groupes`). */
+  branche?: true;
 }
 
 /**

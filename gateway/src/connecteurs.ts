@@ -1656,6 +1656,12 @@ export interface GroupeOutils {
   outils: number;
   /** Ce qu'il manque pour que le groupe serve, s'il ne sert pas. */
   obstacle?: string;
+  /**
+   * Un service que quelqu'un a branché (courrier, Stripe, un MCP ajouté…), pas
+   * un outil livré d'office : c'est lui que le Chat nomme pour inviter à
+   * allumer les outils quand ils sont éteints (HomePage.tsx, 28/09/2026).
+   */
+  branche?: true;
 }
 
 /**
@@ -1673,6 +1679,7 @@ export async function groupes(): Promise<GroupeOutils[]> {
   const liste: GroupeOutils[] = [];
 
   for (const s of serveurs) {
+    const livre = CATALOGUE.some((e) => e.id === s.id && e.integre);
     liste.push({
       id: s.id,
       label: s.label,
@@ -1680,6 +1687,7 @@ export async function groupes(): Promise<GroupeOutils[]> {
       actif: s.running && s.toolCount > 0,
       outils: s.toolCount,
       obstacle: s.error ?? (s.running ? undefined : "Serveur arrêté."),
+      ...(livre ? {} : { branche: true as const }),
     });
   }
 
@@ -1719,6 +1727,7 @@ export async function groupes(): Promise<GroupeOutils[]> {
       : "Consulter la boîte de courrier connectée, et y préparer des brouillons.",
     actif: outilsCourrier > 0,
     outils: outilsCourrier,
+    ...(outilsCourrier > 0 ? { branche: true as const } : {}),
     obstacle: outilsCourrier > 0 ? undefined : "Aucune boîte connectée.",
   });
 
@@ -1730,6 +1739,7 @@ export async function groupes(): Promise<GroupeOutils[]> {
     description: "Consulter l'agenda connecté, en lecture seule.",
     actif: outilsAgenda > 0,
     outils: outilsAgenda,
+    ...(outilsAgenda > 0 ? { branche: true as const } : {}),
     obstacle: outilsAgenda > 0 ? undefined : "Aucun agenda connecté.",
   });
 
@@ -1741,6 +1751,7 @@ export async function groupes(): Promise<GroupeOutils[]> {
     description: "Chercher et lire les fichiers du Drive connecté, en lecture seule.",
     actif: outilsDrive > 0,
     outils: outilsDrive,
+    ...(outilsDrive > 0 ? { branche: true as const } : {}),
     obstacle: outilsDrive > 0 ? undefined : "Aucun Google Drive connecté.",
   });
   const outilsSlack = slack.toolsForModel().length;
@@ -1750,6 +1761,7 @@ export async function groupes(): Promise<GroupeOutils[]> {
     description: "Lire les salons où l'application Slack est invitée, en lecture seule.",
     actif: outilsSlack > 0,
     outils: outilsSlack,
+    ...(outilsSlack > 0 ? { branche: true as const } : {}),
     obstacle: outilsSlack > 0 ? undefined : "Aucun Slack connecté.",
   });
 
@@ -1769,6 +1781,7 @@ export async function groupes(): Promise<GroupeOutils[]> {
         : "Lire, sans rien modifier.",
       actif: true,
       outils: n,
+      branche: true,
     });
   }
 

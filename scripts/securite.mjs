@@ -7542,6 +7542,23 @@ console.log("\n18 ter. Parcours à l'écran : synchronisation, Chat rechargé, i
   );
 }
 
+console.log("\n21. Chat : un service branché, outils éteints, le Chat le dit (28/09/2026)");
+{
+  const connecteursSrc = readFileSync(join(RACINE, "gateway", "src", "connecteurs.ts"), "utf8");
+  const invite = readFileSync(join(RACINE, "src", "components", "chat", "InviteOutils.tsx"), "utf8");
+  const accueil = readFileSync(join(RACINE, "src", "pages", "HomePage.tsx"), "utf8");
+  verifier(
+    "les groupes d'outils disent ce qui a été branché (MCP ajouté, courrier, agenda, Drive, Slack, services natifs), pas les outils livrés d'office",
+    /const livre = CATALOGUE\.some\(\(e\) => e\.id === s\.id && e\.integre\);/.test(connecteursSrc) && /outilsCourrier > 0 \? \{ branche: true as const \}/.test(connecteursSrc) && /outils: n,\s*branche: true,/.test(connecteursSrc),
+    "connecteurs.ts, groupes",
+  );
+  verifier(
+    "la ligne d'invitation est sous la zone de saisie, n'allume rien d'elle-même (le choix reste à la personne), et se tait si l'instance ne répond pas",
+    /<InviteOutils actif=\{toolsOn\} autorise=\{toolsAllowed\} onAllumer=\{\(\) => setToolsOn\(true\)\} \/>/.test(accueil) && /if \(!groupes\) return;/.test(invite) && !/setToolsOn|onChange\(true\)/.test(invite),
+    "HomePage.tsx, InviteOutils.tsx",
+  );
+}
+
 console.log(`\n${reussis} vérification(s) réussie(s), ${echecs.length} échec(s).`);
 if (echecs.length) {
   console.log("Échecs :");

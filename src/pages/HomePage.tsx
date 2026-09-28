@@ -4,6 +4,7 @@ import { TriangleAlert } from "lucide-react";
 import { LogoMark } from "@/components/ui/Logo";
 import { Composer } from "@/components/chat/Composer";
 import { OutilsChip } from "@/components/chat/OutilsChip";
+import { InviteOutils } from "@/components/chat/InviteOutils";
 import { ConnaissancesChip } from "@/components/chat/ConnaissancesChip";
 import { useProjects } from "@/hooks/useProjects";
 import { ImageChip } from "@/components/chat/ImageChip";
@@ -283,6 +284,7 @@ export function HomePage() {
    */
   const avertissements = (
     <>
+      <InviteOutils actif={toolsOn} autorise={toolsAllowed} onAllumer={() => setToolsOn(true)} />
       {agentDisparu !== null && (
         <InfoBox
           tone="muted"

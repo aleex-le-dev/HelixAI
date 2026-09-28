@@ -96,6 +96,42 @@ l'agent. Le journal de LM Studio lu pour ce pourcentage est
 `server-logs/` dans son dossier (`~/.lmstudio`, ou celui que désigne `~/.lmstudio-home-pointer`) ;
 sans lui, il n'y a simplement pas de chiffre.
 
+### Publier une version : l'essai Windows doit être vert
+
+**Avant chaque publication, l'essai Windows doit être vert.** C'est le flux GitHub Actions
+« Essai Windows » (`.github/workflows/essai-windows.yml`) : sur une machine Windows neuve
+(`windows-latest`), il construit l'application (`npm run build`, puis
+`electron-builder --win dir --x64`, sans signature ni publication), lance
+**l'application empaquetée** `release\win-unpacked\Helix.exe` avec des données et un profil
+jetables, et fait le parcours d'une personne par la passerelle, comme l'écran de mise en
+route : compte administrateur, installation du moteur de LM Studio (conditions acceptées
+pour cet usage interne d'essai), Qwen3 1.7B jusqu'à « prêt », une question au Chat en flux,
+puis l'application quittée, le service de LM Studio arrêté comme après un redémarrage,
+l'application rouverte et la même question. Le pilotage est dans
+`scripts/essai-windows-ci.mjs` (mode d'emploi en tête du fichier) ; il refuse de tourner
+ailleurs que sous Windows, et sans `HELIX_ESSAI_MACHINE_JETABLE=1`, puisqu'il pose le
+moteur dans `%USERPROFILE%\.lmstudio`.
+
+Il part tout seul à chaque poussée sur `main` qui touche `gateway/`, `electron/`, `src/` ou
+`package.json`, et à la main :
+
+```bash
+gh workflow run essai-windows.yml --ref main
+gh run watch                # puis, s'il échoue : gh run view --log-failed
+gh run download <numéro>    # les journaux, gardés 14 jours
+```
+
+Une exécution prend de cinq à dix minutes, construction comprise (plus si le téléchargement du
+modèle est lent). Qu'il passe ou non, il
+garde en artefact `essai-windows-journaux` : le déroulé de l'essai (`essai.log`), la sortie
+de l'application, `passerelle.log`, la liste de `%USERPROFILE%\.lmstudio` et de son
+`.internal`, le contenu des `*install-location.json`, les journaux du serveur de LM Studio,
+les réponses du Chat et le journal d'audit de l'instance jetable.
+
+Sur un poste Windows, `passerelle.log` (la sortie de la passerelle, 5 Mo au plus, l'ancien
+gardé en `.1`) est dans `%APPDATA%\helix-plateforme\logs\` : c'est le premier fichier à
+demander à une personne dont le moteur ne démarre pas.
+
 ### Emplacement du moteur et des modèles
 
 Un modèle pèse de 2 à 18 Go. Quand le disque principal n'a pas la place, l'administrateur choisit

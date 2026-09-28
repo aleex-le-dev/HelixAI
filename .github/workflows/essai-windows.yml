@@ -1,0 +1,75 @@
+# Essai Windows de bout en bout (28/09/2026) : sur une vraie machine Windows jetable,
+# l'application empaquetée (win-unpacked\Helix.exe) fait le parcours d'une personne :
+# compte administrateur, moteur de LM Studio, modèle local, une question au Chat.
+# Le pilotage est dans scripts/essai-windows-ci.mjs (mode d'emploi en tête) ; les journaux
+# (passerelle.log, sortie de l'application, dossier de LM Studio) sont gardés en artefact,
+# que l'essai passe ou non. Avant chaque publication, cet essai doit être vert (docs/GUIDE.md).
+name: Essai Windows
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "gateway/**"
+      - "electron/**"
+      - "src/**"
+      - "package.json"
+      - "scripts/essai-windows-ci.mjs"
+      - ".github/workflows/essai-windows.yml"
+
+permissions:
+  contents: read
+
+# Un essai à la fois par branche : le suivant attend, il n'annule pas celui en cours.
+concurrency:
+  group: essai-windows-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  parcours:
+    name: Parcours d'une personne sous Windows
+    runs-on: windows-latest
+    timeout-minutes: 120
+    steps:
+      # Fins de ligne telles qu'au dépôt, comme sur la machine qui fabrique les versions.
+      - name: Fins de ligne du dépôt
+        run: git config --global core.autocrlf false
+
+      - name: Récupérer le code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Dépendances
+        run: npm ci
+
+      - name: Construire l'interface et la passerelle
+        run: npm run build
+
+      - name: Empaqueter l'application Windows (dossier, sans signature ni publication)
+        env:
+          # Pas de clé d'éditeur sur cette machine : l'application d'essai garde « Télécharger » pour ses mises à jour.
+          HELIX_SANS_CLE_EDITEUR: "1"
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+        run: npx electron-builder --win dir --x64 --publish never
+
+      - name: Parcours d'une personne (application empaquetée)
+        env:
+          HELIX_ESSAI_MACHINE_JETABLE: "1"
+        run: node scripts/essai-windows-ci.mjs --app release/win-unpacked/Helix.exe --modele qwen3-1.7b --sortie essai-windows-sortie --delai-minutes 45
+
+      - name: Garder les journaux
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: essai-windows-journaux
+          path: essai-windows-sortie
+          if-no-files-found: warn
+          retention-days: 14

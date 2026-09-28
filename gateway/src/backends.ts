@@ -259,7 +259,25 @@ async function serviceLmStudioEnMarche(lms: string): Promise<boolean> {
   }
 }
 
-export async function ensureLmStudioServer(): Promise<boolean> {
+/*
+ * Un seul démarrage à la fois (essai Windows du 28/09/2026, application
+ * rouverte le lendemain) : `daemon up` peut prendre plus de trente secondes,
+ * et la garde de `dernierEssai` ne tenait plus. La découverte du démarrage,
+ * la sonde de l'application (`/health`) et l'écran lançaient chacun leur
+ * `lms server start` (trois « démarrage... » en deux secondes au journal) ;
+ * or un `server start` sur un serveur qui tourne le redémarre, et coupe ce
+ * qu'il sert. Les appels suivants attendent le démarrage en cours.
+ */
+let demarrageServeur: Promise<boolean> | null = null;
+
+export function ensureLmStudioServer(): Promise<boolean> {
+  demarrageServeur ??= demarrerServeurLmStudio().finally(() => {
+    demarrageServeur = null;
+  });
+  return demarrageServeur;
+}
+
+async function demarrerServeurLmStudio(): Promise<boolean> {
   if (!LMSTUDIO_URL) return false;
   // Avant tout, même serveur déjà en marche : sans ce dossier, llmster ne charge aucun modèle (engine.ts).
   preparerDossiersLlmster();
@@ -327,7 +345,31 @@ export async function ensureLmStudioServer(): Promise<boolean> {
   }
   try {
     console.log("[helix] serveur LM Studio arrêté, démarrage...");
-    await lancerLms(lms, "server start", 60_000);
+    /*
+     * Le moteur sans interface juste posé ou juste levé peut refuser le
+     * premier `server start` (essai Windows de bout en bout du 28/09/2026,
+     * application empaquetée, scripts/essai-windows-ci.mjs : « Error:
+     * WebSocket connection closed », code 1, une seconde après `daemon up`,
+     * pendant que le service redémarrait). Helix abandonnait alors, et la
+     * mise en route finissait sur « Le moteur est installé, mais il n'a pas
+     * démarré » ; l'essai n'était passé que parce qu'il relisait l'état
+     * toutes les trois secondes, ce qui relançait le serveur. Quatre essais,
+     * cinq secondes d'écart, tant que le serveur ne répond pas.
+     */
+    const essais = moteurSansInterface() ? 4 : 1;
+    for (let n = 1; ; n++) {
+      try {
+        await lancerLms(lms, "server start", 60_000);
+        break;
+      } catch (err) {
+        // Refusé, mais le serveur écoute quand même (lancé entre-temps) : c'est ce qui compte.
+        if (await repond(LMSTUDIO_URL)) break;
+        if (n >= essais) throw err;
+        const detail = `${(err as { stderr?: unknown }).stderr ?? ""}${(err as Error).message ?? ""}`;
+        console.warn(`[helix] \`lms server start\` refusé (essai ${n}/${essais}), nouvel essai dans 5 s :`, detail.slice(-200));
+        await new Promise((r) => setTimeout(r, 5000));
+      }
+    }
   } catch (err) {
     /*
      * macOS : l'application LM Studio posée mais jamais ouverte (vu sur un
@@ -491,15 +533,35 @@ async function listeDistante(backend: BackendConfig): Promise<ModeleDistant[]> {
   return modeles;
 }
 
-/** Interroge tous les backends activés et agrège leurs modèles. */
-export async function discover(): Promise<Discovery> {
+/**
+ * Interroge tous les backends activés et agrège leurs modèles.
+ *
+ * `attendreLmStudio` (vrai par défaut) : un LM Studio muet est réveillé, et
+ * la découverte attend qu'il réponde. Faux pour la sonde `/health` (essai
+ * Windows du 28/09/2026) : l'application rouverte le lendemain, service de
+ * LM Studio arrêté, la sonde attendait `daemon up` (70 s mesurées), et
+ * l'application, qui attend une réponse à cette sonde avant d'ouvrir sa
+ * fenêtre (main.cjs, `startGateway`, un peu plus d'une minute au plus),
+ * restait sans fenêtre tout ce temps. Le réveil est alors lancé sans être
+ * attendu, et LM Studio compte comme éteint pour cette réponse ; `lms` n'est
+ * pas appelé tant que le serveur ne répond pas : `lms ls` lèverait le service
+ * lui-même, depuis la passerelle, en même temps que l'application.
+ */
+export async function discover(options: { attendreLmStudio?: boolean } = {}): Promise<Discovery> {
   const enabled = tousLesBackends()
     .filter((b) => b.enabled)
     .sort((a, b) => a.priority - b.priority);
 
   // Un backend LM Studio activé mais muet : on tente de le réveiller avant de
   // conclure qu'il n'y a aucun modèle.
-  if (enabled.some((b) => b.id === "lmstudio")) await ensureLmStudioServer();
+  let lmStudioEnReveil = false;
+  if (enabled.some((b) => b.id === "lmstudio")) {
+    if (options.attendreLmStudio !== false) await ensureLmStudioServer();
+    else if (!(await lmStudioRepond())) {
+      lmStudioEnReveil = true;
+      void ensureLmStudioServer().catch(() => false);
+    }
+  }
   // Le moteur ouvert (Mac Intel, llamaCpp.ts) : démarré s'il a de quoi servir.
   /*
    * Faux s'il n'est pas reconnu à l'écoute (un autre programme sur son port,
@@ -515,7 +577,7 @@ export async function discover(): Promise<Discovery> {
    * découverte, et interrogeait le LM Studio de la machine (vu dans la batterie
    * de sécurité, qui tournait à côté d'un LM Studio en service).
    */
-  const { meta: lmMeta, enMemoireLu } = enabled.some((b) => b.kind === "lmstudio")
+  const { meta: lmMeta, enMemoireLu } = enabled.some((b) => b.kind === "lmstudio") && !lmStudioEnReveil
     ? await lmStudioMetadata()
     : { meta: new Map<string, Partial<ModelInfo>>(), enMemoireLu: false };
 

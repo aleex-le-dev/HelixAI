@@ -298,6 +298,12 @@ const faux = serveurHttp(async (req, res) => {
     if (p === "/revoke") return reponse(res, 200, {});
     if (p === "/token") {
       if (f.get("client_id") !== GOOGLE.id || f.get("client_secret") !== GOOGLE.secret) return reponse(res, 401, { error: "invalid_client" });
+      // La boîte Gmail branchée par « Se connecter avec Google » (section V) : un renouvellement un peu lent, et une panne passagère.
+      if (f.get("grant_type") === "refresh_token" && f.get("refresh_token") === "ACTU-panne") return reponse(res, 503, { error: "backendError" });
+      if (f.get("grant_type") === "refresh_token" && f.get("refresh_token") === "ACTU-courrier") {
+        await attendre(150);
+        return reponse(res, 200, { access_token: `ACCES-courrier-${++compteur}`, expires_in: 3599, scope: "https://mail.google.com/", token_type: "Bearer" });
+      }
       if (f.get("grant_type") === "refresh_token") {
         const svc = (f.get("refresh_token") ?? "").replace("ACTU-", "");
         if (!PORTEES[svc]) return reponse(res, 400, { error: "invalid_grant" });
@@ -426,6 +432,10 @@ const appel = (chemin, options = {}) => fetch(`${G}${chemin}`, { redirect: "manu
 const poster = (chemin, entetes, corps) => appel(chemin, { method: "POST", headers: entetes, body: JSON.stringify(corps ?? {}) });
 const premier = await (await poster("/helix/auth/create", avecJeton, { fullName: "Alice Essai", email: "alice@example.test", password: "Mot2PasseSolide!42" })).json();
 const A = { ...avecJeton, "X-Helix-Session": premier.session?.token };
+// Une collègue, membre sans droit d'administration (tournée des connecteurs du 28/09/2026, section II).
+const creeB = await (await poster("/helix/auth/create", A, { fullName: "Bruno Essai", email: "bruno@example.test", password: "Provisoire2Passe!11" })).json();
+const connB = await (await poster("/helix/auth/mot-de-passe-provisoire", avecJeton, { accountId: creeB.account?.id, password: "Provisoire2Passe!11", nouveau: "Bruno2PasseSolide!57" })).json();
+const B = { ...avecJeton, "X-Helix-Session": connB.session?.token };
 const installes = async () => (await (await appel("/helix/connecteurs", { headers: A })).json()).installes ?? [];
 /** La « personne » ouvre la page d'autorisation et dit oui : le service rend un code, lié au défi PKCE et à l'adresse de retour. */
 const accorder = async (adresse) => {
@@ -490,6 +500,18 @@ const branches = {};
   branches.asana = vuAsana?.running === true;
 
   // Webflow : l'adresse documentée est celle de l'ancien transport SSE.
+  /*
+   * D'abord un échange raté (code refusé par le service) : le `state` n'est
+   * plus reçu ensuite, même avec un bon code. Il ne restait effacé qu'après un
+   * échange réussi : l'adresse d'autorisation, retrouvée dans l'historique du
+   * navigateur, servait encore dix minutes à qui voulait y brancher son propre
+   * compte (tournée des connecteurs du 28/09/2026).
+   */
+  const departRate = await (await poster("/helix/connecteurs/connecter", A, { id: "webflow" })).json();
+  const accordRate = departRate.adresse ? await accorder(departRate.adresse) : { code: "", state: "" };
+  const rate = await appel(`/helix/oauth/retour?code=CODE-INVENTE&state=${encodeURIComponent(accordRate.state)}`);
+  const reprise = await appel(`/helix/oauth/retour?code=${encodeURIComponent(accordRate.code)}&state=${encodeURIComponent(accordRate.state)}`);
+  verifier("Webflow : après un échange raté, le même state ne sert plus (400), même avec un bon code : rien n'est branché", rate.status === 400 && reprise.status === 400 && !(await installes()).some((c) => c.id === "webflow"), `${rate.status} ${reprise.status}`);
   const departWf = await (await poster("/helix/connecteurs/connecter", A, { id: "webflow" })).json();
   const accordWf = departWf.adresse ? await accorder(departWf.adresse) : null;
   const retourWf = accordWf ? await appel(`/helix/oauth/retour?code=${encodeURIComponent(accordWf.code)}&state=${encodeURIComponent(accordWf.state)}`) : { status: 0 };
@@ -510,6 +532,27 @@ console.log("\nII. Google Drive, Google Agenda et Slack : connexion complète");
 {
   const g = await poster("/helix/google/client", A, { clientId: GOOGLE.id, clientSecret: GOOGLE.secret });
   verifier("application Google de l'instance enregistrée", g.status === 200, g.status);
+
+  /*
+   * Un compte pour toute l'instance : une collègue ne le branche, ne le
+   * remplace ni ne le débranche (tournée des connecteurs du 28/09/2026 : une
+   * séance suffisait, et l'agenda de l'instance pouvait être remplacé par un
+   * serveur à elle, qui recevait les rendez-vous écrits par les agents de tous).
+   */
+  const refusesB = [];
+  for (const [route, corps] of [
+    ["/helix/drive/connecter", {}],
+    ["/helix/drive/code", { adresse: "http://127.0.0.1:1/?state=x&code=y" }],
+    ["/helix/agenda/google/connecter", { ecriture: true }],
+    ["/helix/agenda/google/code", { adresse: "http://127.0.0.1:1/?state=x&code=y" }],
+    ["/helix/agenda/configurer", { url: "https://agenda.exemple.test/dav/", identifiant: "bruno", motDePasse: "x" }],
+    ["/helix/slack/configurer", { jeton: SLACK }],
+  ]) {
+    const r = await poster(route, B, corps);
+    refusesB.push(`${route} ${r.status}`);
+  }
+  const lectureB = await appel("/helix/drive", { headers: B });
+  verifier("une collègue (membre) ne peut ni brancher Drive, Google Agenda, un agenda CalDAV ou Slack, ni coller l'adresse de retour (403) ; elle lit l'état", refusesB.every((x) => x.endsWith(" 403")) && lectureB.status === 200 && !recues.some((x) => x.hote === "slack.com"), refusesB.join(", "));
 
   for (const [svc, route] of [["drive", "/helix/drive"], ["agenda", "/helix/agenda/google"]]) {
     const depart = await (await poster(`${route}/connecter`, A, {})).json();
@@ -534,6 +577,11 @@ console.log("\nII. Google Drive, Google Agenda et Slack : connexion complète");
   verifier("Agenda : l'état dit le compte branché, en lecture seule", agenda.configure === true && agenda.compte === "alice@example.test" && agenda.ecriture !== true, JSON.stringify(agenda).slice(0, 200));
 
   const slack = await (await poster("/helix/slack/configurer", A, { jeton: SLACK })).json();
+  const oublisB = [];
+  for (const route of ["/helix/drive/oublier", "/helix/agenda/google/oublier", "/helix/agenda/oublier", "/helix/slack/oublier"]) oublisB.push(`${route} ${(await poster(route, B, {})).status}`);
+  const driveApresB = await (await appel("/helix/drive", { headers: A })).json();
+  const slackApresB = await (await appel("/helix/slack", { headers: A })).json();
+  verifier("une collègue ne peut pas débrancher le Drive, l'agenda ni le Slack de l'organisation (403) : ils restent branchés", oublisB.every((x) => x.endsWith(" 403")) && driveApresB.configure === true && slackApresB.configure === true, `${oublisB.join(", ")} drive=${driveApresB.configure} slack=${slackApresB.configure}`);
   verifier("Slack : le jeton de bot est essayé (auth.test), ses autorisations relues (lecture seule), les salons listés, puis enregistré", slack.ok === true && /Espace Essai/.test(slack.message ?? "") && /chantier-essai/.test(slack.message ?? ""), slack.message);
   verifier("Slack : la réponse ne rend pas le jeton", !JSON.stringify(slack).includes(SLACK), "jeton rendu");
 }
@@ -646,10 +694,127 @@ console.log("\nIV. Débrancher, et rien de secret nulle part");
   verifier("aucune requête vers un hôte hors de la liste de l'essai", hors.length === 0, hors.map((x) => x.hote).join(", "));
 }
 
+/* ------------------------------------------------------------------------- */
+console.log("\nV. Courrier branché par « Se connecter avec Google » : IMAP en XOAUTH2, renouvellement");
+const COURRIER = mkdtempSync(join(tmpdir(), "helix-connecteurs-courrier-"));
+{
+  /*
+   * Un faux serveur IMAP en TLS (certificat fabriqué par tls.ts, accepté par ce
+   * processus seul), qui se comporte comme Gmail d'après sa documentation
+   * (https://developers.google.com/workspace/gmail/imap/xoauth2-protocol, lue
+   * le 28/09/2026) : un refus de XOAUTH2 envoie d'abord « + <erreur en base 64> »
+   * et attend une ligne vide avant le « NO ». Il annonce aussi LOGINDISABLED,
+   * qui ne ferme que LOGIN.
+   */
+  writeFileSync(join(COURRIER, "profil.json"), JSON.stringify({ chiffrement: "fichier", share: true, backends: [{ id: "lmstudio", enabled: false }, { id: "exo", enabled: false }] }));
+  const script = join(COURRIER, "courrier.mjs");
+  writeFileSync(
+    script,
+    `import tls from "node:tls";
+import { syncBuiltinESMExports } from "node:module";
+const { tlsMaterial } = await import(${src("tls.ts")});
+const m = tlsMaterial();
+const connecterOrigine = tls.connect;
+tls.connect = (...a) => { if (a[0] && typeof a[0] === "object") a[0] = { ...a[0], ca: m.cert }; return connecterOrigine(...a); };
+syncBuiltinESMExports();
+const { ClientImap } = await import(${src("courrier.ts")});
+const co = await import(${src("courrierOauth.ts")});
+const BON = "ACCES-IMAP-BON";
+const sortie = { auths: 0 };
+const serveur = tls.createServer({ cert: m.cert, key: m.key }, (s) => {
+  let tampon = "";
+  let courant = "";
+  let litteral = 0;
+  let suite = null;
+  s.on("error", () => {});
+  s.write("* OK [CAPABILITY IMAP4rev1 SASL-IR AUTH=XOAUTH2 LOGINDISABLED] Essai pret\\r\\n");
+  s.on("data", (b) => {
+    tampon += b.toString("latin1");
+    for (;;) {
+      // Un littéral synchronisant ({n}) : « + », puis ses n octets, puis la suite de la ligne.
+      if (litteral > 0) {
+        if (tampon.length < litteral) return;
+        courant += tampon.slice(0, litteral);
+        tampon = tampon.slice(litteral);
+        litteral = 0;
+      }
+      const i = tampon.indexOf("\\r\\n");
+      if (i < 0) return;
+      const morceau = tampon.slice(0, i);
+      tampon = tampon.slice(i + 2);
+      const annonce = /\\{(\\d+)\\}$/.exec(morceau);
+      if (annonce) {
+        courant += morceau.slice(0, annonce.index);
+        litteral = Number(annonce[1]);
+        s.write("+ vas-y\\r\\n");
+        continue;
+      }
+      const l = courant + morceau;
+      courant = "";
+      if (suite) { const t = suite; suite = null; s.write(t + " NO [AUTHENTICATIONFAILED] Invalid credentials (Failure)\\r\\n"); continue; }
+      const [tag, cmd, ...r] = l.split(" ");
+      const c = (cmd ?? "").toUpperCase();
+      if (c === "CAPABILITY") s.write("* CAPABILITY IMAP4rev1 SASL-IR AUTH=XOAUTH2 LOGINDISABLED\\r\\n" + tag + " OK Fait\\r\\n");
+      else if (c === "AUTHENTICATE") {
+        sortie.auths++;
+        const clair = Buffer.from(r[1] ?? "", "base64").toString("utf8");
+        if (clair.includes("auth=Bearer " + BON)) s.write(tag + " OK Bienvenue\\r\\n");
+        else { suite = tag; s.write("+ " + Buffer.from('{"status":"401","schemes":"Bearer","scope":"https://mail.google.com/"}').toString("base64") + "\\r\\n"); }
+      } else if (c === "LOGIN") s.write(tag + " NO LOGIN desactive\\r\\n");
+      else if (c === "EXAMINE") s.write("* 2 EXISTS\\r\\n* OK [UIDVALIDITY 7] ok\\r\\n" + tag + " OK [READ-ONLY] fait\\r\\n");
+      else if (c === "LOGOUT") { s.write("* BYE a bientot\\r\\n" + tag + " OK\\r\\n"); s.end(); }
+      else s.write(tag + " BAD inconnu\\r\\n");
+    }
+  });
+});
+await new Promise((ok) => serveur.listen(0, "127.0.0.1", ok));
+const base = { serveur: "127.0.0.1", port: serveur.address().port, chiffrement: "tls", identifiant: "boite@example.test", motDePasse: "", adresse: "boite@example.test" };
+const jetons = (acces) => ({ fournisseur: "google", clientId: ${JSON.stringify(GOOGLE.id)}, clientSecret: ${JSON.stringify(GOOGLE.secret)}, refreshToken: "ACTU-courrier", accessToken: acces, expire: Date.now() + 3600_000 });
+const c1 = new ClientImap({ ...base, oauth: jetons(BON) });
+try { await c1.connecter(); sortie.total = await c1.ouvrir("INBOX"); } catch (e) { sortie.erreurBon = e.message; } finally { await c1.fermer(); }
+const c2 = new ClientImap({ ...base, oauth: jetons("ACCES-IMAP-REVOQUE") });
+const t0 = Date.now();
+try { await c2.connecter(); sortie.refuseAccepte = true; } catch (e) { sortie.refus = { message: e.message, categorie: e.categorie, ms: Date.now() - t0 }; } finally { await c2.fermer(); }
+const perime = { fournisseur: "google", clientId: ${JSON.stringify(GOOGLE.id)}, clientSecret: ${JSON.stringify(GOOGLE.secret)}, refreshToken: "ACTU-courrier" };
+sortie.simultanes = (await Promise.all([co.accesValide(perime), co.accesValide(perime), co.accesValide(perime)])).map((r) => (r.ok ? r.acces : "ECHEC " + r.message));
+const panne = await co.accesValide({ ...perime, refreshToken: "ACTU-panne" });
+sortie.panne = panne.ok ? "ok" : panne.message;
+serveur.close();
+console.log("RESULTAT " + JSON.stringify(sortie));
+process.exit(0);
+`,
+  );
+  const r = await new Promise((fin) => {
+    const e = spawn(process.execPath, ["--import", PREALABLE, "--no-warnings", script], { env: { ...ENV, HELIX_CONFIG: join(COURRIER, "profil.json"), HELIX_DATA_DIR: COURRIER }, stdio: ["ignore", "pipe", "pipe"] });
+    let texte = "";
+    e.stdout.on("data", (b) => (texte += b));
+    e.stderr.on("data", (b) => (texte += b));
+    const minuterie = setTimeout(() => e.kill(), 90_000);
+    e.on("close", () => {
+      clearTimeout(minuterie);
+      const ligne = texte.split("\n").find((l) => l.startsWith("RESULTAT "));
+      try {
+        fin({ ...JSON.parse(ligne?.slice("RESULTAT ".length) ?? "{}"), brut: texte });
+      } catch {
+        fin({ brut: texte });
+      }
+    });
+  });
+  verifier("IMAP en XOAUTH2 : la boîte s'ouvre avec le jeton, même si le serveur annonce LOGINDISABLED (qui ne ferme que LOGIN)", r.total === 2 && !r.erreurBon, r.erreurBon ?? r.brut?.slice(-400));
+  verifier(
+    "IMAP en XOAUTH2 : un jeton refusé (« + » puis ligne vide, comme Gmail) est dit refusé tout de suite, pas après vingt secondes d'attente (« le serveur a cessé de répondre »)",
+    r.refuseAccepte !== true && r.refus?.categorie === "authentification" && /a refusé l'accès à la boîte/.test(r.refus?.message ?? "") && (r.refus?.ms ?? 99_999) < 5000,
+    JSON.stringify(r.refus ?? r.brut?.slice(-400)),
+  );
+  const renouvellements = recues.filter((x) => x.hote === "oauth2.googleapis.com" && new URLSearchParams(x.corps).get("refresh_token") === "ACTU-courrier").length;
+  verifier("courrier : trois lectures qui renouvellent en même temps ne font qu'un renouvellement chez Google, et reçoivent le même jeton", renouvellements === 1 && new Set(r.simultanes ?? []).size === 1 && /^ACCES-courrier-/.test(r.simultanes?.[0] ?? ""), `${renouvellements} renouvellement(s) ${JSON.stringify(r.simultanes)}`);
+  verifier("courrier : une panne passagère de Google (503) au renouvellement ne dit pas de rebrancher la boîte", /réessayez dans quelques minutes/i.test(r.panne ?? "") && !/rebrancher/.test(r.panne ?? ""), r.panne);
+}
+
 passerelle.kill();
 faux.close();
 await attendre(200);
-for (const d of [DONNEES, AUX, ESPACE]) rmSync(d, { recursive: true, force: true });
+for (const d of [DONNEES, AUX, ESPACE, COURRIER]) rmSync(d, { recursive: true, force: true });
 
 console.log(`\n${reussis} vérification(s) réussie(s), ${echecs.length} échec(s).`);
 if (echecs.length) {

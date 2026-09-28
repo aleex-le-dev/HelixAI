@@ -278,7 +278,9 @@ const faux = serveurHttp(async (req, res) => {
   }
   if (hote === "graph.instagram.com") {
     const jeton = q.get("access_token") ?? f.get("access_token") ?? "";
-    if (p === "/access_token" && q.get("grant_type") === "ig_exchange_token" && q.get("client_secret") === APPS.instagram.secret && jeton === "COURT-instagram") return reponse(res, 200, { access_token: "ACCES-instagram-long", token_type: "bearer", expires_in: 5184000 });
+    if (p === "/access_token" && q.get("grant_type") === "ig_exchange_token" && q.get("client_secret") === APPS.instagram.secret && jeton === "COURT-instagram") return reponse(res, 200, { access_token: "ACCES-instagram-long", token_type: "bearer", expires_in: 3456000 });
+    // Le jeton rendu vaut encore 40 jours (il a déjà servi 20 jours) : l'instance doit le renouveler avant qu'il n'expire (tournée du 28/09/2026).
+    if (p === "/refresh_access_token" && q.get("grant_type") === "ig_refresh_token" && jeton === "ACCES-instagram-long") return reponse(res, 200, { access_token: "ACCES-instagram-long", token_type: "bearer", expires_in: 5184000 });
     if (jeton !== "ACCES-instagram-long") return reponse(res, 401, { error: { message: "bad token", code: 190 } });
     if (p === "/v25.0/me") return reponse(res, 200, { user_id: IG, username: "essai.pro", account_type: "BUSINESS", followers_count: 90, follows_count: 10, media_count: 4 });
     if (p === `/v25.0/${IG}/media` && req.method === "GET") return reponse(res, 200, { data: [{ id: "800", caption: "Photo essai", media_type: "IMAGE", permalink: "https://www.instagram.com/p/x", timestamp: "2026-09-10T08:00:00+0000", like_count: 7, comments_count: 2 }] });
@@ -1123,6 +1125,8 @@ process.exit(0);
   lu("instagram__compte", /@essai\.pro[\s\S]*90 abonnés/);
   lu("instagram__publications", /Photo essai/);
   lu("instagram__statistiques", /views : 55/);
+  const renouvIg = recues.filter((x) => x.hote === "graph.instagram.com" && x.chemin.startsWith("/refresh_access_token?grant_type=ig_refresh_token"));
+  verifier("Instagram : un jeton de 60 jours à qui il en reste moins de 50 est renouvelé à l'usage, une fois (il n'était renouvelé que dans sa dernière minute : en pratique jamais, et le compte se débranchait au bout de 60 jours)", renouvIg.length === 1, `${renouvIg.length} renouvellement(s)`);
   lu("tiktok__profil", /Créatrice essai/);
   lu("tiktok__videos", /1\s000 vues/);
   verifier("ce qui est rendu au modèle ne contient aucun jeton (le jeton de page Facebook compris)", !SECRETS.test(ligne ?? ""), (ligne ?? "").match(SECRETS)?.[0]);

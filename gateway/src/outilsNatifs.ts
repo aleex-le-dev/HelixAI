@@ -1,4 +1,5 @@
-import { lstat, readFile, realpath } from "node:fs/promises";
+import { constants } from "node:fs";
+import { open, realpath } from "node:fs/promises";
 import { extname, isAbsolute, resolve, sep } from "node:path";
 import { estAdministrateur } from "./roles.ts";
 import { ECRITURES_NATIVES, LECTURES_NATIVES } from "./approbation.ts";
@@ -202,20 +203,44 @@ export function toolsForModel(): Outil[] {
 /** Publications récentes, pour l'instance entière : un compteur par service, et le texte pour refuser un doublon. */
 const recentes: { service: IdNatif; quand: number; empreinte: string }[] = [];
 
-function garderPublication(service: IdNatif, contenu: string): string | null {
+/**
+ * Réserve la place d'une écriture ou d'une publication, **avant** l'appel au
+ * service, puis la rend si rien n'est parti (erreur, refus du service).
+ *
+ * Tournée du 28/09/2026 (SECURITE.md § 41) : la place n'était notée qu'après
+ * la réponse du service. Deux appels simultanés (deux Chats, deux onglets,
+ * chacun accepté sur sa carte) passaient donc tous les deux le contrôle :
+ * essayé, le même post lancé trois fois en même temps partait trois fois, et
+ * douze publications Instagram lancées ensemble passaient toutes, au-delà des
+ * dix de l'heure. La vérification et la réservation se font maintenant d'un
+ * seul tenant, sans `await` entre elles.
+ */
+async function sousGarde(service: IdNatif, contenu: string, agir: () => Promise<Resultat>): Promise<Resultat> {
   const maintenant = Date.now();
   while (recentes.length && maintenant - recentes[0]!.quand > 60 * 60_000) recentes.shift();
   const empreinte = contenu.trim().toLowerCase().replace(/\s+/g, " ");
   // Mesuré sur Google Agenda le 26/09/2026 : un petit modèle refait trois fois la même action de suite.
   if (recentes.some((r) => r.service === service && r.empreinte === empreinte && maintenant - r.quand < LIMITES.doublonMs)) {
-    return "Déjà fait : ce même contenu vient d'être publié ou écrit il y a quelques minutes. Rien n'a été refait ; ne le relance pas.";
+    return refus("Déjà fait : ce même contenu vient d'être publié ou écrit il y a quelques minutes. Rien n'a été refait ; ne le relance pas.");
   }
   if (recentes.filter((r) => r.service === service).length >= LIMITES.publicationsParHeure) {
-    return `Refusé : ${LIMITES.publicationsParHeure} écritures ou publications sur ce service dans l'heure, pour toute l'instance. C'est la limite de sécurité ; dis-le à l'utilisateur.`;
+    return refus(`Refusé : ${LIMITES.publicationsParHeure} écritures ou publications sur ce service dans l'heure, pour toute l'instance. C'est la limite de sécurité ; dis-le à l'utilisateur.`);
   }
-  return null;
+  const place = { service, quand: maintenant, empreinte };
+  recentes.push(place);
+  const rendre = () => {
+    const i = recentes.indexOf(place);
+    if (i >= 0) recentes.splice(i, 1);
+  };
+  try {
+    const r = await agir();
+    if (!r.ok) rendre();
+    return r;
+  } catch (err) {
+    rendre();
+    throw err;
+  }
 }
-const noterPublication = (service: IdNatif, contenu: string) => recentes.push({ service, quand: Date.now(), empreinte: contenu.trim().toLowerCase().replace(/\s+/g, " ") });
 
 async function exigerAdministrateur(pour: { userId: string } | undefined): Promise<string | null> {
   if (pour?.userId && (await estAdministrateur(pour.userId))) return null;
@@ -363,8 +388,6 @@ async function sheetsEcrire(args: Record<string, unknown>, ajouter: boolean): Pr
   if (!plage) return refus("Donne « plage », en notation A1, par exemple « Feuil1!A2 ».");
   const v = valeursSures(args.valeurs);
   if (!v.ok) return refus(v.message);
-  const garde = garderPublication("sheets", `${id}|${plage}|${JSON.stringify(v.valeurs)}`);
-  if (garde) return refus(garde);
   /*
    * `RAW` et jamais `USER_ENTERED` : une cellule qui commence par « = » reste
    * du texte. Sans cela, un texte venu d'un mail ou d'une page (« =IMPORTXML(…) »)
@@ -374,11 +397,12 @@ async function sheetsEcrire(args: Record<string, unknown>, ajouter: boolean): Pr
   const chemin = ajouter
     ? `/v4/spreadsheets/${id}/values/${encodeURIComponent(plage)}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`
     : `/v4/spreadsheets/${id}/values/${encodeURIComponent(plage)}?valueInputOption=RAW`;
-  const r = await appelerApi("sheets", (a) => ({ methode: ajouter ? "POST" : "PUT", hote: "sheets.googleapis.com", chemin, entetes: { ...bearer(a), "Content-Type": "application/json" }, corps: JSON.stringify({ range: plage, majorDimension: "ROWS", values: v.valeurs }) }));
-  if (r.statut !== 200) throw erreurApi("Google Sheets", r);
-  noterPublication("sheets", `${id}|${plage}|${JSON.stringify(v.valeurs)}`);
-  const maj = (ajouter ? (r.json.updates as Record<string, unknown> | undefined) : r.json) ?? {};
-  return { ok: true, content: `${ajouter ? "Lignes ajoutées" : "Valeurs écrites"} : ${nombre(maj.updatedCells ?? v.cellules)} cellule(s), plage ${texte(maj.updatedRange, 200) || plage}. C'est fait : ne le refais pas.` };
+  return sousGarde("sheets", `${id}|${plage}|${JSON.stringify(v.valeurs)}`, async () => {
+    const r = await appelerApi("sheets", (a) => ({ methode: ajouter ? "POST" : "PUT", hote: "sheets.googleapis.com", chemin, entetes: { ...bearer(a), "Content-Type": "application/json" }, corps: JSON.stringify({ range: plage, majorDimension: "ROWS", values: v.valeurs }) }));
+    if (r.statut !== 200) throw erreurApi("Google Sheets", r);
+    const maj = (ajouter ? (r.json.updates as Record<string, unknown> | undefined) : r.json) ?? {};
+    return { ok: true, content: `${ajouter ? "Lignes ajoutées" : "Valeurs écrites"} : ${nombre(maj.updatedCells ?? v.cellules)} cellule(s), plage ${texte(maj.updatedRange, 200) || plage}. C'est fait : ne le refais pas.` };
+  });
 }
 
 /** Le texte d'un élément de diapositive, formes, tableaux et groupes compris. */
@@ -505,14 +529,32 @@ async function pagesLinkedin(): Promise<{ id: string; nom: string }[]> {
   return pages;
 }
 
+/**
+ * La page que désigne le modèle : par son identifiant, par son nom exact, ou
+ * par un morceau de nom qu'**une seule** page porte.
+ *
+ * Tournée du 28/09/2026 (SECURITE.md § 41) : la première page dont le nom
+ * contenait le morceau était prise. Essayé avec « Boutique Paris » et
+ * « Boutique Lyon » : « publier sur la page « Boutique » » partait sur Paris,
+ * alors que la carte ne disait que « Boutique ». Deux pages possibles : refusé,
+ * avec leurs noms, pour que le modèle redemande la bonne.
+ */
+function choisirPage<P extends { id: string; nom: string }>(pages: P[], v: string, n: string, service: string, outil: string): P {
+  const exacte = pages.find((p) => p.id === n) ?? pages.find((p) => p.nom.toLowerCase() === n);
+  if (exacte) return exacte;
+  const proches = pages.filter((p) => p.nom.toLowerCase().includes(n));
+  if (proches.length === 1) return proches[0]!;
+  if (proches.length > 1) {
+    throw new ErreurNatif("api", `Plusieurs pages ${service} correspondent à « ${v} » : ${proches.map((p) => `${p.nom} (${p.id})`).join(", ")}. Rien n'a été fait : redonne le nom exact ou l'identifiant de la page voulue.`);
+  }
+  throw new ErreurNatif("api", `Aucune page ${service} ne s'appelle « ${v} ». Pages : ${pages.map((p) => `${p.nom} (${p.id})`).join(", ") || "aucune"} (voir ${outil}).`);
+}
+
 async function pageLinkedin(brut: unknown): Promise<{ id: string; nom: string }> {
   const v = critereSur(brut, 200);
   if (!v) throw new ErreurNatif("api", "Donne « page » : le nom ou l'identifiant rendu par linkedin__pages.");
   const pages = await pagesLinkedin();
-  const n = v.toLowerCase().replace(/^urn:li:organization:/, "");
-  const trouvee = pages.find((p) => p.id === n) ?? pages.find((p) => p.nom.toLowerCase() === n) ?? pages.find((p) => p.nom.toLowerCase().includes(n));
-  if (!trouvee) throw new ErreurNatif("api", `Aucune page administrée ne s'appelle « ${v} ». Pages : ${pages.map((p) => `${p.nom} (${p.id})`).join(", ") || "aucune"}.`);
-  return trouvee;
+  return choisirPage(pages, v, v.toLowerCase().replace(/^urn:li:organization:/, ""), "LinkedIn", "linkedin__pages");
 }
 
 async function linkedinPages(): Promise<Resultat> {
@@ -559,8 +601,6 @@ async function linkedinPublier(args: Record<string, unknown>): Promise<Resultat>
     qui = "le profil connecté";
   }
   const visibilite = args.visibilite === "CONNECTIONS" && auteur.startsWith("urn:li:person:") ? "CONNECTIONS" : "PUBLIC";
-  const garde = garderPublication("linkedin", `${auteur}|${brut}`);
-  if (garde) return refus(garde);
   const corps = {
     author: auteur,
     commentary: texteLinkedin(brut),
@@ -569,11 +609,12 @@ async function linkedinPublier(args: Record<string, unknown>): Promise<Resultat>
     lifecycleState: "PUBLISHED",
     isReshareDisabledByAuthor: false,
   };
-  const r = await appelerApi("linkedin", (a) => ({ methode: "POST", hote: "api.linkedin.com", chemin: "/rest/posts", entetes: enTetesLinkedin(a, true), corps: JSON.stringify(corps) }));
-  if (r.statut !== 201 && r.statut !== 200) throw erreurApi("LinkedIn", r);
-  noterPublication("linkedin", `${auteur}|${brut}`);
-  const idPost = texte(r.entetes["x-restli-id"], 100);
-  return { ok: true, content: `Post publié sur LinkedIn par ${qui}${idPost ? ` (identifiant ${idPost}, https://www.linkedin.com/feed/update/${idPost}/)` : ""}. C'est fait : ne le republie pas.` };
+  return sousGarde("linkedin", `${auteur}|${brut}`, async () => {
+    const r = await appelerApi("linkedin", (a) => ({ methode: "POST", hote: "api.linkedin.com", chemin: "/rest/posts", entetes: enTetesLinkedin(a, true), corps: JSON.stringify(corps) }));
+    if (r.statut !== 201 && r.statut !== 200) throw erreurApi("LinkedIn", r);
+    const idPost = texte(r.entetes["x-restli-id"], 100);
+    return { ok: true, content: `Post publié sur LinkedIn par ${qui}${idPost ? ` (identifiant ${idPost}, https://www.linkedin.com/feed/update/${idPost}/)` : ""}. C'est fait : ne le republie pas.` };
+  });
 }
 
 /* ------------------------------ Facebook --------------------------------- */
@@ -601,10 +642,7 @@ async function pageFacebook(brut: unknown): Promise<PageFacebook> {
   const v = critereSur(brut, 200);
   if (!v) throw new ErreurNatif("api", "Donne « page » : le nom ou l'identifiant rendu par facebook__pages.");
   const pages = await pagesFacebook();
-  const n = v.toLowerCase();
-  const trouvee = pages.find((p) => p.id === n) ?? pages.find((p) => p.nom.toLowerCase() === n) ?? pages.find((p) => p.nom.toLowerCase().includes(n));
-  if (!trouvee) throw new ErreurNatif("api", `Aucune page gérée ne s'appelle « ${v} ». Pages : ${pages.map((p) => `${p.nom} (${p.id})`).join(", ") || "aucune"}.`);
-  return trouvee;
+  return choisirPage(pages, v, v.toLowerCase(), "Facebook", "facebook__pages");
 }
 
 async function facebookPages(): Promise<Resultat> {
@@ -631,7 +669,12 @@ function adresseHttps(brut: unknown): string | null {
   try {
     const u = new URL(v);
     if (u.protocol !== "https:" || u.username || u.password) return null;
-    const hote = u.hostname.replace(/^\[|\]$/g, "").toLowerCase();
+    /*
+     * Le point final d'un nom (« localhost. », « metadata.google.internal. »)
+     * désigne le même hôte : il passait les contrôles de suffixe (tournée du
+     * 28/09/2026, SECURITE.md § 41). Retiré avant de juger.
+     */
+    const hote = u.hostname.replace(/^\[|\]$/g, "").toLowerCase().replace(/\.+$/, "");
     // Une adresse du réseau interne n'a de sens pour aucun service en ligne, qui ne la joindrait pas.
     if (hote === "localhost" || hote.endsWith(".localhost") || hote.endsWith(".local") || hote.endsWith(".internal")) return null;
     if ((/^[\d.]+$/.test(hote) || hote.includes(":")) && interne(hote)) return null;
@@ -648,13 +691,12 @@ async function facebookPublier(args: Record<string, unknown>): Promise<Resultat>
   const lien = args.lien !== undefined && args.lien !== "" ? adresseHttps(args.lien) : null;
   if (args.lien !== undefined && args.lien !== "" && !lien) return refus("« lien » doit être une adresse https publique.");
   const page = await pageFacebook(args.page);
-  const garde = garderPublication("facebook", `${page.id}|${message}|${lien ?? ""}`);
-  if (garde) return refus(garde);
   const corps = new URLSearchParams({ message, ...(lien ? { link: lien } : {}), access_token: page.jeton, appsecret_proof: preuveMeta(page.jeton, secretApplication("facebook")) });
-  const r = await envoyer("facebook", { methode: "POST", hote: "graph.facebook.com", chemin: `/${META}/${page.id}/feed`, entetes: { "Content-Type": "application/x-www-form-urlencoded" }, corps: corps.toString() });
-  if (r.statut !== 200) throw erreurApi("Facebook", r);
-  noterPublication("facebook", `${page.id}|${message}|${lien ?? ""}`);
-  return { ok: true, content: `Post publié sur la page Facebook « ${page.nom} » (identifiant ${texte(r.json.id, 80)}). C'est fait : ne le republie pas.` };
+  return sousGarde("facebook", `${page.id}|${message}|${lien ?? ""}`, async () => {
+    const r = await envoyer("facebook", { methode: "POST", hote: "graph.facebook.com", chemin: `/${META}/${page.id}/feed`, entetes: { "Content-Type": "application/x-www-form-urlencoded" }, corps: corps.toString() });
+    if (r.statut !== 200) throw erreurApi("Facebook", r);
+    return { ok: true, content: `Post publié sur la page Facebook « ${page.nom} » (identifiant ${texte(r.json.id, 80)}). C'est fait : ne le republie pas.` };
+  });
 }
 
 /* ------------------------------ Instagram -------------------------------- */
@@ -698,25 +740,24 @@ async function instagramPublier(args: Record<string, unknown>): Promise<Resultat
   const legende = typeof args.legende === "string" ? args.legende.trim() : "";
   if (legende.length > 2200) return refus("Légende trop longue : Instagram accepte 2200 caractères au plus.");
   const moi = idInstagram();
-  const garde = garderPublication("instagram", `${image}|${legende}`);
-  if (garde) return refus(garde);
   const poster = (chemin: string, champs: Record<string, string>) =>
     appelerApi("instagram", (a) => ({ methode: "POST", hote: "graph.instagram.com", chemin: `/${META}${chemin}`, entetes: { "Content-Type": "application/x-www-form-urlencoded" }, corps: new URLSearchParams({ ...champs, access_token: a }).toString() }));
-  // Deux temps, comme l'API l'impose : un conteneur, puis sa publication quand Instagram a récupéré l'image.
-  const conteneur = await poster(`/${moi}/media`, { image_url: image, ...(legende ? { caption: legende } : {}) });
-  if (conteneur.statut !== 200 || typeof conteneur.json.id !== "string" || !/^\d{1,30}$/.test(conteneur.json.id)) throw erreurApi("Instagram", conteneur);
-  const idConteneur = conteneur.json.id;
-  for (let i = 0; i < 6; i++) {
-    const s = await appelerApi("instagram", (a) => ig(`/${idConteneur}?fields=status_code`, a));
-    const code = texte(s.json.status_code, 20);
-    if (code === "FINISHED") break;
-    if (code === "ERROR" || code === "EXPIRED") return refus("Instagram n'a pas pu utiliser cette image (JPEG exigé, servi par une adresse publique). Rien n'a été publié.");
-    await pause(2000);
-  }
-  const pub = await poster(`/${moi}/media_publish`, { creation_id: idConteneur });
-  if (pub.statut !== 200) throw erreurApi("Instagram", pub);
-  noterPublication("instagram", `${image}|${legende}`);
-  return { ok: true, content: `Photo publiée sur Instagram (identifiant ${texte(pub.json.id, 40)}). C'est fait : ne la republie pas.` };
+  return sousGarde("instagram", `${image}|${legende}`, async () => {
+    // Deux temps, comme l'API l'impose : un conteneur, puis sa publication quand Instagram a récupéré l'image.
+    const conteneur = await poster(`/${moi}/media`, { image_url: image, ...(legende ? { caption: legende } : {}) });
+    if (conteneur.statut !== 200 || typeof conteneur.json.id !== "string" || !/^\d{1,30}$/.test(conteneur.json.id)) throw erreurApi("Instagram", conteneur);
+    const idConteneur = conteneur.json.id;
+    for (let i = 0; i < 6; i++) {
+      const s = await appelerApi("instagram", (a) => ig(`/${idConteneur}?fields=status_code`, a));
+      const code = texte(s.json.status_code, 20);
+      if (code === "FINISHED") break;
+      if (code === "ERROR" || code === "EXPIRED") return refus("Instagram n'a pas pu utiliser cette image (JPEG exigé, servi par une adresse publique). Rien n'a été publié.");
+      await pause(2000);
+    }
+    const pub = await poster(`/${moi}/media_publish`, { creation_id: idConteneur });
+    if (pub.statut !== 200) throw erreurApi("Instagram", pub);
+    return { ok: true, content: `Photo publiée sur Instagram (identifiant ${texte(pub.json.id, 40)}). C'est fait : ne la republie pas.` };
+  });
 }
 
 /* ------------------------------- TikTok ---------------------------------- */
@@ -738,13 +779,26 @@ async function tiktokVideos(args: Record<string, unknown>): Promise<Resultat> {
   return { ok: true, content: lignes.length ? assembler(`${lignes.length} vidéo(s) TikTok :`, lignes) : "Aucune vidéo publique sur ce compte TikTok." };
 }
 
-/** Une vidéo du dossier de travail, et rien d'autre : ni lien qui en sort, ni zone protégée. */
-async function videoDuDossier(brut: unknown): Promise<{ chemin: string; taille: number; type: string } | { erreur: string }> {
+/**
+ * Une vidéo du dossier de travail, et rien d'autre : ni lien qui en sort, ni
+ * zone protégée. Les octets sont lus ici, par le fichier ouvert et vérifié,
+ * jamais relus plus tard par leur nom.
+ *
+ * Tournée du 28/09/2026 (SECURITE.md § 41), trois trous essayés :
+ *  - l'extension était lue sur le nom donné, pas sur le fichier réel : un lien
+ *    `deguise.mp4 → notes.txt` faisait envoyer les notes à TikTok ;
+ *  - un lien **dur** du dossier vers un fichier d'ailleurs a le même chemin
+ *    réel que lui-même : `realpath` ne le voit pas, et le fichier d'ailleurs
+ *    partait. Un fichier à plusieurs noms est refusé ;
+ *  - le fichier était vérifié (`lstat`) puis relu par son nom (`readFile`) :
+ *    remplacé entre les deux par un lien, ou grossi, c'est un autre contenu,
+ *    d'une autre taille que celle annoncée, qui partait.
+ */
+async function videoDuDossier(brut: unknown): Promise<{ chemin: string; taille: number; type: string; octets: Buffer } | { erreur: string }> {
   const v = critereSur(brut, 1000);
   if (!v) return { erreur: "Donne « fichier » : le chemin de la vidéo dans le dossier de travail." };
   const types: Record<string, string> = { ".mp4": "video/mp4", ".mov": "video/quicktime", ".webm": "video/webm" };
-  const type = types[extname(v).toLowerCase()];
-  if (!type) return { erreur: "TikTok accepte les vidéos MP4, MOV ou WebM." };
+  if (!types[extname(v).toLowerCase()]) return { erreur: "TikTok accepte les vidéos MP4, MOV ou WebM." };
   let racine: string;
   let reel: string;
   try {
@@ -755,10 +809,30 @@ async function videoDuDossier(brut: unknown): Promise<{ chemin: string; taille: 
   }
   if (reel !== racine && !reel.startsWith(racine + sep)) return { erreur: "Ce fichier est hors du dossier de travail : TikTok ne reçoit que ce qui s'y trouve." };
   if (estProtege(reel)) return { erreur: "Ce fichier est dans une zone protégée : refusé." };
-  const info = await lstat(reel);
-  if (!info.isFile()) return { erreur: "Ce chemin n'est pas un fichier." };
-  if (info.size === 0 || info.size > LIMITES.videoOctets) return { erreur: "La vidéo doit faire entre 1 octet et 64 Mo." };
-  return { chemin: reel, taille: info.size, type };
+  const type = types[extname(reel).toLowerCase()];
+  if (!type) return { erreur: "Ce chemin mène à un fichier qui n'est pas une vidéo MP4, MOV ou WebM : refusé." };
+  let fichier: Awaited<ReturnType<typeof open>> | undefined;
+  try {
+    // O_NOFOLLOW : si le chemin réel est devenu un lien entre-temps, l'ouverture échoue au lieu de le suivre.
+    fichier = await open(reel, constants.O_RDONLY | constants.O_NOFOLLOW);
+    const info = await fichier.stat();
+    if (!info.isFile()) return { erreur: "Ce chemin n'est pas un fichier." };
+    if (info.nlink > 1) return { erreur: "Ce fichier a plusieurs noms (lien dur) : on ne peut pas dire qu'il est seulement dans le dossier de travail. Refusé ; copiez la vidéo dans le dossier." };
+    if (info.size === 0 || info.size > LIMITES.videoOctets) return { erreur: "La vidéo doit faire entre 1 octet et 64 Mo." };
+    const octets = Buffer.alloc(info.size);
+    let lus = 0;
+    while (lus < info.size) {
+      const { bytesRead } = await fichier.read(octets, lus, info.size - lus, lus);
+      if (bytesRead === 0) break;
+      lus += bytesRead;
+    }
+    if (lus !== info.size) return { erreur: "La vidéo a changé pendant sa lecture : rien n'a été envoyé. Réessaie quand elle ne bouge plus." };
+    return { chemin: reel, taille: info.size, type, octets };
+  } catch {
+    return { erreur: `Fichier illisible : ${v}.` };
+  } finally {
+    await fichier?.close().catch(() => {});
+  }
 }
 
 async function tiktokPublier(args: Record<string, unknown>): Promise<Resultat> {
@@ -774,35 +848,34 @@ async function tiktokPublier(args: Record<string, unknown>): Promise<Resultat> {
   const options = (((info.json.data ?? {}) as { privacy_level_options?: unknown }).privacy_level_options ?? []) as unknown[];
   const voulue = typeof args.confidentialite === "string" ? args.confidentialite : "SELF_ONLY";
   if (!options.includes(voulue)) return refus(`Visibilité « ${voulue} » non permise pour ce compte. Possibles : ${options.map(String).join(", ") || "aucune"}. Tant que l'application n'a pas passé l'audit de TikTok, seule « SELF_ONLY » l'est.`);
-  const garde = garderPublication("tiktok", `${video.chemin}|${video.taille}|${titre}`);
-  if (garde) return refus(garde);
-  const init = await tiktok("/v2/post/publish/video/init/", {
-    post_info: { title: titre, privacy_level: voulue, disable_comment: false, disable_duet: false, disable_stitch: false },
-    source_info: { source: "FILE_UPLOAD", video_size: video.taille, chunk_size: video.taille, total_chunk_count: 1 },
+  return sousGarde("tiktok", `${video.chemin}|${video.taille}|${titre}`, async () => {
+    const init = await tiktok("/v2/post/publish/video/init/", {
+      post_info: { title: titre, privacy_level: voulue, disable_comment: false, disable_duet: false, disable_stitch: false },
+      source_info: { source: "FILE_UPLOAD", video_size: video.taille, chunk_size: video.taille, total_chunk_count: 1 },
+    });
+    const donnees = (init.json.data ?? {}) as { publish_id?: unknown; upload_url?: unknown };
+    if (init.statut !== 200 || typeof donnees.publish_id !== "string" || typeof donnees.upload_url !== "string") throw erreurApi("TikTok", init);
+    // L'adresse d'envoi vient de TikTok : elle n'est suivie que si elle désigne son hôte d'envoi, en https.
+    let envoi: URL;
+    try {
+      envoi = new URL(donnees.upload_url);
+    } catch {
+      return refus("TikTok a rendu une adresse d'envoi illisible : rien n'a été envoyé.");
+    }
+    if (envoi.protocol !== "https:" || envoi.hostname !== "open-upload.tiktokapis.com" || envoi.port) return refus("TikTok a rendu une adresse d'envoi inattendue : rien n'a été envoyé.");
+    const put = await envoyer("tiktok", {
+      methode: "PUT",
+      hote: envoi.hostname,
+      chemin: `${envoi.pathname}${envoi.search}`,
+      entetes: { "Content-Type": video.type, "Content-Range": `bytes 0-${video.taille - 1}/${video.taille}` },
+      corps: video.octets,
+      octets: 64 * 1024,
+      delaiTotalMs: 10 * 60_000,
+    });
+    if (put.statut !== 201 && put.statut !== 200) throw erreurApi("TikTok", put);
+    // La vidéo est partie : un état illisible ne rend pas la place (elle compte dans la limite, et contre un doublon).
+    const statut = await tiktok("/v2/post/publish/status/fetch/", { publish_id: donnees.publish_id }).catch(() => null);
+    const etatPub = texte(((statut?.json.data ?? {}) as { status?: unknown }).status, 40);
+    return { ok: true, content: `Vidéo envoyée à TikTok (publication ${texte(donnees.publish_id, 80)}, état : ${etatPub || "en cours de traitement"}, visibilité ${voulue}). TikTok la traite encore quelques minutes. C'est fait : ne la renvoie pas.` };
   });
-  const donnees = (init.json.data ?? {}) as { publish_id?: unknown; upload_url?: unknown };
-  if (init.statut !== 200 || typeof donnees.publish_id !== "string" || typeof donnees.upload_url !== "string") throw erreurApi("TikTok", init);
-  // L'adresse d'envoi vient de TikTok : elle n'est suivie que si elle désigne son hôte d'envoi, en https.
-  let envoi: URL;
-  try {
-    envoi = new URL(donnees.upload_url);
-  } catch {
-    return refus("TikTok a rendu une adresse d'envoi illisible : rien n'a été envoyé.");
-  }
-  if (envoi.protocol !== "https:" || envoi.hostname !== "open-upload.tiktokapis.com" || envoi.port) return refus("TikTok a rendu une adresse d'envoi inattendue : rien n'a été envoyé.");
-  const octets = await readFile(video.chemin);
-  const put = await envoyer("tiktok", {
-    methode: "PUT",
-    hote: envoi.hostname,
-    chemin: `${envoi.pathname}${envoi.search}`,
-    entetes: { "Content-Type": video.type, "Content-Range": `bytes 0-${video.taille - 1}/${video.taille}` },
-    corps: octets,
-    octets: 64 * 1024,
-    delaiTotalMs: 10 * 60_000,
-  });
-  if (put.statut !== 201 && put.statut !== 200) throw erreurApi("TikTok", put);
-  noterPublication("tiktok", `${video.chemin}|${video.taille}|${titre}`);
-  const statut = await tiktok("/v2/post/publish/status/fetch/", { publish_id: donnees.publish_id });
-  const etatPub = texte(((statut.json.data ?? {}) as { status?: unknown }).status, 40);
-  return { ok: true, content: `Vidéo envoyée à TikTok (publication ${texte(donnees.publish_id, 80)}, état : ${etatPub || "en cours de traitement"}, visibilité ${voulue}). TikTok la traite encore quelques minutes. C'est fait : ne la renvoie pas.` };
 }

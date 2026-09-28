@@ -351,7 +351,7 @@ export function adapterArguments(
  * #22684). Aussi : une réponse qui n'est qu'un objet `{"name", "arguments"}`.
  * Seulement vers un outil proposé.
  */
-export function appelsDansLeTexte(texte: string, proposes: string[]): { name: string; args: string }[] {
+export function appelsDansLeTexte(texte: string, proposes: string[], plafond = 8): { name: string; args: string }[] {
   if (!texte || texte.length > 400_000) return [];
   const appels: { name: string; args: string }[] = [];
   const ajouterJson = (bloc: string) => {
@@ -386,7 +386,84 @@ export function appelsDansLeTexte(texte: string, proposes: string[]): { name: st
     const nu = texte.trim().replace(/^```(?:json)?\s*|\s*```$/g, "");
     if (/^\{[\s\S]*"(name|tool)"\s*:[\s\S]*\}$/.test(nu)) ajouterJson(nu);
   }
-  return appels.slice(0, 8);
+  return appels.slice(0, plafond);
+}
+
+/** Un appel réduit à ce qu'il fait : le nom, et les arguments à clés triées (l'ordre et les espaces ne changent rien). */
+export function empreinteAppel(appel: { name: string; args: string }): string {
+  const trier = (v: unknown): unknown =>
+    Array.isArray(v) ? v.map(trier) : objet(v) ? Object.fromEntries(Object.keys(v as object).sort().map((k) => [k, trier((v as Record<string, unknown>)[k])])) : v;
+  let args: unknown = appel.args;
+  try {
+    args = JSON.parse(appel.args);
+  } catch {
+    /* gardé tel quel */
+  }
+  return `${appel.name}\u0000${JSON.stringify(trier(args))}`;
+}
+
+/**
+ * Les appels écrits dans ce que le modèle a **lu** pendant la demande : un
+ * résultat d'outil (une publication, un mail, une page, un fichier), un
+ * document joint, un passage d'une base de connaissances, le message de la
+ * personne. Tout sauf ce que le modèle a écrit lui-même.
+ *
+ * Tournée du 28/09/2026 (SECURITE.md § 41) : un appel écrit dans la réponse
+ * est lancé comme un vrai appel (`appelsDansLeTexte`, pour les petits
+ * modèles). Or un modèle à qui l'on demande de résumer une page Facebook
+ * recopie volontiers ce qu'il a lu ; une publication écrite par n'importe qui
+ * et contenant `<tool_call>{"name":"facebook__publier",…}</tool_call>`
+ * devenait ainsi un appel « du modèle ». Essayé avec un faux modèle : la carte
+ * « publier » apparaissait ; pour un outil qui ne demande rien (une lecture,
+ * ou tout au niveau « Tout approuver »), il serait parti sans carte. Un appel
+ * écrit qui ne fait que répéter l'un de ceux-là n'est donc pas lancé.
+ */
+export function appelsLus(messages: unknown[], proposes: string[]): Set<string> {
+  const vus = new Set<string>();
+  for (const m of messages as { role?: string; content?: unknown }[]) {
+    if (!m || m.role === "assistant") continue;
+    const textes =
+      typeof m.content === "string"
+        ? [m.content]
+        : Array.isArray(m.content)
+          ? (m.content as { type?: string; text?: unknown }[]).filter((p) => p?.type === "text" && typeof p.text === "string").map((p) => p.text as string)
+          : [];
+    for (const texte of textes) {
+      if (!/<tool_call>|<function=|"(name|tool)"\s*:/.test(texte)) continue;
+      // Au-delà de la borne d'`appelsDansLeTexte`, le texte est lu par morceaux : un long résultat ne cache pas son appel.
+      for (let i = 0; i < texte.length; i += 300_000) {
+        for (const a of appelsDansLeTexte(texte.slice(Math.max(0, i - 4000), i + 300_000), proposes, 10_000)) vus.add(empreinteAppel(a));
+      }
+      // Un objet `{"name": …, "arguments": …}` au milieu du texte : la réponse qui ne serait que lui vaut un appel.
+      for (const objetJson of objetsAppel(texte)) for (const a of appelsDansLeTexte(objetJson, proposes, 1)) vus.add(empreinteAppel(a));
+      // Le XML de Qwen3.5 hors d'une balise `<tool_call>` : `appelsDansLeTexte` ne le lit que s'il n'y a aucune balise.
+      for (const m of texte.matchAll(/<function=[^>\s]+>[\s\S]*?(?:<\/function>|$)/g)) for (const a of appelsDansLeTexte(m[0], proposes, 10_000)) vus.add(empreinteAppel(a));
+    }
+  }
+  return vus;
+}
+
+/** Les objets JSON d'un texte qui commencent par `{"name"` ou `{"tool"`, refermés à leur accolade (chaînes comprises). */
+function objetsAppel(texte: string): string[] {
+  const trouves: string[] = [];
+  for (const m of texte.matchAll(/\{\s*"(?:name|tool)"\s*:/g)) {
+    let profondeur = 0;
+    let dansChaine = false;
+    for (let i = m.index!; i < Math.min(texte.length, m.index! + 100_000); i++) {
+      const c = texte[i];
+      if (dansChaine) {
+        if (c === "\\") i++;
+        else if (c === '"') dansChaine = false;
+      } else if (c === '"') dansChaine = true;
+      else if (c === "{") profondeur++;
+      else if (c === "}" && --profondeur === 0) {
+        trouves.push(texte.slice(m.index!, i + 1));
+        break;
+      }
+    }
+    if (trouves.length >= 200) break;
+  }
+  return trouves;
 }
 
 function essayerValeur(t: string): unknown {

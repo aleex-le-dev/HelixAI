@@ -31,6 +31,17 @@ export type Resultat<T> = { ok: true; valeur: T } | { ok: false; statut: number;
  * métadonnées d'hébergeur (169.254.169.254), les adresses de service.
  */
 export function interne(ip: string): boolean {
+  /*
+   * Une adresse IPv4 écrite en IPv6 « mappée », sous sa forme hexadécimale :
+   * c'est ainsi que l'analyseur d'adresses (WHATWG, `new URL`) réécrit
+   * `[::ffff:127.0.0.1]`, en `[::ffff:7f00:1]`. Elle échappait au contrôle
+   * (tournée du 28/09/2026, SECURITE.md § 41) ; relue en IPv4.
+   */
+  const hexa = /^(?:(?:0{1,4}:){5}|::(?:0{1,4}:)?)ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/i.exec(ip);
+  if (hexa) {
+    const [h, l] = [parseInt(hexa[1]!, 16), parseInt(hexa[2]!, 16)];
+    return interne(`${h >> 8}.${h & 255}.${l >> 8}.${l & 255}`);
+  }
   const v4 = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(ip.replace(/^::ffff:/i, ""));
   if (v4) {
     const [a, b] = [Number(v4[1]), Number(v4[2])];

@@ -563,6 +563,15 @@ class Approbations {
         if (envoi.cc) ligne(`  ${m.cc} : ${envoi.cc}`);
         if (envoi.a) ligne(`  ${m.a} : ${envoi.a}`);
       }
+      /*
+       * Ce que l'outil recevra, comme la carte de l'application (ToolApproval.tsx) :
+       * un post, des cellules, les champs d'un connecteur. Tournée du 28/09/2026
+       * (SECURITE.md § 41) : le terminal n'en montrait que le résumé, soit les
+       * 120 premiers caractères d'un post, et on acceptait le reste sans l'avoir lu.
+       */
+      if (typeof detail.arguments === "string" && typeof detail.commande !== "string" && !(envoi && typeof envoi === "object")) {
+        ligne(`  ${T.approbationContenu} :\n${detail.arguments.replace(/^/gm, "    ")}`);
+      }
       if (!interactif) {
         ligne(jaune(T.approbationSansTerminal(demande.resume ?? "")));
         return;

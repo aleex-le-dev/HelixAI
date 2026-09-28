@@ -760,7 +760,12 @@ process.exit(0);
   verifier("lire ne pose pas de carte ; la barrière range les six lectures parmi les lectures, les trois écritures parmi les cartes à chaque fois, et un outil inconnu de ces préfixes parmi les modifications", r.lectureLibre === true && r.barriere?.lectures && r.barriere?.ecritures && r.barriere?.inconnu, JSON.stringify(r.barriere));
 
   const revG = apres.filter((x) => x.hote === "oauth2.googleapis.com" && x.chemin === "/revoke").length;
-  verifier("débrancher Docs et Forms : révoqué chez Google", ["oubli_docs", "oubli_forms"].every((k) => r[k]?.ok && /révoqué/.test(r[k]?.message ?? "")) && revG >= 2, `${revG} ${r.oubli_docs?.message}`);
+  /*
+   * Tournée des connecteurs du 28/09/2026 : Google révoque tout ce que le projet
+   * a reçu. Docs débranché pendant que Forms reste branché ne révoque donc pas
+   * (Forms serait coupé) ; Forms, le dernier, révoque.
+   */
+  verifier("débrancher Docs puis Forms : Docs n'est pas révoqué tant que Forms s'en sert (le message le dit), Forms, le dernier, l'est", r.oubli_docs?.ok && /pas révoqué chez Google/.test(r.oubli_docs?.message ?? "") && /Google Forms/.test(r.oubli_docs?.message ?? "") && r.oubli_forms?.ok && /révoqué chez Google Forms/.test(r.oubli_forms?.message ?? "") && revG === 1, `${revG} ${r.oubli_docs?.message} | ${r.oubli_forms?.message}`);
   const revDb = apres.filter((x) => x.chemin === "/2/auth/token/revoke").map((x) => x.entetes.authorization);
   verifier("débrancher Dropbox avec un jeton d'accès expiré : renouvelé, puis révoqué (ce qui éteint le jeton d'actualisation)", r.oubli_dropbox?.ok === true && /révoqué/.test(r.oubli_dropbox?.message ?? "") && revDb.at(-1) === "Bearer ACCES-dropbox-9" && revDb.length >= 2, `${r.oubli_dropbox?.message} ${revDb.length}`);
   verifier("après débranchement : plus de service ni d'outil de ces trois-là", r.apres?.length === 0 && r.outilsApres?.length === 0, `${r.apres} ${r.outilsApres}`);

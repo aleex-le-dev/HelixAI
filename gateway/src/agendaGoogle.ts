@@ -3,10 +3,10 @@ import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { db, type StoredCollection } from "./db.ts";
 import { chiffrer, dechiffrer, chiffrementActif } from "./secret.ts";
 import { journaliser } from "./audit.ts";
-import { clientGoogle } from "./clientGoogle.ts";
+import { autresUsagesGoogle, clientGoogle, declarerUsageGoogle, messageSansRevocationGoogle } from "./clientGoogle.ts";
 import { requeteHttps, ErreurTransport, type ReponseHttps } from "./clientHttps.ts";
 import type { Calendrier, Evenement } from "./agenda.ts";
-import { t, tf } from "./langue.ts";
+import { dansLaLangue, langue, t, tf } from "./langue.ts";
 import { sansBalises } from "./texteBrut.ts";
 
 /**
@@ -56,7 +56,7 @@ const PORTEE_ECRITURE = "https://www.googleapis.com/auth/calendar.events";
 const AGENT = "Connecteur-Agenda/1";
 const LIMITES = { delaiMs: 20_000, delaiTotalMs: 45_000, fluxMs: 10 * 60_000, octets: 4 * 1024 * 1024, evenementsParAgenda: 250 };
 const COLLECTION: StoredCollection = "agendaGoogle";
-const RECONNECTER = "Reconnectez Google Agenda dans Paramètres, Connecteurs, puis recommencez.";
+const reconnecter = () => t("Reconnectez Google Agenda dans Paramètres, Connecteurs, puis recommencez.");
 
 // Sans propriété déclarée dans le constructeur : Node lit ce fichier en ôtant les types, et ne l'accepte pas.
 class ErreurAgendaGoogle extends Error {
@@ -156,19 +156,20 @@ function erreurJetons(json: Record<string, unknown>): ErreurAgendaGoogle {
   if (code === "invalid_grant") {
     return new ErreurAgendaGoogle(
       "acces",
-      "Google a refusé l'accès enregistré : il a été révoqué, ou il a expiré. Une application Google Cloud restée « En test » voit ses accès expirer au bout de sept jours. " + RECONNECTER,
+      `${t("Google a refusé l'accès enregistré : il a été révoqué, ou il a expiré. Une application Google Cloud restée « En test » voit ses accès expirer au bout de sept jours.")} ${reconnecter()}`,
     );
   }
+  // Traduits depuis la tournée des connecteurs du 28/09/2026 : ils s'affichent aussi à la connexion, à l'écran.
   if (code === "invalid_client" || code === "unauthorized_client") {
-    return new ErreurAgendaGoogle("config", "Google ne reconnaît pas l'application Google de cette instance (identifiant ou secret). Vérifiez-les dans Paramètres, Connecteurs.");
+    return new ErreurAgendaGoogle("config", t("Google ne reconnaît pas l'application Google de cette instance (identifiant ou secret). Vérifiez-les dans Paramètres, Connecteurs."));
   }
   if (code === "invalid_request" && /client_secret/i.test(detail)) {
-    return new ErreurAgendaGoogle("config", "Google exige le secret de l'application Google. Ajoutez-le dans Paramètres, Connecteurs, puis recommencez.");
+    return new ErreurAgendaGoogle("config", t("Google exige le secret de l'application Google. Ajoutez-le dans Paramètres, Connecteurs, puis recommencez."));
   }
   if (code === "admin_policy_enforced") {
-    return new ErreurAgendaGoogle("acces", "L'administrateur de votre domaine Google bloque l'accès de cette application à l'agenda.");
+    return new ErreurAgendaGoogle("acces", t("L'administrateur de votre domaine Google bloque l'accès de cette application à l'agenda."));
   }
-  return new ErreurAgendaGoogle("api", "Google a refusé l'échange d'autorisation.");
+  return new ErreurAgendaGoogle("api", t("Google a refusé l'échange d'autorisation."));
 }
 
 async function jetonValide(): Promise<string> {
@@ -176,13 +177,13 @@ async function jetonValide(): Promise<string> {
   if (actualisationEnCours) return actualisationEnCours;
   actualisationEnCours = (async () => {
     await charger();
-    if (!cache) throw new ErreurAgendaGoogle("acces", "Aucun Google Agenda n'est connecté.");
-    if (cache.perdu) throw new ErreurAgendaGoogle("acces", `L'accès à Google Agenda a été perdu. ${RECONNECTER}`);
+    if (!cache) throw new ErreurAgendaGoogle("acces", t("Aucun Google Agenda n'est connecté."));
+    if (cache.perdu) throw new ErreurAgendaGoogle("acces", `${t("L'accès à Google Agenda a été perdu.")} ${reconnecter()}`);
     const id = clientGoogle();
-    if (!id.ok) throw new ErreurAgendaGoogle("config", "L'application Google n'est plus configurée sur cette instance.");
-    if (id.clientId !== cache.clientId) throw new ErreurAgendaGoogle("acces", `L'application Google de l'instance a changé depuis la connexion de l'agenda. ${RECONNECTER}`);
+    if (!id.ok) throw new ErreurAgendaGoogle("config", t("L'application Google n'est plus configurée sur cette instance."));
+    if (id.clientId !== cache.clientId) throw new ErreurAgendaGoogle("acces", `${t("L'application Google de l'instance a changé depuis la connexion de l'agenda.")} ${reconnecter()}`);
     const clair = dechiffrer(cache.secret);
-    if (typeof clair !== "string" || !clair) throw new ErreurAgendaGoogle("acces", `Le jeton enregistré est illisible. ${RECONNECTER}`);
+    if (typeof clair !== "string" || !clair) throw new ErreurAgendaGoogle("acces", `${t("Le jeton enregistré est illisible.")} ${reconnecter()}`);
     const p = new URLSearchParams({ client_id: id.clientId, grant_type: "refresh_token", refresh_token: clair });
     if (id.clientSecret) p.set("client_secret", id.clientSecret);
     const { statut, json } = await pointDeJetons("/token", p);
@@ -209,15 +210,15 @@ function erreurApi(statut: number, json: Record<string, unknown>): ErreurAgendaG
   if (a("accessNotConfigured") || a("SERVICE_DISABLED")) {
     return new ErreurAgendaGoogle(
       "config",
-      "L'API Google Calendar n'est pas activée dans le projet Google Cloud de cette application. Dans la console Google Cloud, ouvrez « API et services », puis « Bibliothèque », cherchez « Google Calendar API » et activez-la. L'activation peut demander quelques minutes.",
+      t("L'API Google Calendar n'est pas activée dans le projet Google Cloud de cette application. Dans la console Google Cloud, ouvrez « API et services », puis « Bibliothèque », cherchez « Google Calendar API » et activez-la. L'activation peut demander quelques minutes."),
     );
   }
-  if (a("insufficientPermissions") || a("ACCESS_TOKEN_SCOPE_INSUFFICIENT")) return new ErreurAgendaGoogle("acces", `L'autorisation accordée ne couvre pas la lecture de l'agenda. ${RECONNECTER}`);
-  if (statut === 429 || a("rateLimitExceeded") || a("userRateLimitExceeded") || a("RESOURCE_EXHAUSTED")) return new ErreurAgendaGoogle("quota", "Google limite momentanément le nombre de requêtes. Réessaie dans une minute.");
-  if (statut === 404) return new ErreurAgendaGoogle("api", "Agenda introuvable, ou inaccessible avec le compte Google connecté.");
-  if (statut === 403) return new ErreurAgendaGoogle("acces", "Google refuse l'accès à cet agenda.");
-  if (statut >= 500) return new ErreurAgendaGoogle("api", "Google Agenda est momentanément indisponible.");
-  return new ErreurAgendaGoogle("api", `Google Agenda a refusé la requête (code ${statut}).`);
+  if (a("insufficientPermissions") || a("ACCESS_TOKEN_SCOPE_INSUFFICIENT")) return new ErreurAgendaGoogle("acces", `${t("L'autorisation accordée ne couvre pas la lecture de l'agenda.")} ${reconnecter()}`);
+  if (statut === 429 || a("rateLimitExceeded") || a("userRateLimitExceeded") || a("RESOURCE_EXHAUSTED")) return new ErreurAgendaGoogle("quota", t("Google limite momentanément le nombre de requêtes. Réessaie dans une minute."));
+  if (statut === 404) return new ErreurAgendaGoogle("api", t("Agenda introuvable, ou inaccessible avec le compte Google connecté."));
+  if (statut === 403) return new ErreurAgendaGoogle("acces", t("Google refuse l'accès à cet agenda."));
+  if (statut >= 500) return new ErreurAgendaGoogle("api", t("Google Agenda est momentanément indisponible."));
+  return new ErreurAgendaGoogle("api", tf("Google Agenda a refusé la requête (code {0}).", statut));
 }
 
 /** Un appel à l'API Calendar ; un 401 déclenche une actualisation et une seule reprise. */
@@ -252,7 +253,7 @@ async function api(
     if (r.statut !== 200) throw erreurApi(r.statut, lireJson(r));
     return lireJson(r);
   }
-  throw new ErreurAgendaGoogle("acces", `Google n'accepte plus l'accès enregistré. ${RECONNECTER}`);
+  throw new ErreurAgendaGoogle("acces", `${t("Google n'accepte plus l'accès enregistré.")} ${reconnecter()}`);
 }
 
 /* ------------------------------ lecture des agendas ------------------------------ */
@@ -422,16 +423,20 @@ export async function demarrer(qui: string, ecriture = false): Promise<{ ok: boo
   const etat = randomBytes(32).toString("base64url");
   const verificateur = randomBytes(48).toString("base64url");
   const defi = createHash("sha256").update(verificateur).digest("base64url");
+  const langueDemande = langue();
   const serveur = http.createServer((req, res) => {
     const adresse = new URL(req.url ?? "/", "http://127.0.0.1");
     if (req.method !== "GET" || adresse.pathname !== "/") {
       res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" }).end("Introuvable.");
       return;
     }
-    void recevoir(adresse.searchParams, null).then(
-      (r) => pageRetour(res, r.ok ? 200 : 400, r.ok ? t("Google Agenda est connecté") : t("La connexion n'a pas abouti"), r.ok ? `${r.message} ${t("Vous pouvez fermer cet onglet.")}` : r.message),
-      () => pageRetour(res, 500, t("La connexion n'a pas abouti"), t("Erreur inattendue.")),
-    );
+    // Hors de toute requête de l'application : dans la langue de la demande (langue.ts, `dansLaLangue`).
+    dansLaLangue(langueDemande, () => {
+      void recevoir(adresse.searchParams, null).then(
+        (r) => pageRetour(res, r.ok ? 200 : 400, r.ok ? t("Google Agenda est connecté") : t("La connexion n'a pas abouti"), r.ok ? `${r.message} ${t("Vous pouvez fermer cet onglet.")}` : r.message),
+        () => pageRetour(res, 500, t("La connexion n'a pas abouti"), t("Erreur inattendue.")),
+      );
+    });
   });
   serveur.keepAliveTimeout = 1000;
   const port = await new Promise<number>((ok, ko) => {
@@ -455,7 +460,7 @@ export async function demarrer(qui: string, ecriture = false): Promise<{ ok: boo
     serveur,
     qui,
     echangeEnCours: false,
-    minuterie: setTimeout(() => conclure(false, t("Le délai de dix minutes est dépassé : rien n'a été enregistré. Recommencez.")), LIMITES.fluxMs),
+    minuterie: setTimeout(() => dansLaLangue(langueDemande, () => conclure(false, t("Le délai de dix minutes est dépassé : rien n'a été enregistré. Recommencez."))), LIMITES.fluxMs),
   };
   flux.minuterie.unref?.();
   const p = new URLSearchParams({
@@ -503,30 +508,31 @@ async function recevoir(parametres: URLSearchParams, quiCollage: string | null):
 /** Échange le code, vérifie la portée, lit l'agenda principal (l'essai), puis seulement enregistre. */
 async function echanger(code: string, verificateur: string, redirection: string, qui: string, portees: string[]): Promise<string> {
   const id = clientGoogle();
-  if (!id.ok) throw new ErreurAgendaGoogle("config", "L'application Google n'est plus configurée sur cette instance.");
+  if (!id.ok) throw new ErreurAgendaGoogle("config", t("L'application Google n'est plus configurée sur cette instance."));
   const p = new URLSearchParams({ client_id: id.clientId, code, code_verifier: verificateur, grant_type: "authorization_code", redirect_uri: redirection });
   if (id.clientSecret) p.set("client_secret", id.clientSecret);
   const { statut, json } = await pointDeJetons("/token", p);
   if (statut !== 200 || typeof json.access_token !== "string") {
-    if (json.error === "invalid_grant") throw new ErreurAgendaGoogle("acces", "Le code d'autorisation a expiré ou a déjà servi. Recommencez la connexion.");
+    if (json.error === "invalid_grant") throw new ErreurAgendaGoogle("acces", t("Le code d'autorisation a expiré ou a déjà servi. Recommencez la connexion."));
     throw erreurJetons(json);
   }
   const acces = json.access_token;
   const actualisation = typeof json.refresh_token === "string" ? json.refresh_token : "";
   const accordees = typeof json.scope === "string" ? json.scope.split(/\s+/).filter(Boolean) : [];
-  const revoquer = () => pointDeJetons("/revoke", new URLSearchParams({ token: actualisation || acces })).catch(() => null);
+  // Pas de révocation si un autre service Google (ou l'agenda déjà branché) s'en sert : Google leur retirerait aussi l'accès (clientGoogle.ts).
+  const revoquer = async () => ((await autresUsagesGoogle("")).length > 0 ? null : pointDeJetons("/revoke", new URLSearchParams({ token: actualisation || acces })).catch(() => null));
   // Exactement ce qui a été demandé : une case décochée, ou un accès plus large, et rien n'est gardé.
   if (!portees.every((p) => accordees.includes(p))) {
     await revoquer();
-    throw new ErreurAgendaGoogle("acces", "Tous les accès demandés n'ont pas été accordés : une case était décochée dans la fenêtre Google. Recommencez en les laissant cochées.");
+    throw new ErreurAgendaGoogle("acces", t("Tous les accès demandés n'ont pas été accordés : une case était décochée dans la fenêtre Google. Recommencez en les laissant cochées."));
   }
   if (accordees.some((x) => !portees.includes(x))) {
     await revoquer();
-    throw new ErreurAgendaGoogle("acces", "Google a accordé plus que la lecture de l'agenda. Par prudence, rien n'a été enregistré et l'accès a été révoqué.");
+    throw new ErreurAgendaGoogle("acces", t("Google a accordé plus que ce qui était demandé pour l'agenda. Par prudence, rien n'a été enregistré."));
   }
   if (!actualisation) {
     await revoquer();
-    throw new ErreurAgendaGoogle("api", "Google n'a pas remis d'accès durable (jeton d'actualisation). Recommencez la connexion.");
+    throw new ErreurAgendaGoogle("api", t("Google n'a pas remis d'accès durable (jeton d'actualisation). Recommencez la connexion."));
   }
   // L'essai : l'agenda principal, dont l'identifiant est l'adresse du compte.
   let compte = "";
@@ -541,7 +547,7 @@ async function echanger(code: string, verificateur: string, redirection: string,
   }
   if (!compte) {
     await revoquer();
-    throw new ErreurAgendaGoogle("api", "Google Agenda n'a pas indiqué l'agenda principal du compte. Recommencez.");
+    throw new ErreurAgendaGoogle("api", t("Google Agenda n'a pas indiqué l'agenda principal du compte. Recommencez."));
   }
   const ecriture = portees.includes(PORTEE_ECRITURE);
   const enregistre: CompteEnregistre = { compte, ecriture, secret: chiffrer(actualisation), clientId: id.clientId, depuis: new Date().toISOString() };
@@ -601,8 +607,10 @@ export async function oublier(qui: string): Promise<{ ok: true; message: string 
   fermerFlux();
   issue = null;
   const avant = cache ?? null;
+  // Google révoque tout ce que le projet a reçu de la personne : pas tant qu'un autre service Google s'en sert (clientGoogle.ts).
+  const autres = avant ? await autresUsagesGoogle("agenda") : [];
   let revoque = false;
-  if (avant) {
+  if (avant && autres.length === 0) {
     const clair = dechiffrer(avant.secret);
     if (typeof clair === "string" && clair) {
       const r = await pointDeJetons("/revoke", new URLSearchParams({ token: clair })).catch(() => null);
@@ -619,7 +627,9 @@ export async function oublier(qui: string): Promise<{ ok: true; message: string 
       ? t("Aucun Google Agenda n'était connecté.")
       : revoque
         ? t("Google Agenda a été débranché, et l'accès révoqué chez Google.")
-        : t("Google Agenda a été débranché de cette instance. Google n'a pas confirmé la révocation : retirez l'accès depuis votre compte Google, rubrique Sécurité, « Vos connexions à des applications et services tiers »."),
+        : autres.length > 0
+          ? messageSansRevocationGoogle("Google Agenda", autres)
+          : t("Google Agenda a été débranché de cette instance. Google n'a pas confirmé la révocation : retirez l'accès depuis votre compte Google, rubrique Sécurité, « Vos connexions à des applications et services tiers »."),
   };
 }
 
@@ -627,6 +637,9 @@ export function messageUtilisateur(err: unknown): string {
   if (err instanceof ErreurAgendaGoogle || err instanceof ErreurTransport) return err.message;
   return t("La connexion à Google Agenda a échoué.");
 }
+
+// Google Agenda garde un accès du projet Google de l'instance : une révocation ailleurs le couperait (clientGoogle.ts).
+declarerUsageGoogle("agenda", "Google Agenda", () => charger());
 
 /* ----------------------------------- écriture ------------------------------------ */
 

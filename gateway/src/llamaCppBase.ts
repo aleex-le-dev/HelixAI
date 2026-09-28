@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
-import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { isAbsolute, join } from "node:path";
 
 /**
  * Le moteur ouvert (llama.cpp) : ce que la configuration doit savoir de lui
@@ -84,3 +84,60 @@ export const fichierCleLlamaCpp = (): string => join(racineLlamaCpp(), "cle");
 
 /** La clé existe-t-elle déjà (sans la tirer) ? */
 export const cleLlamaCppPresente = (): boolean => existsSync(fichierCleLlamaCpp());
+
+/* ── L'emplacement des modèles (28/09/2026) ─────────────────────────────── */
+
+/*
+ * Demandé par Medhi le 28/09/2026 : « il y a des gens dont le disque
+ * principal n'a pas la place (ils ont un disque D: par exemple) ». Le moteur
+ * lui-même (11 Mo) reste dans les données de l'instance ; les modèles (2 à
+ * 18 Go chacun) vont là où l'administrateur l'a choisi (emplacementModeles.ts),
+ * dans un sous-dossier à eux, jamais à la racine du dossier choisi : le ménage
+ * du moteur (`menageLlama`) ne touche ainsi qu'à ce qu'il a posé.
+ *
+ * Ici, comme le reste de ce fichier, sans rien importer de la passerelle :
+ * zonesProtegees.ts lit l'emplacement pour le fermer aux agents.
+ */
+
+/** Le nom du sous-dossier créé dans le dossier choisi. */
+export const SOUS_DOSSIER_LLAMA = "modeles-llamacpp";
+
+/** L'emplacement habituel des modèles : `<données>/llamacpp/modeles`. */
+export const dossierModelesParDefaut = (): string => join(racineLlamaCpp(), "modeles");
+
+/** Le fichier qui retient l'emplacement choisi, dans les données de l'instance (zone protégée). */
+export const fichierEmplacementLlama = (): string => join(racineLlamaCpp(), "emplacement.json");
+
+/**
+ * L'emplacement choisi (le sous-dossier des modèles, chemin absolu), ou null
+ * pour l'emplacement habituel. Un chemin relatif ou réseau écrit à la main
+ * dans le fichier n'est pas suivi.
+ */
+export function emplacementLlamaChoisi(): string | null {
+  try {
+    const { dossier } = JSON.parse(readFileSync(fichierEmplacementLlama(), "utf8")) as { dossier?: unknown };
+    if (typeof dossier === "string" && isAbsolute(dossier) && !/^[\\/]{2}/.test(dossier)) return dossier;
+  } catch {
+    /* pas de choix : l'emplacement habituel */
+  }
+  return null;
+}
+
+/** Le dossier des modèles du moteur ouvert : celui choisi, sinon l'emplacement habituel. */
+export const dossierModelesLlama = (): string => emplacementLlamaChoisi() ?? dossierModelesParDefaut();
+
+/**
+ * Retient l'emplacement (null : l'emplacement habituel). Écrit à côté puis
+ * renommé : un arrêt en pleine écriture ne laisse pas un fichier à moitié
+ * écrit, qui renverrait les modèles vers l'emplacement habituel.
+ */
+export function ecrireEmplacementLlama(dossier: string | null): void {
+  mkdirSync(racineLlamaCpp(), { recursive: true, mode: 0o700 });
+  if (dossier === null) {
+    rmSync(fichierEmplacementLlama(), { force: true });
+    return;
+  }
+  const provisoire = `${fichierEmplacementLlama()}.${process.pid}.tmp`;
+  writeFileSync(provisoire, `${JSON.stringify({ dossier, depuis: new Date().toISOString() })}\n`, { mode: 0o600 });
+  renameSync(provisoire, fichierEmplacementLlama());
+}

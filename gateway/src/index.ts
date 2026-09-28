@@ -59,7 +59,9 @@ import {
   verifierModeleEnPlace,
   catalogueOuvert,
   conseilPourLaMachine,
+  miseEnRouteEnCours,
 } from "./provision.ts";
+import { choisirEmplacement, etatEmplacement, moteurLocal, placeNecessaire, verifierEmplacement, type MoteurLocal } from "./emplacementModeles.ts";
 import { moteurOuvert } from "./llamaCppBase.ts";
 import { arreterLlama, installerLlamaCpp, llamaCppInstalle, menageLlama } from "./llamaCpp.ts";
 import { estDefaillant, etatSurCetteMachine } from "./santeModeles.ts";
@@ -126,7 +128,7 @@ import {
   revokeAll,
 } from "./usersession.ts";
 import { filtrer, fusionner, type Demandeur } from "./authz.ts";
-import { installerMoteur, moteurAPoser } from "./engine.ts";
+import { installerMoteur, llmsterPoseAilleurs, lmStudioEnPlace, moteurAPoser } from "./engine.ts";
 import {
   diagnostic as atelierDiagnostic,
   preparer as preparerAtelier,
@@ -623,7 +625,13 @@ async function handleProvisionStatus(res: http.ServerResponse): Promise<void> {
      * n'y a rien à télécharger ni à charger : l'écran de mise en route doit le
      * dire et guider, au lieu de proposer une installation qui échouera.
      */
-    moteurInstalle: ouvert ? llamaCppInstalle() : lmStudioActif && (await findLms()) !== null && !moteurAPoser(),
+    /*
+     * Moteur posé dans `~/.lmstudio` alors qu'un autre emplacement a été
+     * choisi (28/09/2026) : `lms` suivrait le pointeur et n'y trouverait rien.
+     * Compté comme absent : l'écran repropose l'installation, qui dit alors
+     * le problème avant de rien télécharger (engine.ts).
+     */
+    moteurInstalle: ouvert ? llamaCppInstalle() : lmStudioActif && (await findLms()) !== null && !moteurAPoser() && !llmsterPoseAilleurs(),
     // Installation pilotée par l'intégrateur : l'écran de mise en route ne
     // propose rien, les modèles sont ceux du profil client.
     managed: !autoProvisionEnabled() || (!lmStudioActif && !ouvert),
@@ -790,6 +798,71 @@ function installerMoteurOuvert(userId: string, res: http.ServerResponse): void {
       moteurEnInstallation = false;
     });
   send(res, 202, { started: true, state: getProvisionState() });
+}
+
+/* ------------------------- emplacement des modèles ------------------------- */
+
+/**
+ * Le moteur local dont l'emplacement se règle d'ici : aucun sur un poste
+ * piloté par l'intégrateur (ses modèles sont ceux du profil), ni quand LM
+ * Studio est coupé sans moteur ouvert.
+ */
+function moteurDeLEmplacement(): MoteurLocal | null {
+  if (!autoProvisionEnabled()) return null;
+  return moteurLocal(backendById("lmstudio")?.enabled === true, moteurOuvert());
+}
+
+/**
+ * Où iront (ou sont) le moteur et les modèles, la place libre sur ce disque et
+ * la place nécessaire (moteur s'il manque, modèle conseillé, 1 Go de marge).
+ * Une séance suffit à lire : l'écran de mise en route et les réglages le
+ * montrent à chacun ; seul l'administrateur change (route suivante).
+ */
+async function handleEmplacementEtat(req: http.IncomingMessage, res: http.ServerResponse, url: URL): Promise<void> {
+  const qui = await demandeur(req, url);
+  if (!qui) return send(res, 401, sansSeance());
+  const moteur = moteurDeLEmplacement();
+  const etat = etatEmplacement(moteur);
+  const conseil = conseilPourLaMachine(detectHardware());
+  const moteurPose = moteur === "llamacpp" ? llamaCppInstalle() : lmStudioEnPlace() !== null;
+  send(res, 200, {
+    ...etat,
+    necessaire: placeNecessaire(moteur, moteurPose, conseil.downloadGb),
+    modele: { label: conseil.label, downloadGb: conseil.downloadGb },
+    moteurPose,
+    admin: await estAdministrateur(qui.userId),
+  });
+}
+
+/**
+ * Choisir l'emplacement (`{ dossier }`, ou `{ dossier: null }` pour
+ * l'emplacement habituel). L'administrateur seul, au journal : c'est le
+ * dossier d'où la passerelle lancera `lms` (emplacementModeles.ts).
+ */
+async function handleEmplacementChoix(req: http.IncomingMessage, res: http.ServerResponse, url: URL): Promise<void> {
+  const qui = await demandeur(req, url);
+  if (!qui) return send(res, 401, sansSeance());
+  if (await reserveeALAdministration(res, qui, t("Seul l'administrateur de l'instance choisit où vont le moteur et les modèles."))) return;
+  const body = (await readJson(req).catch(() => ({}))) as { dossier?: unknown };
+  if (!("dossier" in body)) return send(res, 400, { error: { message: t("Indiquez un dossier.") } });
+  const issue = choisirEmplacement(moteurDeLEmplacement(), body.dossier, moteurEnInstallation || miseEnRouteEnCours());
+  if (issue.journal) {
+    journaliser("moteur.emplacement", qui.userId, issue.journal);
+    // Le `lms` mémorisé peut être celui de l'ancien dossier.
+    oublierLms();
+    invalidate();
+  }
+  send(res, issue.statut, issue.corps);
+}
+
+/** Juger un dossier sans rien créer ni changer (la place libre avant un déplacement). L'administrateur seul : c'est un regard sur les disques de la machine. */
+async function handleEmplacementVerifier(req: http.IncomingMessage, res: http.ServerResponse, url: URL): Promise<void> {
+  const qui = await demandeur(req, url);
+  if (!qui) return send(res, 401, sansSeance());
+  if (await reserveeALAdministration(res, qui, t("Seul l'administrateur de l'instance choisit où vont le moteur et les modèles."))) return;
+  const body = (await readJson(req).catch(() => ({}))) as { dossier?: unknown };
+  const issue = verifierEmplacement(moteurDeLEmplacement(), body.dossier);
+  send(res, issue.statut, issue.corps);
 }
 
 /**
@@ -1603,6 +1676,10 @@ const EXECUTION: { methode: string; chemin: string }[] = [
   { methode: "POST", chemin: "/helix/models/load" },
   { methode: "POST", chemin: "/helix/provision/moteur" },
   { methode: "POST", chemin: "/helix/provision/start" },
+  // L'emplacement des modèles (28/09/2026) : les chemins de la machine, et le choix de l'administrateur.
+  { methode: "GET", chemin: "/helix/emplacement-modeles" },
+  { methode: "POST", chemin: "/helix/emplacement-modeles" },
+  { methode: "POST", chemin: "/helix/emplacement-modeles/verifier" },
   { methode: "POST", chemin: "/helix/mcp/toggle" },
   { methode: "POST", chemin: "/helix/mcp/workspace" },
   { methode: "POST", chemin: "/helix/code/session" },
@@ -5516,6 +5593,9 @@ const traiter = (
       return handleProvisionStart(req, res);
     if (req.method === "GET" && path === "/helix/provision/stream")
       return handleProvisionStream(req, res);
+    if (req.method === "GET" && path === "/helix/emplacement-modeles") return handleEmplacementEtat(req, res, url);
+    if (req.method === "POST" && path === "/helix/emplacement-modeles") return handleEmplacementChoix(req, res, url);
+    if (req.method === "POST" && path === "/helix/emplacement-modeles/verifier") return handleEmplacementVerifier(req, res, url);
     if (req.method === "POST" && path === "/helix/auth/create")
       return handleAuthCreate(req, res, url);
     if (req.method === "POST" && path === "/helix/auth/premier-mot-de-passe")

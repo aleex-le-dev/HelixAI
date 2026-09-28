@@ -1,6 +1,7 @@
-import { realpathSync } from "node:fs";
+import { readFileSync, realpathSync } from "node:fs";
 import { homedir, hostname } from "node:os";
 import { basename, dirname, isAbsolute, join, resolve, sep } from "node:path";
+import { emplacementLlamaChoisi } from "./llamaCppBase.ts";
 
 /**
  * Ce que ni le dossier de l'équipe ni les agents ne doivent jamais ouvrir.
@@ -125,6 +126,15 @@ function calculerZones(): string[] {
     join(maison, ".var", "app"),
     join(maison, "AppData"),
     ...[process.env.APPDATA, process.env.LOCALAPPDATA].filter((d): d is string => process.platform === "win32" && Boolean(d)),
+    /*
+     * L'emplacement des modèles choisi par l'administrateur (28/09/2026,
+     * emplacementModeles.ts), sur un autre disque le plus souvent : le
+     * dossier de LM Studio que désigne le pointeur (son `bin/lms` est lancé
+     * par la passerelle, comme celui de `~/.lmstudio`), et le sous-dossier
+     * des modèles du moteur ouvert (un modèle remplacé par un agent serait
+     * chargé tel quel).
+     */
+    ...emplacementsDesModeles(maison),
   ];
   if (process.env.HELIX_PROFIL_ESSAI) zones.push(process.env.HELIX_PROFIL_ESSAI);
   // Chacune sous sa forme réelle aussi : `/var` et `/private/var` sur macOS,
@@ -139,6 +149,29 @@ function calculerZones(): string[] {
     }
   }
   return [...toutes];
+}
+
+/**
+ * Les emplacements de modèles hors des zones habituelles : la cible du
+ * pointeur de LM Studio et le dossier des modèles du moteur ouvert. Un
+ * pointeur vers le dossier personnel ou la racine d'un disque n'est pas
+ * repris : il fermerait tout le poste aux agents, et `dossierLmStudio`
+ * (engine.ts) ne le suit de toute façon pas s'il contient leur espace.
+ */
+function emplacementsDesModeles(maison: string): string[] {
+  const liste: string[] = [];
+  try {
+    const pointe = readFileSync(join(maison, ".lmstudio-home-pointer"), "utf8").trim();
+    if (pointe && isAbsolute(pointe) && !/^[\\/]{2}/.test(pointe)) {
+      const p = resolve(pointe);
+      if (p !== resolve(maison) && dirname(p) !== p) liste.push(p);
+    }
+  } catch {
+    /* pas de pointeur */
+  }
+  const llama = emplacementLlamaChoisi();
+  if (llama) liste.push(llama);
+  return liste;
 }
 
 /** Forme repliée : le système de fichiers de macOS ignore la casse (voir `replier`, opencode.ts). */

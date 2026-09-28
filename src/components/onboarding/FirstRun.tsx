@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/Button";
 import { InfoBox } from "@/components/ui/InfoBox";
 import { branding } from "@/config/branding";
 import { useProvision } from "@/hooks/useProvision";
+import { EmplacementModeles } from "@/components/onboarding/EmplacementModeles";
 import { isDesktopApp } from "@/lib/instance";
 import { cn } from "@/lib/cn";
 import { t, tf } from "@/lib/i18n";
@@ -146,12 +147,15 @@ export function FirstRun({ onReady }: { onReady: () => void }) {
           </div>
         ) : ouvert ? (
           <div className="flex w-full max-w-md flex-col items-center gap-3">
+            <EmplacementModeles onChange={refresh} />
             <Button icon={Download} onClick={() => void installerMoteur()}>
               {t("Installer le moteur")}
             </Button>
           </div>
         ) : (
           <div className="flex w-full max-w-md flex-col items-center gap-3">
+            {/* Où iront le moteur et les modèles, avant de rien télécharger (28/09/2026). */}
+            <EmplacementModeles onChange={refresh} />
             <label className="flex items-start gap-2 text-left text-sm text-foreground">
               <input
                 type="checkbox"
@@ -300,6 +304,13 @@ export function FirstRun({ onReady }: { onReady: () => void }) {
           </InfoBox>
         )}
       </div>
+
+      {/* Où ira le modèle, et la place qu'il y a : avant « Installer et démarrer ». */}
+      {!busy && !pret && (
+        <div className="mt-3 flex w-full justify-center">
+          <EmplacementModeles onChange={refresh} />
+        </div>
+      )}
 
       <div className="mt-4 flex items-center gap-2">
         {pret ? (

@@ -16,6 +16,7 @@ import { basename, join, resolve, sep } from "node:path";
 import { promisify } from "node:util";
 import { detectHardware, type Hardware } from "./provision.ts";
 import { findLms, libererPourImage, loadModel } from "./backends.ts";
+import { dossierLmStudio as dossierDeLmStudio, dossierTelechargementsLmStudio } from "./engine.ts";
 import { models } from "./router.ts";
 import { telecharger } from "./images.ts";
 import { completer } from "./completion.ts";
@@ -356,13 +357,14 @@ const EDITEUR_LMSTUDIO = "helix-entrainement";
 function dossierLmStudio(): string {
   const force = process.env.HELIX_LMSTUDIO_MODELES;
   if (force) return force;
-  try {
-    const reglages = JSON.parse(readFileSync(join(homedir(), ".lmstudio", "settings.json"), "utf8")) as { downloadsFolder?: string };
-    if (reglages.downloadsFolder && existsSync(reglages.downloadsFolder)) return reglages.downloadsFolder;
-  } catch {
-    /* réglages illisibles : l'emplacement par défaut */
-  }
-  return join(homedir(), ".lmstudio", "models");
+  /*
+   * Le dossier de LM Studio que suit la passerelle (engine.ts), pointeur
+   * compris : depuis le 28/09/2026, il peut être sur un autre disque. Avant,
+   * `~/.lmstudio` était écrit ici en dur.
+   */
+  const reglage = dossierTelechargementsLmStudio();
+  if (reglage && existsSync(reglage)) return reglage;
+  return join(dossierDeLmStudio(), "models");
 }
 const dossierNosModeles = () => join(dossierLmStudio(), EDITEUR_LMSTUDIO);
 

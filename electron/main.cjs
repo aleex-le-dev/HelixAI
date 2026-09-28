@@ -623,13 +623,21 @@ ipcMain.handle("helix:cli-retirer", (event) => {
   return ligneDeCommande.retirer();
 });
 
-ipcMain.handle("helix:choisir-dossier", async (event) => {
+ipcMain.handle("helix:choisir-dossier", async (event, options) => {
   if (!depuisLaFenetre(event)) throw new Error("Refusé.");
   if (!mainWindow || mainWindow.isDestroyed()) return null;
+  /*
+   * Les libellés viennent de l'écran, dans sa langue (l'emplacement des
+   * modèles a les siens, 28/09/2026). Seulement du texte court : ils ne font
+   * qu'étiqueter la fenêtre du système, le chemin choisi reste celui que la
+   * personne désigne.
+   */
+  const texte = (v, defaut) => (typeof v === "string" && v.trim() && v.length <= 200 ? v : defaut);
+  const o = options && typeof options === "object" ? options : {};
   const { canceled, filePaths } = await dialog.showOpenDialog(mainWindow, {
-    title: "Dossier de travail",
-    message: "Choisissez le dossier sur lequel l'agent doit travailler.",
-    buttonLabel: "Travailler ici",
+    title: texte(o.titre, "Dossier de travail"),
+    message: texte(o.message, "Choisissez le dossier sur lequel l'agent doit travailler."),
+    buttonLabel: texte(o.bouton, "Travailler ici"),
     properties: ["openDirectory", "createDirectory"],
   });
   return canceled || filePaths.length === 0 ? null : filePaths[0];

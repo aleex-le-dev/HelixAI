@@ -75,6 +75,7 @@ const LIBELLES: Record<string, string> = {
   "connexion.second_facteur_a_activer": t("Double authentification à activer"),
   "moteur.conditions_acceptees": t("Conditions de LM Studio acceptées"),
   "moteur.llamacpp_installation": t("Installation du moteur llama.cpp"),
+  "moteur.emplacement": t("Emplacement des modèles changé"),
   "code.opencode_installe": t("OpenCode installé (écran Code)"),
   "donnees.exportees": t("Données exportées"),
   "ecran.mode_modifie": t("Contrôle de l'écran activé ou désactivé"),

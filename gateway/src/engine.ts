@@ -1,7 +1,7 @@
 import { execFile, execFileSync } from "node:child_process";
 import { promisify } from "node:util";
 import { createHash } from "node:crypto";
-import { createWriteStream, existsSync, mkdirSync, readFileSync, statSync } from "node:fs";
+import { createWriteStream, existsSync, mkdirSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { mkdtemp, rm, mkdir } from "node:fs/promises";
 import { homedir } from "node:os";
 import { isAbsolute, join, resolve, sep } from "node:path";
@@ -294,6 +294,141 @@ function espaceEcrivable(dossier: string): boolean {
 
 export const lmsDeLlmster = (): string => join(dossierLmStudio(), "bin", process.platform === "win32" ? "lms.exe" : "lms");
 
+/* ------------- L'emplacement de LM Studio (28/09/2026) ------------- */
+
+/*
+ * Demandé par Medhi le 28/09/2026 : pouvoir mettre moteur et modèles sur un
+ * autre disque que le disque principal (un D: sous Windows). LM Studio le
+ * permet par `~/.lmstudio-home-pointer` : son code ouvert
+ * (lmstudio-js, `lms-common-server/src/findLMStudioHome.ts`, lu le
+ * 28/09/2026) lit ce fichier pour trouver son dossier tout entier (moteur,
+ * téléchargements en cours dans `.internal/temp-downloads`, modèles), et
+ * l'écrit vers `~/.lmstudio` s'il manque. Helix l'écrit donc avant la
+ * première installation, jamais après (emplacementModeles.ts) : llmster se
+ * pose alors directement sur le disque choisi. Que llmster lui-même suive le
+ * pointeur à l'amorce n'a pas été vu avec le vrai llmster : d'où les deux
+ * contrôles de `installerLlmster` ci-dessous.
+ */
+
+export const fichierPointeurLmStudio = (): string => join(homedir(), ".lmstudio-home-pointer");
+export const dossierLmStudioHabituel = (): string => join(homedir(), ".lmstudio");
+
+/** Le contenu du pointeur, s'il y en a un (sans le juger). */
+export function pointeurLmStudio(): string | null {
+  try {
+    const brut = readFileSync(fichierPointeurLmStudio(), "utf8").trim();
+    return brut || null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Le pointeur désigne-t-il un autre dossier que celui que Helix suit ? Disque
+ * débranché, dossier effacé, ou refusé par `dossierLmStudio` : Helix
+ * installerait ou chercherait ailleurs que LM Studio lui-même.
+ */
+export function pointeurNonSuivi(): string | null {
+  const brut = pointeurLmStudio();
+  if (!brut) return null;
+  return resolve(brut) === resolve(dossierLmStudio()) ? null : brut;
+}
+
+/**
+ * Où LM Studio est-il déjà en place sur ce compte (moteur, application
+ * déclarée, ou modèles) ? Rend le dossier, ou null s'il n'y a rien : c'est
+ * seulement alors que Helix peut encore choisir où il ira.
+ */
+export function lmStudioEnPlace(): string | null {
+  const candidats = [...new Set([dossierLmStudio(), dossierLmStudioHabituel(), join(homedir(), ".cache", "lm-studio")].map((d) => resolve(d)))];
+  return candidats.find(installationDans) ?? null;
+}
+
+/** Ce dossier porte-t-il une installation de LM Studio (moteur, déclaration, modèles, téléchargement commencé) ? */
+export function installationDans(d: string): boolean {
+  const exe = process.platform === "win32" ? "lms.exe" : "lms";
+  const nonVide = (x: string) => {
+    try {
+      return readdirSync(x).some((n) => !n.startsWith("."));
+    } catch {
+      return false;
+    }
+  };
+  if (
+    existsSync(join(d, "bin", exe)) ||
+    existsSync(join(d, ".internal", "llmster-install-location.json")) ||
+    existsSync(join(d, ".internal", "app-install-location.json")) ||
+    nonVide(join(d, "models")) ||
+    nonVide(join(d, ".internal", "temp-downloads"))
+  ) {
+    return true;
+  }
+  // Les modèles rangés ailleurs par le réglage de LM Studio (« My Models › Change »).
+  const ailleurs = dossierTelechargementsLmStudio(d);
+  return Boolean(ailleurs && nonVide(ailleurs));
+}
+
+/** Le réglage `downloadsFolder` de LM Studio (le dossier de ses modèles), s'il en a un. */
+export function dossierTelechargementsLmStudio(racine = dossierLmStudio()): string | null {
+  try {
+    const { downloadsFolder } = JSON.parse(readFileSync(join(racine, "settings.json"), "utf8")) as { downloadsFolder?: unknown };
+    return typeof downloadsFolder === "string" && isAbsolute(downloadsFolder) ? downloadsFolder : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Le dossier des modèles de LM Studio : son réglage `downloadsFolder`, sinon `models` dans son dossier. */
+export const dossierModelesLmStudio = (): string => dossierTelechargementsLmStudio() ?? join(dossierLmStudio(), "models");
+
+/**
+ * Place que prend l'installation du moteur, au plus fort (archive, contenu
+ * ouvert et copie posée par l'amorce, côte à côte) : trois fois l'archive.
+ * Une estimation, pas une mesure : la taille ouverte n'a été relevée sur
+ * aucun système.
+ */
+export function placeMoteurLlmster(): number {
+  try {
+    const { nom } = nomLlmster(LLMSTER_VERSION);
+    return (LLMSTER[nom]?.octets ?? LLMSTER[nom.replace(/\+cuda12$/, "")]?.octets ?? 1e9) * 3;
+  } catch {
+    return 3e9;
+  }
+}
+
+/**
+ * Avant de télécharger, et après l'amorce : llmster doit être (ou aller) là
+ * où Helix le cherche. Sinon, une erreur claire, et pas un nouvel essai de
+ * 600 Mo à chaque clic.
+ */
+/**
+ * Un emplacement a été choisi (pointeur suivi, autre que `~/.lmstudio`), mais
+ * `lms` n'y est pas, alors qu'il est dans `~/.lmstudio` : le moteur s'est posé
+ * à l'emplacement habituel, pas à celui choisi.
+ */
+export function llmsterPoseAilleurs(): boolean {
+  const suivi = dossierLmStudio();
+  if (resolve(suivi) === resolve(dossierLmStudioHabituel())) return false;
+  const exe = process.platform === "win32" ? "lms.exe" : "lms";
+  return !existsSync(join(suivi, "bin", exe)) && existsSync(join(dossierLmStudioHabituel(), "bin", exe));
+}
+
+export function incoherenceEmplacement(apresAmorce = false): string | null {
+  // L'application LM Studio déjà servie garde son dossier : rien à contrôler ici.
+  if (process.platform === "darwin" && !moteurSansInterface() && installationDeclaree("app-install-location.json")) return null;
+  const brut = pointeurNonSuivi();
+  if (brut) {
+    return tf("L'emplacement choisi pour LM Studio est introuvable ou refusé ({0}) : branchez le disque, ou revenez à l'emplacement habituel dans les réglages, Modèles locaux.", brut);
+  }
+  const suivi = dossierLmStudio();
+  if (llmsterPoseAilleurs()) {
+    return apresAmorce
+      ? tf("Le moteur s'est installé dans {0}, et non à l'emplacement choisi ({1}). Revenez à l'emplacement habituel dans les réglages, Modèles locaux, puis réessayez : il n'y aura rien à retélécharger.", dossierLmStudioHabituel(), suivi)
+      : tf("Le moteur est déjà installé dans {0}, et non à l'emplacement choisi ({1}). Revenez à l'emplacement habituel dans les réglages, Modèles locaux, puis réessayez : il n'y aura rien à retélécharger.", dossierLmStudioHabituel(), suivi);
+  }
+  return null;
+}
+
 /**
  * Le dossier temporaire interne du moteur, que llmster 0.0.25 ne crée pas
  * lui-même (essai sous Ubuntu 24.04 du 27/09/2026) : sans lui, chaque
@@ -365,6 +500,9 @@ function bibliothequesManquantes(): string[] {
 
 
 async function installerLlmster(onProgress: (p: EngineProgress) => void): Promise<string> {
+  // Emplacement choisi introuvable, ou moteur déjà posé ailleurs : dit avant de télécharger quoi que ce soit.
+  const incoherence = incoherenceEmplacement();
+  if (incoherence) throw new Error(incoherence);
   const manquantes = bibliothequesManquantes();
   if (manquantes.length > 0) {
     throw new Error(
@@ -394,7 +532,12 @@ async function installerLlmster(onProgress: (p: EngineProgress) => void): Promis
    * son contenu (environ 2 Go) pouvaient ne pas y tenir ; un `/tmp` monté
    * `noexec` empêchait aussi l'amorce (revue Linux du 27/09/2026).
    */
-  const racineTravail = process.env.HELIX_DATA_DIR ?? join(homedir(), ".helix", "data");
+  /*
+   * Emplacement choisi sur un autre disque (28/09/2026) : l'archive et son
+   * contenu y sont aussi, pas sur le disque principal qui n'a pas la place.
+   */
+  const ailleurs = resolve(dossierLmStudio()) !== resolve(dossierLmStudioHabituel());
+  const racineTravail = ailleurs ? dossierLmStudio() : (process.env.HELIX_DATA_DIR ?? join(homedir(), ".helix", "data"));
   await mkdir(racineTravail, { recursive: true, mode: 0o700 });
   const travail = await mkdtemp(join(racineTravail, ".moteur-"));
   try {
@@ -439,9 +582,15 @@ async function installerLlmster(onProgress: (p: EngineProgress) => void): Promis
        * sortie ouverte, par exemple) : l'installation est faite, on continue
        * en le notant (revue Windows du 27/09/2026, supposé, pas vu).
        */
-      if (!existsSync(lmsDeLlmster())) throw err;
+      if (!existsSync(lmsDeLlmster())) {
+        const autrePart = incoherenceEmplacement(true);
+        throw autrePart ? new Error(autrePart) : err;
+      }
       console.warn("[helix] llmster bootstrap en erreur, mais `lms` est posé :", err instanceof Error ? err.message : err);
     }
+    // Posé ailleurs qu'à l'emplacement choisi : dit tel quel (le prochain essai s'arrête avant de retélécharger).
+    const ailleursQueChoisi = incoherenceEmplacement(true);
+    if (ailleursQueChoisi) throw new Error(ailleursQueChoisi);
     const lms = lmsDeLlmster();
     if (!existsSync(lms)) throw new Error(t("Le moteur s'est installé, mais son outil `lms` est introuvable. Réessayez, ou installez LM Studio depuis lmstudio.ai."));
     /*

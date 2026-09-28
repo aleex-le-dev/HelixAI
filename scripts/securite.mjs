@@ -7195,6 +7195,13 @@ console.log("\n18 bis. Tournée finale des écrans : aide, rubriques des connect
   const sourceMicrosoft = readFileSync(join(RACINE, "src", "components", "settings", "ConnecteurMicrosoft.tsx"), "utf8");
   verifier("Microsoft 365 : l'étape des permissions ne renvoie plus à une liste « plus bas » absente avant l'enregistrement de l'application", !/listées plus bas/.test(sourceMicrosoft), "ConnecteurMicrosoft.tsx");
   const sourceMessages = readFileSync(join(RACINE, "src", "components", "chat", "MessageList.tsx"), "utf8");
+  const sourceChip = readFileSync(join(RACINE, "src", "components", "ui", "Chip.tsx"), "utf8");
+  const puceCompacte = (fichier) => /<Chip[\s\S]{0,300}\bcompacte\b/.test(readFileSync(join(RACINE, "src", "components", "code", fichier), "utf8"));
+  verifier(
+    "Code à 375 px : les puces du moteur et de RTK passent à l'icône seule, le nom du dossier garde la place (il se réduisait à « … »)",
+    /compacte && "max-sm:sr-only"/.test(sourceChip) && /compacte && "max-sm:shrink-0"/.test(sourceChip) && puceCompacte("MoteurCode.tsx") && puceCompacte("ReglageRtk.tsx"),
+    "Chip.tsx, MoteurCode.tsx, ReglageRtk.tsx",
+  );
   verifier("Chat, sources du web : « N autre(s) résultat(s)… » aligné à gauche quand il passe sur deux lignes", /className="inline-flex items-center gap-1 text-left text-xs text-muted-foreground hover:text-foreground"/.test(sourceMessages), "MessageList.tsx");
 }
 

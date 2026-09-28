@@ -5697,7 +5697,7 @@ console.log("\n14 bis. Seconde tournée de l'audit : dépendances npm à date fi
   );
   verifier(
     "Epoch AI : « Comparer les modèles » affiche la source, le titre, la licence avec son lien, la date et ce qui a été modifié",
-    ["SOURCE_NOTES.page", "SOURCE_NOTES.nom", "SOURCE_NOTES.titre", "SOURCE_NOTES.licenceUrl", "SOURCE_NOTES.licence", "SOURCE_NOTES.releveLe", "rapproché des noms de modèles, notes inchangées"].every((m) => comparer.includes(m)),
+    ["SOURCE_NOTES.page", "SOURCE_NOTES.nom", "SOURCE_NOTES.titre", "SOURCE_NOTES.licenceUrl", "SOURCE_NOTES.licence", "SOURCE_NOTES.releveLe", "extrait, notes inchangées"].every((m) => comparer.includes(m)),
     "élément d'attribution manquant",
   );
   verifier("Epoch AI : THIRD_PARTY_NOTICES.md porte l'attribution et les modifications", /Auteur\*\* : Epoch AI/.test(notices) && /Modifications\*\* :/.test(notices) && notices.includes("https://epoch.ai/benchmarks/use-this-data"), "attribution absente");

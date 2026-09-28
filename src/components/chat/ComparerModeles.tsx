@@ -113,8 +113,8 @@ export function ComparerModeles({
     [modeles],
   );
 
-  /** Les repères : tout modèle noté dont l'éditeur publie un prix. */
-  const tarifes = useMemo(
+  /** Tout modèle noté dont l'éditeur publie un prix : le tableau, et le vivier des repères. */
+  const tousTarifes = useMemo(
     () =>
       MODELES_NOTES.flatMap((n) => {
         const p = prixDeLEditeur(n);
@@ -130,10 +130,43 @@ export function ComparerModeles({
     return table;
   }, [siens]);
 
+  /** Le modèle en cours, sa note et son rang parmi les modèles notés. */
+  const actuel = siens.find((s) => s.modele.uid === choisi);
+
+  /*
+   * Peu de repères, pour que le graphique se lise (vu par Medhi le 28/09/2026 :
+   * les 57 modèles tarifés d'Epoch AI en faisaient un nuage illisible ; le
+   * relevé d'Artificial Analysis n'en montrait qu'une douzaine). Sont gardés :
+   * le mieux noté de chaque éditeur, le moins cher des grands éditeurs, les
+   * modèles de la personne, et le repère le plus proche en note du modèle en
+   * cours, pour le situer. Tous les autres restent dans le tableau.
+   */
+  const { tarifes, proche } = useMemo(() => {
+    const garde = new Set<string>();
+    const parEditeur = new Map<string, (typeof tousTarifes)[number][]>();
+    for (const r of tousTarifes) {
+      const e = r.note.editeur || "?";
+      parEditeur.set(e, [...(parEditeur.get(e) ?? []), r]);
+    }
+    for (const [editeur, liste] of parEditeur) {
+      garde.add([...liste].sort((a, b) => b.note.eci - a.note.eci)[0]!.note.nom);
+      if (["OpenAI", "Anthropic", "Google"].includes(editeur)) garde.add([...liste].sort((a, b) => a.sortie - b.sortie)[0]!.note.nom);
+    }
+    for (const nom of servis.keys()) garde.add(nom);
+    let voisin: string | undefined;
+    if (actuel?.note) {
+      const eci = actuel.note.eci;
+      voisin = tousTarifes
+        .filter((r) => r.note.nom !== actuel.note?.nom && !servis.has(r.note.nom))
+        .sort((a, b) => Math.abs(a.note.eci - eci) - Math.abs(b.note.eci - eci))[0]?.note.nom;
+      if (voisin) garde.add(voisin);
+    }
+    return { tarifes: tousTarifes.filter((r) => garde.has(r.note.nom)), proche: voisin };
+  }, [tousTarifes, servis, actuel]);
+
   const machine = siens.filter((s) => s.local && s.note) as { modele: GatewayModel; note: ModeleNote }[];
   const sansPrix = siens.filter((s) => !s.local && s.note && !s.prix) as { modele: GatewayModel; note: ModeleNote }[];
   const sansNote = siens.filter((s) => !s.note);
-  const dansLeNuage = siens.filter((s) => !s.local && s.note && s.prix).length;
 
   const avecGauche = machine.length > 0;
   const avecDroite = sansPrix.length > 0;
@@ -159,8 +192,6 @@ export function ComparerModeles({
   const xGauche = MARGE.gauche + BANDE / 2;
   const xDroite = LARGEUR - MARGE.droite - BANDE / 2;
 
-  /** Le modèle en cours, sa note et son rang parmi les modèles notés. */
-  const actuel = siens.find((s) => s.modele.uid === choisi);
   const rang = actuel?.note
     ? [...MODELES_NOTES].sort((a, b) => b.eci - a.eci).findIndex((m) => m.nom === actuel.note?.nom) + 1
     : 0;
@@ -175,7 +206,8 @@ export function ComparerModeles({
     const importance = (n: ModeleNote) => {
       const servi = servis.get(n.nom);
       if (servi && servi.uid === choisi) return 0;
-      return servi ? 1 : 2;
+      if (servi) return 1;
+      return n.nom === proche ? 1.5 : 2;
     };
     const ordre = [...tarifes].sort((a, b) => importance(a.note) - importance(b.note));
     const prises: { x1: number; x2: number; y: number }[] = [];
@@ -207,7 +239,7 @@ export function ComparerModeles({
       .sort((a, b) => importance(b.note) - importance(a.note))
       .map((r) => ({ ...r, px: x(r.sortie), py: hauteurDe(r.note.eci), etiquette: pose.get(r.note.nom) }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tarifes, servis, choisi, minX, maxX, minY, maxY, debutEchelle, finEchelle]);
+  }, [tarifes, servis, choisi, proche, minX, maxX, minY, maxY, debutEchelle, finEchelle]);
 
   const dollars = (v: number) =>
     v.toLocaleString(locale(), { style: "currency", currency: "USD", maximumFractionDigits: v < 0.1 ? 3 : 2 });
@@ -261,7 +293,7 @@ export function ComparerModeles({
         <button
           type="button"
           onClick={() => setVue((v) => (v === "nuage" ? "tableau" : "nuage"))}
-          className="inline-flex shrink-0 items-center gap-1.5 rounded-lg px-2 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          className="mr-10 inline-flex shrink-0 items-center gap-1.5 rounded-lg px-2 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
         >
           {vue === "nuage" ? <Table2 size={15} strokeWidth={1.75} /> : <ChartScatter size={15} strokeWidth={1.75} />}
           {vue === "nuage" ? t("Voir le tableau") : t("Voir le graphique")}
@@ -473,12 +505,16 @@ export function ComparerModeles({
           )}
 
           <p className="mt-3 text-xs text-muted-foreground">
-            {tf(
-              "Repères : {0} modèles notés dont l'éditeur publie un prix ({1} des vôtres parmi eux). Le tableau donne les {2} modèles notés.",
-              tarifes.length,
-              dansLeNuage,
-              MODELES_NOTES.length,
-            )}
+            {proche
+              ? tf(
+                  "Repères : le mieux noté de chaque éditeur, les moins chers, vos modèles, et {0}, le plus proche de votre modèle en cours. Le tableau donne les {1} modèles notés.",
+                  proche,
+                  MODELES_NOTES.length,
+                )
+              : tf(
+                  "Repères : le mieux noté de chaque éditeur, les moins chers et vos modèles. Le tableau donne les {0} modèles notés.",
+                  MODELES_NOTES.length,
+                )}
           </p>
         </>
       ) : (
@@ -531,15 +567,15 @@ export function ComparerModeles({
           rel="noreferrer"
           className="inline-flex items-center gap-1 underline underline-offset-2 hover:text-foreground"
         >
-          {tf("{0}, « {1} »", SOURCE_NOTES.nom, SOURCE_NOTES.titre)}
+          {tf("{0} ({1})", SOURCE_NOTES.nom, SOURCE_NOTES.indice)}
           <ExternalLink size={11} strokeWidth={1.75} />
         </a>{" "}
-        {tf("· indice {0}, licence", SOURCE_NOTES.indice)}{" "}
+        {/* Court (demandé par Medhi le 28/09/2026), mais complet pour la licence : source, licence, lien, date et modification. */}
+        {"· "}
         <a href={SOURCE_NOTES.licenceUrl} target="_blank" rel="noreferrer" className="underline underline-offset-2 hover:text-foreground">
           {SOURCE_NOTES.licence}
         </a>
-        {tf(", relevé le {0} ; extrait (modèles sortis depuis 2024) et rapproché des noms de modèles, notes inchangées.", formaterDate(`${SOURCE_NOTES.releveLe}T12:00:00`))}{" "}
-        {tf("Prix : pages de prix des éditeurs, relevées le {0}.", formaterDate(`${SOURCE_NOTES.releveLe}T12:00:00`))}
+        {tf(" · extrait, notes inchangées · prix des éditeurs · relevés le {0}", formaterDate(`${SOURCE_NOTES.releveLe}T12:00:00`))}
       </p>
     </Modal>
   );

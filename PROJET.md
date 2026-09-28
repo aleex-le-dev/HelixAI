@@ -10,7 +10,7 @@ refaite à l'envers.
 
 | | |
 |---|---|
-| Version | 2026.928.3 (`package.json`) |
+| Version | 2026.928.4 (`package.json`) |
 | Dernière mise à jour | 28 septembre 2026 |
 | Vérifié | `npm run securite` : 997 contrôles, 0 échec (28/09/2026) ; `npm run typecheck` ; traductions à 100 % en anglais, chinois et japonais (interface 3 042 phrases, passerelle 1 020) |
 | Reste à essayer | sur les vraies machines : § 5, « Ce qui reste à essayer sur les postes de Medhi » |

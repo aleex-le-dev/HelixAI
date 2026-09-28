@@ -40,6 +40,7 @@ import {
   startAutoServers,
   startServer,
   stopServer,
+  arreterTousEnPartant as arreterServeursMcp,
   status as mcpStatus,
   workspace,
   setWorkspace,
@@ -5928,6 +5929,8 @@ function arreterProprement(): void {
   entrainement.arreterEnPartant();
   stopLmStudioIfStarted();
   employes.arreterEmployes();
+  // Les serveurs MCP locaux, et ce qu'ils ont lancé (mcp.ts, 28/09/2026).
+  arreterServeursMcp();
   // La machine de l'agent garderait 3 Go de mémoire après la fermeture.
   if (configEcran().mode === "sandbox") arreterMachineEnPartant();
 }

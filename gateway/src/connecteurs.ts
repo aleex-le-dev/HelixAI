@@ -1,4 +1,4 @@
-import { chmodSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { chmodSync, copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { chiffrer, dechiffrer, chiffrementActif } from "./secret.ts";
@@ -872,6 +872,38 @@ export function aligner(c: ConnecteurEnregistre): ConnecteurEnregistre {
   return { ...c, args };
 }
 
+/**
+ * Réglages non secrets d'un serveur du catalogue, passés par l'environnement.
+ *
+ * La mémoire de travail (`@modelcontextprotocol/server-memory`) range son
+ * carnet, sans réglage, **à côté de son propre code**, c'est-à-dire dans le
+ * cache de `npx` (`~/.npm/_npx/<empreinte>/…/dist/memory.jsonl`). Relevé le
+ * 28/09/2026 : changer la version épinglée change l'empreinte, et le carnet
+ * repartait vide sans rien dire ; vider le cache de npm l'effaçait ; et deux
+ * instances du même compte partageaient le même carnet. Il est maintenant dans
+ * le dossier de données de l'instance, et un carnet laissé dans le cache par
+ * une version précédente y est recopié une fois.
+ */
+function envPublic(id: string): { envPublic?: Record<string, string> } {
+  if (id !== "memoire") return {};
+  const dossier = process.env.HELIX_DATA_DIR ?? join(homedir(), ".helix", "data");
+  const carnet = join(dossier, "memoire.jsonl");
+  try {
+    mkdirSync(dossier, { recursive: true });
+    if (!existsSync(carnet)) {
+      const cache = join(homedir(), ".npm", "_npx");
+      const anciens = (existsSync(cache) ? readdirSync(cache) : [])
+        .map((d) => join(cache, d, "node_modules", "@modelcontextprotocol", "server-memory", "dist", "memory.jsonl"))
+        .filter((f) => existsSync(f))
+        .sort((a, b) => statSync(b).mtimeMs - statSync(a).mtimeMs);
+      if (anciens[0]) copyFileSync(anciens[0], carnet);
+    }
+  } catch (err) {
+    console.error("[connecteurs] carnet de la mémoire de travail :", err instanceof Error ? err.message : err);
+  }
+  return { envPublic: { MEMORY_FILE_PATH: carnet } };
+}
+
 const versConfig = (brut: ConnecteurEnregistre): McpServerConfig => {
   const c = aligner(brut);
   return c.url
@@ -890,6 +922,7 @@ const versConfig = (brut: ConnecteurEnregistre): McpServerConfig => {
         command: c.command!,
         args: c.args ?? [],
         env: environnement(c),
+        ...envPublic(c.id),
         autoStart: true,
         ...(c.libre === true ? { libre: true } : {}),
       };
@@ -1095,7 +1128,12 @@ function resoudreCommande(
   | { ok: true; id: string; label: string; description: string; command: string; args: string[]; libre: boolean; attendus: ChampSecret[] }
   | { ok: false; message: string } {
   const id = typeof brut.id === "string" ? brut.id.trim().toLowerCase() : "";
-  if (!ID_VALIDE.test(id)) {
+  /*
+   * Ni `__` ni souligné final (28/09/2026) : `__` sépare le serveur de l'outil
+   * dans le nom donné au modèle. Un serveur « fichiers_ » aurait produit des
+   * `fichiers___…`, que la barrière lit comme des outils du serveur de fichiers.
+   */
+  if (!ID_VALIDE.test(id) || id.includes("__") || id.endsWith("_")) {
     return {
       ok: false,
       message: t("Identifiant de connecteur invalide : lettres minuscules, chiffres, tiret et souligné, 32 caractères au plus."),
@@ -1279,6 +1317,7 @@ export async function ajouter(brut: unknown, qui: string): Promise<Resultat> {
     command: verdict.command,
     args: verdict.args,
     env: recolte.secrets,
+    ...envPublic(verdict.id),
     autoStart: true,
     ...(verdict.libre ? { libre: true } : {}),
   };

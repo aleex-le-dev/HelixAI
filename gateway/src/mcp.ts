@@ -10,11 +10,13 @@ import {
 import { StreamableHTTPClientTransport, StreamableHTTPError } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
 import { UnauthorizedError } from "@modelcontextprotocol/sdk/client/auth.js";
+import { ErrorCode, McpError } from "@modelcontextprotocol/sdk/types.js";
 import { deployment } from "./deployment.ts";
 import { t, tf } from "./langue.ts";
 import { cheminProtegeDans, filtrerResultat } from "./zonesProtegees.ts";
 import { assurerNodePrive, DEPENDANCES_NPM_AVANT, nodePriveInstallable, npxPrive } from "./installationOpenClaw.ts";
 import { retenirOutils } from "./natifs/projetsRegles.ts";
+import { arreterPidArbre } from "./processus.ts";
 
 /**
  * Gestionnaire de serveurs MCP auto-hébergés (ARCHITECTURE.md, ADR-004).
@@ -53,6 +55,11 @@ export interface McpServerConfig {
    * dans l'historique du shell d'un intégrateur qui reproduit la commande.
    */
   env?: Record<string, string>;
+  /**
+   * Réglages de l'environnement qui ne sont pas des secrets (le chemin du
+   * carnet de la mémoire de travail) : ils ne sont pas masqués dans le journal.
+   */
+  envPublic?: Record<string, string>;
   /** Serveur démarré automatiquement au lancement. */
   autoStart: boolean;
   /**
@@ -200,6 +207,14 @@ interface Live {
   client?: Client;
   tools: McpTool[];
   error?: string;
+  /** Processus du serveur local, pour arrêter aussi ce qu'il a lancé (`npx` lance `node`). */
+  pid?: number;
+  /** Démarrage en cours : un second appel l'attend au lieu de lancer un second processus. */
+  demarrage?: Promise<{ ok: boolean; error?: string }>;
+  /** Arrêté par la passerelle (retrait, bascule, dossier changé) : on ne le relance pas de soi-même. */
+  arrete?: boolean;
+  /** Relances après un arrêt inattendu, pour ne pas relancer en boucle un serveur qui plante au démarrage. */
+  relances?: number[];
 }
 
 const servers = new Map<string, Live>();
@@ -210,6 +225,144 @@ for (const config of DEFAULT_SERVERS) {
 
 /** Nom qualifié : évite les collisions entre serveurs. */
 const qualify = (serverId: string, tool: string) => `${serverId}__${tool}`;
+
+/**
+ * Nom d'outil tel que le modèle le reçoit : `<serveur>__<outil>`, ramené aux
+ * caractères et à la longueur que les API compatibles OpenAI acceptent
+ * (`^[a-zA-Z0-9_-]{1,64}$`), et unique sur toute l'instance.
+ *
+ * Mesuré le 28/09/2026 (scripts/essai-mcp.mjs) : un serveur qui nomme un outil
+ * `get.weather`, `a/b c` ou d'un nom de 80 caractères le voyait passer tel
+ * quel, et un fournisseur qui applique la règle refuse alors la demande
+ * entière : plus aucune réponse dans le Chat tant que ce serveur était branché.
+ * Et deux serveurs pouvaient produire le même nom qualifié (« a_ » + « x » et
+ * « a » + « _x » donnent tous deux `a___x`) : l'appel partait chez le premier.
+ * Le nom d'origine reste celui qu'on envoie au serveur (`toolName`).
+ */
+function nomPourModele(serverId: string, outil: string, pris: Set<string>): string {
+  const brut = qualify(serverId, outil);
+  let nom = brut.replace(/[^A-Za-z0-9_-]/g, "_");
+  if (nom.length > 64 || nom !== brut) {
+    // Un suffixe tiré du nom d'origine : deux noms voisins, ramenés au même, restent distincts.
+    let h = 0;
+    for (const c of brut) h = (h * 31 + c.codePointAt(0)!) >>> 0;
+    const suffixe = `_${h.toString(36)}`;
+    nom = nom.length > 64 ? nom.slice(0, 64 - suffixe.length) + suffixe : nom;
+  }
+  for (let n = 2; pris.has(nom); n++) {
+    const suffixe = `_${n}`;
+    nom = (nom.length + suffixe.length > 64 ? nom.slice(0, 64 - suffixe.length) : nom.replace(/_\d+$/, "")) + suffixe;
+  }
+  pris.add(nom);
+  return nom;
+}
+
+/** Les noms déjà donnés au modèle par les **autres** serveurs. */
+const nomsPris = (sauf: string): Set<string> =>
+  new Set([...servers.values()].filter((s) => s.config.id !== sauf).flatMap((s) => s.tools.map((t) => t.name)));
+
+type OutilListe = { name: string; description?: string; inputSchema?: unknown };
+
+/**
+ * Tous les outils d'un serveur, page après page.
+ *
+ * `tools/list` est paginé par le protocole (`nextCursor`) : on ne lisait que la
+ * première page. Mesuré le 28/09/2026 : un serveur de sept outils servis par
+ * trois n'en montrait que trois à l'agent, sans rien dire. Borné, pour qu'un
+ * serveur qui rend toujours un curseur ne fasse pas tourner la passerelle.
+ */
+async function listerOutils(client: Client): Promise<OutilListe[]> {
+  const tous: OutilListe[] = [];
+  let curseur: string | undefined;
+  for (let page = 0; page < 50; page++) {
+    const r = await client.listTools(curseur ? { cursor: curseur } : undefined);
+    tous.push(...(r.tools as OutilListe[]));
+    if (!r.nextCursor || r.nextCursor === curseur || tous.length >= 2000) break;
+    curseur = r.nextCursor;
+  }
+  return tous;
+}
+
+/** Range la liste d'outils d'un serveur sous les noms donnés au modèle. */
+function retenirListe(id: string, entry: Live, liste: OutilListe[]): void {
+  const pris = nomsPris(id);
+  const vus = new Set<string>();
+  const noms = new Map<string, string>();
+  // Un outil listé deux fois par le serveur n'est gardé qu'une : deux fonctions du même nom font refuser la demande.
+  const uniques = liste.filter((o) => typeof o?.name === "string" && o.name && !vus.has(o.name) && Boolean(vus.add(o.name)));
+  for (const o of uniques) noms.set(o.name, nomPourModele(id, o.name, pris));
+  /*
+   * Trello, Monday, ClickUp, Todoist, Calendly, Zoom (SECURITE.md § 48) : les
+   * lectures sont relevées, les écritures retirées si l'administrateur ne les
+   * a pas cochées. Un autre serveur passe tel quel.
+   */
+  entry.tools = retenirOutils(id, uniques, (nom) => noms.get(nom) ?? qualify(id, nom)).map((t) => ({
+    name: noms.get(t.name)!,
+    serverId: id,
+    toolName: t.name,
+    description: t.description ?? "",
+    inputSchema: (t.inputSchema && typeof t.inputSchema === "object" ? t.inputSchema : { type: "object", properties: {} }) as Record<string, unknown>,
+  }));
+}
+
+/**
+ * Le serveur annonce que sa liste d'outils a changé (`notifications/tools/list_changed`) :
+ * on la relit. Sans cela, un outil ajouté en cours de route restait invisible
+ * jusqu'au redémarrage de la passerelle (mesuré le 28/09/2026).
+ */
+function surListeChangee(id: string): (err: Error | null) => void {
+  return () => {
+    const entry = servers.get(id);
+    const client = entry?.client;
+    if (!entry || !client) return;
+    listerOutils(client)
+      .then((liste) => {
+        if (entry.client !== client) return;
+        retenirListe(id, entry, liste);
+        console.log(`[mcp] ${entry.config.label} : liste d'outils relue (${entry.tools.length} outils)`);
+      })
+      .catch((err) => console.error(`[mcp] ${id} : liste d'outils illisible après changement :`, masquer(err instanceof Error ? err.message : String(err), entry.config.env)));
+  };
+}
+
+const nouveauClient = (id: string) =>
+  new Client(
+    { name: "helix-gateway", version: "1.0.0" },
+    { capabilities: {}, listChanged: { tools: { autoRefresh: false, debounceMs: 300, onChanged: surListeChangee(id) } } },
+  );
+
+/**
+ * Les processus lancés par un processus, et ceux qu'ils ont lancés (macOS,
+ * Linux). `npx` ne sert qu'à démarrer : c'est un `node` qu'il a lancé qui
+ * répond, et arrêter `npx` ne l'arrête pas toujours.
+ */
+function descendants(pid: number): number[] {
+  if (process.platform === "win32") return [];
+  try {
+    const table = execFileSync("ps", ["-A", "-o", "pid=,ppid="], { encoding: "utf8", timeout: 5000, stdio: ["ignore", "pipe", "ignore"] })
+      .split("\n")
+      .map((l) => l.trim().split(/\s+/).map(Number))
+      .filter((c) => c.length === 2 && c.every(Number.isFinite));
+    const trouves: number[] = [];
+    const file = [pid];
+    while (file.length > 0) {
+      const p = file.shift()!;
+      for (const [enfant, parent] of table) if (parent === p && !trouves.includes(enfant)) (trouves.push(enfant), file.push(enfant));
+    }
+    return trouves;
+  } catch {
+    return [];
+  }
+}
+
+const vivant = (pid: number): boolean => {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+};
 
 /**
  * Retire d'un texte les secrets qu'il pourrait avoir emportés.
@@ -238,10 +391,7 @@ function masquer(texte: string, env?: Record<string, string>): string {
  * d'autorisation le dit clairement, plutôt que d'échouer sans motif — c'est
  * l'interface qui proposera alors « Se connecter ».
  */
-async function demarrerDistant(
-  id: string,
-  entry: { config: McpServerConfig; client?: Client; tools: McpTool[]; error?: string },
-): Promise<{ ok: boolean; error?: string }> {
+async function demarrerDistant(id: string, entry: Live): Promise<{ ok: boolean; error?: string }> {
   const adresse = new URL(entry.config.url!);
   const locale = adresse.hostname === "127.0.0.1" || adresse.hostname === "localhost";
   if (adresse.protocol !== "https:" && !locale) {
@@ -250,8 +400,7 @@ async function demarrerDistant(
   }
 
   const autorisation = entry.config.auth ? { authProvider: entry.config.auth as never } : {};
-  const nouveauClient = () => new Client({ name: "helix-gateway", version: "1.0.0" }, { capabilities: {} });
-  let client = nouveauClient();
+  let client = nouveauClient(id);
   try {
     await client.connect(new StreamableHTTPClientTransport(adresse, autorisation));
   } catch (err) {
@@ -268,25 +417,21 @@ async function demarrerDistant(
     const code = err instanceof StreamableHTTPError ? (err.code ?? 0) : 0;
     if (err instanceof UnauthorizedError || code < 400 || code >= 500 || code === 401 || code === 403) throw err;
     await client.close().catch(() => undefined);
-    client = nouveauClient();
+    client = nouveauClient(id);
     await client.connect(new SSEClientTransport(adresse, autorisation));
   }
 
-  const listed = await client.listTools();
+  let liste: OutilListe[];
+  try {
+    liste = await listerOutils(client);
+  } catch (err) {
+    // Connecté mais muet : la connexion ne reste pas ouverte derrière un échec.
+    await client.close().catch(() => undefined);
+    throw err;
+  }
   entry.client = client;
   entry.error = undefined;
-  /*
-   * Trello, Monday, ClickUp, Todoist, Calendly, Zoom (SECURITE.md § 48) : les
-   * lectures sont relevées, les écritures retirées si l'administrateur ne les
-   * a pas cochées. Un autre serveur passe tel quel.
-   */
-  entry.tools = retenirOutils(id, listed.tools, (nom) => qualify(id, nom)).map((t) => ({
-    name: qualify(id, t.name),
-    serverId: id,
-    toolName: t.name,
-    description: t.description ?? "",
-    inputSchema: (t.inputSchema ?? { type: "object", properties: {} }) as Record<string, unknown>,
-  }));
+  retenirListe(id, entry, liste);
   console.log(`[mcp] ${entry.config.label} branché à distance (${entry.tools.length} outils)`);
   return { ok: true };
 }
@@ -347,7 +492,21 @@ export async function startServer(id: string): Promise<{ ok: boolean; error?: st
   const entry = servers.get(id);
   if (!entry) return { ok: false, error: `Serveur inconnu : ${id}` };
   if (entry.client) return { ok: true };
+  entry.arrete = false;
+  /*
+   * Deux démarrages en même temps (le lancement de la passerelle et une
+   * relance, deux appels d'outil après un plantage) lançaient deux processus,
+   * dont un restait orphelin : le second attend le premier.
+   */
+  if (entry.demarrage) return entry.demarrage;
+  entry.demarrage = demarrer(id, entry).finally(() => {
+    entry.demarrage = undefined;
+  });
+  return entry.demarrage;
+}
 
+async function demarrer(id: string, entry: Live): Promise<{ ok: boolean; error?: string }> {
+  let clientLocal: Client | undefined;
   try {
     if (entry.config.url) return await demarrerDistant(id, entry);
     const npx = entry.config.command === "npx" ? await resoudreNpx() : null;
@@ -364,6 +523,7 @@ export async function startServer(id: string): Promise<{ ok: boolean; error?: st
       env: {
         ...defaut,
         ...(npx?.path ? { PATH: [npx.path, defaut.PATH ?? process.env.PATH ?? ""].filter(Boolean).join(delimiter) } : {}),
+        ...(entry.config.envPublic ?? {}),
         ...(entry.config.env ?? {}),
         /*
          * Aucun script d'installation : `npx` télécharge le paquet épinglé et ses
@@ -400,45 +560,146 @@ export async function startServer(id: string): Promise<{ ok: boolean; error?: st
       if (texte) console.error(`[mcp:${id}] ${texte}`);
     });
 
-    const client = new Client(
-      { name: "helix-gateway", version: "1.0.0" },
-      { capabilities: {} },
-    );
-    await client.connect(transport);
+    const client = nouveauClient(id);
+    clientLocal = client;
+    /*
+     * Le délai d'`initialize` court dès le lancement du processus. Par `npx`,
+     * il couvre donc le premier téléchargement du paquet et de ses dépendances :
+     * soixante secondes, celles du SDK, sur une connexion lente, et l'ajout
+     * échouait au premier essai, le téléchargement interrompu avec le
+     * processus. Cinq minutes pour `npx` ; un serveur déjà sur la machine garde
+     * le délai ordinaire.
+     */
+    await client.connect(transport, { timeout: entry.config.command === "npx" ? Math.max(DELAI_APPEL_MS, 5 * 60_000) : DELAI_APPEL_MS });
+    const pid = transport.pid ?? undefined;
+    entry.pid = pid;
 
-    const listed = await client.listTools();
+    const liste = await listerOutils(client);
+    // Arrêté pendant qu'il démarrait (retrait, dossier changé) : il ne reste pas derrière.
+    if (entry.arrete) {
+      await fermer(client, pid);
+      if (entry.pid === pid) entry.pid = undefined;
+      return { ok: false, error: t("Serveur arrêté pendant son démarrage.") };
+    }
     entry.client = client;
     entry.error = undefined;
-    entry.tools = listed.tools.map((t) => ({
-      name: qualify(id, t.name),
-      serverId: id,
-      toolName: t.name,
-      description: t.description ?? "",
-      inputSchema: (t.inputSchema ?? { type: "object", properties: {} }) as Record<
-        string,
-        unknown
-      >,
-    }));
+    retenirListe(id, entry, liste);
+    client.onclose = () => arretInattendu(id, client);
     console.log(`[mcp] ${entry.config.label} démarré (${entry.tools.length} outils)`);
     return { ok: true };
   } catch (err) {
+    /*
+     * Démarré mais incapable de lister ses outils : le processus tournait
+     * encore, sans que plus rien ne le référence (mesuré le 28/09/2026). Il est
+     * arrêté avec ce qu'il a lancé.
+     */
+    if (clientLocal && entry.client !== clientLocal) {
+      await fermer(clientLocal, entry.pid);
+      entry.pid = undefined;
+    }
     entry.error = masquer(err instanceof Error ? err.message : String(err), entry.config.env);
-    entry.tools = [];
+    /*
+     * Les outils ne sont pas effacés : un premier démarrage n'en a pas encore
+     * (et `stopServer` les efface), et une relance manquée après une connexion
+     * perdue doit laisser l'appel suivant réessayer. Effacés, ils ne revenaient
+     * plus, même une fois le serveur distant de nouveau joignable.
+     */
     console.error(`[mcp] échec du démarrage de ${id} :`, entry.error);
     return { ok: false, error: entry.error };
   }
 }
 
+/**
+ * Ferme un client, et arrête le processus local avec **tout ce qu'il a lancé**.
+ *
+ * Le SDK ferme l'entrée du serveur, puis envoie SIGTERM, puis SIGKILL, mais au
+ * seul processus qu'il a lancé. Mesuré le 28/09/2026 : un serveur qui avait
+ * lancé un processus à lui (un navigateur, un interpréteur, ou le `node` que
+ * lance `npx`) le laissait tourner après le retrait du connecteur, rattaché à
+ * personne. La liste est relevée avant la fermeture : après, ces processus
+ * n'ont plus de parent qui les désigne.
+ */
+async function fermer(client: Client, pid: number | undefined): Promise<void> {
+  const enfants = pid ? descendants(pid) : [];
+  // Windows : pas de signal, et `kill()` n'arrête pas l'arbre (processus.ts).
+  if (process.platform === "win32" && pid) arreterPidArbre(pid);
+  await client.close().catch(() => undefined);
+  const restants = [...enfants, ...(pid ? [pid] : [])].filter(vivant);
+  if (restants.length === 0) return;
+  for (const p of restants) arreterPidArbre(p, "SIGTERM");
+  await new Promise((r) => setTimeout(r, 500));
+  for (const p of restants.filter(vivant)) arreterPidArbre(p, "SIGKILL");
+}
+
+/**
+ * Le serveur local s'est arrêté sans qu'on le lui demande (il a planté, ou
+ * quelqu'un l'a tué).
+ *
+ * Jusqu'ici rien ne le remarquait : l'écran le disait « en marche », ses outils
+ * restaient proposés, et chaque appel répondait « Not connected » jusqu'au
+ * redémarrage de la passerelle (mesuré le 28/09/2026). Il est maintenant dit
+ * arrêté, relancé une seconde plus tard, et au plus trois fois en dix minutes :
+ * un serveur qui plante au démarrage ne tourne pas en boucle. Ses outils restent
+ * proposés : l'appel suivant le relance, s'il ne l'est pas déjà.
+ */
+function arretInattendu(id: string, client: Client): void {
+  const entry = servers.get(id);
+  if (!entry || entry.client !== client) return;
+  entry.client = undefined;
+  entry.pid = undefined;
+  if (entry.arrete) return;
+  const maintenant = Date.now();
+  entry.relances = (entry.relances ?? []).filter((d) => maintenant - d < 10 * 60_000);
+  if (entry.relances.length >= 3) {
+    entry.error = t("Le serveur s'est arrêté trois fois en dix minutes : il n'est plus relancé de lui-même. Il le sera au prochain appel d'un de ses outils.");
+    console.error(`[mcp] ${id} : arrêté trois fois en dix minutes, plus de relance automatique`);
+    return;
+  }
+  entry.relances.push(maintenant);
+  entry.error = t("Le serveur s'est arrêté de lui-même : il est relancé.");
+  console.error(`[mcp] ${id} : arrêt inattendu, relance dans une seconde`);
+  setTimeout(() => {
+    if (!entry.arrete && !entry.client && servers.get(id) === entry) void startServer(id);
+  }, 1000).unref();
+}
+
 export async function stopServer(id: string): Promise<void> {
   const entry = servers.get(id);
-  if (!entry?.client) return;
-  try {
-    await entry.client.close();
-  } catch {
-    /* déjà fermé */
-  }
+  if (!entry) return;
+  entry.arrete = true;
+  if (entry.demarrage) await entry.demarrage.catch(() => undefined);
+  const client = entry.client;
+  const pid = entry.pid;
   entry.client = undefined;
+  entry.pid = undefined;
   entry.tools = [];
+  if (client) await fermer(client, pid);
+}
+
+/**
+ * À la sortie de la passerelle : chaque serveur local, et ce qu'il a lancé,
+ * reçoit SIGTERM, puis SIGKILL s'il est encore là une demi-seconde plus tard.
+ * Synchrone : l'événement `exit` n'attend rien. Sans cela, un serveur qui ne
+ * lit pas la fin de son entrée, ou ce qu'il avait lancé, restait en mémoire
+ * après la fermeture de l'application (mesuré le 28/09/2026).
+ */
+export function arreterTousEnPartant(): void {
+  const cibles: number[] = [];
+  for (const entry of servers.values()) {
+    const pid = entry.pid;
+    if (!pid) continue;
+    entry.arrete = true;
+    if (process.platform === "win32") {
+      arreterPidArbre(pid);
+      continue;
+    }
+    cibles.push(...descendants(pid), pid);
+  }
+  if (cibles.length === 0) return;
+  for (const p of cibles) arreterPidArbre(p, "SIGTERM");
+  const attente = new Int32Array(new SharedArrayBuffer(4));
+  for (let i = 0; i < 10 && cibles.some(vivant); i++) Atomics.wait(attente, 0, 0, 50);
+  for (const p of cibles.filter(vivant)) arreterPidArbre(p, "SIGKILL");
 }
 
 /**
@@ -532,7 +793,19 @@ export async function callTool(
   if (!tool) return { ok: false, content: `Outil inconnu : ${qualifiedName}` };
 
   const entry = servers.get(tool.serverId);
-  if (!entry?.client) return { ok: false, content: `Serveur ${tool.serverId} arrêté.` };
+  if (!entry) return { ok: false, content: `Serveur ${tool.serverId} arrêté.` };
+  /*
+   * Arrêté de lui-même (plantage, serveur distant qui a redémarré) : on le
+   * relance ici, au moment où l'on en a besoin. Arrêté par la passerelle
+   * (bascule, retrait), il le reste.
+   */
+  if (!entry.client) {
+    if (entry.arrete) return { ok: false, content: `Serveur ${tool.serverId} arrêté.` };
+    const relance = await startServer(tool.serverId);
+    if (!relance.ok || !entry.client) {
+      return { ok: false, content: `Le serveur ${entry.config.label} ne répond pas et n'a pas pu être relancé : ${relance.error ?? "cause inconnue"}. Dis-le à l'utilisateur.` };
+    }
+  }
 
   /*
    * Serveur de fichiers : les zones protégées d'abord (zonesProtegees.ts). Le
@@ -556,21 +829,127 @@ export async function callTool(
     }
   }
 
-  try {
-    const result = await entry.client.callTool({ name: tool.toolName, arguments: args });
-    const parts = (result.content ?? []) as { type: string; text?: string }[];
-    const brut = parts
-      .map((p) => (p.type === "text" ? (p.text ?? "") : `[${p.type}]`))
-      .join("\n")
-      .trim();
-    const text = fichiers ? filtrerResultat(tool.toolName, args, brut, espaceCourant) : brut;
-    return { ok: !result.isError, content: expliquer(text) || "(résultat vide)" };
-  } catch (err) {
-    return {
-      ok: false,
-      content: expliquer(err instanceof Error ? err.message : String(err)),
-    };
+  const appeler = (client: Client) =>
+    client.callTool({ name: tool.toolName, arguments: args }, undefined, {
+      /*
+       * Soixante secondes sans nouvelles, comme le SDK ; mais un serveur qui
+       * dit où il en est (`notifications/progress`) n'est plus coupé à la
+       * soixantième seconde d'une opération longue, jusqu'à dix minutes.
+       */
+      timeout: DELAI_APPEL_MS,
+      resetTimeoutOnProgress: true,
+      maxTotalTimeout: 10 * 60_000,
+      onprogress: () => undefined,
+    });
+  // Pour les fichiers seulement : ailleurs, « not allowed » vient d'un service, pas du dossier de travail.
+  const expliquerSi = (texte: string) => (fichiers ? expliquer(texte) : texte);
+
+  let client = entry.client!;
+  for (let essai = 0; ; essai++) {
+    try {
+      const result = await appeler(client);
+      const brut = rendreResultat(result as ResultatOutil);
+      const text = fichiers ? filtrerResultat(tool.toolName, args, brut, espaceCourant) : brut;
+      return { ok: !result.isError, content: expliquerSi(text) || "(résultat vide)" };
+    } catch (err) {
+      const message = masquer(err instanceof Error ? err.message : String(err), entry.config.env);
+      if (err instanceof UnauthorizedError) {
+        return { ok: false, content: `L'autorisation donnée à ${entry.config.label} n'est plus valable (${message}). Dis à l'utilisateur de le reconnecter depuis l'écran des connecteurs.` };
+      }
+      if (err instanceof McpError && err.code === ErrorCode.RequestTimeout) {
+        return { ok: false, content: `${entry.config.label} n'a pas répondu à temps (${message}) : l'appel est abandonné. Il a pu être exécuté quand même : vérifie avant de le refaire.` };
+      }
+      /*
+       * La connexion est perdue (serveur distant redémarré, session oubliée,
+       * processus disparu). Mesuré le 28/09/2026 : chaque appel suivant
+       * échouait (« No valid session ID », « Not connected ») jusqu'au
+       * redémarrage de la passerelle. On rouvre la connexion ; et l'appel est
+       * refait une fois, seulement quand il est sûr que le serveur ne l'a pas
+       * exécuté (refusé avant, ou jamais parvenu).
+       */
+      const perdue = connexionPerdue(err);
+      if (!perdue.perdue || essai > 0) return { ok: false, content: expliquerSi(message) };
+      if (entry.client === client) {
+        entry.client = undefined;
+        const pid = entry.pid;
+        entry.pid = undefined;
+        await fermer(client, pid);
+      }
+      const relance = await startServer(tool.serverId);
+      if (!relance.ok || !entry.client) {
+        return { ok: false, content: `${entry.config.label} ne répond plus (${message}) et la connexion n'a pas pu être rouverte : ${relance.error ?? "cause inconnue"}.` };
+      }
+      if (!perdue.nonExecute) {
+        return { ok: false, content: `La connexion à ${entry.config.label} a été perdue pendant l'appel (${message}). Elle est rouverte, mais l'appel a pu être exécuté : vérifie avant de le refaire.` };
+      }
+      client = entry.client;
+    }
   }
+}
+
+/** Délai d'un appel d'outil sans nouvelles du serveur (réglable pour les essais). */
+const DELAI_APPEL_MS = Number(process.env.HELIX_MCP_DELAI_MS) > 0 ? Number(process.env.HELIX_MCP_DELAI_MS) : 60_000;
+
+/**
+ * Une erreur d'appel dit-elle que la connexion est perdue, et que le serveur
+ * n'a sûrement pas exécuté l'appel ?
+ */
+function connexionPerdue(err: unknown): { perdue: boolean; nonExecute: boolean } {
+  const message = err instanceof Error ? err.message : String(err);
+  // Le processus n'était plus là : rien n'est parti.
+  if (/^Not connected$/.test(message)) return { perdue: true, nonExecute: true };
+  if (err instanceof StreamableHTTPError) {
+    /*
+     * 404 : la session est inconnue du serveur (il a redémarré), et la
+     * spécification demande d'en ouvrir une nouvelle. Plusieurs serveurs
+     * répondent 400 « No valid session ID » pour la même raison.
+     */
+    if (err.code === 404 || (err.code === 400 && /session/i.test(message))) return { perdue: true, nonExecute: true };
+    return { perdue: false, nonExecute: false };
+  }
+  const cause = (err as { cause?: { code?: string } })?.cause?.code;
+  if (/fetch failed/i.test(message)) return { perdue: true, nonExecute: cause === "ECONNREFUSED" };
+  if (err instanceof McpError && err.code === ErrorCode.ConnectionClosed) return { perdue: true, nonExecute: false };
+  return { perdue: false, nonExecute: false };
+}
+
+type ResultatOutil = { content?: unknown; structuredContent?: unknown; isError?: boolean };
+
+/**
+ * Le résultat d'un outil, en texte pour le modèle.
+ *
+ * Seul le texte passait : une ressource renvoyée par le serveur (le contenu
+ * d'un fichier, d'une page) devenait « [resource] », un lien « [resource_link] »
+ * sans son adresse, et un résultat seulement structuré « (résultat vide) ».
+ * Mesuré le 28/09/2026 avec @modelcontextprotocol/server-everything. Les images
+ * et le son ne sont pas transmis au modèle : il le sait, au lieu de croire que
+ * le serveur n'a rien rendu.
+ */
+function rendreResultat(result: ResultatOutil): string {
+  const parts = Array.isArray(result.content) ? (result.content as Record<string, unknown>[]) : [];
+  const chaine = (v: unknown) => (typeof v === "string" ? v : "");
+  const morceaux = parts.map((p) => {
+    switch (p?.type) {
+      case "text":
+        return chaine(p.text);
+      case "image":
+      case "audio":
+        return `[${p.type === "image" ? "image" : "son"} ${chaine(p.mimeType)} rendu par l'outil, non transmis au modèle]`;
+      case "resource": {
+        const r = (p.resource ?? {}) as Record<string, unknown>;
+        if (typeof r.text === "string") return `[ressource ${chaine(r.uri)}]\n${r.text}`;
+        return `[ressource binaire ${chaine(r.uri)} ${chaine(r.mimeType)}, non transmise au modèle]`;
+      }
+      case "resource_link":
+        return `[lien vers une ressource : ${chaine(p.name) || chaine(p.title)} ${chaine(p.uri)}]`.replace(/\s+\]$/, "]");
+      default:
+        return `[${chaine(p?.type) || "contenu"}]`;
+    }
+  });
+  const texte = morceaux.join("\n").trim();
+  if (texte) return texte;
+  if (result.structuredContent !== undefined) return JSON.stringify(result.structuredContent, null, 2);
+  return "";
 }
 
 /**

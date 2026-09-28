@@ -9,6 +9,8 @@ import { t, tf } from "./langue.ts";
 // Google Docs, Google Forms et Dropbox (28/09/2026) : leurs définitions et ce qui leur est propre vivent à part.
 import { definitionsDocuments, identiteDropbox, revoquerDropbox } from "./natifs/documents.ts";
 import { DEFINITIONS_PROJETS, identiteProjet, revocationProjet } from "./natifs/projetsRegles.ts";
+// Microsoft 365 (28/09/2026) : sa définition vit dans son fichier, qui n'importe de valeur que de langue.ts.
+import { DEFINITION_MICROSOFT, type ServiceMicrosoft } from "./natifs/microsoftBase.ts";
 
 /**
  * Connexions natives de 2026.928.2 : Google Sheets, Google Slides, YouTube,
@@ -24,6 +26,10 @@ import { DEFINITIONS_PROJETS, identiteProjet, revocationProjet } from "./natifs/
  * X (ex-Twitter) les a rejoints le même jour, sur la branche `connecteur-x`,
  * à la demande de Medhi : même modèle, mêmes règles (définition `x`
  * ci-dessous, SECURITE.md § 42).
+ *
+ * Microsoft 365 (Outlook, OneDrive, SharePoint, Excel, Word, Teams) aussi, le
+ * même jour, sur la branche `connecteurs-microsoft` : une seule connexion pour
+ * les six, définie dans natifs/microsoftBase.ts (SECURITE.md § 44).
  *
  * Ce module porte ce qui est commun aux huit : l'autorisation, les jetons,
  * leur renouvellement, leur révocation, et l'état montré à l'écran. Les outils
@@ -72,16 +78,20 @@ import { DEFINITIONS_PROJETS, identiteProjet, revocationProjet } from "./natifs/
  */
 
 // Brevo et Mailchimp (28/09/2026, natifs/projetsRegles.ts, SECURITE.md § 48).
-export type IdNatif = "sheets" | "slides" | "youtube" | "linkedin" | "facebook" | "instagram" | "tiktok" | "x" | "docs" | "forms" | "dropbox" | "brevo" | "mailchimp";
-export const IDS_NATIFS: IdNatif[] = ["sheets", "slides", "youtube", "linkedin", "facebook", "instagram", "tiktok", "x", "docs", "forms", "dropbox", "brevo", "mailchimp"];
+export type IdNatif = "sheets" | "slides" | "youtube" | "linkedin" | "facebook" | "instagram" | "tiktok" | "x" | "docs" | "forms" | "dropbox" | "brevo" | "mailchimp" | "microsoft";
+export const IDS_NATIFS: IdNatif[] = ["sheets", "slides", "youtube", "linkedin", "facebook", "instagram", "tiktok", "x", "docs", "forms", "dropbox", "brevo", "mailchimp", "microsoft"];
 export const estIdNatif = (v: unknown): v is IdNatif => typeof v === "string" && (IDS_NATIFS as string[]).includes(v);
 
 /** Une option cochée à la connexion : des portées de plus, et dit si elles demandent une revue chez le fournisseur. */
 export interface Choix {
-  /** `envoi` : envoyer une campagne (Brevo, Mailchimp), en plus des brouillons. */
-  id: "ecriture" | "page" | "envoi";
+  /** `envoi` : envoyer une campagne (Brevo, Mailchimp) ; Microsoft 365 : un choix par service (natifs/microsoftBase.ts). */
+  id: "ecriture" | "page" | "envoi" | ServiceMicrosoft;
   portees: string[];
   revue: boolean;
+  /** Portées demandées en plus pour ce choix quand « ecriture » est aussi coché (Microsoft 365). */
+  ecriture?: string[];
+  /** Demande le consentement d'un administrateur de l'annuaire (Microsoft 365). */
+  admin?: boolean;
 }
 
 export interface Definition {
@@ -126,6 +136,31 @@ export interface Definition {
   /** Hôtes que ce service a le droit de joindre. Aucun autre, quoi qu'on demande. */
   hotes: string[];
   documentation: string[];
+  /*
+   * Ajouts du 28/09/2026 pour Microsoft 365 (natifs/microsoftBase.ts). Tous
+   * facultatifs : les huit services d'avant ne les ont pas, et rien ne change
+   * pour eux.
+   */
+  /** Hôtes admis par leur forme, en plus de `hotes` : les SharePoint où Graph envoie télécharger un fichier. */
+  hoteAdmis?: (hote: string) => boolean;
+  /** Retour sur la boucle locale sous le nom « localhost » (port ignoré par le fournisseur), écouté sur 127.0.0.1 et ::1. */
+  boucleLocalhost?: boolean;
+  /** Au moins un choix, hors « ecriture », doit être coché (les services de Microsoft 365). */
+  choixRequis?: boolean;
+  /** L'annuaire saisi avec l'application, qui entre dans les adresses de consentement et de jetons. */
+  annuaire?: {
+    lire: (brut: unknown) => { ok: true; valeur: string } | { ok: false; message: string };
+    adresses: (annuaire: string) => { consentement: string; jetons: Definition["jetons"] };
+  };
+  /** Comment lire et comparer les portées rendues (Microsoft : encodées, préfixées par la ressource, casse libre). */
+  relecture?: { accordees: (brut: unknown) => string[]; normaliser: (portee: string) => string };
+  /** Messages propres au service, là où la phrase commune serait fausse (« révoqué » quand rien ne peut l'être). */
+  messages?: {
+    manquantes: (portees: string[]) => string;
+    enTrop: (portees: string[]) => string;
+    debranche: () => string;
+    refus: (erreur: string, description: string) => string | null;
+  };
 }
 
 export const GOOGLE_COMMUN = {
@@ -437,6 +472,8 @@ export const DEFINITIONS: Record<IdNatif, Definition> = {
   // Google Docs, Google Forms, Dropbox : natifs/documents.ts (fonction hoistée, sans rien lire de ce module au chargement).
   ...definitionsDocuments(GOOGLE_COMMUN),
   ...DEFINITIONS_PROJETS,
+  // Microsoft 365 par Microsoft Graph (28/09/2026) : portées, adresses et limites relevées dans natifs/microsoftBase.ts.
+  microsoft: DEFINITION_MICROSOFT,
 };
 
 const AGENT = "Connecteur-Natif/1";
@@ -478,6 +515,8 @@ export interface ReponseApi {
   entetes: Record<string, string | string[] | undefined>;
   /** Le corps tel que reçu : le contenu d'un fichier Dropbox n'est pas du JSON (natifs/documents.ts). */
   brut: Buffer;
+  /** Le corps tel que reçu : le contenu d'un fichier téléchargé (Microsoft 365, natifs/microsoft.ts). */
+  corps: Buffer;
 }
 
 function lireJson(r: ReponseHttps): Record<string, unknown> {
@@ -496,7 +535,7 @@ export async function envoyer(
   d: { methode: DemandeHttps["methode"]; hote: string; chemin: string; entetes?: Record<string, string>; corps?: string | Buffer; octets?: number; delaiTotalMs?: number },
 ): Promise<ReponseApi> {
   const def = DEFINITIONS[id];
-  if (!def.hotes.includes(d.hote) && !def.motifHote?.test(d.hote)) throw new ErreurNatif("config", `Hôte non autorisé pour ${def.nom}.`);
+  if (!def.hotes.includes(d.hote) && !def.motifHote?.test(d.hote) && !def.hoteAdmis?.(d.hote)) throw new ErreurNatif("config", `Hôte non autorisé pour ${def.nom}.`);
   const r = await transport(
     {
       methode: d.methode,
@@ -512,7 +551,7 @@ export async function envoyer(
     },
     def.nom,
   );
-  return { statut: r.statut, json: lireJson(r), entetes: r.entetes as ReponseApi["entetes"], brut: r.corps };
+  return { statut: r.statut, json: lireJson(r), entetes: r.entetes as ReponseApi["entetes"], brut: r.corps, corps: r.corps };
 }
 
 const formulaire = (p: Record<string, string>) => new URLSearchParams(p).toString();
@@ -527,6 +566,8 @@ export const preuveMeta = (jeton: string, secret: string): string => createHmac(
 
 interface ApplicationEnregistree {
   clientId: string;
+  /** L'annuaire (Microsoft 365) : identifiant, domaine ou « common ». */
+  annuaire?: string;
   /** Enveloppe `chiffrer()`, liée à sa place. */
   secret?: unknown;
   depuis: string;
@@ -603,7 +644,7 @@ async function ecrire(): Promise<void> {
 /* Application du fournisseur                                          */
 /* ------------------------------------------------------------------ */
 
-type Client = { ok: true; clientId: string; clientSecret: string; source: "google" | "ecran" } | { ok: false };
+type Client = { ok: true; clientId: string; clientSecret: string; source: "google" | "ecran"; annuaire?: string } | { ok: false };
 
 function clientDe(id: IdNatif): Client {
   const def = DEFINITIONS[id];
@@ -622,11 +663,17 @@ function clientDe(id: IdNatif): Client {
       secret = "";
     }
   }
-  return { ok: true, clientId: a.clientId, clientSecret: secret, source: "ecran" };
+  return { ok: true, clientId: a.clientId, clientSecret: secret, source: "ecran", ...(a.annuaire ? { annuaire: a.annuaire } : {}) };
+}
+
+/** Où consentir et où échanger les jetons : dans l'annuaire enregistré, pour Microsoft 365. */
+function adressesDe(id: IdNatif, client: { annuaire?: string }): { consentement: string; jetons: Definition["jetons"] } {
+  const def = DEFINITIONS[id];
+  return def.annuaire && client.annuaire ? def.annuaire.adresses(client.annuaire) : { consentement: def.consentement, jetons: def.jetons };
 }
 
 /** Enregistre l'application créée par l'organisation chez LinkedIn, Meta ou TikTok. Le secret est chiffré, et ne ressort plus. */
-export async function enregistrerApplication(id: unknown, brutId: unknown, brutSecret: unknown, qui: string): Promise<{ ok: boolean; message: string }> {
+export async function enregistrerApplication(id: unknown, brutId: unknown, brutSecret: unknown, qui: string, brutAnnuaire?: unknown): Promise<{ ok: boolean; message: string }> {
   if (!estIdNatif(id)) return { ok: false, message: t("Service inconnu.") };
   const def = DEFINITIONS[id];
   if (def.google) return { ok: false, message: t("Les services Google utilisent l'application Google de l'instance, saisie une fois pour Drive, Agenda, Sheets, Slides et YouTube.") };
@@ -636,12 +683,14 @@ export async function enregistrerApplication(id: unknown, brutId: unknown, brutS
   if (!def.formeIdentifiant.test(clientId)) return { ok: false, message: tf("Cet identifiant n'a pas la forme de ceux de {0}. Vérifiez le copier-coller.", def.nom) };
   // LinkedIn, Meta et TikTok exigent le secret pour échanger le code ; X l'accepte sans (client « public », PKCE seul).
   if (secret.length > 200 || /\s/.test(secret) || (!secret && !def.secretFacultatif)) return { ok: false, message: tf("Collez aussi le secret de l'application {0}, sans espace.", def.nom) };
+  const annuaire = def.annuaire ? def.annuaire.lire(brutAnnuaire) : null;
+  if (annuaire && !annuaire.ok) return { ok: false, message: annuaire.message };
   if (!chiffrementActif()) return { ok: false, message: t("Le chiffrement des données n'est pas actif sur cette machine : le secret ne sera pas enregistré en clair.") };
   const avant = magasin!.applications[id];
-  magasin!.applications[id] = { clientId, ...(secret ? { secret: chiffrer(secret, placeSecret(id)) } : {}), depuis: new Date().toISOString(), par: qui };
-  // Une autre application : le compte branché avec l'ancienne ne vaut plus.
+  magasin!.applications[id] = { clientId, ...(annuaire?.ok ? { annuaire: annuaire.valeur } : {}), ...(secret ? { secret: chiffrer(secret, placeSecret(id)) } : {}), depuis: new Date().toISOString(), par: qui };
+  // Une autre application (ou un autre annuaire) : le compte branché avec l'ancienne ne vaut plus.
   const compte = magasin!.comptes[id];
-  if (compte && compte.clientId !== clientId) compte.perdu = new Date().toISOString();
+  if (compte && (compte.clientId !== clientId || (avant?.annuaire ?? "") !== (annuaire?.ok ? annuaire.valeur : ""))) compte.perdu = new Date().toISOString();
   try {
     await ecrire();
   } catch (err) {
@@ -766,7 +815,6 @@ function identification(id: IdNatif, client: { clientId: string; clientSecret: s
 }
 
 async function rafraichir(id: IdNatif, j: JetonsClairs): Promise<JetonsClairs | null> {
-  const def = DEFINITIONS[id];
   const client = clientDe(id);
   if (!client.ok) return null;
   if (id === "instagram") {
@@ -779,7 +827,8 @@ async function rafraichir(id: IdNatif, j: JetonsClairs): Promise<JetonsClairs | 
   // `identification` rend `client_key` pour TikTok, `client_id` pour les autres, ou l'en-tête Basic de X.
   const qui = identification(id, client);
   const p: Record<string, string> = { ...qui.champs, grant_type: "refresh_token", refresh_token: j.actualisation };
-  const r = await envoyer(id, { methode: "POST", hote: def.jetons.hote, chemin: def.jetons.chemin, entetes: { ...FORM, ...qui.entetes }, corps: formulaire(p), octets: LIMITES.jetons });
+  const point = adressesDe(id, client).jetons;
+  const r = await envoyer(id, { methode: "POST", hote: point.hote, chemin: point.chemin, entetes: { ...FORM, ...qui.entetes }, corps: formulaire(p), octets: LIMITES.jetons });
   if (r.statut !== 200 || typeof r.json.access_token !== "string") return null;
   return {
     acces: r.json.access_token,
@@ -821,6 +870,8 @@ interface Flux {
   portees: string[];
   qui: string;
   serveur: http.Server | null;
+  /** Le même port sur ::1, quand « localhost » y mène (Microsoft 365, `boucleLocalhost`). */
+  serveur6?: http.Server | null;
   minuterie: ReturnType<typeof setTimeout>;
   echangeEnCours: boolean;
 }
@@ -839,6 +890,12 @@ function fermerFlux(id: IdNatif): void {
     s.closeIdleConnections?.();
     // Plus tard : la réponse qui conclut passe par l'une de ces connexions (mesuré sur Drive).
     setTimeout(() => s.closeAllConnections?.(), 2000).unref?.();
+  }
+  if (f.serveur6) {
+    const s6 = f.serveur6;
+    s6.close();
+    s6.closeIdleConnections?.();
+    setTimeout(() => s6.closeAllConnections?.(), 2000).unref?.();
   }
 }
 
@@ -902,7 +959,8 @@ export function adresseDeRetour(id: IdNatif, base: string): string {
     const boucle = ecouteSurIPv4() ? "127.0.0.1" : ecoute === "::1" ? "[::1]" : "localhost";
     return `${def.sansLocalhost ? racine.replace(/^(https?:\/\/)localhost(?=:\d{1,5}$|$)/i, (_, schema: string) => schema + boucle) : racine}/helix/oauth/retour`;
   }
-  // Google accepte tout port de la boucle locale pour une application « de bureau » ; TikTok, le joker `*`.
+  // Google accepte tout port de la boucle locale pour une application « de bureau » ; TikTok, le joker `*` ; Microsoft ignore le port de « localhost ».
+  if (def.boucleLocalhost) return `http://localhost${def.cheminBoucle}`;
   return def.google ? "http://127.0.0.1" : `http://127.0.0.1:*${def.cheminBoucle}`;
 }
 
@@ -932,17 +990,26 @@ export async function demarrer(brutId: unknown, qui: string, base: string, brutC
 
   const demandes = Array.isArray(brutChoix) ? brutChoix.filter((c): c is string => typeof c === "string") : [];
   const choix = def.choix.filter((c) => demandes.includes(c.id));
+  if (def.choixRequis && !choix.some((c) => c.id !== "ecriture")) return { ok: false, message: tf("Cochez au moins un service de {0} à brancher.", def.nom) };
   // La page d'une entreprise LinkedIn sans écriture : on lit, on ne publie pas.
   // Sans doublon : chez Brevo, un brouillon et un envoi demandent la même portée.
-  const portees = [...new Set([...def.lecture, ...choix.flatMap((c) => (c.id === "page" && !demandes.includes("ecriture") ? c.portees.filter((p) => !p.startsWith("w_")) : c.portees))])];
+  const portees = [
+    ...new Set([
+      ...def.lecture,
+      ...choix.flatMap((c) => (c.id === "page" && !demandes.includes("ecriture") ? c.portees.filter((p) => !p.startsWith("w_")) : c.portees)),
+      // Microsoft 365 : les portées d'écriture des services cochés, seulement si « ecriture » l'est aussi.
+      ...(demandes.includes("ecriture") ? choix.flatMap((c) => c.ecriture ?? []) : []),
+    ]),
+  ];
 
   const etat = PREFIXE_ETAT + base64url(randomBytes(32));
   const verificateur = base64url(randomBytes(48));
   let redirection: string;
   let serveur: http.Server | null = null;
+  let serveur6: http.Server | null = null;
 
   if (def.retour === "boucle") {
-    serveur = http.createServer((req, res) => {
+    const repondre = (req: http.IncomingMessage, res: http.ServerResponse) => {
       const adresse = new URL(req.url ?? "/", "http://127.0.0.1");
       if (req.method !== "GET" || adresse.pathname !== def.cheminBoucle) {
         res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" }).end("Introuvable.");
@@ -952,7 +1019,8 @@ export async function demarrer(brutId: unknown, qui: string, base: string, brutC
         (r) => pageBoucle(res, r.ok ? 200 : 400, r.ok ? tf("{0} est connecté", def.nom) : t("La connexion n'a pas abouti"), r.ok ? `${r.message} ${t("Vous pouvez fermer cet onglet.")}` : r.message),
         () => pageBoucle(res, 500, t("La connexion n'a pas abouti"), t("Erreur inattendue.")),
       );
-    });
+    };
+    serveur = http.createServer(repondre);
     serveur.keepAliveTimeout = 1000;
     const s = serveur;
     const port = await new Promise<number>((ok, ko) => {
@@ -966,7 +1034,20 @@ export async function demarrer(brutId: unknown, qui: string, base: string, brutC
       s.close();
       return { ok: false, message: t("Impossible d'ouvrir un port sur la boucle locale pour recevoir la réponse du service.") };
     }
-    redirection = `http://127.0.0.1:${port}${def.cheminBoucle}`;
+    if (def.boucleLocalhost) {
+      /*
+       * « localhost » : macOS le résout d'abord en ::1. Le même port y est
+       * ouvert si l'on peut ; sinon le navigateur retombe sur 127.0.0.1.
+       * Seulement ::1 et 127.0.0.1, jamais une adresse du réseau.
+       */
+      const s6 = http.createServer(repondre);
+      s6.keepAliveTimeout = 1000;
+      serveur6 = await new Promise<http.Server | null>((ok) => {
+        s6.once("error", () => ok(null));
+        s6.listen(port, "::1", () => ok(s6));
+      });
+    }
+    redirection = `http://${def.boucleLocalhost ? "localhost" : "127.0.0.1"}:${port}${def.cheminBoucle}`;
   } else {
     redirection = adresseDeRetour(id, base);
   }
@@ -980,6 +1061,7 @@ export async function demarrer(brutId: unknown, qui: string, base: string, brutC
     portees,
     qui,
     serveur,
+    serveur6,
     echangeEnCours: false,
     minuterie: setTimeout(() => conclure(id, false, t("Le délai de dix minutes est dépassé : rien n'a été enregistré. Recommencez.")), LIMITES.fluxMs),
   };
@@ -999,7 +1081,7 @@ export async function demarrer(brutId: unknown, qui: string, base: string, brutC
     p.set("code_challenge", def.pkce === "S256-hex" ? empreinte.toString("hex") : base64url(empreinte));
     p.set("code_challenge_method", "S256");
   }
-  return { ok: true, message: tf("Autorisez l'accès dans la page de {0} qui s'ouvre. Cette demande expire dans dix minutes.", def.nom), url: `${def.consentement}?${p.toString()}` };
+  return { ok: true, message: tf("Autorisez l'accès dans la page de {0} qui s'ouvre. Cette demande expire dans dix minutes.", def.nom), url: `${adressesDe(id, client).consentement}?${p.toString()}` };
 }
 
 /**
@@ -1014,7 +1096,9 @@ export async function recevoir(parametres: URLSearchParams, quiCollage: string |
   const def = DEFINITIONS[f.id];
   const erreur = parametres.get("error");
   if (erreur) {
-    return { ...conclure(f.id, false, /denied|cancel/i.test(erreur) ? tf("Vous avez refusé l'accès dans {0} : rien n'a été enregistré.", def.nom) : tf("{0} a interrompu l'autorisation : rien n'a été enregistré. Recommencez.", def.nom)), nom: def.nom };
+    // Microsoft 365 : un code AADSTS dit ce qui manque (consentement de l'administrateur, adresse de retour) ; rien de la réponse n'est recopié.
+    const propre = def.messages?.refus(erreur.slice(0, 100), (parametres.get("error_description") ?? "").slice(0, 2000));
+    return { ...conclure(f.id, false, propre ?? (/denied|cancel/i.test(erreur) ? tf("Vous avez refusé l'accès dans {0} : rien n'a été enregistré.", def.nom) : tf("{0} a interrompu l'autorisation : rien n'a été enregistré. Recommencez.", def.nom))), nom: def.nom };
   }
   const code = (parametres.get("code") ?? "").replace(/#_$/, "");
   if (!code || code.length > 2048) return { ...conclure(f.id, false, t("La réponse ne contient pas de code d'autorisation. Recommencez.")), nom: def.nom };
@@ -1075,7 +1159,8 @@ async function echanger(f: Flux, code: string, qui: string): Promise<string> {
       redirect_uri: f.redirection,
       ...(def.pkce ? { code_verifier: f.verificateur } : {}),
     };
-    r = await envoyer(id, { methode: "POST", hote: def.jetons.hote, chemin: def.jetons.chemin, entetes: { ...FORM, ...qui.entetes }, corps: formulaire(p), octets: LIMITES.jetons });
+    const point = adressesDe(id, client).jetons;
+    r = await envoyer(id, { methode: "POST", hote: point.hote, chemin: point.chemin, entetes: { ...FORM, ...qui.entetes }, corps: formulaire(p), octets: LIMITES.jetons });
   }
   // Instagram rend parfois ses champs dans `data[0]`.
   const json = Array.isArray(r.json.data) && r.json.data[0] && typeof r.json.data[0] === "object" ? (r.json.data[0] as Record<string, unknown>) : r.json;
@@ -1113,7 +1198,7 @@ async function echanger(f: Flux, code: string, qui: string): Promise<string> {
     const liste = Array.isArray(p.json.data) ? (p.json.data as { permission?: unknown; status?: unknown }[]) : [];
     accordees = liste.filter((x) => x.status === "granted" && typeof x.permission === "string").map((x) => String(x.permission));
   } else {
-    accordees = decouper(json.scope ?? json.permissions);
+    accordees = def.relecture ? def.relecture.accordees(json.scope) : decouper(json.scope ?? json.permissions);
   }
   if (def.sansPortees) {
     // Mailchimp n'a pas de portées : rien à relire, et rien ne doit revenir.
@@ -1132,15 +1217,21 @@ async function echanger(f: Flux, code: string, qui: string): Promise<string> {
     await revoquer();
     throw new ErreurNatif("portee", t("Le service n'a pas dit quels accès il accordait : rien n'a été enregistré."));
   }
-  const manquantes = def.sansPortees ? [] : f.portees.filter((p) => !accordees.includes(p));
+  // Comparées sous une même forme (Microsoft : sans le préfixe de Graph, sans casse) ; les autres telles quelles.
+  const forme = def.relecture?.normaliser ?? ((p: string) => p);
+  const recues = accordees.map(forme);
+  const implicites = def.implicites.map(forme);
+  // Mailchimp n'a pas de portées (`sansPortees`) : rien ne peut manquer.
+  const manquantes = def.sansPortees ? [] : f.portees.filter((p) => !recues.includes(forme(p)) && !implicites.includes(forme(p)));
   if (manquantes.length > 0) {
     await revoquer();
-    throw new ErreurNatif("portee", tf("Tous les accès demandés n'ont pas été accordés dans {0} (une case décochée, ou une permission que l'application n'a pas). Rien n'a été enregistré.", def.nom));
+    throw new ErreurNatif("portee", def.messages ? def.messages.manquantes(manquantes) : tf("Tous les accès demandés n'ont pas été accordés dans {0} (une case décochée, ou une permission que l'application n'a pas). Rien n'a été enregistré.", def.nom));
   }
-  const enTrop = accordees.filter((p) => !f.portees.includes(p) && !def.implicites.includes(p));
+  const demandees = f.portees.map(forme);
+  const enTrop = recues.filter((p) => !demandees.includes(p) && !implicites.includes(p));
   if (enTrop.length > 0) {
     await revoquer();
-    throw new ErreurNatif("portee", tf("{0} a accordé plus que ce qui était demandé. Par prudence, rien n'a été enregistré et l'accès a été révoqué.", def.nom));
+    throw new ErreurNatif("portee", def.messages ? def.messages.enTrop(enTrop.map((p) => texteCourt(p, 80))) : tf("{0} a accordé plus que ce qui était demandé. Par prudence, rien n'a été enregistré et l'accès a été révoqué.", def.nom));
   }
 
   // L'essai : lire le compte avec ce jeton. Rien n'est gardé s'il échoue.
@@ -1241,6 +1332,12 @@ async function identite(id: IdNatif, acces: string, client: { clientId: string; 
     case "brevo":
     case "mailchimp":
       return identiteProjet(id, acces, envoyer, echec);
+    case "microsoft": {
+      // https://learn.microsoft.com/en-us/graph/api/user-get (`User.Read`) : le compte branché, et son identifiant.
+      const r = await envoyer(id, { methode: "GET", hote: "graph.microsoft.com", chemin: "/v1.0/me?$select=id,displayName,mail,userPrincipalName", entetes: bearer });
+      if (r.statut !== 200 || typeof r.json.id !== "string" || !/^[0-9a-fA-F-]{8,64}$/.test(r.json.id)) throw echec(r);
+      return { compte: texteCourt(r.json.mail) || texteCourt(r.json.userPrincipalName) || texteCourt(r.json.displayName) || "Microsoft 365", ids: { utilisateur: r.json.id } };
+    }
   }
 }
 
@@ -1303,7 +1400,9 @@ export async function oublier(brutId: unknown, qui: string): Promise<{ ok: boole
     ok: true,
     message: revoque
       ? tf("{0} a été débranché, et l'accès révoqué chez {0}.", def.nom)
-      : tf("{0} a été débranché de cette instance. {0} n'a pas confirmé la révocation : retirez aussi l'accès de l'application dans les réglages de votre compte {0}.", def.nom),
+      : def.messages
+        ? def.messages.debranche()
+        : tf("{0} a été débranché de cette instance. {0} n'a pas confirmé la révocation : retirez aussi l'accès de l'application dans les réglages de votre compte {0}.", def.nom),
   };
 }
 
@@ -1321,8 +1420,8 @@ export interface EtatNatif {
   nom: string;
   google: boolean;
   /** L'application du fournisseur est-elle renseignée ? */
-  application: { disponible: boolean; identifiant?: string; avecSecret?: boolean; source?: "google" | "ecran" };
-  choix: { id: Choix["id"]; portees: string[]; revue: boolean }[];
+  application: { disponible: boolean; identifiant?: string; avecSecret?: boolean; source?: "google" | "ecran"; annuaire?: string };
+  choix: { id: Choix["id"]; portees: string[]; revue: boolean; ecriture?: string[]; admin?: boolean }[];
   lecture: string[];
   /** Adresse de retour à déclarer chez le fournisseur. */
   retour: string;
@@ -1352,8 +1451,8 @@ export async function etat(base: string): Promise<EtatNatif[]> {
       id,
       nom: def.nom,
       google: def.google,
-      application: client.ok ? { disponible: true, identifiant: client.clientId, avecSecret: Boolean(client.clientSecret), source: client.source } : { disponible: false },
-      choix: def.choix.map((x) => ({ id: x.id, portees: [...x.portees], revue: x.revue })),
+      application: client.ok ? { disponible: true, identifiant: client.clientId, avecSecret: Boolean(client.clientSecret), source: client.source, ...(client.annuaire ? { annuaire: client.annuaire } : {}) } : { disponible: false },
+      choix: def.choix.map((x) => ({ id: x.id, portees: [...x.portees], revue: x.revue, ...(x.ecriture ? { ecriture: [...x.ecriture] } : {}), ...(x.admin ? { admin: true } : {}) })),
       lecture: [...def.lecture],
       retour: adresseDeRetour(id, base),
       configure: ok,

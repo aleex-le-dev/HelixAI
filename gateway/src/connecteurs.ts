@@ -20,6 +20,7 @@ import * as drive from "./drive.ts";
 import * as slack from "./slack.ts";
 import * as outilsNatifs from "./outilsNatifs.ts";
 import * as messageries from "./natifs/messageries.ts";
+import { NOMS_MICROSOFT } from "./natifs/microsoftBase.ts";
 import * as computer from "./computer.ts";
 import { nomProduit } from "./marque.ts";
 import {
@@ -1066,7 +1067,7 @@ const ID_VALIDE = /^[a-z0-9][a-z0-9_-]{0,31}$/;
  * nommé « linkedin » aurait apporté des `linkedin__profil` que la barrière
  * range parmi les lectures. Et ceux du commerce (natifs/commerce.ts, § 47).
  */
-const IDS_RESERVES = new Set(["courrier", "agenda", "drive", "slack", "bureau", "ecran", "bibliotheque", "reunions", "controle", "code", "connaissances", "taches", "machine", "helix", "web", "sheets", "slides", "youtube", "linkedin", "facebook", "instagram", "tiktok", "x", "docs", "forms", "dropbox", "telegram", "discord", "whatsapp", "stripe", "shopify", "woocommerce", "salesforce", "pipedrive", "zendesk", "brevo", "mailchimp"]);
+const IDS_RESERVES = new Set(["courrier", "agenda", "drive", "slack", "bureau", "ecran", "bibliotheque", "reunions", "controle", "code", "connaissances", "taches", "machine", "helix", "web", "sheets", "slides", "youtube", "linkedin", "facebook", "instagram", "tiktok", "x", "docs", "forms", "dropbox", "telegram", "discord", "whatsapp", "stripe", "shopify", "woocommerce", "salesforce", "pipedrive", "zendesk", "brevo", "mailchimp", "microsoft", "outlook", "onedrive", "sharepoint", "excel", "word", "teams"]);
 
 /**
  * Ce que la requête a le droit d'apporter, selon le régime de l'instance.
@@ -1700,7 +1701,7 @@ export async function groupes(): Promise<GroupeOutils[]> {
   // Sheets, Slides, YouTube et réseaux sociaux (outilsNatifs.ts) : un groupe par service branché, lu à la même source que chat.ts.
   // Et les messageries (natifs/messageries.ts) : leurs envois s'appellent `__envoyer`.
   const natifs = [...outilsNatifs.toolsForModel(), ...messageries.toolsForModel()];
-  const NOMS: Record<string, string> = { sheets: "Google Sheets", slides: "Google Slides", youtube: "YouTube", linkedin: "LinkedIn", facebook: "Facebook", instagram: "Instagram", tiktok: "TikTok", x: "X", docs: "Google Docs", forms: "Google Forms", dropbox: "Dropbox", telegram: "Telegram", discord: "Discord", whatsapp: "WhatsApp", stripe: "Stripe", shopify: "Shopify", woocommerce: "WooCommerce", salesforce: "Salesforce", pipedrive: "Pipedrive", zendesk: "Zendesk", brevo: "Brevo", mailchimp: "Mailchimp" };
+  const NOMS: Record<string, string> = { sheets: "Google Sheets", slides: "Google Slides", youtube: "YouTube", linkedin: "LinkedIn", facebook: "Facebook", instagram: "Instagram", tiktok: "TikTok", x: "X", docs: "Google Docs", forms: "Google Forms", dropbox: "Dropbox", telegram: "Telegram", discord: "Discord", whatsapp: "WhatsApp", stripe: "Stripe", shopify: "Shopify", woocommerce: "WooCommerce", salesforce: "Salesforce", pipedrive: "Pipedrive", zendesk: "Zendesk", brevo: "Brevo", mailchimp: "Mailchimp", ...NOMS_MICROSOFT };
   for (const [id, label] of Object.entries(NOMS)) {
     const n = natifs.filter((o) => o.function.name.startsWith(`${id}__`)).length;
     if (n === 0) continue;
@@ -1708,7 +1709,7 @@ export async function groupes(): Promise<GroupeOutils[]> {
       id,
       label,
       // Par la liste des écritures de la barrière, pas par le nom : `dropbox__envoyer` écrit sans « publier » ni « ecrire » (28/09/2026).
-      description: natifs.some((o) => o.function.name.startsWith(`${id}__`) && (outilsNatifs.ECRITURES_NATIVES.has(o.function.name) || /__(envoyer|noter|repondre|publier|ecrire|ajouter|creer)/.test(o.function.name)))
+      description: natifs.some((o) => o.function.name.startsWith(`${id}__`) && (outilsNatifs.ECRITURES_NATIVES.has(o.function.name) || /__(envoyer|noter|repondre|publier|ecrire|ajouter|creer|brouillon|poster)/.test(o.function.name)))
         ? "Lire, et écrire ou publier après votre accord, à chaque fois."
         : "Lire, sans rien modifier.",
       actif: true,

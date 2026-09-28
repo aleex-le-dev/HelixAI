@@ -6,6 +6,8 @@ import { journaliser } from "./audit.ts";
 import { apercuEnvoi, envoiSansAccord, presenterMessage } from "./courrier.ts";
 import { ECRITURES_COMMERCE, LECTURES_COMMERCE, resumeCommerce } from "./natifs/commerce.ts";
 import { APERCU_REQUIS, ECRITURES_PROJETS, estEcritureMcpProjet, estLectureMcpProjet, LECTURES_PROJETS, resumeProjet } from "./natifs/projetsRegles.ts";
+// Microsoft 365 (28/09/2026) : noms et phrases des cartes, dans un fichier sans autre dépendance que langue.ts.
+import { ECRITURES_MICROSOFT, LECTURES_MICROSOFT, resumeMicrosoft } from "./natifs/microsoftBase.ts";
 
 /**
  * Approbation des actions de l'agent.
@@ -245,6 +247,8 @@ export const LECTURES_NATIVES = new Set([
   ...LECTURES_COMMERCE,
   // Brevo et Mailchimp (natifs/projetsRegles.ts, SECURITE.md § 48).
   ...LECTURES_PROJETS,
+  // Microsoft 365 (Outlook, OneDrive, SharePoint, Excel, Word, Teams), 28/09/2026 (SECURITE.md § 44).
+  ...LECTURES_MICROSOFT,
 ]);
 export const ECRITURES_NATIVES = new Set([
   "sheets__ecrire",
@@ -265,6 +269,8 @@ export const ECRITURES_NATIVES = new Set([
   // Une note Salesforce ou Pipedrive, une réponse Zendesk : une carte à chaque fois (§ 47).
   ...ECRITURES_COMMERCE,
   ...ECRITURES_PROJETS,
+  // Brouillon et envoi Outlook, événement, plage Excel, message Teams : une carte à chaque fois, même au niveau « Tout approuver ».
+  ...ECRITURES_MICROSOFT,
 ]);
 
 /**
@@ -576,6 +582,8 @@ export function resumerOutil(outil: string, args: Record<string, unknown>): stri
 function resumeNatif(outil: string, args: Record<string, unknown>): string | null {
   const projet = resumeProjet(outil, args);
   if (projet) return projet;
+  const microsoft = resumeMicrosoft(outil, args);
+  if (microsoft) return microsoft;
   const extrait = (v: unknown, n = 120) => {
     const s = typeof v === "string" ? v.trim().replace(/\s+/g, " ") : "";
     return s ? ` « ${s.slice(0, n)}${s.length > n ? " …" : ""} »` : "";

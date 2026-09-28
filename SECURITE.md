@@ -5354,3 +5354,149 @@ rendues (Keycloak de Brevo, Zoom qui accorde les portées de l'application), l'a
 `http://127.0.0.1` chez Atlassian, Brevo et Mailchimp, les vrais outils des six serveurs, un vrai
 brouillon, un vrai envoi (et le `recipient_count` réel d'un segment Mailchimp), la révocation chez
 Brevo.
+## 44. Connecteurs Microsoft 365 (28 septembre 2026)
+
+Outlook (mails et agenda), OneDrive, SharePoint, Excel, Word et Teams, par Microsoft Graph v1.0,
+demandés par Medhi, faits sur la branche `connecteurs-microsoft` sur le modèle des connecteurs
+natifs (§§ 40 à 43, corrections comprises). Fichiers : `gateway/src/natifs/microsoftBase.ts`
+(définition, portées, sources, noms des outils, phrases des cartes), `gateway/src/natifs/microsoft.ts`
+(outils), `src/components/settings/ConnecteurMicrosoft.tsx` (panneau) ; ajouts courts dans
+`oauthNatif.ts`, `outilsNatifs.ts`, `approbation.ts`, `connecteurs.ts`, `index.ts`. Documentation
+officielle lue le 28/09/2026 sur learn.microsoft.com et citée dans le code. Contrôles :
+`scripts/essai-microsoft.mjs` (faux Microsoft, OAuth et Graph ; 98 contrôles), repris par
+`npm run securite`, section 16 bis (19 contrôles des pièces seules, puis l'essai sous
+« microsoft : »). **Rien n'a été essayé contre le vrai service** : ni annuaire Entra, ni compte
+Microsoft 365.
+
+### 44.1 Ce qui est tenu
+
+- **Une seule connexion.** Le consentement de Microsoft s'accumule par application et par personne,
+  et un jeton porte ce qui a été consenti (« Refresh tokens are valid for all permissions that your
+  client has already received consent for ») : six connexions sur une même application auraient été
+  six jetons aux mêmes pouvoirs. Une connexion `microsoft`, où l'on coche les services (au moins un)
+  et l'écriture. Les sept préfixes (`microsoft`, `outlook`, `onedrive`, `sharepoint`, `excel`, `word`,
+  `teams`) sont réservés (`IDS_RESERVES`), hors des familles des employés OpenClaw et de l'agent de
+  code.
+- **Portées minimales, relues.** Toujours `User.Read offline_access` ; par service les lectures ;
+  l'écriture seulement si elle est cochée, et seulement pour les services cochés qui savent écrire
+  (Outlook, Excel, Teams). Jamais `Files.Read.All`, `Files.ReadWrite.All`, `Sites.ReadWrite.All`,
+  `Chat.*`, `.default`. La portée rendue est relue sous une forme comparable (encodée, préfixée par
+  `https://graph.microsoft.com/`, casse libre, comme dans la page d'exemple) : une permission qui
+  manque, une en trop (essayé : `Files.ReadWrite.All` accordée en plus) ou une réponse sans `scope`
+  font refuser la connexion, rien n'est gardé, et le message nomme la permission et où la retirer
+  ou l'ajouter dans Entra. `openid`, `profile`, `email`, `offline_access` sont tolérés.
+- **Consentement de l'administrateur.** Signalé pour SharePoint (`Sites.Read.All`) et Teams
+  (`ChannelMessage.Read.All`), et pour eux seuls (tableau « AdminConsentRequired » de la référence
+  des permissions). Un retour `AADSTS65001` ou `90094` dit qui doit consentir, et où ; `65004` (la
+  personne refuse) reste un refus. Aucun texte du fournisseur n'est recopié : seuls des codes sont
+  reconnus.
+- **`state`, PKCE, annuaire.** Même mécanique que les autres (`state` de 32 octets comparé à durée
+  constante, dix minutes, une fois ; PKCE S256, vérificateur de 48 octets qui ne quitte pas
+  l'instance). Essayé : un `state` faux par la boucle locale (en 127.0.0.1 et en ::1), par l'adresse
+  recopiée à l'écran ou par la route publique ne mène à rien et n'annule pas la demande en cours ;
+  un retour rejoué ne vaut plus rien. L'annuaire saisi entre dans le chemin de
+  `login.microsoftonline.com` : seuls un GUID, un domaine, `common` et `organizations` sont admis
+  (essayé : `../evil`, `a/b`, `x?y`, `consumers` refusés).
+- **Client public ou confidentiel.** « Client public/natif » : ni secret ni en-tête d'identification,
+  PKCE seul. « Web » : le secret dans le corps, jamais dans l'adresse ; chiffré au repos
+  (`connecteursNatifs#microsoft#secret`), rendu par aucune route. Changer d'application ou d'annuaire
+  rend le compte branché inutilisable.
+- **Retour.** `http://localhost/microsoft`, sans port (Microsoft ignore le port de « localhost »),
+  écouté sur 127.0.0.1 et, s'il le peut, sur ::1 : jamais une adresse du réseau. Un autre chemin sur
+  ce port rend 404.
+- **Hôtes.** `login.microsoftonline.com` et `graph.microsoft.com`, rien d'autre de fixe ; `envoyer`
+  refuse tout autre hôte avant toute connexion (essayé : `sharepoint.com.evil.example`). Seule
+  exception, l'adresse de téléchargement pré-authentifiée que Graph donne pour un fichier
+  (`@microsoft.graph.downloadUrl`) : suivie seulement si elle est en https, sans port ni
+  identifiant, vers un nom `*.sharepoint.com` d'une seule étiquette, et **sans le jeton** (essayé :
+  une adresse vers un autre hôte, ou en http, refusée sans y rien envoyer).
+- **Identifiants venus du modèle.** Mail, lecteur, élément, site : vérifiés par leur forme (lettres,
+  chiffres et quelques signes ; jamais « .. » ni « / » de trop), puis encodés ; essayé :
+  `b!lecteur1/../../me`, `../../users/autre`, `evil.example/x` refusés avant tout appel. Onglet
+  Excel : les caractères qu'Excel refuse sont refusés. Équipe et canal Teams : choisis parmi ce que
+  Graph a listé, par identifiant, nom exact ou un morceau qu'un seul porte ; deux possibles, refusé
+  avec leurs noms (essayé : « Ventes » pour « Ventes Paris » et « Ventes Lyon »).
+- **Écrire.** Cinq outils (`outlook__brouillon`, `outlook__envoyer`, `outlook__creer_evenement`,
+  `excel__ecrire`, `teams__poster`) dans `ECRITURES_NATIVES`, donc une carte à chaque appel, même
+  au niveau « Tout approuver », qui montre les arguments entiers (essayé pour le mail, le brouillon,
+  l'événement et la plage Excel, et dans un vrai Chat pour Teams) ; réservés à l'administrateur,
+  vérifié au moment d'agir (essayé : un membre et un appel sans personne refusés, rien ne part).
+  Tous passent par `sousGarde` : dix écritures par heure pour Microsoft 365 entier, doublon refusé
+  une demi-heure, place gardée après un 5xx (essayé : un envoi qui reçoit 503, relancé, ne repart
+  pas) ; trois envois simultanés du même mail n'en font qu'un, une rafale de douze messages Teams
+  n'en fait pas passer plus de dix au total.
+- **Contenu.** Mail en texte brut (`contentType: Text`), messages Teams en texte brut (ni mention
+  `<at>`, ni balise, ni image que la carte n'aurait pas montrée) ; un mail lu l'est en texte brut
+  (`Prefer: outlook.body-content-type="text"`), sans images distantes. Pièces jointes par
+  `fichierDuDossier` (dossier de travail, chemin réel, un seul nom, `O_NOFOLLOW`, `O_NONBLOCK`) :
+  trois au plus, 2 Mo chacune, 2,5 Mo ensemble ; essayé : un lien vers un fichier d'ailleurs,
+  `/etc/hosts`, un fichier trop lourd, refusés. Un événement part en UTC (heure du poste
+  convertie), ses invités sont sur la carte, qui dit que les invitations partent aussitôt.
+- **Excel en valeurs brutes.** Écrire passe par `values`, jamais `formulas` ; un texte qui commence
+  par « = », « + », « - », « @ », une tabulation ou un retour reçoit l'apostrophe qui en fait un
+  texte à la saisie, et le format `@` (texte) pour cette cellule, les autres gardant le leur
+  (`null`, « ignore the cell ») ; un nombre écrit en texte (« -12,5 ») reste une valeur. Si la
+  réponse montre malgré tout une formule là où un texte a été écrit, le résultat le dit. Lire rend
+  les `values` (les résultats), pas les formules. Les lignes de longueurs différentes sont refusées
+  (Excel exige un rectangle ; les compléter effacerait des cellules en silence).
+- **Word.** Le `.docx` est lu par `lireZip` (relecture.ts), avec sa borne contre les bombes ZIP
+  (16 Mo par entrée) ; 20 Mo au plus téléchargés ; un fichier qui n'est pas un ZIP donne un texte
+  vide.
+- **Appel recopié.** Un message Teams lu contenant `<tool_call>{"name":"teams__poster",…}`, un mail
+  lu contenant un `outlook__envoyer`, recopiés par le faux modèle dans son résumé : pas lancés,
+  aucune carte, rien ne part, la citation reste du texte (`appelsLus`, § 41.1).
+- **Jetons.** Chiffrés au repos, jamais rendus par une route, ni au modèle, ni au journal ; essayé :
+  aucun jeton ni secret dans l'état (administrateur et membre), le dossier de données, la sortie de
+  la passerelle, ce qui est rendu au modèle. Jeton d'accès d'environ une heure, renouvelé une fois
+  sur un 401 dans l'annuaire enregistré (le nouveau jeton d'actualisation est gardé) ; un second
+  401 débranche.
+- **Révocation.** Microsoft n'a pas de point de révocation d'un jeton pour une application ;
+  `revokeSignInSessions` déconnecterait la personne de tout, partout, et retirer l'accord
+  (`oAuth2PermissionGrants`) demande une permission d'administration de l'annuaire : ni l'un ni
+  l'autre n'est appelé (essayé : aucune requête vers un chemin `revoke`). Débrancher efface les
+  jetons de l'instance et dit, sans prétendre avoir révoqué, où couper l'accès dans Entra
+  (« Applications d'entreprise », l'application, « Autorisations », ou supprimer le secret), et
+  qu'un jeton déjà délivré vaut encore environ une heure.
+
+### 44.2 Limites de Microsoft relevées (documentation du 28/09/2026)
+
+Graph : 130 000 requêtes par 10 secondes pour une application, tous annuaires. Outlook : 10 000
+requêtes par 10 minutes, quatre à la fois, 150 Mo envoyés par 5 minutes, par application et par
+boîte. Excel : 1 500 requêtes par 10 secondes et par annuaire. Teams : poster un message 50 par
+seconde pour l'annuaire, une par seconde et par équipe ; lire un message 20 par seconde ; quatre
+requêtes par seconde au plus sur une même équipe. Un 429 est dit au modèle avec le délai de
+`Retry-After` quand il est donné (essayé). Code d'autorisation : environ une minute ; jeton
+d'accès : environ une heure ; jeton d'actualisation : environ 90 jours.
+
+### 44.3 Soupçons, non démontrés
+
+- **Lecture par les collègues** : toute séance fait lire à ses agents la boîte, les fichiers et les
+  canaux du compte branché (règle du § 41.3). L'écran le dit et conseille un compte dédié ; pour une
+  boîte mail, c'est plus sensible que pour une page d'entreprise.
+- **`Files.ReadWrite`** permet, techniquement, de modifier ou supprimer tout fichier du OneDrive :
+  Microsoft n'a pas de portée « écrire un classeur ». Les outils n'écrivent qu'une plage, derrière la
+  carte ; un jeton volé sur l'instance, lui, pourrait davantage.
+- **Portées consenties avant** : si un jeton demandé avec des portées précises porte aussi celles
+  consenties avant (ce que la documentation dit pour `.default` et laisse entendre pour les jetons
+  d'actualisation), décocher un service fait refuser la connexion tant que sa permission n'est pas
+  retirée dans Entra. Le message le dit ; c'est voulu (l'écran ne dit jamais « lecture seule » d'un
+  jeton qui écrit), mais peut surprendre.
+- **Apostrophe et format `@`** : l'effet exact dans `values` n'est pas documenté ; au pire
+  l'apostrophe s'affiche, le contenu reste du texte.
+- **Dix écritures par heure pour les six services ensemble** : une limite plus serrée qu'un service
+  par service ; elle repart de zéro au redémarrage (§ 41.3).
+- **Pièces jointes** : pas de contrôle de signature des octets (au contraire de l'image de X) ; le
+  chemin est sur la carte, et le fichier vient du dossier de travail.
+- **375 px** : la colonne du panneau est étroite (même remarque qu'au § 43.3 pour la liste) ; les
+  mots longs se coupent, et une adresse de compte longue déborde de sa ligne dans la liste des
+  connecteurs (`Connecteurs.tsx`, commun, non modifié).
+
+### 44.4 Pas essayé
+
+Le vrai service : un annuaire Entra, les deux plateformes d'application, l'adresse
+`http://localhost/microsoft` avec le port de l'instance, l'écran de consentement et celui de
+l'administrateur, la présence et la forme de `scope` dans la réponse, la rotation du jeton
+d'actualisation, chaque lecture et chaque écriture réelles, l'apostrophe et le format `@` dans un
+vrai classeur, le téléchargement depuis un vrai SharePoint, les messages AADSTS réels, les
+comptes Microsoft personnels (non pris en charge : leur adresse de téléchargement n'est pas sur
+`sharepoint.com`), les clouds nationaux ; l'écran en chinois et dans l'application empaquetée.

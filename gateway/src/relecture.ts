@@ -22,8 +22,11 @@ const DECOMPRESSION_MAX = 16 * 1024 * 1024;
  * toute façon dans le dossier d'échange du poste, on le lit donc ici.
  */
 
-/** Les fichiers d'une archive ZIP (hors ZIP64 : un document de bureau n'en a pas besoin). */
-function lireZip(buf: Buffer, voulus: string[]): Map<string, string> {
+/**
+ * Les fichiers d'une archive ZIP (hors ZIP64 : un document de bureau n'en a pas besoin).
+ * Sert aussi à lire un document Word de OneDrive ou SharePoint (natifs/microsoft.ts), même borne.
+ */
+export function lireZip(buf: Buffer, voulus: string[]): Map<string, string> {
   const sortie = new Map<string, string>();
   let fin = -1;
   for (let i = buf.length - 22; i >= Math.max(0, buf.length - 65_557); i--) {

@@ -60,6 +60,7 @@ import { DriveGoogle } from "@/components/settings/DriveGoogle";
 import { SlackConnecteur } from "@/components/settings/SlackConnecteur";
 import { ConnecteurNatif } from "@/components/settings/ConnecteurNatif";
 import { useServicesCommerce } from "@/components/settings/ConnecteurCommerce";
+import { lignesMicrosoft } from "@/components/settings/ConnecteurMicrosoft";
 import { etatNatifs, type EtatNatif, type IdNatif } from "@/lib/natifs";
 import { ConnecteurMessagerie } from "@/components/settings/ConnecteurMessagerie";
 import { etatMessageries, type EtatMessagerie, type IdMessagerie } from "@/lib/messageries";
@@ -1108,6 +1109,8 @@ export function McpSettings() {
       };
     }),
     ...commerce,
+    // Microsoft 365 (28/09/2026) : six lignes, une seule connexion (ConnecteurMicrosoft.tsx).
+    ...lignesMicrosoft(natifs.find((s) => s.id === "microsoft"), ouvert, basculer, relire),
   ];
 
   return (

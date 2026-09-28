@@ -28,6 +28,9 @@ import { executerDocuments, outilsDocuments } from "./natifs/documents.ts";
 import * as commerce from "./natifs/commerce.ts";
 // Brevo et Mailchimp (SECURITE.md § 48) : leurs outils vivent à part, mêmes gardes que ceux-ci.
 import * as projets from "./natifs/projets.ts";
+// Microsoft 365 (28/09/2026) : ses outils dans leur fichier ; ce module lui passe ses gardes (`sousGarde`, `fichierDuDossier`).
+import { executerMicrosoft, outilsMicrosoft } from "./natifs/microsoft.ts";
+import { SERVICES_MICROSOFT, serviceMicrosoft } from "./natifs/microsoftBase.ts";
 
 /**
  * Les outils de l'agent pour Google Sheets, Google Slides, YouTube, LinkedIn,
@@ -78,6 +81,8 @@ const PREFIXES: Record<string, IdNatif> = {
   dropbox__: "dropbox",
   brevo__: "brevo",
   mailchimp__: "mailchimp",
+  // Microsoft 365 : six préfixes, une seule connexion (natifs/microsoftBase.ts).
+  ...Object.fromEntries(SERVICES_MICROSOFT.map((s) => [`${s}__`, "microsoft" as const])),
 };
 
 /** Préfixes réservés : aucun connecteur ajouté ne peut les prendre (connecteurs.ts, `IDS_RESERVES`). */
@@ -229,6 +234,7 @@ export function toolsForModel(): Outil[] {
   outils.push(...outilsDocuments());
   outils.push(...commerce.toolsForModel());
   outils.push(...projets.toolsForModel());
+  outils.push(...outilsMicrosoft());
   return outils;
 }
 
@@ -387,6 +393,7 @@ async function executer(nom: string, args: Record<string, unknown>): Promise<Res
     case "x__publier":
       return xPublier(args);
   }
+  if (serviceMicrosoft(nom)) return executerMicrosoft(nom, args, { sousGarde, fichierDuDossier });
   if (nom.startsWith("brevo__") || nom.startsWith("mailchimp__")) return projets.executer(nom, args, sousGarde);
   return (await executerDocuments(nom, args)) ?? refus(`Outil inconnu : ${nom}.`);
 }

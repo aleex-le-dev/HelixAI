@@ -1299,12 +1299,13 @@ async function handleNatifs(req: http.IncomingMessage, res: http.ServerResponse,
   if (req.method === "GET" && suite === "") return send(res, 200, await etatComplet());
   if (req.method !== "POST") return send(res, 404, { error: { message: t("Introuvable.") } });
   if (await reserveeALAdministration(res, qui, t("Seul l'administrateur de l'instance peut brancher, débrancher ou configurer ces services : ils agissent au nom de toute l'organisation."))) return;
-  const body = (await readJson(req).catch(() => ({}))) as { service?: unknown; clientId?: unknown; clientSecret?: unknown; choix?: unknown; adresse?: unknown };
+  const body = (await readJson(req).catch(() => ({}))) as { service?: unknown; clientId?: unknown; clientSecret?: unknown; choix?: unknown; adresse?: unknown; annuaire?: unknown };
   let r: { ok: boolean; message: string; url?: string };
   try {
     switch (suite) {
       case "/application":
-        r = await natifs.enregistrerApplication(body.service, body.clientId, body.clientSecret, qui.userId);
+        // `annuaire` : Microsoft 365 seulement (l'annuaire Entra de l'application), ignoré par les autres services.
+        r = await natifs.enregistrerApplication(body.service, body.clientId, body.clientSecret, qui.userId, body.annuaire);
         break;
       case "/application/effacer":
         r = await natifs.effacerApplication(body.service, qui.userId);

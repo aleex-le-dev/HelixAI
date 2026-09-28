@@ -5734,6 +5734,41 @@ console.log("\n14 bis. Seconde tournée de l'audit : dépendances npm à date fi
     !/https?:|url\((?!#)/.test(marquesTs) && !/dangerouslySetInnerHTML|<img|fetch\(/.test(tuile) && /EXCEPTION ASSUMÉE À LA RÈGLE DES TOKENS/.test(marquesTs),
     "marques.ts ou LogoMarque",
   );
+  /*
+   * Marques à hauteur minimale (28/09/2026) : la charte de YouTube interdit son
+   * logo sous 100 px. LogoMarque (les lignes de liste, 13 à 22 px) ne peut pas
+   * le recevoir (type CleMarquePetite, que le typecheck tient), LogoMarqueGrand
+   * ne descend jamais sous le minimum et ne montre rien s'il n'a pas la place
+   * (jamais coupé), et le seul endroit qui l'appelle est le panneau YouTube,
+   * avec au moins 100 px.
+   */
+  const grandes = Object.entries(marquesSources.marques).filter(([, m]) => m.grand);
+  const appelsGrands = [];
+  for (const f of readdirSync(join(RACINE, "src"), { recursive: true })) {
+    if (!/\.tsx?$/.test(f)) continue;
+    for (const m of src("src", f).matchAll(/<LogoMarqueGrand\b([^>]*)\/>/g)) appelsGrands.push({ f, attributs: m[1] });
+  }
+  const minimum = (cle) => marquesSources.marques[cle]?.grand?.hauteurMin ?? Infinity;
+  const appelsFautifs = appelsGrands.filter(({ f, attributs }) => {
+    const cle = /marque="([^"]+)"/.exec(attributs)?.[1];
+    const hauteur = Number(/hauteur=\{(\d+)\}/.exec(attributs)?.[1] ?? 0);
+    return !f.endsWith(join("settings", "ConnecteurNatif.tsx")) || !cle || hauteur < minimum(cle);
+  });
+  verifier(
+    "logos : YouTube n'apparaît qu'à 100 px ou plus, entier, en tête de son panneau, jamais dans une ligne de liste",
+    grandes.length === 1 &&
+      grandes[0][0] === "youtube" &&
+      grandes[0][1].grand.hauteurMin >= 100 &&
+      /export type CleMarqueGrande = "youtube";/.test(marquesTs) &&
+      /marque\?: CleMarquePetite;/.test(tuile) &&
+      !/marque\?: CleMarque;/.test(tuile) &&
+      /Math\.max\(hauteur, m\.grand\.hauteurMin\)/.test(tuile) &&
+      /place >= l/.test(tuile) &&
+      appelsGrands.length === 1 &&
+      appelsFautifs.length === 0 &&
+      !/["']youtube["']/.test(src("src", "components", "settings", "marquesConnecteurs.ts")),
+    appelsFautifs.map((a) => a.f).join(", ") || `${grandes.length} marque(s) grande(s), ${appelsGrands.length} appel(s)`,
+  );
 
   // Prix publiés : chaque ligne rattachée à un fournisseur qui a sa page officielle et sa date.
   const prix = await import(versUrl(join(RACINE, "gateway", "src", "prixPublies.ts")).href);

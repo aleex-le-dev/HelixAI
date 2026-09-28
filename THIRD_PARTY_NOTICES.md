@@ -127,8 +127,9 @@ empreintes, est dans `gateway/src/atelier-paquets.json`, `gateway/src/entraineme
 
 ## 4 bis. Marques et logos
 
-Les logos affichés devant les services (écran des connecteurs), les fournisseurs de modèles (clés
-d'API) et les modèles (sélecteur, « Comparer les modèles ») **appartiennent à leurs sociétés**. Ce
+Les logos affichés devant les services (écran des connecteurs), en tête du panneau YouTube, devant
+les fournisseurs de modèles (clés d'API) et les modèles (sélecteur, « Comparer les modèles »)
+**appartiennent à leurs sociétés**. Ce
 sont des marques, pas des composants sous licence libre : l'AGPL-3.0 de HelixAI ne s'applique pas à
 eux, et les recevoir avec HelixAI ne donne aucun droit sur eux. Helix ne les montre que pour
 **désigner le service ou le modèle** dont il est question, à côté de son nom, jamais comme sa propre
@@ -141,7 +142,7 @@ fichiers sont dans `scripts/marques/`, avec leur empreinte SHA-256 dans
 `scripts/marques/sources.json` ; `scripts/gen-marques.cjs` les vérifie et les convertit en données
 de dessin (`src/components/ui/marques.ts`). Les seules interventions : un cadrage de la zone
 visible sur le dessin pour quatre fichiers livrés avec une grande marge (Figma, GitLab, Perplexity,
-Atlassian), et les trois cas notés dans la dernière colonne (X, Sentry, Mistral AI).
+Atlassian), et les quatre cas notés dans la dernière colonne (X, Sentry, Mistral AI, YouTube).
 
 | Marque | Clé | Page de marque | Fichier officiel | Règle d'usage retenue |
 |---|---|---|---|---|
@@ -178,6 +179,7 @@ Atlassian), et les trois cas notés dans la dernière colonne (X, Sentry, Mistra
 | OpenRouter | `openrouter` | https://openrouter.ai/brand | https://openrouter.ai/brand/logos/transparent/glyph/svg/glyph-grape.svg, https://openrouter.ai/brand/logos/transparent/glyph/svg/glyph-volt.svg | Glyphe pour les petites tailles ; Grape sur fond clair, Volt sur fond sombre ; ne pas étirer, recolorer ni remanier. |
 | Kimi | `kimi` | https://moonshotai.github.io/Branding-Guide/ | https://moonshotai.github.io/Branding-Guide/scenarios/04-k-only/k-only-light.svg, https://moonshotai.github.io/Branding-Guide/scenarios/04-k-only/k-only-dark.svg | Le « K seul » de Moonshot AI, version fond clair et version fond sombre, telles que livrées. |
 | Together AI | `together` | https://www.together.ai/brand | https://cdn.prod.website-files.com/69654e88dce9154b5f1206dd/69a6dad66e8b98c718262888_together-ai-logo-suite.zip (Color+Black/TogetherAI_Logo_021026_Logo.svg) | Logo en couleur ; le kit livre le même dessin pour fond clair et fond sombre. |
+| YouTube | `youtube` | https://brand.youtube/youtube-logo/ | https://www.gstatic.com/marketing-cms/52/7d/637fef5a4788a97747e6feabc4aa/youtube-logo.zip (Digital/01 Full Color : yt_logo_fullcolor_almostblack_digital.ai, yt_logo_fullcolor_white_digital.ai) | Logo complet, celui que la charte des développeurs (https://developers.google.com/youtube/terms/branding-guidelines) prévoit pour une fonction qui se sert de l'API ; jamais sous 100 px de haut en numérique ; zone de protection de la taille du triangle ; texte presque noir (#212121) sur fond clair, blanc sur fond sombre ; ni contour, ni ombre, ni recoloration, ni déformation ; fond uni ; cliquable vers YouTube ; jamais l'élément le plus en vue de la page. Le kit ne livre pas de SVG : les deux fichiers .ai, au format PDF, sont convertis par `pdftocairo -svg` (Poppler 26.06.0), sortie non retouchée, mêmes tracés, couleurs et plan de travail. |
 
 PostgreSQL : Postgres, PostgreSQL and the Slonik Logo are trademarks or registered trademarks of the
 PostgreSQL Community Association of Canada, and used with their permission. Le symbole ® que la
@@ -186,6 +188,18 @@ politique demande « là où c'est praticable » n'est pas posé à côté d'un 
 Kubernetes est une marque de The Linux Foundation. GitHub, Gmail, Google Drive, Google Agenda,
 Google Sheets, Google Slides, Google Maps et Gemini sont des marques de leurs propriétaires
 respectifs, comme toutes les marques citées dans ce tableau.
+
+YouTube (décision de Medhi, 28/09/2026) : le logo ne paraît qu'en tête du panneau YouTube de
+l'écran des connecteurs, à 100 px de haut (le logo lui-même, rouge et texte), avec autour la marge
+que le kit livre, plus large que la zone de protection de la charte (68 pt au-dessus et au-dessous,
+98 pt sur les côtés, pour un triangle de 59 × 51 pt, logo de 138 pt de haut). Il mène à
+https://www.youtube.com/, dans le navigateur. La liste des connecteurs, où il ferait 22 px, garde
+une icône neutre ; le type `CleMarquePetite` l'écarte de `LogoMarque`, et `LogoMarqueGrand` ne le
+dessine jamais sous 100 px ni coupé : dans une fenêtre trop étroite pour qu'il tienne en entier
+(595 × 200 px avec sa marge), il ne paraît pas. Point laissé au jugement de Medhi : la charte
+demande aussi que le logo ne soit pas l'élément le plus en vue de la page ; à 100 px, une fois le
+panneau YouTube déplié, c'est le dessin le plus grand et le plus visible de l'écran (vu le
+28/09/2026).
 
 **Gardent une icône neutre**, parce que la charte de la société interdit cet usage ou le soumet à
 une autorisation que le projet n'a pas, ou faute de source officielle trouvée le 28/09/2026. Les
@@ -200,7 +214,7 @@ interdisent.
 - **instagram** : Même situation que Facebook (Meta Brand Resource Center).
 - **meta** : Modèles Llama : le logo de Meta est dans le même centre de marque, derrière la même acceptation de conditions.
 - **tiktok** : https://developers.tiktok.com/doc/getting-started-design-guidelines : pas de logo TikTok sans autorisation écrite préalable.
-- **youtube** : https://brand.youtube/youtube-icon/ : hauteur minimale de 100 px en numérique, incompatible avec une ligne de liste de 22 px.
+- **youtube** : https://brand.youtube/youtube-icon/ : hauteur minimale de 100 px en numérique, incompatible avec une ligne de liste de 22 px. Icône neutre dans la liste seulement : le logo officiel s'affiche en grand dans le panneau YouTube (voir « youtube » dans les marques).
 - **hubspot** : https://www.hubspot.com/partners/app/branding-guidelines : le logo et le sprocket demandent une approbation préalable.
 - **intercom** : https://www.intercom.com/legal/trademark-usage : le logo n'est utilisable que dans le cadre d'un programme partenaire.
 - **asana** : https://asana.com/brand : le symbole ne s'emploie jamais seul, et le logo complet est illisible à 22 px.

@@ -23,7 +23,7 @@ import { LogoMarque } from "@/components/settings/TuileService";
 import { ComparerModeles } from "@/components/chat/ComparerModeles";
 import { noteDuModeleServi } from "../../../gateway/src/notesModeles.ts";
 import { branding } from "@/config/branding";
-import type { CleMarque } from "@/components/ui/marques";
+import { marqueDuModele } from "@/components/settings/marquesConnecteurs";
 import { Popover } from "@/components/ui/Popover";
 import { cn } from "@/lib/cn";
 import { useModels } from "@/hooks/useModels";
@@ -72,29 +72,6 @@ const DRAPEAUX: Record<string, string> = {
 function drapeau(m: GatewayModel): string | null {
   if (m.origine !== "cle" && m.origine !== "agence") return null;
   return m.pays ? (DRAPEAUX[m.pays] ?? null) : null;
-}
-
-/**
- * Le logo de l'éditeur du modèle, déduit de son identifiant.
- *
- * Déduit, et non déclaré : l'identifiant est la seule chose que tous les
- * moteurs donnent. « mistralai/Mistral-Small-3.2 » et « mistral-medium » ont
- * en commun le mot qui compte. Une correspondance manquante ne casse rien, la
- * ligne s'affiche sans logo.
- */
-const MARQUE_DU_MODELE: [RegExp, CleMarque][] = [
-  [/claude|anthropic/i, "anthropic"],
-  [/mistral|magistral|devstral|codestral|ministral/i, "mistral"],
-  [/deepseek/i, "deepseek"],
-  [/qwen|qwq/i, "qwen"],
-  [/llama|nemotron-?llama/i, "meta"],
-  [/gemini|gemma/i, "gemini"],
-  [/kimi|moonshot/i, "moonshot"],
-  [/perplexity|sonar/i, "perplexity"],
-];
-
-function marqueDuModele(id: string): CleMarque | undefined {
-  return MARQUE_DU_MODELE.find(([re]) => re.test(id))?.[1];
 }
 
 /* --- Modèle qui a mal répondu sur cette machine ---------------------------- */
@@ -440,7 +417,6 @@ export function ModelBehaviorPicker({
                                           : t("sans note publiée"),
                                         tf("{0} Go", m.downloadGb.toLocaleString(locale())),
                                         m.vision ? t("images") : "",
-                                        m.verifie ? "" : t("pas encore vérifié avec Helix"),
                                       ]
                                         .filter(Boolean)
                                         .join(" · ")}

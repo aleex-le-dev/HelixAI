@@ -1,6 +1,8 @@
 import { useMemo, useState } from "react";
-import { ExternalLink, Table2, ChartScatter } from "lucide-react";
+import { ExternalLink, Table2, ChartScatter, Cpu } from "lucide-react";
 import { Modal } from "@/components/ui/Modal";
+import { LogoMarque } from "@/components/settings/TuileService";
+import { marqueDuModele } from "@/components/settings/marquesConnecteurs";
 import {
   MODELES_NOTES,
   SOURCE_NOTES,
@@ -64,6 +66,13 @@ const BANDE = 128;
 const ECART_BANDE = 18;
 const LARGEUR = 760;
 const HAUTEUR = 380;
+
+/** Où s'écrit le nom d'un repère : au-dessus, dessous, ou à côté de son point. */
+interface Etiquette {
+  x: number;
+  y: number;
+  ancre: "middle" | "start" | "end";
+}
 
 interface Place {
   modele: GatewayModel;
@@ -198,7 +207,7 @@ export function ComparerModeles({
 
   /*
    * Où poser chaque nom sans qu'ils se marchent dessus : au-dessus du point,
-   * sinon dessous, sinon pas du tout, dans l'ordre d'importance, pour que ce
+   * sinon dessous, à droite, à gauche, sinon pas du tout, dans l'ordre d'importance, pour que ce
    * soit toujours un repère lointain qui cède la place, jamais le modèle en
    * cours. Six pixels par caractère : une approximation, pour espacer.
    */
@@ -211,27 +220,43 @@ export function ComparerModeles({
     };
     const ordre = [...tarifes].sort((a, b) => importance(a.note) - importance(b.note));
     const prises: { x1: number; x2: number; y: number }[] = [];
-    const libre = (px: number, largeur: number, py: number) =>
-      !prises.some((b) => Math.abs(b.y - py) < 12 && px - largeur / 2 < b.x2 && px + largeur / 2 > b.x1);
-    const pose = new Map<string, { dessus: boolean }>();
-    // Les points des modèles de la personne sont plus gros : aucun nom de repère ne passe dessous.
+    // Les noms restent dans le cadre et hors des bandes (celles-ci ont les leurs).
+    const bordGauche = avecGauche ? debutEchelle - ECART_BANDE / 2 : 0;
+    const bordDroit = avecDroite ? finEchelle + ECART_BANDE / 2 : LARGEUR;
+    const libre = (x1: number, x2: number, y: number) =>
+      // 14 : la hauteur d'un nom à 11 px. À 12, deux noms à 13 px d'écart se touchaient (Mistral Medium 3.5 et GPT-4.1, 28/09/2026).
+      x1 >= bordGauche && x2 <= bordDroit && !prises.some((b) => Math.abs(b.y - y) < 14 && x1 < b.x2 && x2 > b.x1);
+    const pose = new Map<string, Etiquette>();
+    /*
+     * Aucun nom ne passe sur un point, pas même celui d'un repère : vu le
+     * 28/09/2026 à 1440 px, « DeepSeek V4 Pro 0813 » était posé à cheval sur
+     * les points de Gemini 3.7 Flash et de Grok 4.6, et se lisait
+     * « DeepSeek•V4 Pro 0813 ». Il se pose désormais au-dessus, dessous, à
+     * droite ou à gauche de son point ; sans place, il garde son point et sa
+     * bulle, et son nom est dans le tableau.
+     */
     for (const r of tarifes) {
-      if (!servis.has(r.note.nom)) continue;
       const px = x(r.sortie);
-      const py = hauteurDe(r.note.eci) + 4;
-      prises.push({ x1: px - 9, x2: px + 9, y: py });
+      // + 3 : son propre nom, au-dessus (py - 11) comme dessous (py + 17), reste à 14 px.
+      const py = hauteurDe(r.note.eci) + 3;
+      const demi = servis.has(r.note.nom) ? 9 : 6;
+      prises.push({ x1: px - demi, x2: px + demi, y: py });
     }
     for (const r of ordre) {
       const servi = servis.get(r.note.nom);
       const largeur = (servi ? nomCourt(servi.id) : r.note.nom).length * 6;
       const px = x(r.sortie);
       const py = hauteurDe(r.note.eci);
-      if (libre(px, largeur, py - 11)) {
-        prises.push({ x1: px - largeur / 2, x2: px + largeur / 2, y: py - 11 });
-        pose.set(r.note.nom, { dessus: true });
-      } else if (libre(px, largeur, py + 17)) {
-        prises.push({ x1: px - largeur / 2, x2: px + largeur / 2, y: py + 17 });
-        pose.set(r.note.nom, { dessus: false });
+      const essais: (Etiquette & { x1: number; x2: number })[] = [
+        { x: px, y: py - 11, ancre: "middle", x1: px - largeur / 2, x2: px + largeur / 2 },
+        { x: px, y: py + 17, ancre: "middle", x1: px - largeur / 2, x2: px + largeur / 2 },
+        { x: px + 10, y: py + 4, ancre: "start", x1: px + 10, x2: px + 10 + largeur },
+        { x: px - 10, y: py + 4, ancre: "end", x1: px - 10 - largeur, x2: px - 10 },
+      ];
+      const retenu = essais.find((e) => libre(e.x1, e.x2, e.y));
+      if (retenu) {
+        prises.push({ x1: retenu.x1, x2: retenu.x2, y: retenu.y });
+        pose.set(r.note.nom, { x: retenu.x, y: retenu.y, ancre: retenu.ancre });
       }
     }
     // Les modèles de la personne par-dessus les repères.
@@ -239,7 +264,7 @@ export function ComparerModeles({
       .sort((a, b) => importance(b.note) - importance(a.note))
       .map((r) => ({ ...r, px: x(r.sortie), py: hauteurDe(r.note.eci), etiquette: pose.get(r.note.nom) }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tarifes, servis, choisi, proche, minX, maxX, minY, maxY, debutEchelle, finEchelle]);
+  }, [tarifes, servis, choisi, proche, minX, maxX, minY, maxY, debutEchelle, finEchelle, avecGauche, avecDroite]);
 
   const dollars = (v: number) =>
     v.toLocaleString(locale(), { style: "currency", currency: "USD", maximumFractionDigits: v < 0.1 ? 3 : 2 });
@@ -274,31 +299,36 @@ export function ComparerModeles({
 
   return (
     <Modal open={open} onClose={onClose} size="xl">
+      {/*
+       * Le titre et le bouton du tableau sur une ligne, la phrase dessous sur
+       * toute la largeur : à 375 px, le bouton à côté d'elle la tassait dans
+       * une colonne de 200 px, sur neuf lignes (vu le 28/09/2026).
+       */}
       <div className="flex items-start justify-between gap-4">
-        <div>
-          <h2 className="text-lg font-semibold text-foreground">{t("Comparer les modèles")}</h2>
-          <p className="mt-1 text-sm text-muted-foreground">
-            {t("Note face au prix. Plus haut et plus à gauche : plus capable pour moins cher.")}{" "}
-            {siens.length === 0
-              ? t("Aucun modèle n'est servi par votre instance pour l'instant.")
-              : sansNote.length === 0
-                ? tf("Vos {0} modèles y figurent.", siens.length)
-                : tf(
-                    "Vos {0} modèles y figurent, dont {1} sans note publiée : ils sont listés sous le graphique, sans position sur l'axe.",
-                    siens.length,
-                    sansNote.length,
-                  )}
-          </p>
-        </div>
+        <h2 className="text-lg font-semibold text-foreground">{t("Comparer les modèles")}</h2>
         <button
           type="button"
           onClick={() => setVue((v) => (v === "nuage" ? "tableau" : "nuage"))}
+          title={vue === "nuage" ? t("Voir le tableau") : t("Voir le graphique")}
           className="mr-10 inline-flex shrink-0 items-center gap-1.5 rounded-lg px-2 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
         >
           {vue === "nuage" ? <Table2 size={15} strokeWidth={1.75} /> : <ChartScatter size={15} strokeWidth={1.75} />}
-          {vue === "nuage" ? t("Voir le tableau") : t("Voir le graphique")}
+          {/* À 375 px, l'icône seule : le libellé repoussait « Comparer les modèles » sur trois lignes. */}
+          <span className="sr-only sm:not-sr-only">{vue === "nuage" ? t("Voir le tableau") : t("Voir le graphique")}</span>
         </button>
       </div>
+      <p className="mt-1 text-sm text-muted-foreground">
+        {t("Note face au prix. Plus haut et plus à gauche : plus capable pour moins cher.")}{" "}
+        {siens.length === 0
+          ? t("Aucun modèle n'est servi par votre instance pour l'instant.")
+          : sansNote.length === 0
+            ? tf("Vos {0} modèles y figurent.", siens.length)
+            : tf(
+                "Vos {0} modèles y figurent, dont {1} sans note publiée : ils sont listés sous le graphique, sans position sur l'axe.",
+                siens.length,
+                sansNote.length,
+              )}
+      </p>
 
       {vue === "nuage" ? (
         <>
@@ -410,9 +440,9 @@ export function ComparerModeles({
                   <g key={note.nom}>
                     {etiquette && (
                       <text
-                        x={px}
-                        y={etiquette.dessus ? py - 11 : py + 17}
-                        textAnchor="middle"
+                        x={etiquette.x}
+                        y={etiquette.y}
+                        textAnchor={etiquette.ancre}
                         className={cn(
                           "text-[11px]",
                           actif ? "fill-foreground font-semibold" : servi ? "fill-foreground font-medium" : "fill-muted-foreground",
@@ -471,7 +501,10 @@ export function ComparerModeles({
            */}
           {actuel && (
             <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 rounded-xl bg-muted px-3.5 py-2.5 text-sm">
-              <span className="font-medium text-foreground">{actuel.modele.id}</span>
+              <span className="inline-flex items-center gap-2 font-medium text-foreground">
+                <LogoMarque marque={marqueDuModele(actuel.modele.id)} icone={Cpu} taille={16} />
+                {actuel.modele.id}
+              </span>
               {actuel.note ? (
                 <>
                   {actuel.note.nom !== actuel.modele.id && (
@@ -536,6 +569,9 @@ export function ComparerModeles({
                 return (
                   <tr key={m.nom} className={cn("border-b border-border/60", servi && "bg-muted/60")}>
                     <td className="py-2 pr-3 text-foreground">
+                      <span className="mr-2 inline-flex align-[-3px]">
+                        <LogoMarque marque={marqueDuModele(m.nom)} icone={Cpu} taille={16} />
+                      </span>
                       {m.nom}
                       {servi && (
                         <span className="ml-2 rounded-full bg-accent/15 px-1.5 py-0.5 text-[10px] font-medium text-foreground">
@@ -563,6 +599,8 @@ export function ComparerModeles({
         {t("Notes :")}{" "}
         <a
           href={SOURCE_NOTES.page}
+          // Le titre de l'œuvre, demandé par l'attribution : en bulle, pour garder la source sur une ligne.
+          title={SOURCE_NOTES.titre}
           target="_blank"
           rel="noreferrer"
           className="inline-flex items-center gap-1 underline underline-offset-2 hover:text-foreground"

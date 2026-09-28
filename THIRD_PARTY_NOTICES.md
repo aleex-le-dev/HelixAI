@@ -21,6 +21,7 @@ l'application construite (copié dans ses ressources par electron-builder).
 | Police Plus Jakarta Sans (`public/fonts/plus-jakarta-sans-*.woff2`), The Plus Jakarta Sans Project Authors | SIL Open Font License 1.1 | Oui : l'OFL permet d'utiliser, de modifier et de redistribuer la police avec un logiciel, y compris sous AGPL, tant que la police n'est pas vendue seule. Texte dans `public/fonts/OFL-plus-jakarta-sans.txt`. Voir § 2. |
 | Code repris d'autres projets : données de conception de ui-ux-pro-max (`gateway/design/`), découpeur de texte porté de LangChain.js, idées d'AnythingLLM (`gateway/rag/`) | MIT | Oui ; leurs mentions sont à côté du code (`LICENCE-*.txt`). |
 | Notes des modèles (indice ECI d'Epoch AI) | CC BY 4.0 | Oui, avec l'attribution du § 3. La Free Software Foundation tient CC BY 4.0 pour compatible avec la GPL version 3. |
+| Logos des services et des fournisseurs de modèles (`scripts/marques/`, `src/components/ui/marques.ts`) | marques de leurs sociétés, pas des licences libres | Sans objet : ils ne sont pas sous AGPL et ne sont montrés que pour désigner le service ou le modèle, selon la charte de chaque société. Voir § 4 bis. |
 | Prix des fournisseurs cloud (`gateway/src/prixPublies.ts`) | faits relevés sur les pages de prix de chaque fournisseur | Des tarifs publiés sont des faits ; ils sont recopiés tels quels, avec la page et la date du relevé. |
 
 ### 1.1 Electron et Chromium
@@ -123,6 +124,101 @@ empreintes, est dans `gateway/src/atelier-paquets.json`, `gateway/src/entraineme
 | OpenCode 1.18.32, Node 24.21.0, OpenClaw 2026.9.4 | MIT (npm : Artistic-2.0) | Oui | |
 | Serveurs d'outils lancés par `npx` | MIT ou Apache-2.0 (projet MCP : Apache-2.0 pour le nouveau code, MIT pour l'ancien) | Oui | `exa-mcp-server` ne déclare pas de licence dans son paquet ; son dépôt est sous MIT. |
 | Modèles de conversation, d'images, de vidéo, de dictée et d'entraînement | Apache-2.0 ou MIT | Oui | Règle du projet ; relevé au § 32 de SECURITE.md. |
+
+## 4 bis. Marques et logos
+
+Les logos affichés devant les services (écran des connecteurs), les fournisseurs de modèles (clés
+d'API) et les modèles (sélecteur, « Comparer les modèles ») **appartiennent à leurs sociétés**. Ce
+sont des marques, pas des composants sous licence libre : l'AGPL-3.0 de HelixAI ne s'applique pas à
+eux, et les recevoir avec HelixAI ne donne aucun droit sur eux. Helix ne les montre que pour
+**désigner le service ou le modèle** dont il est question, à côté de son nom, jamais comme sa propre
+marque, et sans suggérer de partenariat, d'approbation ni de parrainage.
+
+Chaque logo est le fichier officiel publié par la société sur son kit ou sa page de marque, **relevé
+le 28/09/2026**, embarqué dans l'application (aucun appel réseau à l'affichage) et non modifié :
+mêmes tracés, mêmes couleurs, la version pour fond sombre quand la société en livre une. Les
+fichiers sont dans `scripts/marques/`, avec leur empreinte SHA-256 dans
+`scripts/marques/sources.json` ; `scripts/gen-marques.cjs` les vérifie et les convertit en données
+de dessin (`src/components/ui/marques.ts`). Les seules interventions : un cadrage de la zone
+visible sur le dessin pour quatre fichiers livrés avec une grande marge (Figma, GitLab, Perplexity,
+Atlassian), et les trois cas notés dans la dernière colonne (X, Sentry, Mistral AI).
+
+| Marque | Clé | Page de marque | Fichier officiel | Règle d'usage retenue |
+|---|---|---|---|---|
+| Gmail | `gmail` | https://partnermarketinghub.withgoogle.com/brands/google/use-cases/product-co-branding/ | https://www.gstatic.com/images/branding/productlogos/gmail_2020q4/v11/192px.svg | Google autorise ses icônes de produit pour montrer une grille de produits compatibles ou une action dans une interface, sans modification, la marque de l'application restant la plus visible. |
+| Google Agenda | `googleAgenda` | https://partnermarketinghub.withgoogle.com/brands/google/use-cases/product-co-branding/ | https://www.gstatic.com/images/branding/productlogos/calendar_2020q4/v13/192px.svg | Même règle que Gmail (icônes de produit Google). |
+| Google Drive | `googleDrive` | https://partnermarketinghub.withgoogle.com/brands/google/use-cases/product-co-branding/ | https://www.gstatic.com/images/branding/productlogos/drive_2020q4/v10/192px.svg | Même règle que Gmail (icônes de produit Google). |
+| Google Sheets | `googleSheets` | https://partnermarketinghub.withgoogle.com/brands/google/use-cases/product-co-branding/ | https://www.gstatic.com/images/branding/productlogos/sheets_2020q4/v11/192px.svg | Même règle que Gmail (icônes de produit Google). |
+| Google Slides | `googleSlides` | https://partnermarketinghub.withgoogle.com/brands/google/use-cases/product-co-branding/ | https://www.gstatic.com/images/branding/productlogos/slides_2020q4/v12/192px.svg | Même règle que Gmail (icônes de produit Google). |
+| Google Maps | `googleMaps` | https://partnermarketinghub.withgoogle.com/brands/google/use-cases/product-co-branding/ | https://www.gstatic.com/images/branding/productlogos/maps/v7/192px.svg | Même règle que Gmail (icônes de produit Google). |
+| Gemini | `gemini` | https://partnermarketinghub.withgoogle.com/brands/google/use-cases/product-co-branding/ | https://www.gstatic.com/images/branding/productlogos/gemini/v4/192px.svg | Même règle que Gmail (icônes de produit Google) ; sert aux modèles Gemini et au fournisseur « Google Gemini ». |
+| GitHub | `github` | https://brand.github.com/foundations/logo | https://brand.github.com/GitHub_Logos.zip (GitHub_Invertocat_Black.svg, GitHub_Invertocat_White.svg) | Logo permis pour dire qu'un projet s'intègre à GitHub, sans suggérer de partenariat ; Invertocat en noir ou en blanc, sans modification. |
+| Linear | `linear` | https://linear.app/brand | https://static.linear.app/design-assets/Linear-Brand-Assets.zip?v=3 (logo-dark.svg, logo-light.svg) | Logomark prévu pour les mises en page serrées et les grilles de logos ; fichiers non modifiés, sans suggérer d'approbation. |
+| Figma | `figma` | https://www.figma.com/using-the-figma-brand/ | https://static.figma.com/uploads/4fbf4d754dbbc027ba1530205f8747cd97d532e5 (Figma Icon (Full-color).svg) | Usage permis pour signaler la compatibilité avec Figma ; la marque de l'application doit rester plus grande et plus visible. |
+| Vercel | `vercel` | https://vercel.com/geist/brands | https://k2mkucxia43oc7fa.public.blob.vercel-storage.com/front/press/vercel-assets.zip (icon/light, icon/dark) | Symbole seul là où seuls les symboles de plusieurs marques sont affichés ; noir sur fond clair, blanc sur fond sombre ; aucune modification. |
+| X | `x` | https://about.x.com/en/who-we-are/brand-toolkit | https://about.x.com/content/dam/about-twitter/x/brand-toolkit/x-logo.zip (logo.svg) | Logo noir sur fond clair, blanc sur fond sombre (guide https://about.x.com/content/dam/about-twitter/x/brand-toolkit/x-brand-guidelines.pdf). x.svg est le tracé de logo.svg (livré en blanc) rempli en noir, la couleur que le guide prescrit sur fond clair et que le kit fournit aussi en PNG. |
+| Canva | `canva` | https://www.canva.dev/docs/connect/guidelines/brand/ | https://www.canva.dev/assets/connect/Canva-logos.zip (Canva Icon logo.svg) | Logo icône pour les surfaces de moins de 50 px, marge d'au moins 8 px, couleurs et forme non modifiées. |
+| Atlassian | `atlassian` | https://www.atlassian.com/legal/trademark | https://atlassian.design/assets/06c6b5ff60de/logos/atlassian_logo.zip (Atlassian mark brand RGB.svg, Atlassian mark inverse RGB.svg) | Logos d'Atlassian permis pour signaler qu'un produit est compatible, reproduits exactement, sans modification autre que la taille ; sert au connecteur « Jira et Confluence ». |
+| Notion | `notion` | https://www.notion.so/Media-Kit-205535b1d9c4440497a3d7a2ac096286 | https://www.notion.so/Media-Kit-205535b1d9c4440497a3d7a2ac096286 (NotionLogoFiles.zip, notion-logo-block-main.svg) | Kit presse officiel, sans règle d'usage écrite ; le cube blanc cerné de noir se lit sur les deux fonds, il sert aux deux thèmes. |
+| Sentry | `sentry` | https://sentry.io/branding/ | https://sentry.io/branding/ (glyphe, couleurs « Dark » et « Light » de la page) | Glyphe proposé par la page officielle, avec l'option « inverser en mode sombre » ; couleur #181225 en clair, blanc en sombre. La page dessine le glyphe dans le navigateur au lieu de livrer un fichier : le tracé est recopié de son code source, dans les deux couleurs qu'elle propose. |
+| GitLab | `gitlab` | https://about.gitlab.com/press/press-kit/ | https://about.gitlab.com/images/press/gitlab-logo-500-rgb.svg | Logomark en couleur ; ni recoloration, ni transformation, ni effet ; au moins 20 px en numérique (https://design.gitlab.com/brand-logo/core-logo). |
+| Webflow | `webflow` | https://brand.webflow.com/brand-assets | https://dhygzobemt712.cloudfront.net/Mark/Mark_Logo_Blue.svg | La marque W en bleu, telle que livrée ; la charte recommande de « mener avec le bleu » et interdit de la modifier. Le logo complet reste le premier choix quand la place le permet. |
+| Wix | `wix` | https://www.wix.com/about/design-assets | https://www.wix.com/about/design-assets (WixLogoNew.zip : « Wix logoW.svg » noir, « Wix logoB.svg » blanc) | Logo à utiliser tel quel, sans modification ; le logo de Wix est son nom, il n'existe pas de symbole seul. |
+| PostgreSQL | `postgresql` | https://www.postgresql.org/about/policies/trademarks/ | https://wiki.postgresql.org/images/a/a4/PostgreSQL_logo.3colors.svg | Usage loyal pour dire qu'un logiciel fonctionne avec PostgreSQL, sans suggérer d'affiliation ; mention d'attribution dans THIRD_PARTY_NOTICES.md. |
+| Kubernetes | `kubernetes` | https://www.linuxfoundation.org/legal/trademark-usage | https://raw.githubusercontent.com/cncf/artwork/main/projects/kubernetes/icon/color/kubernetes-icon-color.svg | Logo officiel du projet (dépôt d'illustrations de la CNCF), sans variation de couleur ; formule « compatible avec ». |
+| Brave | `brave` | https://brave.com/brave-branding-assets/ | https://brave.com/static-assets/images/brave-logo-sans-text.svg | Lion sans texte publié par Brave sur sa page de marque ; la page ne donne pas de règle d'usage écrite. |
+| Firecrawl | `firecrawl` | https://www.firecrawl.dev/press-brand | https://www.firecrawl.dev/brand/brand-assets.zip (firecrawl-logo.svg) | La flamme sert quand un format carré ou réduit est nécessaire ; ne pas étirer, recolorer ni modifier. |
+| Exa | `exa` | https://exa.ai/brand | https://exa.ai/assets/Exa%20Brand%20Assets.zip (Exa Logomark Blue.svg, Exa Logomark White.svg) | Logomark en bleu Exa en standard, en blanc sur fond sombre ; couleurs et proportions non modifiées. |
+| Anthropic | `anthropic` | https://www.anthropic.com/news | https://www.anthropic.com/press-kit (Anthropic symbol - Slate.svg, Anthropic symbol - Ivory.svg) | Kit presse officiel, sans règle d'usage jointe ; symbole ardoise sur fond clair, ivoire sur fond sombre, sans modification. |
+| Claude | `claude` | https://www.anthropic.com/news | https://www.anthropic.com/press-kit (Claude Spark - Clay.svg) | Même kit presse ; l'étincelle de Claude, couleur argile, désigne les modèles Claude. |
+| Mistral AI | `mistral` | https://mistral.ai/brand/ | https://mistral.ai/brand/ (symbole M en dégradé de l'en-tête de la page) | Version en dégradé préférée ; ni recoloration, ni cadre, ni fond coloré. Le kit (cms.globalaegis.net) est derrière une vérification anti-robot que Helix ne contourne pas : le symbole est recopié de la page de marque elle-même, où Mistral l'affiche en SVG. |
+| Perplexity | `perplexity` | https://live.standards.site/perplexity/logo | https://live.standards.site/perplexity/logo (Perplexity_AllLogos_Final.zip, perplexity-icon-dark.svg, perplexity-icon-light.svg) | Le symbole s'emploie seul là où le logo complet ne tient pas ; ne pas le remplir ni le tourner ; teinte claire sur fond sombre, sombre sur fond clair. |
+| Grok | `grok` | https://x.ai/legal/brand-guidelines | https://data.x.ai/logos/SpaceXAI_Grok_Assets.zip (Grok_Logomark_Dark.svg, Grok_Logomark_Light.svg) | Logos exactement tels que fournis, seulement pour désigner SpaceXAI et ses services. |
+| xAI | `xai` | https://x.ai/legal/brand-guidelines | https://data.x.ai/logos/SpaceXAI_Grok_Assets.zip (spacexai - symbol - black - transparent.svg, spacexai - symbol - white - transparent.svg) | Même charte que Grok ; symbole de SpaceXAI pour le fournisseur « xAI ». |
+| OpenRouter | `openrouter` | https://openrouter.ai/brand | https://openrouter.ai/brand/logos/transparent/glyph/svg/glyph-grape.svg, https://openrouter.ai/brand/logos/transparent/glyph/svg/glyph-volt.svg | Glyphe pour les petites tailles ; Grape sur fond clair, Volt sur fond sombre ; ne pas étirer, recolorer ni remanier. |
+| Kimi | `kimi` | https://moonshotai.github.io/Branding-Guide/ | https://moonshotai.github.io/Branding-Guide/scenarios/04-k-only/k-only-light.svg, https://moonshotai.github.io/Branding-Guide/scenarios/04-k-only/k-only-dark.svg | Le « K seul » de Moonshot AI, version fond clair et version fond sombre, telles que livrées. |
+| Together AI | `together` | https://www.together.ai/brand | https://cdn.prod.website-files.com/69654e88dce9154b5f1206dd/69a6dad66e8b98c718262888_together-ai-logo-suite.zip (Color+Black/TogetherAI_Logo_021026_Logo.svg) | Logo en couleur ; le kit livre le même dessin pour fond clair et fond sombre. |
+
+PostgreSQL : Postgres, PostgreSQL and the Slonik Logo are trademarks or registered trademarks of the
+PostgreSQL Community Association of Canada, and used with their permission. Le symbole ® que la
+politique demande « là où c'est praticable » n'est pas posé à côté d'un logo de 16 à 22 px.
+
+Kubernetes est une marque de The Linux Foundation. GitHub, Gmail, Google Drive, Google Agenda,
+Google Sheets, Google Slides, Google Maps et Gemini sont des marques de leurs propriétaires
+respectifs, comme toutes les marques citées dans ce tableau.
+
+**Gardent une icône neutre**, parce que la charte de la société interdit cet usage ou le soumet à
+une autorisation que le projet n'a pas, ou faute de source officielle trouvée le 28/09/2026. Les
+anciennes icônes Lucide qui imitaient certains de ces logos (YouTube, LinkedIn, Facebook, Instagram)
+sont retirées aussi : une copie approximative d'un logo est précisément ce que les chartes
+interdisent.
+
+- **slack** : https://slack.com/terms-of-service/slack-brand : la plupart des usages demandent une licence écrite, et la charte interdit de « distribuer ou mettre à disposition » ses logos, ce que ferait un dépôt public.
+- **openai** : https://openai.com/brand/ : ne pas utiliser le logo sans l'autorisation d'OpenAI (demande à partnercomms@openai.com).
+- **linkedin** : https://brand.linkedin.com/in-logo : un développeur ne peut employer le logo [in] que comme bouton « Share » ou widget « Follow ».
+- **facebook** : https://www.meta.com/brand/resources/facebook/logo/ : le téléchargement passe par une case « j'accepte les conditions » qu'il revient à Medhi de cocher ; et https://developers.facebook.com/docs/app-review/resources/logos/ réserve les marques aux usages autorisés par Meta.
+- **instagram** : Même situation que Facebook (Meta Brand Resource Center).
+- **meta** : Modèles Llama : le logo de Meta est dans le même centre de marque, derrière la même acceptation de conditions.
+- **tiktok** : https://developers.tiktok.com/doc/getting-started-design-guidelines : pas de logo TikTok sans autorisation écrite préalable.
+- **youtube** : https://brand.youtube/youtube-icon/ : hauteur minimale de 100 px en numérique, incompatible avec une ligne de liste de 22 px.
+- **hubspot** : https://www.hubspot.com/partners/app/branding-guidelines : le logo et le sprocket demandent une approbation préalable.
+- **intercom** : https://www.intercom.com/legal/trademark-usage : le logo n'est utilisable que dans le cadre d'un programme partenaire.
+- **asana** : https://asana.com/brand : le symbole ne s'emploie jamais seul, et le logo complet est illisible à 22 px.
+- **airtable** : https://www.airtable.com/company/trademark-guidelines : seuls deux assemblages icône et nom sont approuvés ; l'icône seule n'en fait pas partie.
+- **box** : https://www.box.com/legal/trademark : sans accord écrit, un tiers ne peut utiliser aucun logo de Box.
+- **paypal** : https://newsroom.paypal-corp.com/media-resources : fichiers destinés à la presse ; un développeur doit demander l'accord de developer@paypal.com.
+- **square** : https://developer.squareup.com/docs/brand-guidelines : seul un assemblage logo et nom en PNG est fourni aux développeurs, illisible à 22 px.
+- **tavily** : Aucune page de marque officielle trouvée.
+- **deepseek** : Aucune page de marque ; le seul fichier officiel (https://github.com/deepseek-ai/DeepSeek-V2/blob/main/figures/logo.svg) est l'assemblage baleine et nom, illisible à 22 px.
+- **qwen** : Aucune page de marque ; le dépôt QwenLM ne publie qu'une image PNG de Qwen-Image.
+- **gemma** : Logo propre aux modèles Gemma non relevé ; l'icône de Gemini, un autre produit, n'est plus prêtée à Gemma.
+- **groq** : Aucune page de marque officielle trouvée.
+- **scaleway** : Aucune page de marque officielle trouvée.
+- **ovhcloud** : https://www.ovhcloud.com/sites/default/files/external_files/trademark_usage_guidelines_for_contracting-parties-30122024-english.pdf : marques réservées aux parties ayant signé un contrat avec OVHcloud.
+- **ionos** : https://www.ionos.com/newsroom/download/ : pas de symbole téléchargeable, seulement le nom.
+
+Refaire le relevé : retélécharger chaque fichier à l'adresse de la colonne « Fichier officiel »,
+relire la page de marque, puis `node scripts/gen-marques.cjs --noter` et vérifier à l'écran.
 
 ## 5. Paquets npm
 

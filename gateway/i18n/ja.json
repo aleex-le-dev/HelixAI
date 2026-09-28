@@ -199,7 +199,7 @@
   "Canva": "Canva",
   "Capture d'écran refusée par le système. Autorisez {0} dans Réglages Système > Confidentialité et sécurité > Enregistrement de l'écran, puis relancez l'application.": "スクリーンショットがシステムに拒否されました。「システム設定」>「プライバシーとセキュリティ」>「画面収録」で {0} を許可してから、アプリケーションを再起動してください。",
   "Capture réalisée.": "スクリーンショットを撮りました。",
-  "Carte NVIDIA de {0} Go : {1}, entraîné en QLoRA par Unsloth (transformers et peft en repli). Choisi selon la mémoire de la carte : Qwen3 1.7B dès 6 Go, 4B dès 12 Go. Ce chemin n'a pas encore été essayé sur une vraie machine.": "NVIDIA カード（{0} GB）：{1}。Unsloth による QLoRA でトレーニングします（代替として transformers と peft）。カードのメモリに応じて選ばれます：6 GB 以上で Qwen3 1.7B、12 GB 以上で 4B。この方法はまだ実機で試していません。",
+  "Carte NVIDIA de {0} Go : {1}, entraîné en QLoRA par Unsloth (transformers et peft en repli). Choisi selon la mémoire de la carte : Qwen3 1.7B dès 6 Go, 4B dès 12 Go.": "NVIDIA カード（{0} GB）：{1}。Unsloth による QLoRA でトレーニングします（代替として transformers と peft）。カードのメモリに応じて選ばれます：6 GB 以上で Qwen3 1.7B、12 GB 以上で 4B。",
   "Carte NVIDIA de {0} Go : il en faut 6 au moins pour entraîner un modèle.": "NVIDIA カード（{0} GB）：モデルをトレーニングするには 6 GB 以上必要です。",
   "Catalogue, commandes et paiements Square.": "Square のカタログ、注文、支払い。",
   "Ce bot a fini.": "このボットは終了しました。",

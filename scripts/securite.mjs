@@ -5702,6 +5702,39 @@ console.log("\n14 bis. Seconde tournée de l'audit : dépendances npm à date fi
   );
   verifier("Epoch AI : THIRD_PARTY_NOTICES.md porte l'attribution et les modifications", /Auteur\*\* : Epoch AI/.test(notices) && /Modifications\*\* :/.test(notices) && notices.includes("https://epoch.ai/benchmarks/use-this-data"), "attribution absente");
 
+  /*
+   * Logos des services et des fournisseurs (28/09/2026) : les fichiers officiels
+   * de scripts/marques/ n'ont pas bougé depuis le relevé (empreintes), marques.ts
+   * en est bien tiré, chaque marque et chaque refus est dans les mentions, et
+   * le dessin ne passe ni par du HTML injecté ni par le réseau.
+   */
+  const marquesSources = JSON.parse(src("scripts", "marques", "sources.json"));
+  let marquesAJour = "";
+  try {
+    marquesAJour = execFileSync(process.execPath, [join(RACINE, "scripts", "gen-marques.cjs"), "--verifier"], { cwd: RACINE, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+  } catch (e) {
+    marquesAJour = "";
+    verifier("logos : fichiers officiels conformes à leurs empreintes, marques.ts engendré depuis eux", false, String(e.stderr ?? e.message).trim().slice(0, 300));
+  }
+  if (marquesAJour) verifier("logos : fichiers officiels conformes à leurs empreintes, marques.ts engendré depuis eux", /à jour/.test(marquesAJour), marquesAJour.trim());
+  const sectionLogos = notices.slice(notices.indexOf("## 4 bis. Marques et logos"), notices.indexOf("## 5. Paquets npm"));
+  const clesAbsentes = [...Object.keys(marquesSources.marques), ...Object.keys(marquesSources.neutres)].filter(
+    (c) => !sectionLogos.includes(`\`${c}\``) && !sectionLogos.includes(`**${c}**`),
+  );
+  const pagesAbsentes = Object.values(marquesSources.marques).filter((m) => !m.page || !sectionLogos.includes(m.page)).map((m) => m.titre);
+  verifier(
+    "THIRD_PARTY_NOTICES.md : section « Marques et logos » (propriété des sociétés, usage limité à désigner le service), chaque logo avec sa page de marque et la date du relevé, chaque icône neutre avec sa raison",
+    sectionLogos.length > 1000 && /appartiennent à leurs sociétés/.test(sectionLogos) && /relevé\s+le 28\/09\/2026/.test(sectionLogos) && clesAbsentes.length === 0 && pagesAbsentes.length === 0,
+    [...clesAbsentes, ...pagesAbsentes].join(", ") || "section absente",
+  );
+  const marquesTs = src("src", "components", "ui", "marques.ts");
+  const tuile = src("src", "components", "settings", "TuileService.tsx");
+  verifier(
+    "logos : dessinés depuis des données embarquées, sans HTML injecté ni adresse externe",
+    !/https?:|url\((?!#)/.test(marquesTs) && !/dangerouslySetInnerHTML|<img|fetch\(/.test(tuile) && /EXCEPTION ASSUMÉE À LA RÈGLE DES TOKENS/.test(marquesTs),
+    "marques.ts ou LogoMarque",
+  );
+
   // Prix publiés : chaque ligne rattachée à un fournisseur qui a sa page officielle et sa date.
   const prix = await import(versUrl(join(RACINE, "gateway", "src", "prixPublies.ts")).href);
   const pages = new Map(prix.FOURNISSEURS_PRIX.map((f) => [f.id, f]));
@@ -5833,6 +5866,40 @@ console.log("\n15 quater. Tournée de la 2026.928.2 : connecteurs");
 }
 
 /*
+ * Décision de Medhi, 28/09/2026 (PROJET.md § 3.16) : ce qui n'a pas été essayé
+ * se dit dans la documentation interne, plus à l'écran. Les catalogues portent
+ * chaque phrase affichée (la clé française, et sa traduction dans chaque
+ * langue) : aucune ne doit plus dire « pas encore essayé » ni ses variantes.
+ * Les « réessayez » et les constats (« essayé : refusé ») ne sont pas visés.
+ */
+console.log("\n15 quinquies. Écran : plus de « pas encore essayé » (28/09/2026)");
+{
+  const francais = /pas encore (été )?(essay|éprouv)|pas encore vérifié avec|sans garantie|faux serveurs/i;
+  const parLangue = {
+    en: /not yet (been )?(tried|tested|verified)|without guarantee|fake servers/i,
+    // « Google 尚未验证此应用 » (Google n'a pas validé l'application) et « 尚未经过 Apple 签名 » ne sont pas visés.
+    zh: /尚未(在|用|经).{0,20}(试用|试过|测试|验证)|不作保证|模拟服务器/,
+    ja: /まだ.{0,8}(試して|動作確認|未検証)|保証はあ/,
+  };
+  const fautifs = [];
+  for (const cote of ["src", "gateway"]) {
+    for (const [langue, motif] of Object.entries(parLangue)) {
+      const cat = JSON.parse(readFileSync(join(RACINE, cote, "i18n", `${langue}.json`), "utf8"));
+      for (const [fr, trad] of Object.entries(cat)) {
+        if (francais.test(fr) || motif.test(trad)) fautifs.push(`${cote}/${langue} : ${fr.slice(0, 60)}`);
+      }
+    }
+  }
+  verifier("aucune phrase affichée (interface, passerelle, aide ; fr, en, zh, ja) ne dit « pas encore essayé » ni « pas encore éprouvé »", fautifs.length === 0, [...new Set(fautifs)].slice(0, 4).join(" | "));
+  verifier(
+    "témoin : les anciennes phrases seraient vues, un « réessayez » ou « essayé : refusé » ne l'est pas",
+    francais.test("Pas encore essayé avec un vrai compte {0}") && francais.test("Pas encore éprouvé de bout en bout") && parLangue.en.test("Not yet tried with {0}") &&
+      !francais.test("Réessayez dans une minute.") && !francais.test("(essayé : refusé, alors qu'il l'accepte pour Gmail)"),
+    "motifs",
+  );
+}
+
+/*
  * X (ex-Twitter), 28/09/2026 (SECURITE.md § 42). De bout en bout dans
  * essai-natifs.mjs (sections H, E, F et G, repris plus haut sous
  * « natifs : ») ; ici, les pièces seules : la définition (portées, PKCE,
@@ -5840,7 +5907,7 @@ console.log("\n15 quater. Tournée de la 2026.928.2 : connecteurs");
  * réservés, l'adresse de retour sans « localhost », et l'image lue comme la
  * vidéo de TikTok.
  */
-console.log("\n15 quinquies. Connecteur X");
+console.log("\n15 sexies. Connecteur X");
 {
   const { pathToFileURL: versUrl } = await import("node:url");
   const natif = await import(versUrl(join(RACINE, "gateway", "src", "oauthNatif.ts")).href);

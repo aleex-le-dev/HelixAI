@@ -24,8 +24,10 @@ import { t, tf } from "@/lib/i18n";
  *
  * Les modèles proposés sont ceux que la machine peut faire tourner (images.ts,
  * côté passerelle), le conseillé en premier. Aucun n'est installé sans clic :
- * le panneau annonce ce qui sera téléchargé, puis suit l'installation. Un
- * modèle pas encore essayé de bout en bout avec Helix le dit.
+ * le panneau annonce ce qui sera téléchargé, puis suit l'installation.
+ * Depuis le 28/09/2026, l'écran ne dit plus si un modèle a été essayé de bout
+ * en bout avec Helix (PROJET.md § 3.16) : `verifie` ne sert plus qu'à la
+ * passerelle.
  */
 export function ImageChip({
   onFermer,
@@ -156,7 +158,6 @@ export function ImageChip({
                             <span className="block text-xs text-muted-foreground">{m.atout}</span>
                             <span className="block text-[11px] text-muted-foreground">
                               {m.editeur} · {m.licence}
-                              {!m.verifie && ` · ${t("pas encore vérifié avec Helix")}`}
                             </span>
                           </button>
                           {choisi && <Check size={15} className="mt-0.5 shrink-0 text-primary" />}

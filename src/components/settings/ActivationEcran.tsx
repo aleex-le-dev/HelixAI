@@ -255,7 +255,7 @@ export function ActivationEcran({
           </div>
           {macosPossible && (
             <p className="mt-2 text-xs text-muted-foreground">
-              {t("Mac virtuel : Safari et LibreOffice dans un macOS isolé, 8 Go de mémoire, environ 23 Go à télécharger la première fois. Pas encore éprouvé de bout en bout ; le bureau Linux l'est.")}
+              {t("Mac virtuel : Safari et LibreOffice dans un macOS isolé, 8 Go de mémoire, environ 23 Go à télécharger la première fois.")}
             </p>
           )}
           {machineInstallee && (
@@ -300,7 +300,7 @@ export function ActivationEcran({
           t("• Dans la machine : Safari et LibreOffice (installé au premier démarrage, environ 300 Mo). Elle garde 8 Go de mémoire tant qu'elle tourne."),
           tf("• Elle n'est joignable que depuis ce Mac, et s'arrête quand vous désactivez ou fermez {0}.", branding.name),
           t("• L'agent n'accède à aucun de vos fichiers, sauf le dossier d'échange par lequel il vous rend les documents."),
-          t("• Pas encore éprouvée de bout en bout : si elle ne démarre pas, le message dira où, et le bureau Linux reste possible."),
+          t("• Si elle ne démarre pas, le message dira où, et le bureau Linux reste possible."),
         ]
       : choix === "sandbox"
       ? [

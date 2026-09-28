@@ -1,6 +1,12 @@
-import type { ReactNode } from "react";
+import { createElement, useId, type ReactNode } from "react";
 import type { LucideIcon } from "lucide-react";
-import { MARQUES, type CleMarque } from "@/components/ui/marques";
+import {
+  MARQUES,
+  type CleMarque,
+  type DessinMarque,
+  type Marque,
+  type NoeudMarque,
+} from "@/components/ui/marques";
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 
@@ -32,10 +38,59 @@ export interface TuileServiceProps {
 }
 
 /**
- * Dessin d'une marque, à sa couleur officielle.
+ * Rend un nœud du dessin officiel. Les identifiants (dégradés, découpes)
+ * reçoivent le préfixe du dessin : deux logos Canva sur la même page, ou le
+ * même logo en clair et en sombre, se volaient sinon leurs dégradés, le
+ * navigateur ne retenant que le premier `id` du document.
+ */
+function rendreNoeud(noeud: NoeudMarque, prefixe: string, cle: number): ReactNode {
+  const [balise, attributs, enfants] = noeud;
+  const props: Record<string, string | number> = { key: cle };
+  for (const [nom, valeur] of Object.entries(attributs)) {
+    props[nom] =
+      nom === "id" ? prefixe + valeur : prefixe ? valeur.replace(/url\(#/g, `url(#${prefixe}`) : valeur;
+  }
+  return createElement(balise, props, enfants?.map((e, i) => rendreNoeud(e, prefixe, i)));
+}
+
+function Dessin({
+  dessin,
+  taille,
+  classe,
+}: {
+  dessin: DessinMarque;
+  taille: number;
+  classe?: string;
+}) {
+  // useId donne « :r1: » : les deux-points sont valides dans un id mais pas
+  // dans `url(#…)` sans échappement, d'où leur retrait.
+  const prefixe = useId().replace(/:/g, "") + "-";
+  return (
+    <svg
+      viewBox={dessin.viewBox}
+      width={taille}
+      height={taille}
+      aria-hidden="true"
+      focusable="false"
+      className={cn("shrink-0", classe)}
+    >
+      {dessin.corps.map((n, i) => rendreNoeud(n, dessin.ids ? prefixe : "", i))}
+    </svg>
+  );
+}
+
+/**
+ * Logo d'une marque, tel que la société le publie, en couleur.
  *
- * Exporté : la liste des connecteurs affiche les mêmes logos, et deux dessins
- * du même logo finiraient par diverger.
+ * Deux dessins quand la marque en livre deux : le logo pour fond clair et
+ * celui pour fond sombre (GitHub, X, Vercel, Linear… passent au blanc). Les
+ * deux sont posés et le thème choisit, par CSS (`.marque-claire`,
+ * `.marque-sombre` dans styles/index.css) : lire le thème en JavaScript aurait
+ * laissé le mauvais logo affiché le temps d'un rendu après chaque bascule.
+ *
+ * Exporté : la liste des connecteurs, le sélecteur de modèles et les clés
+ * d'API affichent les mêmes logos, et deux dessins du même logo finiraient par
+ * diverger.
  */
 export function LogoMarque({
   marque,
@@ -47,18 +102,13 @@ export function LogoMarque({
   taille?: number;
 }) {
   if (marque) {
-    const m = MARQUES[marque];
+    const m: Marque = MARQUES[marque];
+    if (!m.sombre) return <Dessin dessin={m.clair} taille={taille} />;
     return (
-      <svg
-        viewBox="0 0 24 24"
-        width={taille}
-        height={taille}
-        role="img"
-        aria-hidden="true"
-        className="shrink-0"
-      >
-        <path d={m.chemin} fill={m.couleur} />
-      </svg>
+      <>
+        <Dessin dessin={m.clair} taille={taille} classe="marque-claire" />
+        <Dessin dessin={m.sombre} taille={taille} classe="marque-sombre" />
+      </>
     );
   }
   if (Icone) {

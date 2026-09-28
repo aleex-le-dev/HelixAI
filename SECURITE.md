@@ -4543,7 +4543,7 @@ sept connecteurs du § 40, avec les corrections de la tournée du § 41 déjà e
 `x__publications`, `x__publier`). Documentation officielle lue le 28/09/2026 sur docs.x.com et
 citée dans le code. Contrôles : `scripts/essai-natifs.mjs`, section H (connexion) et sections
 E, F, G (jetons, outils, appel recopié), repris par `npm run securite` sous « natifs : » ;
-`scripts/securite.mjs`, section 15 quinquies. **Rien n'a été essayé contre le vrai service** :
+`scripts/securite.mjs`, section 15 sexies. **Rien n'a été essayé contre le vrai service** :
 ni compte X, ni application de développeur, ni crédits ; faux serveur OAuth et fausse API
 seulement, écrits d'après la documentation.
 

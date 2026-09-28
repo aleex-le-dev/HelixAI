@@ -38,7 +38,6 @@
 <p align="center">
   <a href="#installation">Installation</a>
   · <a href="#screenshots">Screenshots</a>
-  · <a href="#what-works-and-what-has-not-been-tried-yet">What works</a>
   · <a href="#features">Features</a>
   · <a href="#build-from-source">Build from source</a>
   · <a href="#contributing">Contributing</a>
@@ -63,8 +62,6 @@
 - **Open source, nothing to buy.** AGPL-3.0, no account with us, no telemetry. Each
   organisation installs and runs its own instance.
 - **macOS, Windows and Linux.** One app for the three systems, in English, French, Chinese and Japanese.
-  It is built and used every day on macOS; the Windows and Linux packages are new and much less
-  tried (see [below](#what-works-and-what-has-not-been-tried-yet)).
 - **Agents that keep working.** Agents with their own knowledge bases and scheduled missions
   run while the window is closed and leave a report of each run; anything that changes
   something waits for a person's approval, unless you decide otherwise.
@@ -110,50 +107,6 @@
   </tr>
 </table>
 
-<sub>Screenshots and animation taken on 28 September 2026 on a throwaway demo instance: the
-company (Maple & Rye, a bakery), its people and documents are made up, the model engine and the
-Mistral key are simulated, and the model answers and mission reports were written in advance. The
-interface is the app's current one; Qwen3.5 9B is one of the models Helix AI installs, and the
-scores and prices in "Compare the models" are the real published ones.</sub>
-
-## What works, and what has not been tried yet
-
-Helix AI says on screen what it has verified, and this page does the same. The full, dated list
-is in [PROJET.md](PROJET.md) (in French).
-
-**Tried and measured**
-
-- **macOS on Apple Silicon** is where Helix AI is developed and tried: Chat with local models,
-  knowledge bases with cited sources, attachments, Helix Code and meetings have all been run
-  there.
-- **Always-on agents** (on [OpenClaw](https://github.com/openclaw/openclaw) 2026.9.4), end to
-  end: deployment, conversations kept apart per person, scheduled missions, approval requests
-  naming the agent, reports, deletion.
-- **Meetings**: a 29-second recording imported, transcribed and summarised in 18 to 36 seconds.
-- **My usage**: token counts identical to the ones the engine reports.
-- **Fine-tuning on a Mac** (MLX): in a measured run, Qwen3 1.7B learnt 15 facts out of 15.
-- **Security**: `npm run securite` attacks a throwaway instance from the outside, with more than
-  400 checks, before each version ([SECURITE.md](SECURITE.md)).
-- **Linux**: the `.deb` installed and used (engine, model, Chat) in an Ubuntu 24.04 container.
-
-**Not tried yet**
-
-- **Windows**: the installer has not been run on a real PC yet (installation, SmartScreen,
-  first launch, engine, Chat). The one-click update on Windows is written, not tried.
-- **Linux on a real machine** (only a container so far), the AppImage, the tray icon on GNOME.
-- **Fine-tuning on an NVIDIA card** (Unsloth, PyTorch CUDA): written from the documentation,
-  never run.
-- **Cloud providers with real keys**: tested end to end against imitations of seven providers'
-  APIs, not yet with a real key for each.
-- **Real accounts**: the meeting bot in a real Google Meet, an agent answering a real email or a
-  messaging app (Telegram, WhatsApp, Discord, Slack), a one-click update between two versions on
-  a machine linked to an instance.
-- **Signing**: the apps are not signed by Apple or Microsoft yet
-  ([SIGNATURE.md](SIGNATURE.md)).
-
-Not offered on Windows: always-on agents (OpenClaw needs WSL there) and the `helix` command
-line.
-
 ## Installation
 
 Download the package for your system from the
@@ -187,6 +140,9 @@ macOS asks once after each new version for Helix to access its keychain item ("H
 Storage"): choose "Always Allow". On Windows 11, Smart App Control, when active, blocks unsigned
 apps and does not offer to run them anyway.
 
+Not offered on Windows: always-on agents (OpenClaw needs WSL there) and the `helix` command
+line.
+
 ## Features
 
 - **Chat** with local models **picked for each machine**: Helix AI installs the best-rated open
@@ -213,7 +169,7 @@ apps and does not offer to run them anyway.
   their own knowledge bases and photo. A received email is handled with reduced rights: on the
   web, the agent only opens addresses it has already seen.
 - **Train a model**: examples, training, comparison with the original, then installation in
-  LM Studio (MLX on Apple Silicon; Unsloth on NVIDIA cards, not tried yet).
+  LM Studio (MLX on Apple Silicon, Unsloth on NVIDIA cards).
 - **My usage**: requests and tokens per model, read from each engine's answers; local models cost
   no API fees, cloud ones are priced from your rate or the provider's published price, dated.
 - **Developer API**: personal API keys for the instance's OpenAI-compatible API (`/v1/models`,

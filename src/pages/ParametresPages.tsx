@@ -18,16 +18,15 @@ import {
   Trash2,
   Plus,
   Loader2,
-  Sheet,
-  Presentation,
-  Youtube,
-  Linkedin,
-  Facebook,
-  Instagram,
+  PlaySquare,
+  Briefcase,
+  Users,
+  Camera,
   Music2,
   AtSign,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
+import type { CleMarque } from "@/components/ui/marques";
 import { useProfile } from "@/hooks/useProfile";
 import { useComputer } from "@/hooks/useComputer";
 import { runAction, installerModeleEcran, MODE_LABEL } from "@/lib/computer";
@@ -1012,7 +1011,10 @@ export function McpSettings() {
     {
       id: "slack",
       label: "Slack",
-      // Slack a demandé le retrait de son logo des bibliothèques d'icônes.
+      /*
+       * Icône neutre : la charte de Slack soumet l'usage du logo à une licence
+       * écrite et interdit de le redistribuer (scripts/marques/sources.json).
+       */
       description: resumeSlack(slack),
       categorie: CATEGORIE,
       icone: MessageSquare,
@@ -1023,27 +1025,33 @@ export function McpSettings() {
     },
     /*
      * Sheets, Slides, YouTube et réseaux sociaux (28/09/2026,
-     * ConnecteurNatif.tsx). Icônes de Lucide : ces marques ne sont pas dans
-     * la table des logos (marques.ts), et une icône neutre suffit à les reconnaître.
+     * ConnecteurNatif.tsx). Sheets et Slides portent l'icône de produit de
+     * Google, que sa charte permet dans une liste de services compatibles.
+     * Les autres gardent une icône neutre (28/09/2026) : la charte de YouTube
+     * fixe une hauteur minimale de 100 px, LinkedIn réserve son logo aux
+     * boutons « Share » et « Follow », Meta et TikTok le soumettent à leur
+     * accord. Les glyphes « marque » de Lucide (Youtube, Linkedin, Facebook,
+     * Instagram) ont été retirés aussi : ce sont des copies approximatives de
+     * ces logos, précisément ce que les chartes interdisent.
      */
     ...([
-      ["sheets", "Google Sheets", t("Lire vos feuilles, et y écrire après accord"), Sheet, CATEGORIE],
-      ["slides", "Google Slides", t("Lire vos présentations"), Presentation, CATEGORIE],
-      ["youtube", "YouTube", t("Vidéos et statistiques d'une chaîne"), Youtube, t("Réseaux sociaux")],
-      ["linkedin", "LinkedIn", t("Publier après accord, et lire une page d'entreprise"), Linkedin, t("Réseaux sociaux")],
-      ["facebook", "Facebook", t("Pages : publications, réactions, publier après accord"), Facebook, t("Réseaux sociaux")],
-      ["instagram", "Instagram", t("Compte professionnel : publications, statistiques, publier après accord"), Instagram, t("Réseaux sociaux")],
+      ["sheets", "Google Sheets", t("Lire vos feuilles, et y écrire après accord"), "googleSheets", CATEGORIE],
+      ["slides", "Google Slides", t("Lire vos présentations"), "googleSlides", CATEGORIE],
+      ["youtube", "YouTube", t("Vidéos et statistiques d'une chaîne"), PlaySquare, t("Réseaux sociaux")],
+      ["linkedin", "LinkedIn", t("Publier après accord, et lire une page d'entreprise"), Briefcase, t("Réseaux sociaux")],
+      ["facebook", "Facebook", t("Pages : publications, réactions, publier après accord"), Users, t("Réseaux sociaux")],
+      ["instagram", "Instagram", t("Compte professionnel : publications, statistiques, publier après accord"), Camera, t("Réseaux sociaux")],
       ["tiktok", "TikTok", t("Vidéos, statistiques, publier après accord"), Music2, t("Réseaux sociaux")],
-      // X (28/09/2026) : icône neutre en attendant son logo, sous la clé de marque « x » (marques.ts).
+      // X (28/09/2026) : icône neutre en attendant son logo ; la clé de marque sera « x » (marques.ts).
       ["x", "X", t("Ex-Twitter : posts, statistiques, publier après accord"), AtSign, t("Réseaux sociaux")],
-    ] as [IdNatif, string, string, LucideIcon, string][]).map(([id, label, description, icone, categorie]): ServiceMaison => {
+    ] as [IdNatif, string, string, LucideIcon | CleMarque, string][]).map(([id, label, description, dessin, categorie]): ServiceMaison => {
       const e = natifs.find((s) => s.id === id);
       return {
         id,
         label,
         description: e?.configure ? tf("Connecté : {0}", e.compte ?? "") : e?.aReconnecter ? t("Accès perdu, à reconnecter") : description,
         categorie,
-        icone,
+        ...(typeof dessin === "string" ? { marque: dessin } : { icone: dessin }),
         connecte: Boolean(e?.configure),
         ouvert: ouvert === id,
         onBasculer: () => basculer(id),

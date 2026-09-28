@@ -3,15 +3,19 @@ import {
   BookOpen,
   Brain,
   Compass,
+  CreditCard,
   FileText,
   Folder,
   Globe,
+  Headset,
   Laptop,
+  ListChecks,
   Mail,
   MessageSquare,
   Monitor,
-  Palette,
   Search,
+  Table2,
+  TrendingUp,
   Video,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -23,7 +27,7 @@ import type { CleMarque } from "@/components/ui/marques";
  * Pourquoi cette table vit côté écran, et non dans le catalogue de la
  * passerelle : un logo est une affaire de présentation. La passerelle dit ce
  * qu'un service fait et comment il se branche ; elle n'a pas à transporter des
- * tracés SVG, ni à savoir que Slack ne veut plus voir son logo ailleurs.
+ * tracés SVG, ni à savoir quelle charte de marque permet quoi.
  *
  * Une entrée absente n'est pas un défaut : elle retombe sur l'icône neutre
  * ci-dessous, puis sur un carré générique. Un service sans logo reste
@@ -33,37 +37,38 @@ export const MARQUE_DU_CONNECTEUR: Record<string, CleMarque> = {
   courrier: "gmail",
   agenda: "googleAgenda",
   drive: "googleDrive",
+  sheets: "googleSheets",
+  slides: "googleSlides",
   notion: "notion",
   "notion-jeton": "notion",
   linear: "linear",
-  atlassian: "jira",
-  asana: "asana",
+  // « Jira et Confluence » : le logo d'Atlassian couvre les deux produits.
+  atlassian: "atlassian",
   sentry: "sentry",
-  intercom: "intercom",
   figma: "figma",
   webflow: "webflow",
   wix: "wix",
   vercel: "vercel",
-  square: "square",
-  paypal: "paypal",
   github: "github",
   "github-jeton": "github",
   gitlab: "gitlab",
-  box: "box",
-  "airtable-mcp": "airtable",
-  "airtable-jeton": "airtable",
   postgres: "postgresql",
-  hubspot: "hubspot",
   brave: "brave",
   kubernetes: "kubernetes",
   cartes: "googleMaps",
+  canva: "canva",
+  firecrawl: "firecrawl",
+  exa: "exa",
+  x: "x",
 };
 
 /**
- * Icône neutre pour les services sans logo utilisable : ceux que Simple Icons
- * n'a jamais eus (Canva, Firecrawl, Tavily, Exa), ceux qui ont demandé le
- * retrait du leur (Slack), et les serveurs livrés avec le produit, qui ne sont
- * la marque de personne.
+ * Icône neutre pour les services sans logo utilisable : ceux dont la charte
+ * interdit cet usage ou le soumet à une autorisation (Slack, LinkedIn, Meta,
+ * TikTok, YouTube, HubSpot, Intercom, Asana, Airtable, Box, PayPal, Square),
+ * ceux dont on n'a trouvé aucune source officielle (Tavily), et les serveurs
+ * livrés avec le produit, qui ne sont la marque de personne. Raisons datées
+ * dans scripts/marques/sources.json.
  */
 export const ICONE_DU_CONNECTEUR: Record<string, LucideIcon> = {
   fichiers: Folder,
@@ -78,13 +83,61 @@ export const ICONE_DU_CONNECTEUR: Record<string, LucideIcon> = {
   slack: MessageSquare,
   "slack-mcp": MessageSquare,
   "slack-jeton": MessageSquare,
-  canva: Palette,
-  firecrawl: Search,
   tavily: Search,
-  exa: Search,
+  asana: ListChecks,
+  hubspot: TrendingUp,
+  intercom: Headset,
+  "airtable-mcp": Table2,
+  "airtable-jeton": Table2,
+  box: Folder,
+  paypal: CreditCard,
+  square: CreditCard,
   courrierIMAP: Mail,
   autre: Compass,
 };
 
 /** Le carré générique, quand ni marque ni icône ne sont connues. */
 export const ICONE_PAR_DEFAUT: LucideIcon = Blocks;
+
+/**
+ * Logo des fournisseurs de modèles, par identifiant du catalogue de la
+ * passerelle (gateway/src/fournisseurs.ts). Absents faute de logo utilisable
+ * (28/09/2026, scripts/marques/sources.json) : OpenAI, Scaleway, OVHcloud,
+ * IONOS, Groq, DeepSeek, et « compatible », qui n'est personne. Ils gardent
+ * la clé neutre.
+ */
+/**
+ * Le logo de l'éditeur d'un modèle, déduit de son identifiant.
+ *
+ * Déduit, et non déclaré : l'identifiant est la seule chose que tous les
+ * moteurs donnent. « mistralai/Mistral-Small-3.2 » et « mistral-medium » ont
+ * en commun le mot qui compte. Une correspondance manquante ne casse rien, la
+ * ligne s'affiche avec l'icône neutre.
+ *
+ * Logos officiels seulement (28/09/2026, scripts/marques/sources.json) :
+ * DeepSeek, Qwen, Llama, Gemma et les modèles d'OpenAI n'en ont pas ici, faute
+ * de symbole officiel utilisable ou parce que leur charte demande une
+ * autorisation. Gemma n'emprunte plus l'icône de Gemini, un autre produit.
+ * Partagé par le sélecteur de modèles et la comparaison des modèles.
+ */
+const MARQUE_DU_MODELE: [RegExp, CleMarque][] = [
+  [/claude|anthropic/i, "claude"],
+  [/mistral|magistral|devstral|codestral|ministral|pixtral|voxtral/i, "mistral"],
+  [/gemini/i, "gemini"],
+  [/kimi|moonshot/i, "kimi"],
+  [/perplexity|sonar/i, "perplexity"],
+  [/grok/i, "grok"],
+];
+
+export function marqueDuModele(id: string): CleMarque | undefined {
+  return MARQUE_DU_MODELE.find(([re]) => re.test(id))?.[1];
+}
+
+export const MARQUE_DU_FOURNISSEUR: Record<string, CleMarque> = {
+  mistral: "mistral",
+  anthropic: "anthropic",
+  google: "gemini",
+  openrouter: "openrouter",
+  xai: "xai",
+  together: "together",
+};

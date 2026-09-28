@@ -12,7 +12,7 @@ refaite à l'envers.
 |---|---|
 | Version | 2026.928.2 (`package.json`) |
 | Dernière mise à jour | 28 septembre 2026 |
-| Vérifié | `npm run securite` : 936 contrôles, 0 échec (28/09/2026) ; `npm run typecheck` ; traductions à 100 % (interface 2 945 phrases, passerelle 966) |
+| Vérifié | `npm run securite` : 938 contrôles, 0 échec (28/09/2026) ; `npm run typecheck` ; traductions à 100 % en anglais, chinois et japonais (interface 3 042 phrases, passerelle 1 020) |
 | Reste à essayer | sur les vraies machines : § 5, « Ce qui reste à essayer sur les postes de Medhi » |
 | Documents liés | [ARCHITECTURE.md](ARCHITECTURE.md), [SECURITE.md](SECURITE.md), [SCREENS.md](SCREENS.md), [SIGNATURE.md](SIGNATURE.md), [README.md](README.md), [docs/GUIDE.md](docs/GUIDE.md) |
 
@@ -598,8 +598,8 @@ donc pas été touchés.
 
 **Pas encore essayé avec un vrai compte X ni une vraie application de développeur**, et sans
 crédits : vérifié contre un faux serveur OAuth et une fausse API (`scripts/essai-natifs.mjs`,
-section H et sections E, F, G ; `scripts/securite.mjs`, 15 quinquies), écrits d'après la
-documentation. Règle du 28/09/2026 : l'écran, l'aide et les README ne le disent pas ; c'est dit
+section H et sections E, F, G ; `scripts/securite.mjs`, 15 sexies), écrits d'après la
+documentation. Règle du 28/09/2026 (§ 3.16) : l'écran, l'aide et les README ne le disent pas ; c'est dit
 ici et au § 42 de SECURITE.md. À essayer sur le poste : créer l'application sur console.x.com
 (les deux types), déclarer `http://127.0.0.1:8787/helix/oauth/retour`, acheter quelques crédits,
 se connecter, lire, publier un post, puis un post avec image, débrancher. Points incertains :
@@ -1370,6 +1370,57 @@ illisibles, rien n'est écrit par-dessus, et l'écran le dit.
 au graphique et son coût dans Mon usage avec la mention du prix publié ; les identifiants que
 chaque fournisseur rend vraiment (seuls ceux de la documentation ont été vus).
 
+**Vu à l'écran le 28/09/2026**, après l'allègement à une douzaine de repères (passerelle jetable,
+faux OpenAI servant `gpt-4.1-nano`, faux LM Studio servant `qwen3-8b`, Vite ; 1440 et 375 px,
+clair et sombre, français et anglais) : « DeepSeek V4 Pro 0813 » était écrit à cheval sur les
+points de Gemini 3.7 Flash et de Grok 4.6. Un nom ne se pose plus sur aucun point, et peut se
+poser à droite ou à gauche du sien ; deux noms restent espacés de leur hauteur (Mistral Medium
+3.5 et GPT-4.1 se touchaient d'un pixel). Contrôlé dans la page : aucun nom sur un autre, ni sur
+un point, ni hors du cadre, les douze repères nommés. À 375 px, la phrase d'en-tête était tassée
+dans une colonne de 200 px par le bouton du tableau : elle passe dessous, sur toute la largeur,
+et le bouton n'y montre que son icône. Le graphique garde sa largeur minimale de 560 px et
+défile à l'horizontale sur un téléphone.
+
+### 3.16 Ce qui n'a pas été essayé se dit ici, plus à l'écran ni sur GitHub (28/09/2026)
+
+**Décision de Medhi, 28/09/2026**, à propos de l'encadré des connecteurs natifs (« Pas encore
+essayé avec un vrai compte Google Sheets : ce branchement a été vérifié contre de faux
+serveurs, d'après la documentation du fournisseur. Dites-nous ce qui ne marche pas. ») :
+« Ne précise pas, ça fait amateur qui ne teste pas. On le sait dans la doc du projet ici, mais
+sur GitHub, dans la doc du logiciel et sur le logiciel : pas de truc comme ça. »
+
+La règle, qui remplace la pratique suivie depuis la 0.22.0 :
+
+- **Ce qui n'a pas été essayé se dit dans la documentation interne** : ce fichier (§ 5,
+  « Ce qui reste à essayer sur les postes de Medhi »), SECURITE.md, ARCHITECTURE.md,
+  SCREENS.md et les commentaires du code.
+- **Plus à l'écran, ni dans ce que le public lit** : README (en, fr, zh, ja), notes de
+  version, aide intégrée, parties de docs/GUIDE.md qui s'adressent à l'utilisateur.
+- **L'écran ne promet toujours rien de faux** : on retire la mention, on n'écrit jamais
+  « vérifié » ou « testé » à la place. Ce qui n'a pas été essayé n'est pas présenté comme
+  éprouvé.
+- **Un conseil utile reste**, sans le « pas encore essayé » : « s'il ne se charge pas, un
+  autre modèle adapté à la machine prend le relais ».
+- Les constats restent : « essayé : refusé » pour Google Agenda, les « réessayez », la version
+  d'OpenClaw « éprouvée avec » l'application (elle l'a été).
+
+Retiré ou reformulé le 28/09/2026 : l'encadré des connecteurs natifs ; « Pas encore essayé
+avec {0} » à l'accueil (reste le conseil) ; la mise en garde de l'entraînement (« Ce réglage
+n'a pas encore été essayé de bout en bout… sans garantie ») ; « Pas encore éprouvé(e) de bout
+en bout » du Mac virtuel (reste « si elle ne démarre pas, le message dira où… ») ; le badge
+« pas encore vérifié avec Helix » des modèles d'images et du sélecteur ; la dernière phrase
+de la carte NVIDIA (« Ce chemin n'a pas encore été essayé sur une vraie machine ») ; dans les
+README, la section « ce qui marche / pas encore essayé » et la note sur les captures et
+l'animation simulées ; dans docs/GUIDE.md, les mentions de ce genre côté utilisateur (restent
+les notes de fabrication, comme les fusibles d'Electron à relire) ; CONTRIBUTING.md suit la
+nouvelle règle. Les notes des publications v2026.928.1 et v2026.928.2 ont été préparées sans
+les lignes « Not yet tried » ni la relecture du japonais par un locuteur natif (à éditer sur
+GitHub par Medhi) : ce qui reste à essayer est au § 5. Le
+champ `verifie` des catalogues (modèles, images, entraînement) reste dans la passerelle (les
+replis de l'installation s'en servent) ; il n'est plus affiché, sauf pour choisir de montrer le
+conseil de l'accueil. `npm run securite` (§ 15 quinquies) vérifie qu'aucune phrase des
+catalogues, en français comme dans ses traductions, ne dit plus « pas encore essayé ».
+
 ---
 
 ## 4. Sécurité
@@ -1959,6 +2010,29 @@ quinze mégaoctets. Slack et OpenAI ont demandé le retrait de leur logo de ces
 collections, Canva, Firecrawl, Tavily et Exa n'y ont jamais figuré : tous
 reçoivent une icône neutre, ce qui est aussi plus prudent juridiquement qu'un
 dessin approximatif.
+
+**Les vrais logos, en couleur (28/09/2026, branche `logos`).** Medhi : « mets
+les vrais logos », « là, les logos sont sans couleur ». Simple Icons est
+abandonné : chaque logo est désormais le fichier officiel du kit ou de la page
+de marque de la société, relevé le 28/09/2026, en couleur, avec sa version pour
+fond sombre quand elle existe (GitHub, X, Vercel, Linear… passent au blanc).
+33 marques, fichiers et empreintes dans `scripts/marques/` (`sources.json`
+donne l'adresse, la page et la règle d'usage retenue de chacun) ;
+`scripts/gen-marques.cjs` les vérifie et les convertit en données de dessin,
+sans HTML injecté ni appel réseau ; `LogoMarque` pose les deux versions et le
+thème en montre une, par CSS. Les logos gagnent aussi les clés d'API (liste des
+fournisseurs) et « Comparer les modèles ». Les chartes ont été lues une à une,
+et 23 marques gardent une icône neutre : Slack (licence écrite, redistribution
+interdite), OpenAI (autorisation préalable), LinkedIn (boutons « Share » et
+« Follow » seulement), Facebook, Instagram et Llama (téléchargement derrière
+une case « j'accepte » que l'agent n'a pas cochée à la place de Medhi), TikTok,
+HubSpot, Intercom, Box, PayPal (autorisation), YouTube (100 px de haut au
+minimum), Asana, Airtable, Square (pas de symbole seul autorisé), DeepSeek,
+Qwen, Gemma, Tavily, Groq, Scaleway, OVHcloud, IONOS (pas de source officielle
+utilisable). Les glyphes Lucide qui imitaient YouTube, LinkedIn, Facebook et
+Instagram sont retirés. THIRD_PARTY_NOTICES.md § 4 bis, contrôlé par
+`npm run securite`. Si Medhi accepte les conditions de Meta, les logos de
+Facebook et d'Instagram se posent dans `scripts/marques/` comme les autres.
 
 **Le sélecteur de modèles, un seul panneau (0.26.0).** Il y en avait deux :
 « comportement », puis « modèle précis » derrière un chevron. Deux défauts,
@@ -2953,6 +3027,13 @@ Fedora) ; une tâche programmée partie seule à l'heure dite ; la dictée au mi
 l'application ; la vidéo Wan 2.2 sur 32 Go, et la vidéo sous Windows et Linux ; le bot dans
 une vraie réunion ; une mise à jour d'un clic signée entre deux versions sur un poste
 rattaché ; `lms get` sans terminal sur un réseau lent.
+
+**Plus dits à l'écran depuis le 28/09/2026 (§ 3.16), donc tenus ici** : les connecteurs natifs
+avec de vrais comptes (Google Sheets, Slides, YouTube, LinkedIn, Facebook, Instagram, TikTok,
+vérifiés contre de faux serveurs, SECURITE.md § 41) et Google Drive et Slack ; l'entraînement
+sur une vraie carte NVIDIA (Unsloth) ; le Mac virtuel (Lume) de bout en bout ; les modèles
+d'images et de vidéo marqués `verifie: false` (`images.ts`) et les modèles de conversation
+conseillés sans avoir été essayés (`provision.ts`) ; le japonais relu par un locuteur natif.
 
 ### Ce qui reste à faire
 

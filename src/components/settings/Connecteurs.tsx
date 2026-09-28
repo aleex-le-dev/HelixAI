@@ -286,9 +286,15 @@ export function Connecteurs({ maison = [] }: { maison?: ServiceMaison[] } = {}) 
     );
     setEnCours(false);
     if (!resultat.ok) {
-      setErreur(resultat.message);
       // Un service qui réclame une application : on ouvre le formulaire.
       if (entree.oauth === "appli" && ouvert !== entree.id) ouvrir(entree);
+      /*
+       * Après `ouvrir`, qui efface le message (revérification du 28/09/2026) :
+       * posé avant, il disparaissait aussitôt, et avec lui l'adresse de retour
+       * à déclarer chez le service, que le formulaire annonce « dans le
+       * message ci-dessous ». Sans elle, impossible de créer l'application.
+       */
+      setErreur(resultat.message);
       return;
     }
     if (resultat.etat) setEtat(resultat.etat);

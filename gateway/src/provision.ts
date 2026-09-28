@@ -6,7 +6,7 @@ import { backendById, faireLaPlace, findLms, lmStudioRepond, optionsDeChargement
 import { nomProduit } from "./marque.ts";
 import { langue, t, tf } from "./langue.ts";
 import { noteDuModele } from "./notesModeles.ts";
-import { dossierLmStudio, dossierModelesLmStudio, moteurAPoser, preparerDossiersLlmster } from "./engine.ts";
+import { diagnosticInstallation, dossierLmStudio, dossierModelesLmStudio, moteurAPoser, preparerDossiersLlmster } from "./engine.ts";
 import { aEssayer, essayerModele, estDefaillant, nomDuModele, noterCoupure, noterEssai, type Verdict } from "./santeModeles.ts";
 import { autoProvisionEnabled } from "./deployment.ts";
 import { cleLlamaCpp, moteurOuvert, urlLlamaCpp } from "./llamaCppBase.ts";
@@ -876,6 +876,21 @@ async function provision(
           return state;
         }
         console.error(`[helix] téléchargement de ${choice.key} refusé : ${got.output.slice(-400)}`);
+        /*
+         * Le moteur lui-même ne démarre pas (vu sous Windows le 28/09/2026 :
+         * « daemon is not running and no valid installation »). Un autre modèle
+         * n'irait pas mieux : on s'arrête au premier, en disant quoi faire,
+         * au lieu d'essayer tous les modèles jusqu'au plus léger.
+         */
+        if (/daemon is not running|no valid installation|failed to start or connect to local LM Studio/i.test(got.output)) {
+          console.error(`[helix] moteur LM Studio injoignable : ${diagnosticInstallation()}`);
+          setState({
+            phase: "error",
+            message: t("Le moteur des modèles ne démarre pas sur cette machine."),
+            error: tf("Quittez {0} puis rouvrez-le : l'écran de mise en route proposera de réinstaller le moteur. Si cela se répète, installez LM Studio depuis lmstudio.ai, ouvrez-le une fois, puis revenez.", nomProduit()),
+          });
+          return state;
+        }
         echec = { message, error: got.output.slice(-400) };
         continue;
       }

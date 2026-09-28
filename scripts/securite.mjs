@@ -7950,6 +7950,22 @@ console.log("\n29. Écran : « Réglages » partout, et la carte d'accord nomme 
   verifier("la carte d'accord nomme le connecteur par son nom lisible, pas par son identifiant", /registreNoms\(\)\.fn\?\.\(id\) \|\| id/.test(barriere) && /definirNomsConnecteurs\(\(id\) =>/.test(connecteursSrc), "approbation.ts, connecteurs.ts");
 }
 
+console.log("\n30. Windows : moteur LM Studio présent mais non déclaré (28/09/2026)");
+{
+  const moteur = readFileSync(join(RACINE, "gateway", "src", "engine.ts"), "utf8");
+  const prov = readFileSync(join(RACINE, "gateway", "src", "provision.ts"), "utf8");
+  verifier(
+    "sous Windows et Linux aussi, `lms` seul ne suffit pas : sans déclaration d'installation (llmster ou application), le moteur est à poser, et l'installation ne s'arrête pas à « déjà là »",
+    /\["darwin", "win32", "linux"\]\.includes\(process\.platform\)/.test(moteur) && /if \(dejaLa && !moteurAPoser\(\)\) return dejaLa;/.test(moteur),
+    "engine.ts",
+  );
+  verifier(
+    "« daemon is not running and no valid installation » : la mise en route s'arrête au premier modèle, en disant quoi faire, au lieu de les essayer tous",
+    /daemon is not running\|no valid installation\|failed to start or connect to local LM Studio/.test(prov) && /Le moteur des modèles ne démarre pas sur cette machine\./.test(prov),
+    "provision.ts",
+  );
+}
+
 console.log(`\n${reussis} vérification(s) réussie(s), ${echecs.length} échec(s).`);
 if (echecs.length) {
   console.log("Échecs :");

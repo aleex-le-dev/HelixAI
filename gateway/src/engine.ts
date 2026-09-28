@@ -159,8 +159,41 @@ function installationDeclaree(fichier: "app-install-location.json" | "llmster-in
  * moteur sans interface qui est posé, à côté de l'application.
  */
 export function moteurAPoser(): boolean {
-  if (process.platform !== "darwin" || process.arch !== "arm64") return false;
+  /*
+   * Windows et Linux aussi, depuis le 28/09/2026 : vu chez plusieurs personnes
+   * sous Windows (2026.928.6), « LM Studio daemon is not running and no valid
+   * installation could be found » à chaque modèle. `lms.exe` était là, donc le
+   * moteur passait pour installé ; mais `lms` ne démarre le moteur que par sa
+   * déclaration (`findOrStartLlmster`, lmstudio-js, relu le 28/09/2026 :
+   * `llmster-install-location.json` ou `app-install-location.json`, dont le
+   * chemin doit exister). Sans elle, le moteur est à poser, comme sur un Mac.
+   */
+  if (process.platform === "darwin" && process.arch !== "arm64") return false;
+  if (!["darwin", "win32", "linux"].includes(process.platform)) return false;
   return !installationDeclaree("app-install-location.json") && !installationDeclaree("llmster-install-location.json");
+}
+
+/**
+ * Ce que contient le dossier interne de LM Studio, pour le journal quand le
+ * moteur ne se déclare pas (noms de fichiers seulement : diagnostic d'un poste
+ * qu'on ne peut pas voir, 28/09/2026).
+ */
+export function diagnosticInstallation(): string {
+  const dossier = join(dossierLmStudio(), ".internal");
+  try {
+    const noms = readdirSync(dossier).filter((n) => /install-location|pid|lock/i.test(n));
+    const declaration = (f: string) => {
+      try {
+        const { path } = JSON.parse(readFileSync(join(dossier, f), "utf8")) as { path?: unknown };
+        return typeof path === "string" ? `${f} → ${existsSync(path) ? "présent" : "ABSENT"}` : `${f} → illisible`;
+      } catch {
+        return `${f} → absent`;
+      }
+    };
+    return `${dossier} : ${noms.join(", ") || "aucun fichier d'installation"} ; ${declaration("llmster-install-location.json")} ; ${declaration("app-install-location.json")}`;
+  } catch {
+    return `${dossier} : introuvable`;
+  }
 }
 
 /** L'application LM Studio (avec son interface) sur ce Mac, ou null. */
@@ -195,7 +228,8 @@ export async function installerMoteur(
   onProgress: (p: EngineProgress) => void,
 ): Promise<string> {
   const dejaLa = await appInstallee();
-  if (dejaLa) return dejaLa;
+  // `lms` présent mais installation non déclarée (Windows, 28/09/2026) : on repose le moteur au lieu de croire qu'il est là.
+  if (dejaLa && !moteurAPoser()) return dejaLa;
   /*
    * Mac à puce Apple aussi, depuis le 27/09/2026 : l'application LM Studio
    * posée par Helix n'avait jamais été ouverte, et `lms` refusait alors de
@@ -604,7 +638,10 @@ async function installerLlmster(onProgress: (p: EngineProgress) => void): Promis
      * (`llmster-install-location.json`). Absente, Helix redemanderait
      * l'installation en boucle, 600 Mo à chaque fois (revue du 27/09/2026).
      */
-    if (moteurAPoser()) throw new Error(t("Le moteur s'est installé, mais LM Studio ne le reconnaît pas. Réessayez ; si cela se répète, installez LM Studio depuis lmstudio.ai et ouvrez-le une fois."));
+    if (moteurAPoser()) {
+      console.error(`[helix] moteur posé mais non déclaré : ${diagnosticInstallation()}`);
+      throw new Error(t("Le moteur s'est installé, mais LM Studio ne le reconnaît pas. Réessayez ; si cela se répète, installez LM Studio depuis lmstudio.ai et ouvrez-le une fois."));
+    }
     preparerDossiersLlmster();
     onProgress({ phase: "pret", message: tf("Moteur installé (version {0}).", version), percent: 100 });
     return lms;

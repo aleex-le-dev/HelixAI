@@ -25,7 +25,7 @@ import { t, tf } from "@/lib/i18n";
 /**
  * Panneau d'un service branché nativement (gateway/src/oauthNatif.ts) :
  * Google Sheets, Google Slides, YouTube, LinkedIn, Facebook, Instagram,
- * TikTok. Ajouté le 28/09/2026 à la demande de Medhi.
+ * TikTok, et X (ex-Twitter). Ajouté le 28/09/2026 à la demande de Medhi.
  *
  * Il dit, en mots simples, comment l'organisation crée son application chez
  * le fournisseur, ce qui marche sans revue et ce qui en demande une, et que
@@ -102,6 +102,20 @@ function Guide({ id }: { id: IdNatif }) {
           <li>{t("Recopiez la « Client key » et le « Client secret ». Pour essayer sans examen, créez un « Sandbox » et ajoutez-y votre compte TikTok comme compte cible.")}</li>
         </ol>
       );
+    case "x":
+      // D'après https://docs.x.com/x-api/getting-started/getting-access et https://docs.x.com/fundamentals/developer-apps (28/09/2026).
+      return (
+        <ol className="list-decimal space-y-1 pl-5">
+          <li>
+            {t("Sur")} <Lien href="https://console.x.com">console.x.com</Lien>
+            {t(", connectez-vous avec le compte X de votre organisation, acceptez l'accord des développeurs, puis créez une application (« New App ») : un nom, une description, l'usage prévu.")}
+          </li>
+          <li>{t("Achetez des crédits dans la même console : l'API de X se paie à l'usage (voir plus bas).")}</li>
+          <li>{t("Dans les réglages d'authentification de l'application, activez OAuth 2.0. Type d'application : « Web App » (elle a un secret) ou « Native App » (sans secret). Si la console demande les droits de l'application, choisissez « Read and write » pour pouvoir publier.")}</li>
+          <li>{t("« Callback URI » : l'adresse de retour ci-dessous, à l'identique. X refuse « localhost » : l'adresse montrée commence donc par 127.0.0.1.")}</li>
+          <li>{t("Recopiez le « Client ID » et, pour une « Web App », le « Client Secret ». Branchez de préférence le compte qui a créé l'application : X facture moins cher la lecture de ses propres posts.")}</li>
+        </ol>
+      );
   }
 }
 
@@ -115,6 +129,8 @@ function Revue({ id }: { id: IdNatif }) {
     facebook: t("Sans examen (« accès standard ») : seulement pour les personnes qui ont un rôle dans l'application. Pour d'autres personnes : examen de l'application par Meta et vérification de l'entreprise. L'accès dure 60 jours, puis il faut se reconnecter."),
     instagram: t("Sans examen : seulement pour les comptes qui ont un rôle dans l'application (testeur Instagram compris). Pour d'autres comptes : examen par Meta. Publier : une photo JPEG, à une adresse web publique, 100 publications par jour au plus. L'accès dure 60 jours et se renouvelle seul."),
     tiktok: t("Sans examen : le bac à sable, jusqu'à 10 comptes. Tant que l'application n'a pas passé l'audit de TikTok, tout ce qu'elle publie reste privé (visible de vous seul)."),
+    // https://docs.x.com/x-api/getting-started/pricing et https://docs.x.com/changelog, lus le 28/09/2026.
+    x: t("Aucun examen de X pour brancher le compte de votre organisation, mais l'API est payante. Depuis le 6 février 2026, X n'a plus d'offre gratuite pour les nouveaux développeurs : on achète des crédits d'avance, et chaque appel est décompté. Tarifs publiés par X au 28 septembre 2026 : publier un post, 0,015 $ (0,20 $ s'il contient une adresse web) ; lire un de vos posts, 0,001 $ si le compte branché est celui qui a créé l'application, 0,005 $ sinon. Il faut des crédits avant le premier appel. Les offres Basic et Pro, pour qui y est déjà abonné, permettent aussi de lire et de publier. Limite de X : 100 posts par 15 minutes. Citer un post, suivre, aimer : X ne le permet plus par son API."),
   };
   return <p>{texte[id]}</p>;
 }
@@ -126,6 +142,7 @@ function libelleChoix(id: IdNatif, c: IdChoix): string {
   if (id === "facebook") return t("Permettre de publier des posts sur les pages.");
   if (id === "instagram") return t("Permettre de publier des photos.");
   if (id === "tiktok") return t("Permettre de publier des vidéos du dossier de travail.");
+  if (id === "x") return t("Permettre de publier des posts : un texte, et une image du dossier de travail si vous le demandez.");
   return t("Permettre de publier des posts.");
 }
 
@@ -238,7 +255,8 @@ export function ConnecteurNatif({ id, onChange }: { id: IdNatif; onChange?: () =
             ? t("Vos agents peuvent lire, et proposer d'écrire ou de publier : chaque écriture et chaque publication vous est montrée en entier et n'a lieu qu'après votre accord, à chaque fois, quel que soit le niveau d'approbation. Seul l'administrateur de l'instance peut publier. L'accès est conservé chiffré sur l'instance et n'en ressort jamais.")
             : t("Lecture seule : vos agents peuvent lire, sans rien modifier ni publier. L'accès est conservé chiffré sur l'instance et n'en ressort jamais.")}
         </InfoBox>
-        {honnetete}
+        {/* Règle du 28/09/2026 : pour X, rien de tel à l'écran ; c'est écrit dans PROJET.md et SECURITE.md § 42. */}
+        {id !== "x" && honnetete}
         {messages}
         {admin && (
           <div className="flex justify-end">
@@ -263,6 +281,8 @@ export function ConnecteurNatif({ id, onChange }: { id: IdNatif; onChange?: () =
       },
     );
   const boucle = etat.retour.startsWith("http://127.0.0.1") && !etat.retour.includes("/helix/oauth/retour");
+  // X accepte une application « publique », sans secret (oauthNatif.ts, `secretFacultatif`).
+  const secretFacultatif = id === "x";
 
   return (
     <Card className="space-y-3">
@@ -279,12 +299,12 @@ export function ConnecteurNatif({ id, onChange }: { id: IdNatif; onChange?: () =
           {tf("{0} n'accepte plus l'accès enregistré (révoqué, expiré, ou application changée). Reconnectez-vous.", etat.nom)}
         </InfoBox>
       )}
-      {honnetete}
+      {id !== "x" && honnetete}
       <InfoBox leading={<KeyRound size={15} strokeWidth={1.75} />}>
         <div className="space-y-2">
           <p className="font-medium">{t("Préparer l'application, une fois pour toute l'instance")}</p>
           <Guide id={id} />
-          <p className="font-medium">{t("Ce qui demande un examen du fournisseur")}</p>
+          <p className="font-medium">{id === "x" ? t("Ce que permet chaque offre de X") : t("Ce qui demande un examen du fournisseur")}</p>
           <Revue id={id} />
           <p className="text-xs">{t("Les libellés des consoles changent parfois : cherchez l'équivalent.")}</p>
         </div>
@@ -308,14 +328,17 @@ export function ConnecteurNatif({ id, onChange }: { id: IdNatif; onChange?: () =
           <Field label={tf("Identifiant de l'application {0}", etat.nom)}>
             <Input value={identifiant} onChange={(e) => setIdentifiant(e.target.value)} autoComplete="off" spellCheck={false} />
           </Field>
-          <Field label={t("Secret de l'application")} hint={t("Gardé chiffré sur l'instance, il n'en ressort jamais.")}>
+          <Field
+            label={secretFacultatif ? t("Secret de l'application, pour une « Web App » seulement") : t("Secret de l'application")}
+            hint={secretFacultatif ? t("Laissez vide pour une « Native App » : X la protège sans secret. S'il est donné, il est gardé chiffré sur l'instance et n'en ressort jamais.") : t("Gardé chiffré sur l'instance, il n'en ressort jamais.")}
+          >
             <Input type="password" value={secret} onChange={(e) => setSecret(e.target.value)} autoComplete="off" spellCheck={false} />
           </Field>
           <div className="flex justify-end">
             <Button
               size="sm"
               icon={enCours ? Loader2 : Check}
-              disabled={enCours || !identifiant.trim() || !secret.trim()}
+              disabled={enCours || !identifiant.trim() || (!secretFacultatif && !secret.trim())}
               onClick={() =>
                 void agir(
                   () => enregistrerApplication(id, identifiant.trim(), secret.trim()),

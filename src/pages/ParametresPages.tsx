@@ -25,6 +25,7 @@ import {
   Facebook,
   Instagram,
   Music2,
+  AtSign,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useProfile } from "@/hooks/useProfile";
@@ -1033,6 +1034,8 @@ export function McpSettings() {
       ["facebook", "Facebook", t("Pages : publications, réactions, publier après accord"), Facebook, t("Réseaux sociaux")],
       ["instagram", "Instagram", t("Compte professionnel : publications, statistiques, publier après accord"), Instagram, t("Réseaux sociaux")],
       ["tiktok", "TikTok", t("Vidéos, statistiques, publier après accord"), Music2, t("Réseaux sociaux")],
+      // X (28/09/2026) : icône neutre en attendant son logo, sous la clé de marque « x » (marques.ts).
+      ["x", "X", t("Ex-Twitter : posts, statistiques, publier après accord"), AtSign, t("Réseaux sociaux")],
     ] as [IdNatif, string, string, LucideIcon, string][]).map(([id, label, description, icone, categorie]): ServiceMaison => {
       const e = natifs.find((s) => s.id === id);
       return {

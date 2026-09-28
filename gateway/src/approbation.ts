@@ -221,6 +221,9 @@ export const LECTURES_NATIVES = new Set([
   "instagram__statistiques",
   "tiktok__profil",
   "tiktok__videos",
+  // X (ex-Twitter), ajouté le 28/09/2026 sur le même modèle (SECURITE.md § 42).
+  "x__profil",
+  "x__publications",
 ]);
 export const ECRITURES_NATIVES = new Set([
   "sheets__ecrire",
@@ -229,6 +232,7 @@ export const ECRITURES_NATIVES = new Set([
   "facebook__publier",
   "instagram__publier",
   "tiktok__publier_video",
+  "x__publier",
 ]);
 
 const TOUJOURS_CONFIRMER = new Set(["agenda__supprimer", "taches__programmer", ...ECRITURES_NATIVES]);
@@ -550,6 +554,14 @@ function resumeNatif(outil: string, args: Record<string, unknown>): string | nul
       return "consulter le compte TikTok";
     case "tiktok__publier_video":
       return `publier sur TikTok la vidéo ${typeof args.fichier === "string" ? abreger(args.fichier).slice(0, 200) : "?"}${extrait(args.titre)}, visibilité ${typeof args.confidentialite === "string" ? args.confidentialite : "SELF_ONLY (moi seul)"}`;
+    case "x__profil":
+    case "x__publications":
+      return "consulter le compte X";
+    case "x__publier": {
+      // Une adresse dans le post : X le facture plus cher (0,20 $ au lieu de 0,015 $, tarifs du 20/04/2026) ; la carte le dit.
+      const lien = typeof args.texte === "string" && /https?:\/\/|www\./i.test(args.texte);
+      return `publier sur X, au nom du compte connecté, le post${extrait(args.texte)}${typeof args.image === "string" && args.image ? `, avec l'image ${abreger(args.image).slice(0, 200)}` : ""}${lien ? " (il contient une adresse, que X facture plus cher)" : ""} (une publication ne se reprend pas)`;
+    }
   }
   return null;
 }

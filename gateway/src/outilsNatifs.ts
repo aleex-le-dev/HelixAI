@@ -25,7 +25,7 @@ import {
 
 /**
  * Les outils de l'agent pour Google Sheets, Google Slides, YouTube, LinkedIn,
- * Facebook, Instagram et TikTok (connexions : oauthNatif.ts).
+ * Facebook, Instagram, TikTok et X (connexions : oauthNatif.ts).
  *
  * Trois règles, qui valent pour chacun :
  *
@@ -49,7 +49,7 @@ import {
  *    publie) ; l'instance ne la télécharge pas.
  *
  * ⚠ Pas encore essayé avec un vrai compte (28/09/2026) : vérifié contre de
- * faux serveurs (scripts/securite.mjs, section 15 bis).
+ * faux serveurs (scripts/securite.mjs, section 15 bis). X de même.
  */
 
 interface Outil {
@@ -66,6 +66,7 @@ const PREFIXES: Record<string, IdNatif> = {
   facebook__: "facebook",
   instagram__: "instagram",
   tiktok__: "tiktok",
+  x__: "x",
 };
 
 /** Préfixes réservés : aucun connecteur ajouté ne peut les prendre (connecteurs.ts, `IDS_RESERVES`). */
@@ -91,6 +92,10 @@ const LIMITES = {
   colonnesEcrites: 50,
   publicationsParHeure: 10,
   videoOctets: 64 * 1024 * 1024,
+  // X : « Image size: <= 5 MB » (https://docs.x.com/x-api/media/quickstart/best-practices).
+  imageXOctets: 5 * 1024 * 1024,
+  // X : 280 caractères comptés à sa façon (https://docs.x.com/fundamentals/counting-characters).
+  poidsX: 280,
   doublonMs: 30 * 60_000,
 };
 
@@ -191,6 +196,23 @@ export function toolsForModel(): Outil[] {
     outils.push(fn("tiktok__videos", "Liste les dernières vidéos publiques du compte TikTok, avec leurs vues, j'aime, commentaires et partages.", { nombre: P.nombre }));
     if (aChoisi("tiktok", "ecriture")) {
       outils.push(fn("tiktok__publier_video", "Publie sur TikTok une vidéo du dossier de travail (MP4, MOV ou WebM, 64 Mo au plus). Tant que l'application TikTok de l'organisation n'a pas passé l'audit de TikTok, la vidéo reste privée. La personne voit le fichier, le titre et la visibilité et doit l'accepter avant.", { fichier: { type: "string", description: "Le chemin de la vidéo dans le dossier de travail." }, titre: { type: "string", description: "Le titre ou la légende, 2200 caractères au plus." }, confidentialite: { type: "string", enum: ["SELF_ONLY", "MUTUAL_FOLLOW_FRIENDS", "FOLLOWER_OF_CREATOR", "PUBLIC_TO_EVERYONE"], description: "Qui la verra ; « SELF_ONLY » (moi seul) par défaut." } }, ["fichier"]));
+    }
+  }
+  if (connecte("x")) {
+    outils.push(fn("x__profil", "Donne le compte X (ex-Twitter) connecté : nom, abonnés, abonnements, nombre de posts."));
+    outils.push(fn("x__publications", "Liste les derniers posts du compte X connecté, avec leurs statistiques publiques : vues, j'aime, reposts, réponses, citations, signets. Chaque lecture est facturée par X à l'organisation.", { nombre: { type: "number", description: "Nombre de posts, 10 par défaut, entre 5 et 100." } }));
+    if (aChoisi("x", "ecriture")) {
+      outils.push(
+        fn(
+          "x__publier",
+          "Publie un post sur X (ex-Twitter), au nom du compte connecté : un texte de 280 caractères au plus (un emoji, un caractère chinois ou japonais compte double, une adresse compte 23), et une image du dossier de travail si on la donne. Ni réponse, ni citation, ni mention voulue d'un autre compte. La personne voit le texte entier et doit l'accepter avant ; une publication ne se reprend pas. N'appelle cet outil qu'une fois par post.",
+          {
+            texte: { type: "string", description: "Le texte du post." },
+            image: { type: "string", description: "Facultatif : le chemin d'une image JPEG, PNG ou WebP du dossier de travail, 5 Mo au plus." },
+          },
+          ["texte"],
+        ),
+      );
     }
   }
   return outils;
@@ -316,6 +338,12 @@ async function executer(nom: string, args: Record<string, unknown>): Promise<Res
       return tiktokVideos(args);
     case "tiktok__publier_video":
       return tiktokPublier(args);
+    case "x__profil":
+      return xProfil();
+    case "x__publications":
+      return xPublications(args);
+    case "x__publier":
+      return xPublier(args);
   }
   return refus(`Outil inconnu : ${nom}.`);
 }
@@ -794,11 +822,56 @@ async function tiktokVideos(args: Record<string, unknown>): Promise<Resultat> {
  *    remplacé entre les deux par un lien, ou grossi, c'est un autre contenu,
  *    d'une autre taille que celle annoncée, qui partait.
  */
-async function videoDuDossier(brut: unknown): Promise<{ chemin: string; taille: number; type: string; octets: Buffer } | { erreur: string }> {
+/**
+ * Ce qu'un service accepte du dossier de travail. La vidéo de TikTok d'abord ;
+ * l'image de X (28/09/2026) passe par les mêmes gardes (la fonction
+ * s'appelait `videoDuDossier` avant elle), et en plus par sa
+ * signature : une image se reconnaît à ses premiers octets, et un fichier
+ * renommé en « .jpg » ne part pas.
+ */
+interface Genre {
+  cle: string;
+  service: string;
+  /** « la vidéo », « l'image » : dans les messages. */
+  quoi: string;
+  /** « une vidéo MP4, MOV ou WebM » : ce que le service accepte. */
+  forme: string;
+  types: Record<string, string>;
+  max: number;
+  signature?: (tete: Buffer) => string | null;
+}
+
+const VIDEO_TIKTOK: Genre = {
+  cle: "fichier",
+  service: "TikTok",
+  quoi: "la vidéo",
+  forme: "une vidéo MP4, MOV ou WebM",
+  types: { ".mp4": "video/mp4", ".mov": "video/quicktime", ".webm": "video/webm" },
+  max: LIMITES.videoOctets,
+};
+
+/** Le type d'image que disent les premiers octets (JPEG, PNG, WebP), ou rien. */
+export function typeImage(tete: Buffer): string | null {
+  if (tete.length >= 3 && tete[0] === 0xff && tete[1] === 0xd8 && tete[2] === 0xff) return "image/jpeg";
+  if (tete.length >= 8 && tete.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) return "image/png";
+  if (tete.length >= 12 && tete.subarray(0, 4).toString("latin1") === "RIFF" && tete.subarray(8, 12).toString("latin1") === "WEBP") return "image/webp";
+  return null;
+}
+
+const IMAGE_X: Genre = {
+  cle: "image",
+  service: "X",
+  quoi: "l'image",
+  forme: "une image JPEG, PNG ou WebP",
+  types: { ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png", ".webp": "image/webp" },
+  max: LIMITES.imageXOctets,
+  signature: typeImage,
+};
+
+async function fichierDuDossier(brut: unknown, g: Genre): Promise<{ chemin: string; taille: number; type: string; octets: Buffer } | { erreur: string }> {
   const v = critereSur(brut, 1000);
-  if (!v) return { erreur: "Donne « fichier » : le chemin de la vidéo dans le dossier de travail." };
-  const types: Record<string, string> = { ".mp4": "video/mp4", ".mov": "video/quicktime", ".webm": "video/webm" };
-  if (!types[extname(v).toLowerCase()]) return { erreur: "TikTok accepte les vidéos MP4, MOV ou WebM." };
+  if (!v) return { erreur: `Donne « ${g.cle} » : le chemin de ${g.quoi} dans le dossier de travail.` };
+  if (!g.types[extname(v).toLowerCase()]) return { erreur: `${g.service} accepte seulement ${g.forme}.` };
   let racine: string;
   let reel: string;
   try {
@@ -807,18 +880,18 @@ async function videoDuDossier(brut: unknown): Promise<{ chemin: string; taille: 
   } catch {
     return { erreur: `Fichier introuvable : ${v}.` };
   }
-  if (reel !== racine && !reel.startsWith(racine + sep)) return { erreur: "Ce fichier est hors du dossier de travail : TikTok ne reçoit que ce qui s'y trouve." };
+  if (reel !== racine && !reel.startsWith(racine + sep)) return { erreur: `Ce fichier est hors du dossier de travail : ${g.service} ne reçoit que ce qui s'y trouve.` };
   if (estProtege(reel)) return { erreur: "Ce fichier est dans une zone protégée : refusé." };
-  const type = types[extname(reel).toLowerCase()];
-  if (!type) return { erreur: "Ce chemin mène à un fichier qui n'est pas une vidéo MP4, MOV ou WebM : refusé." };
+  const type = g.types[extname(reel).toLowerCase()];
+  if (!type) return { erreur: `Ce chemin mène à un fichier qui n'est pas ${g.forme} : refusé.` };
   let fichier: Awaited<ReturnType<typeof open>> | undefined;
   try {
     // O_NOFOLLOW : si le chemin réel est devenu un lien entre-temps, l'ouverture échoue au lieu de le suivre.
     fichier = await open(reel, constants.O_RDONLY | constants.O_NOFOLLOW);
     const info = await fichier.stat();
     if (!info.isFile()) return { erreur: "Ce chemin n'est pas un fichier." };
-    if (info.nlink > 1) return { erreur: "Ce fichier a plusieurs noms (lien dur) : on ne peut pas dire qu'il est seulement dans le dossier de travail. Refusé ; copiez la vidéo dans le dossier." };
-    if (info.size === 0 || info.size > LIMITES.videoOctets) return { erreur: "La vidéo doit faire entre 1 octet et 64 Mo." };
+    if (info.nlink > 1) return { erreur: `Ce fichier a plusieurs noms (lien dur) : on ne peut pas dire qu'il est seulement dans le dossier de travail. Refusé ; copiez ${g.quoi} dans le dossier.` };
+    if (info.size === 0 || info.size > g.max) return { erreur: `${g.quoi.charAt(0).toUpperCase()}${g.quoi.slice(1)} doit faire entre 1 octet et ${Math.round(g.max / (1024 * 1024))} Mo.` };
     const octets = Buffer.alloc(info.size);
     let lus = 0;
     while (lus < info.size) {
@@ -826,7 +899,9 @@ async function videoDuDossier(brut: unknown): Promise<{ chemin: string; taille: 
       if (bytesRead === 0) break;
       lus += bytesRead;
     }
-    if (lus !== info.size) return { erreur: "La vidéo a changé pendant sa lecture : rien n'a été envoyé. Réessaie quand elle ne bouge plus." };
+    if (lus !== info.size) return { erreur: `${g.quoi.charAt(0).toUpperCase()}${g.quoi.slice(1)} a changé pendant sa lecture : rien n'a été envoyé. Réessaie quand le fichier ne bouge plus.` };
+    // Les octets lus, pas le nom : un texte renommé « photo.jpg » n'est pas une image.
+    if (g.signature && g.signature(octets.subarray(0, 16)) !== type) return { erreur: `Ce fichier ne contient pas ${g.forme} (son contenu ne correspond pas à son extension) : refusé.` };
     return { chemin: reel, taille: info.size, type, octets };
   } catch {
     return { erreur: `Fichier illisible : ${v}.` };
@@ -836,7 +911,7 @@ async function videoDuDossier(brut: unknown): Promise<{ chemin: string; taille: 
 }
 
 async function tiktokPublier(args: Record<string, unknown>): Promise<Resultat> {
-  const video = await videoDuDossier(args.fichier);
+  const video = await fichierDuDossier(args.fichier, VIDEO_TIKTOK);
   if ("erreur" in video) return refus(video.erreur);
   const titre = typeof args.titre === "string" ? args.titre.trim() : "";
   if (titre.length > 2200) return refus("Titre trop long : TikTok accepte 2200 caractères au plus.");
@@ -877,5 +952,132 @@ async function tiktokPublier(args: Record<string, unknown>): Promise<Resultat> {
     const statut = await tiktok("/v2/post/publish/status/fetch/", { publish_id: donnees.publish_id }).catch(() => null);
     const etatPub = texte(((statut?.json.data ?? {}) as { status?: unknown }).status, 40);
     return { ok: true, content: `Vidéo envoyée à TikTok (publication ${texte(donnees.publish_id, 80)}, état : ${etatPub || "en cours de traitement"}, visibilité ${voulue}). TikTok la traite encore quelques minutes. C'est fait : ne la renvoie pas.` };
+  });
+}
+
+/* --------------------------------- X ------------------------------------- */
+
+/*
+ * X (ex-Twitter), ajouté le 28/09/2026 (oauthNatif.ts, définition `x` ;
+ * SECURITE.md § 42). Trois outils : le compte, ses derniers posts avec leurs
+ * statistiques publiques, et publier un post (texte, et une image du dossier
+ * de travail au plus). Chaque appel est facturé par X à l'organisation
+ * (offre à l'usage) : les lectures sont bornées, et l'outil le dit au modèle.
+ */
+
+/**
+ * Une erreur de X dite simplement. 402 (« paiement requis ») n'est pas décrit
+ * dans les pages lues le 28/09/2026 ; c'est ce qu'un service à crédits rend le
+ * plus probablement quand ils manquent : dit avec prudence.
+ */
+function erreurX(r: ReponseApi): ErreurNatif {
+  if (r.statut === 402) return new ErreurNatif("quota", "X refuse la requête (code 402, paiement requis) : l'application X de l'organisation n'a probablement plus de crédits dans la console de X. Dis-le à l'utilisateur ; rien n'a été fait.");
+  if (r.statut === 429) {
+    const reprise = Number(r.entetes["x-rate-limit-reset"]);
+    return new ErreurNatif("quota", `X limite momentanément le nombre de requêtes${Number.isFinite(reprise) && reprise > 0 ? ` (reprise vers ${dateFrancaise(reprise * 1000)})` : ""}. Réessaie plus tard, et dis-le à l'utilisateur.`);
+  }
+  return erreurApi("X", r);
+}
+
+function idX(): string {
+  const id = idsDe("x").utilisateur ?? "";
+  if (!/^\d{1,19}$/.test(id)) throw new ErreurNatif("acces", "Le compte X connecté n'a pas d'identifiant lisible : il faut le reconnecter.");
+  return id;
+}
+
+/**
+ * Le poids d'un texte selon X (https://docs.x.com/fundamentals/counting-characters) :
+ * forme NFC, une adresse vaut 23, un emoji 2 (une suite liée par des
+ * « zero-width joiners » compte pour un seul), un caractère latin ou une
+ * ponctuation courante 1, le reste 2 (chinois, japonais, coréen…). Les plages
+ * de poids 1 sont celles de la bibliothèque twitter-text, citée par la page.
+ * Une adresse sans « http » (« exemple.fr ») est comptée lettre à lettre :
+ * X la compterait 23 ; il refuserait alors lui-même un post trop long.
+ */
+export function poidsX(brut: string): number {
+  let poids = 0;
+  const sans = brut.normalize("NFC").replace(/https?:\/\/\S+/gi, () => {
+    poids += 23;
+    return "";
+  });
+  const leger = (cp: number) => cp <= 4351 || (cp >= 8192 && cp <= 8205) || (cp >= 8208 && cp <= 8223) || (cp >= 8242 && cp <= 8247);
+  for (const { segment } of new Intl.Segmenter("fr", { granularity: "grapheme" }).segment(sans)) {
+    if (/\p{Extended_Pictographic}/u.test(segment)) {
+      poids += 2;
+      continue;
+    }
+    for (const c of segment) poids += leger(c.codePointAt(0)!) ? 1 : 2;
+  }
+  return poids;
+}
+
+async function xProfil(): Promise<Resultat> {
+  const r = await appelerApi("x", (a) => ({ methode: "GET", hote: "api.x.com", chemin: `/2/users/me?user.fields=${encodeURIComponent("username,name,description,created_at,public_metrics,verified")}`, entetes: bearer(a) }));
+  if (r.statut !== 200) throw erreurX(r);
+  const u = (r.json.data ?? {}) as Record<string, unknown>;
+  const m = (u.public_metrics ?? {}) as Record<string, unknown>;
+  return {
+    ok: true,
+    content: assembler("Compte X connecté :", [
+      `@${texte(u.username, 50)} (« ${texte(u.name, 100)} »), créé le ${quand(u.created_at)}`,
+      `Abonnés : ${nombre(m.followers_count)} ; abonnements : ${nombre(m.following_count)} ; posts : ${nombre(m.tweet_count)} ; listes : ${nombre(m.listed_count)}`,
+      `Description : ${texte(u.description, 500) || "(aucune)"}`,
+    ]),
+  };
+}
+
+async function xPublications(args: Record<string, unknown>): Promise<Resultat> {
+  // X exige entre 5 et 100 (https://docs.x.com/x-api/users/get-posts, `max_results`).
+  const n = Math.max(5, borner(args.nombre, 10, 100));
+  const r = await appelerApi("x", (a) => ({
+    methode: "GET",
+    hote: "api.x.com",
+    chemin: `/2/users/${idX()}/tweets?max_results=${n}&exclude=retweets&tweet.fields=${encodeURIComponent("created_at,public_metrics")}`,
+    entetes: bearer(a),
+  }));
+  if (r.statut !== 200) throw erreurX(r);
+  const posts = Array.isArray(r.json.data) ? (r.json.data as Record<string, unknown>[]) : [];
+  const lignes = posts.map((p) => {
+    const m = (p.public_metrics ?? {}) as Record<string, unknown>;
+    const id = texte(p.id, 25);
+    return `- ${quand(p.created_at)} (identifiant ${id}) : ${nombre(m.impression_count)} vues, ${nombre(m.like_count)} j'aime, ${nombre(m.retweet_count)} reposts, ${nombre(m.reply_count)} réponses, ${nombre(m.quote_count)} citations, ${nombre(m.bookmark_count)} signets${/^\d{1,19}$/.test(id) ? ` (https://x.com/i/web/status/${id})` : ""} : ${texte(p.text, 1500) || "(sans texte)"}`;
+  });
+  return { ok: true, content: lignes.length ? assembler(`${lignes.length} dernier(s) post(s) du compte X :`, lignes) : "Aucun post sur ce compte X." };
+}
+
+async function xPublier(args: Record<string, unknown>): Promise<Resultat> {
+  const brut = typeof args.texte === "string" ? args.texte.trim() : "";
+  if (!brut) return refus("Donne « texte », le texte du post.");
+  const poids = poidsX(brut);
+  if (poids > LIMITES.poidsX) return refus(`Texte trop long pour X : il compte ${poids} sur ${LIMITES.poidsX} (un emoji, un caractère chinois ou japonais compte double, une adresse 23). Raccourcis-le ; rien n'a été publié.`);
+  // L'image est lue ici, par le fichier ouvert et vérifié, avant la carte de sousGarde : ce sont ces octets-là qui partent.
+  const image = args.image !== undefined && args.image !== "" ? await fichierDuDossier(args.image, IMAGE_X) : null;
+  if (image && "erreur" in image) return refus(image.erreur);
+  return sousGarde("x", `${brut}|${image ? `${image.chemin}|${image.taille}` : ""}`, async () => {
+    let media: string | null = null;
+    if (image) {
+      // Envoi simple, en base 64 dans un corps JSON (https://docs.x.com/x-api/media/upload-media, `media_category: tweet_image`).
+      const envoi = await appelerApi("x", (a) => ({
+        methode: "POST",
+        hote: "api.x.com",
+        chemin: "/2/media/upload",
+        entetes: { ...bearer(a), "Content-Type": "application/json" },
+        corps: JSON.stringify({ media: image.octets.toString("base64"), media_category: "tweet_image" }),
+        delaiTotalMs: 2 * 60_000,
+      }));
+      const id = (envoi.json.data as { id?: unknown } | undefined)?.id;
+      if (envoi.statut !== 200 || typeof id !== "string" || !/^\d{1,25}$/.test(id)) throw erreurX(envoi);
+      media = id;
+    }
+    const r = await appelerApi("x", (a) => ({
+      methode: "POST",
+      hote: "api.x.com",
+      chemin: "/2/tweets",
+      entetes: { ...bearer(a), "Content-Type": "application/json" },
+      corps: JSON.stringify({ text: brut, ...(media ? { media: { media_ids: [media] } } : {}) }),
+    }));
+    if (r.statut !== 201 && r.statut !== 200) throw erreurX(r);
+    const id = texte((r.json.data as { id?: unknown } | undefined)?.id, 25);
+    return { ok: true, content: `Post publié sur X${media ? ", avec l'image" : ""}${/^\d{1,19}$/.test(id) ? ` (identifiant ${id}, https://x.com/i/web/status/${id})` : ""}. C'est fait : ne le republie pas.` };
   });
 }

@@ -2,13 +2,13 @@ import { apiFetch } from "./endpoint";
 import { t, tf } from "@/lib/i18n";
 
 /**
- * Google Sheets, Google Slides, YouTube, LinkedIn, Facebook, Instagram et
- * TikTok (gateway/src/oauthNatif.ts). Aucun jeton ni secret ne revient par
+ * Google Sheets, Google Slides, YouTube, LinkedIn, Facebook, Instagram,
+ * TikTok et X (gateway/src/oauthNatif.ts). Aucun jeton ni secret ne revient par
  * ici : le secret d'une application part une fois, à l'enregistrement, et
  * l'instance le garde chiffré.
  */
 
-export type IdNatif = "sheets" | "slides" | "youtube" | "linkedin" | "facebook" | "instagram" | "tiktok";
+export type IdNatif = "sheets" | "slides" | "youtube" | "linkedin" | "facebook" | "instagram" | "tiktok" | "x";
 export type IdChoix = "ecriture" | "page";
 
 export interface EtatNatif {

@@ -18,7 +18,11 @@ import { t, tf } from "./langue.ts";
  * parle donc à leur API, depuis l'instance, sans intermédiaire (PROJET.md
  * § 3.5, « ne jamais introduire un tiers que le client n'a pas déjà choisi »).
  *
- * Ce module porte ce qui est commun aux sept : l'autorisation, les jetons,
+ * X (ex-Twitter) les a rejoints le même jour, sur la branche `connecteur-x`,
+ * à la demande de Medhi : même modèle, mêmes règles (définition `x`
+ * ci-dessous, SECURITE.md § 42).
+ *
+ * Ce module porte ce qui est commun aux huit : l'autorisation, les jetons,
  * leur renouvellement, leur révocation, et l'état montré à l'écran. Les outils
  * de l'agent sont dans outilsNatifs.ts.
  *
@@ -60,11 +64,12 @@ import { t, tf } from "./langue.ts";
  * ⚠ Rien de ceci n'a été essayé contre les vrais services : ni compte, ni
  * application de développeur n'étaient disponibles le 28/09/2026. Tout est
  * vérifié contre de faux serveurs locaux (scripts/securite.mjs, section
- * 15 bis), d'après la documentation citée à chaque définition.
+ * 15 bis), d'après la documentation citée à chaque définition. X de même
+ * (section H de scripts/essai-natifs.mjs).
  */
 
-export type IdNatif = "sheets" | "slides" | "youtube" | "linkedin" | "facebook" | "instagram" | "tiktok";
-export const IDS_NATIFS: IdNatif[] = ["sheets", "slides", "youtube", "linkedin", "facebook", "instagram", "tiktok"];
+export type IdNatif = "sheets" | "slides" | "youtube" | "linkedin" | "facebook" | "instagram" | "tiktok" | "x";
+export const IDS_NATIFS: IdNatif[] = ["sheets", "slides", "youtube", "linkedin", "facebook", "instagram", "tiktok", "x"];
 export const estIdNatif = (v: unknown): v is IdNatif => typeof v === "string" && (IDS_NATIFS as string[]).includes(v);
 
 /** Une option cochée à la connexion : des portées de plus, et dit si elles demandent une revue chez le fournisseur. */
@@ -92,6 +97,22 @@ interface Definition {
   cheminBoucle: string;
   cleClient: "client_id" | "client_key";
   formeIdentifiant: RegExp;
+  /**
+   * Le secret peut manquer : le fournisseur accepte un client « public », que
+   * PKCE seul protège (X, application de type « Native App »).
+   */
+  secretFacultatif?: boolean;
+  /**
+   * Avec un secret, le client s'identifie par l'en-tête `Authorization: Basic`
+   * (RFC 6749 § 2.3.1) plutôt que par `client_secret` dans le corps (X).
+   */
+  identificationBasique?: boolean;
+  /**
+   * Le fournisseur refuse « localhost » dans l'adresse de retour : l'adresse
+   * vue par le navigateur est réécrite en 127.0.0.1, qui mène à la même
+   * passerelle, à l'écoute sur la boucle locale par défaut (config.ts).
+   */
+  sansLocalhost?: boolean;
   extras: Record<string, string>;
   /** Hôtes que ce service a le droit de joindre. Aucun autre, quoi qu'on demande. */
   hotes: string[];
@@ -326,6 +347,84 @@ export const DEFINITIONS: Record<IdNatif, Definition> = {
       "https://developers.tiktok.com/doc/content-posting-api-get-started",
     ],
   },
+  /*
+   * X (ex-Twitter), OAuth 2.0 « Authorization Code Flow with PKCE », lu le
+   * 28/09/2026 (https://docs.x.com/fundamentals/authentication/oauth-2-0/authorization-code,
+   * https://docs.x.com/fundamentals/authentication/oauth-2-0/user-access-token) :
+   *  - consentement sur `https://x.com/i/oauth2/authorize`, échange et
+   *    renouvellement sur `https://api.x.com/2/oauth2/token`, révocation sur
+   *    `https://api.x.com/2/oauth2/revoke` ; portées séparées par des espaces ;
+   *  - PKCE S256 (ou `plain`, que l'on n'emploie pas) ; le code ne vaut que
+   *    30 secondes ; `state` jusqu'à 500 caractères ;
+   *  - jeton d'accès de deux heures, jeton d'actualisation seulement avec
+   *    `offline.access` ;
+   *  - deux sortes d'applications : « confidentielles » (Web App, Automated
+   *    App or Bot), qui ont un secret et s'identifient par `Authorization:
+   *    Basic`, sans `client_id` dans le corps ; « publiques » (Native App,
+   *    Single Page App), sans secret, `client_id` dans le corps, PKCE seul
+   *    (https://docs.x.com/fundamentals/developer-apps). Les deux sont acceptées ;
+   *  - adresse de retour : correspondance exacte, dix au plus par application,
+   *    « For local development, use http://127.0.0.1 (not localhost) »
+   *    (même page). Aucun joker de port n'est documenté : on revient donc par
+   *    la route publique de l'instance, dont l'adresse ne change pas, réécrite
+   *    en 127.0.0.1 quand le navigateur l'atteint par « localhost ».
+   *
+   * Portées (tableau de la même page) : `tweet.read` et `users.read` pour lire
+   * le compte et ses posts, `offline.access` pour rester branché ; publier :
+   * `tweet.write`, et `media.write` pour joindre une image. `POST /2/tweets`
+   * exige `tweet.read`, `users.read` et `tweet.write` ; `POST /2/media/upload`,
+   * `media.write` (https://docs.x.com/x-api/posts/create-post,
+   * https://docs.x.com/x-api/media/upload-media).
+   *
+   * Offres (https://docs.x.com/x-api/getting-started/pricing et
+   * https://docs.x.com/changelog, lus le 28/09/2026) : depuis le 06/02/2026,
+   * l'accès se paie à l'usage, par crédits achetés d'avance dans la console
+   * (console.x.com). L'ancienne offre gratuite (« Legacy Free ») est fermée :
+   * ses utilisateurs récents ont reçu un bon unique de 10 $ ; les offres
+   * Basic et Pro restent ouvertes à leurs abonnés, qui peuvent passer à
+   * l'usage. Tarifs publiés : lire un post 0,005 $ ; lire ses propres posts
+   * (« Owned Reads », quand le compte connecté possède l'application)
+   * 0,001 $ depuis le 20/04/2026 ; lire un compte 0,010 $ ; publier 0,015 $,
+   * 0,20 $ si le post contient une adresse. Plafond : 3 millions de posts lus
+   * par mois. Citer un post, suivre, aimer par l'API : retirés de toutes les
+   * offres en libre-service le 20/04/2026 ; répondre, seulement à qui vous a
+   * mentionné (23/02/2026). Rien de cela n'est proposé ici.
+   *
+   * Limites de débit (https://docs.x.com/x-api/fundamentals/rate-limits) :
+   * `POST /2/tweets` 100 par 15 minutes et par personne, 10 000 par jour pour
+   * l'application ; `GET /2/users/me` 75 par 15 minutes ;
+   * `GET /2/users/:id/tweets` 900 par 15 minutes et par personne ;
+   * `POST /2/media/upload` 500 par 15 minutes et par personne. Une réponse 429
+   * dit de patienter (en-tête `x-rate-limit-reset`).
+   */
+  x: {
+    id: "x",
+    nom: "X",
+    google: false,
+    consentement: "https://x.com/i/oauth2/authorize",
+    jetons: { hote: "api.x.com", chemin: "/2/oauth2/token", methode: "POST" },
+    lecture: ["tweet.read", "users.read", "offline.access"],
+    choix: [{ id: "ecriture", portees: ["tweet.write", "media.write"], revue: false }],
+    implicites: [],
+    separateur: " ",
+    pkce: "S256",
+    retour: "instance",
+    cheminBoucle: "",
+    cleClient: "client_id",
+    // Exemple de la documentation : « M1M5R3BMVy13QmpScXkzTUt5OE46MTpjaQ ».
+    formeIdentifiant: /^[A-Za-z0-9_-]{16,80}$/,
+    secretFacultatif: true,
+    identificationBasique: true,
+    sansLocalhost: true,
+    extras: {},
+    hotes: ["api.x.com"],
+    documentation: [
+      "https://docs.x.com/fundamentals/authentication/oauth-2-0/authorization-code",
+      "https://docs.x.com/fundamentals/developer-apps",
+      "https://docs.x.com/x-api/getting-started/pricing",
+      "https://docs.x.com/x-api/fundamentals/rate-limits",
+    ],
+  },
 };
 
 const AGENT = "Connecteur-Natif/1";
@@ -518,11 +617,11 @@ export async function enregistrerApplication(id: unknown, brutId: unknown, brutS
   const clientId = typeof brutId === "string" ? brutId.trim() : "";
   const secret = typeof brutSecret === "string" ? brutSecret.trim() : "";
   if (!def.formeIdentifiant.test(clientId)) return { ok: false, message: tf("Cet identifiant n'a pas la forme de ceux de {0}. Vérifiez le copier-coller.", def.nom) };
-  // Les trois exigent le secret pour échanger le code (documentation citée plus haut).
-  if (!secret || secret.length > 200 || /\s/.test(secret)) return { ok: false, message: tf("Collez aussi le secret de l'application {0}, sans espace.", def.nom) };
+  // LinkedIn, Meta et TikTok exigent le secret pour échanger le code ; X l'accepte sans (client « public », PKCE seul).
+  if (secret.length > 200 || /\s/.test(secret) || (!secret && !def.secretFacultatif)) return { ok: false, message: tf("Collez aussi le secret de l'application {0}, sans espace.", def.nom) };
   if (!chiffrementActif()) return { ok: false, message: t("Le chiffrement des données n'est pas actif sur cette machine : le secret ne sera pas enregistré en clair.") };
   const avant = magasin!.applications[id];
-  magasin!.applications[id] = { clientId, secret: chiffrer(secret, placeSecret(id)), depuis: new Date().toISOString(), par: qui };
+  magasin!.applications[id] = { clientId, ...(secret ? { secret: chiffrer(secret, placeSecret(id)) } : {}), depuis: new Date().toISOString(), par: qui };
   // Une autre application : le compte branché avec l'ancienne ne vaut plus.
   const compte = magasin!.comptes[id];
   if (compte && compte.clientId !== clientId) compte.perdu = new Date().toISOString();
@@ -632,11 +731,27 @@ export async function accesValide(id: IdNatif, forcer = false): Promise<string> 
   }
 }
 
+/**
+ * Comment le client se présente à l'échange de jetons. X, avec un secret :
+ * `Authorization: Basic`, rien dans le corps (« You don't need client id for
+ * confidential clients with a valid Authorization Header ») ; sans secret :
+ * `client_id` dans le corps. Les autres : identifiant et secret dans le
+ * corps, comme leur documentation le montre.
+ */
+function identification(id: IdNatif, client: { clientId: string; clientSecret: string }): { entetes: Record<string, string>; champs: Record<string, string> } {
+  const def = DEFINITIONS[id];
+  if (def.identificationBasique && client.clientSecret) {
+    // RFC 6749 § 2.3.1 : identifiant et secret encodés comme dans un formulaire, puis en base 64.
+    const paire = `${encodeURIComponent(client.clientId)}:${encodeURIComponent(client.clientSecret)}`;
+    return { entetes: { Authorization: `Basic ${Buffer.from(paire, "utf8").toString("base64")}` }, champs: {} };
+  }
+  return { entetes: {}, champs: { [def.cleClient]: client.clientId, ...(client.clientSecret ? { client_secret: client.clientSecret } : {}) } };
+}
+
 async function rafraichir(id: IdNatif, j: JetonsClairs): Promise<JetonsClairs | null> {
   const def = DEFINITIONS[id];
   const client = clientDe(id);
   if (!client.ok) return null;
-  const secret: Record<string, string> = client.clientSecret ? { client_secret: client.clientSecret } : {};
   if (id === "instagram") {
     // Renouvelable après 24 heures et avant expiration (documentation de la connexion Instagram).
     const r = await envoyer(id, { methode: "GET", hote: "graph.instagram.com", chemin: `/refresh_access_token?${formulaire({ grant_type: "ig_refresh_token", access_token: j.acces })}`, octets: LIMITES.jetons });
@@ -644,11 +759,10 @@ async function rafraichir(id: IdNatif, j: JetonsClairs): Promise<JetonsClairs | 
   }
   // Facebook : pas de jeton d'actualisation ; LinkedIn : seulement pour certains partenaires.
   if (!j.actualisation) return null;
-  const p: Record<string, string> =
-    id === "tiktok"
-      ? { client_key: client.clientId, ...secret, grant_type: "refresh_token", refresh_token: j.actualisation }
-      : { client_id: client.clientId, ...secret, grant_type: "refresh_token", refresh_token: j.actualisation };
-  const r = await envoyer(id, { methode: "POST", hote: def.jetons.hote, chemin: def.jetons.chemin, entetes: FORM, corps: formulaire(p), octets: LIMITES.jetons });
+  // `identification` rend `client_key` pour TikTok, `client_id` pour les autres, ou l'en-tête Basic de X.
+  const qui = identification(id, client);
+  const p: Record<string, string> = { ...qui.champs, grant_type: "refresh_token", refresh_token: j.actualisation };
+  const r = await envoyer(id, { methode: "POST", hote: def.jetons.hote, chemin: def.jetons.chemin, entetes: { ...FORM, ...qui.entetes }, corps: formulaire(p), octets: LIMITES.jetons });
   if (r.statut !== 200 || typeof r.json.access_token !== "string") return null;
   return {
     acces: r.json.access_token,
@@ -748,7 +862,10 @@ function pageBoucle(res: http.ServerResponse, statut: number, titre: string, mes
 /** L'adresse de retour à déclarer chez le fournisseur, telle que l'écran doit la montrer. */
 export function adresseDeRetour(id: IdNatif, base: string): string {
   const def = DEFINITIONS[id];
-  if (def.retour === "instance") return `${base.replace(/\/+$/, "")}/helix/oauth/retour`;
+  if (def.retour === "instance") {
+    const racine = base.replace(/\/+$/, "");
+    return `${def.sansLocalhost ? racine.replace(/^(https?:\/\/)localhost(?=:\d{1,5}$|$)/i, "$1127.0.0.1") : racine}/helix/oauth/retour`;
+  }
   // Google accepte tout port de la boucle locale pour une application « de bureau » ; TikTok, le joker `*`.
   return def.google ? "http://127.0.0.1" : `http://127.0.0.1:*${def.cheminBoucle}`;
 }
@@ -913,15 +1030,15 @@ async function echanger(f: Flux, code: string, qui: string): Promise<string> {
     // Meta documente un GET, paramètres dans l'adresse, de serveur à serveur.
     r = await envoyer(id, { methode: "GET", hote: def.jetons.hote, chemin: `${def.jetons.chemin}?${formulaire({ client_id: client.clientId, redirect_uri: f.redirection, ...secret, code })}`, octets: LIMITES.jetons });
   } else {
+    const qui = identification(id, client);
     const p: Record<string, string> = {
-      [def.cleClient]: client.clientId,
-      ...secret,
+      ...qui.champs,
       code,
       grant_type: "authorization_code",
       redirect_uri: f.redirection,
       ...(def.pkce ? { code_verifier: f.verificateur } : {}),
     };
-    r = await envoyer(id, { methode: "POST", hote: def.jetons.hote, chemin: def.jetons.chemin, entetes: FORM, corps: formulaire(p), octets: LIMITES.jetons });
+    r = await envoyer(id, { methode: "POST", hote: def.jetons.hote, chemin: def.jetons.chemin, entetes: { ...FORM, ...qui.entetes }, corps: formulaire(p), octets: LIMITES.jetons });
   }
   // Instagram rend parfois ses champs dans `data[0]`.
   const json = Array.isArray(r.json.data) && r.json.data[0] && typeof r.json.data[0] === "object" ? (r.json.data[0] as Record<string, unknown>) : r.json;
@@ -962,7 +1079,13 @@ async function echanger(f: Flux, code: string, qui: string): Promise<string> {
     accordees = decouper(json.scope ?? json.permissions);
   }
   if (accordees.length === 0) {
-    // Les quatre documentations disent rendre les portées accordées : leur absence est une anomalie, pas un accord.
+    /*
+     * Les quatre documentations disent rendre les portées accordées : leur
+     * absence est une anomalie, pas un accord. X ne l'écrit pas dans sa page ;
+     * la réponse montrée sur son forum des développeurs porte `scope`
+     * (« offline.access tweet.write media.write users.read tweet.read ») :
+     * la même règle vaut, à vérifier sur le vrai service (PROJET.md).
+     */
     await revoquer();
     throw new ErreurNatif("portee", t("Le service n'a pas dit quels accès il accordait : rien n'a été enregistré."));
   }
@@ -1053,6 +1176,14 @@ async function identite(id: IdNatif, acces: string, client: { clientId: string; 
       if (r.statut !== 200 || !u) throw echec(r);
       return { compte: texteCourt(u.display_name) || "TikTok", ids: typeof u.open_id === "string" ? { openId: u.open_id.slice(0, 100) } : {} };
     }
+    case "x": {
+      // https://docs.x.com/x-api/users/get-my-user (`tweet.read`, `users.read`). L'identifiant sert ensuite à lire ses posts.
+      const r = await envoyer(id, { methode: "GET", hote: "api.x.com", chemin: "/2/users/me?user.fields=username,name", entetes: bearer });
+      const u = (r.json.data ?? {}) as { id?: unknown; username?: unknown; name?: unknown };
+      if (r.statut !== 200 || typeof u.id !== "string" || !/^\d{1,19}$/.test(u.id)) throw echec(r);
+      const pseudo = texteCourt(u.username, 50);
+      return { compte: pseudo ? `@${pseudo}` : texteCourt(u.name) || "X", ids: { utilisateur: u.id } };
+    }
   }
 }
 
@@ -1071,6 +1202,20 @@ async function revocation(id: IdNatif, j: JetonsClairs): Promise<boolean> {
   if (id === "tiktok" && client.ok) {
     const r = await envoyer(id, { methode: "POST", hote: "open.tiktokapis.com", chemin: "/v2/oauth/revoke/", entetes: FORM, corps: formulaire({ client_key: client.clientId, client_secret: client.clientSecret, token: j.acces }), octets: LIMITES.jetons });
     return r.statut === 200;
+  }
+  if (id === "x" && client.ok) {
+    /*
+     * « A revoke token invalidates an access token or refresh token » : les
+     * deux sont révoqués, l'actualisation d'abord (c'est elle qui ferait
+     * renaître un accès). Même identification qu'à l'échange du code.
+     */
+    const qui = identification(id, client);
+    let tous = true;
+    for (const jeton of [j.actualisation, j.acces].filter((v): v is string => Boolean(v))) {
+      const r = await envoyer(id, { methode: "POST", hote: "api.x.com", chemin: "/2/oauth2/revoke", entetes: { ...FORM, ...qui.entetes }, corps: formulaire({ ...qui.champs, token: jeton }), octets: LIMITES.jetons }).catch(() => null);
+      tous = tous && r?.statut === 200;
+    }
+    return tous;
   }
   // LinkedIn et Instagram : pas de révocation documentée pour ces parcours ; l'écran dit où retirer l'accès.
   return false;

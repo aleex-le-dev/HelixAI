@@ -213,7 +213,11 @@ try {
     const script = `require("http").createServer((q, r) => { r.setHeader("content-type", "application/json"); r.end(${JSON.stringify(reponse)}); }).listen(${portReste}, "127.0.0.1");`;
     const reste = spawn(join(d2, "llamacpp", "b11146", "llama-server"), ["-e", script], { stdio: "ignore" });
     intrus.push(() => reste.kill());
-    await attendre(800);
+    // Qu'il écoute vraiment avant la passerelle (une copie de 100 Mo démarre lentement sur une machine chargée).
+    for (let i = 0; i < 100; i++) {
+      if (await fetch(`http://127.0.0.1:${portReste}/`).then(() => true, () => false)) break;
+      await attendre(200);
+    }
     await demarrer(d2, { HELIX_MOTEUR: "llamacpp", HELIX_LLAMACPP_PORT: String(portReste) });
     const m2 = await fetch(`${G}/v1/models`, { headers: { Authorization: `Bearer ${JETON}` } }).then((r) => r.json()).catch(() => ({}));
     verifier("un serveur resté de Helix (même fichier exécuté, lu par lsof) est repris", (m2.data ?? []).some((m) => m.id === "llamacpp/qwen3-1.7b"), JSON.stringify(m2).slice(0, 200));

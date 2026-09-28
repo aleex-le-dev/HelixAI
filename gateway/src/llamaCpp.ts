@@ -483,7 +483,7 @@ export function assurerServeurLlama(): Promise<boolean> {
  */
 function ecouteurReconnu(): boolean {
   const lsof = (args: string[]) =>
-    execFileSync("/usr/sbin/lsof", args, { encoding: "utf8", timeout: 5000, stdio: ["ignore", "pipe", "ignore"] });
+    execFileSync("/usr/sbin/lsof", args, { encoding: "utf8", timeout: 15_000, stdio: ["ignore", "pipe", "ignore"] });
   try {
     const pids = lsof(["-nP", "-a", `-iTCP:${portLlamaCpp()}`, "-sTCP:LISTEN", "-t"])
       .split("\n")

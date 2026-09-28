@@ -1,5 +1,6 @@
 import { existsSync, renameSync } from "node:fs";
 import { syncBuiltinESMExports } from "node:module";
+import { join } from "node:path";
 import { promisify } from "node:util";
 // L'objet du module lui-même (modifiable), pas son espace de noms : c'est lui que lisent les autres modules.
 import processusEnfants, { spawnSync, type ChildProcess } from "node:child_process";
@@ -82,7 +83,13 @@ export function arreterArbre(p: ChildProcess | null | undefined, signal: NodeJS.
 export function arreterPidArbre(pid: number, signal: NodeJS.Signals = "SIGTERM"): void {
   if (process.platform === "win32") {
     try {
-      spawnSync("taskkill", ["/pid", String(pid), "/T", "/F"], { stdio: "ignore", windowsHide: true, timeout: 10_000 });
+      /*
+       * Par son chemin dans System32, pas par le PATH (28/09/2026) : un
+       * `taskkill.exe` posé plus tôt dans le PATH aurait été lancé à sa place.
+       * Toujours par numéro (`/pid`), jamais par nom (`/IM`).
+       */
+      const taskkill = join(process.env.SystemRoot ?? process.env.windir ?? "C:\\Windows", "System32", "taskkill.exe");
+      spawnSync(taskkill, ["/pid", String(pid), "/T", "/F"], { stdio: "ignore", windowsHide: true, timeout: 10_000 });
     } catch {
       /* déjà arrêté */
     }

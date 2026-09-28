@@ -364,9 +364,12 @@ function ChoixOutils({
 function ChoixLiberte({
   valeur,
   onChange,
+  windows,
 }: {
   valeur: Liberte;
   onChange: (v: Liberte) => void;
+  /** L'instance tourne sous Windows (OpenClaw natif, 28/09/2026) : ses commandes y passent par PowerShell. */
+  windows: boolean;
 }) {
   return (
     <div className="space-y-2">
@@ -390,6 +393,12 @@ function ChoixLiberte({
       {valeur === "libre" && (
         <InfoBox tone="warning" leading={<TriangleAlert size={15} strokeWidth={1.75} />}>
           {t("Au palier Libre, il peut lancer n'importe quelle commande sur la machine de l'instance, avec les droits de")}{" "}{branding.name}{" "}{t(": installer, modifier, supprimer. Chaque outil qu'il utilise est inscrit au journal d'activité, mais pas le détail de la commande.")}
+          {/*
+           * Windows natif : OpenClaw y lance ses commandes par PowerShell, pas
+           * par un shell Unix (plateformeOpenClaw.ts). Dit ici, pour ce seul
+           * palier : les autres ne lancent aucune commande.
+           */}
+          {windows && <>{" "}{t("Sur cette instance (Windows), ses commandes passent par PowerShell : une commande écrite pour macOS ou Linux peut ne pas y marcher.")}</>}
         </InfoBox>
       )}
     </div>
@@ -1381,7 +1390,7 @@ function Reglages({
         manquant={employe.modeleEtat && !employe.modeleEtat.disponible ? { uid: employe.modele, etat: employe.modeleEtat, estProprietaire: true } : undefined}
       />
       <ChoixAutonomie valeur={autonome} onChange={setAutonome} />
-      <ChoixLiberte valeur={liberte} onChange={setLiberte} />
+      <ChoixLiberte valeur={liberte} onChange={setLiberte} windows={etat.moteur.plateforme === "win32"} />
       {aConfirmer && (
         <ConfirmationIdentite
           raison={

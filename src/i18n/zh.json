@@ -3013,6 +3013,7 @@
   "Sur ce canal, il converse et cherche sur le web s'il en a le droit, mais ne touche ni aux mails, ni aux fichiers, ni aux agendas de l'entreprise.": "在此渠道中，它可以交谈，并在获准时搜索网络，但不会触及公司的邮件、文件或日历。",
   "sur ce poste": "在此电脑上",
   "Sur ce poste, les modèles sont préparés par l'intégrateur, et aucun n'est encore disponible. Contactez la personne qui a installé ce poste.": "此设备上的模型由集成方准备，目前尚无可用模型。请联系为此设备进行安装的人员。",
+  "Sur cette instance (Windows), ses commandes passent par PowerShell : une commande écrite pour macOS ou Linux peut ne pas y marcher.": "在此实例上（Windows），它的命令通过 PowerShell 执行：为 macOS 或 Linux 编写的命令可能无法运行。",
   "sur cette machine.": "在此设备上。",
   "sur la machine": "在本机上",
   "sur la machine de l'instance": "在实例所在的机器上",

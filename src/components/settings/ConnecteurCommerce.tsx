@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/Button";
 import { Field, Input } from "@/components/ui/Field";
 import { InfoBox } from "@/components/ui/InfoBox";
 import { ACopier } from "@/components/ui/ACopier";
+import { branding } from "@/config/branding";
 import { formaterDate } from "@/lib/formats";
 import { t, tf } from "@/lib/i18n";
 
@@ -227,7 +228,15 @@ export function ConnecteurCommerce({ id, onChange }: { id: IdCommerce; onChange?
       </Card>
     );
   }
-  if (!etats || !etat) return null;
+  // Instance injoignable (revue du 28/09/2026) : le panneau déplié restait un cadre vide ; il le dit, comme celui des messageries.
+  if (!etats) {
+    return (
+      <InfoBox tone="warning" leading={<ShieldAlert size={15} strokeWidth={1.75} />}>
+        {tf("L'instance {0} ne répond pas. Réessayez quand elle est joignable.", branding.name)}
+      </InfoBox>
+    );
+  }
+  if (!etat) return null;
   const admin = etats.administrateur;
 
   const messages = (

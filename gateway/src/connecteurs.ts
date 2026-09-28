@@ -1029,6 +1029,8 @@ export interface EtatConnecteurs {
   chiffrementDonnees: boolean;
   /** Le profil de déploiement autorise-t-il une commande hors catalogue ? */
   commandeLibre: boolean;
+  /** Issue du dernier retour d'autorisation, par connecteur (`issuesRetour`). */
+  issues: Record<string, { ok: boolean; message: string; quand: string }>;
 }
 
 /**
@@ -1080,6 +1082,7 @@ export async function etat(): Promise<EtatConnecteurs> {
     ),
     chiffrementDonnees: chiffrementActif(),
     commandeLibre: commandeLibreAutorisee(),
+    issues: Object.fromEntries(issuesRetour),
   };
 }
 
@@ -1473,6 +1476,8 @@ export async function connecter(
   }
 
   const retour = `${base.replace(/\/+$/, "")}/helix/oauth/retour`;
+  // Une nouvelle demande : l'issue de la précédente ne vaut plus pour elle.
+  issuesRetour.delete(id);
   memoriserRetour(id, retour);
   await noterDemandeur(id, entree.url, qui);
 
@@ -1559,7 +1564,40 @@ export async function acheverAutorisation(
 ): Promise<{ ok: boolean; message: string; label?: string }> {
   const attendu = await connecteurDuRetour(etat);
   if (!attendu) return { ok: false, message: t("Cette autorisation n'est plus en attente.") };
+  const r = await achever(attendu, code);
+  noterIssue(attendu.id, r);
+  return r;
+}
 
+/**
+ * Issue du dernier retour d'autorisation, par connecteur (revue du
+ * 28/09/2026). L'écran qui attend l'accord (Connecteurs.tsx) ne voyait que
+ * « branché » ou rien : un refus dans la page du service, un échange refusé ou
+ * un serveur muet après l'accord laissaient « En attente de votre accord… »
+ * cinq minutes, puis le bouton revenait sans un mot ; seule la page ouverte
+ * dans le navigateur disait pourquoi. En mémoire seulement : rien de secret,
+ * et rien à garder après un redémarrage.
+ */
+const issuesRetour = new Map<string, { ok: boolean; message: string; quand: string }>();
+function noterIssue(id: string, r: { ok: boolean; message: string }): void {
+  issuesRetour.set(id, { ok: r.ok, message: r.message, quand: new Date().toISOString() });
+}
+
+/**
+ * Le service a renvoyé une erreur au lieu d'un code (`error=access_denied`…).
+ * Un `state` qui n'attend rien ne touche à rien. Le message est celui que la
+ * page de retour montre (index.ts), fixe, sans le texte du service.
+ */
+export async function refuserAutorisation(etat: string, message: string): Promise<void> {
+  if (!etat) return;
+  const attendu = await connecteurDuRetour(etat).catch(() => null);
+  if (attendu) noterIssue(attendu.id, { ok: false, message });
+}
+
+async function achever(
+  attendu: { id: string; url: string; retour: string; pour?: string },
+  code: string,
+): Promise<{ ok: boolean; message: string; label?: string }> {
   const entree = entreeCatalogue(attendu.id);
   if (!entree?.url) return { ok: false, message: t("Connecteur inconnu.") };
 

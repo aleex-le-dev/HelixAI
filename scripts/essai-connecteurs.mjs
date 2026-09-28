@@ -453,6 +453,21 @@ const branches = {};
     adresse?.origin === "https://auth.atlassian.com" && adresse.pathname === "/authorize" && adresse.searchParams.get("code_challenge_method") === "S256" && (adresse.searchParams.get("code_challenge") ?? "").length >= 43 && (adresse.searchParams.get("state") ?? "").length >= 32 && adresse.searchParams.get("resource") === "https://mcp.atlassian.com/v2/mcp" && adresse.searchParams.get("client_id") === inscrit?.client.client_id,
     depart.adresse,
   );
+  /*
+   * Un refus dans la page du service (revue du 28/09/2026) : l'écran qui
+   * attend l'accord le lit dans l'état des connecteurs, au lieu d'attendre
+   * cinq minutes. Un refus au `state` inventé ne note rien.
+   */
+  const etatDemande = adresse?.searchParams.get("state") ?? "";
+  await appel(`/helix/oauth/retour?error=access_denied&state=${"z".repeat(32)}`);
+  const sansIssue = (await (await appel("/helix/connecteurs", { headers: A })).json()).issues ?? {};
+  const refusRetour = await appel(`/helix/oauth/retour?error=access_denied&state=${encodeURIComponent(etatDemande)}`);
+  const issueRefus = ((await (await appel("/helix/connecteurs", { headers: A })).json()).issues ?? {}).atlassian;
+  verifier(
+    "Atlassian : un refus dans la page du service est noté pour l'écran qui attend (issue en échec, message fixe), un refus au state inventé ne note rien",
+    refusRetour.status === 400 && !sansIssue.atlassian && issueRefus?.ok === false && /access_denied/.test(issueRefus?.message ?? ""),
+    JSON.stringify({ sansIssue, issueRefus }),
+  );
   // Sans page d'autorisation (code d'avant la revérification), la suite échoue sans s'arrêter.
   const accord = depart.adresse ? await accorder(depart.adresse) : { code: "", state: "" };
   const faux = await appel(`/helix/oauth/retour?code=${accord.code}&state=${"x".repeat(32)}`);
@@ -464,6 +479,8 @@ const branches = {};
   verifier("Atlassian : le bon retour aboutit (le code s'échange avec le vérificateur PKCE gardé par l'instance), et la page le dit dans la langue du navigateur (elle était toujours en anglais)", retour.status === 200 && /branché/.test(page) && Boolean(echange) && new URLSearchParams(echange.corps).get("resource") === "https://mcp.atlassian.com/v2/mcp", `${retour.status} ${page.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").slice(0, 200)}`);
   const vu = (await installes()).find((c) => c.id === "atlassian");
   verifier("Atlassian : branché, serveur démarré, un outil listé par le transport « streamable » avec le jeton en Bearer", vu?.running === true && vu.toolCount === 1 && vu.distant === true && recues.some((x) => x.hote === "mcp.atlassian.com" && x.methode === "POST" && x.chemin === "/v2/mcp" && /tools\/list/.test(x.corps)), JSON.stringify(vu));
+  const issueFinale = ((await (await appel("/helix/connecteurs", { headers: A })).json()).issues ?? {}).atlassian;
+  verifier("Atlassian : après le bon retour, l'issue notée est un succès (le refus d'avant ne compte plus)", issueFinale?.ok === true, JSON.stringify(issueFinale));
   branches.atlassian = vu?.running === true;
   const rejoue = await appel(`/helix/oauth/retour?code=${encodeURIComponent(accord.code)}&state=${encodeURIComponent(accord.state)}`);
   verifier("Atlassian : le même retour rejoué ne mène plus à rien (400)", rejoue.status === 400, rejoue.status);

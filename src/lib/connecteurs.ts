@@ -68,6 +68,12 @@ export interface EtatConnecteurs {
   installes: ConnecteurInstalle[];
   chiffrementDonnees: boolean;
   commandeLibre: boolean;
+  /**
+   * Issue du dernier retour d'autorisation, par connecteur (28/09/2026) : un
+   * refus dans la page du service se lit ici, au lieu d'attendre en vain.
+   * Absent d'une instance plus ancienne.
+   */
+  issues?: Record<string, { ok: boolean; message: string; quand: string }>;
 }
 
 export interface Resultat {

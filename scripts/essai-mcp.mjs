@@ -497,6 +497,8 @@ const codes = new Map();
 const acces = new Set();
 const actualisations = new Set();
 let compteur = 0;
+/** Délai ajouté à chaque renouvellement de jeton (commande `/__lent`). */
+let lenteurRenouvellement = 0;
 /** Chaque demande reçue par le faux modèle. */
 const auModele = [];
 
@@ -634,11 +636,16 @@ const fauxWeb = serveurHttp(async (req, res) => {
     // Commandes de l'essai : les jetons d'accès expirent, ou tout est révoqué.
     if (url.pathname === "/__expirer") return (acces.clear(), json(res, 200, {}));
     if (url.pathname === "/__revoquer") return (acces.clear(), actualisations.clear(), json(res, 200, {}));
+    // Un renouvellement lent, pour que deux appels simultanés se croisent (28/09/2026).
+    if (url.pathname === "/__lent") return ((lenteurRenouvellement = Number(url.searchParams.get("ms")) || 0), json(res, 200, {}));
     return json(res, 404, {});
   }
   recues.push({ hote, methode: req.method, chemin: url.pathname + url.search, corps });
   if (hote === "mcp.linear.app") return fauxLinear(req, res, corps);
-  if (hote === "auth.essai.example") return fauxAutorisation(req, res, corps);
+  if (hote === "auth.essai.example") {
+    if (lenteurRenouvellement && /grant_type=refresh_token/.test(corps)) await attendre(lenteurRenouvellement);
+    return fauxAutorisation(req, res, corps);
+  }
   return json(res, 404, {});
 });
 const PORT_FAUX = await portLibre();
@@ -825,6 +832,29 @@ try {
   const c2 = await chat(passerelle, [["linear__get_issue", { id: "LIN-2" }]]);
   const renouv = recues.slice(avantRenouv).find((x) => x.chemin === "/token" && /grant_type=refresh_token/.test(x.corps));
   verifier("jeton d'accès expiré : renouvelé par le jeton d'actualisation, l'appel passe", Boolean(renouv) && c2.fins[0]?.ok && /LIN-2/.test(c2.texte), `${renouv?.corps} ${JSON.stringify(c2.fins)}`);
+
+  /*
+   * Deux Chats en même temps sur un jeton expiré (revue du 28/09/2026). Le
+   * serveur d'autorisation fait tourner le jeton d'actualisation (un seul
+   * usage), comme Atlassian ou Linear. Avant la correction, les deux appels
+   * renouvelaient chacun avec le même jeton ; le second recevait
+   * `invalid_grant`, et le SDK effaçait alors les jetons neufs que le premier
+   * venait d'enregistrer : les deux appels échouaient, et le service restait
+   * à reconnecter.
+   */
+  await fetch(`http://127.0.0.1:${PORT_FAUX}/__expirer`);
+  await fetch(`http://127.0.0.1:${PORT_FAUX}/__lent?ms=800`);
+  const avantCroise = recues.length;
+  const [x1, x2] = await Promise.all([chat(passerelle, [["linear__get_issue", { id: "LIN-X1" }]]), chat(passerelle, [["linear__get_issue", { id: "LIN-X2" }]])]);
+  await fetch(`http://127.0.0.1:${PORT_FAUX}/__lent?ms=0`);
+  const renouvCroises = recues.slice(avantCroise).filter((x) => x.chemin === "/token" && /grant_type=refresh_token/.test(x.corps));
+  verifier(
+    "deux appels simultanés sur un jeton expiré : un seul renouvellement part, et les deux appels passent",
+    renouvCroises.length === 1 && x1.fins[0]?.ok && /LIN-X1/.test(x1.texte) && x2.fins[0]?.ok && /LIN-X2/.test(x2.texte),
+    `${renouvCroises.length} renouvellement(s) ; ${JSON.stringify(x1.fins)} ${JSON.stringify(x2.fins)}`,
+  );
+  const x3 = await chat(passerelle, [["linear__get_issue", { id: "LIN-X3" }]]);
+  verifier("après ces deux appels, l'accès est toujours là : un troisième appel passe", x3.fins[0]?.ok && /LIN-X3/.test(x3.texte), JSON.stringify(x3.fins));
 
   // Redémarrage de la passerelle : tout est relu du magasin chiffré.
   passerelle.processus.kill("SIGTERM");

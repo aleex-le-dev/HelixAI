@@ -21,6 +21,7 @@ import { InfoBox } from "@/components/ui/InfoBox";
 import { ACopier } from "@/components/ui/ACopier";
 import { LogoMarqueGrand } from "@/components/settings/TuileService";
 import { estNatifProjet, GuideProjet, libelleChoixProjet, pourquoiApplicationProjet, revueProjet } from "@/components/settings/ConnecteurProjets";
+import { branding } from "@/config/branding";
 import { formaterDate } from "@/lib/formats";
 import { t, tf } from "@/lib/i18n";
 // Google Docs, Google Forms, Dropbox (28/09/2026) : leurs textes vivent à part.
@@ -253,7 +254,18 @@ export function ConnecteurNatif({ id, onChange }: { id: IdNatif; onChange?: () =
       </Card>
     );
   }
-  if (!etats || !etat) return null;
+  /*
+   * Instance injoignable (revue du 28/09/2026) : le panneau déplié restait un
+   * cadre vide, sans rien dire. Il le dit, comme celui des messageries.
+   */
+  if (!etats) {
+    return (
+      <InfoBox tone="warning" leading={<ShieldAlert size={15} strokeWidth={1.75} />}>
+        {tf("L'instance {0} ne répond pas. Réessayez quand elle est joignable.", branding.name)}
+      </InfoBox>
+    );
+  }
+  if (!etat) return null;
   const admin = etats.administrateur;
   const logo = id === "youtube" ? <LogoYouTube nom={etat.nom} /> : null;
 

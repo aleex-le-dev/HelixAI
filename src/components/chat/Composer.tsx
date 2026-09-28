@@ -456,12 +456,17 @@ function EntreeRechercheWeb({
     >
       <Globe size={16} strokeWidth={1.75} className={cn("shrink-0", possible ? "text-foreground" : "text-muted-foreground")} />
       <span className="min-w-0 flex-1">
-        <span className="flex min-w-0 items-center gap-3">
+        {/*
+          Pas de points de suspension ici, à la différence des autres entrées :
+          le nom du moteur est l'information, et il se coupait à 375 px en
+          japonais (« 質問は DuckDuck… »). La phrase passe à la ligne à la place.
+        */}
+        <span className="flex min-w-0 flex-wrap items-baseline gap-x-3">
           <span className={cn("shrink-0 whitespace-nowrap text-sm", possible ? "text-foreground" : "text-muted-foreground")}>
             {t("Rechercher sur le web")}
           </span>
           {possible && etat && (
-            <span className="truncate text-xs text-muted-foreground">{tf("Vos questions partent à {0}", etat.moteur)}</span>
+            <span className="text-xs text-muted-foreground">{tf("Vos questions partent à {0}", etat.moteur)}</span>
           )}
         </span>
         {raison && <span className="mt-0.5 block text-xs text-muted-foreground">{raison}</span>}

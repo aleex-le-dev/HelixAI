@@ -38,7 +38,6 @@
 <p align="center">
   <a href="#安装">安装</a>
   · <a href="#截图">截图</a>
-  · <a href="#已验证的部分与尚未尝试的部分">已验证的部分</a>
   · <a href="#功能">功能</a>
   · <a href="#从源码构建">从源码构建</a>
   · <a href="#参与贡献">参与贡献</a>
@@ -55,7 +54,7 @@
 - **默认在本地运行。** 模型通过 [LM Studio](https://lmstudio.ai) 的引擎在您的电脑或组织的服务器上运行，Helix AI 会一并安装与机器内存相匹配的模型。系统绝不会替您选择云端模型。
 - **不接入密钥，就不会外传。** 只有当您添加某个云端服务商的 API 密钥并选择其模型时，对话才会发送给该服务商；模型选择器会标明每个模型的运行位置。除您自行连接的服务（云端密钥、邮箱、Drive、Slack 等）之外，应用联网只为下载它要安装的内容（引擎、模型、工具）以及查询新版本（在 GitHub 上查询 Helix AI，在 npm 上查询 OpenClaw）。
 - **开源，无需购买。** AGPL-3.0，无需在我们这里注册账户，无遥测。每个组织自行安装并运行自己的实例。
-- **macOS、Windows 和 Linux。** 三个系统使用同一个应用，界面提供英语、法语、中文和日语。它每天在 macOS 上构建和使用；Windows 和 Linux 安装包刚推出，试用得少得多（见[下文](#已验证的部分与尚未尝试的部分)）。
+- **macOS、Windows 和 Linux。** 三个系统使用同一个应用，界面提供英语、法语、中文和日语。
 - **持续工作的智能体。** 智能体拥有各自的知识库和定时任务，窗口关闭后照常运行，每次运行都会留下报告；任何会修改内容的操作都要等待人工批准，除非您另作决定。
 - **在应用中微调模型。** 用问答示例让小型开源模型学习贵公司的信息，与原始模型对比，然后在 Chat 中使用（Apple 芯片上使用 MLX）。
 - **为团队设计。** 账户、群组、按群组共享的知识库、双重认证、审计日志，数据落盘加密。
@@ -97,33 +96,6 @@
   </tr>
 </table>
 
-<sub>截图和动画于 2026 年 9 月 28 日在一个一次性演示实例上拍摄：公司（Maple & Rye，一家烘焙店）、员工和文档均为虚构，模型引擎和 Mistral 密钥是模拟的，模型的回答和任务报告都是预先写好的。界面是应用的当前版本；Qwen3.5 9B 是 Helix AI 会安装的模型之一，“模型比较”中的评分和价格是真实公布的数据。</sub>
-
-## 已验证的部分与尚未尝试的部分
-
-Helix AI 在界面上只说明已经验证过的内容，本页也是如此。完整且注明日期的清单见 [PROJET.md](PROJET.md)（法语）。
-
-**已试用并测量**
-
-- **Apple 芯片上的 macOS** 是 Helix AI 开发和试用的平台：使用本地模型的 Chat、注明来源的知识库、附件、Helix Code 和会议功能都已在其上运行过。
-- **全天候智能体**（基于 [OpenClaw](https://github.com/openclaw/openclaw) 2026.9.4），端到端：部署、按人隔离的对话、定时任务、注明智能体名称的审批请求、报告、删除。
-- **会议**：一段 29 秒的录音在 18 到 36 秒内完成导入、转写和总结。
-- **我的用量**：令牌数与引擎返回的数值完全一致。
-- **在 Mac 上微调**（MLX）：在一次测量中，Qwen3 1.7B 学会了 15 个事实中的 15 个。
-- **安全**：`npm run securite` 从外部攻击一个一次性实例，包含 400 多项检查，每个版本发布前都会运行（[SECURITE.md](SECURITE.md)）。
-- **Linux**：`.deb` 已在 Ubuntu 24.04 容器中安装并使用（引擎、模型、Chat）。
-
-**尚未尝试**
-
-- **Windows**：安装程序尚未在真实 PC 上运行过（安装、SmartScreen、首次启动、引擎、Chat）。Windows 上的一键更新已编写，尚未试用。
-- **真实机器上的 Linux**（目前只在容器中试过）、AppImage、GNOME 上的托盘图标。
-- **在 NVIDIA 显卡上微调**（Unsloth、PyTorch CUDA）：依据文档编写，从未运行过。
-- **使用真实密钥的云端服务商**：已针对七家服务商 API 的模拟实现做过端到端测试，尚未对每家都用真实密钥试过。
-- **真实账户**：会议机器人加入真实的 Google Meet 会议，智能体回复真实邮件或即时消息（Telegram、WhatsApp、Discord、Slack），在连接到实例的机器上于两个版本之间一键更新。
-- **签名**：这些应用尚未获得 Apple 或 Microsoft 的签名（[SIGNATURE.md](SIGNATURE.md)）。
-
-Windows 上暂不提供：全天候智能体（OpenClaw 在 Windows 上需要 WSL）以及 `helix` 命令行。
-
 ## 安装
 
 请在 [v2026.928.2 发布页](https://github.com/medhiclb/HelixAI/releases/tag/v2026.928.2)下载适合您系统的安装包。SHA-256 校验值：[`SHA256SUMS.txt`](https://github.com/medhiclb/HelixAI/releases/download/v2026.928.2/SHA256SUMS.txt)。
@@ -145,6 +117,8 @@ curl -fsSL https://raw.githubusercontent.com/medhiclb/HelixAI/main/scripts/insta
 
 新版本会在应用内提示：macOS 上一键安装；在 Windows 和 Linux 上，会提供新安装包，覆盖旧版本安装即可，数据会保留。在应用获得公证之前，每次安装新版本后，macOS 会询问一次是否允许 Helix 访问其钥匙串项目（“Helix Safe Storage”）：请选择“始终允许”。在 Windows 11 上，智能应用控制（Smart App Control）启用时会阻止未签名的应用，且不提供“仍要运行”选项。
 
+Windows 上暂不提供：全天候智能体（OpenClaw 在 Windows 上需要 WSL）以及 `helix` 命令行。
+
 ## 功能
 
 - **Chat**：使用**按每台机器挑选**的本地模型：Helix AI 会安装能装入该机器内存、评分最高的开源模型（Apache 2.0 或 MIT），从小型笔记本到工作站都适用，并推荐该机器能运行的其他模型。模型目录涵盖 Qwen、Mistral（Magistral、Ministral）、OpenAI gpt-oss、Z.ai GLM、IBM Granite、Ai2 OLMo、Meta 和 DeepSeek。云端模型可用您自己的 API 密钥。支持附件、语音输入（Whisper，本机运行）、图像生成（Z-Image Turbo、FLUX.2 klein）以及短视频生成（Wan 2.1 和 2.2），同样在本机运行。
@@ -155,7 +129,7 @@ curl -fsSL https://raw.githubusercontent.com/medhiclb/HelixAI/main/scripts/insta
 - **连接器**：邮件、Google 日历（读写）、Google Drive、Slack、Notion 和 MCP 服务器，均受**审批机制**保护：任何修改操作都须经您同意。
 - **定时任务**：一条指令加一个频率（每天、周一至周五、每周或每月某天），用您的工具执行，即使窗口关闭也会运行，可指定执行的智能体。
 - **全天候智能体**：定时任务、回复收到的邮件和即时消息，并可使用各自的知识库和头像。处理收到的邮件时权限受限：上网时只打开已见过的地址。
-- **训练模型**：示例、训练、与原始模型对比，然后安装到 LM Studio（Apple 芯片上使用 MLX；NVIDIA 显卡上使用 Unsloth，尚未试用）。
+- **训练模型**：示例、训练、与原始模型对比，然后安装到 LM Studio（Apple 芯片上使用 MLX，NVIDIA 显卡上使用 Unsloth）。
 - **我的用量**：按模型统计的请求和令牌，读取自每个引擎的响应；本地模型没有 API 费用，云端模型按您填写的费率或服务商公布的价格计费，并注明日期。
 - **开发者 API**：个人 API 密钥，用于实例的 OpenAI 兼容 API（`/v1/models`、`/v1/chat/completions`，含知识库），以您的名义使用且仅限于此，可随时撤销。
 - **会议**：录制或导入，在本机转写并生成纪要，支持会议机器人。

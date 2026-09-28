@@ -26,8 +26,10 @@ Each rule fixes a defect that has already happened in this repository.
   gateway. The software ships as a white label.
 - **No hard-coded colour** outside `src/styles/tokens.css`.
 - **The software does not lie.** A button that does nothing, a state claimed without being
-  measured, a green tick that checks nothing: that is a bug, like a crash. What has not been
-  tried is said as such, in the code, the docs and the interface.
+  measured, a green tick that checks nothing: that is a bug, like a crash. Never write
+  "verified" or "tested" for what has not been. What has not been tried yet is recorded in
+  the project's internal documentation (PROJET.md, SECURITE.md, code comments), not on
+  screen nor in the README or release notes: remove the claim, keep any useful advice.
 - **Downloads are pinned and verified**: a fixed version, a checksum written in the code, and
   a licence compatible with the project (Apache 2.0 or MIT; exceptions are listed in
   [PROJET.md](PROJET.md)).

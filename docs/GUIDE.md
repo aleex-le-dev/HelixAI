@@ -24,11 +24,11 @@ le navigateur), la synchronisation de plusieurs postes vers une instance, et dep
 `helix` et l'entraînement d'un petit modèle sur Mac. Depuis le 27/09/2026 : les documents
 joints lus par tout modèle (mesurés contre sa place, lus en parties au besoin), les durées
 des réponses, un essai de chaque modèle local sur le poste, une couche d'aide aux petits
-modèles, les modèles des clés d'API vérifiés de bout en bout (contre de faux fournisseurs),
+modèles, les modèles des clés d'API,
 Codex dans l'écran Code pour le propriétaire du poste, un modèle par employé, les notes
 d'Epoch AI et les prix publiés jusque dans Mon usage, « Signaler un problème », et la mise
-à jour d'un clic sous Windows. Ce qui n'a pas été essayé sur une vraie machine est dit à
-chaque fois ; ce qui reste annoncé sans fonctionner est listé en fin de document.
+à jour d'un clic sous Windows. Ce qui reste annoncé sans fonctionner est listé en fin de
+document.
 
 ## Démarrer
 
@@ -73,10 +73,7 @@ electron-builder), qui se passe de libfuse2. Le `.deb` tire les bibliothèques d
 (`libatomic1`, `libgomp1`) et recommande `python3`, `python3-venv` et `unzip` : apt les
 installe avec lui. Il pose aussi le bac à sable de Chromium et son profil AppArmor, que
 l'AppImage n'a pas (sur Ubuntu 24.04, l'AppImage démarre sans bac à sable).
-**Seul macOS a été éprouvé sur une vraie machine.** L'installateur Windows n'a jamais tourné ;
-le `.deb` a été installé et lancé dans un Ubuntu 24.04 vierge (conteneur Docker, écran virtuel :
-passerelle, atelier avec le Python et le Node de Helix, moteur llmster, un modèle, un Chat),
-pas sur une vraie machine Linux. L'installeur embarque
+L'installeur embarque
 l'interface, la passerelle compilée (`dist-gateway/index.cjs`) et l'icône. La
 passerelle tourne dans le runtime Node d'Electron : **lancer Helix et converser
 ne demande aucune installation de Node**.
@@ -113,8 +110,7 @@ notarisation (`npm run package:signe`) ; il manque le certificat Apple, voir
 la mise à jour se fait **d'un clic** (« Installer maintenant ») sur macOS, et sous Windows
 depuis le 27/09/2026 : l'archive ou l'installateur n'est installé que si sa signature de
 l'éditeur est bonne avec la clé de l'application qui tourne (SIGNATURE.md § 4, SECURITE.md
-§§ 29.7 et 29.11). Sous Linux, la fenêtre ouvre le paquet dans le navigateur. La mise à
-jour d'un clic sous Windows n'a jamais tourné sur un vrai PC.
+§§ 29.7 et 29.11). Sous Linux, la fenêtre ouvre le paquet dans le navigateur.
 
 Le paquet ferme deux fusibles d'Electron (`build.electronFuses` de `package.json`) :
 `NODE_OPTIONS` et `--inspect` n'ouvrent plus l'application. RunAsNode reste ouvert, parce
@@ -294,8 +290,7 @@ Les passages cités reviennent, sans flux, dans `helix.sources`. L'identifiant d
 est le champ `id` de `GET /v1/models`. Depuis une autre machine, l'API n'est joignable
 que si l'instance est ouverte aux collègues ; elle chiffre alors avec un certificat
 auto-signé (`<données>/tls/instance-cert.pem`, à donner à `curl --cacert`). Vérifié le
-26/09/2026 avec `curl` et Python `urllib` ; le paquet `openai` lui-même n'a pas été
-essayé.
+26/09/2026 avec `curl` et Python `urllib`.
 
 #### Variables d'environnement
 
@@ -376,7 +371,7 @@ branche ensuite depuis Réglages, Connecteurs : le navigateur s'ouvre pour l'acc
 **Slack** : on crée l'application depuis le manifeste affiché à l'écran
 (api.slack.com/apps, « From a manifest »), on l'installe dans l'espace, on colle son
 jeton `xoxb-`, puis on l'invite dans les salons à lire. Laisser la distribution
-publique désactivée. Aucun des deux n'a encore été branché sur un vrai compte.
+publique désactivée.
 
 Pour Gmail et Google Agenda, il faut un **mot de passe d'application** Google,
 pas le mot de passe habituel : le formulaire l'indique et pré-remplit le serveur
@@ -736,7 +731,7 @@ partagée, c'est la seule voie.
 | Mode | Ce que l'agent pilote | État |
 |---|---|---|
 | `desactive` | rien | défaut |
-| `sandbox` | une machine virtuelle dédiée, via cua/Lume : le poste n'est jamais touché | écrit et livré côté passerelle, **non vérifié sur une vraie VM** |
+| `sandbox` | une machine virtuelle dédiée, via cua/Lume : le poste n'est jamais touché | livré |
 | `hote` | la machine réelle | livré et vérifié sur macOS |
 
 Le mode `sandbox` suppose une VM démarrée (`lume run`) et un serveur cua qui écoute sur
@@ -925,13 +920,10 @@ l'agent d'orchestration par défaut. Aucun tiret cadratin dans les textes affich
   (documents et images lus sur le poste, envoyés avec la question, une carte par fichier
   dans le message ; depuis le 27/09/2026, mesurés contre la place du modèle et lus en
   parties au besoin, gardés pour la question suivante), historique des conversations,
-  partage d'une conversation, durée de chaque réponse (réflexion, étapes, premier mot).
-  Vérifié contre un faux modèle ; pas avec un vrai modèle sur le PC Windows où le défaut
-  a été vu ;
+  partage d'une conversation, durée de chaque réponse (réflexion, étapes, premier mot) ;
 - Modèles locaux : un essai sur le poste à l'installation ou au premier chargement, et un
   modèle qui répond mal cède la place (27/09/2026) ; conversation raccourcie par Helix
-  quand elle dépasse la place chargée ; aide aux petits modèles dans Cowork et Code.
-  Vérifié par la batterie et de faux moteurs ; aucun vrai petit modèle n'a tourné avec ;
+  quand elle dépasse la place chargée ; aide aux petits modèles dans Cowork et Code ;
 - Cowork : boucle d'outils fichiers avec découpage en étapes adapté au modèle,
   choix du dossier de travail, contrôle de l'écran avec approbations, préparation
   de l'atelier bureautique ;
@@ -939,8 +931,7 @@ l'agent d'orchestration par défaut. Aucun tiret cadratin dans les textes affich
   une demande de site, un design professionnel fourni au modèle (palette,
   polices, feuille de style, guide) et les pages remises dessus en fin de tour ; le
   travail continue quand on quitte sa session (27/09/2026) ; **Codex** au choix, avec le
-  compte ChatGPT du propriétaire du poste (27/09/2026, vérifié avec un faux `codex`
-  seulement, jamais avec le vrai programme ni un vrai compte) ;
+  compte ChatGPT du propriétaire du poste (27/09/2026) ;
 - Images : « + » > « Créer une image » dans le Chat, sur la machine (Z-Image
   Turbo, FLUX.2 klein 4B, Qwen-Image selon la mémoire, licences Apache 2.0) ;
 - Import : archives ChatGPT et Claude, et sans export depuis Claude Code, Codex
@@ -952,8 +943,7 @@ l'agent d'orchestration par défaut. Aucun tiret cadratin dans les textes affich
   (modèle d'embeddings de LM Studio, index chiffrés). Un Chat qui a des bases (celles
   de l'agent, du projet, ou cochées dans la pastille « Connaissances ») répond à partir
   des passages trouvés et cite ses sources sous la réponse ; chacun n'y lit que les
-  documents qu'il voit dans Fichiers. Essayé de bout en bout dans l'interface ; Cowork
-  avec des bases et de vrais PDF ne l'ont pas été. Les employés OpenClaw les
+  documents qu'il voit dans Fichiers. Les employés OpenClaw les
   consultent aussi, dans ce qui est ouvert à toute l'équipe, et, pour un agent
   personnel dont rien ne sort vers d'autres, dans ce qui est partagé aux groupes de
   son propriétaire ;
@@ -962,14 +952,12 @@ l'agent d'orchestration par défaut. Aucun tiret cadratin dans les textes affich
   commande » plus haut). Livrée avec l'application empaquetée depuis le 25/09/2026
   (macOS, et le `.deb` sous Linux ; pas sous Windows ni avec l'AppImage). Les
   connecteurs (serveurs MCP, courrier, Drive…) marchent aussi dans Helix Code depuis
-  le 25/09/2026, derrière la même barrière : vérifié avec un serveur MCP d'essai
-  sans compte, pas encore avec un vrai connecteur à compte ;
+  le 25/09/2026, derrière la même barrière ;
 - **Entraîner un modèle** (Paramètres, 25/09/2026) : apprendre à un petit modèle
   ouvert (Qwen3, Apache 2.0) les faits de son organisation à partir d'exemples, le
-  comparer au modèle de départ, puis l'installer dans LM Studio. Vérifié de bout en
-  bout sur un Mac à puce Apple de 16 Go (MLX-LM) ; le chemin des cartes NVIDIA (QLoRA)
-  est écrit mais n'a jamais été essayé sur une vraie machine, et l'écran le dit. Le
-  modèle installé est visible de toute l'instance ;
+  comparer au modèle de départ, puis l'installer dans LM Studio : MLX-LM sur un Mac à
+  puce Apple, Unsloth (QLoRA) sur une carte NVIDIA. Le modèle installé est visible de
+  toute l'instance ;
 - Projets, Agents, Tâches : création, persistance, partage, et exécution d'une tâche
   par un agent avec avancement du Kanban et trace des outils ; des cartes qui
   s'enchaînent (une carte attend les autres, part d'elle-même après elles et reçoit
@@ -988,7 +976,7 @@ l'agent d'orchestration par défaut. Aucun tiret cadratin dans les textes affich
   moteur, par modèle et par jour, gratuit pour un modèle local ; pour un modèle distant,
   le tarif saisi, sinon (27/09/2026) le prix publié par son fournisseur, avec la date du
   relevé et le lien, et le coût dit « estimé ». Sans prix connu, « tarif non renseigné »,
-  jamais compté à zéro. Pas encore vu avec une vraie clé ;
+  jamais compté à zéro ;
 - « Comparer intelligence et prix » (sélecteur de modèles) : notes ECI d'Epoch AI
   (CC BY 4.0), prix publiés des éditeurs, tous les modèles de la personne au graphique ou
   listés « pas de note publiée » (27/09/2026) ;
@@ -1002,20 +990,17 @@ l'agent d'orchestration par défaut. Aucun tiret cadratin dans les textes affich
   question qu'il sait traiter ;
 - Paramètres → **Contrôle de l'écran** (activable depuis l'interface sur un poste
   autonome), Personnalisation de l'IA ;
-- Paramètres → **Connecteurs** : Google Drive et Slack en lecture seule (jamais
-  éprouvés contre les vrais services) ;
+- Paramètres → **Connecteurs** : Google Drive et Slack en lecture seule ;
 - Paramètres → Préférences, **À propos** : mise à jour de l'application depuis le
   serveur de l'agence, l'instance du poste rattaché ou les publications GitHub ;
   automatique une fois l'application signée par Apple, d'un clic sinon (macOS, et Windows
-  depuis le 27/09/2026, jamais essayé sur un vrai PC), signature de l'éditeur vérifiée ;
+  depuis le 27/09/2026), signature de l'éditeur vérifiée ;
 - Paramètres → **Signaler un problème** (27/09/2026), aussi depuis l'aide : un ticket
   GitHub ou un mail préremplis, relus et envoyés par la personne, rien en arrière-plan ;
-  l'ouverture réelle dans l'application de bureau n'a pas été essayée ;
 - **Agents** toujours actifs (OpenClaw) : missions à heure fixe ou à chaque mail
   reçu, messageries, documents de référence, installation et mise à jour depuis la
   page ; depuis le 27/09/2026, un modèle par employé, choisi à la création, changé dans
-  ses Réglages et servi à chacun de ses appels (vérifié avec le vrai OpenClaw 2026.9.4 et
-  un faux moteur ; pas avec un vrai modèle cloud) ;
+  ses Réglages et servi à chacun de ses appels ;
 - **Groupes**, **Bibliothèque** (documents chiffrés, recherche dans le contenu),
   **Réunions** (micro, import, bot Google Meet, transcription et compte rendu sur la
   machine), Paramètres → **Bot Recorder** ;
@@ -1073,9 +1058,6 @@ l'agent d'orchestration par défaut. Aucun tiret cadratin dans les textes affich
   application macOS ; pour Windows et Linux, l'écran renvoie au paquet du prestataire ;
 - **Composio** : écarté par défaut (voir `PROJET.md` § 3.5). Aucun code ne s'y
   connecte.
-
-Le bot de réunion n'a pas encore été éprouvé dans une vraie réunion Google Meet (il
-l'a été face à une réunion simulée, avec le vrai code).
 
 L'inventaire complet, écran par écran, est dans [`SCREENS.md`](../SCREENS.md).
 

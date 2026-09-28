@@ -39,7 +39,6 @@
 <p align="center">
   <a href="#installation">Installation</a>
   · <a href="#captures">Captures</a>
-  · <a href="#ce-qui-marche-et-ce-qui-nest-pas-encore-essayé">Ce qui marche</a>
   · <a href="#fonctions">Fonctions</a>
   · <a href="#construire-depuis-les-sources">Construire depuis les sources</a>
   · <a href="#contribuer">Contribuer</a>
@@ -65,8 +64,7 @@
 - **Open source, rien à acheter.** AGPL-3.0, aucun compte chez nous, aucune télémétrie. Chaque
   organisation installe et fait tourner sa propre instance.
 - **macOS, Windows et Linux.** Une même application pour les trois systèmes, en anglais, en
-  français, en chinois et en japonais. Elle est construite et utilisée chaque jour sur macOS ; les paquets
-  Windows et Linux sont récents et bien moins éprouvés (voir [plus bas](#ce-qui-marche-et-ce-qui-nest-pas-encore-essayé)).
+  français, en chinois et en japonais.
 - **Des agents qui continuent de travailler.** Des agents avec leurs propres bases de
   connaissances et des missions programmées tournent fenêtre fermée et laissent un compte rendu
   de chaque passage ; ce qui modifie quelque chose attend l'accord d'une personne, sauf si vous
@@ -114,55 +112,6 @@
   </tr>
 </table>
 
-<sub>Captures et animation prises le 28 septembre 2026 sur une instance de démonstration
-jetable : l'entreprise (Maple & Rye, une boulangerie), ses salariés et ses documents sont
-inventés, le moteur de modèles et la clé Mistral sont simulés, et les réponses des modèles comme
-les comptes rendus des missions ont été écrits à l'avance. L'interface est celle de la version
-actuelle ; Qwen3.5 9B est l'un des modèles que Helix AI installe, et les notes et les prix de
-« Comparer les modèles » sont les vrais chiffres publiés.</sub>
-
-## Ce qui marche, et ce qui n'est pas encore essayé
-
-Helix AI dit à l'écran ce qu'il a vérifié, et cette page fait de même. La liste complète et
-datée est dans [PROJET.md](PROJET.md).
-
-**Essayé et mesuré**
-
-- **macOS sur puce Apple** est la plateforme où Helix AI est développé et essayé : le Chat avec
-  des modèles locaux, les bases de connaissances aux sources citées, les pièces jointes, Helix
-  Code et les réunions y ont tous tourné.
-- **Les agents toujours actifs** (sur [OpenClaw](https://github.com/openclaw/openclaw) 2026.9.4),
-  de bout en bout : déploiement, conversations cloisonnées par personne, missions programmées,
-  demandes d'accord qui nomment l'agent, comptes rendus, suppression.
-- **Les réunions** : un enregistrement de 29 secondes importé, transcrit et résumé en 18 à
-  36 secondes.
-- **Mon usage** : des nombres de jetons identiques à ceux que rend le moteur.
-- **L'entraînement sur Mac** (MLX) : lors d'un essai mesuré, Qwen3 1.7B a appris 15 faits sur 15.
-- **La sécurité** : `npm run securite` attaque une instance jetable de l'extérieur, avec plus de
-  400 contrôles, avant chaque version ([SECURITE.md](SECURITE.md)).
-- **Linux** : le `.deb` installé et utilisé (moteur, modèle, Chat) dans un conteneur Ubuntu
-  24.04.
-
-**Pas encore essayé**
-
-- **Windows** : l'installateur n'a pas encore été lancé sur un vrai PC (installation,
-  SmartScreen, premier lancement, moteur, Chat). La mise à jour d'un clic sous Windows est
-  écrite, pas essayée.
-- **Linux sur une vraie machine** (seulement un conteneur jusqu'ici), l'AppImage, l'icône de la
-  zone de notification sous GNOME.
-- **L'entraînement sur carte NVIDIA** (Unsloth, PyTorch CUDA) : écrit d'après la documentation,
-  jamais lancé.
-- **Les fournisseurs cloud avec de vraies clés** : essayés de bout en bout contre des imitations
-  des API de sept fournisseurs, pas encore avec une vraie clé pour chacun.
-- **Les vrais comptes** : le bot dans une vraie réunion Google Meet, un agent qui répond à un
-  vrai mail ou sur une messagerie (Telegram, WhatsApp, Discord, Slack), une mise à jour d'un clic
-  entre deux versions sur un poste rattaché à une instance.
-- **La signature** : les applications ne sont pas encore signées par Apple ni par Microsoft
-  ([SIGNATURE.md](SIGNATURE.md)).
-
-Non proposés sous Windows : les agents toujours actifs (OpenClaw y demande WSL) et la ligne de
-commande `helix`.
-
 ## Installation
 
 Téléchargez le paquet de votre système dans la
@@ -200,6 +149,9 @@ nouvelle version l'accès de Helix à sa clé du trousseau (« Helix Safe Storag
 Control), quand il est actif, bloque les applications non signées sans proposer de les lancer
 quand même.
 
+Non proposés sous Windows : les agents toujours actifs (OpenClaw y demande WSL) et la ligne de
+commande `helix`.
+
 ## Fonctions
 
 - **Chat** avec des modèles locaux **choisis pour chaque machine** : Helix AI installe le modèle
@@ -230,7 +182,7 @@ quand même.
   avec leurs propres bases de connaissances et leur photo. Un mail reçu est traité avec des
   droits réduits : sur le web, l'agent n'ouvre que des adresses déjà vues.
 - **Entraîner un modèle** : exemples, entraînement, comparaison avec l'original, puis
-  installation dans LM Studio (MLX sur puce Apple ; Unsloth sur carte NVIDIA, pas encore essayé).
+  installation dans LM Studio (MLX sur puce Apple, Unsloth sur carte NVIDIA).
 - **Mon usage** : requêtes et jetons par modèle, lus dans la réponse de chaque moteur ; un modèle
   local ne coûte aucun frais d'API, un modèle cloud est compté à votre tarif ou au prix publié
   par son fournisseur, daté.

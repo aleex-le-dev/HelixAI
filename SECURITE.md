@@ -4433,3 +4433,104 @@ avec `r_organization_admin` ; les métriques Instagram (`views`, `reach`…) sur
 l'envoi réel d'une vidéo à TikTok ; la révocation chez LinkedIn et Instagram n'est pas
 documentée pour ces parcours (l'écran dit de retirer l'accès dans les réglages du compte).
 Les phrases des cartes restent en français dans les autres langues (même dette que § 35.4).
+
+## 41. Tournée de la 2026.928.2 : connecteurs (28 septembre 2026)
+
+Demandée par Medhi, sur la branche `version-928-2` (connecteurs natifs du § 40 et interface en
+japonais). Instance jetable seulement : `"chiffrement": "fichier"`, dossier de données
+temporaire, LM Studio et exo éteints, faux fournisseurs et faux modèle servis par
+`scripts/essai-natifs.mjs` ; ni `security`, ni `lms`, ni aucun vrai service. Chaque faille
+ci-dessous a été reproduite par un essai, corrigée à la racine, et a son contrôle : dans
+`essai-natifs.mjs` (sections F et G, repris par `npm run securite` sous « natifs : ») et dans
+`scripts/securite.mjs`, section 15 quater. Les contrôles nouveaux échouent sur le code de
+`version-928-2` (12 échecs dans l'essai, dont deux contrôles existants de TikTok que les envois
+en trop font tomber, et 6 dans la section 15 quater, rejoués sur les sources d'avant) et
+réussissent après.
+
+### 41.1 Failles corrigées
+
+| Gravité | Composant | Ce qui se passait | Correctif | Contrôle |
+|---|---|---|---|---|
+| **Élevée** | Chat, appels écrits dans le texte (`chat.ts`, `petitsModeles.ts`) | Soupçon du § 37.4, démontré. Une réponse sans vrai appel qui contient `<tool_call>…</tool_call>` est lancée comme un appel, pour tout modèle. Essayé dans un vrai Chat avec le faux modèle : on lui demande de résumer la page Facebook, il lit les publications par un vrai appel, l'une d'elles (écrite par n'importe qui) contient `<tool_call>{"name":"facebook__publier",…}</tool_call>`, il la recopie dans son résumé ; la passerelle en a fait un appel « du modèle », et la carte « publier le post « Message glissé par un inconnu » » est apparue. Pour un outil sans carte (une lecture, ou tout outil au niveau « Tout approuver »), l'appel serait parti sans rien demander. Même chose pour un mail, une page web, un fichier, un document joint. | Un appel écrit qui répète un appel trouvé dans ce que le modèle a **lu** pendant la demande (résultats d'outils, messages de la personne et documents joints, consignes ; tout sauf ce que le modèle a écrit) n'est pas lancé : il reste du texte dans la réponse (`appelsLus`, `empreinteAppel` : nom réparé et arguments à clés triées ; formes `<tool_call>`, XML de Qwen3.5 nu, objet JSON au milieu d'une phrase). Un appel que le modèle écrit lui-même reste lancé (témoin). | essai G (3 et un témoin), 15 quater (4) |
+| Moyenne | Carte d'accord (`approbation.ts`) | La carte montrait les arguments coupés à 8 000 caractères, alors que `facebook__publier` accepte 60 000 caractères et `sheets__ecrire` 10 000 cellules de 5 000. Essayé : pour un post de 10 800 caractères, la fin n'était pas sur la carte (« … 2 844 caractères de plus, non montrés »), et partait avec l'accord. Un post ne se reprend pas. | Pour les écritures natives, la carte montre jusqu'à 100 000 caractères (zone qui défile) ; au-delà, l'appel est refusé sans carte, et le modèle est prié d'écrire moins à la fois. | essai F (2), 15 quater (1) |
+| Moyenne | Commande `helix` (`cli/helix.mjs`) | Pour une carte hors fichiers, mail et commande, le terminal n'affichait que le résumé : 120 caractères d'un post, rien des cellules d'une feuille. Essayé avec la vraie commande, lancée sans terminal contre l'instance d'essai : la fin du post n'apparaissait nulle part. | Le terminal affiche `arguments`, comme la carte de l'application (« Ce qui partira, en entier »). | essai G (1) |
+| Moyenne | Pages Facebook et LinkedIn (`outilsNatifs.ts`) | La page était prise par identifiant, par nom exact, sinon par la **première** dont le nom contenait le morceau donné. Essayé avec « Boutique Paris » et « Boutique Lyon » : « publier sur la page « Boutique » » partait sur Paris ; la carte ne disait que « Boutique ». | Un morceau de nom qu'une seule page porte suffit ; deux pages possibles, l'appel est refusé avec leurs noms et identifiants. Le nom exact reste accepté (témoin). | essai F (1 et un témoin) |
+| Faible | Limite horaire et doublon (`outilsNatifs.ts`) | La place n'était notée qu'après la réponse du service : deux appels simultanés passaient tous deux le contrôle. Essayé : le même post lancé trois fois en même temps est parti trois fois ; douze publications Instagram lancées ensemble ont toutes été faites (16 dans l'heure, pour une limite de 10). Il faut pour cela plusieurs cartes acceptées (deux Chats, deux onglets) : gravité faible. | `sousGarde` : vérifier et réserver d'un seul tenant, sans `await` entre les deux ; la place est rendue si rien n'est parti. | essai F (2) |
+| Faible | Vidéo TikTok (`outilsNatifs.ts`, `videoDuDossier`) | Trois trous : l'extension était lue sur le nom donné, pas sur le fichier réel (essayé : `deguise.mp4 → notes.txt` a envoyé les notes) ; un **lien dur** du dossier vers un fichier d'ailleurs a pour chemin réel lui-même (essayé : le fichier d'ailleurs est parti) ; le fichier était vérifié puis relu par son nom (`readFile`), donc remplaçable ou agrandi entre les deux (relu, pas provoqué). | Extension jugée sur le chemin réel ; ouverture en `O_NOFOLLOW`, vérifications (`isFile`, un seul nom, taille) sur le fichier ouvert, octets lus par ce même fichier et comptés. | essai F (2), 15 quater (1) |
+| Faible | Image Instagram (`outilsNatifs.ts`, `sortieReseau.ts`) | `https://[::ffff:7f00:1]/` (c'est ainsi que `new URL` réécrit `[::ffff:127.0.0.1]`), `https://localhost./` et `https://metadata.google.internal./` passaient le filtre. L'instance ne télécharge pas l'image (Instagram le fait) : l'adresse n'atteint que les serveurs de Meta, d'où la gravité faible. | Le point final des noms est retiré avant de juger ; `interne()` relit en IPv4 une adresse IPv6 « mappée » écrite en hexadécimal. `interne()` sert aussi, après résolution du nom, au web des employés (`webGarde.ts`) et aux modèles branchés par clé (`fournisseurs.ts`) : ceux-là refusaient déjà ces formes (le nom entre crochets ne se résout pas, essayé), c'est une défense de plus. | essai F (1), 15 quater (2) |
+
+### 41.2 Examiné, et qui tient
+
+- **`state` et PKCE** : un `state` rejoué après la conclusion, faux, ou d'un autre service ne
+  mène à rien (`recevoir` ne trouve la demande que par comparaison à durée constante, et la
+  demande est close à la première réponse) ; relancer une connexion ferme la précédente, dont le
+  `state` ne vaut plus. Le vérificateur PKCE (48 octets) ne quitte pas l'instance. Aucune route
+  ne rend un `state` (l'état ne dit que `attente`). Pas de redirection ouverte : la route
+  publique `/helix/oauth/retour` rend une page fixe, sans `Location`, et le texte d'erreur du
+  fournisseur n'y est pas recopié.
+- **Mélange de jetons** : chaque enveloppe est liée à sa place (`connecteursNatifs#<service>#jetons`) ;
+  une autre application enregistrée rend le compte inutilisable (identifiant du client comparé à
+  chaque appel) ; l'échange du code se fait pour la demande trouvée par son `state`, jamais pour
+  un service nommé par le retour.
+- **Fuites** : ni jeton, ni secret, ni `appsecret_proof` dans les routes, le journal d'audit,
+  la sortie de la passerelle, le disque en clair, ni ce qui est rendu au modèle (contrôles
+  existants de l'essai, rejoués avec le faux modèle et la commande `helix` en plus). Les
+  erreurs de transport ne citent ni l'adresse ni la réponse (`clientHttps.ts`).
+- **Chemins de contournement de la carte** : les écritures natives ne sont ni dans les familles
+  des employés OpenClaw (`serveurOutils.ts` ne sert que `outilsDe`), ni dans celles de l'agent de
+  code (`outilsPourCode`) ; un employé ou OpenCode qui appellerait lui-même `/v1/chat/completions`
+  avec `tools: true` n'a pas de séance (401), une clé d'API est refusée (403). Une tâche
+  programmée agit au nom de sa propriétaire, et la carte, toujours posée, le dit. Un nom
+  réparé (`petitsModeles.ts`) passe la barrière sous son vrai nom, avec les arguments qui
+  partiront. Un accord « toujours confirmé » n'est jamais gardé pour l'appel suivant.
+- **Sheets** : les deux écritures passent par `valueInputOption=RAW` ; la plage est encodée
+  (`encodeURIComponent` : ni `?`, ni `&`, ni `/`) ; aucun autre chemin n'écrit dans une feuille
+  (Drive et Slides sont en lecture seule).
+- **Droits, route par route** : `GET /helix/natifs` pour toute séance (ni jeton ni secret) ;
+  `POST /helix/natifs/{application, application/effacer, connecter, code, oublier}` et
+  `/helix/google/client` pour l'administrateur seul ; écrire ou publier vérifié par l'outil au
+  moment d'agir (`exigerAdministrateur`).
+- **Régressions** : `clientHttps.ts` ne change que le type du corps (texte ou octets) ; Drive,
+  Agenda, Slack et le courrier passent la batterie sans changement. Une régression entre
+  fusions, hors connecteurs, relevée par la batterie : la pile de polices du japonais
+  (`tokens.css`) nommait encore Satoshi, retirée pour sa licence (§ 39) ; remplacée par Plus
+  Jakarta Sans.
+- **Japonais** : `langueDe` (`plan.ts`) et `langue.ts` relus ; ils ne choisissent qu'une langue
+  de réponse et un catalogue, rien qui touche aux droits.
+
+### 41.3 Soupçons, non démontrés
+
+- **Révocation chez Google** : débrancher Sheets, Slides ou YouTube (ou un accès refusé à la
+  relecture des portées) appelle `/revoke`. Les cinq services Google partagent l'application de
+  l'instance ; d'après la documentation de Google, révoquer un jeton peut retirer tout l'accès de
+  cette application au compte, donc aussi Drive et Agenda s'ils sont branchés avec le même compte
+  Google. Drive et Agenda faisaient déjà de même. Pas essayé sans vrai compte Google.
+- **Lecture par les collègues** : toute séance lit, par le modèle, ce que le compte branché voit :
+  toute feuille ou présentation du compte Google dont on connaît l'adresse, les statistiques de
+  la page LinkedIn, les publications des pages Facebook. C'est la règle de Drive (« le Drive de
+  l'entreprise ») ; à dire dans le guide : brancher un compte dédié à l'organisation, pas le
+  compte personnel de l'administrateur. Les outils d'écriture sont aussi proposés au modèle d'un
+  collègue, qui pose une carte puis se voit refuser l'action : pas de fuite, une carte inutile.
+- **Appel décidé par le modèle après une injection** : si le modèle suit une consigne lue (au
+  lieu de la recopier) et fait un vrai appel, ou recompose un appel écrit autrement (entités
+  HTML, morceaux), c'est la carte qui arrête l'action. La carte ne dit pas que la conversation a
+  lu un contenu venu du dehors.
+- **Caractères invisibles** : la carte retire les caractères qui renversent l'ordre d'affichage
+  (`nettoyer`) ; le post, lui, les garde. Un texte peut donc s'afficher chez Facebook autrement
+  que sur la carte. Les mentions de Facebook (`@[identifiant]`) ne sont pas neutralisées comme
+  celles de LinkedIn ; la carte les montre telles quelles.
+- **Limites en mémoire** : les dix écritures par heure et le refus du doublon repartent de zéro au
+  redémarrage de la passerelle ; le doublon est textuel (une virgule de plus fait un autre post),
+  et la limite vaut par service (soixante-dix par heure pour les sept).
+- **Connecteur ajouté avant cette version sous un nom désormais réservé** (« sheets »,
+  « linkedin »…) : ses outils sont aiguillés vers les connexions natives et ne partent plus
+  (aucun ne s'exécute à sa place : c'est une panne, pas une porte). Rien ne le signale à l'écran.
+
+### 41.4 Pas essayé
+
+Les vrais services (aucun compte, aucune application de développeur) ; la vraie commande
+`helix` dans un terminal interactif (l'essai la lance sans terminal, ce qu'elle affiche avant la
+question est le même) ; `O_NOFOLLOW` et le compte des liens durs sous Windows et Linux (sous
+Windows, Node n'a pas `O_NOFOLLOW` : l'ouverture y suit un lien, et seules les vérifications
+sur le fichier ouvert tiennent) ; un vrai modèle qui recopie une publication piégée (le faux
+modèle le fait à coup sûr, un vrai seulement parfois) ; l'interface en japonais à l'écran.

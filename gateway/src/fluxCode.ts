@@ -2,6 +2,7 @@ import type http from "node:http";
 import { api, enMarche, ensureServer, fluxEvenements, portEnCours } from "./opencode.ts";
 import { journaliser } from "./audit.ts";
 import { noterSousSession } from "./sessionsCode.ts";
+import { rtkSousSession } from "./rtk.ts";
 import { permissionRepondueAilleurs, traiterPermissionCode, type DemandeOpenCode } from "./permissionsCode.ts";
 
 /**
@@ -384,6 +385,8 @@ export function traduire(brut: { type?: string; properties?: Record<string, unkn
       }
       // Au registre, sous la propriétaire de la session parente (sessionsCode.ts) : ses droits suivent.
       void noterSousSession(info.id, info.parentID).catch(() => {});
+      // Ses commandes suivent le réglage RTK de la session qui l'a lancé, et comptent pour elle (rtk.ts).
+      rtkSousSession(info.id, racine);
     }
     return;
   }

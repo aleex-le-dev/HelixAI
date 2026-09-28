@@ -7,7 +7,7 @@ import { estAdministrateur } from "../roles.ts";
 import { lookup } from "node:dns/promises";
 import { interne } from "../sortieReseau.ts";
 import { ErreurNatif, messageUtilisateur } from "../oauthNatif.ts";
-import { t, tf } from "../langue.ts";
+import { avecLangueDe, langue, t, tf, type Langue } from "../langue.ts";
 
 /**
  * Commerce et relation client : Stripe, Shopify, WooCommerce, Salesforce,
@@ -934,6 +934,8 @@ interface Flux {
   ecriture: boolean;
   portees: string[];
   qui: string;
+  /** La langue de l'écran de qui a lancé la connexion : celle de l'issue (voir `recevoir`). */
+  langue: Langue;
   minuterie: ReturnType<typeof setTimeout>;
   echangeEnCours: boolean;
 }
@@ -991,6 +993,7 @@ export async function demarrer(brutId: unknown, qui: string, base: string, brutE
     ecriture,
     portees,
     qui,
+    langue: langue(),
     echangeEnCours: false,
     minuterie: setTimeout(() => conclure(id, false, t("Le délai de dix minutes est dépassé : rien n'a été enregistré. Recommencez.")), LIMITES.fluxMs),
   };
@@ -1019,6 +1022,17 @@ export async function recevoir(parametres: URLSearchParams): Promise<{ ok: boole
   const f = [...flux.values()].find((x) => memeEtat(recu, x.etat));
   // Un `state` inconnu n'annule rien : ce serait donner à n'importe qui le moyen d'interrompre.
   if (!f) return { ok: false, message: t("Cette réponse ne correspond à aucune demande de connexion en cours : elle est ignorée.") };
+  /*
+   * Le navigateur qui revient du service n'envoie pas la langue de l'écran
+   * (ni `X-Helix-Langue`, ni `?langue=`) : l'issue, relue ensuite par le
+   * panneau de l'administrateur, était écrite en anglais (vu à l'écran le
+   * 28/09/2026, en français). Elle est écrite dans la langue de qui a lancé
+   * la connexion.
+   */
+  return avecLangueDe({ "x-helix-langue": f.langue }, new URL("http://instance/"), () => conclureRetour(f, parametres));
+}
+
+async function conclureRetour(f: Flux, parametres: URLSearchParams): Promise<{ ok: boolean; message: string; nom?: string }> {
   const def = DEFINITIONS[f.id];
   const erreur = parametres.get("error");
   if (erreur) return { ...conclure(f.id, false, /denied|cancel/i.test(erreur) ? tf("Vous avez refusé l'accès dans {0} : rien n'a été enregistré.", def.nom) : tf("{0} a interrompu l'autorisation : rien n'a été enregistré. Recommencez.", def.nom)), nom: def.nom };

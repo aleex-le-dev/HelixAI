@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { Check, Cloud, CreditCard, ExternalLink, Handshake, Headset, KeyRound, Link2, Loader2, Lock, ShieldAlert, ShoppingBag, ShoppingCart, Trash2, type LucideIcon } from "lucide-react";
 import type { ServiceMaison } from "@/components/settings/Connecteurs";
+import type { CleMarquePetite } from "@/components/ui/marques";
 import { connecterCommerce, enregistrerCommerce, etatCommerce, oublierCommerce, type EtatCommerce, type EtatsCommerce, type IdCommerce } from "@/lib/commerce";
 import { Card } from "@/components/settings/SettingsShell";
 import { Button } from "@/components/ui/Button";
@@ -25,11 +26,12 @@ import { t, tf } from "@/lib/i18n";
 
 /*
  * Icônes neutres (Lucide) en attendant les logos officiels, qu'un autre
- * travail pose : il suffira d'ajouter les clés de marque `stripe`, `shopify`,
- * `woocommerce`, `salesforce`, `pipedrive`, `zendesk` à MARQUE_DU_CONNECTEUR
- * (marquesConnecteurs.ts), qui passe avant l'icône.
+ * travail pose : une ligne de la liste « maison » ne lit pas
+ * MARQUE_DU_CONNECTEUR, il suffira donc de donner ici la clé de marque
+ * (`stripe`, `shopify`, `woocommerce`, `salesforce`, `pipedrive`, `zendesk`)
+ * en quatrième colonne, qui passe avant l'icône.
  */
-const LISTE: [IdCommerce, string, LucideIcon][] = [
+const LISTE: [IdCommerce, string, LucideIcon, CleMarquePetite?][] = [
   ["stripe", "Stripe", CreditCard],
   ["shopify", "Shopify", ShoppingBag],
   ["woocommerce", "WooCommerce", ShoppingCart],
@@ -53,14 +55,14 @@ export function useServicesCommerce(ouvert: string | null, basculer: (cle: strin
     pipedrive: t("Contacts et affaires, notes après accord"),
     zendesk: t("Tickets, réponses après accord"),
   };
-  return LISTE.map(([id, label, icone]) => {
+  return LISTE.map(([id, label, icone, marque]) => {
     const e = etats.find((s) => s.id === id);
     return {
       id,
       label,
       description: e?.configure ? tf("Connecté : {0}", e.compte ?? "") : e?.aReconnecter ? t("Accès perdu, à reconnecter") : description[id],
       categorie: t("Commerce et relation client"),
-      icone,
+      ...(marque ? { marque } : { icone }),
       connecte: Boolean(e?.configure),
       ouvert: ouvert === id,
       onBasculer: () => basculer(id),

@@ -530,6 +530,9 @@ console.log("\nC. Accord dans le navigateur : Salesforce, Pipedrive, Zendesk");
   const echZd = recues.filter((x) => x.hote === ZD && x.chemin === "/oauth/tokens").at(-1);
   const jZd = JSON.parse(echZd?.corps || "{}");
   verifier("Zendesk branché : corps JSON (réponse 201), secret et PKCE ensemble, portées relues", rZd.statut === 200 && jZd.code_verifier && createHash("sha256").update(jZd.code_verifier).digest("base64url") === zd2.p.get("code_challenge") && (await service("zendesk"))?.accordes?.includes("ecriture"), `${rZd.statut} ${rZd.page.replace(/<[^>]+>/g, " ").slice(0, 200)}`);
+  // Le navigateur qui revient ne dit pas la langue de l'écran : l'issue reste dans celle de qui a lancé (ici, le français).
+  const issueZd = (await service("zendesk"))?.issue?.message ?? "";
+  verifier("l'issue de la connexion est écrite dans la langue de l'administrateur qui l'a lancée, pas dans celle du navigateur qui revient", /Zendesk connecté/.test(issueZd) && !/connected/.test(issueZd), issueZd);
   const rejoue = await appel(`/helix/oauth/retour?state=${encodeURIComponent(zd2.p.get("state") ?? "")}&code=CODE-zendesk`);
   verifier("un retour rejoué (même `state`, même code) ne vaut plus rien", rejoue.status === 400, rejoue.status);
 }

@@ -10,7 +10,7 @@ refaite à l'envers.
 
 | | |
 |---|---|
-| Version | 2026.928.6 (`package.json`) |
+| Version | 2026.928.7 (`package.json`) |
 | Dernière mise à jour | 28 septembre 2026 |
 | Vérifié | `npm run securite` : 1649 contrôles, 0 échec (28/09/2026) ; `npm run typecheck` ; traductions à 100 % en anglais, chinois et japonais (interface 3 042 phrases, passerelle 1 020) |
 | Reste à essayer | sur les vraies machines : § 5, « Ce qui reste à essayer sur les postes de Medhi » |
@@ -1987,6 +1987,42 @@ pointeur sous `%USERPROFILE%`), Linux ; le vrai llmster (qu'il suive le pointeur
 dans le code de LM Studio, pas vu) ; la marche à suivre de LM Studio installé (`lms daemon down`,
 déplacement à la main) ; le sélecteur de dossier de l'application empaquetée ; un vrai modèle de
 plusieurs Go déplacé. Détail de sécurité : SECURITE.md § 55.
+
+### 3.21 Windows : le moteur de LM Studio cassé par la 2026.928.6, et le choix du modèle (28/09/2026)
+
+**Vu chez plusieurs personnes sous Windows (captures de Medhi, 2026.928.6)** : « LM Studio daemon is
+not running and no valid installation could be found », puis, après une première correction,
+« Timed out waiting for LM Studio daemon to start » ; l'écran annonçait Qwen3.5 35B A3B pendant que
+l'erreur parlait de Qwen3 1.7B. Jusqu'à la 2026.928.5, le moteur démarrait sous Windows.
+
+**Causes :**
+- **Installation coupée net (prouvée ici)** : `llmster bootstrap` était lancé par `execFile`, dont la
+  sortie est bornée à 1 Mo ; au-delà, Node arrête le programme (`ERR_CHILD_PROCESS_STDIO_MAXBUFFER`,
+  reproduit avec un faux installateur bavard). `lms.exe` était déjà copié, la déclaration
+  (`llmster-install-location.json`, que `lms` exige : `findOrStartLlmster`, lmstudio-js) jamais écrite,
+  et Helix, qui ne regardait que `lms.exe` sous Windows, passait au modèle.
+- **Service qui ne démarre pas (probable, pas vu)** : depuis la 2026.928.6, la passerelle vit dans un
+  `utilityProcess` d'Electron (fusible RunAsNode fermé), et le service de LM Studio qu'elle lance en
+  hérite. Pas de PC Windows ici pour le confirmer.
+- **Carte trompeuse** : chaque modèle échouait à son tour, jusqu'au plus léger, sous la carte figée
+  du modèle conseillé.
+
+**Corrigé (2026.928.7)** : `llmster bootstrap` lancé sans borne de sortie, installation reconnue
+seulement si elle est déclarée (sinon un second essai, puis l'erreur et un diagnostic au journal) ;
+sous Windows, `lms daemon up` et `lms server start` lancés par le processus principal de l'application
+(`electron/moteurWindows.cjs`, seulement ces deux commandes, seulement `lms.exe` du dossier de LM
+Studio), et attente jusqu'à trois minutes au premier démarrage ; la mise en route s'arrête à la
+première panne du moteur, et la carte montre le modèle en cours ; la sortie de la passerelle est
+gardée dans `passerelle.log` (dossier des journaux de l'application), pour voir ce qui se passe chez
+quelqu'un.
+
+**Choix du modèle (demandé par Medhi)** : « Choisir un autre modèle » à la mise en route, parmi les
+seuls modèles qui tiennent sur la machine (`modelesQuiTiennent`), le conseillé coché. Et un modèle
+à experts doit tenir dans la mémoire vive seule, même avec une carte NVIDIA : additionner la carte et
+la mémoire faisait conseiller Qwen3.5 35B A3B sur un PC de 32 Go, gpt-oss 20B sur un PC de 16 Go.
+
+**Pas essayé** : tout cela sur un vrai PC Windows. À vérifier sur le poste de Medhi ou d'une des
+personnes touchées : installation du moteur de bout en bout, démarrage du service, `passerelle.log`.
 
 ## 4. Sécurité
 

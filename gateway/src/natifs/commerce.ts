@@ -1334,8 +1334,8 @@ type Resultat = { ok: boolean; content: string };
 // Les listes lues par la barrière vivent dans commerceRegles.ts, sans aucune dépendance :
 // approbation.ts les lit à son chargement, et les imports croisés de la fusion du
 // 28/09/2026 le faisaient avant que ce module-ci ait fini de se charger.
-import { LECTURES_COMMERCE, ECRITURES_COMMERCE, IDS_COMMERCE, PREFIXES_COMMERCE, type IdCommerce } from "./commerceRegles.ts";
-export { LECTURES_COMMERCE, ECRITURES_COMMERCE, IDS_COMMERCE, PREFIXES_COMMERCE, type IdCommerce };
+import { LECTURES_COMMERCE, ECRITURES_COMMERCE, IDS_COMMERCE, PREFIXES_COMMERCE, resumeCommerce, type IdCommerce } from "./commerceRegles.ts";
+export { LECTURES_COMMERCE, ECRITURES_COMMERCE, IDS_COMMERCE, PREFIXES_COMMERCE, resumeCommerce, type IdCommerce };
 
 /** Préfixes réservés (connecteurs.ts, `IDS_RESERVES`) : aucun connecteur MCP ne peut les prendre. */
 
@@ -1421,46 +1421,6 @@ export function toolsForModel(): Outil[] {
   return o;
 }
 
-/** La phrase de la carte d'accord (approbation.ts). Le texte entier est aussi dans le détail de la carte. */
-export function resumeCommerce(outil: string, args: Record<string, unknown>): string | null {
-  const extrait = (v: unknown, n = 120) => {
-    const s = typeof v === "string" ? v.trim().replace(/\s+/g, " ") : "";
-    return s ? ` « ${s.slice(0, n)}${s.length > n ? " …" : ""} »` : "";
-  };
-  const court = (v: unknown) => (typeof v === "string" || typeof v === "number" ? String(v).slice(0, 40) : "?");
-  switch (outil) {
-    case "stripe__paiements":
-    case "stripe__clients":
-    case "stripe__factures":
-    case "stripe__abonnements":
-      return "consulter Stripe, en lecture seule";
-    case "shopify__commandes":
-    case "shopify__produits":
-    case "shopify__stocks":
-      return "consulter la boutique Shopify";
-    case "woocommerce__commandes":
-    case "woocommerce__produits":
-      return "consulter la boutique WooCommerce";
-    case "salesforce__contacts":
-    case "salesforce__affaires":
-      return "consulter Salesforce";
-    case "pipedrive__contacts":
-    case "pipedrive__affaires":
-      return "consulter Pipedrive";
-    case "zendesk__tickets":
-    case "zendesk__ticket":
-      return "consulter les tickets Zendesk";
-    case "salesforce__noter":
-      return `ajouter dans Salesforce, sur la fiche ${court(args.fiche)}, la note${extrait(args.titre, 80)} :${extrait(args.texte)} (une note ajoutée ne se reprend pas ici)`;
-    case "pipedrive__noter":
-      return `ajouter dans Pipedrive, ${args.affaire !== undefined && args.affaire !== "" ? `sur l'affaire ${court(args.affaire)}` : `sur la personne ${court(args.personne)}`}, la note${extrait(args.texte)} (une note ajoutée ne se reprend pas ici)`;
-    case "zendesk__repondre":
-      return args.publique === true
-        ? `répondre au client sur le ticket Zendesk n° ${court(args.ticket)}, par une réponse publique que Zendesk lui enverra :${extrait(args.texte)} (une réponse envoyée ne se reprend pas)`
-        : `ajouter une note interne au ticket Zendesk n° ${court(args.ticket)} :${extrait(args.texte)}`;
-  }
-  return null;
-}
 
 /** Erreur d'API dite simplement, sans recopier la réponse du service. Un 5xx laisse l'issue incertaine (`sousGarde`). */
 function erreurApi(service: string, r: ReponseApi): ErreurNatif {

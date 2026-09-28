@@ -4,8 +4,7 @@ import { homedir } from "node:os";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { journaliser } from "./audit.ts";
 import { apercuEnvoi, envoiSansAccord, presenterMessage } from "./courrier.ts";
-import { ECRITURES_COMMERCE, LECTURES_COMMERCE } from "./natifs/commerceRegles.ts";
-import { resumeCommerce } from "./natifs/commerce.ts";
+import { ECRITURES_COMMERCE, LECTURES_COMMERCE, resumeCommerce } from "./natifs/commerceRegles.ts";
 import { APERCU_REQUIS, ECRITURES_PROJETS, estEcritureMcpProjet, estLectureMcpProjet, LECTURES_PROJETS, resumeProjet } from "./natifs/projetsRegles.ts";
 // Microsoft 365 (28/09/2026) : noms et phrases des cartes, dans un fichier sans autre dépendance que langue.ts.
 import { ECRITURES_MICROSOFT, LECTURES_MICROSOFT, resumeMicrosoft } from "./natifs/microsoftBase.ts";

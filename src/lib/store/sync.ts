@@ -350,8 +350,19 @@ export function push(collection: Collection): Promise<boolean> {
 }
 
 async function pousser(collection: Collection, reprise = false): Promise<boolean> {
-  if (!online) return false;
   if (JAMAIS_POUSSEES.includes(collection)) return false;
+  /*
+   * Hors ligne, la modification est notée en attente (28/09/2026, vu par
+   * Medhi : « j'ai choisi qwen, il propose gpt nano encore »). Elle ne partait
+   * pas, et rien ne le retenait : la relecture suivante (au lancement, à la
+   * connexion) remettait la copie de l'instance, donc le choix d'avant ; un
+   * Chat créé pendant ce temps disparaissait de même. Notée, elle est fusionnée
+   * à la relecture et renvoyée au retour de l'instance (`refresh`).
+   */
+  if (!online) {
+    noterEnAttente(collection, true);
+    return false;
+  }
   /*
    * Fichier des Chats illisible au démarrage (grandStockage.ts) : la copie
    * locale part d'une liste vide. La pousser effacerait tous les Chats de la
@@ -427,6 +438,7 @@ async function refresh(): Promise<void> {
 
     const touched: Collection[] = [];
     const groupesChanges = ++releves % RELEVES_PAR_GROUPES === 0 && (await relireMesGroupes());
+    const deRetour = !online;
     online = true;
     for (const collection of COLLECTIONS) {
       if (pushing.has(collection)) continue;
@@ -440,6 +452,15 @@ async function refresh(): Promise<void> {
         if (etat === "absente" && readLocal(collection) !== null) await push(collection);
       }
     }
+    /*
+     * L'instance répond de nouveau : ce qui a été modifié ici pendant son
+     * absence repart (28/09/2026). Sans changement en face, rien n'était relu,
+     * donc rien n'était renvoyé : le choix d'un modèle fait pendant un
+     * redémarrage de la passerelle restait sur ce poste seul, et la relecture
+     * suivante le défaisait. Seulement ce qui a déjà été relu cette séance :
+     * pas de poussée à l'aveugle.
+     */
+    if (deRetour) for (const collection of enAttente()) if (relues.has(collection) && lisible(collection)) aRepousser.add(collection);
     if (touched.length > 0) announce(touched);
     await repousserFusions();
   } catch {
@@ -458,8 +479,18 @@ export async function startSync(): Promise<void> {
     online = true;
   } catch {
     online = false;
-    // Fichier des Chats illisible : sans instance, rien ne les rendra pendant cette séance, et le bandeau le dit.
+    // Fichier des Chats illisible : tant que l'instance ne répond pas, rien ne les rend, et le bandeau le dit.
     for (const collection of COLLECTIONS) noterReleve(collection, "hors-ligne");
+    /*
+     * La relève tourne quand même (28/09/2026). Elle ne démarrait qu'après un
+     * premier échange réussi : une passerelle encore en train de démarrer à
+     * l'ouverture de la fenêtre laissait toute la séance sans synchronisation
+     * et, la personne étant restée connectée, rien ne la relançait (mesuré
+     * dans une fenêtre cachée : vingt secondes après, toujours hors ligne).
+     * `refresh` fait le premier échange dès que l'instance répond : chaque
+     * collection y est relue, puisqu'aucune ne l'a été.
+     */
+    demarrerReleve();
     return;
   }
 
@@ -487,7 +518,10 @@ export async function startSync(): Promise<void> {
   }
   announce([...COLLECTIONS]);
   await repousserFusions();
+  demarrerReleve();
+}
 
+function demarrerReleve(): void {
   if (timer) clearInterval(timer);
   timer = setInterval(() => void refresh(), POLL_MS);
 }

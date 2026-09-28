@@ -6104,6 +6104,113 @@ console.log("\n15 septies. Tournée de la 2026.928.3 : logos, mentions, X");
   verifier("Comparer les modèles : dans les colonnes « Sur votre machine » et « Cloud, prix non relevé », les noms s'écrivent à droite des points (centrés au-dessus, un nom descendu tombait sur le point suivant)", /x=\{cx \+ 12\}/.test(bande) && /textAnchor="start"/.test(bande) && /Math\.max\(py \+ 4, precedent \+ 14\)/.test(comparer), "noms centrés sur les points");
 }
 
+/*
+ * Vu par Medhi le 28/09/2026 sur la 2026.928.4 : « j'ai choisi le modèle qwen,
+ * il propose gpt nano encore ». Le choix était écrit sur le poste, jamais
+ * envoyé à l'instance ni noté en attente quand la synchronisation se croyait
+ * hors ligne, et la relève ne démarrait pas si l'instance ne répondait pas à
+ * l'ouverture. La relecture suivante (lancement, connexion) remettait l'ancien
+ * choix, que le graphique montrait comme modèle en cours. Rejoué ici sur le
+ * vrai `sync.ts` (et `storage.ts`), empaqueté par esbuild, contre une fausse
+ * instance : les trois contrôles échouent sur le code d'avant.
+ */
+console.log("\n15 octies. Modèle choisi pendant une absence de l'instance : envoyé à son retour, jamais défait (28/09/2026)");
+{
+  const { build } = await import("esbuild");
+  const { pathToFileURL: versUrl } = await import("node:url");
+  const { writeFileSync: ecrireFichier } = await import("node:fs");
+  const dossierSync = mkdtempSync(join(tmpdir(), "helix-sync-"));
+  let resultat = {};
+  try {
+    await build({
+      stdin: { contents: 'export { startSync, relireMaintenant, stopSync } from "./src/lib/store/sync.ts";\nexport { storage } from "./src/lib/store/storage.ts";', resolveDir: RACINE, loader: "ts" },
+      bundle: true,
+      format: "esm",
+      platform: "browser",
+      outfile: join(dossierSync, "sync.mjs"),
+      alias: { "@": join(RACINE, "src") },
+      define: { "import.meta.env": "{}", __HELIX_VERSION__: '"essai"' },
+      loader: { ".png": "empty", ".svg": "empty", ".css": "empty" },
+      logLevel: "error",
+    });
+    const module = versUrl(join(dossierSync, "sync.mjs")).href;
+    // Un processus à part : le stockage, les événements et la minuterie de la page y sont simulés.
+    const harnais = `
+const magasin = new Map();
+globalThis.localStorage = { getItem: (k) => (magasin.has(k) ? magasin.get(k) : null), setItem: (k, v) => void magasin.set(k, String(v)), removeItem: (k) => void magasin.delete(k), key: (i) => [...magasin.keys()][i] ?? null, get length() { return magasin.size; }, clear: () => magasin.clear() };
+const cible = new EventTarget();
+globalThis.window = globalThis;
+globalThis.addEventListener = cible.addEventListener.bind(cible);
+globalThis.removeEventListener = cible.removeEventListener.bind(cible);
+globalThis.dispatchEvent = cible.dispatchEvent.bind(cible);
+globalThis.location = { protocol: "http:", search: "", href: "http://127.0.0.1/", hostname: "127.0.0.1" };
+localStorage.setItem("helix:session-token", "seance-essai");
+// La fausse instance : le profil de la personne, sa révision (le 409 compris), une panne à la demande.
+const inst = { profils: {}, revision: 1, panne: false };
+const nano = "cle-essai/gpt-4.1-nano", qwen = "machine/qwen3-8b";
+const profil = (m) => ({ userId: "u1", customInstructions: "", personalInfo: "", memoryEnabled: true, memories: [], preferredModelUid: m });
+const reponse = (statut, corps) => new Response(JSON.stringify(corps), { status: statut, headers: { "Content-Type": "application/json" } });
+globalThis.fetch = async (url, init = {}) => {
+  if (inst.panne) throw new TypeError("Failed to fetch");
+  const chemin = String(url).replace(/^\\/api/, "");
+  if (chemin === "/helix/data") return reponse(200, { revisions: { profiles: inst.revision } });
+  if (chemin === "/helix/data/profiles") {
+    if ((init.method ?? "GET") === "GET") return reponse(200, { value: Object.keys(inst.profils).length ? structuredClone(inst.profils) : null, revision: inst.revision });
+    const corps = JSON.parse(init.body);
+    if (corps.base !== undefined && corps.base !== inst.revision) return reponse(409, { revision: inst.revision });
+    inst.profils = { "profile:u1": corps.value["profile:u1"] };
+    inst.revision += 1;
+    return reponse(200, { revision: inst.revision });
+  }
+  if (chemin.startsWith("/helix/data/")) return reponse(200, { value: null, revision: 0 });
+  return reponse(404, {});
+};
+const attendre = (ms) => new Promise((r) => setTimeout(r, ms));
+const ici = () => JSON.parse(localStorage.getItem("helix:profile:u1") ?? "{}").preferredModelUid;
+const enFace = () => inst.profils["profile:u1"]?.preferredModelUid;
+const r = {};
+const s = await import(${JSON.stringify(module)});
+// 1. Fenêtre ouverte avant que l'instance réponde, personne restée connectée : qwen choisi, puis l'instance répond.
+inst.profils = { "profile:u1": profil(nano) };
+localStorage.setItem("helix:profile:u1", JSON.stringify(profil(nano)));
+inst.panne = true;
+await s.startSync();
+s.storage.set("profile:u1", profil(qwen));
+inst.panne = false;
+await attendre(4600);
+r.lancement = { ici: ici(), enFace: enFace() };
+// 2. Passerelle qui redémarre en cours de séance : qwen choisi pendant l'absence.
+s.storage.set("profile:u1", profil(nano));
+await attendre(100);
+inst.panne = true;
+await s.relireMaintenant();
+s.storage.set("profile:u1", profil(qwen));
+inst.panne = false;
+await s.relireMaintenant();
+await attendre(100);
+r.panne = { ici: ici(), enFace: enFace() };
+s.stopSync();
+// 3. Lancement suivant : ce que la relecture rend au poste, donc au graphique.
+const s2 = await import(${JSON.stringify(module + "?relance")});
+await s2.startSync();
+s2.stopSync();
+r.relance = { ici: ici(), enFace: enFace() };
+console.log("RESULTAT " + JSON.stringify(r));
+process.exit(0);
+`;
+    ecrireFichier(join(dossierSync, "harnais.mjs"), harnais);
+    const sortie = execFileSync(process.execPath, [join(dossierSync, "harnais.mjs")], { encoding: "utf8", timeout: 30000, stdio: ["ignore", "pipe", "pipe"] });
+    resultat = JSON.parse(sortie.match(/RESULTAT (.*)/)?.[1] ?? "{}");
+  } catch (e) {
+    resultat = { erreur: String(e.stderr ?? e.message).slice(0, 400) };
+  }
+  rmSync(dossierSync, { recursive: true, force: true });
+  const qwen = "machine/qwen3-8b";
+  verifier("modèle choisi pendant que l'instance ne répondait pas encore (fenêtre ouverte avant elle, séance restée ouverte) : la relève démarre quand même et l'envoie dès qu'elle répond", resultat.lancement?.enFace === qwen && resultat.lancement?.ici === qwen, JSON.stringify(resultat.lancement ?? resultat));
+  verifier("modèle choisi pendant un redémarrage de la passerelle : noté en attente et envoyé à son retour (il restait sur le poste seul)", resultat.panne?.enFace === qwen && resultat.panne?.ici === qwen, JSON.stringify(resultat.panne ?? resultat));
+  verifier("lancement suivant : la relecture rend le modèle choisi, pas le précédent (le graphique montrait gpt-4.1-nano comme modèle en cours)", resultat.relance?.ici === qwen, JSON.stringify(resultat.relance ?? resultat));
+}
+
 console.log(`\n${reussis} vérification(s) réussie(s), ${echecs.length} échec(s).`);
 if (echecs.length) {
   console.log("Échecs :");

@@ -4253,6 +4253,41 @@ dix minutes comme celle d'un fournisseur cloud. **Pas essayé** : l'application 
 LM Studio (la mémoire réelle d'un chargement de 32 768 jetons, ses garde-fous de chargement), un vrai
 modèle, le vrai Codex, un disque plein.
 
+**Corrigé le 28/09/2026 : le modèle choisi revenait à l'ancien (branche `bug-modele-en-cours`).**
+Vu par Medhi sur la 2026.928.4 : « j'ai choisi le modèle qwen, il propose gpt nano encore » ;
+« Comparer les modèles » montrait gpt-4.1-nano comme modèle en cours alors que qwen3-8b était
+choisi. Le graphique n'y était pour rien : il montre `preferredModelUid`, le modèle que la
+question suivante emporte (vérifié : un Chat rouvert, créé sur gpt-4.1-nano, part bien sur le
+modèle choisi ensuite, la conversation ne garde pas le sien). C'est le choix lui-même qui était
+défait, par la synchronisation (`src/lib/store/sync.ts`), en deux défauts :
+- **une écriture faite hors ligne n'était ni envoyée ni notée** : `pousser` rendait `false` dès
+  que la synchronisation se croyait hors ligne, avant de noter la collection « en attente ». La
+  relecture suivante (lancement, connexion) remettait la copie de l'instance, donc l'ancien
+  choix. Hors ligne, cela arrive le temps d'un redémarrage de la passerelle (une relève ratée
+  suffit) ;
+- **la relève ne démarrait pas si l'instance ne répondait pas à l'ouverture de la fenêtre** :
+  `startSync` sortait sans lancer la minuterie, et, la personne restée connectée, rien ne la
+  relançait. Toute la séance était alors hors ligne sans le dire.
+
+Rejoué contre une instance jetable (faux LM Studio servant `qwen3-8b`, faux OpenAI servant
+`gpt-4.1-nano`, Vite, fenêtre Electron cachée), sur le code d'avant : instance injoignable au
+lancement, qwen3-8b choisi, puis instance revenue : vingt secondes après, synchronisation
+toujours hors ligne, rien d'envoyé ni d'attente notée, l'instance garde gpt-4.1-nano ; au
+lancement suivant, le sélecteur et le graphique montrent gpt-4.1-nano. Même chose pour une
+relève ratée en cours de séance (passerelle qui redémarre). Et un **Chat créé pendant ce temps
+disparaissait au lancement suivant** (même cause : la liste de l'instance remplaçait celle du
+poste). Corrigé : hors ligne, la modification est notée en attente (fusionnée à la relecture,
+comme les autres) ; la relève tourne même après un premier échange raté ; au retour de
+l'instance, ce qui attend et a déjà été relu repart. Revu dans la même fenêtre après la
+correction : le choix atteint l'instance dès son retour et survit au lancement suivant, le Chat
+aussi. Écarté après essai : une relecture partie avant une écriture ne la recouvre pas, car
+l'envoi de cette écriture porte une révision dépassée et l'instance répond 409, ce qui la fait
+fusionner. **Vérifié** : `npm run securite`, section 15 octies (trois contrôles, qui rejouent le
+vrai `sync.ts` empaqueté par esbuild contre une fausse instance : tous en échec sur le code
+d'avant). **Pas essayé** : l'application empaquetée elle-même ; la cause exacte de l'absence de
+l'instance sur le poste de Medhi ce jour-là n'est pas connue (redémarrage de la passerelle ou
+démarrage lent sont les deux chemins reproduits).
+
 **Fait le 27/09/2026 : Codex dans l'écran Code, avec le compte ChatGPT du propriétaire du
 poste.** Décidé par Medhi (« ajoute »). Le détail, les sources et ce qui reste à essayer sont
 au § 3.14 (« Fait ») ; les barrières au § 30 de SECURITE.md. En bref : second moteur au choix

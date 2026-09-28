@@ -366,14 +366,35 @@
       "empreintes": {
         "together.svg": "edf757b7bc10f86da65ba32ee2d02193cf952414aeb7bbbb69daaf9c2c927f80"
       }
+    },
+    "facebook": {
+      "titre": "Facebook",
+      "clair": "facebook.svg",
+      "cadre": "100 100 500 500",
+      "source": "Facebook Brand Asset Pack (Logo/Primary Logo/Facebook_Logo_Primary.ai), téléchargé par Medhi le 28/09/2026 sur https://about.meta.com/brand/resources/facebook/logo/ après acceptation des conditions de Meta",
+      "page": "https://about.meta.com/brand/resources/facebook/logo/",
+      "regle": "Logo principal (cercle bleu, « f » blanc), non modifié, pour désigner le connecteur Facebook ; conditions de Meta acceptées par Medhi le 28/09/2026.",
+      "retouche": "facebook.svg est la conversion vectorielle exacte du fichier .ai officiel (pdftocairo -svg), sans changer le tracé ; « cadre » retire la marge du plan de travail.",
+      "empreintes": {
+        "facebook.svg": "befb84ec9e0acb9784a06e6e33ab9135e2e8e2391347bfcf7d5a3c2a740d9c16"
+      }
+    },
+    "instagram": {
+      "titre": "Instagram",
+      "clair": "instagram.png",
+      "source": "IG brand asset pack 2023 (01 Static Glyph/01 Gradient Glyph/Instagram_Glyph_Gradient.png), téléchargé par Medhi le 28/09/2026 sur https://about.meta.com/brand/resources/instagram/ après acceptation des conditions de Meta",
+      "page": "https://about.meta.com/brand/resources/instagram/",
+      "regle": "Glyphe en dégradé, non modifié, pour désigner le connecteur Instagram ; conditions de Meta acceptées par Medhi le 28/09/2026.",
+      "retouche": "Instagram ne publie le dégradé qu'en image (son SVG découpe un PNG) : instagram.png est le PNG officiel réduit de 2500 à 128 pixels (sips), sans autre changement.",
+      "empreintes": {
+        "instagram.png": "19e83f89f6906fcbcd59752fb00adc4f3d6dbe7ade5bbb0885808a45764de592"
+      }
     }
   },
   "neutres": {
     "slack": "https://slack.com/terms-of-service/slack-brand : la plupart des usages demandent une licence écrite, et la charte interdit de « distribuer ou mettre à disposition » ses logos, ce que ferait un dépôt public.",
     "openai": "https://openai.com/brand/ : ne pas utiliser le logo sans l'autorisation d'OpenAI (demande à partnercomms@openai.com).",
     "linkedin": "https://brand.linkedin.com/in-logo : un développeur ne peut employer le logo [in] que comme bouton « Share » ou widget « Follow ».",
-    "facebook": "https://www.meta.com/brand/resources/facebook/logo/ : le téléchargement passe par une case « j'accepte les conditions » qu'il revient à Medhi de cocher ; et https://developers.facebook.com/docs/app-review/resources/logos/ réserve les marques aux usages autorisés par Meta.",
-    "instagram": "Même situation que Facebook (Meta Brand Resource Center).",
     "meta": "Modèles Llama : le logo de Meta est dans le même centre de marque, derrière la même acceptation de conditions.",
     "tiktok": "https://developers.tiktok.com/doc/getting-started-design-guidelines : pas de logo TikTok sans autorisation écrite préalable.",
     "youtube": "https://brand.youtube/youtube-icon/ : hauteur minimale de 100 px en numérique, incompatible avec une ligne de liste de 22 px.",

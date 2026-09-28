@@ -20,8 +20,6 @@ import {
   Loader2,
   PlaySquare,
   Briefcase,
-  Users,
-  Camera,
   Music2,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -1028,8 +1026,9 @@ export function McpSettings() {
      * Google, que sa charte permet dans une liste de services compatibles.
      * Les autres gardent une icône neutre (28/09/2026) : la charte de YouTube
      * fixe une hauteur minimale de 100 px, LinkedIn réserve son logo aux
-     * boutons « Share » et « Follow », Meta et TikTok le soumettent à leur
-     * accord. Les glyphes « marque » de Lucide (Youtube, Linkedin, Facebook,
+     * boutons « Share » et « Follow », TikTok le soumet à son accord.
+     * Facebook et Instagram ont leur logo depuis que Medhi a accepté les
+     * conditions de Meta (28/09/2026). Les glyphes « marque » de Lucide (Youtube, Linkedin, Facebook,
      * Instagram) ont été retirés aussi : ce sont des copies approximatives de
      * ces logos, précisément ce que les chartes interdisent.
      */
@@ -1038,8 +1037,8 @@ export function McpSettings() {
       ["slides", "Google Slides", t("Lire vos présentations"), "googleSlides", CATEGORIE],
       ["youtube", "YouTube", t("Vidéos et statistiques d'une chaîne"), PlaySquare, t("Réseaux sociaux")],
       ["linkedin", "LinkedIn", t("Publier après accord, et lire une page d'entreprise"), Briefcase, t("Réseaux sociaux")],
-      ["facebook", "Facebook", t("Pages : publications, réactions, publier après accord"), Users, t("Réseaux sociaux")],
-      ["instagram", "Instagram", t("Compte professionnel : publications, statistiques, publier après accord"), Camera, t("Réseaux sociaux")],
+      ["facebook", "Facebook", t("Pages : publications, réactions, publier après accord"), "facebook", t("Réseaux sociaux")],
+      ["instagram", "Instagram", t("Compte professionnel : publications, statistiques, publier après accord"), "instagram", t("Réseaux sociaux")],
       ["tiktok", "TikTok", t("Vidéos, statistiques, publier après accord"), Music2, t("Réseaux sociaux")],
       // X : son logo officiel (kit de marque de X, noir sur fond clair, blanc sur fond sombre ; marques.ts).
       ["x", "X", t("Ex-Twitter : posts, statistiques, publier après accord"), "x", t("Réseaux sociaux")],

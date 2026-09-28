@@ -65,6 +65,9 @@ function Dessin({
   // useId donne « :r1: » : les deux-points sont valides dans un id mais pas
   // dans `url(#…)` sans échappement, d'où leur retrait.
   const prefixe = useId().replace(/:/g, "") + "-";
+  if (dessin.image) {
+    return <img src={dessin.image} width={taille} height={taille} alt="" aria-hidden="true" className={cn("shrink-0", classe)} />;
+  }
   return (
     <svg
       viewBox={dessin.viewBox}

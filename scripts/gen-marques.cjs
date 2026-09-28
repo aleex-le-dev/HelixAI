@@ -191,6 +191,19 @@ function compacter(n) {
 }
 
 function dessin(fichier, cadre) {
+  /*
+   * Un PNG officiel, quand la société ne publie son logo qu'en image (le glyphe
+   * en dégradé d'Instagram, 28/09/2026 : même son SVG n'est qu'une image
+   * découpée). Intégré en données, sans appel réseau ; seule la signature PNG
+   * est admise.
+   */
+  if (fichier.endsWith(".png")) {
+    const octets = readFileSync(join(DOSSIER, fichier));
+    if (!octets.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) {
+      throw new Error(`${fichier} : ce n'est pas un PNG`);
+    }
+    return { viewBox: "0 0 1 1", ids: false, corps: [], image: `data:image/png;base64,${octets.toString("base64")}` };
+  }
   const svg = lireSvg(fichier);
   const viewBox = cadre ?? svg.attributs.viewBox ?? `0 0 ${parseFloat(svg.attributs.width)} ${parseFloat(svg.attributs.height)}`;
   if (!/^-?[\d.]+(\s+-?[\d.]+){3}$/.test(viewBox.trim())) throw new Error(`${fichier} : viewBox illisible « ${viewBox} »`);
@@ -278,6 +291,8 @@ export interface DessinMarque {
   /** Le dessin porte des identifiants (dégradés, découpes) à rendre uniques. */
   ids: boolean;
   corps: NoeudMarque[];
+  /** Logo publié seulement en image : un PNG officiel, en données. */
+  image?: string;
 }
 
 export interface Marque {

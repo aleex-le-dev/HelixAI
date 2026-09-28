@@ -1302,7 +1302,11 @@ export function modeleDicteeRecommande(): { modele: ModeleDictee; raison: string
     CATALOGUE_DICTEE[CATALOGUE_DICTEE.length - 1];
   return {
     modele,
-    raison: tf("{0} cœur{1} de performance et {2} Go de mémoire : {3}.", coeurs, coeurs > 1 ? "s" : "", memoire, modele.pourquoi),
+    // Une phrase par nombre (28/09/2026) : le « s » collé restait tel quel en chinois (« 个性能核心s »).
+    raison:
+      coeurs > 1
+        ? tf("{0} cœurs de performance et {1} Go de mémoire : {2}.", coeurs, memoire, modele.pourquoi)
+        : tf("{0} cœur de performance et {1} Go de mémoire : {2}.", coeurs, memoire, modele.pourquoi),
   };
 }
 

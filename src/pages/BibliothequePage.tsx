@@ -437,7 +437,7 @@ function Ligne({
   onAction: (a: Action) => void;
 }) {
   const [menu, setMenu] = useState(false);
-  const proprietaire = e.estProprietaire ? "Vous" : (allAccounts().find((a) => a.id === e.ownerId)?.fullName ?? t("Un ancien membre"));
+  const proprietaire = e.estProprietaire ? t("Vous") : (allAccounts().find((a) => a.id === e.ownerId)?.fullName ?? t("Un ancien membre"));
   const actions: { id: Action; label: string; icon: typeof Pencil; danger?: boolean }[] = [
     ...(e.type === "document" ? [{ id: "telecharger" as const, label: t("Télécharger"), icon: Download }] : []),
     ...(e.estProprietaire

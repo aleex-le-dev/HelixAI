@@ -156,7 +156,7 @@ const CHAMPS_TRI: {
   desc: string;
 }[] = [
   { id: "echeance", label: t("Échéance"), asc: t("la plus proche d'abord"), desc: t("la plus lointaine d'abord") },
-  { id: "priorite", label: t("Priorité"), asc: "basse d'abord", desc: t("haute d'abord") },
+  { id: "priorite", label: t("Priorité"), asc: t("basse d'abord"), desc: t("haute d'abord") },
   { id: "maj", label: t("Date de mise à jour"), asc: t("la plus ancienne d'abord"), desc: t("la plus récente d'abord") },
 ];
 
@@ -385,8 +385,8 @@ function Echeance({ task, compact }: { task: Task; compact?: boolean }) {
       )}
       {s === "retard"
         ? compact
-          ? "En retard"
-          : `En retard · ${date(jour)}`
+          ? t("En retard")
+          : tf("En retard · {0}", date(jour))
         : s === "aujourdhui"
           ? t("Aujourd'hui")
           : date(jour)}
@@ -565,7 +565,9 @@ function ChoixPrerequis({
       ? t("Aucune")
       : choisies.length === 1
         ? `« ${choisies[0]!.title} »`
-        : tf("« {0} » et {1} autre{2}", choisies[0]!.title, choisies.length - 1, choisies.length > 2 ? "s" : "");
+        : choisies.length === 2
+          ? tf("« {0} » et 1 autre", choisies[0]!.title)
+          : tf("« {0} » et {1} autres", choisies[0]!.title, choisies.length - 1);
 
   return (
     <Popover
@@ -628,11 +630,16 @@ function libelleLancement(auto: boolean, nombre: number): string {
 function attenteDe(prerequis: EtatPrerequis): string | null {
   if (prerequis.bloque.length > 0) {
     const t = prerequis.bloque[0]!;
-    return tf("Bloquée : « {0} » a été annulée{1}", t.title, prerequis.bloque.length > 1 ? `, et ${prerequis.bloque.length - 1} autre${prerequis.bloque.length > 2 ? "s" : ""}` : "");
+    /* Une phrase par nombre (28/09/2026) : « , et N autre(s) » était collé en français dans toutes les langues. */
+    if (prerequis.bloque.length === 1) return tf("Bloquée : « {0} » a été annulée", t.title);
+    if (prerequis.bloque.length === 2) return tf("Bloquée : « {0} » a été annulée, et 1 autre", t.title);
+    return tf("Bloquée : « {0} » a été annulée, et {1} autres", t.title, prerequis.bloque.length - 1);
   }
   if (prerequis.attend.length > 0) {
     const t = prerequis.attend[0]!;
-    return prerequis.attend.length === 1 ? tf("Après « {0} »", t.title) : tf("Après « {0} » et {1} autre{2}", t.title, prerequis.attend.length - 1, prerequis.attend.length > 2 ? "s" : "");
+    if (prerequis.attend.length === 1) return tf("Après « {0} »", t.title);
+    if (prerequis.attend.length === 2) return tf("Après « {0} » et 1 autre", t.title);
+    return tf("Après « {0} » et {1} autres", t.title, prerequis.attend.length - 1);
   }
   return null;
 }
@@ -892,7 +899,7 @@ function TaskCard({
           </Button>
         ) : task.status === "a-faire" && !prerequis.pret ? (
           <Button variant="secondary" size="sm" icon={Hourglass} block disabled>
-            {prerequis.bloque.length > 0 ? t("En attente d'une relance") : task.autoStart ? t("Partira d'elle-même") : "En attente"}
+            {prerequis.bloque.length > 0 ? t("En attente d'une relance") : task.autoStart ? t("Partira d'elle-même") : t("En attente")}
           </Button>
         ) : task.status === "terminee" ? (
           <Button variant="secondary" size="sm" block onClick={onOpen}>

@@ -304,7 +304,7 @@ export function ProfilSettings() {
                 {t("Annuler")}
               </Button>
               <Button type="submit" disabled={!pret}>
-                {occupe ? "Enregistrement..." : t("Enregistrer")}
+                {occupe ? t("Enregistrement…") : t("Enregistrer")}
               </Button>
             </div>
           </form>
@@ -484,7 +484,7 @@ export function PreferencesSettings() {
       {/*
        * L'anglais est la langue de référence et la langue par défaut du
        * logiciel ; les phrases françaises servent de clés aux traductions
-       * (src/lib/i18n.ts). L'interface se choisit parmi les trois langues.
+       * (src/lib/i18n.ts). L'interface se choisit parmi les quatre langues.
        */}
       <ChoixLangue />
 

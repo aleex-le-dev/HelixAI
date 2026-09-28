@@ -47,12 +47,12 @@ export interface PreferencesFormats {
 export const FORMATS_DATE: { valeur: FormatDate; nom: string }[] = [
   { valeur: "eu", nom: t("Format européen (JJ/MM/AAAA)") },
   { valeur: "us", nom: t("Format américain (MM/JJ/AAAA)") },
-  { valeur: "iso", nom: "ISO (AAAA-MM-JJ)" },
+  { valeur: "iso", nom: t("ISO (AAAA-MM-JJ)") },
 ];
 
 export const FORMATS_HEURE: { valeur: FormatHeure; nom: string }[] = [
   { valeur: "24", nom: t("24 heures") },
-  { valeur: "12", nom: "12 heures" },
+  { valeur: "12", nom: t("12 heures") },
 ];
 
 /**

@@ -342,9 +342,9 @@ export function DeuxFacteurs() {
           <p className="mt-1 text-sm text-muted-foreground">
             {etat.activeLe ? tf("Depuis le {0}. ", formats.date(etat.activeLe)) : ""}
             {restants > 1
-              ? `${restants} codes de secours restants.`
+              ? tf("{0} codes de secours restants.", restants)
               : restants === 1
-                ? "1 code de secours restant."
+                ? t("1 code de secours restant.")
                 : t("Plus aucun code de secours.")}
           </p>
         </div>

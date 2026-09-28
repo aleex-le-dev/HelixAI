@@ -166,10 +166,10 @@ const ARTICLES: Article[] = [
   {
     id: "langue",
     titre: t("Changer la langue"),
-    resume: t("Français, anglais, chinois."),
+    resume: t("Français, anglais, chinois, japonais."),
     motsCles: ["langue", "anglais", "chinois", "japonais", "english", "japanese", "traduction", "language", "中文", "日本語"],
     lien: "/parametres/preferences",
-    corps: t(`L'interface se lit en français, en anglais ou en chinois. Le choix se fait dans Réglages, Préférences, rubrique Langue.
+    corps: t(`L'interface se lit en français, en anglais, en chinois ou en japonais. Le choix se fait dans Réglages, Préférences, rubrique Langue.
 
 - Le choix vaut pour ce poste, pas pour toute l'instance : chacun peut lire dans sa langue, sur la même instance.
 - La page se recharge aussitôt, pour que tout l'écran change d'un coup plutôt qu'à moitié.

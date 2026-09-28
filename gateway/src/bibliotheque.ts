@@ -456,7 +456,10 @@ export function supprimerElement(id: string, qui: Qui): Promise<Resultat<{ suppr
       return {
         ok: false,
         statut: 409,
-        message: tf("Ce dossier contient {0} élément{1} déposé{2} par des collègues : demandez-leur de les déplacer, ou videz-le d'abord.", autrui, autrui > 1 ? "s" : "", autrui > 1 ? "s" : ""),
+        message:
+          autrui > 1
+            ? tf("Ce dossier contient {0} éléments déposés par des collègues : demandez-leur de les déplacer, ou videz-le d'abord.", autrui)
+            : tf("Ce dossier contient {0} élément déposé par un collègue : demandez-lui de le déplacer, ou videz-le d'abord.", autrui),
       };
     }
     const partent = new Set([id, ...sous]);

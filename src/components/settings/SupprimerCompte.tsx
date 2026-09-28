@@ -5,16 +5,19 @@ import { Field, Input } from "@/components/ui/Field";
 import { InfoBox } from "@/components/ui/InfoBox";
 import { useUtilisateurCourant, clearCurrentUser } from "@/lib/store/identity";
 import { apercuEffacement, effacerMonCompte, oublierSurCePoste, type Apercu } from "@/lib/effacement";
-import { t } from "@/lib/i18n";
+import { t, tf } from "@/lib/i18n";
 
 /**
  * « Supprimer mon compte » : le seul geste vraiment irréversible de la zone de
  * danger. L'écran dit avant la confirmation ce qui disparaît, ce qui est
  * confié à un collègue et ce qui reste (le journal d'audit), puis demande le
  * mot de passe, et un code si le second facteur est actif.
+ *
+ * Chaque nombre a sa phrase entière, au singulier et au pluriel, plutôt qu'un
+ * mot accolé au chiffre. Jusqu'au 28/09/2026, l'aperçu se composait de
+ * morceaux (« documents », « et », « projets ou partages ») écrits sans
+ * `t()` : ils restaient en français dans toutes les langues.
  */
-
-const pluriel = (n: number, un: string, plusieurs: string) => `${n} ${n > 1 ? plusieurs : un}`;
 
 export function SupprimerCompte() {
   const utilisateur = useUtilisateurCourant();
@@ -85,16 +88,21 @@ export function SupprimerCompte() {
           <p className="font-medium text-foreground">{t("Seront supprimés définitivement :")}</p>
           <ul className="space-y-0.5">
             <li>
-              • {pluriel(apercu.conversations, t("conversation"), t("conversations"))},{" "}
-              {pluriel(apercu.taches, t("tâche"), t("tâches"))}, {pluriel(apercu.agents, t("agent"), t("agents"))}
+              {tf(
+                "• {0}, {1}, {2}",
+                apercu.conversations === 1 ? t("1 conversation") : tf("{0} conversations", apercu.conversations),
+                apercu.taches === 1 ? t("1 tâche") : tf("{0} tâches", apercu.taches),
+                apercu.agents === 1 ? t("1 agent") : tf("{0} agents", apercu.agents),
+              )}
             </li>
             <li>{t("• votre profil : instructions et mémoire personnelles")}</li>
             <li>{t("• votre consommation des modèles et vos postes connectés")}</li>
             <li>{t("• vos conversations avec les agents de l'équipe")}</li>
             {(apercu.employes?.length ?? 0) > 0 && (
               <li>
-                • {apercu.employes?.length === 1 ? t("l'agent que vous avez mis en service") : "les agents que vous avez mis en service"} :{" "}
-                {apercu.employes?.join(", ")}
+                {apercu.employes?.length === 1
+                  ? tf("• l'agent que vous avez mis en service : {0}", apercu.employes.join(", "))
+                  : tf("• les agents que vous avez mis en service : {0}", apercu.employes?.join(", ") ?? "")}
               </li>
             )}
             {(apercu.clesModeles?.length ?? 0) > 0 && (
@@ -102,20 +110,28 @@ export function SupprimerCompte() {
             )}
             {apercu.bibliotheque && apercu.bibliotheque.documents + apercu.bibliotheque.dossiers > 0 && (
               <li>
-                {t("• dans la bibliothèque :")}{" "}{pluriel(apercu.bibliotheque.documents, "document", "documents")} et{" "}
-                {pluriel(apercu.bibliotheque.dossiers, "dossier", "dossiers")}{" "}{t("(ce que des collègues avaient déposé dans vos dossiers leur reste)")}
+                {tf(
+                  "• dans la bibliothèque : {0} et {1} (ce que des collègues avaient déposé dans vos dossiers leur reste)",
+                  apercu.bibliotheque.documents === 1 ? t("1 document") : tf("{0} documents", apercu.bibliotheque.documents),
+                  apercu.bibliotheque.dossiers === 1 ? t("1 dossier") : tf("{0} dossiers", apercu.bibliotheque.dossiers),
+                )}
               </li>
             )}
             {(apercu.reunions ?? 0) > 0 && (
-              <li>• {pluriel(apercu.reunions ?? 0, t("réunion enregistrée"), t("réunions enregistrées"))}{t(", avec compte rendu et transcription")}</li>
+              <li>
+                {apercu.reunions === 1
+                  ? t("• 1 réunion enregistrée, avec compte rendu et transcription")
+                  : tf("• {0} réunions enregistrées, avec compte rendu et transcription", apercu.reunions ?? 0)}
+              </li>
             )}
             {apercu.projetsSupprimes.length > 0 && (
               <li>{t("• les projets sans autre membre :")}{" "}{apercu.projetsSupprimes.join(", ")}</li>
             )}
             {apercu.mentionsRetirees > 0 && (
               <li>
-                {t("• votre place dans")}{" "}{pluriel(apercu.mentionsRetirees, "projet ou partage", "projets ou partages")}{" "}
-                {t("de collègues")}
+                {apercu.mentionsRetirees === 1
+                  ? t("• votre place dans 1 projet ou partage de collègues")
+                  : tf("• votre place dans {0} projets ou partages de collègues", apercu.mentionsRetirees)}
               </li>
             )}
           </ul>
@@ -124,9 +140,7 @@ export function SupprimerCompte() {
               <p className="font-medium text-foreground">{t("Confiés à un collègue, pour ne pas perdre le travail commun :")}</p>
               <ul className="space-y-0.5">
                 {apercu.projetsConfies.map((c) => (
-                  <li key={c.projet}>
-                    • « {c.projet}{" "}{t("» à")}{" "}{c.a}
-                  </li>
+                  <li key={c.projet}>{tf("• « {0} » à {1}", c.projet, c.a)}</li>
                 ))}
               </ul>
             </>
@@ -171,7 +185,7 @@ export function SupprimerCompte() {
       )}
       <div className="flex flex-wrap gap-2">
         <Button variant="destructive" icon={Trash2} disabled={!pret || occupe} onClick={() => void supprimer()}>
-          {occupe ? "Suppression…" : t("Supprimer définitivement")}
+          {occupe ? t("Suppression…") : t("Supprimer définitivement")}
         </Button>
         <Button variant="ghost" onClick={fermer} disabled={occupe}>
           {t("Annuler")}

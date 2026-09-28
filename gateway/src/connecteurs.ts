@@ -1403,7 +1403,14 @@ async function brancherDistant(
   journaliser("connecteur.ajoute", qui, { connecteur: entree.id, distant: true });
 
   const outils = mcpStatus().find((s) => s.id === entree.id)?.toolCount ?? 0;
-  return { ok: true, message: tf("{0} est branché : {1} outil{2} disponible{3}.", entree.label, outils, outils > 1 ? "s" : "", outils > 1 ? "s" : "") };
+  // Une phrase par nombre (28/09/2026) : les « s » collés restaient tels quels en chinois.
+  return {
+    ok: true,
+    message:
+      outils > 1
+        ? tf("{0} est branché : {1} outils disponibles.", entree.label, outils)
+        : tf("{0} est branché : {1} outil disponible.", entree.label, outils),
+  };
 }
 
 /* ------------------------------------------------------------------ */

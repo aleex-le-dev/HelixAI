@@ -74,8 +74,16 @@ export function CourrierOauth({
   return (
     <div className="space-y-4">
       <InfoBox leading={<Info size={15} strokeWidth={1.75} />}>
-        {t("Ce chemin demande une préparation, une fois, par la personne qui administre votre")}{" "}{nom}{" "}{t("d'entreprise : déclarer")}{" "}{branding.name}{" "}{t("comme application")}
-        <strong className="font-medium text-foreground"> interne</strong>{" "}{t("à votre organisation. Cinq minutes, et aucune vérification à passer chez")}{" "}{nom}{" "}{t("puisque l'application ne sort pas de chez vous. Ensuite, chacun se connecte en un clic.")}
+        {/*
+         * Une phrase entière (28/09/2026) : faite de six morceaux, elle
+         * gardait « interne » en français dans toutes les langues, et l'ordre
+         * des morceaux ne tenait ni en japonais ni en chinois.
+         */}
+        {tf(
+          "Ce chemin demande une préparation, une fois, par la personne qui administre votre {0} d'entreprise : déclarer {1} comme application interne à votre organisation. Cinq minutes, et aucune vérification à passer chez {0}, puisque l'application ne sort pas de chez vous. Ensuite, chacun se connecte en un clic.",
+          nom,
+          branding.name,
+        )}
       </InfoBox>
 
       <div>

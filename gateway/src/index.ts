@@ -5,7 +5,7 @@ import { once } from "node:events";
 import { estEnvoiEnFlux, lireEnvoi, LIBELLE_DOCUMENT_MAX } from "./televersement.ts";
 import { ENTETES_SECURITE, entetesOrigine, entetesFlux } from "./entetes.ts";
 import { nomProduit } from "./marque.ts";
-import { avecLangueDe, t, tf } from "./langue.ts";
+import { avecLangueDe, langue, t, tf } from "./langue.ts";
 import * as telechargement from "./telechargement.ts";
 import https from "node:https";
 import { tlsMaterial } from "./tls.ts";
@@ -3768,7 +3768,7 @@ function pageRetour(titre: string, message: string, reussi: boolean): string {
   const echapper = (t: string) =>
     t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
   return `<!doctype html>
-<html lang="fr"><head><meta charset="utf-8">
+<html lang="${langue()}"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${echapper(titre)}</title>
 <style>
@@ -3784,7 +3784,7 @@ function pageRetour(titre: string, message: string, reussi: boolean): string {
 </style></head>
 <body><main>
   <p class="marque">${echapper(nomProduit())}</p>
-  <h1>${echapper(reussi ? titre : "Autorisation interrompue")}</h1>
+  <h1>${echapper(reussi ? titre : t("Autorisation interrompue"))}</h1>
   <p>${echapper(message)}</p>
 </main></body></html>`;
 }
@@ -3815,11 +3815,11 @@ async function handleOauthRetour(
   // Un refus chez LinkedIn ou Meta clôt la demande en cours, si son `state` est le bon (oauthNatif.ts) ; sinon il ne touche à rien.
   if (erreur && natifs.estEtatNatif(url.searchParams.get("state") ?? "")) {
     const r = await natifs.recevoir(url.searchParams, null);
-    return repondre("Autorisation refusée", r.message, false, 400);
+    return repondre(t("Autorisation refusée"), r.message, false, 400);
   }
   if (erreur) {
     return repondre(
-      "Autorisation refusée",
+      t("Autorisation refusée"),
       /*
        * Un message fixe, pas `error_description` : cette page est publique, et
        * n'importe qui pouvait faire afficher son propre texte à l'adresse de
@@ -3835,7 +3835,7 @@ async function handleOauthRetour(
   const code = url.searchParams.get("code");
   const etat = url.searchParams.get("state");
   if (!code || !etat) {
-    return repondre("Autorisation interrompue", "La réponse du service est incomplète.", false, 400);
+    return repondre(t("Autorisation interrompue"), t("La réponse du service est incomplète."), false, 400);
   }
 
   /*
@@ -3848,7 +3848,7 @@ async function handleOauthRetour(
   if (natifs.estEtatNatif(etat)) {
     const r = await natifs.recevoir(url.searchParams, null);
     return repondre(
-      r.ok ? tf("{0} est branché", r.nom ?? "Service") : "Autorisation interrompue",
+      r.ok ? tf("{0} est branché", r.nom ?? t("Service")) : t("Autorisation interrompue"),
       r.ok ? `${r.message} ${tf("Vous pouvez fermer cette fenêtre et revenir à {0}.", nomProduit())}` : r.message,
       r.ok,
       r.ok ? 200 : 400,
@@ -3857,12 +3857,12 @@ async function handleOauthRetour(
 
   if (estEtatCourrier(etat)) {
     const r = await acheverCourrier(code, etat);
-    if (!r.ok) return repondre("Autorisation interrompue", r.message, false, 400);
+    if (!r.ok) return repondre(t("Autorisation interrompue"), r.message, false, 400);
     const branchement = await brancherParOauth(r.jetons, r.adresse);
     return repondre(
-      branchement.ok ? "Votre boîte est branchée" : "Autorisation interrompue",
+      branchement.ok ? t("Votre boîte est branchée") : t("Autorisation interrompue"),
       branchement.ok
-        ? `${branchement.message} Vous pouvez fermer cette fenêtre et revenir à ${nomProduit()}.`
+        ? `${branchement.message} ${tf("Vous pouvez fermer cette fenêtre et revenir à {0}.", nomProduit())}`
         : branchement.message,
       branchement.ok,
       branchement.ok ? 200 : 400,
@@ -3871,9 +3871,9 @@ async function handleOauthRetour(
 
   const resultat = await connecteurs.acheverAutorisation(code, etat);
   repondre(
-    resultat.ok ? `${resultat.label ?? "Service"} est branché` : "Autorisation interrompue",
+    resultat.ok ? tf("{0} est branché", resultat.label ?? t("Service")) : t("Autorisation interrompue"),
     resultat.ok
-      ? `${resultat.message} Vous pouvez fermer cette fenêtre et revenir à ${nomProduit()}.`
+      ? `${resultat.message} ${tf("Vous pouvez fermer cette fenêtre et revenir à {0}.", nomProduit())}`
       : resultat.message,
     resultat.ok,
     resultat.ok ? 200 : 400,
@@ -5342,7 +5342,11 @@ const traiter = (
       res.setHeader("Retry-After", String(debitVerdict.retenteDans ?? 60));
       return send(res, 429, {
         error: {
-          message: tf("Trop de requêtes sur cette route. Réessayez dans {0} seconde{1}.", debitVerdict.retenteDans, (debitVerdict.retenteDans ?? 0) > 1 ? "s" : ""),
+          // Une phrase par nombre (28/09/2026) : le « s » collé restait tel quel en chinois.
+          message:
+            (debitVerdict.retenteDans ?? 0) > 1
+              ? tf("Trop de requêtes sur cette route. Réessayez dans {0} secondes.", debitVerdict.retenteDans)
+              : tf("Trop de requêtes sur cette route. Réessayez dans {0} seconde.", debitVerdict.retenteDans),
         },
       });
     }

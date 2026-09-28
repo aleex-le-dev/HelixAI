@@ -58,8 +58,19 @@
    * `:focus-visible` ne se declenche qu'au clavier, jamais a la souris — un
    * clic ne doit pas encadrer l'element.
    */
-  :where(a, button, input, select, [tabindex]):focus-visible {
+  :where(a, button, select, [tabindex], input[type="checkbox"], input[type="radio"], input[type="range"], input[type="file"], input[type="color"], input[type="button"], input[type="submit"]):focus-visible {
     @apply outline-none ring-2 ring-accent/50 ring-offset-1 ring-offset-background;
+  }
+
+  /*
+   * Les champs texte, non (vu par Medhi le 28/09/2026 : un rectangle vert autour
+   * du titre d'une nouvelle tâche, jusque sous la croix de la fenêtre). Un champ
+   * texte est `:focus-visible` même au clic, contrairement à un bouton ; ceux des
+   * formulaires marquent déjà leur focus par leur bordure (Field.tsx), et les
+   * champs sans cadre (titres, recherche) par leur curseur.
+   */
+  :where(input):focus-visible {
+    @apply outline-none;
   }
 
   /*

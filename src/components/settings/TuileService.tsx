@@ -98,25 +98,44 @@ function Dessin({
  * Exporté : la liste des connecteurs, le sélecteur de modèles et les clés
  * d'API affichent les mêmes logos, et deux dessins du même logo finiraient par
  * diverger.
+ *
+ * Taille minimale et zone de protection (seconde tournée du 28/09/2026) :
+ * quand la charte les chiffre (`tailleMin`, `marge` dans marques.ts), elles
+ * s'appliquent ici. Sous la taille minimale, c'est l'icône neutre qui paraît.
+ * `degagement` est l'espace que l'écran laisse déjà autour du logo (l'écart
+ * de la ligne, sa marge intérieure) ; il ne manque que la différence, posée
+ * en marge autour du dessin. Sans `degagement`, toute la zone est ajoutée.
  */
 export function LogoMarque({
   marque,
   icone: Icone,
   taille = 22,
+  degagement = 0,
 }: {
   /** Jamais une marque « grande » (YouTube) : sa charte interdit la taille d'une ligne. */
   marque?: CleMarquePetite;
   icone?: LucideIcon;
   taille?: number;
+  /** Espace libre, en pixels, que la mise en page garantit de chaque côté du logo. */
+  degagement?: number;
 }) {
-  if (marque) {
-    const m: Marque = MARQUES[marque];
-    if (!m.sombre) return <Dessin dessin={m.clair} taille={taille} />;
-    return (
+  const m: Marque | undefined = marque ? MARQUES[marque] : undefined;
+  if (m && !(m.tailleMin && taille < m.tailleMin)) {
+    const zone = m.marge ? Math.max(m.marge.part * taille, m.marge.px) : 0;
+    const manque = Math.max(0, Math.ceil(zone - degagement));
+    const dessins = !m.sombre ? (
+      <Dessin dessin={m.clair} taille={taille} />
+    ) : (
       <>
         <Dessin dessin={m.clair} taille={taille} classe="marque-claire" />
         <Dessin dessin={m.sombre} taille={taille} classe="marque-sombre" />
       </>
+    );
+    if (!manque) return dessins;
+    return (
+      <span className="inline-flex shrink-0" style={{ margin: manque }}>
+        {dessins}
+      </span>
     );
   }
   if (Icone) {
@@ -225,7 +244,8 @@ export function TuileService({
             : "border-border hover:bg-muted",
       )}
     >
-      <LogoMarque marque={marque} icone={icone} />
+      {/* gap-3 et py-3 : 12 px libres autour du logo. */}
+      <LogoMarque marque={marque} icone={icone} degagement={12} />
       <span className="min-w-0 flex-1">
         <span className="block truncate text-sm font-medium text-foreground">{nom}</span>
         <span className="block truncate text-xs text-muted-foreground">{resume}</span>

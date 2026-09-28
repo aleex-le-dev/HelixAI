@@ -219,7 +219,9 @@ function dessin(fichier, cadre) {
    * Un PNG officiel, quand la société ne publie son logo qu'en image (le glyphe
    * en dégradé d'Instagram, 28/09/2026 : même son SVG n'est qu'une image
    * découpée). Intégré en données, sans appel réseau ; seule la signature PNG
-   * est admise.
+   * est admise. Même cas pour les icônes de produit Google redessinées en
+   * 2026 (seconde tournée du 28/09/2026) : leur version 2, celle que la charte
+   * de l'API Drive désigne, n'est publiée qu'en PNG.
    */
   if (fichier.endsWith(".png")) {
     const octets = readFileSync(join(DOSSIER, fichier));
@@ -285,6 +287,23 @@ for (const [cle, m] of Object.entries(sources.marques)) {
     if (!(hauteurMin > 0 && hauteurLogo > 0 && hauteurLogo <= hauteurCadre)) throw new Error(`${cle} : « grand » illisible`);
     champs.push(`    grand: ${JSON.stringify({ hauteurMin, hauteurLogo })},`);
   }
+  /*
+   * Taille minimale et zone de protection écrites dans la charte (28/09/2026,
+   * seconde tournée) : GitLab jamais sous 20 px, Todoist sous 16 px, Canva
+   * avec 8 px libres autour, Tavily avec la hauteur du logo… LogoMarque les
+   * applique (voir `degagement`) au lieu de les laisser dans un commentaire.
+   * `marge.part` est une part de la hauteur affichée, `marge.px` un minimum
+   * en pixels ; la plus grande des deux s'applique.
+   */
+  if (m.tailleMin !== undefined) {
+    if (!(Number.isFinite(m.tailleMin) && m.tailleMin > 0 && m.tailleMin < 100)) throw new Error(`${cle} : « tailleMin » illisible`);
+    champs.push(`    tailleMin: ${m.tailleMin},`);
+  }
+  if (m.marge !== undefined) {
+    const { part = 0, px = 0, ...reste } = m.marge;
+    if (Object.keys(reste).length || !(part >= 0 && part <= 2 && px >= 0 && px <= 40) || !(part > 0 || px > 0)) throw new Error(`${cle} : « marge » illisible`);
+    champs.push(`    marge: ${JSON.stringify({ part, px })},`);
+  }
   entrees.push(`  ${cle}: {\n${champs.join("\n")}\n  },`);
 }
 const grandes = Object.entries(sources.marques).filter(([, m]) => m.grand).map(([cle]) => JSON.stringify(cle));
@@ -321,6 +340,12 @@ const entete = `/**
  * passent que par LogoMarqueGrand, jamais par LogoMarque, dont le type
  * (CleMarquePetite) les exclut : les montrer en petit ne compile pas.
  *
+ * Taille minimale (\`tailleMin\`) et zone de protection (\`marge\`) : celles
+ * que la charte écrit en chiffres. LogoMarque les applique à l'affichage.
+ *
+ * Une marque peut figurer ici sans paraître nulle part : ce sont les tables
+ * de src/components/settings/marquesConnecteurs.ts qui la branchent à un écran.
+ *
  * Fichier engendré par scripts/gen-marques.cjs, à ne pas modifier à la main.
  */
 
@@ -345,6 +370,14 @@ export interface Marque {
    * logo lui-même dans le cadre (viewBox), marge de protection du kit exclue.
    */
   grand?: { hauteurMin: number; hauteurLogo: number };
+  /** Hauteur d'affichage minimale imposée par la charte, en pixels. En dessous, LogoMarque montre l'icône neutre. */
+  tailleMin?: number;
+  /**
+   * Zone de protection de la charte : \`part\` de la hauteur affichée, \`px\`
+   * minimum en pixels. LogoMarque ajoute la marge qui manque au dégagement
+   * que l'écran garantit déjà autour du logo.
+   */
+  marge?: { part: number; px: number };
 }
 
 export const MARQUES = {

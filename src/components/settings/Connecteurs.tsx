@@ -100,6 +100,14 @@ export interface ServiceMaison {
  * identiques dans lesquelles on cherchait son service en lisant. Le logo se
  * reconnaît sans lire, et le point garde la seule chose qu'il disait — branché,
  * branché mais arrêté, pas branché.
+ *
+ * Le point est posé devant le logo, plus sur son coin (seconde tournée des
+ * logos, 28/09/2026) : les chartes interdisent d'ajouter un élément à un logo
+ * ou dans sa zone de protection (GitHub : « combining with other design
+ * elements » ; Canva : 8 px libres ; Facebook : une demi-largeur de logo). Le
+ * point sur le coin du G de Gmail ou du chat de GitHub faisait exactement cela.
+ * L'écart de 12 px (gap-3) entre le point, le logo et le nom, et la marge
+ * intérieure de la ligne (14 px), sont le dégagement que LogoMarque reçoit.
  */
 function Pastille({
   id,
@@ -115,14 +123,14 @@ function Pastille({
   const marqueRetenue = marque ?? (id ? MARQUE_DU_CONNECTEUR[id] : undefined);
   const iconeRetenue = icone ?? (id ? ICONE_DU_CONNECTEUR[id] : undefined) ?? ICONE_PAR_DEFAUT;
   return (
-    <span className="relative shrink-0">
-      <LogoMarque marque={marqueRetenue} icone={marqueRetenue ? undefined : iconeRetenue} taille={22} />
+    <span className="flex shrink-0 items-center gap-3">
       <span
         className={cn(
-          "absolute -bottom-0.5 -right-0.5 h-2 w-2 rounded-full ring-2 ring-card",
+          "h-2 w-2 shrink-0 rounded-full",
           etat === "actif" ? "bg-success" : etat === "attention" ? "bg-warning" : "bg-neutral-70",
         )}
       />
+      <LogoMarque marque={marqueRetenue} icone={iconeRetenue} taille={22} degagement={12} />
     </span>
   );
 }

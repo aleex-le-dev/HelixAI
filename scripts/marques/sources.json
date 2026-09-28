@@ -1,75 +1,104 @@
 {
-  "_lisezmoi": "Provenance des logos de src/components/ui/marques.ts. Chaque fichier .svg de ce dossier est le fichier officiel tel que publié par la société (octet pour octet, sauf mention contraire dans « retouche »), relevé le 28/09/2026. « clair » sert en thème clair, « sombre » en thème sombre (absent : le même dessin sert aux deux). « cadre » recadre la zone visible (viewBox) sur le dessin, sans toucher au dessin : les kits livrent souvent le logo au milieu d'une grande marge. Les empreintes SHA-256 sont vérifiées par scripts/gen-marques.cjs ; `node scripts/gen-marques.cjs --noter` les réécrit après un nouveau relevé. Les marques de la liste « neutres » gardent une icône neutre, pour la raison dite.",
+  "_lisezmoi": "Provenance des logos de src/components/ui/marques.ts. Chaque fichier de ce dossier (.svg, ou .png quand la société ne publie son logo qu'en image) est le fichier officiel tel que publié par la société (octet pour octet, sauf mention contraire dans « retouche »), relevé le 28/09/2026. « clair » sert en thème clair, « sombre » en thème sombre (absent : le même dessin sert aux deux). « cadre » recadre la zone visible (viewBox) sur le dessin, sans toucher au dessin : les kits livrent souvent le logo au milieu d'une grande marge. « tailleMin » (pixels) et « marge » (part de la hauteur affichée, ou pixels) sont la taille minimale et la zone de protection que la charte écrit en chiffres ; LogoMarque les applique. Les empreintes SHA-256 sont vérifiées par scripts/gen-marques.cjs ; `node scripts/gen-marques.cjs --noter` les réécrit après un nouveau relevé. Les marques de la liste « neutres » gardent une icône neutre, pour la raison dite.",
   "releve": "2026-09-28",
   "marques": {
     "gmail": {
       "titre": "Gmail",
-      "clair": "gmail.svg",
-      "source": "https://www.gstatic.com/images/branding/productlogos/gmail_2020q4/v11/192px.svg",
+      "clair": "gmail.png",
+      "source": "https://www.gstatic.com/images/branding/productlogos/gmail_2026/v2/web-64dp/logo_gmail_2026_color_2x_web_64dp.png",
       "page": "https://partnermarketinghub.withgoogle.com/brands/google/use-cases/product-co-branding/",
-      "regle": "Google autorise ses icônes de produit pour montrer une grille de produits compatibles ou une action dans une interface, sans modification, la marque de l'application restant la plus visible.",
+      "regle": "Google autorise ses icônes de produit pour montrer une grille de produits compatibles ou une action dans une interface, sans modification, la marque de l'application restant la plus visible ; sa charte demande la version la plus récente des icônes, redessinées en 2026 (seconde tournée du 28/09/2026 : les icônes de 2020 sont remplacées). Point laissé à Medhi : la page https://partnermarketinghub.withgoogle.com/brands/google/branding-guidelines/how-to-show-googles-brand/ demande en plus, pour une icône de produit, une demande d'autorisation par le formulaire du Partner Marketing Hub (compte à créer).",
+      "retouche": "Publiée seulement en PNG (la version 2 n'existe pas en SVG) : fichier officiel de 128 pixels, non modifié.",
       "empreintes": {
-        "gmail.svg": "4a255e631f5e08a0426ec385148d216eb5fe42c82ffa8097b7e44622c6862a6e"
+        "gmail.png": "e057ce78b788890abf1c3311be810686f82528caeba21eece1ce24a4348f9f68"
       }
     },
     "googleAgenda": {
       "titre": "Google Agenda",
-      "clair": "googleAgenda.svg",
-      "source": "https://www.gstatic.com/images/branding/productlogos/calendar_2020q4/v13/192px.svg",
+      "clair": "googleAgenda.png",
+      "source": "https://www.gstatic.com/images/branding/productlogos/calendar_2026/v2/web-64dp/logo_calendar_2026_color_2x_web_64dp.png",
       "page": "https://partnermarketinghub.withgoogle.com/brands/google/use-cases/product-co-branding/",
-      "regle": "Même règle que Gmail (icônes de produit Google).",
+      "regle": "Même règle que Gmail (icônes de produit Google, version de 2026).",
+      "retouche": "Publiée seulement en PNG (la version 2 n'existe pas en SVG) : fichier officiel de 128 pixels, non modifié.",
       "empreintes": {
-        "googleAgenda.svg": "26e9daec33d3a5859160c465c5e43d3bddef0c994efb1a4643135686eaf1c0cc"
+        "googleAgenda.png": "4734a49a934c276bf15267c2520c29f6baa7ef370f9bc51ebef26e46c5eace8e"
       }
     },
     "googleDrive": {
       "titre": "Google Drive",
-      "clair": "googleDrive.svg",
-      "source": "https://www.gstatic.com/images/branding/productlogos/drive_2020q4/v10/192px.svg",
+      "clair": "googleDrive.png",
+      "source": "https://www.gstatic.com/images/branding/productlogos/drive_2026/v2/web-64dp/logo_drive_2026_color_2x_web_64dp.png",
       "page": "https://partnermarketinghub.withgoogle.com/brands/google/use-cases/product-co-branding/",
-      "regle": "Même règle que Gmail (icônes de produit Google).",
+      "regle": "Même règle que Gmail (icônes de produit Google, version de 2026). La charte de l'API Drive (https://developers.google.com/workspace/drive/api/guides/branding) permet aussi le logo de Drive dans une application, pour un bouton qui agit sur Drive ou pour signaler un fichier rangé dans Drive, sans approbation préalable, et c'est ce fichier-là qu'elle désigne.",
+      "retouche": "Publiée seulement en PNG (la version 2 n'existe pas en SVG) : fichier officiel de 128 pixels, non modifié.",
       "empreintes": {
-        "googleDrive.svg": "2897441606067de8560ef21fc1357ce314331f5ac233760b22e3de224cc0bb09"
+        "googleDrive.png": "39e2c15449e7fa75ebe3a29f3f99e2e9ee11b5ef36aebf4dda3d30e484635495"
       }
     },
     "googleSheets": {
       "titre": "Google Sheets",
-      "clair": "googleSheets.svg",
-      "source": "https://www.gstatic.com/images/branding/productlogos/sheets_2020q4/v11/192px.svg",
+      "clair": "googleSheets.png",
+      "source": "https://www.gstatic.com/images/branding/productlogos/sheets_2026/v2/web-64dp/logo_sheets_2026_color_2x_web_64dp.png",
       "page": "https://partnermarketinghub.withgoogle.com/brands/google/use-cases/product-co-branding/",
-      "regle": "Même règle que Gmail (icônes de produit Google).",
+      "regle": "Même règle que Gmail (icônes de produit Google, version de 2026).",
+      "retouche": "Publiée seulement en PNG (la version 2 n'existe pas en SVG) : fichier officiel de 128 pixels, non modifié.",
       "empreintes": {
-        "googleSheets.svg": "17a1182e511d50cf45ff2dd0c882725947e21878804a3b11dcdbbf91192b19d5"
+        "googleSheets.png": "96f05891effad5af06f8120012cc3b777aef7e2031bc364472c9b373c1e68725"
       }
     },
     "googleSlides": {
       "titre": "Google Slides",
-      "clair": "googleSlides.svg",
-      "source": "https://www.gstatic.com/images/branding/productlogos/slides_2020q4/v12/192px.svg",
+      "clair": "googleSlides.png",
+      "source": "https://www.gstatic.com/images/branding/productlogos/slides_2026/v2/web-64dp/logo_slides_2026_color_2x_web_64dp.png",
       "page": "https://partnermarketinghub.withgoogle.com/brands/google/use-cases/product-co-branding/",
-      "regle": "Même règle que Gmail (icônes de produit Google).",
+      "regle": "Même règle que Gmail (icônes de produit Google, version de 2026).",
+      "retouche": "Publiée seulement en PNG (la version 2 n'existe pas en SVG) : fichier officiel de 128 pixels, non modifié.",
       "empreintes": {
-        "googleSlides.svg": "9a4fec75d3fb6967d9dddb432576518a64dd9fc06340acc9340830adb68fa5fe"
+        "googleSlides.png": "3d432d239cbc95d93a1f69bf19a5afc74edddeef858a542d0425d86e96a3f8ac"
+      }
+    },
+    "googleDocs": {
+      "titre": "Google Docs",
+      "clair": "googleDocs.png",
+      "source": "https://www.gstatic.com/images/branding/productlogos/docs_2026/v2/web-64dp/logo_docs_2026_color_2x_web_64dp.png",
+      "page": "https://partnermarketinghub.withgoogle.com/brands/google/use-cases/product-co-branding/",
+      "regle": "Même règle que Gmail (icônes de produit Google, version de 2026). Relevé pour un connecteur Google Docs à venir : aucun écran ne le montre encore.",
+      "retouche": "Publiée seulement en PNG (la version 2 n'existe pas en SVG) : fichier officiel de 128 pixels, non modifié.",
+      "empreintes": {
+        "googleDocs.png": "4e31fbb79725a4f88eecb919771ce33f7ac0389f5f84b59d82434061aeb8abfd"
+      }
+    },
+    "googleForms": {
+      "titre": "Google Forms",
+      "clair": "googleForms.png",
+      "source": "https://www.gstatic.com/images/branding/productlogos/forms_2026/v2/web-64dp/logo_forms_2026_color_2x_web_64dp.png",
+      "page": "https://partnermarketinghub.withgoogle.com/brands/google/use-cases/product-co-branding/",
+      "regle": "Même règle que Gmail (icônes de produit Google, version de 2026). Relevé pour un connecteur Google Forms à venir : aucun écran ne le montre encore.",
+      "retouche": "Publiée seulement en PNG (la version 2 n'existe pas en SVG) : fichier officiel de 128 pixels, non modifié.",
+      "empreintes": {
+        "googleForms.png": "50cd9e151981307f13c56d12c27dedf76466990900b789b34feba3a95b527e10"
       }
     },
     "googleMaps": {
       "titre": "Google Maps",
-      "clair": "googleMaps.svg",
-      "source": "https://www.gstatic.com/images/branding/productlogos/maps/v7/192px.svg",
+      "clair": "googleMaps.png",
+      "source": "https://www.gstatic.com/images/branding/productlogos/maps_2025/v1/web-64dp/logo_maps_2025_color_2x_web_64dp.png",
       "page": "https://partnermarketinghub.withgoogle.com/brands/google/use-cases/product-co-branding/",
-      "regle": "Même règle que Gmail (icônes de produit Google).",
+      "regle": "Même règle que Gmail (icônes de produit Google) ; Maps n'a pas encore d'icône de 2026, celle de 2025 est la plus récente publiée.",
+      "retouche": "Publiée seulement en PNG (la version 2 n'existe pas en SVG) : fichier officiel de 128 pixels, non modifié.",
       "empreintes": {
-        "googleMaps.svg": "8cd1a6b63933b799253176a4f9489279672a0c1d223fffaa382fd98accbddead"
+        "googleMaps.png": "f039d234d20b90ff0a865b4e1233c14443bc404040a877fcc43a686bc4dc5bbd"
       }
     },
     "gemini": {
       "titre": "Gemini",
-      "clair": "gemini.svg",
-      "source": "https://www.gstatic.com/images/branding/productlogos/gemini/v4/192px.svg",
+      "clair": "gemini.png",
+      "source": "https://www.gstatic.com/images/branding/productlogos/gemini_2026/v1/web-64dp/logo_gemini_2026_color_2x_web_64dp.png",
       "page": "https://partnermarketinghub.withgoogle.com/brands/google/use-cases/product-co-branding/",
-      "regle": "Même règle que Gmail (icônes de produit Google) ; sert aux modèles Gemini et au fournisseur « Google Gemini ».",
+      "regle": "Même règle que Gmail (icônes de produit Google, version de 2026) ; sert aux modèles Gemini et au fournisseur « Google Gemini ».",
+      "retouche": "Publiée seulement en PNG (la version 2 n'existe pas en SVG) : fichier officiel de 128 pixels, non modifié.",
       "empreintes": {
-        "gemini.svg": "2a60c2610c33938a402dc487286f7ba2b02c9816dd448bb34b58af1099cbc3d5"
+        "gemini.png": "709ec2c908a64e257730d574ab60281127aed9f8dee95fce2120c31306acc463"
       }
     },
     "github": {
@@ -140,6 +169,9 @@
       "regle": "Logo icône pour les surfaces de moins de 50 px, marge d'au moins 8 px, couleurs et forme non modifiées.",
       "empreintes": {
         "canva.svg": "fbbd91cfb0dcc0f9e9eeabc7ea5a6393974167bb06902c27df0b5b50c1fe798f"
+      },
+      "marge": {
+        "px": 8
       }
     },
     "atlassian": {
@@ -187,7 +219,8 @@
       "regle": "Logomark en couleur ; ni recoloration, ni transformation, ni effet ; au moins 20 px en numérique (https://design.gitlab.com/brand-logo/core-logo).",
       "empreintes": {
         "gitlab.svg": "d8522f9bb83b35bcf0ab6e7fc25a312c26120028af308bec1dd9d20e15c1a615"
-      }
+      },
+      "tailleMin": 20
     },
     "webflow": {
       "titre": "Webflow",
@@ -390,10 +423,14 @@
       "cadre": "100 100 500 500",
       "source": "Facebook Brand Asset Pack (Logo/Primary Logo/Facebook_Logo_Primary.ai), téléchargé par Medhi le 28/09/2026 sur https://about.meta.com/brand/resources/facebook/logo/ après acceptation des conditions de Meta",
       "page": "https://about.meta.com/brand/resources/facebook/logo/",
-      "regle": "Logo principal (cercle bleu, « f » blanc), non modifié, pour désigner le connecteur Facebook ; conditions de Meta acceptées par Medhi le 28/09/2026.",
+      "regle": "Logo principal, non modifié, pour désigner le connecteur Facebook ; au moins 16 px de large en numérique, et toujours à une demi-largeur de logo au moins de tout autre contenu (la zone de protection stricte est d'un quart). Converti du .ai en SVG (pdftocairo), tracé inchangé.",
       "retouche": "facebook.svg est la conversion vectorielle exacte du fichier .ai officiel (pdftocairo -svg), sans changer le tracé ; « cadre » retire la marge du plan de travail.",
       "empreintes": {
         "facebook.svg": "befb84ec9e0acb9784a06e6e33ab9135e2e8e2391347bfcf7d5a3c2a740d9c16"
+      },
+      "tailleMin": 16,
+      "marge": {
+        "part": 0.5
       }
     },
     "instagram": {
@@ -406,29 +443,121 @@
       "empreintes": {
         "instagram.png": "19e83f89f6906fcbcd59752fb00adc4f3d6dbe7ade5bbb0885808a45764de592"
       }
+    },
+    "tavily": {
+      "titre": "Tavily",
+      "clair": "tavily.svg",
+      "sombre": "tavily.sombre.svg",
+      "source": "https://www.tavily.com/logos/tavily-mark-black.svg, https://www.tavily.com/logos/tavily-mark-offwhite.svg",
+      "page": "https://www.tavily.com/brand",
+      "regle": "Page de marque publiée depuis le premier relevé : l'usage référentiel est permis pour désigner les produits de Tavily (déclaration de compatibilité), s'il est nécessaire, sans suggérer d'approbation et sans plus de place que nécessaire. Le « brand mark » est prévu pour les petites tailles ; noir sur fond clair, blanc cassé sur fond sombre ; zone libre au moins égale à sa hauteur ; ni recoloration, ni déformation, ni effet.",
+      "marge": {
+        "part": 1
+      },
+      "empreintes": {
+        "tavily.svg": "320ef37b5a13331bee4d756c6aed45422e61e73a02816ac3a4768815f6ed5153",
+        "tavily.sombre.svg": "ff1dbb5a01fb6c3cf73229d55d2b86ad5554977ff4f62f1c967d3317699e5572"
+      }
+    },
+    "dropbox": {
+      "titre": "Dropbox",
+      "clair": "dropbox.svg",
+      "source": "https://www.dropbox.com/scl/fo/6qjduc7j5ujf09f75w1p7/AFc217w49gnfwVNr64Bd1_A?rlkey=tkqw8jcoi7f24voc6577vakky (Brand Partner Toolkit, lien de https://brand.dropbox.com/ : Logos/Dropbox/Glyph/Glyph_128.svg)",
+      "page": "https://docs.dropboxapi.com/dropbox-api/docs/developer-resources/branding-guide",
+      "regle": "La charte des développeurs permet le nom et le logo de Dropbox dans une application, seulement pour désigner une intégration avec Dropbox ou y mener, sans modification, la marque de l'application restant la plus visible (https://www.dropbox.com/branding). Point laissé à Medhi : la page juridique demande aussi de consulter Dropbox avant un usage « dans un produit ». Le glyphe bleu, seul livré en SVG, sert aux deux thèmes. Relevé pour un connecteur à venir : aucun écran ne le montre encore.",
+      "empreintes": {
+        "dropbox.svg": "c2175e421fbe504b015a2d66c822b529d5eed0cfd76408755b3f0f6dcf1b44e1"
+      }
+    },
+    "telegram": {
+      "titre": "Telegram",
+      "clair": "telegram.svg",
+      "source": "https://telegram.org/file/464001088/1/bI7AJLo7oX4.287931.zip/374fe3b0a59dc60005 (Logo.svg)",
+      "page": "https://telegram.org/tour/screenshots",
+      "regle": "Telegram permet ses logos pour illustrer un article, un graphique, un bouton « transférer vers Telegram », etc., à condition qu'on ne passe pas pour son représentant officiel. Le logo rond en dégradé sert aux deux thèmes. Relevé pour un connecteur à venir : aucun écran ne le montre encore.",
+      "empreintes": {
+        "telegram.svg": "54842d414c100f0110f90caf09ff58cd0d229629820e4576bd70befca88befd5"
+      }
+    },
+    "trello": {
+      "titre": "Trello",
+      "clair": "trello.svg",
+      "source": "https://atlassian.design/assets/06c6b5ff60de/logos/trello_app.zip (trello/svg/Trello_icon.svg)",
+      "page": "https://www.atlassian.com/legal/trademark",
+      "regle": "Même charte qu'Atlassian : logos de produit permis pour signaler qu'un produit est compatible, reproduits exactement, sans autre modification que la taille ; le symbole reste dans sa tuile, sans conteneur ajouté (https://atlassian.design/foundations/logos). La tuile bleue sert aux deux thèmes. Relevé pour un connecteur à venir : aucun écran ne le montre encore.",
+      "empreintes": {
+        "trello.svg": "8e0693f3d8c757c43cf702bb34e7d57012792355f1a8799207d006cf7d84f211"
+      }
+    },
+    "todoist": {
+      "titre": "Todoist",
+      "clair": "todoist.svg",
+      "sombre": "todoist.sombre.svg",
+      "source": "https://www.todoist.com/brand-assets/todoist-logo.zip (Icon/Color.svg, Icon/White.svg)",
+      "page": "https://www.todoist.com/press",
+      "regle": "La page d'aide des intégrations (https://www.todoist.com/help/articles/market-your-todoist-integration-B6C5sCKkn) renvoie à la charte pour qui emploie le logo dans une intégration ; la charte (Todoist Brand Guidelines.pdf, 01/2021, dans le même kit) : symbole d'au moins 16 px de haut, zone libre de la moitié de sa hauteur, en couleur sur fond blanc ou beige, en blanc sur fond sombre, sans modification. Relevé pour un connecteur à venir : aucun écran ne le montre encore.",
+      "tailleMin": 16,
+      "marge": {
+        "part": 0.5
+      },
+      "empreintes": {
+        "todoist.svg": "9adff05124fc2e773bcf4c7fff454ce341899d1806782dee543405bd77d53383",
+        "todoist.sombre.svg": "cce77683d713f3cf5b2976cf2c90fb5d2103dfcb64b7bacebbba09754b808cd1"
+      }
+    },
+    "clickup": {
+      "titre": "ClickUp",
+      "clair": "clickup.svg",
+      "source": "https://clickup.com/assets/brand/v4/clickup-brand-assets.zip (Logos/ClickUp/Logomark-gradient.svg)",
+      "page": "https://clickup.com/brand",
+      "regle": "Page de marque officielle, sans règle écrite pour les tiers ; ni recoloration, ni contour, ni déformation, ni rotation, pas sur un fond coloré ; zone libre du symbole d'environ 17 % de sa largeur (schéma logo-clickup-icon-clearspace-full.svg de la page). Le symbole en dégradé sert aux deux thèmes. Relevé pour un connecteur à venir : aucun écran ne le montre encore.",
+      "marge": {
+        "part": 0.18
+      },
+      "empreintes": {
+        "clickup.svg": "a8b08e70df4a7d7c949a423b4f3caa04671e209617c8b73bc24cff846ae2e017"
+      }
     }
   },
   "neutres": {
-    "slack": "https://slack.com/terms-of-service/slack-brand : la plupart des usages demandent une licence écrite, et la charte interdit de « distribuer ou mettre à disposition » ses logos, ce que ferait un dépôt public.",
-    "openai": "https://openai.com/brand/ : ne pas utiliser le logo sans l'autorisation d'OpenAI (demande à partnercomms@openai.com).",
-    "linkedin": "https://brand.linkedin.com/in-logo : un développeur ne peut employer le logo [in] que comme bouton « Share » ou widget « Follow ».",
-    "meta": "Modèles Llama : le logo de Meta est dans le même centre de marque, derrière la même acceptation de conditions.",
-    "tiktok": "https://developers.tiktok.com/doc/getting-started-design-guidelines : pas de logo TikTok sans autorisation écrite préalable.",
+    "slack": "https://slack.com/terms-of-service/slack-brand : une application peut dire qu'elle s'intègre à Slack, mais la charte interdit de « distribuer ou mettre à disposition » ses logos, ce que ferait un dépôt public ; le kit (https://slack.com/media-kit) ne se télécharge qu'en acceptant ces conditions. Relu le 28/09/2026.",
+    "openai": "https://openai.com/brand/ : pour un développeur de l'API, tout ce qui touche à l'application (nom, logo, description, captures d'écran) doit rester libre des marques d'OpenAI, logos compris ; tout autre usage passe par partnercomms@openai.com. Relu le 28/09/2026.",
+    "linkedin": "https://brand.linkedin.com/in-logo : un développeur ne peut employer le logo [in] que comme bouton « Share » ou widget « Follow » ; le kit se télécharge après acceptation des conditions de LinkedIn, ce qui ne changerait pas cette règle.",
+    "meta": "Modèles Llama : https://www.meta.com/brand/resources/meta/company-brand/ : tout usage du logo de Meta demande une approbation (« Brand Review ») et il est réservé aux partenariats sous accord, à la presse et à l'édition ; Llama n'a pas de page de marque propre (l'ancienne adresse n'existe plus). Le kit téléchargé par Medhi n'a pas été retrouvé sur le poste le 28/09/2026 ; il ne lèverait pas l'approbation demandée.",
+    "tiktok": "https://developers.tiktok.com/doc/getting-started-design-guidelines : pas de logo TikTok sans autorisation écrite préalable. Relu le 28/09/2026.",
     "youtube": "https://brand.youtube/youtube-icon/ : hauteur minimale de 100 px en numérique, incompatible avec une ligne de liste de 22 px. Icône neutre dans la liste seulement : le logo officiel s'affiche en grand dans le panneau YouTube (voir « youtube » dans les marques).",
-    "hubspot": "https://www.hubspot.com/partners/app/branding-guidelines : le logo et le sprocket demandent une approbation préalable.",
-    "intercom": "https://www.intercom.com/legal/trademark-usage : le logo n'est utilisable que dans le cadre d'un programme partenaire.",
-    "asana": "https://asana.com/brand : le symbole ne s'emploie jamais seul, et le logo complet est illisible à 22 px.",
-    "airtable": "https://www.airtable.com/company/trademark-guidelines : seuls deux assemblages icône et nom sont approuvés ; l'icône seule n'en fait pas partie.",
-    "box": "https://www.box.com/legal/trademark : sans accord écrit, un tiers ne peut utiliser aucun logo de Box.",
+    "hubspot": "https://www.hubspot.com/partners/app/branding-guidelines : le logo et le sprocket demandent une approbation préalable (formulaire, 7 à 10 jours) ; seuls les badges de partenaire se téléchargent sans elle.",
+    "intercom": "https://www.intercom.com/legal/trademark-usage : le logo désigné ne s'emploie que dans le cadre du programme développeur ou d'un accord écrit avec Intercom.",
+    "asana": "https://asana.com/brand : le symbole ne s'emploie jamais seul, et le logo complet est illisible à 22 px. Relu le 28/09/2026.",
+    "airtable": "https://www.airtable.com/company/trademark-guidelines : seuls deux assemblages icône et nom sont approuvés ; l'icône seule n'en fait pas partie. Relu le 28/09/2026.",
+    "box": "https://www.box.com/legal/trademark : sans accord écrit, un tiers ne peut utiliser aucun logo de Box, même pour décrire une intégration. Relu le 28/09/2026.",
     "paypal": "https://newsroom.paypal-corp.com/media-resources : fichiers destinés à la presse ; un développeur doit demander l'accord de developer@paypal.com.",
-    "square": "https://developer.squareup.com/docs/brand-guidelines : seul un assemblage logo et nom en PNG est fourni aux développeurs, illisible à 22 px.",
-    "tavily": "Aucune page de marque officielle trouvée.",
-    "deepseek": "Aucune page de marque ; le seul fichier officiel (https://github.com/deepseek-ai/DeepSeek-V2/blob/main/figures/logo.svg) est l'assemblage baleine et nom, illisible à 22 px.",
-    "qwen": "Aucune page de marque ; le dépôt QwenLM ne publie qu'une image PNG de Qwen-Image.",
-    "gemma": "Logo propre aux modèles Gemma non relevé ; l'icône de Gemini, un autre produit, n'est plus prêtée à Gemma.",
-    "groq": "Aucune page de marque officielle trouvée.",
-    "scaleway": "Aucune page de marque officielle trouvée.",
-    "ovhcloud": "https://www.ovhcloud.com/sites/default/files/external_files/trademark_usage_guidelines_for_contracting-parties-30122024-english.pdf : marques réservées aux parties ayant signé un contrat avec OVHcloud.",
-    "ionos": "https://www.ionos.com/newsroom/download/ : pas de symbole téléchargeable, seulement le nom."
+    "square": "https://developer.squareup.com/docs/brand-guidelines : seul un assemblage « Built with Square » en PNG est fourni aux développeurs, illisible à 22 px. Relu le 28/09/2026.",
+    "deepseek": "Aucune page de marque ; le seul fichier officiel (https://github.com/deepseek-ai/DeepSeek-V2/blob/main/figures/logo.svg) est l'assemblage baleine et nom, illisible à 22 px. Relu le 28/09/2026.",
+    "qwen": "Aucune page de marque ; le dépôt QwenLM ne publie qu'une image PNG de Qwen-Image. Relu le 28/09/2026.",
+    "gemma": "https://ai.google.dev/gemma/terms (§ 4.2) : les conditions de Gemma n'accordent aucun droit sur les logos de Google, et aucun fichier officiel du logo de Gemma n'est publié avec une règle d'usage. L'icône de Gemini, un autre produit, n'est pas prêtée à Gemma.",
+    "groq": "https://groq.com/brand-assets/ renvoie une page introuvable le 28/09/2026 ; aucune autre page de marque officielle.",
+    "scaleway": "https://ultraviolet.scaleway.com/6dd9b5c45/p/6840d3-logo : le logo complet s'emploie de préférence, le symbole seul en dernier recours, et jamais sous 32 px de haut en numérique ; les listes de Helix l'afficheraient entre 13 et 22 px.",
+    "ovhcloud": "https://www.ovhcloud.com/sites/default/files/external_files/trademark-usage-policy-en-30december-24.pdf : le logo d'OVHcloud ne s'emploie, sur un site ou dans un produit, qu'avec une licence écrite ; la compatibilité se dit avec le nom seul.",
+    "ionos": "https://www.ionos.com/newsroom/download/ : pas de symbole téléchargeable, seulement le nom. Relu le 28/09/2026.",
+    "outlook": "https://www.microsoft.com/en-us/legal/intellectualproperty/trademarks : les logos et icônes de produit de Microsoft ne s'emploient jamais sans licence expresse ; la compatibilité ne se dit qu'en texte. Les jeux d'icônes de Microsoft Learn sont réservés aux schémas d'architecture, à la formation et à la documentation.",
+    "onedrive": "Même règle que outlook (Microsoft).",
+    "sharepoint": "Même règle que outlook (Microsoft).",
+    "excel": "Même règle que outlook (Microsoft).",
+    "word": "Même règle que outlook (Microsoft).",
+    "teams": "Même règle que outlook (Microsoft).",
+    "whatsapp": "https://www.meta.com/brand/resources/whatsapp/whatsapp-brand/ : l'usage serait possible (logo non modifié, jamais l'élément le plus en vue, sans suggérer de partenariat), mais le kit ne se télécharge qu'en cochant « J'ai lu et j'accepte les règles applicables » : c'est à Medhi de l'accepter.",
+    "discord": "https://discord.com/branding : les marques de Discord ne servent qu'à dire qu'on utilise Discord ou qu'on y a un serveur ; tout autre usage demande la permission de Discord.",
+    "stripe": "https://stripe.com/marks/legal : les conditions couvrent un client de Stripe qui signale Stripe là où il s'en sert (page de paiement) ; tout autre usage passe par trademarks@stripe.com.",
+    "shopify": "https://www.shopify.com/brand-assets : tout usage des éléments de marque de Shopify doit être autorisé par écrit.",
+    "woocommerce": "https://woocommerce.com/trademark-guidelines/ : les logos WooCommerce et Woo ne peuvent servir à aucun usage ; la compatibilité se dit en texte.",
+    "salesforce": "https://www.salesforce.com/company/legal/tmcusageguidelines/ : un produit compatible ne peut montrer le logo d'un produit Salesforce que dans un schéma ou un diagramme qui explique comment il fonctionne avec lui.",
+    "pipedrive": "https://www.pipedrive.com/en/newsroom/press-kit : les fichiers du logo ne sont remis que sur demande.",
+    "zendesk": "https://www.zendesk.com/company/trademark-property/trademarks/ : aucune marque de Zendesk sans accord écrit qui contienne une licence ; sa page de fichiers de marque ne répond plus (28/09/2026).",
+    "monday": "https://monday.com/p/news/press-kit/ : le logo s'emploie avec le texte « monday.com » complet, jamais les capsules seules ; l'ensemble est illisible à 22 px.",
+    "calendly": "Aucune page de marque ni kit officiel trouvé (calendly.com/press, /brand, /newsroom, le 28/09/2026).",
+    "zoom": "https://www.zoom.com/en/trust/legal/zoom-api-license-and-tou/ : la licence de marque ne vaut que pour les applications bâties sur le SDK de Zoom ; tout autre usage demande l'accord écrit préalable de Zoom.",
+    "brevo": "https://www.brevo.com/press/ : seul le nom en toutes lettres est publié, sans symbole ni règle d'usage ; à 22 px de large, il ferait 6 px de haut.",
+    "mailchimp": "https://mailchimp.com/about/brand-assets/ : Freddie va toujours avec le nom, le kit ne livre que cet assemblage (illisible à 22 px), et l'associer à un autre graphisme demande l'accord écrit de Mailchimp."
   }
 }

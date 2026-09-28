@@ -60,14 +60,17 @@ export const MARQUE_DU_CONNECTEUR: Record<string, CleMarquePetite> = {
   firecrawl: "firecrawl",
   exa: "exa",
   x: "x",
+  // Page de marque de Tavily publiée depuis le premier relevé (seconde tournée, 28/09/2026).
+  tavily: "tavily",
 };
 
 /**
  * Icône neutre pour les services sans logo utilisable : ceux dont la charte
  * interdit cet usage ou le soumet à une autorisation (Slack, LinkedIn, Meta,
  * TikTok, YouTube, HubSpot, Intercom, Asana, Airtable, Box, PayPal, Square),
- * ceux dont on n'a trouvé aucune source officielle (Tavily), et les serveurs
- * livrés avec le produit, qui ne sont la marque de personne. Raisons datées
+ * et les serveurs livrés avec le produit, qui ne sont la marque de personne.
+ * Tavily a désormais son logo (MARQUE_DU_CONNECTEUR passe devant) ; son
+ * icône reste ici, pour le cas où la ligne serait trop petite pour sa charte. Raisons datées
  * dans scripts/marques/sources.json. YouTube n'a d'icône neutre que dans la
  * liste : sa charte fixe 100 px au moins, son logo est en grand dans son
  * panneau (ConnecteurNatif.tsx), et CleMarquePetite l'écarte des tables

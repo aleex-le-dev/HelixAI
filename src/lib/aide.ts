@@ -147,6 +147,15 @@ const ARTICLES: Article[] = [
     corps: t("Le connecteur courrier se règle dans Réglages, Outils et connecteurs.\n\n- Lecture : l'agent lit les messages de votre boîte par IMAP.\n- Brouillons : il peut déposer un vrai brouillon dans votre messagerie, que vous relisez et envoyez vous-même.\n- Envoi : il faut renseigner le serveur d'envoi. Chaque message vous est montré en entier avant de partir, avec ses destinataires.\n\nUn mot de passe d'application est souvent nécessaire (Gmail, Outlook) : votre mot de passe habituel sera refusé par le fournisseur. Il est conservé chiffré sur l'instance, jamais dans la fenêtre.\n\nLa boîte est commune à l'instance : seul son administrateur la branche, change son serveur d'envoi ou autorise l'envoi sans confirmation."),
   },
   {
+    // X (ex-Twitter), 28/09/2026 : gateway/src/oauthNatif.ts, outilsNatifs.ts, SECURITE.md § 42.
+    id: "x",
+    titre: t("Connecter X (ex-Twitter)"),
+    resume: t("Lire les posts du compte de l'organisation, publier après accord."),
+    motsCles: ["x", "twitter", "tweet", "post", "reseaux sociaux", "publier"],
+    lien: "/parametres/mcp",
+    corps: t("X se branche dans Réglages, Outils et connecteurs, avec l'application que votre organisation crée elle-même sur console.x.com. L'écran dit comment, en quelques étapes. Seul l'administrateur de l'instance branche X, et seul lui peut publier.\n\n- Lecture, sans rien cocher : le compte (abonnés, nombre de posts) et ses derniers posts, avec leurs vues, j'aime, reposts et réponses.\n- Publier, si la case est cochée à la connexion : un post de 280 caractères au plus, avec une image du dossier de travail si vous le demandez. Chaque post vous est montré en entier et ne part qu'après votre accord, à chaque fois, quel que soit le niveau d'approbation.\n\nL'API de X est payante : X n'a plus d'offre gratuite pour les nouveaux développeurs depuis février 2026. On lui achète des crédits, et chaque lecture ou publication est décomptée ; un post qui contient une adresse web coûte plus cher. Les tarifs publiés par X sont rappelés sur l'écran de connexion.\n\nPar prudence, dix publications par heure au plus pour toute l'instance, et le même post n'est pas publié deux fois de suite."),
+  },
+  {
     id: "reunions",
     titre: t("Réunions et transcription"),
     resume: t("Enregistrer, transcrire, résumer une réunion."),

@@ -801,9 +801,9 @@ export function secretApplication(id: IdNatif): string {
 export async function accesValide(id: IdNatif, forcer = false): Promise<string> {
   await charger();
   const c = utilisable(id);
-  if (!c) throw new ErreurNatif("acces", magasin?.comptes[id] ? `L'accès à ${DEFINITIONS[id].nom} a été perdu : il faut le reconnecter dans Paramètres, Connecteurs.` : `${DEFINITIONS[id].nom} n'est pas connecté.`);
+  if (!c) throw new ErreurNatif("acces", magasin?.comptes[id] ? `L'accès à ${DEFINITIONS[id].nom} a été perdu : il faut le reconnecter dans Réglages, Connecteurs.` : `${DEFINITIONS[id].nom} n'est pas connecté.`);
   const j = jetonsDe(id, c);
-  if (!j) throw new ErreurNatif("acces", `Le jeton enregistré pour ${DEFINITIONS[id].nom} est illisible : il faut le reconnecter dans Paramètres, Connecteurs.`);
+  if (!j) throw new ErreurNatif("acces", `Le jeton enregistré pour ${DEFINITIONS[id].nom} est illisible : il faut le reconnecter dans Réglages, Connecteurs.`);
   const valable = Boolean(j.expire) && j.expire! - 60_000 > Date.now();
   const anticipe = !forcer && id === "instagram" && valable && j.expire! - Date.now() < RENOUVELER_INSTAGRAM_MS && Date.now() - essaiInstagram > 3600_000;
   if (!forcer && !anticipe && (!j.expire || valable)) return j.acces;
@@ -836,7 +836,7 @@ export async function accesValide(id: IdNatif, forcer = false): Promise<string> 
        * n'expire pas (Mailchimp) et qu'on a révoqué était dit « expiré » au
        * modèle (banc d'essai du 28/09/2026).
        */
-      throw new ErreurNatif("acces", forcer ? `${DEFINITIONS[id].nom} n'accepte plus l'accès enregistré : il faut le reconnecter dans Paramètres, Connecteurs.` : `L'accès à ${DEFINITIONS[id].nom} a expiré et ne se renouvelle pas seul : il faut le reconnecter dans Paramètres, Connecteurs.`);
+      throw new ErreurNatif("acces", forcer ? `${DEFINITIONS[id].nom} n'accepte plus l'accès enregistré : il faut le reconnecter dans Réglages, Connecteurs.` : `L'accès à ${DEFINITIONS[id].nom} a expiré et ne se renouvelle pas seul : il faut le reconnecter dans Réglages, Connecteurs.`);
     }
     c.jetons = chiffrer(neufs, placeJetons(id));
     await ecrire();
@@ -913,7 +913,7 @@ export async function appelerApi(id: IdNatif, construire: (acces: string) => Par
     if (r.statut === 401 && essai === 0) continue;
     if (r.statut === 401) {
       await marquerPerdu(id, compte);
-      throw new ErreurNatif("acces", `${DEFINITIONS[id].nom} n'accepte plus l'accès enregistré : il faut le reconnecter dans Paramètres, Connecteurs.`);
+      throw new ErreurNatif("acces", `${DEFINITIONS[id].nom} n'accepte plus l'accès enregistré : il faut le reconnecter dans Réglages, Connecteurs.`);
     }
     return r;
   }
@@ -1215,7 +1215,7 @@ function erreurJetons(nom: string, json: Record<string, unknown>): ErreurNatif {
   const e = json.error;
   const code = typeof e === "string" ? e : typeof (e as { code?: unknown })?.code === "string" ? String((e as { code: string }).code) : "";
   if (code === "invalid_grant") return new ErreurNatif("acces", tf("Le code d'autorisation a expiré ou a déjà servi. Recommencez la connexion à {0}.", nom));
-  if (code === "invalid_client" || code === "unauthorized_client") return new ErreurNatif("config", tf("{0} ne reconnaît pas l'application enregistrée (identifiant ou secret). Vérifiez-les dans Paramètres, Connecteurs.", nom));
+  if (code === "invalid_client" || code === "unauthorized_client") return new ErreurNatif("config", tf("{0} ne reconnaît pas l'application enregistrée (identifiant ou secret). Vérifiez-les dans Réglages, Connecteurs.", nom));
   if (/redirect/i.test(code) || /redirect/i.test(String(json.error_description ?? ""))) return new ErreurNatif("config", tf("{0} refuse l'adresse de retour : déclarez-la à l'identique dans l'application, telle que l'écran la montre.", nom));
   return new ErreurNatif("api", tf("{0} a refusé l'échange d'autorisation.", nom));
 }

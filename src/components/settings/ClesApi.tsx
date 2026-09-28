@@ -421,7 +421,7 @@ function Documentation({ etat }: { etat: EtatClesApi }) {
         ))}
         {etat.adresses.reseau.length === 0 && (
           <p className="text-sm text-muted-foreground">
-            {t("Depuis une autre machine, l'API n'est pas joignable : l'instance n'écoute que sur cette machine tant qu'elle n'est pas ouverte aux collègues (Paramètres, Profil, rubrique Collègues).")}
+            {t("Depuis une autre machine, l'API n'est pas joignable : l'instance n'écoute que sur cette machine tant qu'elle n'est pas ouverte aux collègues (Réglages, Profil, rubrique Collègues).")}
           </p>
         )}
         {etat.adresses.chiffre && (
@@ -485,7 +485,7 @@ function Documentation({ etat }: { etat: EtatClesApi }) {
         </ul>
         <p className="text-sm text-muted-foreground">
           {tf(
-            "Au plus {0} requêtes par minute et par clé, {1} clés par personne. Chaque appel est inscrit à votre journal (Paramètres, Sécurité), sans son contenu.",
+            "Au plus {0} requêtes par minute et par clé, {1} clés par personne. Chaque appel est inscrit à votre journal (Réglages, Sécurité), sans son contenu.",
             etat.parMinute,
             etat.limite,
           )}

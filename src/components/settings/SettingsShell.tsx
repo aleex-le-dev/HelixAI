@@ -136,7 +136,7 @@ export function SettingsLayout() {
   return (
     <div className="flex h-full flex-col">
       <div className="px-6 pb-3 pt-6">
-        <h1 className="text-lg font-semibold text-foreground">{t("Paramètres")}</h1>
+        <h1 className="text-lg font-semibold text-foreground">{t("Réglages")}</h1>
       </div>
       <div className="flex min-h-0 flex-1 flex-col md:flex-row">
         <SettingsNav />

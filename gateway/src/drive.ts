@@ -171,7 +171,7 @@ class ErreurDrive extends Error {
  * traduits depuis la tournée des connecteurs du 28/09/2026, ils arrivaient en
  * français sur un écran anglais, chinois ou japonais.
  */
-const reconnecter = () => t("Reconnectez Google Drive dans Paramètres, Connecteurs, puis recommencez.");
+const reconnecter = () => t("Reconnectez Google Drive dans Réglages, Connecteurs, puis recommencez.");
 
 /* ------------------------- identifiants du client OAuth ----------------------- */
 
@@ -328,13 +328,13 @@ function erreurJetons(json: Record<string, unknown>): ErreurDrive {
   if (code === "invalid_client" || code === "unauthorized_client") {
     return new ErreurDrive(
       "config",
-      t("Google ne reconnaît pas l'application Google de cette instance (identifiant ou secret). Vérifiez-la dans Paramètres, Connecteurs (ou la rubrique « google » de helix.config.json si elle y est fixée)."),
+      t("Google ne reconnaît pas l'application Google de cette instance (identifiant ou secret). Vérifiez-la dans Réglages, Connecteurs (ou la rubrique « google » de helix.config.json si elle y est fixée)."),
     );
   }
   if (code === "invalid_request" && /client_secret/i.test(detail)) {
     return new ErreurDrive(
       "config",
-      t("Google exige le secret de l'application Google : enregistrez-la de nouveau avec son secret dans Paramètres, Connecteurs (ou ajoutez « clientSecret » dans la rubrique « google » de helix.config.json, puis redémarrez l'instance)."),
+      t("Google exige le secret de l'application Google : enregistrez-la de nouveau avec son secret dans Réglages, Connecteurs (ou ajoutez « clientSecret » dans la rubrique « google » de helix.config.json, puis redémarrez l'instance)."),
     );
   }
   if (code === "admin_policy_enforced") {
@@ -710,7 +710,7 @@ export async function demarrer(qui: string): Promise<{ ok: boolean; message: str
       ok: false,
       message:
         id.manque === "identifiant"
-          ? t("Aucune application Google n'est enregistrée sur cette instance : renseignez-la dans Paramètres, Connecteurs (ou « google » dans helix.config.json).")
+          ? t("Aucune application Google n'est enregistrée sur cette instance : renseignez-la dans Réglages, Connecteurs (ou « google » dans helix.config.json).")
           : t("L'identifiant du client OAuth Google de helix.config.json n'a pas la bonne forme : il se termine par « .apps.googleusercontent.com »."),
     };
   }
@@ -1212,8 +1212,8 @@ export async function callTool(
   if (!utilisable(cache)) {
     return refus(
       cache
-        ? `L'accès à Google Drive a été perdu. Dis à l'utilisateur de reconnecter Google Drive dans Paramètres, Connecteurs. N'essaie pas d'autres outils Drive.`
-        : "Aucun Google Drive n'est connecté. Dis à l'utilisateur de le brancher dans Paramètres, Connecteurs. N'essaie pas d'autres outils Drive.",
+        ? `L'accès à Google Drive a été perdu. Dis à l'utilisateur de reconnecter Google Drive dans Réglages, Connecteurs. N'essaie pas d'autres outils Drive.`
+        : "Aucun Google Drive n'est connecté. Dis à l'utilisateur de le brancher dans Réglages, Connecteurs. N'essaie pas d'autres outils Drive.",
     );
   }
 

@@ -129,7 +129,7 @@ class ErreurSlack extends Error {
 }
 
 // Une fonction, pour être dite dans la langue de qui lit (tournée des connecteurs du 28/09/2026).
-const reconnecter = () => t("Reconnectez Slack dans Paramètres, Connecteurs, avec un nouveau jeton.");
+const reconnecter = () => t("Reconnectez Slack dans Réglages, Connecteurs, avec un nouveau jeton.");
 
 /* ------------------------------- persistance ---------------------------------- */
 
@@ -824,8 +824,8 @@ export async function callTool(
   if (!utilisable(cache)) {
     return refus(
       cache
-        ? "Slack refuse désormais le jeton enregistré. Dis à l'utilisateur de reconnecter Slack dans Paramètres, Connecteurs. N'essaie pas d'autres outils Slack."
-        : "Aucun Slack n'est connecté. Dis à l'utilisateur de le brancher dans Paramètres, Connecteurs. N'essaie pas d'autres outils Slack.",
+        ? "Slack refuse désormais le jeton enregistré. Dis à l'utilisateur de reconnecter Slack dans Réglages, Connecteurs. N'essaie pas d'autres outils Slack."
+        : "Aucun Slack n'est connecté. Dis à l'utilisateur de le brancher dans Réglages, Connecteurs. N'essaie pas d'autres outils Slack.",
     );
   }
 

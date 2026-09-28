@@ -101,7 +101,7 @@ function contenuLanceur({ script: scriptCli = script(), prive = nodePrive(), nom
   const verifier = `process.exit(Number(process.versions.node.split(".")[0]) >= ${NODE_MINIMUM} ? 0 : 1)`;
   return [
     "#!/bin/sh",
-    "# Lanceur de la ligne de commande helix, posé par l'application (Paramètres).",
+    "# Lanceur de la ligne de commande helix, posé par l'application (Réglages).",
     `# Node : celui que l'application pose, sinon celui du système en version ${NODE_MINIMUM} ou plus.`,
     `for NODE in ${guillemets(prive)} "$(command -v node 2>/dev/null)" /opt/homebrew/bin/node /usr/local/bin/node /usr/bin/node; do`,
     `  [ -n "$NODE" ] && [ -x "$NODE" ] || continue`,

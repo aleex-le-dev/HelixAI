@@ -445,7 +445,7 @@ async function cuaCallUneFois(
       ok: false,
       injoignable: true,
       error: t(
-        "La machine de l'agent ne répond pas. Démarrez-la dans Paramètres, rubrique Contrôle de l'écran, puis réessayez.",
+        "La machine de l'agent ne répond pas. Démarrez-la dans Réglages, rubrique Contrôle de l'écran, puis réessayez.",
       ),
     };
   }

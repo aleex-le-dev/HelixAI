@@ -232,7 +232,7 @@ export function ReunionsPage() {
         <InfoBox tone={etat.agenda ? "muted" : "warning"} className="mt-4" leading={<CalendarClock size={15} strokeWidth={1.75} />}>
           {etat.agenda
             ? t("Le bot rejoint seul vos réunions Google Meet de l'agenda, à l'heure dite, tant que l'application est ouverte.")
-            : t("Le bot automatique attend un agenda : branchez-le dans Paramètres, Connecteurs.")}
+            : t("Le bot automatique attend un agenda : branchez-le dans Réglages, Connecteurs.")}
         </InfoBox>
       )}
 

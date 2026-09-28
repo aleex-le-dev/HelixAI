@@ -694,7 +694,7 @@ function EditeurMissions({
                   />
                   <p className="text-xs text-muted-foreground">
                     {!courrier.branchee
-                      ? t("Aucune boîte mail n'est branchée : faites-le dans Paramètres, Connecteurs. La mission attendra.")
+                      ? t("Aucune boîte mail n'est branchée : faites-le dans Réglages, Connecteurs. La mission attendra.")
                       : !courrier.acces
                         ? t("Il lui faut l'accès à la boîte mail : cochez « Courrier » dans ses outils ci-dessus.")
                         : t("La boîte est relevée toutes les deux minutes. Chaque nouveau mail lui est confié, avec la consigne ci-dessus ; s'il doit répondre, il prépare un brouillon. Il n'envoie rien de lui-même : un envoi attend toujours l'accord d'une personne, quels que soient les réglages, puisque le mail vient de l'extérieur.")}

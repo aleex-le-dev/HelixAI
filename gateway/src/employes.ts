@@ -2157,7 +2157,7 @@ async function avertissementCourrier(e: Employe): Promise<string | null> {
   if (!e.missions.some((m) => m.rythme === "a-chaque-mail")) return null;
   return (await courrier.adresseBranchee())
     ? null
-    : t("Aucune boîte mail n'est branchée (Paramètres, Connecteurs) : ses missions « à chaque mail reçu » attendront qu'elle le soit.");
+    : t("Aucune boîte mail n'est branchée (Réglages, Connecteurs) : ses missions « à chaque mail reçu » attendront qu'elle le soit.");
 }
 
 const joindre = (...avertissements: (string | null)[]) => avertissements.filter(Boolean).join(" ") || null;

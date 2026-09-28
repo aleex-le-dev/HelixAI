@@ -36,6 +36,7 @@ import {
 import { auth } from "@modelcontextprotocol/sdk/client/auth.js";
 import { definirEcriture, estMcpProjet, porteesDemandees, porteesEnTrop } from "./natifs/projetsRegles.ts";
 import { t, tf } from "./langue.ts";
+import { definirNomsConnecteurs } from "./approbation.ts";
 
 /**
  * Catalogue de connecteurs.
@@ -500,7 +501,7 @@ export const CATALOGUE: EntreeCatalogue[] = [
         nom: "NOTION_TOKEN",
         libelle: "Jeton d'intégration interne",
         aide:
-          "Dans Notion, ouvrez Réglages puis Intégrations, et créez une « intégration " +
+          "Dans Notion, ouvrez Paramètres puis Intégrations, et créez une « intégration " +
           "interne ». Copiez son jeton, puis ouvrez chaque page à partager et " +
           "utilisez « Connexions » pour y donner accès à cette intégration : Notion ne " +
           "montre au connecteur que ce que vous lui avez explicitement partagé.",
@@ -1856,3 +1857,13 @@ export async function groupes(): Promise<GroupeOutils[]> {
     ...(g.obstacle ? { obstacle: t(g.obstacle) } : {}),
   }));
 }
+
+/*
+ * Le nom lisible d'un connecteur pour la carte d'accord (approbation.ts,
+ * 28/09/2026) : celui qu'il porte dans l'écran Connecteurs, dans la langue de
+ * la demande, plutôt que son identifiant (« memoire »).
+ */
+definirNomsConnecteurs((id) => {
+  const nom = enMemoire.find((c) => c.id === id)?.label ?? CATALOGUE.find((e) => e.id === id)?.label;
+  return nom ? t(nom) : undefined;
+});

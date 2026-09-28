@@ -334,6 +334,22 @@ export function definirApercuNatif(fn: Apercu): void {
   registreApercu().fn = fn;
 }
 
+/*
+ * Le nom lisible d'un connecteur (« Mémoire de travail » plutôt que
+ * « memoire »), pour la carte d'accord (tournée à l'écran du 28/09/2026).
+ * Donné par connecteurs.ts au chargement, comme l'aperçu natif : l'importer
+ * d'ici refermerait un cycle d'import, avec les erreurs d'ordre de
+ * chargement vues à la fusion du 28/09/2026.
+ */
+type NomConnecteur = (id: string) => string | undefined;
+function registreNoms(): { fn: NomConnecteur | null } {
+  const porteur = registreNoms as unknown as { valeur?: { fn: NomConnecteur | null } };
+  return (porteur.valeur ??= { fn: null });
+}
+export function definirNomsConnecteurs(fn: NomConnecteur): void {
+  registreNoms().fn = fn;
+}
+
 /**
  * Outils livrés d'OpenCode qui ne font que lire le dossier du projet
  * (permissionsCode.ts : `code__<permission>`). Tout le reste modifie ou sort :
@@ -560,7 +576,9 @@ export function resumerOutil(outil: string, args: Record<string, unknown>): stri
    */
   const prefixe = outil.indexOf("__");
   if (prefixe > 0 && outil.slice(0, prefixe) !== "fichiers") {
-    return `utiliser l'outil « ${outil.slice(prefixe + 2)} » du connecteur « ${outil.slice(0, prefixe)} »`;
+    const id = outil.slice(0, prefixe);
+    const nom = registreNoms().fn?.(id) || id;
+    return `utiliser l'outil « ${outil.slice(prefixe + 2)} » du connecteur « ${nom} »`;
   }
 
   const separateur = outil.indexOf("__");

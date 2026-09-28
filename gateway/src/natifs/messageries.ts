@@ -468,9 +468,9 @@ async function appeler(
 ): Promise<Reponse> {
   await charger();
   const c = utilisable(id);
-  if (!c) throw new ErreurMessagerie("acces", magasin?.comptes[id] ? `L'accès à ${DEFINITIONS[id].nom} a été perdu : il faut le reconnecter dans Paramètres, Connecteurs.` : `${DEFINITIONS[id].nom} n'est pas connecté.`);
+  if (!c) throw new ErreurMessagerie("acces", magasin?.comptes[id] ? `L'accès à ${DEFINITIONS[id].nom} a été perdu : il faut le reconnecter dans Réglages, Connecteurs.` : `${DEFINITIONS[id].nom} n'est pas connecté.`);
   const jeton = jetonDe(id, c);
-  if (!jeton) throw new ErreurMessagerie("acces", `Le jeton enregistré pour ${DEFINITIONS[id].nom} est illisible : il faut le reconnecter dans Paramètres, Connecteurs.`);
+  if (!jeton) throw new ErreurMessagerie("acces", `Le jeton enregistré pour ${DEFINITIONS[id].nom} est illisible : il faut le reconnecter dans Réglages, Connecteurs.`);
   for (let essai = 0; essai < 2; essai++) {
     let r: Reponse;
     try {
@@ -482,7 +482,7 @@ async function appeler(
     const codeMeta = Number((r.json.error as { code?: unknown } | undefined)?.code);
     if (r.statut === 401 || (id === "whatsapp" && codeMeta === 190)) {
       await marquerPerdu(id);
-      throw new ErreurMessagerie("acces", `${DEFINITIONS[id].nom} refuse le jeton enregistré (révoqué ou régénéré) : il faut le reconnecter dans Paramètres, Connecteurs.`);
+      throw new ErreurMessagerie("acces", `${DEFINITIONS[id].nom} refuse le jeton enregistré (révoqué ou régénéré) : il faut le reconnecter dans Réglages, Connecteurs.`);
     }
     if (r.statut === 429) {
       const s = attente429(r);
@@ -1295,7 +1295,7 @@ export async function callTool(nom: string, args: Record<string, unknown>, pour?
   await charger();
   // Relu à chaque appel : un outil proposé avant un débranchement, ou avant que l'envoi soit fermé, ne part plus.
   if (!toolsForModel().some((o) => o.function.name === nom)) {
-    return refus(`L'outil ${nom} n'est pas disponible : la messagerie n'est pas connectée, ou l'envoi n'y est pas permis. Dis à l'utilisateur de le régler dans Paramètres, Connecteurs ; n'essaie pas d'autres outils de cette messagerie.`);
+    return refus(`L'outil ${nom} n'est pas disponible : la messagerie n'est pas connectée, ou l'envoi n'y est pas permis. Dis à l'utilisateur de le régler dans Réglages, Connecteurs ; n'essaie pas d'autres outils de cette messagerie.`);
   }
   if (ENVOIS_MESSAGERIES.includes(nom)) {
     // Au nom de toute l'organisation : l'administrateur seul, vérifié au moment d'agir (et pas seulement à l'écran).
@@ -1386,7 +1386,7 @@ async function executer(nom: string, args: Record<string, unknown>): Promise<Res
     }
     case "whatsapp__conversations": {
       const toutes = Object.entries(magasin!.conversations.whatsapp ?? {}).sort((a, b) => (b[1].messages.at(-1)?.quand ?? 0) - (a[1].messages.at(-1)?.quand ?? 0));
-      if (toutes.length === 0) return { ok: true, content: "Aucune conversation reçue. Les messages n'arrivent que si Meta peut joindre l'instance (webhook en https, réglé dans Paramètres, Connecteurs, WhatsApp). Sans message reçu, seul un modèle approuvé peut partir." };
+      if (toutes.length === 0) return { ok: true, content: "Aucune conversation reçue. Les messages n'arrivent que si Meta peut joindre l'instance (webhook en https, réglé dans Réglages, Connecteurs, WhatsApp). Sans message reçu, seul un modèle approuvé peut partir." };
       return {
         ok: true,
         content: assembler(

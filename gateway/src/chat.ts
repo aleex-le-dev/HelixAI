@@ -1214,7 +1214,7 @@ export async function handleChatRequest(
       const note =
         "Services que la personne peut connecter mais qui ne le sont pas encore : " +
         aBrancher.join(" ; ") +
-        ". Elle les connecte elle-même en un clic dans Paramètres, rubrique Connecteurs. " +
+        ". Elle les connecte elle-même en un clic dans Réglages, rubrique Connecteurs. " +
         "Si elle demande si tu pourrais t'en servir, réponds simplement oui, dis ce que tu pourras faire " +
         "une fois le service connecté et où le connecter. Ne prétends pas y avoir accès tant qu'il n'est pas connecté.";
       const premier = messages[0] as { role?: string; content?: unknown } | undefined;

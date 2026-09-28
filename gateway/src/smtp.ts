@@ -241,7 +241,7 @@ async function session(s: ServeurSmtp, domaine: string): Promise<Session> {
       attendu(
         await sess.commande(`AUTH XOAUTH2 ${jeton}`),
         [235],
-        t("Le serveur d'envoi a refusé l'autorisation. Elle a peut-être été retirée : rebranchez la boîte dans Paramètres, Connecteurs."),
+        t("Le serveur d'envoi a refusé l'autorisation. Elle a peut-être été retirée : rebranchez la boîte dans Réglages, Connecteurs."),
       );
     } else if (/\bPLAIN\b/.test(auth)) {
       const jeton = Buffer.from(`\u0000${s.identifiant}\u0000${s.motDePasse}`, "utf8").toString("base64");

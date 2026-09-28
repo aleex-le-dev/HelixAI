@@ -294,7 +294,7 @@ export function InstanceSetupPage({
         )}
 
         <p className="mt-8 text-center text-xs leading-relaxed text-muted-foreground">
-          {t("Ce choix est modifiable plus tard dans Paramètres. Dans les deux cas, vos documents et vos conversations ne sortent jamais de chez vous : rien n'est envoyé à un service d'intelligence artificielle, tout est calculé sur vos machines. Seule l'installation télécharge le moteur et le modèle auprès de leurs éditeurs.")}
+          {t("Ce choix est modifiable plus tard dans Réglages. Dans les deux cas, vos documents et vos conversations ne sortent jamais de chez vous : rien n'est envoyé à un service d'intelligence artificielle, tout est calculé sur vos machines. Seule l'installation télécharge le moteur et le modèle auprès de leurs éditeurs.")}
         </p>
       </div>
     </div>

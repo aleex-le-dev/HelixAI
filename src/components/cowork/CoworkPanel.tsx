@@ -79,7 +79,7 @@ function EcranMachine() {
     <PanelCard title={t("Machine de l'agent")} headerRight={<Box size={16} strokeWidth={1.75} />}>
       {!actif ? (
         <p className="text-xs leading-relaxed text-muted-foreground">
-          {t("La machine démarre, ou ne répond pas. Son état est dans Paramètres, rubrique Contrôle de l'écran.")}
+          {t("La machine démarre, ou ne répond pas. Son état est dans Réglages, rubrique Contrôle de l'écran.")}
         </p>
       ) : image ? (
         <>

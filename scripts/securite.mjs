@@ -7931,6 +7931,25 @@ console.log("\n28. Tournée à l'écran : mise en route, Chat, réglages, écran
   verifier("aucune phrase française affichée par un gabarit hors de t() / tf()", trouves.length === 0, trouves.join(", "));
 }
 
+console.log("\n29. Écran : « Réglages » partout, et la carte d'accord nomme le connecteur (28/09/2026)");
+{
+  const textes = [];
+  const parcourir = (d) => {
+    for (const e of readdirSync(d, { withFileTypes: true })) {
+      const c = join(d, e.name);
+      if (e.isDirectory() && e.name !== "i18n") parcourir(c);
+      else if (/\.(ts|tsx)$/.test(e.name)) textes.push(...(readFileSync(c, "utf8").match(/t\("[^"]*Paramètres[^"]*"\)/g) ?? []));
+    }
+  };
+  parcourir(join(RACINE, "src"));
+  // Seuls restent les menus d'autres logiciels (Meta, ChatGPT, Claude), qui s'appellent ainsi chez eux.
+  const deHelix = textes.filter((x) => !/Paramètres de l'app|ChatGPT : Paramètres|Claude : Paramètres/.test(x));
+  verifier("l'interface dit « Réglages » (plus de « Paramètres » pour les réglages de Helix)", deHelix.length === 0, deHelix.slice(0, 3).join(" | "));
+  const barriere = readFileSync(join(RACINE, "gateway", "src", "approbation.ts"), "utf8");
+  const connecteursSrc = readFileSync(join(RACINE, "gateway", "src", "connecteurs.ts"), "utf8");
+  verifier("la carte d'accord nomme le connecteur par son nom lisible, pas par son identifiant", /registreNoms\(\)\.fn\?\.\(id\) \|\| id/.test(barriere) && /definirNomsConnecteurs\(\(id\) =>/.test(connecteursSrc), "approbation.ts, connecteurs.ts");
+}
+
 console.log(`\n${reussis} vérification(s) réussie(s), ${echecs.length} échec(s).`);
 if (echecs.length) {
   console.log("Échecs :");

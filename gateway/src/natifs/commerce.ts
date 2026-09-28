@@ -703,14 +703,14 @@ async function accesValide(id: IdCommerce, forcer = false): Promise<string> {
   await charger();
   const def = DEFINITIONS[id];
   const c = utilisable(id);
-  if (!c) throw new ErreurNatif("acces", magasin?.comptes[id] ? `L'accès à ${def.nom} a été perdu : il faut le reconnecter dans Paramètres, Connecteurs.` : `${def.nom} n'est pas connecté.`);
+  if (!c) throw new ErreurNatif("acces", magasin?.comptes[id] ? `L'accès à ${def.nom} a été perdu : il faut le reconnecter dans Réglages, Connecteurs.` : `${def.nom} n'est pas connecté.`);
   if (def.mode === "cle") {
     const cle = secretDe(id);
-    if (!cle) throw new ErreurNatif("acces", `La clé enregistrée pour ${def.nom} est illisible : il faut la saisir de nouveau dans Paramètres, Connecteurs.`);
+    if (!cle) throw new ErreurNatif("acces", `La clé enregistrée pour ${def.nom} est illisible : il faut la saisir de nouveau dans Réglages, Connecteurs.`);
     return cle;
   }
   const j = jetonsDe(id, c);
-  if (!j) throw new ErreurNatif("acces", `Le jeton enregistré pour ${def.nom} est illisible : il faut le reconnecter dans Paramètres, Connecteurs.`);
+  if (!j) throw new ErreurNatif("acces", `Le jeton enregistré pour ${def.nom} est illisible : il faut le reconnecter dans Réglages, Connecteurs.`);
   if (!forcer && (!j.expire || j.expire - 60_000 > Date.now())) return j.acces;
   const deja = enCours.get(id);
   if (deja) return deja;
@@ -728,7 +728,7 @@ async function accesValide(id: IdCommerce, forcer = false): Promise<string> {
     if (!neufs) {
       await marquerPerdu(id);
       // `forcer` : le service vient de refuser l'accès (401), il n'a pas seulement expiré.
-      throw new ErreurNatif("acces", forcer ? `${def.nom} n'accepte plus l'accès enregistré : il faut le reconnecter dans Paramètres, Connecteurs.` : `L'accès à ${def.nom} a expiré et ne se renouvelle pas seul : il faut le reconnecter dans Paramètres, Connecteurs.`);
+      throw new ErreurNatif("acces", forcer ? `${def.nom} n'accepte plus l'accès enregistré : il faut le reconnecter dans Réglages, Connecteurs.` : `L'accès à ${def.nom} a expiré et ne se renouvelle pas seul : il faut le reconnecter dans Réglages, Connecteurs.`);
     }
     c.jetons = chiffrer(neufs, placeJetons(id));
     await ecrire();
@@ -770,7 +770,7 @@ async function appelerApi(id: IdCommerce, construire: (hote: string) => Omit<Par
     if (r.statut === 401 && essai === 0 && def.mode !== "cle") continue;
     if (r.statut === 401) {
       await marquerPerdu(id);
-      throw new ErreurNatif("acces", `${def.nom} n'accepte plus l'accès enregistré : il faut le reconnecter dans Paramètres, Connecteurs.`);
+      throw new ErreurNatif("acces", `${def.nom} n'accepte plus l'accès enregistré : il faut le reconnecter dans Réglages, Connecteurs.`);
     }
     return r;
   }
@@ -1087,7 +1087,7 @@ async function conclureRetour(f: Flux, parametres: URLSearchParams): Promise<{ o
 function erreurJetons(nom: string, json: Record<string, unknown>): ErreurNatif {
   const code = typeof json.error === "string" ? json.error : "";
   if (code === "invalid_grant") return new ErreurNatif("acces", tf("Le code d'autorisation a expiré ou a déjà servi. Recommencez la connexion à {0}.", nom));
-  if (code === "invalid_client" || code === "unauthorized_client") return new ErreurNatif("config", tf("{0} ne reconnaît pas l'application enregistrée (identifiant ou secret). Vérifiez-les dans Paramètres, Connecteurs.", nom));
+  if (code === "invalid_client" || code === "unauthorized_client") return new ErreurNatif("config", tf("{0} ne reconnaît pas l'application enregistrée (identifiant ou secret). Vérifiez-les dans Réglages, Connecteurs.", nom));
   if (/redirect/i.test(code) || /redirect/i.test(String(json.error_description ?? ""))) return new ErreurNatif("config", tf("{0} refuse l'adresse de retour : déclarez-la à l'identique dans l'application, telle que l'écran la montre.", nom));
   return new ErreurNatif("api", tf("{0} a refusé l'échange d'autorisation.", nom));
 }
@@ -1482,7 +1482,7 @@ export async function callTool(nom: string, args: Record<string, unknown>, pour?
   await charger();
   // Relu à chaque appel : un outil proposé avant un débranchement, ou sans la case « écriture », ne part plus.
   if (!toolsForModel().some((o) => o.function.name === nom)) {
-    return refus(`L'outil ${nom} n'est pas disponible : le service n'est pas connecté, ou l'accès accordé ne le permet pas. Dis à l'utilisateur de le brancher dans Paramètres, Connecteurs ; n'essaie pas d'autres outils de ce service.`);
+    return refus(`L'outil ${nom} n'est pas disponible : le service n'est pas connecté, ou l'accès accordé ne le permet pas. Dis à l'utilisateur de le brancher dans Réglages, Connecteurs ; n'essaie pas d'autres outils de ce service.`);
   }
   if (ECRITURES_COMMERCE.includes(nom) && !(pour?.userId && (await estAdministrateur(pour.userId)))) {
     return refus("Refusé : écrire par ce connecteur, au nom de l'organisation, est réservé à l'administrateur de l'instance. Dis-le à l'utilisateur ; rien n'a été fait.");

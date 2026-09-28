@@ -834,7 +834,7 @@ export class ClientImap {
         throw new ErreurImap(
           "authentification",
           tf(
-            "{0} a refusé l'accès à la boîte {1}. L'autorisation a peut-être été retirée, ou elle a été donnée pour une autre adresse : rebranchez la boîte dans Paramètres, Connecteurs.",
+            "{0} a refusé l'accès à la boîte {1}. L'autorisation a peut-être été retirée, ou elle a été donnée pour une autre adresse : rebranchez la boîte dans Réglages, Connecteurs.",
             nomFournisseur(this.compte.oauth.fournisseur),
             this.compte.adresse,
           ),
@@ -2332,7 +2332,7 @@ export function toolsForModel(): {
         (cache.smtp
           ? ""
           : " L'envoi direct n'est pas activé pour cette boîte : si l'utilisateur veut qu'un mail parte, " +
-            "prépare le brouillon et dis-lui qu'il peut activer l'envoi dans Paramètres, Connecteurs, Courrier."),
+            "prépare le brouillon et dis-lui qu'il peut activer l'envoi dans Réglages, Connecteurs, Courrier."),
       {
         a: { type: "string", description: "Destinataires, séparés par des virgules : « jean@exemple.fr, Marie <marie@exemple.fr> »." },
         cc: { type: "string", description: "Copie, même forme. Facultatif." },

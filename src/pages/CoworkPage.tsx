@@ -79,7 +79,7 @@ const SERVICES_ROLE = [
   t("Messagerie, agenda, Google Drive et Slack : n'en parle qu'après avoir utilisé l'outil qui les lit"),
   t("(« courrier__… », « agenda__… », « drive__… », « slack__… »). Si cet outil ne t'est pas proposé, le"),
   t("service n'est pas connecté : dis-le franchement, sans rien supposer de son contenu, et indique qu'il"),
-  t("se connecte dans Paramètres, rubrique Connecteurs. Les réunions transcrites ne sont pas l'agenda."),
+  t("se connecte dans Réglages, rubrique Connecteurs. Les réunions transcrites ne sont pas l'agenda."),
   t("Les connecteurs d'agenda, de Google Drive et de Slack ne font que lire : ils ne créent pas de"),
   t("rendez-vous et n'envoient pas de message."),
 ].join("\n");
@@ -129,7 +129,7 @@ const SANS_ECRAN_ROLE = [
   ``,
   t("Tu ne vois pas l'écran et tu ne peux ni cliquer, ni taper au clavier, ni ouvrir une application."),
   t("Si on te le demande, dis-le tout de suite, sans chercher de détour avec les autres outils, et indique"),
-  t("que le contrôle de l'écran se règle dans Paramètres, rubrique Contrôle de l'écran, avec un modèle"),
+  t("que le contrôle de l'écran se règle dans Réglages, rubrique Contrôle de l'écran, avec un modèle"),
   t("capable de voir les images choisi dans le sélecteur de modèle."),
 ].join("\n");
 

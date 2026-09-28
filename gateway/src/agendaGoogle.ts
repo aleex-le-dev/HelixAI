@@ -56,7 +56,7 @@ const PORTEE_ECRITURE = "https://www.googleapis.com/auth/calendar.events";
 const AGENT = "Connecteur-Agenda/1";
 const LIMITES = { delaiMs: 20_000, delaiTotalMs: 45_000, fluxMs: 10 * 60_000, octets: 4 * 1024 * 1024, evenementsParAgenda: 250 };
 const COLLECTION: StoredCollection = "agendaGoogle";
-const reconnecter = () => t("Reconnectez Google Agenda dans Paramètres, Connecteurs, puis recommencez.");
+const reconnecter = () => t("Reconnectez Google Agenda dans Réglages, Connecteurs, puis recommencez.");
 
 // Sans propriété déclarée dans le constructeur : Node lit ce fichier en ôtant les types, et ne l'accepte pas.
 class ErreurAgendaGoogle extends Error {
@@ -161,10 +161,10 @@ function erreurJetons(json: Record<string, unknown>): ErreurAgendaGoogle {
   }
   // Traduits depuis la tournée des connecteurs du 28/09/2026 : ils s'affichent aussi à la connexion, à l'écran.
   if (code === "invalid_client" || code === "unauthorized_client") {
-    return new ErreurAgendaGoogle("config", t("Google ne reconnaît pas l'application Google de cette instance (identifiant ou secret). Vérifiez-les dans Paramètres, Connecteurs."));
+    return new ErreurAgendaGoogle("config", t("Google ne reconnaît pas l'application Google de cette instance (identifiant ou secret). Vérifiez-les dans Réglages, Connecteurs."));
   }
   if (code === "invalid_request" && /client_secret/i.test(detail)) {
-    return new ErreurAgendaGoogle("config", t("Google exige le secret de l'application Google. Ajoutez-le dans Paramètres, Connecteurs, puis recommencez."));
+    return new ErreurAgendaGoogle("config", t("Google exige le secret de l'application Google. Ajoutez-le dans Réglages, Connecteurs, puis recommencez."));
   }
   if (code === "admin_policy_enforced") {
     return new ErreurAgendaGoogle("acces", t("L'administrateur de votre domaine Google bloque l'accès de cette application à l'agenda."));
@@ -728,7 +728,7 @@ async function idAgenda(nom: string | null): Promise<string> {
 }
 
 function exigerEcriture(): void {
-  if (!ecritureActive()) throw new ErreurAgendaGoogle("acces", "Google Agenda est branché en lecture seule : pour écrire, reconnectez-le en cochant l'écriture dans Paramètres, Connecteurs.");
+  if (!ecritureActive()) throw new ErreurAgendaGoogle("acces", "Google Agenda est branché en lecture seule : pour écrire, reconnectez-le en cochant l'écriture dans Réglages, Connecteurs.");
 }
 
 const idSur = (id: string) => /^[A-Za-z0-9_@.-]{1,1024}$/.test(id);

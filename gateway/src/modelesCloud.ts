@@ -391,7 +391,7 @@ export function messageDuFournisseur(statut: number, detail: string, modele: str
   const dit = messageDuRefus(detail) || String(statut);
   if (statut === 401 || statut === 403 || (statut === 400 && CLE_REFUSEE.test(detail))) {
     return tf(
-      "{0} refuse la clé ({1}) : elle a peut-être été révoquée, a expiré, ou n'a pas accès à {2}. Vérifiez-la dans Paramètres, Modèles cloud. Réponse du fournisseur : {3}",
+      "{0} refuse la clé ({1}) : elle a peut-être été révoquée, a expiré, ou n'a pas accès à {2}. Vérifiez-la dans Réglages, Modèles cloud. Réponse du fournisseur : {3}",
       fournisseur,
       statut,
       modele,
@@ -412,7 +412,7 @@ export function messageDuFournisseur(statut: number, detail: string, modele: str
   }
   if (statut === 404 || (statut < 500 && /model_not_found|not_found_error|does not exist|unknown model|invalid model|no such model|model .*not found|is not found/i.test(detail))) {
     return tf(
-      "{0} ne connaît pas (ou plus) le modèle {1} ({2}) : il a peut-être été retiré. Choisissez-en un autre, ou mettez à jour les modèles de la clé dans Paramètres, Modèles cloud. Réponse du fournisseur : {3}",
+      "{0} ne connaît pas (ou plus) le modèle {1} ({2}) : il a peut-être été retiré. Choisissez-en un autre, ou mettez à jour les modèles de la clé dans Réglages, Modèles cloud. Réponse du fournisseur : {3}",
       fournisseur,
       modele,
       statut,

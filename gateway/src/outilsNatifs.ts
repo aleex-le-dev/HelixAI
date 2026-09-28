@@ -328,7 +328,7 @@ export async function callTool(nom: string, args: Record<string, unknown>, pour?
   await charger();
   // Relu à chaque appel : un outil proposé avant un débranchement ne part plus.
   if (!toolsForModel().some((o) => o.function.name === nom)) {
-    return refus(`L'outil ${nom} n'est pas disponible : le service n'est pas connecté, ou l'accès accordé ne le permet pas. Dis à l'utilisateur de le brancher dans Paramètres, Connecteurs ; n'essaie pas d'autres outils de ce service.`);
+    return refus(`L'outil ${nom} n'est pas disponible : le service n'est pas connecté, ou l'accès accordé ne le permet pas. Dis à l'utilisateur de le brancher dans Réglages, Connecteurs ; n'essaie pas d'autres outils de ce service.`);
   }
   if (ECRITURES_NATIVES.has(nom)) {
     const r = await exigerAdministrateur(pour);

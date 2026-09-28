@@ -145,7 +145,7 @@ const brevo = (methode: "GET" | "POST", chemin: string, corps?: unknown) =>
 /** L'hôte de l'API Mailchimp du compte branché, relu à chaque appel, de la forme attendue seulement. */
 function hoteMailchimp(): string {
   const hote = `${idsDe("mailchimp").dc ?? ""}.api.mailchimp.com`;
-  if (!HOTE_MAILCHIMP.test(hote)) throw new ErreurNatif("acces", "Le centre de données du compte Mailchimp est inconnu : il faut reconnecter Mailchimp dans Paramètres, Connecteurs.");
+  if (!HOTE_MAILCHIMP.test(hote)) throw new ErreurNatif("acces", "Le centre de données du compte Mailchimp est inconnu : il faut reconnecter Mailchimp dans Réglages, Connecteurs.");
   return hote;
 }
 const mailchimp = (methode: "GET" | "POST" | "PUT", chemin: string, corps?: unknown) => {

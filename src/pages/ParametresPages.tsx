@@ -635,7 +635,7 @@ export function PersonnalisationSettings() {
       </InfoBox>
 
       <SettingsRow
-        title={t("Paramètres personnalisés")}
+        title={t("Réglages personnalisés")}
         desc={t("Personnalisez le comportement de l'IA selon vos préférences")}
       >
         <Card>

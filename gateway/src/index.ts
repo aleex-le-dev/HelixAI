@@ -4523,7 +4523,7 @@ async function handleImportLogiciels(req: http.IncomingMessage, res: http.Server
     return send(res, 400, { error: { message: t("Jetons en en-têtes seulement pour cette route, jamais dans l'adresse.") } });
   }
   if (instancePartagee()) {
-    return send(res, 403, { error: { message: t("L'import depuis les logiciels du poste est fermé sur une instance partagée : ces fichiers seraient ceux du serveur, pas les vôtres. Utilisez l'export du logiciel (Paramètres, Importer).") } });
+    return send(res, 403, { error: { message: t("L'import depuis les logiciels du poste est fermé sur une instance partagée : ces fichiers seraient ceux du serveur, pas les vôtres. Utilisez l'export du logiciel (Réglages, Importer).") } });
   }
   const qui = await demandeur(req, url);
   if (!qui) return send(res, 401, sansSeance());

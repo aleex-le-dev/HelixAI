@@ -332,7 +332,7 @@ async function passage(bot) {
   }
   if (phase === "connexion-requise") {
     bot.erreurAttendue =
-      "Cette réunion n'accepte que des comptes Google connectés. Connectez un compte Google au bot dans Paramètres, Bot Recorder, puis renvoyez-le.";
+      "Cette réunion n'accepte que des comptes Google connectés. Connectez un compte Google au bot dans Réglages, Bot Recorder, puis renvoyez-le.";
     return arreterEnregistrement(bot);
   }
   if (phase === "attente") {

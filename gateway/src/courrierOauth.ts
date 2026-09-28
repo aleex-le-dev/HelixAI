@@ -360,7 +360,7 @@ async function renouveler(jetons: JetonsCourrier): Promise<Renouvellement> {
     if (!reponse.ok) {
       return {
         ok: false,
-        message: tf("{0} a refusé de renouveler l'accès à la boîte : {1}. Il faut rebrancher la boîte dans Paramètres, Connecteurs.", def.nom, lisible(texte)),
+        message: tf("{0} a refusé de renouveler l'accès à la boîte : {1}. Il faut rebrancher la boîte dans Réglages, Connecteurs.", def.nom, lisible(texte)),
       };
     }
     const json = JSON.parse(texte) as {

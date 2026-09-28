@@ -4159,6 +4159,34 @@ refuse de charger (`lms`), le bot de réunion, la mise à jour d'un clic (le nav
 pont Electron). À savoir : le bouton « Copier les informations techniques » a été essayé une fois
 dans la fenêtre Electron d'essai et a écrit dans le presse-papiers du Mac.
 
+**Fait le 28/09/2026 (pour la 2026.928.3), à la demande de Medhi, vu sur ses captures.**
+- **Comparer les modèles** : 57 repères rendaient le graphique illisible. Il n'en garde plus
+  qu'une douzaine : le mieux noté de chaque éditeur, le moins cher d'OpenAI, d'Anthropic et de
+  Google, les modèles de la personne, et le repère le plus proche en note du modèle en cours, pour
+  le situer. Le tableau garde les 217. La source tient en une ligne (licence CC BY 4.0 complète :
+  source, licence, lien, date, « extrait, notes inchangées ») ; « Voir le tableau » est écarté de la
+  croix de fermeture.
+- **Cadre vert autour des champs texte** (titre d'une nouvelle tâche, jusque sous la croix) :
+  l'anneau de focus clavier global s'appliquait aux champs texte, qui sont `:focus-visible` même
+  au clic. Il reste sur boutons, liens, menus et cases ; les champs de formulaire marquent leur
+  focus par leur bordure (`src/styles/index.css`).
+- **Tâches** : la colonne des rubriques se réduit à ses icônes (bouton en tête, choix retenu sur
+  le poste, nom au survol) ; dans le tableau, le titre ne se coupe plus mot par mot. Le compte
+  rendu d'une tâche est mis en forme (titres, listes) et peut s'agrandir, se copier ou se
+  télécharger en Markdown, titre de la tâche en tête.
+- **Logos de Facebook et d'Instagram** : Medhi a accepté les conditions de Meta et téléchargé
+  leurs kits (28/09/2026). Facebook : le .ai officiel converti en SVG sans changer le tracé
+  (`pdftocairo`) ; Instagram ne publie son dégradé qu'en image, d'où un PNG officiel réduit à
+  128 pixels, que `scripts/gen-marques.cjs` admet désormais (signature PNG vérifiée, intégré en
+  données, aucun appel réseau). YouTube : son logo en grand dans son panneau seulement (charte :
+  100 pixels au moins). LinkedIn, TikTok, Slack et OpenAI restent neutres, faute d'accord.
+- **Tâches et OpenClaw**, question de Medhi : une tâche (« Agent par défaut » ou un agent choisi)
+  tourne avec le moteur du Chat, dans Helix ; une tâche programmée aussi, lancée par la
+  passerelle. OpenClaw ne sert qu'aux employés 24/7. Décidé de ne rien changer à ce partage.
+**Pas essayé** : l'application de bureau avec ces changements (vu dans le code et, pour le
+graphique, dans le navigateur contre une instance jetable) ; le téléchargement du compte rendu
+dans Electron (même mécanisme que l'export des données, déjà en place).
+
 **Fait le 28/09/2026 : seconde tournée, les régressions entre fusions.** Sur le code fusionné le
 27/09 au soir (6b77c21), contre une instance jetable (clé des données en fichier, dossier de données,
 dossier personnel et PATH jetables, faux `security`, aucun `lms`, LM Studio et exo coupés), un faux

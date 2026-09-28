@@ -30,6 +30,11 @@ async function identifiantsSmtp(
   if (!compte.oauth) {
     return { ok: true, identifiant: compte.identifiant, motDePasse: compte.motDePasse };
   }
+  // Le jeton ouvre toute la boîte : il ne part qu'au serveur d'envoi du fournisseur (voir `reglerEnvoi`).
+  const attendu = SERVEURS[compte.oauth.fournisseur].smtp;
+  if (compte.smtp && compte.smtp.serveur.toLowerCase() !== attendu) {
+    return { ok: false, message: tf("Une boîte branchée avec {0} n'envoie que par son serveur, {1} : l'accès accordé n'est remis à aucun autre.", nomFournisseur(compte.oauth.fournisseur), attendu) };
+  }
   const acces = await accesValide(compte.oauth);
   if (!acces.ok) return { ok: false, message: acces.message };
   return {
@@ -406,13 +411,12 @@ export class ClientImap {
       if (!this.capacites.has("STARTTLS")) {
         throw new ErreurImap(
           "reseau",
-          "Ce serveur n'annonce pas STARTTLS sur ce port : la session resterait en clair. " +
-            "Vérifiez le port, ou choisissez le chiffrement TLS direct sur le port 993.",
+          t("Ce serveur n'annonce pas STARTTLS sur ce port : la session resterait en clair. Vérifiez le port, ou choisissez le chiffrement TLS direct sur le port 993."),
         );
       }
       const reponse = await this.commande(["STARTTLS"]);
       if (reponse.etat !== "OK") {
-        throw new ErreurImap("reseau", "Le serveur a refusé de passer en TLS.");
+        throw new ErreurImap("reseau", t("Le serveur a refusé de passer en TLS."));
       }
       /*
        * On remonte le TLS sur la socket existante. Tout ce qui a été annoncé
@@ -431,10 +435,11 @@ export class ClientImap {
     }
 
     await this.rafraichirCapacites();
-    if (this.capacites.has("LOGINDISABLED")) {
+    // LOGINDISABLED ne ferme que LOGIN : une boîte branchée par autorisation s'identifie par AUTHENTICATE XOAUTH2.
+    if (!this.compte.oauth && this.capacites.has("LOGINDISABLED")) {
       throw new ErreurImap(
         "authentification",
-        "Ce serveur refuse l'authentification par mot de passe sur cette connexion.",
+        t("Ce serveur refuse l'authentification par mot de passe sur cette connexion."),
       );
     }
     await this.authentifier();
@@ -445,7 +450,7 @@ export class ClientImap {
       const socket = connecterTcp({ host, port });
       const minuteur = setTimeout(() => {
         socket.destroy();
-        ko(new ErreurImap("reseau", "Le serveur n'a pas répondu dans le temps imparti."));
+        ko(new ErreurImap("reseau", t("Le serveur n'a pas répondu dans le temps imparti.")));
       }, LIMITES.delaiConnexionMs);
       socket.once("connect", () => {
         clearTimeout(minuteur);
@@ -463,7 +468,7 @@ export class ClientImap {
       const socket = connecterTls(options);
       const minuteur = setTimeout(() => {
         socket.destroy();
-        ko(new ErreurImap("reseau", "Le serveur n'a pas répondu dans le temps imparti."));
+        ko(new ErreurImap("reseau", t("Le serveur n'a pas répondu dans le temps imparti.")));
       }, LIMITES.delaiConnexionMs);
       socket.once("secureConnect", () => {
         clearTimeout(minuteur);
@@ -488,7 +493,7 @@ export class ClientImap {
     socket.on("error", (e: Error) => this.terminer(this.traduireReseau(e)));
     socket.on("timeout", () => {
       socket.destroy();
-      this.terminer(new ErreurImap("reseau", "Le serveur a cessé de répondre."));
+      this.terminer(new ErreurImap("reseau", t("Le serveur a cessé de répondre.")));
     });
     /*
      * « close » couvre aussi la coupure au milieu d'une réponse : le lecteur
@@ -496,10 +501,10 @@ export class ClientImap {
      * rester suspendu jusqu'au délai, ou de laisser remonter un TypeError.
      */
     socket.on("close", () =>
-      this.terminer(new ErreurImap("reseau", "La connexion a été interrompue par le serveur.")),
+      this.terminer(new ErreurImap("reseau", t("La connexion a été interrompue par le serveur."))),
     );
     socket.on("end", () =>
-      this.terminer(new ErreurImap("reseau", "La connexion a été interrompue par le serveur.")),
+      this.terminer(new ErreurImap("reseau", t("La connexion a été interrompue par le serveur."))),
     );
   }
 
@@ -538,23 +543,21 @@ export class ClientImap {
   private traduireReseau(e: Error): ErreurImap {
     const code = (e as NodeJS.ErrnoException).code ?? "";
     if (code === "ENOTFOUND" || code === "EAI_AGAIN") {
-      return new ErreurImap("reseau", "Nom de serveur introuvable : vérifiez son orthographe.");
+      return new ErreurImap("reseau", t("Nom de serveur introuvable : vérifiez son orthographe."));
     }
     if (code === "ECONNREFUSED") {
-      return new ErreurImap("reseau", "Connexion refusée : vérifiez le serveur et le port.");
+      return new ErreurImap("reseau", t("Connexion refusée : vérifiez le serveur et le port."));
     }
     if (code === "ETIMEDOUT" || code === "ECONNRESET") {
-      return new ErreurImap("reseau", "La connexion au serveur a été interrompue.");
+      return new ErreurImap("reseau", t("La connexion au serveur a été interrompue."));
     }
     if (/certificat|certificate|self.signed|CERT_|DEPTH_ZERO|ERR_TLS/i.test(code + " " + e.message)) {
       return new ErreurImap(
         "reseau",
-        "Le certificat du serveur n'est pas reconnu. " + NomProduit() + " refuse de continuer plutôt que " +
-          "d'exposer votre mot de passe : faites installer un certificat valide, ou ajoutez " +
-          "l'autorité de votre entreprise au magasin de confiance de cette machine.",
+        tf("Le certificat du serveur n'est pas reconnu. {0} refuse de continuer plutôt que d'exposer votre mot de passe : faites installer un certificat valide, ou ajoutez l'autorité de votre entreprise au magasin de confiance de cette machine.", NomProduit()),
       );
     }
-    return new ErreurImap("reseau", "La connexion au serveur de courrier a échoué.");
+    return new ErreurImap("reseau", t("La connexion au serveur de courrier a échoué."));
   }
 
   /** Ferme proprement. Appelé dans un `finally`, donc jamais bruyant. */
@@ -614,7 +617,7 @@ export class ClientImap {
         return ligne;
       }
       if (buf.length > LIMITES.ligne) {
-        throw new ErreurImap("protocole", "Réponse du serveur illisible : ce n'est pas de l'IMAP.");
+        throw new ErreurImap("protocole", t("Réponse du serveur illisible : ce n'est pas de l'IMAP."));
       }
       await this.attendre();
     }
@@ -682,11 +685,11 @@ export class ClientImap {
     if (/^\* BYE/i.test(ligne.texte)) {
       throw new ErreurImap(
         "serveur",
-        "Le serveur a refusé la connexion. Il limite peut-être le nombre de sessions simultanées.",
+        t("Le serveur a refusé la connexion. Il limite peut-être le nombre de sessions simultanées."),
       );
     }
     if (!/^\* (OK|PREAUTH)/i.test(ligne.texte)) {
-      throw new ErreurImap("protocole", "Ce serveur ne répond pas comme un serveur IMAP.");
+      throw new ErreurImap("protocole", t("Ce serveur ne répond pas comme un serveur IMAP."));
     }
     this.noterCapacites(ligne.texte);
   }
@@ -710,7 +713,7 @@ export class ClientImap {
   private ecrire(donnees: Buffer | string): void {
     const socket = this.socket;
     if (!socket || this.fin) {
-      throw this.fin ?? new ErreurImap("reseau", "La connexion au serveur est fermée.");
+      throw this.fin ?? new ErreurImap("reseau", t("La connexion au serveur est fermée."));
     }
     socket.write(donnees);
   }
@@ -725,7 +728,21 @@ export class ClientImap {
    * un CRLF ou une commande complète glissée dans un critère de recherche ne
    * sont que des octets comptés, jamais du protocole.
    */
-  private async commande(fragments: Fragment[]): Promise<ReponseImap> {
+  private async commande(
+    fragments: Fragment[],
+    /**
+     * Une demande de suite (« + … ») du serveur reçoit une réponse vide, et la
+     * commande continue jusqu'à sa conclusion. Pour AUTHENTICATE XOAUTH2
+     * seulement : en cas de refus, Google (et Microsoft) envoient d'abord
+     * « + <erreur en base 64> » et attendent une ligne vide avant le « NO »
+     * (https://developers.google.com/workspace/gmail/imap/xoauth2-protocol,
+     * lu le 28/09/2026). Sans cette réponse, la commande attendait jusqu'au
+     * délai d'inactivité : vingt secondes, puis « Le serveur a cessé de
+     * répondre » au lieu de dire que l'accès était refusé (tournée des
+     * connecteurs du 28/09/2026).
+     */
+    repondreSuite = false,
+  ): Promise<ReponseImap> {
     if (this.fin) throw this.fin;
     const etiquette = `h${String(++this.compteur).padStart(4, "0")}`;
     const lignes: LigneImap[] = [];
@@ -736,7 +753,7 @@ export class ClientImap {
       if (typeof fragment === "string") {
         if (/[\r\n]/.test(fragment)) {
           // Ceinture et bretelles : jamais atteint avec les constantes du module.
-          throw new ErreurImap("protocole", "Commande interne mal formée.");
+          throw new ErreurImap("protocole", t("Commande interne mal formée."));
         }
         tampon += fragment;
         continue;
@@ -760,7 +777,7 @@ export class ClientImap {
       if (ligne.tronque) this.rognage = true;
       if (ligne.texte.startsWith(etiquette + " ")) {
         const conclusion = /^\S+ (OK|NO|BAD)\b\s*(.*)$/i.exec(ligne.texte);
-        if (!conclusion) throw new ErreurImap("protocole", "Réponse du serveur incompréhensible.");
+        if (!conclusion) throw new ErreurImap("protocole", t("Réponse du serveur incompréhensible."));
         return {
           lignes,
           etat: conclusion[1]!.toUpperCase() as ReponseImap["etat"],
@@ -768,7 +785,13 @@ export class ClientImap {
         };
       }
       if (/^\* BYE/i.test(ligne.texte)) {
-        throw new ErreurImap("serveur", "Le serveur a mis fin à la session.");
+        throw new ErreurImap("serveur", t("Le serveur a mis fin à la session."));
+      }
+      if (repondreSuite && ligne.texte.startsWith("+")) {
+        // Une seule fois : un serveur qui redemande sans fin n'obtiendra pas une boucle.
+        repondreSuite = false;
+        this.ecrire(Buffer.from("\r\n", "utf8"));
+        continue;
       }
       lignes.push(ligne);
     }
@@ -781,7 +804,7 @@ export class ClientImap {
       if (ligne.texte.startsWith(etiquette + " ")) {
         throw new ErreurImap(
           "protocole",
-          "Le serveur a refusé la commande avant d'en recevoir les valeurs.",
+          t("Le serveur a refusé la commande avant d'en recevoir les valeurs."),
         );
       }
       lignes.push(ligne);
@@ -803,16 +826,18 @@ export class ClientImap {
       if (!acces.ok) throw new ErreurImap("authentification", acces.message);
       // Le jeton renouvelé est rendu au module appelant, qui l'enregistrera.
       this.jetonsRenouveles = acces.jetons;
-      const r = await this.commande([
-        "AUTHENTICATE XOAUTH2 ",
-        chaineXoauth2(this.compte.adresse, acces.acces),
-      ]);
+      const r = await this.commande(
+        ["AUTHENTICATE XOAUTH2 ", chaineXoauth2(this.compte.adresse, acces.acces)],
+        true,
+      );
       if (r.etat !== "OK") {
         throw new ErreurImap(
           "authentification",
-          `${nomFournisseur(this.compte.oauth.fournisseur)} a refusé l'accès à la boîte. ` +
-            "L'autorisation a peut-être été retirée : rebranchez la boîte dans " +
-            "Réglages, Connecteurs.",
+          tf(
+            "{0} a refusé l'accès à la boîte {1}. L'autorisation a peut-être été retirée, ou elle a été donnée pour une autre adresse : rebranchez la boîte dans Paramètres, Connecteurs.",
+            nomFournisseur(this.compte.oauth.fournisseur),
+            this.compte.adresse,
+          ),
         );
       }
       return;
@@ -833,9 +858,7 @@ export class ClientImap {
     if (r.etat !== "OK") {
       throw new ErreurImap(
         "authentification",
-        "Identifiant ou mot de passe refusé par le serveur. Si votre compte utilise la " +
-          "validation en deux étapes, il vous faut un mot de passe d'application et non " +
-          "votre mot de passe habituel.",
+        t("Identifiant ou mot de passe refusé par le serveur. Si votre compte utilise la validation en deux étapes, il vous faut un mot de passe d'application et non votre mot de passe habituel."),
       );
     }
   }
@@ -924,7 +947,7 @@ export class ClientImap {
   async etatBoite(dossier: string): Promise<{ total: number; validite: number; prochain: number }> {
     const r = await this.commande(["EXAMINE ", { litteral: encoderUtf7Modifie(dossier) }]);
     if (r.etat !== "OK") {
-      throw new ErreurImap("serveur", `Le dossier « ${dossier} » est introuvable sur ce serveur.`);
+      throw new ErreurImap("serveur", tf("Le dossier « {0} » est introuvable sur ce serveur.", dossier));
     }
     let total = 0;
     let validite = 0;
@@ -950,7 +973,7 @@ export class ClientImap {
   async ouvrir(dossier: string): Promise<number> {
     const r = await this.commande(["EXAMINE ", { litteral: encoderUtf7Modifie(dossier) }]);
     if (r.etat !== "OK") {
-      throw new ErreurImap("serveur", `Le dossier « ${dossier} » est introuvable sur ce serveur.`);
+      throw new ErreurImap("serveur", tf("Le dossier « {0} » est introuvable sur ce serveur.", dossier));
     }
     for (const ligne of r.lignes) {
       const m = /^\* (\d+) EXISTS/i.exec(ligne.texte);
@@ -970,7 +993,7 @@ export class ClientImap {
         // Le serveur ne connaît pas UTF-8 pour SEARCH : on retente en le taisant.
         return this.chercher(criteres, false);
       }
-      throw new ErreurImap("serveur", "Le serveur a refusé cette recherche.");
+      throw new ErreurImap("serveur", t("Le serveur a refusé cette recherche."));
     }
     const uids: number[] = [];
     for (const ligne of r.lignes) {
@@ -999,7 +1022,7 @@ export class ClientImap {
     const r = await this.commande([
       `UID FETCH ${liste} (UID INTERNALDATE RFC822.SIZE BODY.PEEK[]<0.${fenetre}>)`,
     ]);
-    if (r.etat !== "OK") throw new ErreurImap("serveur", "Le serveur a refusé de livrer ces messages.");
+    if (r.etat !== "OK") throw new ErreurImap("serveur", t("Le serveur a refusé de livrer ces messages."));
 
     const messages: MessageBrut[] = [];
     for (const ligne of r.lignes) {
@@ -1797,7 +1820,7 @@ function compteComplet(enregistre: CompteEnregistre): CompteCourrier {
   if (typeof clair !== "string") {
     throw new ErreurImap(
       "authentification",
-      "Le mot de passe enregistré est illisible. Reconfigurez le compte de courrier.",
+      t("Le mot de passe enregistré est illisible. Reconfigurez le compte de courrier."),
     );
   }
   let oauth: JetonsCourrier | undefined;
@@ -1806,7 +1829,7 @@ function compteComplet(enregistre: CompteEnregistre): CompteCourrier {
     if (typeof brut !== "string") {
       throw new ErreurImap(
         "authentification",
-        "Les jetons d'autorisation enregistrés sont illisibles. Rebranchez la boîte.",
+        t("Les jetons d'autorisation enregistrés sont illisibles. Rebranchez la boîte."),
       );
     }
     try {
@@ -1814,7 +1837,7 @@ function compteComplet(enregistre: CompteEnregistre): CompteCourrier {
     } catch {
       throw new ErreurImap(
         "authentification",
-        "Les jetons d'autorisation enregistrés sont abîmés. Rebranchez la boîte.",
+        t("Les jetons d'autorisation enregistrés sont abîmés. Rebranchez la boîte."),
       );
     }
   }
@@ -1839,9 +1862,26 @@ function compteComplet(enregistre: CompteEnregistre): CompteCourrier {
  * renouvellement tournant (Microsoft en rend un nouveau à chaque échange)
  * serait perdu, débranchant la boîte au bout d'une rotation.
  */
-export async function enregistrerJetons(jetons: JetonsCourrier): Promise<void> {
+export async function enregistrerJetons(jetons: JetonsCourrier, precedent?: string): Promise<void> {
   const enregistre = await lireCompte();
   if (!enregistre) return;
+  /*
+   * La boîte a pu être rebranchée (une autre, ou la même avec un nouvel
+   * accord) pendant que l'outil travaillait : ses jetons ne sont pas écrasés
+   * par ceux de l'ancienne connexion, qui les aurait rendus inutilisables
+   * (tournée des connecteurs du 28/09/2026). `precedent` : le jeton de
+   * renouvellement avec lequel la connexion a commencé.
+   */
+  if (precedent !== undefined) {
+    let actuel = "";
+    try {
+      const brut = enregistre.oauth !== undefined ? dechiffrer(enregistre.oauth) : null;
+      actuel = typeof brut === "string" ? String((JSON.parse(brut) as Partial<JetonsCourrier>).refreshToken ?? "") : "";
+    } catch {
+      return;
+    }
+    if (actuel !== precedent && actuel !== jetons.refreshToken) return;
+  }
   const suite: CompteEnregistre = { ...enregistre, oauth: chiffrer(JSON.stringify(jetons)) };
   await db().write(COLLECTION, suite);
   cache = suite;
@@ -1870,9 +1910,7 @@ function valider(brut: unknown): { ok: true; compte: CompteCourrier } | { ok: fa
     return {
       ok: false,
       message:
-        "Indiquez le mot de passe. Si votre messagerie utilise la validation en deux étapes, " +
-        "créez un mot de passe d'application : c'est ce qu'exigent Gmail, Outlook et la plupart " +
-        "des fournisseurs.",
+        t("Indiquez le mot de passe. Si votre messagerie utilise la validation en deux étapes, créez un mot de passe d'application : c'est ce qu'exigent Gmail, Outlook et la plupart des fournisseurs."),
     };
   }
   if (!adresse || !adresse.includes("@")) {
@@ -1920,10 +1958,7 @@ export async function configurer(
     return {
       ok: false,
       message:
-        "Le chiffrement des données n'est pas actif sur cette machine : " + nomProduit() + " refuse " +
-        "d'enregistrer un mot de passe de messagerie en clair. Déverrouillez le trousseau du " +
-        "compte hôte, ou réglez « chiffrement » sur « fichier » dans helix.config.json, puis " +
-        "recommencez.",
+        tf("Le chiffrement des données n'est pas actif sur cette machine : {0} refuse d'enregistrer un mot de passe de messagerie en clair. Déverrouillez le trousseau du compte hôte, ou réglez « chiffrement » sur « fichier » dans helix.config.json, puis recommencez.", nomProduit()),
     };
   }
 
@@ -1945,7 +1980,7 @@ export async function configurer(
     } catch (err) {
       return {
         ok: false,
-        message: tf("La lecture fonctionne, mais pas l'envoi : {0} Corrigez le serveur d'envoi, ou désactivez l'envoi.", err instanceof ErreurSmtp ? err.message : "le serveur d'envoi ne répond pas."),
+        message: tf("La lecture fonctionne, mais pas l'envoi : {0} Corrigez le serveur d'envoi, ou désactivez l'envoi.", err instanceof ErreurSmtp ? err.message : t("le serveur d'envoi ne répond pas.")),
       };
     }
   }
@@ -1970,8 +2005,8 @@ export async function configurer(
   return {
     ok: true,
     message: verdict.compte.smtp
-      ? `Boîte ${verdict.compte.adresse} connectée : lecture, brouillons, et envoi, toujours après votre accord.`
-      : `Boîte ${verdict.compte.adresse} connectée : lecture, et brouillons à relire avant envoi.`,
+      ? tf("Boîte {0} connectée : lecture, brouillons, et envoi, toujours après votre accord.", verdict.compte.adresse)
+      : tf("Boîte {0} connectée : lecture, et brouillons à relire avant envoi.", verdict.compte.adresse),
     etat: await etat(),
   };
 }
@@ -2004,8 +2039,7 @@ export async function brancherParOauth(
     return {
       ok: false,
       message:
-        "Le chiffrement des données n'est pas actif sur cette machine : " + nomProduit() +
-        " refuse d'enregistrer des jetons d'accès en clair.",
+        tf("Le chiffrement des données n'est pas actif sur cette machine : {0} refuse d'enregistrer des jetons d'accès en clair.", nomProduit()),
     };
   }
 
@@ -2050,7 +2084,7 @@ export async function brancherParOauth(
     );
   } catch (err) {
     envoi = false;
-    motifEnvoi = err instanceof ErreurSmtp ? err.message : "le serveur d'envoi ne répond pas.";
+    motifEnvoi = err instanceof ErreurSmtp ? err.message : t("le serveur d'envoi ne répond pas.");
   }
 
   const enregistre: CompteEnregistre = {
@@ -2073,10 +2107,8 @@ export async function brancherParOauth(
   return {
     ok: true,
     message: envoi
-      ? `Boîte ${adresse} connectée avec ${nomFournisseur(jetons.fournisseur)} : lecture, ` +
-        `brouillons, et envoi, toujours après votre accord.`
-      : `Boîte ${adresse} connectée en lecture. L'envoi n'a pas pu être essayé : ${motifEnvoi} ` +
-        `Les agents prépareront des brouillons.`,
+      ? tf("Boîte {0} connectée avec {1} : lecture, brouillons, et envoi, toujours après votre accord.", adresse, nomFournisseur(jetons.fournisseur))
+      : tf("Boîte {0} connectée en lecture. L'envoi n'a pas pu être essayé : {1} Les agents prépareront des brouillons.", adresse, motifEnvoi),
     etat: await etat(),
   };
 }
@@ -2115,12 +2147,37 @@ export async function reglerEnvoi(brut: unknown): Promise<{ ok: boolean; message
   } catch (err) {
     return { ok: false, message: messageUtilisateur(err) };
   }
-  try {
-    await verifierSmtp({ ...smtp, identifiant: complet.identifiant, motDePasse: complet.motDePasse }, compte.adresse);
-  } catch (err) {
-    return { ok: false, message: err instanceof ErreurSmtp ? err.message : "Le serveur d'envoi ne répond pas." };
+  /*
+   * Boîte branchée par « Se connecter avec Google / Microsoft » : elle n'a pas
+   * de mot de passe. L'envoi s'essayait avec un mot de passe vide, que le
+   * serveur refusait toujours : une boîte dont l'envoi n'avait pas pu être
+   * essayé au branchement ne pouvait plus jamais l'activer. Et le jeton
+   * d'accès, qui ouvre toute la boîte, partait ensuite au serveur d'envoi
+   * saisi, quel qu'il soit (tournée des connecteurs du 28/09/2026). Il ne va
+   * plus qu'au serveur d'envoi du fournisseur, et l'essai se fait avec lui.
+   */
+  let jetonsRenouveles: JetonsCourrier | undefined;
+  if (complet.oauth) {
+    const attendu = SERVEURS[complet.oauth.fournisseur].smtp;
+    if (smtp.serveur.toLowerCase() !== attendu) {
+      return { ok: false, message: tf("Une boîte branchée avec {0} n'envoie que par son serveur, {1} : l'accès accordé n'est remis à aucun autre.", nomFournisseur(complet.oauth.fournisseur), attendu) };
+    }
+    const ids = await identifiantsSmtp(complet);
+    if (!ids.ok) return { ok: false, message: ids.message };
+    jetonsRenouveles = ids.jetons;
+    try {
+      await verifierSmtp({ ...smtp, identifiant: ids.identifiant, motDePasse: "", acces: ids.acces }, compte.adresse);
+    } catch (err) {
+      return { ok: false, message: err instanceof ErreurSmtp ? err.message : t("Le serveur d'envoi ne répond pas.") };
+    }
+  } else {
+    try {
+      await verifierSmtp({ ...smtp, identifiant: complet.identifiant, motDePasse: complet.motDePasse }, compte.adresse);
+    } catch (err) {
+      return { ok: false, message: err instanceof ErreurSmtp ? err.message : t("Le serveur d'envoi ne répond pas.") };
+    }
   }
-  const suite: CompteEnregistre = { ...compte, smtp };
+  const suite: CompteEnregistre = { ...compte, smtp, ...(jetonsRenouveles ? { oauth: chiffrer(JSON.stringify(jetonsRenouveles)) } : {}) };
   await db().write(COLLECTION, suite);
   cache = suite;
   return { ok: true, active: true, message: t("Envoi activé. Chaque mail vous sera montré en entier, et ne partira qu'après votre accord.") };
@@ -2143,8 +2200,8 @@ export async function reglerConfirmation(brut: unknown): Promise<{ ok: boolean; 
     ok: true,
     sansAccord,
     message: sansAccord
-      ? "Les mails partent sans confirmation au niveau « Tout approuver » et depuis un agent autonome."
-      : "Chaque mail vous sera de nouveau montré avant de partir.",
+      ? t("Les mails partent sans confirmation au niveau « Tout approuver » et depuis un agent autonome.")
+      : t("Chaque mail vous sera de nouveau montré avant de partir."),
   };
 }
 
@@ -2189,7 +2246,7 @@ export async function oublier(): Promise<{ ok: true; message: string }> {
  */
 function messageUtilisateur(err: unknown): string {
   if (err instanceof ErreurImap) return err.message;
-  return "La connexion au serveur de courrier a échoué. Vérifiez le serveur, le port et le mot de passe.";
+  return t("La connexion au serveur de courrier a échoué. Vérifiez le serveur, le port et le mot de passe.");
 }
 
 /* --------------------------------- outils ------------------------------------ */
@@ -2359,7 +2416,7 @@ function dateImap(valeur: string): string | null {
 /** Ouvre une session, exécute, et referme quoi qu'il arrive. */
 async function avecSession<T>(action: (client: ClientImap) => Promise<T>): Promise<T> {
   await charger();
-  if (!cache) throw new ErreurImap("authentification", "Aucun compte de courrier n'est configuré.");
+  if (!cache) throw new ErreurImap("authentification", t("Aucun compte de courrier n'est configuré."));
   /*
    * Une connexion par appel d'outil, sans mise en commun. Une session IMAP
    * laissée ouverte entre deux tours se fait couper par le serveur au bout de
@@ -2367,7 +2424,8 @@ async function avecSession<T>(action: (client: ClientImap) => Promise<T>): Promi
    * d'une poignée de main TLS est très inférieur au coût d'un diagnostic de
    * session fantôme chez un client.
    */
-  const client = new ClientImap(compteComplet(cache));
+  const complet = compteComplet(cache);
+  const client = new ClientImap(complet);
   try {
     await client.connecter();
     return await action(client);
@@ -2375,10 +2433,12 @@ async function avecSession<T>(action: (client: ClientImap) => Promise<T>): Promi
     /*
      * Les jetons renouvelés pendant cette connexion sont enregistrés avant de
      * fermer. Sans cela, le fournisseur serait sollicité à chaque appel
-     * d'outil, et un jeton de renouvellement tournant se perdrait.
+     * d'outil, et un jeton de renouvellement tournant se perdrait. Seulement
+     * s'ils ont changé : chaque appel d'outil récrivait la boîte.
      */
-    if (client.jetonsRenouveles) {
-      await enregistrerJetons(client.jetonsRenouveles).catch(() => undefined);
+    const neufs = client.jetonsRenouveles;
+    if (neufs && complet.oauth && (neufs.accessToken !== complet.oauth.accessToken || neufs.refreshToken !== complet.oauth.refreshToken)) {
+      await enregistrerJetons(neufs, complet.oauth.refreshToken).catch(() => undefined);
     }
     await client.fermer();
   }
@@ -2789,10 +2849,19 @@ async function envoyer(args: Record<string, unknown>, dossier: string, qui: stri
     if (m.remise.length === 0) return refus("Donne au moins un destinataire dans « a ».");
     if (m.remise.length > 20) return refus("Vingt destinataires au plus.");
     const message = composer(m);
-    const complet = compteComplet(compte);
+    /*
+     * Les jetons que la connexion IMAP vient peut-être de renouveler, pas ceux
+     * lus avant elle : sinon l'envoi renouvelait une seconde fois avec l'ancien
+     * jeton de renouvellement, et chez Microsoft, qui le fait tourner, le plus
+     * ancien des deux nouveaux était enregistré en dernier (tournée des
+     * connecteurs du 28/09/2026).
+     */
+    const complet = { ...compteComplet(compte), ...(client.jetonsRenouveles ? { oauth: client.jetonsRenouveles } : {}) };
     try {
       const ids = await identifiantsSmtp(complet);
       if (!ids.ok) return refus(`Le mail n'est pas parti : ${ids.message}`);
+      // Enregistrés par `avecSession`, en sortant, même si l'envoi échoue : une seule écriture, la plus récente.
+      if (ids.jetons) client.jetonsRenouveles = ids.jetons;
       await envoyerSmtp(
         {
           ...compte.smtp!,
@@ -2804,7 +2873,6 @@ async function envoyer(args: Record<string, unknown>, dossier: string, qui: stri
         m.remise,
         message,
       );
-      if (ids.jetons) await enregistrerJetons(ids.jetons);
     } catch (err) {
       return refus(`Le mail n'est pas parti : ${err instanceof ErreurSmtp ? err.message : "le serveur d'envoi a échoué."} Dis-le à l'utilisateur.`);
     }

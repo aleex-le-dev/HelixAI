@@ -1195,14 +1195,14 @@ class ClientCalDav {
       try {
         prochaine = new URL(suite, url);
       } catch {
-        throw new ErreurAgenda("protocole", "Le serveur a renvoyé une redirection illisible.");
+        throw new ErreurAgenda("protocole", t("Le serveur a renvoyé une redirection illisible."));
       }
       this.verifierRedirection(url, prochaine);
       url = prochaine;
     }
     throw new ErreurAgenda(
       "protocole",
-      "Le serveur d'agenda enchaîne trop de redirections. Vérifiez l'adresse saisie.",
+      t("Le serveur d'agenda enchaîne trop de redirections. Vérifiez l'adresse saisie."),
     );
   }
 
@@ -1216,16 +1216,14 @@ class ClientCalDav {
     if (vers.protocol !== "https:") {
       throw new ErreurAgenda(
         "reseau",
-        "Le serveur redirige vers une adresse non chiffrée. " + NomProduit() + " refuse de continuer plutôt " +
-          "que d'y envoyer votre mot de passe.",
+        tf("Le serveur redirige vers une adresse non chiffrée. {0} refuse de continuer plutôt que d'y envoyer votre mot de passe.", NomProduit()),
       );
     }
     const racine = (h: string) => h.split(".").slice(-2).join(".");
     if (vers.hostname !== depuis.hostname && racine(vers.hostname) !== racine(depuis.hostname)) {
       throw new ErreurAgenda(
         "reseau",
-        "Le serveur redirige vers un autre domaine. " + NomProduit() + " refuse de lui transmettre vos " +
-          "identifiants. Vérifiez l'adresse CalDAV saisie.",
+        tf("Le serveur redirige vers un autre domaine. {0} refuse de lui transmettre vos identifiants. Vérifiez l'adresse CalDAV saisie.", NomProduit()),
       );
     }
   }
@@ -1241,8 +1239,7 @@ class ClientCalDav {
         ko(
           new ErreurAgenda(
             "reseau",
-            "L'adresse CalDAV doit commencer par https://. " + NomProduit() + " n'envoie pas d'identifiants " +
-              "sur une liaison en clair.",
+            tf("L'adresse CalDAV doit commencer par https://. {0} n'envoie pas d'identifiants sur une liaison en clair.", NomProduit()),
           ),
         );
         return;
@@ -1308,8 +1305,7 @@ class ClientCalDav {
                 ko(
                   new ErreurAgenda(
                     "serveur",
-                    "La réponse du serveur d'agenda dépasse la taille autorisée. Demandez une " +
-                      "période plus courte, ou restreignez les agendas consultés.",
+                    t("La réponse du serveur d'agenda dépasse la taille autorisée. Demandez une période plus courte, ou restreignez les agendas consultés."),
                   ),
                 ),
               );
@@ -1334,7 +1330,7 @@ class ClientCalDav {
       req.setTimeout(LIMITES.delaiMs, () => {
         req.destroy();
         finir(() =>
-          ko(new ErreurAgenda("reseau", "Le serveur d'agenda n'a pas répondu dans le temps imparti.")),
+          ko(new ErreurAgenda("reseau", t("Le serveur d'agenda n'a pas répondu dans le temps imparti."))),
         );
       });
       req.on("error", (e: Error) => finir(() => ko(this.traduireReseau(e))));
@@ -1345,23 +1341,21 @@ class ClientCalDav {
   private traduireReseau(e: Error): ErreurAgenda {
     const code = (e as NodeJS.ErrnoException).code ?? "";
     if (code === "ENOTFOUND" || code === "EAI_AGAIN") {
-      return new ErreurAgenda("reseau", "Nom de serveur introuvable : vérifiez son orthographe.");
+      return new ErreurAgenda("reseau", t("Nom de serveur introuvable : vérifiez son orthographe."));
     }
     if (code === "ECONNREFUSED") {
-      return new ErreurAgenda("reseau", "Connexion refusée : vérifiez l'adresse et le port.");
+      return new ErreurAgenda("reseau", t("Connexion refusée : vérifiez l'adresse et le port."));
     }
     if (code === "ETIMEDOUT" || code === "ECONNRESET") {
-      return new ErreurAgenda("reseau", "La connexion au serveur d'agenda a été interrompue.");
+      return new ErreurAgenda("reseau", t("La connexion au serveur d'agenda a été interrompue."));
     }
     if (/certificat|certificate|self.signed|CERT_|DEPTH_ZERO|ERR_TLS/i.test(`${code} ${e.message}`)) {
       return new ErreurAgenda(
         "reseau",
-        "Le certificat du serveur n'est pas reconnu. " + NomProduit() + " refuse de continuer plutôt que " +
-          "d'exposer votre mot de passe : faites installer un certificat valide, ou ajoutez " +
-          "l'autorité de votre entreprise au magasin de confiance de cette machine.",
+        tf("Le certificat du serveur n'est pas reconnu. {0} refuse de continuer plutôt que d'exposer votre mot de passe : faites installer un certificat valide, ou ajoutez l'autorité de votre entreprise au magasin de confiance de cette machine.", NomProduit()),
       );
     }
-    return new ErreurAgenda("reseau", "La connexion au serveur d'agenda a échoué.");
+    return new ErreurAgenda("reseau", t("La connexion au serveur d'agenda a échoué."));
   }
 
   /** Traduit un code HTTP en phrase compréhensible, sans jamais citer la réponse. */
@@ -1369,31 +1363,28 @@ class ClientCalDav {
     if (statut === 401 || statut === 403) {
       throw new ErreurAgenda(
         "authentification",
-        "Identifiant ou mot de passe refusé par le serveur d'agenda. Si votre compte utilise " +
-          "la validation en deux étapes, il vous faut un mot de passe d'application et non " +
-          "votre mot de passe habituel.",
+        t("Identifiant ou mot de passe refusé par le serveur d'agenda. Si votre compte utilise la validation en deux étapes, il vous faut un mot de passe d'application et non votre mot de passe habituel."),
       );
     }
     if (statut === 404) {
       throw new ErreurAgenda(
         "protocole",
-        "L'adresse CalDAV est introuvable sur ce serveur. Vérifiez le chemin saisi.",
+        t("L'adresse CalDAV est introuvable sur ce serveur. Vérifiez le chemin saisi."),
       );
     }
     if (statut === 405) {
       throw new ErreurAgenda(
         "protocole",
-        "Ce serveur ne répond pas aux requêtes CalDAV à cette adresse. Vérifiez le chemin, " +
-          "ou demandez l'adresse de synchronisation à votre hébergeur.",
+        t("Ce serveur ne répond pas aux requêtes CalDAV à cette adresse. Vérifiez le chemin, ou demandez l'adresse de synchronisation à votre hébergeur."),
       );
     }
     if (statut >= 500) {
-      throw new ErreurAgenda("serveur", "Le serveur d'agenda a signalé une erreur interne.");
+      throw new ErreurAgenda("serveur", t("Le serveur d'agenda a signalé une erreur interne."));
     }
     if (statut !== 207 && statut !== 200) {
       throw new ErreurAgenda(
         "protocole",
-        "Le serveur n'a pas répondu comme un serveur CalDAV. Vérifiez l'adresse saisie.",
+        t("Le serveur n'a pas répondu comme un serveur CalDAV. Vérifiez l'adresse saisie."),
       );
     }
   }
@@ -1525,8 +1516,7 @@ class ClientCalDav {
     } catch {
       throw new ErreurAgenda(
         "protocole",
-        "L'adresse CalDAV n'est pas une URL valide. Elle ressemble à " +
-          "https://serveur.example/remote.php/dav/.",
+        t("L'adresse CalDAV n'est pas une URL valide. Elle ressemble à https://serveur.example/remote.php/dav/."),
       );
     }
 
@@ -1561,9 +1551,7 @@ class ClientCalDav {
 
     throw new ErreurAgenda(
       "protocole",
-      "Aucun agenda trouvé à cette adresse. Vérifiez le chemin CalDAV : chez certains " +
-        "hébergeurs il contient votre identifiant, et il se récupère depuis leur espace " +
-        "de configuration.",
+      t("Aucun agenda trouvé à cette adresse. Vérifiez le chemin CalDAV : chez certains hébergeurs il contient votre identifiant, et il se récupère depuis leur espace de configuration."),
     );
   }
 
@@ -1708,7 +1696,7 @@ function compteComplet(enregistre: CompteEnregistre): CompteAgenda {
   if (typeof clair !== "string") {
     throw new ErreurAgenda(
       "authentification",
-      "Le mot de passe enregistré est illisible. Reconfigurez l'agenda.",
+      t("Le mot de passe enregistré est illisible. Reconfigurez l'agenda."),
     );
   }
   return {
@@ -1738,8 +1726,7 @@ function valider(
     return {
       ok: false,
       message:
-        "Indiquez l'adresse CalDAV de votre agenda, par exemple " +
-        "https://serveur.example/remote.php/dav/.",
+        t("Indiquez l'adresse CalDAV de votre agenda, par exemple https://serveur.example/remote.php/dav/."),
     };
   }
   let analysee: URL;
@@ -1752,8 +1739,7 @@ function valider(
     return {
       ok: false,
       message:
-        "L'adresse doit commencer par https://. " + NomProduit() + " n'envoie pas d'identifiants sur une " +
-        "liaison en clair, même sur un réseau interne.",
+        tf("L'adresse doit commencer par https://. {0} n'envoie pas d'identifiants sur une liaison en clair, même sur un réseau interne.", NomProduit()),
     };
   }
   if (!identifiant) {
@@ -1763,9 +1749,7 @@ function valider(
     return {
       ok: false,
       message:
-        "Indiquez le mot de passe. Si votre compte utilise la validation en deux étapes, " +
-        "créez un mot de passe d'application : c'est ce qu'exigent Google et iCloud pour " +
-        "CalDAV.",
+        t("Indiquez le mot de passe. Si votre compte utilise la validation en deux étapes, créez un mot de passe d'application : c'est ce qu'exigent Google et iCloud pour CalDAV."),
     };
   }
 
@@ -1797,10 +1781,7 @@ export async function configurer(
     return {
       ok: false,
       message:
-        "Le chiffrement des données n'est pas actif sur cette machine : " + nomProduit() + " refuse " +
-        "d'enregistrer un mot de passe d'agenda en clair. Déverrouillez le trousseau du " +
-        "compte hôte, ou réglez « chiffrement » sur « fichier » dans helix.config.json, puis " +
-        "recommencez.",
+        tf("Le chiffrement des données n'est pas actif sur cette machine : {0} refuse d'enregistrer un mot de passe d'agenda en clair. Déverrouillez le trousseau du compte hôte, ou réglez « chiffrement » sur « fichier » dans helix.config.json, puis recommencez.", nomProduit()),
     };
   }
 
@@ -1819,8 +1800,7 @@ export async function configurer(
     return {
       ok: false,
       message:
-        `Ces agendas n'existent pas sur le serveur : ${inconnus.join(", ")}. ` +
-        `Agendas disponibles : ${calendriers.map((c) => c.nom).join(", ")}.`,
+        tf("Ces agendas n'existent pas sur le serveur : {0}. Agendas disponibles : {1}.", inconnus.join(", "), calendriers.map((c) => c.nom).join(", ")),
     };
   }
 
@@ -1889,7 +1869,7 @@ function messageUtilisateur(err: unknown): string {
   if (err instanceof ErreurAgenda) return err.message;
   // Google Agenda (agendaGoogle.ts) a ses propres erreurs, déjà écrites pour la personne.
   if (!cache && agendaGoogle.connecte()) return agendaGoogle.messageUtilisateur(err);
-  return "La connexion au serveur d'agenda a échoué. Vérifiez l'adresse, l'identifiant et le mot de passe.";
+  return t("La connexion au serveur d'agenda a échoué. Vérifiez l'adresse, l'identifiant et le mot de passe.");
 }
 
 /* ---------------------------------- outils ------------------------------------ */
@@ -2077,7 +2057,7 @@ async function avecClient<T>(action: (client: ClientAgenda, source: "caldav" | "
   await charger();
   if (cache) return action(new ClientCalDav(compteComplet(cache)), "caldav");
   if (await agendaGoogle.charger()) return action(new agendaGoogle.ClientGoogleAgenda(), "google");
-  throw new ErreurAgenda("authentification", "Aucun agenda n'est configuré.");
+  throw new ErreurAgenda("authentification", t("Aucun agenda n'est configuré."));
 }
 
 /** Agendas à interroger, découverte mise en cache et filtre du modèle appliqué. */
@@ -2105,8 +2085,7 @@ async function calendriersRetenus(
       return {
         ok: false,
         message:
-          `Aucun agenda ne s'appelle « ${demande} ». Agendas disponibles : ` +
-          `${liste.map((c) => c.nom).join(", ") || "aucun"}. Omets « calendrier » pour tous les consulter.`,
+          tf("Aucun agenda ne s'appelle « {0} ». Agendas disponibles : {1}. Omets « calendrier » pour tous les consulter.", demande, liste.map((c) => c.nom).join(", ") || "aucun"),
       };
     }
     liste = filtre;

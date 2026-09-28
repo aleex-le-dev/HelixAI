@@ -7800,6 +7800,75 @@ process.exit(0);
   }
 }
 
+/*
+ * 27. Connexions aux outils, tournée finale du 28/09/2026 (SECURITE.md § 59) :
+ * ce que la tournée a corrigé, tenu par le code. Les parcours eux-mêmes sont
+ * éprouvés de bout en bout par les essais des sections 15 bis à 16 septies
+ * (essai-connecteurs, essai-natifs, essai-microsoft, essai-commerce,
+ * essai-projets, essai-messageries, essai-documents), qui ont reçu chacun le
+ * contrôle qui aurait attrapé le défaut.
+ */
+console.log("\n27. Connexions aux outils : droits, usage unique, cartes liées à l'appel, courrier OAuth, archives piégées");
+{
+  const lireSrc = (f) => readFileSync(join(RACINE, "gateway", "src", f), "utf8");
+  const index = lireSrc("index.ts");
+  const corpsDe = (nom) => {
+    const i = index.indexOf(`async function ${nom}(`);
+    return i < 0 ? "" : index.slice(i, index.indexOf("\n}\n", i));
+  };
+  const communs = ["handleAgendaConfigurer", "handleAgendaOublier", "handleAgendaGoogleConnecter", "handleAgendaGoogleCode", "handleAgendaGoogleOublier", "handleDriveConnecter", "handleDriveCode", "handleDriveOublier", "handleSlackConfigurer", "handleSlackOublier"];
+  const ouverts = communs.filter((n) => !/reserveeServiceCommun\(res, qui\)/.test(corpsDe(n)));
+  verifier("Drive, agenda (CalDAV et Google) et Slack : brancher, coller l'adresse de retour, débrancher, réservés à l'administrateur dans la route même", ouverts.length === 0, ouverts.join(", "));
+
+  const courrier = lireSrc("courrier.ts");
+  verifier("courrier : AUTHENTICATE XOAUTH2 répond à la demande de suite (« + ») d'un refus, au lieu d'attendre le délai", /chaineXoauth2\(this\.compte\.adresse, acces\.acces\)\],\s*true,/.test(courrier) && /repondreSuite && ligne\.texte\.startsWith\("\+"\)/.test(courrier), "commande");
+  verifier("courrier : LOGINDISABLED ne ferme que LOGIN (une boîte OAuth passe)", /!this\.compte\.oauth && this\.capacites\.has\("LOGINDISABLED"\)/.test(courrier), "LOGINDISABLED");
+  verifier("courrier : le jeton d'une boîte OAuth ne part qu'au serveur d'envoi de son fournisseur", /SERVEURS\[compte\.oauth\.fournisseur\]\.smtp/.test(courrier) && /SERVEURS\[complet\.oauth\.fournisseur\]\.smtp/.test(courrier), "serveur d'envoi");
+  const courrierOauth = lireSrc("courrierOauth.ts");
+  verifier("courrier OAuth : jetons par le client HTTPS borné (pas fetch), un renouvellement à la fois", !/\bfetch\(/.test(courrierOauth) && /renouvellements\.get\(jetons\.refreshToken\)/.test(courrierOauth), "transport");
+
+  const oauthMcp = lireSrc("oauthMcp.ts");
+  const retour = oauthMcp.slice(oauthMcp.indexOf("export async function connecteurDuRetour"), oauthMcp.indexOf("export async function retoursEnregistres"));
+  verifier("serveurs MCP : le state est consommé dès le retour, avant toute attente (usage unique même après un échange raté)", retour.indexOf("a.etat = undefined") > 0 && retour.indexOf("a.etat = undefined") < retour.indexOf("await majeur") && retour.indexOf("a.etat = undefined") < retour.indexOf("await ecrire(liste)"), "connecteurDuRetour");
+
+  const approbation = lireSrc("approbation.ts");
+  const projets = lireSrc(join("natifs", "projets.ts"));
+  verifier("campagnes Brevo et Mailchimp : l'empreinte vient de la carte acceptée pour cet appel, plus d'une carte seulement montrée", /if \(accord && apercu\?\.empreinte\) apercusAccordes\.set\(args, apercu\.empreinte\)/.test(approbation) && /empreinteAccordee\(args\)/.test(projets) && !/montrees/.test(projets), "empreinte");
+
+  const messageries = lireSrc(join("natifs", "messageries.ts"));
+  const webhook = messageries.slice(messageries.indexOf("export async function webhookWhatsApp"));
+  verifier("webhook WhatsApp : la forme de la signature est vérifiée avant de lire le corps, et la limite ne compte que les requêtes signées", webhook.indexOf("sha256=[0-9a-f]{64}") > 0 && webhook.indexOf("sha256=[0-9a-f]{64}") < webhook.indexOf("for await (const m of req)") && webhook.indexOf("verifierDebit(") < webhook.indexOf("for await (const m of req)"), "ordre");
+
+  const { pathToFileURL: versUrl } = await import("node:url");
+  const { lireZip } = await import(versUrl(join(RACINE, "gateway", "src", "relecture.ts")).href);
+  const { deflateRawSync } = await import("node:zlib");
+  const brut = Buffer.concat([Buffer.from("<w:t>ZIP-PIEGE</w:t>"), Buffer.alloc(12 * 1024 * 1024, 0x20)]);
+  const comp = deflateRawSync(brut);
+  const nom = Buffer.from("word/document.xml");
+  const local = Buffer.alloc(30);
+  local.writeUInt32LE(0x04034b50, 0);
+  local.writeUInt16LE(8, 8);
+  local.writeUInt16LE(nom.length, 26);
+  const central = Buffer.alloc(46);
+  central.writeUInt32LE(0x02014b50, 0);
+  central.writeUInt16LE(8, 10);
+  central.writeUInt32LE(comp.length, 20);
+  central.writeUInt16LE(nom.length, 28);
+  const exemplaires = 200;
+  const repertoire = Buffer.concat(Array.from({ length: exemplaires }, () => Buffer.concat([central, nom])));
+  const fin = Buffer.alloc(22);
+  fin.writeUInt32LE(0x06054b50, 0);
+  fin.writeUInt16LE(exemplaires, 10);
+  fin.writeUInt32LE(local.length + nom.length + comp.length, 16);
+  const t0 = Date.now();
+  const lu = lireZip(Buffer.concat([local, nom, comp, repertoire, fin]), ["word/document.xml"]);
+  const duree = Date.now() - t0;
+  verifier("archive piégée : un nom répété 200 fois dans le répertoire ZIP n'est décompressé qu'une fois (un Word de OneDrive, SharePoint ou du bureau)", /ZIP-PIEGE/.test(lu.get("word/document.xml") ?? "") && duree < 1500, `${duree} ms`);
+
+  const ecranCourrier = readFileSync(join(RACINE, "src", "components", "settings", "CourrierOauth.tsx"), "utf8");
+  verifier("écran « Se connecter avec Google / Microsoft » : l'adresse de retour à déclarer est celle de instance(), pas le stockage local (vide dans l'application de bureau)", /instance\(\)\.url/.test(ecranCourrier) && !/localStorage\.getItem\("helix:instance"\)/.test(ecranCourrier), "instanceVue");
+}
+
 console.log(`\n${reussis} vérification(s) réussie(s), ${echecs.length} échec(s).`);
 if (echecs.length) {
   console.log("Échecs :");

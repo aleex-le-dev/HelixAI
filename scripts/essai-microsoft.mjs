@@ -596,6 +596,8 @@ await regler("excelFormule=1");
 sortie.excelFormule = await appeler("excel__ecrire", { fichier: "b!lecteur1/XL1", onglet: "Ventes", cellule: "D2", valeurs: [["=1+1"]] });
 await regler("excelFormule=0");
 sortie.teamsAmbigu = await appeler("teams__poster", { equipe: "Ventes", canal: "Général", texte: "Pour quelle équipe ?" });
+// Un morceau de nom qu'une seule équipe porte : pour poster, refusé (la carte ne montrait que « Paris »), tournée du 28/09/2026.
+sortie.teamsMorceau = await appeler("teams__poster", { equipe: "Paris", canal: "Général", texte: "Morceau de nom seulement" });
 sortie.teams = await appeler("teams__poster", { equipe: "Ventes Paris", canal: "Général", texte: "Point du jour : tout va bien." });
 // Appels simultanés : le même mail trois fois, puis une rafale ; la limite (dix par heure pour Microsoft 365) tient d'un seul tenant.
 sortie.memeMail = await Promise.all([1, 2, 3].map(() => appeler("outlook__envoyer", { a: ["client@exemple.test"], objet: "Même mail", texte: "Même mail en parallèle" })));
@@ -711,6 +713,7 @@ process.exit(0);
 
   const postsTeams = apres.filter((x) => x.methode === "POST" && /\/channels\/.*\/messages$/.test(decodeURIComponent(x.chemin))).map((x) => ({ chemin: decodeURIComponent(x.chemin), j: JSON.parse(x.corps || "{}") }));
   verifier("Teams : une équipe désignée par un nom que deux équipes partagent est refusée (aucune choisie au hasard)", r.teamsAmbigu?.ok === false && /Ventes Paris/.test(r.teamsAmbigu?.content ?? "") && /Ventes Lyon/.test(r.teamsAmbigu?.content ?? "") && !postsTeams.some((p) => /Pour quelle/.test(p.j.body?.content ?? "")), r.teamsAmbigu?.content);
+  verifier("Teams : pour poster, un morceau de nom (« Paris ») ne suffit pas, même porté par une seule équipe : la carte ne montrait pas « Ventes Paris » ; rien n'est posté", r.teamsMorceau?.ok === false && /exactement/.test(r.teamsMorceau?.content ?? "") && !postsTeams.some((p) => /Morceau de nom/.test(p.j.body?.content ?? "")), r.teamsMorceau?.content);
   verifier("Teams : posté en texte brut (aucune mention ni balise), dans le bon canal", r.teams?.ok === true && postsTeams.some((p) => p.chemin === `/v1.0/teams/${EQUIPE_PARIS}/channels/${CANAL_PARIS}/messages` && p.j.body?.contentType === "text" && p.j.body?.content === "Point du jour : tout va bien."), r.teams?.content);
   const memes = envois.filter((e) => e.message?.subject === "Même mail");
   verifier("le même mail lancé trois fois en même temps ne part qu'une fois", memes.length === 1 && (r.memeMail ?? []).filter((x) => x.ok).length === 1, `${memes.length} envoi(s)`);
@@ -730,6 +733,51 @@ process.exit(0);
   verifier("débrancher : aucun appel à un point de révocation inventé, ni déconnexion de la personne partout (revokeSignInSessions)", !apres.some((x) => /revoke/i.test(x.chemin)), apres.filter((x) => /revoke/i.test(x.chemin)).map((x) => x.chemin).join(" "));
   verifier("après débranchement : plus de compte, plus d'outil Microsoft 365", r.apres?.configure === false && !r.apres?.compte && !r.outilsApres?.some((x) => /^(outlook|onedrive|sharepoint|excel|word|teams)__/.test(x)), `${JSON.stringify(r.apres).slice(0, 160)} ${r.outilsApres}`);
   verifier("aucun jeton ni secret dans la sortie du second processus (hors du rendu contrôlé plus haut)", !SECRETS.test(sortieBrute.replace(ligne ?? "", "")), sortieBrute.match(SECRETS)?.[0]);
+}
+
+console.log("\nH. Un document Word piégé ne bloque pas la passerelle");
+{
+  /*
+   * Tournée des connecteurs du 28/09/2026 : un .docx dont le répertoire
+   * central répète le nom « word/document.xml » (ici 300 fois), chaque fois
+   * vers la même entrée qui gonfle à 15 Mo, faisait tout décompresser, une
+   * fois par exemplaire, dans le seul fil de la passerelle (65 535
+   * exemplaires : une demi-heure, estimée). lireZip ne décompresse plus
+   * qu'un exemplaire, et borne le total.
+   */
+  const { lireZip } = await import(pathToFileURL(join(RACINE, "gateway", "src", "relecture.ts")).href);
+  const brut = Buffer.concat([Buffer.from('<?xml version="1.0"?><w:document xmlns:w="x"><w:body><w:p><w:r><w:t>BOMBE-DEBUT</w:t></w:r></w:p>'), Buffer.alloc(15 * 1024 * 1024, 0x20), Buffer.from("</w:body></w:document>")]);
+  const comp = deflateRawSync(brut);
+  const nom = Buffer.from("word/document.xml");
+  const local = Buffer.alloc(30);
+  local.writeUInt32LE(0x04034b50, 0);
+  local.writeUInt16LE(20, 4);
+  local.writeUInt16LE(8, 8);
+  local.writeUInt32LE(comp.length, 18);
+  local.writeUInt32LE(brut.length, 22);
+  local.writeUInt16LE(nom.length, 26);
+  const central = Buffer.alloc(46);
+  central.writeUInt32LE(0x02014b50, 0);
+  central.writeUInt16LE(8, 10);
+  central.writeUInt32LE(comp.length, 20);
+  central.writeUInt32LE(brut.length, 24);
+  central.writeUInt16LE(nom.length, 28);
+  central.writeUInt32LE(0, 42);
+  const exemplaires = 300;
+  const repertoire = Buffer.concat(Array.from({ length: exemplaires }, () => Buffer.concat([central, nom])));
+  const fin = Buffer.alloc(22);
+  fin.writeUInt32LE(0x06054b50, 0);
+  fin.writeUInt16LE(exemplaires, 8);
+  fin.writeUInt16LE(exemplaires, 10);
+  fin.writeUInt32LE(repertoire.length, 12);
+  fin.writeUInt32LE(local.length + nom.length + comp.length, 16);
+  const piege = Buffer.concat([local, nom, comp, repertoire, fin]);
+  const t0 = Date.now();
+  const lu = lireZip(piege, ["word/document.xml"]);
+  const duree = Date.now() - t0;
+  verifier(`un .docx de ${Math.round(piege.length / 1024)} Ko qui répète ${exemplaires} fois « word/document.xml » (15 Mo chacun) : lu une seule fois, en moins d'une seconde et demie`, /BOMBE-DEBUT/.test(lu.get("word/document.xml") ?? "") && duree < 1500, `${duree} ms`);
+  const deux = lireZip(Buffer.concat([piege]), ["word/document.xml", "xl/sharedStrings.xml"]);
+  verifier("témoin : un nom absent de l'archive ne relance pas la décompression des autres", deux.size === 1, String(deux.size));
 }
 
 faux.close();

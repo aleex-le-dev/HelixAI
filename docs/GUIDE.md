@@ -408,6 +408,9 @@ branche ensuite depuis Réglages, Connecteurs : le navigateur s'ouvre pour l'acc
 (api.slack.com/apps, « From a manifest »), on l'installe dans l'espace, on colle son
 jeton `xoxb-`, puis on l'invite dans les salons à lire. Laisser la distribution
 publique désactivée.
+Google Drive, l'agenda (CalDAV ou Google Agenda) et Slack valent pour toute
+l'instance, comme la boîte mail commune : seul l'administrateur les branche, les
+remplace ou les débranche ; chaque membre en voit l'état, et ses agents les lisent.
 
 Pour Gmail et Google Agenda, il faut un **mot de passe d'application** Google,
 pas le mot de passe habituel : le formulaire l'indique et pré-remplit le serveur

@@ -655,6 +655,11 @@ sortie.sfFicheBizarre = await appeler("salesforce__noter", { fiche: "00500000000
 sortie.sfLong = await appeler("salesforce__noter", { fiche: "006000000000001AAA", titre: "Trop long", texte: "x".repeat(10_001) });
 sortie.pd = await appeler("pipedrive__noter", { affaire: 11, texte: "Devis envoyé." });
 sortie.pdDeux = await appeler("pipedrive__noter", { affaire: 11, personne: 7, texte: "Les deux" });
+// Tournée du 28/09/2026 : une cible donnée mais illisible, et un identifiant Salesforce trop long, sont refusés (la carte en montrait une autre).
+sortie.pdAffaireNulle = await appeler("pipedrive__noter", { affaire: null, personne: 7, texte: "Affaire nulle" });
+sortie.pdAffaireIllisible = await appeler("pipedrive__noter", { affaire: "abc", personne: 7, texte: "Affaire illisible" });
+sortie.carteAffaireNulle = (await import(${JSON.stringify(pathToFileURL(join(RACINE, "gateway", "src", "natifs", "commerceRegles.ts")).href)})).resumeCommerce("pipedrive__noter", { affaire: null, personne: 7, texte: "x" });
+sortie.sfFicheColle = await appeler("salesforce__noter", { fiche: "003000000000001AAA003000000000002BBB", titre: "Deux fiches collées", texte: "Pour laquelle ?" });
 sortie.zd = await appeler("zendesk__repondre", { ticket: 42, texte: "Nous renvoyons votre colis aujourd'hui.", publique: true });
 sortie.zdInterne = await appeler("zendesk__repondre", { ticket: 42, texte: "Transporteur relancé.", publique: false });
 sortie.zdSansChoix = await appeler("zendesk__repondre", { ticket: 42, texte: "Public ou pas ?" });
@@ -775,6 +780,8 @@ process.exit(0);
   verifier("Salesforce : la note part sur la fiche donnée (ParentId, Title, Body), une seule fois, le doublon est refusé", r.sf?.ok === true && notesSf.length === 1 && notesSf[0].ParentId === "003000000000001AAA" && notesSf[0].Title === "Appel du 28/09" && notesSf[0].Body === "Rappeler la semaine prochaine." && r.sfDoublon?.ok === false && /Déjà fait/.test(r.sfDoublon?.content ?? ""), `${notesSf.length} ${r.sf?.content} | ${r.sfDoublon?.content}`);
   verifier("Salesforce : une fiche d'un autre genre (005, utilisateur) et un texte de plus de 10 000 caractères sont refusés sans rien envoyer", r.sfFicheBizarre?.ok === false && r.sfLong?.ok === false && notesSf.length === 1, `${r.sfFicheBizarre?.content} | ${r.sfLong?.content}`);
   const notesPd = apres.filter((x) => x.hote === PD_DOMAINE && x.methode === "POST").map((x) => JSON.parse(x.corps));
+  verifier("Pipedrive : « affaire » à null vaut absence, pour la carte comme pour l'outil (la carte disait « sur l'affaire ? » d'une note posée sur la personne) ; une affaire illisible (« abc ») est refusée", r.pdAffaireNulle?.ok === true && notesPd.some((n) => n.content === "Affaire nulle" && n.person_id === 7 && n.deal_id === undefined) && /sur la personne 7/.test(r.carteAffaireNulle ?? "") && r.pdAffaireIllisible?.ok === false && !notesPd.some((n) => n.content === "Affaire illisible"), `${r.pdAffaireNulle?.content} | ${r.carteAffaireNulle} | ${r.pdAffaireIllisible?.content}`);
+  verifier("Salesforce : un identifiant plus long que 18 caractères (deux fiches collées) est refusé, pas coupé en une autre fiche que la carte ne montrait pas", r.sfFicheColle?.ok === false && notesSf.length === 1, r.sfFicheColle?.content);
   verifier("Pipedrive : la note part sur l'affaire (deal_id), jamais sur deux cibles à la fois", r.pd?.ok === true && notesPd.some((n) => n.deal_id === 11 && n.content === "Devis envoyé.") && r.pdDeux?.ok === false && !notesPd.some((n) => n.content === "Les deux"), `${r.pd?.content} | ${r.pdDeux?.content}`);
   const putsZd = apres.filter((x) => x.hote === ZD && x.methode === "PUT").map((x) => JSON.parse(x.corps));
   verifier("Zendesk : une réponse publique et une note interne, telles que demandées ; sans choix explicite, refusé", r.zd?.ok === true && r.zdInterne?.ok === true && putsZd.some((p) => p.ticket?.comment?.public === true && p.ticket.comment.body === "Nous renvoyons votre colis aujourd'hui.") && putsZd.some((p) => p.ticket?.comment?.public === false) && r.zdSansChoix?.ok === false, `${r.zd?.content} | ${r.zdSansChoix?.content}`);

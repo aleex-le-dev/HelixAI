@@ -301,7 +301,26 @@ export const demandeToujours = (outil: string) => toujoursConfirmer(outil) || (E
  * s'inscrit ici à son chargement (la barrière ne l'importe pas : elle reste
  * chargeable seule).
  */
-type Apercu = (outil: string, args: Record<string, unknown>) => Promise<{ resume: string; affiche: string } | { refus: string }>;
+type Apercu = (outil: string, args: Record<string, unknown>) => Promise<{ resume: string; affiche: string; empreinte?: string } | { refus: string }>;
+
+/*
+ * L'empreinte de ce qu'une carte **acceptée** a montré, attachée à l'appel
+ * même (l'objet de ses arguments, que chat.ts passe tel quel de la barrière à
+ * l'outil). Tournée des connecteurs du 28/09/2026 : projets.ts retenait
+ * l'empreinte de la dernière carte **montrée** pour la campagne, acceptée ou
+ * non, et de n'importe qui. Une carte montrée à un collègue (que l'outil
+ * refuse ensuite) ou refusée remplaçait celle que l'administrateur allait
+ * accepter : la campagne modifiée entre-temps partait, alors que la carte
+ * acceptée en montrait une autre.
+ */
+const apercusAccordes = new WeakMap<object, string>();
+
+/** L'empreinte montrée sur la carte acceptée pour cet appel, une seule fois ; `undefined` sans carte acceptée. */
+export function empreinteAccordee(args: object): string | undefined {
+  const v = apercusAccordes.get(args);
+  apercusAccordes.delete(args);
+  return v;
+}
 /*
  * Registre porté par une fonction, hissée avec ce module : un `let` ne l'est pas,
  * et natifs/projets.ts s'inscrit parfois avant que ce module ait fini de se
@@ -1141,7 +1160,7 @@ export async function verifierOutil(
    * (campagne relue chez le service, destinataires comptés). Sans cet aperçu,
    * rien ne part : la barrière chargée seule refuse, elle ne devine pas.
    */
-  let apercu: { resume: string; affiche: string } | null = null;
+  let apercu: { resume: string; affiche: string; empreinte?: string } | null = null;
   if (APERCU_REQUIS.has(outil)) {
     const apercuNatif = registreApercu().fn;
     const a = apercuNatif ? await apercuNatif(outil, args).catch((err: unknown) => ({ refus: err instanceof Error ? err.message : String(err) })) : { refus: "Refusé : la carte de cette campagne n'a pas pu être préparée. Rien n'a été fait." };
@@ -1224,6 +1243,7 @@ export async function verifierOutil(
 
   const accord = issue === "accord";
   if (!(toujours && accord)) memoire?.set(cle, { accord, issue });
+  if (accord && apercu?.empreinte) apercusAccordes.set(args, apercu.empreinte);
 
   // L'entrée est au nom de qui a répondu ; la personne pour qui l'agent
   // travaillait figure dans le détail. Sans réponse, personne n'a décidé.

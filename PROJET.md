@@ -1009,6 +1009,23 @@ un vrai modèle, Windows (arrêt de l'arbre des processus). PayPal : l'adresse d
 (`/http`) répond 404, `/mcp` répond 401 ; laissée telle que documentée, à trancher avec un compte.
 SECURITE.md § 56.
 
+**Tournée finale des connexions aux outils, 28/09/2026 (nuit).** Medhi : « pour les connexions
+aux outils j'ai testé Gmail etc., mais que tout soit bon, niveau code ». Tout le code des
+connexions relu ligne à ligne (natives, courrier IMAP et SMTP, Drive, agenda, Slack, MCP, commerce,
+projets, messageries, Microsoft 365, documents). Quinze défauts corrigés, les plus sérieux : un
+`.docx` piégé (nom répété dans l'archive) bloquait la passerelle environ une demi-heure pour tout le
+monde, dès qu'un agent le lisait dans un OneDrive ou un SharePoint partagé ; **décision appliquée** :
+Drive, l'agenda et Slack se branchent et se débranchent par l'administrateur seul, comme la boîte
+commune (un membre pouvait remplacer l'agenda de l'instance par son serveur) ; l'envoi d'une
+campagne Brevo ou Mailchimp n'est couvert que par la carte acceptée pour cet appel ; courrier par
+« Se connecter avec Google » : un jeton refusé faisait attendre vingt secondes puis disait « le
+serveur a cessé de répondre », et l'écran donnait à déclarer `helix://app/helix/oauth/retour` dans
+l'application de bureau ; Instagram se débranchait au bout de 60 jours ; le webhook WhatsApp se
+laissait saturer par des requêtes non signées. Messages du courrier, de l'agenda et de Slack
+traduits (134 phrases). Chaque défaut a son contrôle dans l'essai du service ; section 27 de la
+batterie. **Pas essayé** : les vrais services (ligne vide de XOAUTH2 chez Microsoft, renouvellement
+d'Instagram, Telegram sans `offset`). SECURITE.md § 59.
+
 ### 3.6 Découpage des tâches lourdes
 
 Ajouté en septembre 2026, après mesure. Un modèle de 8 milliards de paramètres perd le

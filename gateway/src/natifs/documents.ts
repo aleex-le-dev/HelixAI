@@ -518,7 +518,13 @@ async function formsReponses(args: Record<string, unknown>): Promise<Resultat> {
   let incomplet = false;
   for (let page = 0; page < LIMITES.pagesReponses; page++) {
     const suite = jeton ? `&pageToken=${encodeURIComponent(jeton)}` : "";
-    const r = await appelerApi("forms", (a) => ({ methode: "GET", hote: "forms.googleapis.com", chemin: `/v1/forms/${f.id}/responses?pageSize=1000${filtre}${suite}`, entetes: bearer(a) }));
+    /*
+     * Une page de mille réponses longues dépassait les 4 Mo admis par défaut :
+     * l'outil échouait toujours sur un gros formulaire, en conseillant de
+     * demander moins, ce qui ne changeait rien (tournée des connecteurs du
+     * 28/09/2026). 16 Mo par page, trois pages au plus.
+     */
+    const r = await appelerApi("forms", (a) => ({ methode: "GET", hote: "forms.googleapis.com", chemin: `/v1/forms/${f.id}/responses?pageSize=1000${filtre}${suite}`, entetes: bearer(a), octets: 16 * 1024 * 1024 }));
     if (r.statut !== 200) throw erreurApi("Google Forms", r);
     toutes.push(...tableau(r.json.responses));
     jeton = texte(r.json.nextPageToken, 500);

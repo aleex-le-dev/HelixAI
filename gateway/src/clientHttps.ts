@@ -1,5 +1,7 @@
 import https from "node:https";
 import type { IncomingHttpHeaders, IncomingMessage } from "node:http";
+// Les messages de transport s'affichent aussi à l'écran (connexion d'un service) : traduits depuis la tournée des connecteurs du 28/09/2026.
+import { tf } from "./langue.ts";
 
 /**
  * Client HTTPS minimal des connecteurs Google Drive et Slack.
@@ -80,21 +82,19 @@ function traduire(e: Error, service: string): ErreurTransport {
   if (/certificat|certificate|self.signed|CERT_|DEPTH_ZERO|ERR_TLS|UNABLE_TO_VERIFY/i.test(`${code} ${e.message}`)) {
     return new ErreurTransport(
       "certificat",
-      `Le certificat présenté au nom de ${service} n'est pas reconnu. La connexion est refusée ` +
-        "plutôt que d'y envoyer un jeton d'accès. Si votre réseau intercepte le trafic chiffré, " +
-        "l'autorité de votre entreprise doit être installée dans le magasin de confiance de cette machine.",
+      tf("Le certificat présenté au nom de {0} n'est pas reconnu. La connexion est refusée plutôt que d'y envoyer un jeton d'accès. Si votre réseau intercepte le trafic chiffré, l'autorité de votre entreprise doit être installée dans le magasin de confiance de cette machine.", service),
     );
   }
   if (code === "ENOTFOUND" || code === "EAI_AGAIN") {
-    return new ErreurTransport("reseau", `${service} est injoignable : pas de réseau, ou nom introuvable.`);
+    return new ErreurTransport("reseau", tf("{0} est injoignable : pas de réseau, ou nom introuvable.", service));
   }
   if (code === "ECONNREFUSED" || code === "ECONNRESET" || code === "EPIPE") {
-    return new ErreurTransport("reseau", `La connexion à ${service} a été interrompue.`);
+    return new ErreurTransport("reseau", tf("La connexion à {0} a été interrompue.", service));
   }
   if (code === "ETIMEDOUT") {
-    return new ErreurTransport("delai", `${service} n'a pas répondu dans le temps imparti.`);
+    return new ErreurTransport("delai", tf("{0} n'a pas répondu dans le temps imparti.", service));
   }
-  return new ErreurTransport("reseau", `La connexion à ${service} a échoué.`);
+  return new ErreurTransport("reseau", tf("La connexion à {0} a échoué.", service));
 }
 
 /** Un échange complet, sans jamais laisser de connexion ouverte derrière lui. */
@@ -158,7 +158,7 @@ export function requeteHttps(demande: DemandeHttps, service: string): Promise<Re
               ko(
                 new ErreurTransport(
                   "taille",
-                  `La réponse de ${service} dépasse la taille autorisée. Demandez moins d'éléments à la fois.`,
+                  tf("La réponse de {0} dépasse la taille autorisée. Demandez moins d'éléments à la fois.", service),
                 ),
               ),
             );
@@ -178,18 +178,18 @@ export function requeteHttps(demande: DemandeHttps, service: string): Promise<Re
          */
         res.on("close", () => {
           if (res.complete) livrer();
-          else finir(() => ko(new ErreurTransport("reseau", `La réponse de ${service} a été interrompue.`)));
+          else finir(() => ko(new ErreurTransport("reseau", tf("La réponse de {0} a été interrompue.", service))));
         });
       },
     );
 
     req.setTimeout(demande.delaiMs, () => {
       req.destroy();
-      finir(() => ko(new ErreurTransport("delai", `${service} n'a pas répondu dans le temps imparti.`)));
+      finir(() => ko(new ErreurTransport("delai", tf("{0} n'a pas répondu dans le temps imparti.", service))));
     });
     minuterieTotale = setTimeout(() => {
       req.destroy();
-      finir(() => ko(new ErreurTransport("delai", `L'échange avec ${service} a pris trop de temps.`)));
+      finir(() => ko(new ErreurTransport("delai", tf("L'échange avec {0} a pris trop de temps.", service))));
     }, demande.delaiTotalMs);
     req.on("error", (e: Error) => finir(() => ko(traduire(e, service))));
     req.end(charge ?? undefined);

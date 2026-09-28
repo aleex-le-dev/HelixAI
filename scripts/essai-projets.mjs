@@ -125,12 +125,15 @@ const CAMPAGNES_BREVO = {
   13: { id: 13, name: "Déjà partie", subject: "Envoyée", status: "sent", sender: { name: "Boutique", email: "bonjour@exemple.fr" }, htmlContent: "<p>Envoyée</p>", recipients: { lists: [3] }, statistics: { globalStats: { sent: 1200, delivered: 1190, uniqueViews: 400, uniqueClicks: 80, unsubscriptions: 3 } } },
   14: { id: 14, name: "Changera", subject: "Avant", status: "draft", sender: { name: "Boutique", email: "bonjour@exemple.fr" }, htmlContent: "<p>Texte d'origine</p>", recipients: { lists: [7] } },
   15: { id: 15, name: "Panne", subject: "Réponse perdue", status: "draft", sender: { name: "Boutique", email: "bonjour@exemple.fr" }, htmlContent: "<p>Peut-être partie</p>", recipients: { lists: [7] } },
+  16: { id: 16, name: "Refusée", subject: "Carte refusée", status: "draft", sender: { name: "Boutique", email: "bonjour@exemple.fr" }, htmlContent: "<p>Refusée sur la carte</p>", recipients: { lists: [7] } },
 };
 const envoisBrevo = [];
 const creesBrevo = [];
 /* Mailchimp. */
 const CAMPAGNES_MC = {
-  c0ffee1234: { id: "c0ffee1234", status: "save", settings: { title: "Lettre de septembre", subject_line: "Les nouveautés", from_name: "Essai SARL", reply_to: "lettre@exemple.fr" }, recipients: { list_id: "a1b2c3d4e5", list_name: "Newsletter", recipient_count: 830 }, html: "<p>Bonjour à tous</p><a href='https://exemple.fr/septembre'>Lire</a><p>FIN-MAILCHIMP</p>" },
+  // Une campagne en texte brut : pas de HTML, la carte n'en montrerait rien ; elle ne part pas d'ici (tournée du 28/09/2026).
+  deadbeef00: { id: "deadbeef00", type: "plaintext", status: "save", settings: { title: "Texte seul", subject_line: "Sans HTML", from_name: "Essai SARL", reply_to: "lettre@exemple.fr" }, recipients: { list_id: "a1b2c3d4e5", list_name: "Newsletter", recipient_count: 830 }, html: "" },
+  c0ffee1234: { id: "c0ffee1234", type: "regular", status: "save", settings: { title: "Lettre de septembre", subject_line: "Les nouveautés", from_name: "Essai SARL", reply_to: "lettre@exemple.fr" }, recipients: { list_id: "a1b2c3d4e5", list_name: "Newsletter", recipient_count: 830 }, html: "<p>Bonjour à tous</p><a href='https://exemple.fr/septembre'>Lire</a><p>FIN-MAILCHIMP</p>" },
 };
 const envoisMc = [];
 const creesMc = [];
@@ -717,23 +720,49 @@ const carteDe = async (outil, args, accord = false, pour = A) => {
 };
 sortie.carteBrouillon = await carteDe("brevo__creer_brouillon", brouillon);
 // Envoyer : la campagne relue, le nombre de destinataires, puis l'envoi.
+/*
+ * Comme dans chat.ts, la carte et l'envoi portent le même objet d'arguments :
+ * l'accord est attaché à cet appel-là (approbation.ts, « empreinteAccordee »),
+ * pas à la campagne (tournée des connecteurs du 28/09/2026).
+ */
 sortie.envoiSansCarte = await appeler("brevo__envoyer_campagne", { campagne: 11 });
-sortie.carteEnvoi = await carteDe("brevo__envoyer_campagne", { campagne: 11 }, true);
-sortie.envoiB = await appeler("brevo__envoyer_campagne", { campagne: 11 }, B);
-sortie.envoi = await appeler("brevo__envoyer_campagne", { campagne: 11 });
-sortie.envoiRejoue = await appeler("brevo__envoyer_campagne", { campagne: 11 });
+const appel11 = { campagne: 11 };
+sortie.carteEnvoi = await carteDe("brevo__envoyer_campagne", appel11, true);
+// Une carte acceptée pour un autre appel de la même campagne ne vaut pas pour celui-ci.
+await carteDe("brevo__envoyer_campagne", { campagne: 11 }, true);
+sortie.envoiAutreAppel = await appeler("brevo__envoyer_campagne", { campagne: 11 });
+sortie.envoiB = await appeler("brevo__envoyer_campagne", appel11, B);
+sortie.envoi = await appeler("brevo__envoyer_campagne", appel11);
+sortie.envoiRejoue = await appeler("brevo__envoyer_campagne", appel11);
 sortie.carteSegment = await carteDe("brevo__envoyer_campagne", { campagne: 12 });
-sortie.carteChange = await carteDe("brevo__envoyer_campagne", { campagne: 14 }, true);
+/*
+ * Une carte refusée, puis la campagne modifiée, puis une carte acceptée pour
+ * un autre appel : l'appel refusé ne part pas avec l'empreinte de l'autre.
+ * Avant la tournée, « montrees » gardait la dernière carte montrée, acceptée ou
+ * non, de n'importe qui.
+ */
+const refuse16 = { campagne: 16 };
+sortie.carteRefusee = await carteDe("brevo__envoyer_campagne", refuse16, false);
+await carteDe("brevo__envoyer_campagne", { campagne: 16 }, true);
+sortie.envoiApresRefus = await appeler("brevo__envoyer_campagne", refuse16);
+const appel14 = { campagne: 14 };
+sortie.carteChange = await carteDe("brevo__envoyer_campagne", appel14, true);
 // Le processus principal change la campagne chez le faux Brevo, puis répond.
 console.log("CHANGER");
 await new Promise((r) => process.stdin.once("data", r));
-sortie.envoiChange = await appeler("brevo__envoyer_campagne", { campagne: 14 });
-sortie.carte503 = await carteDe("brevo__envoyer_campagne", { campagne: 15 }, true);
-sortie.envoi503 = await appeler("brevo__envoyer_campagne", { campagne: 15 });
-await carteDe("brevo__envoyer_campagne", { campagne: 15 }, true);
-sortie.envoi503bis = await appeler("brevo__envoyer_campagne", { campagne: 15 });
-sortie.carteMc = await carteDe("mailchimp__envoyer_campagne", { campagne: "c0ffee1234" }, true);
-sortie.envoiMc = await appeler("mailchimp__envoyer_campagne", { campagne: "c0ffee1234" });
+// Une collègue fait montrer la campagne changée (sa carte, acceptée par elle) : cela ne couvre pas l'appel de l'administrateur.
+await carteDe("brevo__envoyer_campagne", { campagne: 14 }, true, B);
+sortie.envoiChange = await appeler("brevo__envoyer_campagne", appel14);
+const appel15 = { campagne: 15 };
+sortie.carte503 = await carteDe("brevo__envoyer_campagne", appel15, true);
+sortie.envoi503 = await appeler("brevo__envoyer_campagne", appel15);
+const appel15bis = { campagne: 15 };
+await carteDe("brevo__envoyer_campagne", appel15bis, true);
+sortie.envoi503bis = await appeler("brevo__envoyer_campagne", appel15bis);
+const appelMc = { campagne: "c0ffee1234" };
+sortie.carteMc = await carteDe("mailchimp__envoyer_campagne", appelMc, true);
+sortie.envoiMc = await appeler("mailchimp__envoyer_campagne", appelMc);
+sortie.envoiMcTexte = await carteDe("mailchimp__envoyer_campagne", { campagne: "deadbeef00" }, false);
 // Limites : douze brouillons lancés ensemble ne dépassent pas dix dans l'heure (moins ceux déjà faits).
 sortie.rafale = await Promise.all(Array.from({ length: 12 }, (_, i) => appeler("mailchimp__creer_brouillon", { ...brouillon, objet: "Rafale " + i, audience: "a1b2c3d4e5" })));
 // Serveur MCP : employés et agent de code sans écriture ; un collègue refusé au moment d'agir.
@@ -798,6 +827,9 @@ process.exit(0);
   const envois11 = envoisBrevo.slice(avantEnvois).filter((x) => x === 11).length;
   verifier("carte acceptée : la campagne part une fois ; la même carte ne vaut pas un second envoi", r.envoi?.ok === true && /1\s256 destinataire/.test(r.envoi?.content) && r.envoiRejoue?.ok === false && envois11 === 1, `${r.envoi?.content} | ${r.envoiRejoue?.content} | ${envois11}`);
   verifier("une campagne vers un segment (nombre inconnu) : refusée sans carte", r.carteSegment?.nombre === 0 && r.carteSegment?.autorise === false && /segment/.test(r.carteSegment?.message), JSON.stringify(r.carteSegment));
+  verifier("une carte acceptée pour un autre appel de la même campagne ne couvre pas celui-ci : rien ne part", r.envoiAutreAppel?.ok === false && /pas été montrée/.test(r.envoiAutreAppel?.content ?? "") && envois11 === 1, r.envoiAutreAppel?.content);
+  verifier("carte refusée : l'appel ne part pas, même si une autre carte de la même campagne a été acceptée entre-temps", r.carteRefusee?.autorise === false && r.envoiApresRefus?.ok === false && !envoisBrevo.includes(16), r.envoiApresRefus?.content);
+  verifier("Mailchimp : une campagne en texte brut (sans HTML à montrer) n'est pas proposée à l'envoi", r.envoiMcTexte?.nombre === 0 && r.envoiMcTexte?.autorise === false && /classique/.test(r.envoiMcTexte?.message ?? "") && !envoisMc.includes("deadbeef00"), JSON.stringify(r.envoiMcTexte).slice(0, 300));
   verifier("campagne changée chez Brevo entre la carte et l'envoi : rien ne part", r.carteChange?.autorise === true && r.envoiChange?.ok === false && /a changé/.test(r.envoiChange?.content) && !envoisBrevo.includes(14), r.envoiChange?.content);
   const envois15 = envoisBrevo.filter((x) => x === 15).length;
   verifier("Brevo répond 503 à l'envoi : peut-être parti, le même envoi relancé n'est pas renvoyé", r.envoi503?.ok === false && /peut-être/.test(r.envoi503?.content) && r.envoi503bis?.ok === false && envois15 === 1, `${envois15} ${r.envoi503?.content} | ${r.envoi503bis?.content}`);

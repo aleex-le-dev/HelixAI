@@ -314,6 +314,9 @@ console.log("\nB. Connexion : le jeton est essayé, jamais rendu");
   const tg = await connecter({ service: "telegram", jeton: TG, envoi: true });
   const tgTexte = await tg.text();
   verifier("Telegram branché, envoi permis ; la réponse ne contient pas le jeton", tg.status === 200 && !SECRETS.test(tgTexte) && /@essai_bot/.test(tgTexte), tgTexte.slice(0, 200));
+  // « offset=-1 » fait oublier à Telegram tous les messages en attente sauf le dernier (tournée du 28/09/2026).
+  const sondes = recues.filter((x) => x.hote === "api.telegram.org" && /\/getUpdates/.test(x.chemin));
+  verifier("Telegram : l'essai de la connexion ne confirme ni n'oublie aucun message en attente (getUpdates sans offset négatif)", sondes.length > 0 && !sondes.some((x) => /offset=-/.test(x.chemin)), sondes.map((x) => x.chemin.replace(/bot[^/]+/, "bot…")).join(" "));
   const etatTg = await service("telegram");
   verifier("l'écran dit que le bot ne lit pas tout un groupe (mode confidentialité)", etatTg?.configure === true && etatTg?.toutLeGroupe === false && etatTg?.envoi === true, JSON.stringify(etatTg).slice(0, 200));
 
@@ -367,11 +370,33 @@ console.log("\nC. Webhook de WhatsApp : signé par Meta, ou ignoré");
   const rAncien = await deposer(ancien, signer(ancien));
   const rDouble = await deposer(recent, signer(recent));
   const etatWa = await service("whatsapp");
+  /*
+   * Reconnecter le même numéro sans recoller la clé secrète (champ facultatif
+   * à l'écran) : la clé et le jeton de vérification sont gardés, le webhook
+   * accepte toujours les notifications signées (tournée du 28/09/2026 : il
+   * répondait 404 à toutes, et les messages reçus étaient perdus).
+   */
+  const reconnexion = await connecter({ service: "whatsapp", jeton: WA, numero: WA_NUMERO, compte: WA_COMPTE, envoi: true });
+  const apresReconnexion = notification([{ from: "33655555555", nom: "Léa Client", id: "wamid.R2", ts: maintenant() - 60, texte: "Après la reconnexion" }]);
+  const rReconnexion = await deposer(apresReconnexion, signer(apresReconnexion));
+  const verificationApres = (await service("whatsapp"))?.webhook?.verification;
+  verifier("WhatsApp reconnecté sans recoller la clé secrète : la clé et le jeton de vérification sont gardés, le webhook accepte encore les notifications signées", reconnexion.status === 200 && rReconnexion.status === 200 && verificationApres === VERIFICATION, `${reconnexion.status} ${rReconnexion.status} ${verificationApres === VERIFICATION}`);
   verifier("deux notifications signées gardées, une notification rejouée par Meta ne fait pas de doublon", rBon.status === 200 && rAncien.status === 200 && rDouble.status === 200 && etatWa?.conversations === 2 && typeof etatWa?.webhook?.dernier === "string", `${rBon.status} ${rAncien.status} ${JSON.stringify(etatWa).slice(0, 200)}`);
   // La passerelle coupe la connexion au-delà de 2 Mo : fetch peut ne pas voir la réponse.
   const enorme = await deposer("x".repeat(3 * 1024 * 1024), "sha256=00").catch(() => ({ status: 0 }));
   const apresEnorme = await appel("/health").then((x) => x.status).catch(() => 0);
-  verifier("un corps de plus de 2 Mo est refusé sans être lu en entier, et la passerelle répond toujours", (enorme.status === 413 || enorme.status === 0) && apresEnorme === 200, `${enorme.status} ${apresEnorme}`);
+  // Sans signature de la bonne forme (« sha256=00 »), refusé d'emblée (401, tournée du 28/09/2026) ; avec, coupé à 2 Mo (413).
+  const enormeSigne = await deposer("x".repeat(3 * 1024 * 1024), `sha256=${"0".repeat(64)}`).catch(() => ({ status: 0 }));
+  verifier("un corps de plus de 2 Mo est refusé sans être lu en entier, et la passerelle répond toujours", [401, 0].includes(enorme.status) && [413, 0].includes(enormeSigne.status) && apresEnorme === 200, `${enorme.status} ${enormeSigne.status} ${apresEnorme}`);
+  /*
+   * Derrière un mandataire, tous les appelants ont la même adresse : 320
+   * requêtes sans signature (au-delà des 300 par minute) ne font plus refuser
+   * la vraie notification de Meta qui suit (tournée du 28/09/2026).
+   */
+  const bruit = await Promise.all(Array.from({ length: 320 }, () => deposer("{}", "").then((x) => x.status).catch(() => 0)));
+  const apresBruit = notification([{ from: "33666666666", nom: "Tom Client", id: "wamid.B1", ts: maintenant() - 30, texte: "Après le bruit" }]);
+  const rApresBruit = await deposer(apresBruit, signer(apresBruit));
+  verifier("320 requêtes sans signature, d'une même adresse : refusées (401), sans épuiser la limite ; la notification signée qui suit passe (200)", bruit.every((x) => x === 401 || x === 0) && rApresBruit.status === 200, `${[...new Set(bruit)].join(",")} ${rApresBruit.status}`);
 }
 
 console.log("\nD. Un vrai Chat : la carte d'envoi, et l'appel recopié d'un message reçu");

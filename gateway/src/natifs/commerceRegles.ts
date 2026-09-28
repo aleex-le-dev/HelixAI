@@ -71,7 +71,8 @@ export function resumeCommerce(outil: string, args: Record<string, unknown>): st
     case "salesforce__noter":
       return `ajouter dans Salesforce, sur la fiche ${court(args.fiche)}, la note${extrait(args.titre, 80)} :${extrait(args.texte)} (une note ajoutée ne se reprend pas ici)`;
     case "pipedrive__noter":
-      return `ajouter dans Pipedrive, ${args.affaire !== undefined && args.affaire !== "" ? `sur l'affaire ${court(args.affaire)}` : `sur la personne ${court(args.personne)}`}, la note${extrait(args.texte)} (une note ajoutée ne se reprend pas ici)`;
+      // Comme l'outil (commerce.ts, `pipedriveNoter`) : `null` et "" ne désignent rien.
+      return `ajouter dans Pipedrive, ${args.affaire !== undefined && args.affaire !== null && args.affaire !== "" ? `sur l'affaire ${court(args.affaire)}` : `sur la personne ${court(args.personne)}`}, la note${extrait(args.texte)} (une note ajoutée ne se reprend pas ici)`;
     case "zendesk__repondre":
       return args.publique === true
         ? `répondre au client sur le ticket Zendesk n° ${court(args.ticket)}, par une réponse publique que Zendesk lui enverra :${extrait(args.texte)} (une réponse envoyée ne se reprend pas)`

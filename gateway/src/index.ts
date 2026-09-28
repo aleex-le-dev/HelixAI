@@ -1151,6 +1151,21 @@ async function reserveeALAdministration(res: http.ServerResponse, qui: Demandeur
   return true;
 }
 
+/**
+ * Google Drive, l'agenda (CalDAV ou Google) et Slack sont, comme la boîte
+ * commune, un compte pour toute l'instance : ses agents les lisent pour tous
+ * les membres, et l'agenda y écrit. Tournée des connecteurs du 28/09/2026 :
+ * une séance suffisait pour les brancher, les remplacer ou les débrancher. Un
+ * membre pouvait donc couper le Drive ou le Slack de l'organisation, ou
+ * remplacer l'agenda de l'instance par un serveur à lui, qui recevait ensuite
+ * les rendez-vous que les agents de tous y écrivaient (même règle que la boîte
+ * commune, revue du 26/09/2026, et que les connexions natives du 28/09).
+ * Lire l'état reste permis à toute séance.
+ */
+async function reserveeServiceCommun(res: http.ServerResponse, qui: Demandeur): Promise<boolean> {
+  return reserveeALAdministration(res, qui, t("Seul l'administrateur de l'instance peut brancher, débrancher ou configurer ces services : ils agissent au nom de toute l'organisation."));
+}
+
 async function handleCourrierEtat(res: http.ServerResponse, url: URL): Promise<void> {
   const adresse = url.searchParams.get("adresse") ?? "";
   send(res, 200, {
@@ -1332,6 +1347,7 @@ async function handleAgendaConfigurer(
 ): Promise<void> {
   const qui = await demandeur(req, url);
   if (!qui) return send(res, 401, sansSeance());
+  if (await reserveeServiceCommun(res, qui)) return;
 
   const body = await readJson(req).catch(() => ({}));
   const resultat = await configurerAgenda(body);
@@ -1349,6 +1365,7 @@ async function handleAgendaOublier(
 ): Promise<void> {
   const qui = await demandeur(req, url);
   if (!qui) return send(res, 401, sansSeance());
+  if (await reserveeServiceCommun(res, qui)) return;
 
   const resultat = await oublierAgenda();
   journaliser("donnees.ecrites", qui.userId, { collection: "agenda.compte" });
@@ -1498,6 +1515,7 @@ async function handleAgendaGoogleEtat(req: http.IncomingMessage, res: http.Serve
 async function handleAgendaGoogleConnecter(req: http.IncomingMessage, res: http.ServerResponse, url: URL): Promise<void> {
   const qui = await demandeur(req, url);
   if (!qui) return send(res, 401, sansSeance());
+  if (await reserveeServiceCommun(res, qui)) return;
   const body = (await readJson(req).catch(() => ({}))) as { ecriture?: unknown };
   const r = await agendaGoogle.demarrer(qui.userId, body.ecriture === true);
   send(res, r.ok ? 200 : 400, r);
@@ -1506,6 +1524,7 @@ async function handleAgendaGoogleConnecter(req: http.IncomingMessage, res: http.
 async function handleAgendaGoogleCode(req: http.IncomingMessage, res: http.ServerResponse, url: URL): Promise<void> {
   const qui = await demandeur(req, url);
   if (!qui) return send(res, 401, sansSeance());
+  if (await reserveeServiceCommun(res, qui)) return;
   const body = (await readJson(req).catch(() => ({}))) as { adresse?: unknown };
   const r = await agendaGoogle.collerAdresse(body.adresse, qui.userId);
   send(res, r.ok ? 200 : 400, { ...r, etat: await agendaGoogle.etat() });
@@ -1514,6 +1533,7 @@ async function handleAgendaGoogleCode(req: http.IncomingMessage, res: http.Serve
 async function handleAgendaGoogleOublier(req: http.IncomingMessage, res: http.ServerResponse, url: URL): Promise<void> {
   const qui = await demandeur(req, url);
   if (!qui) return send(res, 401, sansSeance());
+  if (await reserveeServiceCommun(res, qui)) return;
   const r = await agendaGoogle.oublier(qui.userId);
   send(res, 200, { ...r, etat: await agendaGoogle.etat() });
 }
@@ -1526,6 +1546,7 @@ async function handleDriveEtat(res: http.ServerResponse): Promise<void> {
 async function handleDriveConnecter(req: http.IncomingMessage, res: http.ServerResponse, url: URL): Promise<void> {
   const qui = await demandeur(req, url);
   if (!qui) return send(res, 401, sansSeance());
+  if (await reserveeServiceCommun(res, qui)) return;
   const resultat = await drive.demarrer(qui.userId);
   send(res, resultat.ok ? 200 : 400, resultat);
 }
@@ -1534,6 +1555,7 @@ async function handleDriveConnecter(req: http.IncomingMessage, res: http.ServerR
 async function handleDriveCode(req: http.IncomingMessage, res: http.ServerResponse, url: URL): Promise<void> {
   const qui = await demandeur(req, url);
   if (!qui) return send(res, 401, sansSeance());
+  if (await reserveeServiceCommun(res, qui)) return;
   const body = (await readJson(req).catch(() => ({}))) as { adresse?: unknown };
   const resultat = await drive.collerAdresse(body.adresse, qui.userId);
   send(res, resultat.ok ? 200 : 400, { ...resultat, etat: await drive.etat() });
@@ -1542,6 +1564,7 @@ async function handleDriveCode(req: http.IncomingMessage, res: http.ServerRespon
 async function handleDriveOublier(req: http.IncomingMessage, res: http.ServerResponse, url: URL): Promise<void> {
   const qui = await demandeur(req, url);
   if (!qui) return send(res, 401, sansSeance());
+  if (await reserveeServiceCommun(res, qui)) return;
   const resultat = await drive.oublier(qui.userId);
   send(res, 200, { ...resultat, etat: await drive.etat() });
 }
@@ -1554,6 +1577,7 @@ async function handleSlackEtat(res: http.ServerResponse): Promise<void> {
 async function handleSlackConfigurer(req: http.IncomingMessage, res: http.ServerResponse, url: URL): Promise<void> {
   const qui = await demandeur(req, url);
   if (!qui) return send(res, 401, sansSeance());
+  if (await reserveeServiceCommun(res, qui)) return;
   const body = await readJson(req).catch(() => ({}));
   const resultat = await slack.configurer(body, qui.userId);
   send(res, resultat.ok ? 200 : 400, resultat);
@@ -1562,6 +1586,7 @@ async function handleSlackConfigurer(req: http.IncomingMessage, res: http.Server
 async function handleSlackOublier(req: http.IncomingMessage, res: http.ServerResponse, url: URL): Promise<void> {
   const qui = await demandeur(req, url);
   if (!qui) return send(res, 401, sansSeance());
+  if (await reserveeServiceCommun(res, qui)) return;
   const resultat = await slack.oublier(qui.userId);
   send(res, 200, { ...resultat, etat: await slack.etat() });
 }

@@ -7,6 +7,7 @@ import { estAdministrateur } from "../roles.ts";
 import { definirApercuMessagerie } from "../approbation.ts";
 import { requeteHttps, ErreurTransport, dateFrancaise, type DemandeHttps, type ReponseHttps } from "../clientHttps.ts";
 import { t, tf } from "../langue.ts";
+import { verifier as verifierDebit } from "../debit.ts";
 
 /**
  * Messageries pour le Chat et Cowork : Telegram (API des bots), Discord (bot)
@@ -660,6 +661,9 @@ function repondreTexte(res: http.ServerResponse, statut: number, texte: string):
  * l'abonnement ; le numéro de l'organisation, seul accepté ; la taille bornée ;
  * un débit limité (debit.ts). Elle ne rend rien d'autre que « reçu ».
  */
+/** La limite des notifications signées (debit.ts) : la route elle-même n'y est plus soumise avant la signature. */
+export const CHEMIN_DEBIT_SIGNE = "/helix/messageries/whatsapp/webhook#signee";
+
 export async function webhookWhatsApp(req: http.IncomingMessage, res: http.ServerResponse, url: URL): Promise<void> {
   await charger();
   const c = magasin!.comptes.whatsapp;
@@ -679,6 +683,29 @@ export async function webhookWhatsApp(req: http.IncomingMessage, res: http.Serve
     req.resume();
     return repondreTexte(res, 404, "Introuvable.");
   }
+  /*
+   * Tournée des connecteurs du 28/09/2026 : la limite de débit (300 par
+   * minute et par adresse, debit.ts) comptait toute requête, signée ou non,
+   * avant la signature ; et le corps entier (2 Mo) était lu même sans
+   * en-tête de signature. Derrière le mandataire ou le tunnel qui donne à
+   * l'instance le certificat que Meta exige, tous les appelants ont la même
+   * adresse : 300 requêtes quelconques par minute suffisaient à faire refuser
+   * (429) les vraies notifications de Meta. Une requête sans signature de la
+   * bonne forme est désormais refusée tout de suite, sans lire son corps ni
+   * compter contre la limite, qui ne vaut plus que pour les requêtes signées.
+   */
+  const signature = String(req.headers["x-hub-signature-256"] ?? "");
+  if (!/^sha256=[0-9a-f]{64}$/i.test(signature)) {
+    res.writeHead(401, { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff", Connection: "close" });
+    res.end("Signature refusée.", () => req.destroy());
+    return;
+  }
+  const debit = verifierDebit("POST", CHEMIN_DEBIT_SIGNE, `a:${req.socket.remoteAddress ?? "inconnue"}`);
+  if (!debit.ok) {
+    res.setHeader("Retry-After", String(debit.retenteDans ?? 60));
+    req.resume();
+    return repondreTexte(res, 429, "Trop de requêtes.");
+  }
   const morceaux: Buffer[] = [];
   let taille = 0;
   try {
@@ -694,7 +721,6 @@ export async function webhookWhatsApp(req: http.IncomingMessage, res: http.Serve
     return repondreTexte(res, 400, "Illisible.");
   }
   const corps = Buffer.concat(morceaux);
-  const signature = String(req.headers["x-hub-signature-256"] ?? "");
   const attendue = `sha256=${createHmac("sha256", secret).update(corps).digest("hex")}`;
   if (!memeValeur(signature, attendue)) return repondreTexte(res, 401, "Signature refusée.");
   let json: unknown;
@@ -871,7 +897,14 @@ export async function connecter(brut: Saisie, qui: string): Promise<{ ok: boolea
       const adresse = (crochet.json.result as { url?: unknown } | undefined)?.url;
       // Un webhook posé appartient à quelqu'un d'autre : on ne le retire pas, et getUpdates ne marcherait pas.
       if (typeof adresse === "string" && adresse) return { ok: false, message: t("Ce bot envoie déjà ses messages à un webhook, posé par un autre logiciel : Telegram ne les donne qu'à un seul lecteur. Créez un bot à part pour ce connecteur. Rien n'a été enregistré.") };
-      const premier = await essai({ methode: "GET", chemin: `/bot${jeton}/getUpdates?timeout=0&limit=1&offset=-1` });
+      /*
+       * Sans `offset` : l'essai ne confirme rien. Avec `offset=-1`, Telegram
+       * oubliait tous les messages en attente sauf le dernier (« All previous
+       * updates will be forgotten ») : cinq personnes qui avaient écrit au bot
+       * avant sa connexion n'en faisaient plus qu'une, et un bot ne peut pas
+       * écrire le premier aux quatre autres (tournée des connecteurs du 28/09/2026).
+       */
+      const premier = await essai({ methode: "GET", chemin: `/bot${jeton}/getUpdates?timeout=0&limit=1` });
       if (premier.statut === 409) return { ok: false, message: t("Un autre programme lit déjà les messages de ce bot (un agent branché sur le même bot, ou un autre logiciel). Telegram ne les donne qu'à un seul lecteur : créez un bot à part pour ce connecteur. Rien n'a été enregistré.") };
       const pseudo = nettoyer(bot.username, 64);
       compte = {
@@ -902,7 +935,16 @@ export async function connecter(brut: Saisie, qui: string): Promise<{ ok: boolea
     } else {
       const numero = chaine(brut.numero, 30);
       const waba = chaine(brut.compte, 30);
-      const secretApp = chaine(brut.secretApp, 100);
+      /*
+       * Reconnecter le même numéro sans recoller la clé secrète (le champ est
+       * facultatif à l'écran) gardait un compte sans elle : le webhook
+       * répondait ensuite 404 à chaque notification, et les messages reçus
+       * étaient perdus. La clé et le jeton de vérification déjà enregistrés
+       * pour ce numéro sont gardés (tournée des connecteurs du 28/09/2026).
+       */
+      const precedent = magasin!.comptes.whatsapp;
+      const memeNumero = precedent?.ids.numero === chaine(brut.numero, 30);
+      const secretApp = chaine(brut.secretApp, 100) || (memeNumero && precedent?.secretApp !== undefined ? secretDe(precedent.secretApp, placeSecretApp) : "");
       if (!/^\d{5,25}$/.test(numero)) return { ok: false, message: t("L'identifiant du numéro de téléphone est une suite de chiffres, lue dans « Configuration de l'API » de l'application Meta.") };
       if (!/^\d{5,25}$/.test(waba)) return { ok: false, message: t("L'identifiant du compte WhatsApp Business est une suite de chiffres, lu dans « Configuration de l'API » de l'application Meta.") };
       if (secretApp && !/^[0-9a-f]{32}$/.test(secretApp)) return { ok: false, message: t("La clé secrète de l'application Meta fait 32 caractères hexadécimaux (Paramètres de l'app, Général).") };
@@ -917,7 +959,7 @@ export async function connecter(brut: Saisie, qui: string): Promise<{ ok: boolea
         ids: { numero, compte: waba },
         jeton: chiffrer(jeton, placeJeton(id)),
         ...(secretApp ? { secretApp: chiffrer(secretApp, placeSecretApp) } : {}),
-        verification: chiffrer(randomBytes(24).toString("base64url"), placeVerification),
+        verification: memeNumero && precedent?.verification !== undefined && secretDe(precedent.verification, placeVerification) ? precedent.verification : chiffrer(randomBytes(24).toString("base64url"), placeVerification),
         envoi,
         depuis: new Date().toISOString(),
         par: qui,

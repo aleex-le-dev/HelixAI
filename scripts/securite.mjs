@@ -6028,6 +6028,15 @@ console.log("\n15 septies. Tournée de la 2026.928.3 : logos, mentions, X");
   const sourceOutils = readFileSync(join(RACINE, "gateway", "src", "outilsNatifs.ts"), "utf8");
   verifier("X et TikTok : le fichier du dossier est ouvert sans attendre (O_NONBLOCK : un tube nommé ne bloque plus l'outil)", /O_NOFOLLOW \| \(constants\.O_NONBLOCK \?\? 0\)/.test(sourceOutils), "O_NONBLOCK absent");
 
+  // L'adresse de retour de X suit l'adresse où la passerelle écoute vraiment (essayé : sur ::1, 127.0.0.1 ne menait à rien).
+  const natifX = await import(versUrl(join(RACINE, "gateway", "src", "oauthNatif.ts")).href);
+  const retours = {};
+  for (const ecoute of ["::1", "0.0.0.0", "127.0.0.1"]) {
+    natifX.noterEcoute?.(ecoute);
+    retours[ecoute] = natifX.adresseDeRetour("x", "http://localhost:8787");
+  }
+  verifier("X : « localhost » n'est réécrit en 127.0.0.1 que si la passerelle y écoute ; sur ::1 seulement (HELIX_GATEWAY_HOST=::1 ou localhost), l'adresse montrée est [::1]", typeof natifX.noterEcoute === "function" && retours["::1"] === "http://[::1]:8787/helix/oauth/retour" && retours["0.0.0.0"] === "http://127.0.0.1:8787/helix/oauth/retour" && retours["127.0.0.1"] === "http://127.0.0.1:8787/helix/oauth/retour", JSON.stringify(retours));
+
   // Écran (vu dans une fenêtre cachée, contre une instance jetable).
   const natifEcran = readFileSync(join(RACINE, "src", "components", "settings", "ConnecteurNatif.tsx"), "utf8");
   verifier("X, panneau : ne dit plus « X examine les applications » (sa rubrique dit « Aucun examen de X ») ; il dit pourquoi l'application est la vôtre", /id === "x"\s*\?[\s\S]{0,400}X facture chaque appel/.test(natifEcran), "phrase commune donnée à X");

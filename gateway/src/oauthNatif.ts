@@ -862,12 +862,31 @@ function pageBoucle(res: http.ServerResponse, statut: number, titre: string, mes
   );
 }
 
+/**
+ * L'adresse sur laquelle la passerelle écoute vraiment (index.ts, à
+ * l'ouverture du port). « localhost » ne se réécrit en 127.0.0.1 que si
+ * 127.0.0.1 mène à elle.
+ *
+ * Tournée de la 2026.928.3 (SECURITE.md § 43) : avec `HELIX_GATEWAY_HOST=::1`,
+ * ou `localhost` (que macOS résout d'abord en ::1), la passerelle n'écoute pas
+ * sur 127.0.0.1 ; l'adresse de retour de X, réécrite en 127.0.0.1, ne menait
+ * à rien (essayé : connexion refusée), et la connexion à X ne pouvait pas
+ * aboutir. Elle est alors écrite `[::1]`, la même machine par l'adresse où
+ * l'instance écoute ; la documentation de X ne dit pas s'il l'accepte.
+ */
+let ecoute = "127.0.0.1";
+export function noterEcoute(adresse: string): void {
+  ecoute = adresse;
+}
+const ecouteSurIPv4 = () => ["127.0.0.1", "0.0.0.0", "::", ""].includes(ecoute);
+
 /** L'adresse de retour à déclarer chez le fournisseur, telle que l'écran doit la montrer. */
 export function adresseDeRetour(id: IdNatif, base: string): string {
   const def = DEFINITIONS[id];
   if (def.retour === "instance") {
     const racine = base.replace(/\/+$/, "");
-    return `${def.sansLocalhost ? racine.replace(/^(https?:\/\/)localhost(?=:\d{1,5}$|$)/i, "$1127.0.0.1") : racine}/helix/oauth/retour`;
+    const boucle = ecouteSurIPv4() ? "127.0.0.1" : ecoute === "::1" ? "[::1]" : "localhost";
+    return `${def.sansLocalhost ? racine.replace(/^(https?:\/\/)localhost(?=:\d{1,5}$|$)/i, (_, schema: string) => schema + boucle) : racine}/helix/oauth/retour`;
   }
   // Google accepte tout port de la boucle locale pour une application « de bureau » ; TikTok, le joker `*`.
   return def.google ? "http://127.0.0.1" : `http://127.0.0.1:*${def.cheminBoucle}`;

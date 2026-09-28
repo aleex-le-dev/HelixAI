@@ -5905,6 +5905,9 @@ server.on("error", (err: NodeJS.ErrnoException) => {
 void preparerMagasin().then(() => server.listen(PORT, HOST, () => {
   const schema = tls ? "https" : "http";
   console.log(`[helix-gateway] écoute sur ${schema}://${HOST}:${PORT}`);
+  // L'adresse réellement ouverte (« localhost » peut donner ::1) : l'adresse de retour de X en dépend (oauthNatif.ts, SECURITE.md § 43).
+  const ouverte = server.address();
+  if (ouverte && typeof ouverte === "object") natifs.noterEcoute(ouverte.address);
   /*
    * Le port réellement ouvert, à côté du jeton (0600). La ligne de commande
    * ne lit le jeton du poste que pour ce port-là (cli/helix.mjs) : revue du

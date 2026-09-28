@@ -3812,14 +3812,21 @@ if (process.platform === "darwin") {
       "",
     ].join("\n"),
   );
-  const avantCopies = lister(tmpdir()).filter((n) => n.startsWith("helix-essai-")).length;
+  /*
+   * Seules les copies de CE test comptent (celles qui contiennent test_piege.py) : le
+   * dossier temporaire est commun, et d'autres essais lancés en même temps y créent
+   * leurs propres « helix-essai-* » (vu le 28/09/2026, faux échec sous charge).
+   */
+  const copiesDuPiege = () =>
+    lister(tmpdir()).filter((n) => n.startsWith("helix-essai-") && existe(join(tmpdir(), n, "test_piege.py"))).length;
+  const avantCopies = copiesDuPiege();
   const r = await essayerTests(piege);
   const sortie = r && "sortie" in r ? r.sortie : JSON.stringify(r);
   verifier("cage : le test piégé a bien été lancé", /LECTURE|ECRITURE|RESEAU/.test(sortie), sortie.slice(0, 200));
   verifier("cage : un fichier hors du projet ne se lit pas", sortie.includes("LECTURE REFUSEE") && !sortie.includes("SECRET-CAGE-4242"), sortie.slice(0, 200));
   verifier("cage : rien ne s'écrit hors de la copie", sortie.includes("ECRITURE REFUSEE") && !existe(dehors), sortie.slice(0, 200));
   verifier("cage : pas de réseau, pas même la passerelle locale", sortie.includes("RESEAU REFUSE") && !sortie.includes("RESEAU OUVERT"), sortie.slice(0, 200));
-  verifier("cage : la copie d'essai est effacée", lister(tmpdir()).filter((n) => n.startsWith("helix-essai-")).length <= avantCopies, "copie restée");
+  verifier("cage : la copie d'essai est effacée", copiesDuPiege() <= avantCopies, "copie restée");
 
   /*
    * Revue de sécurité du 26/09/2026 : les évasions trouvées par les agents

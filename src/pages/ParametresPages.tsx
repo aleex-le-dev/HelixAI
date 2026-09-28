@@ -1018,21 +1018,6 @@ export function McpSettings() {
       onBasculer: () => basculer("drive"),
       panneau: <DriveGoogle onChange={relire} />,
     },
-    {
-      id: "slack",
-      label: "Slack",
-      /*
-       * Icône neutre : la charte de Slack soumet l'usage du logo à une licence
-       * écrite et interdit de le redistribuer (scripts/marques/sources.json).
-       */
-      description: resumeSlack(slack),
-      categorie: CATEGORIE,
-      icone: MessageSquare,
-      connecte: Boolean(slack?.configure),
-      ouvert: ouvert === "slack",
-      onBasculer: () => basculer("slack"),
-      panneau: <SlackConnecteur onChange={relire} />,
-    },
     /*
      * Sheets, Slides, YouTube et réseaux sociaux (28/09/2026,
      * ConnecteurNatif.tsx). Sheets et Slides portent l'icône de produit de
@@ -1110,6 +1095,29 @@ export function McpSettings() {
     ...commerce,
     // Microsoft 365 (28/09/2026) : six lignes, une seule connexion (ConnecteurMicrosoft.tsx).
     ...lignesMicrosoft(natifs.find((s) => s.id === "microsoft"), ouvert, basculer, relire),
+    {
+      id: "slack",
+      /*
+       * « Slack (par jeton) », sous « Travail en équipe » (tournée finale du
+       * 28/09/2026) : il y avait deux lignes « Slack », celle-ci sous
+       * « Courrier, agenda et fichiers » et celle du serveur de Slack (catalogue)
+       * sous « Travail en équipe ». Elles sont désormais côte à côte, et se
+       * distinguent comme Notion et « Notion (par jeton) » : ici, le jeton d'un
+       * bot, qui lit les salons où on l'invite.
+       */
+      label: t("Slack (par jeton)"),
+      /*
+       * Icône neutre : la charte de Slack soumet l'usage du logo à une licence
+       * écrite et interdit de le redistribuer (scripts/marques/sources.json).
+       */
+      description: resumeSlack(slack),
+      categorie: t("Travail en équipe"),
+      icone: MessageSquare,
+      connecte: Boolean(slack?.configure),
+      ouvert: ouvert === "slack",
+      onBasculer: () => basculer("slack"),
+      panneau: <SlackConnecteur onChange={relire} />,
+    },
   ];
 
   return (

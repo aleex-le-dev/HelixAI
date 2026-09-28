@@ -7136,6 +7136,46 @@ console.log("\n18 bis. Tournée finale des écrans : aide, rubriques des connect
     !/Outils et connecteurs/.test(sourceAide) && !/Outils et connecteurs/.test(menuReglages) && /label: t\("Connecteurs"\), path: "\/parametres\/mcp"/.test(menuReglages),
     (sourceAide.match(/.{30}Outils et connecteurs/) ?? [""])[0],
   );
+
+  // Connecteurs : une rubrique, un titre.
+  const sourceCatalogue = readFileSync(join(RACINE, "gateway", "src", "connecteurs.ts"), "utf8");
+  const rubriquesCatalogue = [...(/export const CATEGORIES: Categorie\[\] = \[([\s\S]*?)\];/.exec(sourceCatalogue)?.[1] ?? "").matchAll(/"([^"]+)"/g)].map((m) => m[1]);
+  verifier(
+    "connecteurs : le commerce sous une seule rubrique (plus de « Vente et relation client » ni de « Paiement et gestion » à côté de « Commerce et relation client »)",
+    rubriquesCatalogue.includes("Commerce et relation client") && !/Vente et relation client"|Paiement et gestion"/.test(sourceCatalogue),
+    rubriquesCatalogue.join(", "),
+  );
+  const categorieDe = (id) => new RegExp(`id: "${id}",[\\s\\S]*?categorie: "([^"]+)"`).exec(sourceCatalogue)?.[1];
+  verifier(
+    "connecteurs : HubSpot, Intercom, Square et PayPal rejoignent Stripe et Salesforce ; Box rejoint Drive et Dropbox",
+    ["hubspot", "intercom", "square", "paypal"].every((id) => categorieDe(id) === "Commerce et relation client") && categorieDe("box") === "Courrier, agenda et fichiers",
+    ["hubspot", "intercom", "square", "paypal", "box"].map((id) => `${id}=${categorieDe(id)}`).join(" "),
+  );
+  const ecartsTraduction = [];
+  for (const langue of ["en", "zh", "ja"]) {
+    const passerelle = JSON.parse(readFileSync(join(RACINE, "gateway", "i18n", `${langue}.json`), "utf8"));
+    const ecran = JSON.parse(readFileSync(join(RACINE, "src", "i18n", `${langue}.json`), "utf8"));
+    for (const r of rubriquesCatalogue) if (r in ecran && ecran[r] !== passerelle[r]) ecartsTraduction.push(`${langue} « ${r} » : ${passerelle[r]} / ${ecran[r]}`);
+  }
+  verifier(
+    "connecteurs : une rubrique du catalogue qui porte le nom d'une rubrique de l'écran est traduite pareil des deux côtés (sinon deux titres pour la même rubrique)",
+    ecartsTraduction.length === 0 && ["Commerce et relation client", "Courrier, agenda et fichiers", "Travail en équipe"].every((r) => rubriquesCatalogue.includes(r)),
+    ecartsTraduction.join(" | "),
+  );
+  const sourceConnecteursEcran = readFileSync(join(RACINE, "src", "components", "settings", "Connecteurs.tsx"), "utf8");
+  const sourceParametres = readFileSync(join(RACINE, "src", "pages", "ParametresPages.tsx"), "utf8");
+  verifier(
+    "connecteurs : l'écran range les entrées du catalogue sous la rubrique de même nom des services à panneau, et les deux Slack se distinguent (« Slack (par jeton) », avec l'autre)",
+    /entrees: aBrancher\.find\(\(g\) => g\.cat === cat\)\?\.entrees/.test(sourceConnecteursEcran) &&
+      /label: t\("Slack \(par jeton\)"\)[\s\S]{0,400}categorie: t\("Travail en équipe"\)/.test(sourceParametres) &&
+      /id: "slack-mcp",\s*label: "Slack",[\s\S]{0,200}categorie: "Travail en équipe"/.test(sourceCatalogue),
+    "Connecteurs.tsx / ParametresPages.tsx",
+  );
+  verifier(
+    "connecteurs : un service qui ne demande aucun identifiant n'offre pas « Où trouver mon jeton », mais sa documentation",
+    /entree\.ecritureAuChoix \|\| entree\.secrets\.length === 0\s*\?\s*t\("Documentation du service"\)/.test(sourceConnecteursEcran),
+    "Connecteurs.tsx",
+  );
 }
 
 console.log(`\n${reussis} vérification(s) réussie(s), ${echecs.length} échec(s).`);

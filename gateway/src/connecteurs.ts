@@ -112,23 +112,35 @@ export interface EntreeCatalogue {
   integre?: true;
 }
 
+/*
+ * Une rubrique « Commerce et relation client » pour le catalogue comme pour les
+ * services à panneau (tournée finale du 28/09/2026). Il y en avait trois :
+ * « Commerce et relation client » (Stripe, Salesforce, Zendesk…, écran),
+ * « Vente et relation client » (HubSpot, Intercom) et « Paiement et gestion »
+ * (Square, PayPal) : on cherchait son CRM ou son moyen de paiement dans trois
+ * listes. L'écran range sous un même titre les services à panneau et ceux du
+ * catalogue (Connecteurs.tsx) : les deux traductions de la rubrique doivent
+ * donc être identiques (gateway/i18n et src/i18n, contrôlé par npm run securite).
+ * Box rejoint de même « Courrier, agenda et fichiers », où sont Drive et Dropbox :
+ * il était seul, parmi Canva et Figma, sous « Documents et données ».
+ */
 export type Categorie =
   | "Livré avec le produit"
+  | "Courrier, agenda et fichiers"
   | "Travail en équipe"
   | "Développement"
   | "Documents et données"
-  | "Vente et relation client"
-  | "Web et recherche"
-  | "Paiement et gestion";
+  | "Commerce et relation client"
+  | "Web et recherche";
 
 export const CATEGORIES: Categorie[] = [
   "Livré avec le produit",
+  "Courrier, agenda et fichiers",
   "Travail en équipe",
   "Développement",
   "Documents et données",
-  "Vente et relation client",
+  "Commerce et relation client",
   "Web et recherche",
-  "Paiement et gestion",
 ];
 
 /**
@@ -249,7 +261,7 @@ export const CATALOGUE: EntreeCatalogue[] = [
     id: "intercom",
     label: "Intercom",
     description: "Conversations clients et articles d'aide Intercom.",
-    categorie: "Vente et relation client",
+    categorie: "Commerce et relation client",
     // Espaces Intercom hébergés aux États-Unis ; ceux d'Europe ont une autre adresse (mcp.eu.intercom.com), pas au catalogue.
     url: "https://mcp.intercom.com/mcp",
     oauth: "auto",
@@ -326,7 +338,7 @@ export const CATALOGUE: EntreeCatalogue[] = [
     id: "square",
     label: "Square",
     description: "Catalogue, commandes et paiements Square.",
-    categorie: "Paiement et gestion",
+    categorie: "Commerce et relation client",
     // 28/09/2026 : `/mcp`, l'adresse de la documentation de Square (le transport « streamable »).
     url: "https://mcp.squareup.com/mcp",
     oauth: "auto",
@@ -337,7 +349,7 @@ export const CATALOGUE: EntreeCatalogue[] = [
     id: "paypal",
     label: "PayPal",
     description: "Factures, commandes et remboursements PayPal.",
-    categorie: "Paiement et gestion",
+    categorie: "Commerce et relation client",
     // 28/09/2026 : PayPal documente `/http` (transport « streamable ») et `/sse`, pas `/mcp`.
     url: "https://mcp.paypal.com/http",
     oauth: "auto",
@@ -447,7 +459,7 @@ export const CATALOGUE: EntreeCatalogue[] = [
     id: "box",
     label: "Box",
     description: "Fichiers et dossiers Box.",
-    categorie: "Documents et données",
+    categorie: "Courrier, agenda et fichiers",
     url: "https://mcp.box.com/",
     oauth: "appli",
     /*
@@ -533,7 +545,7 @@ export const CATALOGUE: EntreeCatalogue[] = [
     id: "hubspot",
     label: "HubSpot",
     description: "Contacts, entreprises et affaires HubSpot.",
-    categorie: "Vente et relation client",
+    categorie: "Commerce et relation client",
     command: "npx",
     args: ["-y", "@hubspot/mcp-server@0.4.0"],
     documentation: "https://developers.hubspot.com/docs/api/private-apps",

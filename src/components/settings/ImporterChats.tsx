@@ -1,13 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { auGrand, grandEnRepli, grandStockageDisponible, issueDerniereEcriture, type IssueEcriture } from "@/lib/store/grandStockage";
 import { dernierEnvoi } from "@/lib/store/sync";
-import { Upload, Loader2, TriangleAlert, CircleCheck, FolderKanban, MessageSquare, Download } from "lucide-react";
+import { Upload, Loader2, TriangleAlert, CircleCheck, FolderKanban, MessageSquare, Download, ExternalLink, Info } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { InfoBox } from "@/components/ui/InfoBox";
 import { Card } from "@/components/settings/SettingsShell";
-import { NOM_SOURCE, completerChats, lireExport, lireLogiciel, logicielsDuPoste, type Import, type LogicielTrouve } from "@/lib/importChats";
+import { NOM_SOURCE, completerChats, lireExport, lireLogiciel, logicielsDuPoste, type ChatImporte, type Import, type LogicielTrouve } from "@/lib/importChats";
 import { instance } from "@/lib/instance";
-import { ajouterSessionsImportees, placeOccupeeParLesChats, type Session } from "@/lib/store/sessions";
+import { ajouterSessionsImportees, chatsDejaImportes, placeOccupeeParLesChats, type Session } from "@/lib/store/sessions";
 import { createProject } from "@/lib/store/projects";
 import { createAgent } from "@/lib/store/agents";
 import { currentUser } from "@/lib/store/identity";
@@ -27,6 +27,18 @@ import { t, tf, locale } from "@/lib/i18n";
  * place, et on relit ce qui a vraiment été gardé.
  */
 const PLACE_CHATS = grandStockageDisponible() ? 25_000_000 : 3_500_000;
+
+/**
+ * Google Takeout, « Mes activités » seul coché (identifiant de produit
+ * `myactivity`, relevé le 28/09/2026 dans les liens de Takeout publiés par
+ * d'autres outils). Le choix de « Applications Gemini » dans la liste des
+ * activités, et du format JSON, reste à faire à la main : Takeout n'a pas
+ * d'adresse pour eux. Si Google changeait l'identifiant, la page s'ouvre sur
+ * la liste complète, et le guide dit quoi cocher.
+ */
+const TAKEOUT_GEMINI = "https://takeout.google.com/settings/takeout/custom/myactivity";
+
+const nbMessages = (c: ChatImporte) => c.nbMessages ?? c.messages.length;
 
 const date = (iso: string) => new Date(iso).toLocaleDateString(locale(), { day: "numeric", month: "short", year: "numeric" });
 const mo = (car: number) => (car / 1_000_000).toLocaleString(locale(), { maximumFractionDigits: 1 });
@@ -49,12 +61,14 @@ interface Bilan {
   ecriture?: IssueEcriture | null;
   /** Quand le fichier a refusé : l'instance en a-t-elle reçu la copie ? */
   envoye?: boolean;
+  /** Chats de l'export déjà importés auparavant, laissés tels quels. */
+  dejaImportes: number;
 }
 
 /**
- * Reprendre ses Chats et ses projets depuis ChatGPT ou Claude.
+ * Reprendre ses Chats et ses projets depuis ChatGPT, Claude ou Gemini.
  *
- * L'archive d'export est lue sur ce poste (importChats.ts). On choisit ce
+ * L'archive d'export est lue sur ce poste (importChats.ts, importGemini.ts). On choisit ce
  * qu'on reprend ; les projets Claude reviennent avec leurs documents (rangés
  * dans Fichiers) et, si on le veut, un agent qui porte leurs instructions,
  * pour que les Chats de ce projet se poursuivent comme avant.
@@ -74,6 +88,14 @@ export function ImporterChats() {
   const [avecInstructions, setAvecInstructions] = useState(true);
   /** Avancement d'une lecture ou d'un import par morceaux (logiciels du poste), affiché sous les boutons. */
   const [avancement, setAvancement] = useState<string | null>(null);
+  /**
+   * Chats de cette source déjà importés par cette personne (clé d'origine vers
+   * le nombre de messages importés). Un Chat déjà là n'est ni présélectionné
+   * ni réimporté ; s'il a grandi depuis, on peut en reprendre une copie à côté.
+   */
+  const [deja, setDeja] = useState<Map<string, number>>(new Map());
+  /** Déjà importé, et pas plus long dans cet export : rien à reprendre. */
+  const bloque = (c: ChatImporte) => deja.has(c.cle) && nbMessages(c) <= (deja.get(c.cle) ?? 0);
 
   useEffect(() => {
     if (instance().remote) return;
@@ -97,11 +119,14 @@ export function ImporterChats() {
     setLecture(true);
     try {
       const lu = await lire();
-      // Les plus récents d'abord, présélectionnés tant qu'il reste de la place.
+      const dejaLa = chatsDejaImportes(currentUser().id, lu.source);
+      setDeja(dejaLa);
+      // Les plus récents d'abord, présélectionnés tant qu'il reste de la place, sauf ceux déjà importés.
       lu.chats.sort((a, b) => b.modifieLe.localeCompare(a.modifieLe));
       const pre = new Set<string>();
       let place = 0;
       for (const c of lu.chats) {
+        if (dejaLa.has(c.cle)) continue;
         if (place + c.taille > placeLibre) continue;
         pre.add(c.cle);
         place += c.taille;
@@ -122,7 +147,7 @@ export function ImporterChats() {
     setEnCours(true);
     setErreur(null);
     const moi = currentUser();
-    const bilanEnCours: Bilan = { chats: 0, chatsDemandes: 0, projets: 0, agents: 0, documents: 0, documentsEchoues: 0, illisibles: 0 };
+    const bilanEnCours: Bilan = { chats: 0, chatsDemandes: 0, projets: 0, agents: 0, documents: 0, documentsEchoues: 0, illisibles: 0, dejaImportes: 0 };
     try {
       /*
        * Un logiciel du poste n'a donné que la liste : les messages des seuls
@@ -131,7 +156,11 @@ export function ImporterChats() {
        * les projets et les agents : une instance qui ne répond plus ne laisse
        * pas un import à moitié fait.
        */
-      let choisisComplets = donnees.chats.filter((c) => choisis.has(c.cle));
+      // Relu au moment d'importer : un autre onglet a pu importer le même export entre-temps.
+      const dejaLa = chatsDejaImportes(moi.id, donnees.source);
+      const encoreBloque = (c: ChatImporte) => dejaLa.has(c.cle) && nbMessages(c) <= (dejaLa.get(c.cle) ?? 0);
+      bilanEnCours.dejaImportes = donnees.chats.filter(encoreBloque).length;
+      let choisisComplets = donnees.chats.filter((c) => choisis.has(c.cle) && !encoreBloque(c));
       if (donnees.aCompleter) {
         const demandes = choisisComplets.length;
         choisisComplets = await completerChats(donnees.aCompleter, choisisComplets, (faits, total) =>
@@ -207,6 +236,7 @@ export function ImporterChats() {
           messages: c.messages.map((m) => ({ id: newId(), role: m.role, content: m.content, createdAt: m.createdAt })),
           createdAt: c.creeLe,
           updatedAt: c.modifieLe,
+          importe: { source: donnees.source, cle: c.cle, messages: c.messages.length },
         }));
       bilanEnCours.chatsDemandes = sessions.length + bilanEnCours.illisibles;
       const parLeFichier = auGrand("sessions");
@@ -294,14 +324,36 @@ export function ImporterChats() {
         <ul className="space-y-1 text-sm text-muted-foreground">
           <li>{t("• ChatGPT : Paramètres, Contrôle des données, Exporter les données.")}</li>
           <li>{t("• Claude : Paramètres, Confidentialité, Exporter les données.")}</li>
+          <li>{t("• Gemini : Google Takeout, « Mes activités », « Applications Gemini » seulement (étapes ci-dessous).")}</li>
         </ul>
+        <details className="rounded-xl border border-border p-3 text-sm text-muted-foreground">
+          <summary className="cursor-pointer font-medium text-foreground">{t("Exporter ses Chats de Gemini, pas à pas")}</summary>
+          <ol className="mt-2 list-decimal space-y-1.5 pl-5">
+            <li>
+              <a className="underline" href={TAKEOUT_GEMINI} target="_blank" rel="noreferrer noopener">
+                {t("Ouvrez Google Takeout")}
+                <ExternalLink size={12} className="ml-1 inline" />
+              </a>{" "}
+              {t("avec le compte Google de Gemini.")}
+            </li>
+            <li>{t("Seul « Mes activités » doit être coché : sinon, cliquez « Tout désélectionner », puis cochez « Mes activités ». Le produit « Gemini » seul ne contient que vos Gems, pas vos Chats.")}</li>
+            <li>{t("Sous « Mes activités », cliquez « Toutes les données d'activité sont incluses », puis « Tout désélectionner », cochez « Applications Gemini » et validez.")}</li>
+            <li>{t("Cliquez « Plusieurs formats » et choisissez JSON pour les enregistrements d'activité : les dates y sont exactes. Le HTML proposé par défaut se lit aussi.")}</li>
+            <li>{t("Cliquez « Étape suivante », gardez « Exporter une fois » et le type .zip, puis « Créer une exportation ».")}</li>
+            <li>{t("Google prépare l'archive en quelques minutes à quelques jours, le plus souvent dans la journée, et envoie un lien par mail, valable 7 jours.")}</li>
+            <li>{t("Téléchargez l'archive et choisissez-la ici telle quelle, ou seulement le fichier MyActivity.json (ou MyActivity.html) de son dossier Gemini.")}</li>
+          </ol>
+          <p className="mt-2">
+            {t("L'export de Google est un journal d'activité, pas une liste de conversations : chaque question avec sa réponse et sa date. Les Chats sont regroupés d'après le lien de conversation que Google ajoute à chaque question, ou, à défaut, par proximité dans le temps. Pas de titres (chaque Chat prend sa première question), pas les images ni les fichiers joints (leur nom est noté), pas les Gems.")}
+          </p>
+        </details>
         <p className="text-xs text-muted-foreground">
           {t("L'archive est lue sur cet ordinateur : rien n'est envoyé ailleurs que dans votre instance.")}
         </p>
         <input
           ref={entree}
           type="file"
-          accept=".zip,.json,application/zip,application/json"
+          accept=".zip,.json,.html,.htm,application/zip,application/json,text/html"
           className="hidden"
           onChange={(e) => {
             const f = e.target.files?.[0];
@@ -334,6 +386,9 @@ export function ImporterChats() {
               {bilan.agents > 0 && ` ${tf("{0} agent(s) avec les instructions des projets.", bilan.agents)}`}
               {bilan.documents > 0 && ` ${tf("{0} document(s) rangé(s) dans Fichiers.", bilan.documents)}`}
             </p>
+            {bilan.dejaImportes > 0 && (
+              <p className="mt-1">{tf("{0} Chat(s) de cet export étaient déjà importés : laissés tels quels.", bilan.dejaImportes)}</p>
+            )}
             {bilan.illisibles > 0 && (
               <p className="mt-1">
                 {tf("{0} Chat(s) n'ont pas pu être relus sur cet ordinateur : leur fichier a été déplacé ou effacé depuis la lecture.", bilan.illisibles)}
@@ -371,6 +426,16 @@ export function ImporterChats() {
               {tf("Sélection : {0} Mo sur {1} Mo de place libre", mo(placeChoisie), mo(placeLibre))}
             </p>
           </div>
+
+          {donnees.remarques && donnees.remarques.length > 0 && (
+            <InfoBox tone="muted" leading={<Info size={15} strokeWidth={1.75} />}>
+              <ul className="space-y-1">
+                {donnees.remarques.map((r) => (
+                  <li key={r}>{r}</li>
+                ))}
+              </ul>
+            </InfoBox>
+          )}
 
           {donnees.projets.length > 0 && (
             <div className="space-y-1.5">
@@ -424,7 +489,7 @@ export function ImporterChats() {
             <div className="flex items-center justify-between">
               <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{t("Chats")}</p>
               <span className="flex gap-3 text-xs">
-                <button type="button" className="text-muted-foreground hover:text-foreground" onClick={() => setChoisis(new Set(donnees.chats.map((c) => c.cle)))}>
+                <button type="button" className="text-muted-foreground hover:text-foreground" onClick={() => setChoisis(new Set(donnees.chats.filter((c) => !bloque(c)).map((c) => c.cle)))}>
                   {t("Tout choisir")}
                 </button>
                 <button type="button" className="text-muted-foreground hover:text-foreground" onClick={() => setChoisis(new Set())}>
@@ -435,18 +500,28 @@ export function ImporterChats() {
             <ul className="max-h-80 space-y-0.5 overflow-y-auto rounded-lg border border-border p-1">
               {donnees.chats.map((c) => (
                 <li key={c.cle}>
-                  <label className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-muted">
-                    <input type="checkbox" checked={choisis.has(c.cle)} onChange={() => basculer(c.cle)} />
+                  <label className={bloque(c) ? "flex items-center gap-2 rounded-md px-2 py-1.5 text-sm opacity-60" : "flex items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-muted"}>
+                    <input type="checkbox" checked={choisis.has(c.cle) && !bloque(c)} disabled={bloque(c)} onChange={() => basculer(c.cle)} />
                     <MessageSquare size={14} strokeWidth={1.75} className="shrink-0 text-muted-foreground" />
                     <span className="min-w-0 flex-1 truncate text-foreground">{c.titre}</span>
                     <span className="shrink-0 text-xs text-muted-foreground">
-                      {date(c.modifieLe)} · {tf("{0} messages", c.nbMessages ?? c.messages.length)}
+                      {deja.has(c.cle) &&
+                        (bloque(c)
+                          ? `${t("déjà importé")} · `
+                          : `${tf("déjà importé, {0} message(s) de plus : une copie complète sera ajoutée", nbMessages(c) - (deja.get(c.cle) ?? 0))} · `)}
+                      {date(c.modifieLe)} · {tf("{0} messages", nbMessages(c))}
                     </span>
                   </label>
                 </li>
               ))}
             </ul>
           </div>
+
+          {donnees.chats.length > 0 && donnees.chats.every(bloque) && (
+            <InfoBox tone="muted" leading={<CircleCheck size={15} strokeWidth={1.75} />}>
+              {t("Tous les Chats de cet export sont déjà importés : rien de nouveau à reprendre.")}
+            </InfoBox>
+          )}
 
           {trop && (
             <InfoBox tone="warning" leading={<TriangleAlert size={15} strokeWidth={1.75} />}>
@@ -455,7 +530,7 @@ export function ImporterChats() {
           )}
 
           <Button icon={enCours ? Loader2 : Upload} disabled={enCours || trop || (choisis.size === 0 && projetsChoisis.size === 0)} onClick={() => void importer()}>
-            {enCours ? t("Import en cours...") : tf("Importer {0} Chat(s)", choisis.size)}
+            {enCours ? t("Import en cours...") : tf("Importer {0} Chat(s)", donnees.chats.filter((c) => choisis.has(c.cle) && !bloque(c)).length)}
           </Button>
           {avancement && enCours && (
             <p className="flex items-center gap-2 text-xs text-muted-foreground">

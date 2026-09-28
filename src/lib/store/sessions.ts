@@ -144,6 +144,14 @@ export interface Session {
    * l'instance l'emportait. `updatedAt` garde son rôle : l'ordre de la liste.
    */
   modifieLe?: string;
+  /**
+   * Chat repris d'un export ou d'un logiciel du poste (ImporterChats.tsx) :
+   * la source, la clé de la conversation d'origine, et combien de messages
+   * elle avait. Importer deux fois le même export ne crée pas de doublons
+   * (28/09/2026) ; un export plus récent de la même conversation, plus
+   * longue, se propose sans rien écrire par-dessus le Chat déjà là.
+   */
+  importe?: { source: string; cle: string; messages: number };
 }
 
 /** Marque une modification qui ne fait pas remonter le Chat dans la liste (voir `modifieLe`). */
@@ -266,6 +274,20 @@ export function ajouterSessionsImportees(nouvelles: Session[]): number {
   persist([...nouvelles.filter((s) => !ids.has(s.id)), ...avant]);
   const gardes = new Set(all().map((s) => s.id));
   return nouvelles.filter((s) => gardes.has(s.id)).length;
+}
+
+/**
+ * Chats déjà repris d'une source par cette personne : clé d'origine vers le
+ * plus grand nombre de messages importé pour elle. Un Chat supprimé depuis
+ * n'y est plus, et peut être importé de nouveau.
+ */
+export function chatsDejaImportes(ownerId: string, source: string): Map<string, number> {
+  const deja = new Map<string, number>();
+  for (const s of all()) {
+    if (s.ownerId !== ownerId || s.importe?.source !== source) continue;
+    deja.set(s.importe.cle, Math.max(deja.get(s.importe.cle) ?? 0, s.importe.messages));
+  }
+  return deja;
 }
 
 /** Place occupée par les Chats dans le stockage du poste, en caractères. */

@@ -1508,12 +1508,12 @@ export function AppsSettings() {
 
 /* ----------------------------- Importer ses Chats ----------------------------- */
 
-/** Reprendre ses Chats et ses projets depuis ChatGPT ou Claude : voir ImporterChats.tsx. */
+/** Reprendre ses Chats et ses projets depuis ChatGPT, Claude ou Gemini : voir ImporterChats.tsx. */
 export function ImportSettings() {
   return (
     <SettingsPage
       title={t("Importer depuis d'autres IA")}
-      subtitle={t("Reprenez vos Chats, projets et instructions de ChatGPT, Claude, Claude Code ou Codex.")}
+      subtitle={t("Reprenez vos Chats, projets et instructions de ChatGPT, Claude, Gemini, Claude Code, Codex ou Cursor.")}
     >
       <ImporterChats />
     </SettingsPage>

@@ -255,6 +255,22 @@ const ARTICLES: Article[] = [
     corps: t("Par défaut, rien ne sort de votre installation. Ce qui peut en sortir, et seulement si vous l'avez branché vous-même :\n\n- un modèle chez un fournisseur avec votre clé : la conversation part chez lui ;\n- un connecteur (boîte mail, stockage, messagerie) : il parle au service que vous avez désigné ;\n- la vérification de mise à jour, vers l'adresse inscrite dans le paquet par votre prestataire, ou vers l'instance de votre organisation. Une mise à jour ne s'installe que si elle porte la signature de l'éditeur de votre application, d'où qu'elle vienne.\n\nVous pouvez à tout moment exporter toutes vos données, ou demander leur effacement, depuis Réglages, Confidentialité. Le journal d'audit garde la trace de chaque action faite par un agent."),
   },
   {
+    id: "importer",
+    titre: t("Reprendre ses Chats d'une autre IA"),
+    resume: t("ChatGPT, Claude, Gemini, et les logiciels d'IA de ce poste."),
+    motsCles: ["importer", "import", "chatgpt", "claude", "gemini", "google", "takeout", "export", "historique", "reprendre", "codex", "cursor"],
+    lien: "/parametres/importer",
+    corps: tf(`Réglages, « Importer depuis d'autres IA ». L'export est lu sur ce poste : rien ne part ailleurs que dans votre instance. Vous choisissez ensuite les Chats à garder ; un Chat déjà importé n'est pas importé une seconde fois.
+
+- ChatGPT : Paramètres, Contrôle des données, Exporter les données. Choisissez l'archive ZIP reçue par mail.
+- Claude : Paramètres, Confidentialité, Exporter les données. Les projets reviennent avec leurs documents et leurs instructions.
+- Gemini : sur Google Takeout, cochez seulement « Mes activités », puis, dans « Toutes les données d'activité sont incluses », seulement « Applications Gemini ». Le format JSON (bouton « Plusieurs formats ») est conseillé, le HTML se lit aussi. Choisissez l'archive ZIP telle quelle, ou le fichier MyActivity.json qu'elle contient.
+
+Ce qu'il faut savoir sur Gemini : Google n'exporte pas des conversations, mais un journal de vos questions, avec la réponse et la date. {0} regroupe les questions d'une même conversation d'après le lien que Google range avec chacune, ou, sans lien, les questions posées à moins de 30 minutes d'écart, et l'écran le dit. L'export n'a pas de titres : chaque Chat prend sa première question. Les images, les fichiers joints et les Gems ne sont pas repris.
+
+Sur l'application de bureau, Claude Code, Codex et Cursor installés sur ce poste se reprennent sans export, depuis la même page.`, branding.name),
+  },
+  {
     id: "langue",
     titre: t("Changer la langue"),
     resume: t("Français, anglais, chinois, japonais."),

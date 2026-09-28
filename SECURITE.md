@@ -6092,3 +6092,60 @@ d'OpenClaw par `cmd.exe`, OpenClaw qui démarre, ses modules natifs (koffi, node
 x64 et arm64 publiés, pas chargés), ses messageries, PowerShell qui lit une ligne de commande,
 `taskkill`, l'antivirus (Defender) pendant l'installation, un nom de compte avec espace ou accent,
 les chemins de plus de 260 caractères.
+
+## 58. Connexions aux outils : tournée finale du 28 septembre 2026
+
+Demandée par Medhi avant la 2026.928.6 (« que tout soit bon, niveau code, qu'il n'y ait vraiment pas
+de bug ni de faille »), après les deux tournées du jour (§§ 49 à 56). Relu ligne à ligne :
+`oauthNatif.ts`, `courrier.ts`, `courrierOauth.ts`, `smtp.ts`, `agenda.ts`, `agendaGoogle.ts`,
+`drive.ts`, `clientGoogle.ts`, `slack.ts`, `oauthMcp.ts`, `connecteurs.ts` (autorisation),
+`outilsNatifs.ts`, `natifs/*.ts`, `approbation.ts` (écritures des connecteurs), `secret.ts`,
+`relecture.ts`, les routes d'`index.ts` et les écrans des connecteurs. Deux relecteurs en parallèle
+(commerce et projets ; messageries, Microsoft 365 et documents), chaque constat relu avant d'être
+corrigé. Contrôles : les essais des sections 15 bis à 16 septies ont reçu chacun le contrôle qui
+aurait attrapé le défaut (lancés contre l'ancien code pour le courrier, les droits et le `state` :
+11 échecs), et la section 25 de la batterie tient les corrections dans le code.
+
+### 58.1 Défauts corrigés
+
+| Gravité | Constat | Correction | Contrôle |
+|---|---|---|---|
+| Élevée | `.docx` piégé (`relecture.ts`, `lireZip`, lu par `word__lire`, `onedrive__lire`, `sharepoint__lire` et la relecture du bureau) : le répertoire central d'une archive de 4 Mo peut répéter 65 535 fois « word/document.xml » vers la même entrée qui gonfle à 16 Mo ; chaque exemplaire était décompressé, dans le seul fil de la passerelle (une demi-heure environ, estimé). Il suffisait de le déposer dans un OneDrive ou un SharePoint partagé et qu'un agent le lise. La borne du § 44.1 ne valait que par entrée. | Chaque nom voulu décompressé une fois, arrêt quand tous le sont, 32 Mo au total par archive. | essai-microsoft H ; batterie 25 |
+| Moyenne | Drive, agenda (CalDAV et Google, qui écrit) et Slack : une séance suffisait pour les brancher, les remplacer ou les débrancher. Un membre coupait le Drive ou le Slack de l'organisation, ou mettait son propre serveur d'agenda à la place : les rendez-vous que les agents de tous y écrivaient partaient chez lui. | `reserveeServiceCommun` (index.ts) sur les dix routes ; lire l'état reste permis. | essai-connecteurs II ; batterie 25 |
+| Moyenne | Campagnes Brevo et Mailchimp (`natifs/projets.ts`) : l'envoi vérifiait l'empreinte de la dernière carte **montrée** pour la campagne, acceptée ou non, par n'importe qui. Une carte montrée à un collègue (refusé ensuite par l'outil) ou refusée remplaçait celle que l'administrateur allait accepter : une campagne modifiée entre-temps partait alors que la carte acceptée en montrait une autre. | L'empreinte est attachée par la barrière à l'objet des arguments de l'appel dont la carte est acceptée (`empreinteAccordee`, approbation.ts), et consommée à l'envoi. Mailchimp : seules les campagnes « regular » ; la version texte est montrée et comptée. | essai-projets |
+| Moyenne | Courrier branché par « Se connecter avec Google / Microsoft » (`courrier.ts`) : un jeton refusé en XOAUTH2 laissait la commande attendre vingt secondes (Gmail envoie « + <erreur> » et attend une ligne vide), puis « Le serveur a cessé de répondre » ; un serveur qui annonce LOGINDISABLED fermait aussi les boîtes OAuth ; activer l'envoi plus tard s'essayait avec un mot de passe vide (jamais possible), et le jeton, qui ouvre toute la boîte, partait ensuite au serveur d'envoi saisi, quel qu'il soit. | Ligne vide sur la demande de suite ; LOGINDISABLED ignoré en XOAUTH2 ; envoi essayé avec le jeton, et seulement vers le serveur du fournisseur (vérifié aussi à chaque envoi). | essai-connecteurs V ; batterie 25 |
+| Moyenne | Écran « Se connecter avec Google / Microsoft » (`CourrierOauth.tsx`) : l'adresse de retour à déclarer était lue dans le stockage local, où l'adresse de l'instance ne se trouve plus (coffre du poste) ; l'application de bureau montrait `helix://app/helix/oauth/retour`, que Google et Microsoft refusent. | Lue par `instance()`, comme les requêtes. | batterie 25 |
+| Moyenne | Instagram (`oauthNatif.ts`) : le jeton de 60 jours n'était renouvelé que dans sa dernière minute, donc jamais ; le compte se débranchait au bout de 60 jours même utilisé chaque jour ; une panne passagère au renouvellement le débranchait. | Renouvelé à l'usage dès qu'il lui reste moins de 50 jours, une fois par heure au plus ; un échec ne coupe rien tant que le jeton vaut ; 429 et 5xx ne débranchent pas. | essai-natifs |
+| Moyenne | Webhook WhatsApp : la limite de 300 requêtes par minute et par adresse comptait toute requête, avant la signature, et le corps (2 Mo) était lu même sans signature. Derrière le mandataire ou le tunnel qui donne le certificat que Meta exige, 300 requêtes quelconques faisaient refuser les vraies notifications. | Signature de la bonne forme exigée avant de lire le corps ; la limite ne compte que les requêtes signées. | essai-messageries C |
+| Moyenne | Serveurs MCP (`oauthMcp.ts`) : le `state` n'était effacé qu'après un échange réussi ; après un échec, l'adresse d'autorisation retrouvée dans un historique servait encore dix minutes à y brancher un autre compte. | Consommé dès le retour, avant toute attente. | essai-connecteurs I ; batterie 25 |
+| Faible | Teams : une équipe désignée par un morceau de nom qu'une seule porte (« Direction » pour « Comité de direction, partenaires externes ») recevait le message ; la carte ne montrait que « Direction ». | Poster demande le nom exact ou l'identifiant. | essai-microsoft F |
+| Faible | Pipedrive : la carte disait « sur l'affaire ? » (`affaire: null`) d'une note posée sur la personne ; Salesforce : un identifiant de plus de 18 caractères était coupé en une autre fiche que celle de la carte. | Même lecture pour la carte et l'outil ; une valeur illisible ou trop longue est refusée. | essai-commerce |
+| Faible | WhatsApp reconnecté sans recoller la clé secrète (champ facultatif) : compte sans clé, webhook en 404, messages perdus. Telegram : l'essai de connexion (`offset=-1`) faisait oublier à Telegram tous les messages en attente sauf le dernier. | Clé et jeton de vérification gardés pour le même numéro ; essai sans `offset`. | essai-messageries B et C |
+| Faible | Retours d'autorisation : un second retour (même `state`, `error=`) fermait une demande en plein échange, qui enregistrait pourtant le compte ; une application Zendesk réenregistrée pendant l'échange gardait le jeton de l'ancienne ; un compte rebranché pendant qu'un Chat s'en servait pouvait être marqué perdu à la place de l'ancien ; une coupure réseau au renouvellement était dite « peut-être publié » et bloquait le même contenu une demi-heure. | Échange en cours d'abord ; empreinte de l'application lue au départ et relue avant d'enregistrer ; `marquerPerdu` vise le compte de l'appel ; erreur ordinaire. | essais natifs et commerce |
+| Faible | Renouvellement du courrier OAuth (`courrierOauth.ts`) : deux lectures simultanées renouvelaient deux fois (chez Microsoft, deux jetons de renouvellement, le plus ancien parfois enregistré en dernier) ; une panne passagère disait « il faut rebrancher la boîte » ; `fetch` sans borne de taille ; des jetons renouvelés pouvaient être écrits sur une boîte rebranchée entre-temps. | Un renouvellement à la fois ; 429 et 5xx dits comme tels ; client HTTPS borné ; jetons écrits seulement sur la même connexion. | essai-connecteurs V |
+| Faible | Google Agenda restait « Connecté » après un second refus (401) ; `no_permission` de Slack (un salon) débranchait Slack entier ; Forms échouait toujours sur un gros formulaire (page de mille réponses au-delà de 4 Mo). | Marqué à reconnecter ; `no_permission` vise l'élément ; 16 Mo par page. | relu |
+| Faible | Messages de connexion et d'erreur du courrier, de l'envoi SMTP, de l'agenda CalDAV, de Slack et du transport HTTPS en français sur un écran anglais, chinois ou japonais. | `t()`/`tf()`, 134 phrases traduites. | i18n 100 % |
+
+### 58.2 Vu tenir
+
+`state` des connexions natives, du commerce, de Drive, de Google Agenda et du courrier : tirés au
+hasard, comparés à durée constante, dix minutes, usage unique, un `state` inconnu n'annule rien ;
+PKCE où le fournisseur l'accepte ; pages de retour échappées, sans script (CSP) ; jetons chiffrés liés
+à leur place, jamais rendus par une route, un journal ou un message (les erreurs de transport ne
+citent pas l'adresse) ; aucune redirection suivie ; hôtes écrits dans le code ou vérifiés par leur
+forme ; renouvellements des connexions natives et du commerce un à la fois, jeton tourné gardé ;
+écritures derrière une carte à chaque appel, administrateur vérifié au moment d'agir ; `sousGarde`
+d'un seul tenant ; SOQL, GraphQL de Shopify, recherche Zendesk, OData de Graph, requêtes IMAP
+(littéraux) et CalDAV (échappées) : aucune injection trouvée.
+
+### 58.3 Pas essayé, ou laissé
+
+Rien contre les vrais services (aucun compte ni application de développeur le 28/09/2026) : en
+particulier la ligne vide de XOAUTH2 chez Microsoft (documentée pour Google), le renouvellement
+d'Instagram, `getUpdates` sans `offset` chez Telegram. Laissé : reconnecter un service par-dessus un
+compte branché efface l'ancien jeton sans le révoquer (Google et Facebook révoquent tout ce que
+l'application a reçu de la personne : révoquer l'ancien couperait le nouveau) ; la redirection
+CalDAV admise vers un même « domaine » lu sur ses deux derniers morceaux (`*.co.uk` compris) ;
+derrière un mandataire, une requête qui porte une fausse signature de la bonne forme compte encore
+dans la limite du webhook. Les panneaux Drive, Agenda et Slack disent le refus au membre quand il
+essaie, sans le dire d'avance.

@@ -712,6 +712,7 @@
   "Le locataire ne peut contenir que des lettres, chiffres, points et tirets.": "The tenant may contain only letters, digits, dots and hyphens.",
   "Le message est vide.": "The message is empty.",
   "Le mode Auto ne choisit jamais un modèle branché par une clé : il est facturé à quelqu'un. Choisissez-le dans le sélecteur de modèle (par exemple {0}), ou installez un modèle sur cette machine.": "Auto mode never picks a model connected with a key: someone is billed for it. Choose it in the model picker (for example {0}), or install a model on this machine.",
+  "Le mode Auto ne trouve aucun modèle de code sur cette instance. Choisissez un modèle dans le sélecteur, sous la saisie, ou installez un modèle de code sur cette machine.": "Auto mode finds no code model on this instance. Choose a model in the selector below the input, or install a code model on this machine.",
   "Le modèle « {0} », imposé pour le rôle « {1} » par le profil de déploiement, n'est pas disponible.": "The model “{0}”, required for the “{1}” role by the deployment profile, is not available.",
   "Le modèle {0} est en train de répondre dans LM Studio : sur cette machine, il ne laisse pas assez de mémoire pour entraîner. Réessayez quand il aura fini.": "The model {0} is answering in LM Studio: on this machine it leaves too little memory to train. Try again when it has finished.",
   "Le modèle {0} n'a pas répondu à temps.": "Model {0} did not answer in time.",

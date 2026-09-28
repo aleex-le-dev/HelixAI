@@ -2833,7 +2833,20 @@ async function reglageCode(
 ): Promise<{ modele: string; variante?: string } | { erreur: string }> {
   const choix = await resolve(model ? { model, acces } : { role: "code", acces });
   if ("error" in choix) {
-    return { erreur: model ? choix.error : "Aucun modèle disponible pour l'écran Code. " + choix.error };
+    /*
+     * Tournée finale du 28/09/2026 : l'écran affichait « Aucun modèle disponible pour l'écran
+     * Code. Aucun modèle disponible pour le rôle « code ». », en français dans toutes les
+     * langues, et sans dire quoi faire, alors que le sélecteur, sous la saisie, proposait des
+     * modèles (servis pour le Chat, que le mode Auto ne prend pas pour le code). Les autres
+     * refus du routeur (modèle imposé absent, modèles branchés par clé) disent déjà la raison.
+     */
+    if (model) return { erreur: choix.error };
+    return {
+      erreur:
+        choix.error === tf("Aucun modèle disponible pour le rôle « {0} ».", "code")
+          ? t("Le mode Auto ne trouve aucun modèle de code sur cette instance. Choisissez un modèle dans le sélecteur, sous la saisie, ou installez un modèle de code sur cette machine.")
+          : choix.error,
+    };
   }
   return { modele: choix.model.id, variante: varianteDe(effort) };
 }

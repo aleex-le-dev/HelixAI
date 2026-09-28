@@ -712,6 +712,7 @@
   "Le locataire ne peut contenir que des lettres, chiffres, points et tirets.": "テナントに使えるのは、英字、数字、ピリオド、ハイフンだけです。",
   "Le message est vide.": "メッセージが空です。",
   "Le mode Auto ne choisit jamais un modèle branché par une clé : il est facturé à quelqu'un. Choisissez-le dans le sélecteur de modèle (par exemple {0}), ou installez un modèle sur cette machine.": "「自動」モードでは、キーで接続したモデルは選ばれません。誰かに料金が発生するためです。モデル選択から選ぶか（たとえば {0}）、このマシンにモデルをインストールしてください。",
+  "Le mode Auto ne trouve aucun modèle de code sur cette instance. Choisissez un modèle dans le sélecteur, sous la saisie, ou installez un modèle de code sur cette machine.": "自動モードでは、このインスタンスにコード用のモデルが見つかりません。入力欄の下のセレクターでモデルを選ぶか、このマシンにコード用のモデルをインストールしてください。",
   "Le modèle « {0} », imposé pour le rôle « {1} » par le profil de déploiement, n'est pas disponible.": "デプロイプロファイルで役割「{1}」に指定されているモデル「{0}」は利用できません。",
   "Le modèle {0} est en train de répondre dans LM Studio : sur cette machine, il ne laisse pas assez de mémoire pour entraîner. Réessayez quand il aura fini.": "モデル {0} が LM Studio で応答中です。このマシンでは、トレーニングに必要なメモリが足りません。応答が終わってからもう一度お試しください。",
   "Le modèle {0} n'a pas répondu à temps.": "モデル {0} が時間内に応答しませんでした。",

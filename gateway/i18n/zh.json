@@ -712,6 +712,7 @@
   "Le locataire ne peut contenir que des lettres, chiffres, points et tirets.": "租户名称只能包含字母、数字、句点和连字符。",
   "Le message est vide.": "消息为空。",
   "Le mode Auto ne choisit jamais un modèle branché par une clé : il est facturé à quelqu'un. Choisissez-le dans le sélecteur de modèle (par exemple {0}), ou installez un modèle sur cette machine.": "“自动”模式从不选择通过密钥接入的模型：它会产生费用。请在模型选择器中选择它（例如 {0}），或在本机安装一个模型。",
+  "Le mode Auto ne trouve aucun modèle de code sur cette instance. Choisissez un modèle dans le sélecteur, sous la saisie, ou installez un modèle de code sur cette machine.": "自动模式在此实例上找不到代码模型。请在输入框下方的选择器中选择一个模型，或在本机安装一个代码模型。",
   "Le modèle « {0} », imposé pour le rôle « {1} » par le profil de déploiement, n'est pas disponible.": "部署配置为“{1}”角色指定的模型“{0}”不可用。",
   "Le modèle {0} est en train de répondre dans LM Studio : sur cette machine, il ne laisse pas assez de mémoire pour entraîner. Réessayez quand il aura fini.": "模型 {0} 正在 LM Studio 中回答：在本机上它占用内存过多，无法训练。请等它完成后重试。",
   "Le modèle {0} n'a pas répondu à temps.": "模型 {0} 未能及时响应。",

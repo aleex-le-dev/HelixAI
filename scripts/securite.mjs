@@ -7176,6 +7176,26 @@ console.log("\n18 bis. Tournée finale des écrans : aide, rubriques des connect
     /entree\.ecritureAuChoix \|\| entree\.secrets\.length === 0\s*\?\s*t\("Documentation du service"\)/.test(sourceConnecteursEcran),
     "Connecteurs.tsx",
   );
+
+  // Textes vus à l'écran.
+  const sourceIndex = readFileSync(join(RACINE, "gateway", "src", "index.ts"), "utf8");
+  verifier(
+    "Code sans modèle de code : plus de phrase française en dur, redoublée (« Aucun modèle disponible pour l'écran Code. Aucun modèle… ») ; l'écran dit quoi faire, dans la langue choisie",
+    !/"Aucun modèle disponible pour l'écran Code\. " \+/.test(sourceIndex) && /t\("Le mode Auto ne trouve aucun modèle de code sur cette instance\./.test(sourceIndex),
+    "index.ts, reglageCode",
+  );
+  const sourceComparer = readFileSync(join(RACINE, "src", "components", "chat", "ComparerModeles.tsx"), "utf8");
+  verifier(
+    "Comparer les modèles : « Vos 2 modèles y figurent, dont 2 sans note » quand aucun n'y figure, et « Vos 1 modèles », ne s'écrivent plus",
+    /sansNote\.length === siens\.length/.test(sourceComparer) && /t\("Votre modèle y figure\."\)/.test(sourceComparer),
+    "ComparerModeles.tsx",
+  );
+  const sourceCli = readFileSync(join(RACINE, "src", "components", "settings", "LigneDeCommande.tsx"), "utf8");
+  verifier("Réglages, commande helix : la raison « inconnue » venue de l'application est traduite, pas affichée telle quelle", /erreur === "inconnue"\s*\?\s*t\("raison inconnue"\)/.test(sourceCli), "LigneDeCommande.tsx");
+  const sourceMicrosoft = readFileSync(join(RACINE, "src", "components", "settings", "ConnecteurMicrosoft.tsx"), "utf8");
+  verifier("Microsoft 365 : l'étape des permissions ne renvoie plus à une liste « plus bas » absente avant l'enregistrement de l'application", !/listées plus bas/.test(sourceMicrosoft), "ConnecteurMicrosoft.tsx");
+  const sourceMessages = readFileSync(join(RACINE, "src", "components", "chat", "MessageList.tsx"), "utf8");
+  verifier("Chat, sources du web : « N autre(s) résultat(s)… » aligné à gauche quand il passe sur deux lignes", /className="inline-flex items-center gap-1 text-left text-xs text-muted-foreground hover:text-foreground"/.test(sourceMessages), "MessageList.tsx");
 }
 
 console.log(`\n${reussis} vérification(s) réussie(s), ${echecs.length} échec(s).`);

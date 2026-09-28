@@ -290,7 +290,11 @@ export function ConnecteurMicrosoft({ service, onChange }: { service: ServiceMic
             <li>{t("« URI de redirection » : plateforme « Client public/natif (mobile et bureau) », et l'adresse de retour ci-dessous, à l'identique. Vous pouvez aussi choisir la plateforme « Web » avec la même adresse : l'application aura alors un secret.")}</li>
             <li>{t("Sur la page « Vue d'ensemble » de l'application, recopiez l'« ID d'application (client) » et l'« ID de l'annuaire (locataire) ».")}</li>
             <li>{t("Plateforme « Web » seulement : « Certificats et secrets », « Nouveau secret client », puis recopiez sa « Valeur » (pas son identifiant). Pour « Client public », pas de secret.")}</li>
-            <li>{t("« Autorisations de l'API », « Ajouter une autorisation », « Microsoft Graph », « Autorisations déléguées » : ajoutez exactement les permissions listées plus bas, qui suivent les cases que vous cochez. Rien de plus : une permission en trop fait refuser la connexion.")}</li>
+            {/*
+              La liste des permissions n'apparaît qu'une fois l'application enregistrée, avec les
+              cases : l'ancienne phrase renvoyait à une liste « plus bas » absente du premier écran (28/09/2026).
+            */}
+            <li>{t("« Autorisations de l'API », « Ajouter une autorisation », « Microsoft Graph », « Autorisations déléguées » : ajoutez exactement les permissions que cet écran liste une fois l'application enregistrée, selon les services que vous cochez. Rien de plus : une permission en trop fait refuser la connexion.")}</li>
             <li>{t("Si la liste contient SharePoint ou Teams, ou si votre organisation interdit aux personnes de consentir elles-mêmes : un administrateur de l'annuaire clique sur « Accorder un consentement d'administrateur pour » votre organisation.")}</li>
           </ol>
           <p className="text-xs">{t("Les libellés du portail changent parfois : cherchez l'équivalent.")}</p>

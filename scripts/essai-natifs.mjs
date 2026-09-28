@@ -25,7 +25,7 @@
  */
 import { spawn } from "node:child_process";
 import { createHash, createHmac } from "node:crypto";
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { chmodSync, linkSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { createServer as serveurHttp } from "node:http";
 import { createServer as serveurTcp } from "node:net";
 import { tmpdir } from "node:os";
@@ -300,6 +300,15 @@ writeFileSync(FAUX_OPENCODE, `#!/bin/sh\nexec "${process.execPath}" "${join(RACI
 chmodSync(FAUX_OPENCODE, 0o755);
 // Une petite « vidéo » dans le dossier de travail, pour TikTok.
 writeFileSync(join(ESPACE, "clip.mp4"), Buffer.alloc(2048, 7));
+/*
+ * Tournée du 28/09/2026 (§ 41) : un lien symbolique au nom de vidéo vers un
+ * fichier qui n'en est pas une, et un lien dur, dans le dossier de travail,
+ * vers un fichier qui est hors de lui.
+ */
+writeFileSync(join(ESPACE, "notes.txt"), "NOTES-PRIVEES du dossier");
+symlinkSync(join(ESPACE, "notes.txt"), join(ESPACE, "deguise.mp4"));
+writeFileSync(join(AUX, "hors-dossier.mp4"), "HORS-DOSSIER contenu d'un autre dossier");
+linkSync(join(AUX, "hors-dossier.mp4"), join(ESPACE, "lien-dur.mp4"));
 
 const PORT = await portLibre();
 const G = `http://127.0.0.1:${PORT}`;
@@ -602,6 +611,20 @@ await controle("uploadAilleurs=1");
 sortie.tiktokAilleurs = await appeler("tiktok__publier_video", { fichier: "clip.mp4", titre: "Clip essai 2" });
 await controle("uploadAilleurs=0&tiktok401=1");
 sortie.tiktokRenouvele = await appeler("tiktok__profil", {});
+await controle("tiktok401=0");
+// Tournée du 28/09/2026 (§ 41) : ce que l'auteur n'avait pas essayé.
+sortie.tiktokDeguise = await appeler("tiktok__publier_video", { fichier: "deguise.mp4", titre: "Déguisé" });
+sortie.tiktokLienDur = await appeler("tiktok__publier_video", { fichier: "lien-dur.mp4", titre: "Lien dur" });
+sortie.igMappee = await appeler("instagram__publier", { image: "https://[::ffff:7f00:1]/x.jpg", legende: "mappée" });
+sortie.igPoint = await appeler("instagram__publier", { image: "https://localhost./x.jpg", legende: "point" });
+sortie.igInterne = await appeler("instagram__publier", { image: "https://metadata.google.internal./x.jpg", legende: "interne" });
+await controle("deuxPages=1");
+sortie.fbAmbigu = await appeler("facebook__publier", { page: "Boutique", message: "Pour quelle boutique ?" });
+sortie.fbExact = await appeler("facebook__publier", { page: "Boutique Lyon", message: "Pour Lyon" });
+await controle("deuxPages=0");
+// Appels simultanés (deux Chats, deux onglets) : la limite et le refus du doublon valent aussi pour eux.
+sortie.memeTexte = await Promise.all([1, 2, 3].map(() => appeler("linkedin__publier", { texte: "Même texte en parallèle" })));
+sortie.rafale = await Promise.all(Array.from({ length: 12 }, (_, i) => appeler("instagram__publier", { image: "https://exemple.fr/photo.jpg", legende: "Rafale " + i })));
 try { await n.envoyer("linkedin", { methode: "GET", hote: "exemple-malveillant.test", chemin: "/" }); sortie.hoteRefuse = false; } catch { sortie.hoteRefuse = true; }
 // La carte d'accord : même au niveau « Tout approuver », publier la pose, et le texte entier y est.
 ap.definirNiveau("tout", "essai");
@@ -613,6 +636,18 @@ const cartes = ap.enAttente("outil", A.userId);
 sortie.carte = { tranche, nombre: cartes.length, montreTout: JSON.stringify(cartes[0]?.detail ?? {}).includes("FIN-DU-TEXTE"), unique: cartes[0]?.detail?.unique === true, resume: cartes[0]?.resume ?? "" };
 if (cartes[0]) ap.repondre(cartes[0].id, false, "outil", A.userId);
 sortie.carte.refuse = (await verdict).autorise === false;
+// Un post plus long que ce que la carte montrait (8 000 caractères) : la fin partait sans avoir été vue (§ 41).
+const carteDe = async (args) => {
+  const v = ap.verifierOutil(null, "facebook__publier", args, A.userId);
+  await new Promise((r) => setTimeout(r, 150));
+  const c = ap.enAttente("outil", A.userId)[0];
+  if (c) ap.repondre(c.id, false, "outil", A.userId);
+  const fin = await v;
+  // Ce que l'écran montre du contenu : \`arguments\` (ToolApproval.tsx) ; la clé de portée n'est pas affichée.
+  return { nombre: c ? 1 : 0, montreTout: String(c?.detail?.arguments ?? "").includes("FIN-CACHEE"), autorise: fin.autorise, message: fin.message ?? "" };
+};
+sortie.carteLongue = await carteDe({ page: "Page Essai", message: "Texte d'un post ordinaire. ".repeat(400) + "FIN-CACHEE" });
+sortie.carteImmense = await carteDe({ page: "Page Essai", message: "\\n".repeat(59_000) + "FIN-CACHEE" });
 const lecture = await Promise.race([ap.verifierOutil(null, "linkedin__profil", {}, A.userId), new Promise((r) => setTimeout(() => r("attente"), 300))]);
 sortie.lectureLibre = lecture !== "attente" && lecture.autorise === true;
 // Hors requête, la passerelle parle anglais (langue.ts) : les messages de l'écran sont lus ici en français, comme par une personne qui l'a choisi.
@@ -672,7 +707,8 @@ process.exit(0);
 
   verifier("publier : refusé à un collègue qui n'administre pas, et à un appel sans personne", r.parB?.ok === false && /administrateur/.test(r.parB?.content ?? "") && r.sansPersonne?.ok === false, `${r.parB?.content} | ${r.sansPersonne?.content}`);
   verifier("rien n'est parti chez le fournisseur pour ces deux refus", !apres.some((x) => /Publié par un collègue|Sans personne/.test(x.corps)), "parti");
-  const postLi = apres.filter((x) => x.hote === "api.linkedin.com" && x.methode === "POST" && x.chemin === "/rest/posts");
+  // Hors des envois simultanés de la tournée du 28/09 (comptés à part plus bas).
+  const postLi = apres.filter((x) => x.hote === "api.linkedin.com" && x.methode === "POST" && x.chemin === "/rest/posts" && !(x.corps ?? "").includes("Même texte en parallèle"));
   const corpsLi = postLi[0] ? JSON.parse(postLi[0].corps) : {};
   verifier("LinkedIn : publié au nom du profil, texte échappé (aucune mention glissée), mot-dièse gardé, en-tête de version", r.linkedin?.ok === true && corpsLi.author === "urn:li:person:abc123" && corpsLi.commentary === "Bonjour \\@\\[Pierre\\]\\(urn:li:person:1\\) \\*gras\\* #essai" && postLi[0]?.entetes["linkedin-version"] === "202609", `${r.linkedin?.content} ${postLi[0]?.corps}`);
   verifier("LinkedIn : au nom d'une page seulement si elle est administrée", r.linkedinPage?.ok === true && postLi.some((x) => JSON.parse(x.corps).author === "urn:li:organization:777"), r.linkedinPage?.content);
@@ -695,6 +731,23 @@ process.exit(0);
   verifier("un hôte hors de la liste du service est refusé avant toute connexion", r.hoteRefuse === true, r.hoteRefuse);
   verifier("carte d'accord pour publier, même au niveau « Tout approuver » : posée, unique, texte entier, et un refus n'envoie rien", r.carte?.tranche === false && r.carte?.nombre === 1 && r.carte?.montreTout === true && r.carte?.unique === true && r.carte?.refuse === true && /LinkedIn/.test(r.carte?.resume ?? ""), JSON.stringify(r.carte));
   verifier("lire ne pose pas de carte", r.lectureLibre === true, r.lectureLibre);
+
+  // Tournée du 28/09/2026 (SECURITE.md § 41).
+  const carteOk = (c) => (c?.nombre === 1 && c.montreTout) || (c?.nombre === 0 && c.autorise === false && /entier|trop long/i.test(c.message));
+  verifier("un post de 10 000 caractères : la carte le montre jusqu'au bout", r.carteLongue?.nombre === 1 && r.carteLongue?.montreTout === true, JSON.stringify(r.carteLongue));
+  verifier("un post que la carte ne peut pas montrer en entier ne part pas (refusé sans carte)", carteOk(r.carteImmense) && r.carteImmense?.nombre === 0, JSON.stringify(r.carteImmense));
+  const envoisTk = apres.filter((x) => x.methode === "PUT" && x.hote === "open-upload.tiktokapis.com");
+  verifier("TikTok : un lien « .mp4 » vers un fichier qui n'est pas une vidéo est refusé, rien n'est envoyé", r.tiktokDeguise?.ok === false && envoisTk.length === 1, `${r.tiktokDeguise?.content} (${envoisTk.length} envoi(s))`);
+  verifier("TikTok : un lien dur vers un fichier hors du dossier de travail est refusé", r.tiktokLienDur?.ok === false && envoisTk.length === 1, r.tiktokLienDur?.content);
+  const conteneurs = apres.filter((x) => x.hote === "graph.instagram.com" && x.methode === "POST" && x.chemin === `/v25.0/${IG}/media`).map((x) => new URLSearchParams(x.corps).get("image_url") ?? "");
+  verifier("Instagram : une image à une adresse de la machine ou du réseau interne écrite autrement ([::ffff:7f00:1], « localhost. », « .internal. ») est refusée", [r.igMappee, r.igPoint, r.igInterne].every((x) => x?.ok === false) && !conteneurs.some((u) => /ffff|localhost|internal/.test(u)), `${[r.igMappee, r.igPoint, r.igInterne].map((x) => x?.content).join(" | ")}`);
+  const feeds = apres.filter((x) => x.hote === "graph.facebook.com" && x.methode === "POST" && /\/(222|333)\/feed$/.test(x.chemin));
+  verifier("Facebook : une page désignée par un nom que deux pages partagent est refusée (aucune n'est choisie au hasard)", r.fbAmbigu?.ok === false && /Boutique Paris/.test(r.fbAmbigu?.content ?? "") && /Boutique Lyon/.test(r.fbAmbigu?.content ?? "") && !feeds.some((x) => x.chemin.includes("/222/")), `${r.fbAmbigu?.content} ${feeds.map((x) => x.chemin)}`);
+  verifier("témoin : la page nommée exactement reçoit le post", r.fbExact?.ok === true && feeds.some((x) => x.chemin.includes("/333/")), r.fbExact?.content);
+  const memes = apres.filter((x) => x.hote === "api.linkedin.com" && x.methode === "POST" && (x.corps ?? "").includes("Même texte en parallèle"));
+  verifier("LinkedIn : le même post lancé trois fois en même temps ne part qu'une fois", memes.length === 1 && (r.memeTexte ?? []).filter((x) => x.ok).length === 1, `${memes.length} publication(s) : ${(r.memeTexte ?? []).map((x) => x.ok).join(",")}`);
+  const publiesIg = apres.filter((x) => x.hote === "graph.instagram.com" && x.chemin === `/v25.0/${IG}/media_publish`).length;
+  verifier("Instagram : douze publications lancées en même temps ne dépassent pas dix dans l'heure", publiesIg <= 10 && (r.rafale ?? []).some((x) => x.ok === false && /10 écritures/.test(x.content)), `${publiesIg} publication(s) Instagram`);
   verifier("débrancher : révoqué chez Google, Meta et TikTok", ["oubli_sheets", "oubli_facebook", "oubli_tiktok"].every((k) => r[k]?.ok && /révoqué/.test(r[k]?.message ?? "")) && apres.some((x) => x.methode === "DELETE" && x.chemin.startsWith("/v25.0/me/permissions")) && apres.some((x) => x.chemin === "/v2/oauth/revoke/"), ["oubli_sheets", "oubli_facebook", "oubli_tiktok"].map((k) => r[k]?.message).join(" | "));
   verifier("débrancher LinkedIn, Instagram : sans révocation documentée, l'écran dit où retirer l'accès", /réglages de votre compte/.test(r.oubli_linkedin?.message ?? "") && /réglages de votre compte/.test(r.oubli_instagram?.message ?? ""), r.oubli_linkedin?.message);
   verifier("après débranchement : plus de service ni d'outil de ces services", r.apres?.join(",") === "slides,youtube" && !r.outilsApres?.some((x) => /^(sheets|linkedin|facebook|instagram|tiktok)__/.test(x)), `${r.apres} ${r.outilsApres}`);

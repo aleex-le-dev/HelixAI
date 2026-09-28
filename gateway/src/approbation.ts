@@ -885,11 +885,23 @@ function portee(outil: string, args: Record<string, unknown>, courant: Niveau): 
 /* ------------------------------------------------------------------ */
 
 /** Les arguments tels que l'outil les recevra, lisibles, et dits tronqués quand ils le sont. */
-function argumentsLisibles(args: Record<string, unknown>): string {
+function argumentsLisibles(args: Record<string, unknown>, MAX = 8000): string {
   const texte = JSON.stringify(args, null, 2) ?? "{}";
-  const MAX = 8000;
   return texte.length > MAX ? `${texte.slice(0, MAX)}\n… (${texte.length - MAX} caractères de plus, non montrés)` : texte;
 }
+
+/**
+ * Ce qu'une carte d'écriture native (un post, des cellules) montre au plus.
+ * La carte le montre entier (zone qui défile, ToolApproval.tsx) ; au-delà,
+ * l'appel est refusé sans carte.
+ *
+ * Tournée du 28/09/2026 (SECURITE.md § 41) : la carte coupait à 8 000
+ * caractères, alors qu'un post Facebook en accepte 60 000 et une écriture
+ * Sheets 10 000 cellules. Essayé : la fin d'un post de 10 000 caractères
+ * n'était pas sur la carte, et partait avec l'accord. Un post ne se reprend
+ * pas : on n'accepte que ce qu'on a pu lire en entier.
+ */
+const CARTE_NATIVE_MAX = 100_000;
 
 /**
  * `parLaPersonne` : le refus vient d'elle (ou de son silence), pas d'une règle.
@@ -991,6 +1003,15 @@ export async function verifierOutil(
     return verifierEnvoi(contexte, outil, args, qui, courant, employe, origine);
   }
   const toujours = TOUJOURS_CONFIRMER.has(outil);
+  const native = ECRITURES_NATIVES.has(outil);
+  if (native && (JSON.stringify(args, null, 2) ?? "").length > CARTE_NATIVE_MAX) {
+    return {
+      autorise: false,
+      message:
+        "Refusé sans rien demander : ce contenu est trop long pour être montré en entier sur la carte d'accord, et rien ne part sans avoir été lu en entier. " +
+        "Écris-en moins à la fois (un post plus court, moins de lignes), et dis-le à l'utilisateur.",
+    };
+  }
   /*
    * « Tout approuver » vaut pour ce que l'entreprise demande elle-même, pas
    * pour ce qu'un texte venu du dehors fait faire : `forcer` traverse le
@@ -1044,7 +1065,7 @@ export async function verifierOutil(
          * Hors fichiers, la carte montre ce que l'outil recevra (un connecteur,
          * un événement, une tâche) : le nom de l'outil ne dit pas ce qui part.
          */
-        ...(!porteeParDossier(outil) && !outil.startsWith("code__") ? { arguments: argumentsLisibles(args) } : {}),
+        ...(!porteeParDossier(outil) && !outil.startsWith("code__") ? { arguments: argumentsLisibles(args, native ? CARTE_NATIVE_MAX : undefined) } : {}),
         ...(tacheEnCours ? { tache: tacheEnCours } : {}),
       },
     },

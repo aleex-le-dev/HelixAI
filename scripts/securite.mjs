@@ -5781,6 +5781,40 @@ console.log("\n14 bis. Seconde tournée de l'audit : dépendances npm à date fi
       !/["']youtube["']/.test(src("src", "components", "settings", "marquesConnecteurs.ts")),
     appelsFautifs.map((a) => a.f).join(", ") || `${grandes.length} marque(s) grande(s), ${appelsGrands.length} appel(s)`,
   );
+  /*
+   * Seconde tournée des logos (28/09/2026) : les règles chiffrées des chartes
+   * (taille minimale, zone de protection) sont dans sources.json et LogoMarque
+   * les applique ; chaque appel dit l'espace que sa mise en page laisse déjà ;
+   * et rien ne se pose plus sur un logo (le point d'état de la liste des
+   * connecteurs était sur son coin, dans la zone de protection).
+   */
+  const chiffrees = Object.entries(marquesSources.marques).filter(([, m]) => m.tailleMin || m.marge);
+  const appelsLogo = [];
+  for (const f of readdirSync(join(RACINE, "src"), { recursive: true })) {
+    if (!/\.tsx$/.test(f)) continue;
+    for (const m of src("src", f).matchAll(/<LogoMarque\b([^>]*)\/>/g)) appelsLogo.push({ f, attributs: m[1] });
+  }
+  const sansDegagement = appelsLogo.filter(({ attributs }) => !/degagement=\{\d+\}/.test(attributs));
+  const connecteursTsx = src("src", "components", "settings", "Connecteurs.tsx");
+  verifier(
+    "logos : taille minimale et zone de protection des chartes appliquées par LogoMarque, dégagement dit à chaque appel, rien de posé sur un logo",
+    chiffrees.length >= 5 &&
+      ["canva", "gitlab", "facebook", "tavily", "todoist"].every((c) => marquesSources.marques[c]?.tailleMin || marquesSources.marques[c]?.marge) &&
+      /m\.tailleMin && taille < m\.tailleMin/.test(tuile) &&
+      /Math\.max\(m\.marge\.part \* taille, m\.marge\.px\)/.test(tuile) &&
+      /zone - degagement/.test(tuile) &&
+      appelsLogo.length >= 5 &&
+      sansDegagement.length === 0 &&
+      !/absolute[^"]*-bottom-[^"]*-right-/.test(connecteursTsx),
+    sansDegagement.map((a) => a.f).join(", ") || `${chiffrees.length} marque(s) chiffrée(s), ${appelsLogo.length} appel(s)`,
+  );
+  // Les icônes de produit Google suivent leur refonte : la charte demande la version la plus récente.
+  const iconesGoogle = Object.entries(marquesSources.marques).filter(([, m]) => /gstatic\.com\/images\/branding\/productlogos\//.test(m.source));
+  verifier(
+    "logos : icônes de produit Google dans leur version la plus récente relevée (2026, Maps 2025)",
+    iconesGoogle.length >= 9 && iconesGoogle.every(([, m]) => /_(2026|2025)\/v\d+\//.test(m.source) && m.clair.endsWith(".png")),
+    iconesGoogle.filter(([, m]) => !/_(2026|2025)\//.test(m.source)).map(([c]) => c).join(", ") || `${iconesGoogle.length} icônes`,
+  );
 
   // Prix publiés : chaque ligne rattachée à un fournisseur qui a sa page officielle et sa date.
   const prix = await import(versUrl(join(RACINE, "gateway", "src", "prixPublies.ts")).href);

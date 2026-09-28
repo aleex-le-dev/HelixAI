@@ -135,7 +135,7 @@ function LigneCle({ cle, onChange }: { cle: CleModele; onChange: () => void }) {
   return (
     <li className="rounded-2xl border border-border bg-card p-4">
       <div className="flex flex-wrap items-center gap-2">
-        <LogoMarque marque={MARQUE_DU_FOURNISSEUR[cle.fournisseur]} icone={KeyRound} taille={18} />
+        <LogoMarque marque={MARQUE_DU_FOURNISSEUR[cle.fournisseur]} icone={KeyRound} taille={18} degagement={8} />
         <span className="font-medium text-foreground">{cle.nom}</span>
         <Pays pays={cle.pays} />
         <span className="text-xs text-muted-foreground">•••• {cle.fin}</span>
@@ -247,7 +247,7 @@ function AjoutCle({ catalogue, onFini }: { catalogue: Fournisseur[]; onFini: () 
               onClick={() => setChoix(f)}
               className="flex items-center gap-3 rounded-xl border border-border px-3 py-2.5 text-left transition-colors hover:bg-muted"
             >
-              <LogoMarque marque={MARQUE_DU_FOURNISSEUR[f.id]} icone={KeyRound} taille={22} />
+              <LogoMarque marque={MARQUE_DU_FOURNISSEUR[f.id]} icone={KeyRound} taille={22} degagement={10} />
               <span className="flex min-w-0 flex-col items-start gap-1">
                 <span className="text-sm font-medium text-foreground">{f.nom}</span>
                 {!f.adresseLibre && <Pays pays={f.pays} />}
@@ -269,7 +269,7 @@ function AjoutCle({ catalogue, onFini }: { catalogue: Fournisseur[]; onFini: () 
   return (
     <div className="mt-4 space-y-4 border-t border-border pt-4">
       <div className="flex flex-wrap items-center gap-2">
-        <LogoMarque marque={MARQUE_DU_FOURNISSEUR[choix.id]} icone={KeyRound} taille={18} />
+        <LogoMarque marque={MARQUE_DU_FOURNISSEUR[choix.id]} icone={KeyRound} taille={18} degagement={8} />
         <span className="font-medium text-foreground">{choix.nom}</span>
         {!choix.adresseLibre && <Pays pays={choix.pays} />}
         {choix.cles && (

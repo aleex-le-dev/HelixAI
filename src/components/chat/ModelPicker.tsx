@@ -276,7 +276,7 @@ export function ModelBehaviorPicker({
           isSelected && "bg-muted",
         )}
       >
-        <LogoMarque marque={marqueDuModele(m.id)} icone={Cpu} taille={18} />
+        <LogoMarque marque={marqueDuModele(m.id)} icone={Cpu} taille={18} degagement={8} />
         <span className="min-w-0 flex-1">
           <span className="flex items-center gap-1.5">
             <span className="truncate text-sm font-medium text-foreground">{m.id}</span>
@@ -338,7 +338,7 @@ export function ModelBehaviorPicker({
           </span>
           {modele ? (
             <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-              <LogoMarque marque={marqueDuModele(modele.id)} icone={Cpu} taille={13} />
+              <LogoMarque marque={marqueDuModele(modele.id)} icone={Cpu} taille={13} degagement={6} />
               <span className="truncate">{modele.id}</span>
               {drapeau(modele) && <span className="leading-none">{drapeau(modele)}</span>}
             </span>

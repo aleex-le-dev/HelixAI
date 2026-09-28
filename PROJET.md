@@ -2320,6 +2320,51 @@ Instagram sont retirés. THIRD_PARTY_NOTICES.md § 4 bis, contrôlé par
 `npm run securite`. Si Medhi accepte les conditions de Meta, les logos de
 Facebook et d'Instagram se posent dans `scripts/marques/` comme les autres.
 
+**Logos, seconde tournée (28/09/2026, branche `logos-2`).** Medhi : « intégrer
+les logos quand c'est possible, vérifier ceux qui existent, voir si on peut
+intégrer les autres ». Chaque charte relue, pages « partenaires » et
+« développeurs » comprises ; aucune case de conditions cochée à la place de
+Medhi.
+
+- **Vérifiés** : les empreintes de `sources.json` tiennent, et les fichiers
+  retéléchargés aux mêmes adresses (GitHub, Linear, Canva, Exa, Atlassian,
+  Firecrawl, Vercel, Webflow, PostgreSQL, Kubernetes, Brave, GitLab,
+  OpenRouter, Kimi) sont identiques octet pour octet. Le kit de SpaceXAI
+  (Grok, xAI) ne se laisse plus télécharger hors navigateur : non recomparé.
+- **Corrigés** : les icônes Google dataient de 2020 alors que la charte demande
+  la version la plus récente ; elles passent à la refonte de 2026 (Maps : 2025),
+  en PNG officiel, la version 2 n'existant pas en SVG. Le point d'état de la
+  liste des connecteurs était posé sur le coin du logo, dans sa zone de
+  protection (GitHub, Canva, Facebook, Atlassian l'interdisent) : il passe
+  devant, à 12 px. Les tailles minimales et zones de protection chiffrées
+  (Canva 8 px, GitLab 20 px, Facebook 16 px et une demi-largeur, Todoist,
+  Tavily, ClickUp) sont dans `sources.json` et `LogoMarque` les applique ;
+  chaque appel dit l'espace que sa ligne laisse déjà (`degagement`).
+- **Ajoutés** : Tavily (page de marque publiée depuis, usage référentiel
+  permis ; zone libre égale à sa hauteur, d'où une ligne un peu plus haute).
+  Relevés pour des connecteurs à venir, sans être montrés : Google Docs, Google
+  Forms, Dropbox, Telegram, Trello, Todoist, ClickUp.
+- **Restent neutres**, raison relue : Microsoft (Outlook, OneDrive, SharePoint,
+  Excel, Word, Teams : jamais sans licence), Stripe, Shopify, WooCommerce,
+  Salesforce (schéma seulement), Pipedrive (sur demande), Zendesk, Discord,
+  Zoom (SDK seulement), monday.com et Mailchimp (logo complet seulement), Brevo
+  (le nom seul), Calendly (aucune page), Scaleway (32 px minimum), Meta pour
+  Llama (approbation « Brand Review » ; le kit n'a pas été retrouvé sur le
+  poste), et ceux qui l'étaient déjà (Slack, OpenAI, LinkedIn, TikTok,
+  HubSpot, Intercom, Box, PayPal, Asana, Airtable, Square, DeepSeek, Qwen,
+  Groq, OVHcloud, IONOS, Gemma ; YouTube dans la liste). Raisons dans `sources.json` et
+  THIRD_PARTY_NOTICES.md § 4 bis.
+- **Laissé à Medhi** : WhatsApp (usage possible, kit derrière une case
+  « j'accepte » : https://www.meta.com/brand/resources/whatsapp/whatsapp-brand/) ;
+  la page Google « How to show Google's brand » demande en plus une
+  autorisation par formulaire du Partner Marketing Hub pour les icônes de
+  produit ; Dropbox demande aussi, sur sa page juridique, d'être consulté avant
+  un usage « dans un produit ».
+
+Vu à l'écran (passerelle et interface jetables, ports 5391 et 5392) : le point
+devant le logo, Tavily à 22 px avec 10 px de marge ajoutés, les icônes Google
+de 2026 en clair et en sombre. Pas vu : l'application empaquetée.
+
 **Le sélecteur de modèles, un seul panneau (0.26.0).** Il y en avait deux :
 « comportement », puis « modèle précis » derrière un chevron. Deux défauts,
 tous deux constatés à l'usage.

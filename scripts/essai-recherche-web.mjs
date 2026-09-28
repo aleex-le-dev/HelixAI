@@ -374,6 +374,11 @@ try {
   const outilsSeuls = await chat(principale, { model: "essai-outils", tools: true, messages: question("Quelle est la hauteur de la tour Eiffel ?") });
   const demandeOutils = auModele.filter((d) => Array.isArray(d.tools)).at(-1);
   verifier("« Outils » activé sans la bascule : toujours aucun outil web, aucune requête", outilsSeuls.statut === 200 && !(demandeOutils?.tools ?? []).some((o) => /^web__/.test(o.function?.name)) && recues.length === avant, `${recues.length - avant} requête(s)`);
+  // Tournée finale de la 2026.928.6 (SECURITE.md § 53) : le jeton d'instance seul, sans séance, ne fait rien partir.
+  const avantJeton = recues.length;
+  const auModeleAvant = auModele.length;
+  const jetonSeul = await fetch(`${principale.G}/v1/chat/completions`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: principale.A.Authorization }, body: JSON.stringify({ model: "essai-outils", stream: true, tools: false, web: true, messages: question("Quelle est la hauteur de la tour Eiffel ?") }) });
+  verifier("sans séance (jeton d'instance seul), « web: true » est refusé (401) : ni recherche, ni modèle appelé", jetonSeul.status === 401 && recues.length === avantJeton && auModele.length === auModeleAvant, `${jetonSeul.status} ${recues.length - avantJeton} requête(s)`);
   const corpsSansWeb = auModele.filter((d) => "web" in d);
   verifier("le champ « web » de la demande ne part jamais chez le moteur de modèles", corpsSansWeb.length === 0, `${corpsSansWeb.length} demande(s)`);
 

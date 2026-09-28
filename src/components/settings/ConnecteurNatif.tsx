@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
-import { Check, ExternalLink, FlaskConical, KeyRound, Link2, Loader2, Lock, ShieldAlert, Trash2 } from "lucide-react";
+import { Check, ExternalLink, KeyRound, Link2, Loader2, Lock, ShieldAlert, Trash2 } from "lucide-react";
 import {
   collerAdresseNatif,
   connecterNatif,
@@ -207,11 +207,6 @@ export function ConnecteurNatif({ id, onChange }: { id: IdNatif; onChange?: () =
       {succes && <InfoBox leading={<Check size={15} strokeWidth={1.75} />}>{succes}</InfoBox>}
     </>
   );
-  const honnetete = (
-    <InfoBox tone="muted" leading={<FlaskConical size={15} strokeWidth={1.75} />}>
-      {tf("Pas encore essayé avec un vrai compte {0} : ce branchement a été vérifié contre de faux serveurs, d'après la documentation du fournisseur. Dites-nous ce qui ne marche pas.", etat.nom)}
-    </InfoBox>
-  );
 
   if (etat.configure) {
     const depuis = etat.depuis ? new Date(etat.depuis) : null;
@@ -238,7 +233,6 @@ export function ConnecteurNatif({ id, onChange }: { id: IdNatif; onChange?: () =
             ? t("Vos agents peuvent lire, et proposer d'écrire ou de publier : chaque écriture et chaque publication vous est montrée en entier et n'a lieu qu'après votre accord, à chaque fois, quel que soit le niveau d'approbation. Seul l'administrateur de l'instance peut publier. L'accès est conservé chiffré sur l'instance et n'en ressort jamais.")
             : t("Lecture seule : vos agents peuvent lire, sans rien modifier ni publier. L'accès est conservé chiffré sur l'instance et n'en ressort jamais.")}
         </InfoBox>
-        {honnetete}
         {messages}
         {admin && (
           <div className="flex justify-end">
@@ -279,7 +273,6 @@ export function ConnecteurNatif({ id, onChange }: { id: IdNatif; onChange?: () =
           {tf("{0} n'accepte plus l'accès enregistré (révoqué, expiré, ou application changée). Reconnectez-vous.", etat.nom)}
         </InfoBox>
       )}
-      {honnetete}
       <InfoBox leading={<KeyRound size={15} strokeWidth={1.75} />}>
         <div className="space-y-2">
           <p className="font-medium">{t("Préparer l'application, une fois pour toute l'instance")}</p>

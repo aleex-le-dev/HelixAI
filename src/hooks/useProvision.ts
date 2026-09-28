@@ -18,7 +18,11 @@ export interface CatalogEntry {
   minMemoryGb: number;
   downloadGb: number;
   description: string;
-  /** Essayé avec Helix ? L'écran le dit quand ce n'est pas le cas. */
+  /**
+   * Essayé avec Helix ? Faux : l'accueil dit que s'il ne se charge pas, un
+   * autre modèle prend le relais (sans dire qu'il n'a pas été essayé, PROJET.md
+   * § 3.16).
+   */
   verifie?: boolean;
 }
 

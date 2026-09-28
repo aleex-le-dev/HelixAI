@@ -5832,6 +5832,40 @@ console.log("\n15 quater. Tournée de la 2026.928.2 : connecteurs");
   verifier("vidéo TikTok : lue par le fichier ouvert (O_NOFOLLOW), jamais relue par son nom", /O_NOFOLLOW/.test(source) && !/readFile\(/.test(source) && /nlink > 1/.test(source), "readFile");
 }
 
+/*
+ * Décision de Medhi, 28/09/2026 (PROJET.md § 3.16) : ce qui n'a pas été essayé
+ * se dit dans la documentation interne, plus à l'écran. Les catalogues portent
+ * chaque phrase affichée (la clé française, et sa traduction dans chaque
+ * langue) : aucune ne doit plus dire « pas encore essayé » ni ses variantes.
+ * Les « réessayez » et les constats (« essayé : refusé ») ne sont pas visés.
+ */
+console.log("\n15 quinquies. Écran : plus de « pas encore essayé » (28/09/2026)");
+{
+  const francais = /pas encore (été )?(essay|éprouv)|pas encore vérifié avec|sans garantie|faux serveurs/i;
+  const parLangue = {
+    en: /not yet (been )?(tried|tested|verified)|without guarantee|fake servers/i,
+    // « Google 尚未验证此应用 » (Google n'a pas validé l'application) et « 尚未经过 Apple 签名 » ne sont pas visés.
+    zh: /尚未(在|用|经).{0,20}(试用|试过|测试|验证)|不作保证|模拟服务器/,
+    ja: /まだ.{0,8}(試して|動作確認|未検証)|保証はあ/,
+  };
+  const fautifs = [];
+  for (const cote of ["src", "gateway"]) {
+    for (const [langue, motif] of Object.entries(parLangue)) {
+      const cat = JSON.parse(readFileSync(join(RACINE, cote, "i18n", `${langue}.json`), "utf8"));
+      for (const [fr, trad] of Object.entries(cat)) {
+        if (francais.test(fr) || motif.test(trad)) fautifs.push(`${cote}/${langue} : ${fr.slice(0, 60)}`);
+      }
+    }
+  }
+  verifier("aucune phrase affichée (interface, passerelle, aide ; fr, en, zh, ja) ne dit « pas encore essayé » ni « pas encore éprouvé »", fautifs.length === 0, [...new Set(fautifs)].slice(0, 4).join(" | "));
+  verifier(
+    "témoin : les anciennes phrases seraient vues, un « réessayez » ou « essayé : refusé » ne l'est pas",
+    francais.test("Pas encore essayé avec un vrai compte {0}") && francais.test("Pas encore éprouvé de bout en bout") && parLangue.en.test("Not yet tried with {0}") &&
+      !francais.test("Réessayez dans une minute.") && !francais.test("(essayé : refusé, alors qu'il l'accepte pour Gmail)"),
+    "motifs",
+  );
+}
+
 console.log(`\n${reussis} vérification(s) réussie(s), ${echecs.length} échec(s).`);
 if (echecs.length) {
   console.log("Échecs :");

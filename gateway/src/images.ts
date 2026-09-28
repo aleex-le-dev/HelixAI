@@ -805,7 +805,8 @@ export async function lancerCreation(description: string, format: Format, qui: s
  * Pas sur le processeur seul : il y passerait des heures.
  *
  * Pas encore essayés de bout en bout avec Helix (il faut les télécharger) :
- * l'écran le dit, comme pour les modèles d'images pas encore essayés.
+ * `verifie: false`. L'écran ne le dit plus depuis le 28/09/2026 (PROJET.md
+ * § 3.16).
  */
 
 export type IdModeleVideo = "wan21-1.3b" | "wan22-5b";

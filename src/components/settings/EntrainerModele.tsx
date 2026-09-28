@@ -180,11 +180,6 @@ export function EntrainerModele() {
                 {tf("Modèle de départ : {0} ({1}, licence {2}).", etat.base.nom, etat.base.depot, etat.base.licence)}
               </p>
             )}
-            {etat.possible && !etat.verifie && (
-              <InfoBox tone="warning" className="mt-3" leading={<Info size={15} strokeWidth={1.75} />}>
-                {t("Ce réglage n'a pas encore été essayé de bout en bout sur une machine comme celle-ci. Il devrait fonctionner, sans garantie.")}
-              </InfoBox>
-            )}
           </div>
         </div>
 

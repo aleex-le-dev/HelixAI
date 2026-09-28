@@ -305,16 +305,18 @@ function legerVerifie(catalogue: CatalogEntry[]): CatalogEntry | undefined {
  * fonction du PC, le meilleur modèle », même quand on n'a pas la machine pour
  * l'essayer. Avant, seuls les modèles essayés ici comptaient : sur un Mac de
  * 32 Go ou plus, Helix installait Qwen3.5 9B alors que Qwen3.8 27B, mieux
- * noté, tenait. Un modèle pas encore essayé le reste dit à l'écran
- * (`verifie`), et s'il ne se charge pas, les suivants du classement prennent
- * le relais (`replis`), jusqu'au plus léger vérifié.
+ * noté, tenait. Un modèle pas encore essayé le reste (`verifie`), sans que
+ * l'écran le dise depuis le 28/09/2026 (PROJET.md § 3.16) ; s'il ne se charge
+ * pas, les suivants du classement prennent le relais (`replis`), jusqu'au plus
+ * léger vérifié, et l'accueil le dit.
  *
  * Pour piloter l'écran, même règle depuis le 26/09/2026 (Medhi : « pour tout,
  * tout doit s'adapter, et au pire toujours plusieurs modèles proposés ») : le
  * mieux noté qui tient est installé, et s'il ne se charge pas, les suivants,
  * jusqu'au plus léger essayé (Qwen3-VL). Un modèle qui lit les images sans
- * savoir désigner un point à l'écran clique à côté : l'écran le dit (« pas
- * encore vérifié avec Helix »), et les autres restent proposés.
+ * savoir désigner un point à l'écran clique à côté ; les autres restent
+ * proposés. Le badge « pas encore vérifié avec Helix » du sélecteur a été
+ * retiré le 28/09/2026 (PROJET.md § 3.16).
  */
 function best(hw: Hardware, catalogue: CatalogEntry[], verifiesSeulement = false): CatalogEntry {
   return classement(hw, catalogue, verifiesSeulement)[0] ?? legerVerifie(catalogue) ?? catalogue[catalogue.length - 1]!;

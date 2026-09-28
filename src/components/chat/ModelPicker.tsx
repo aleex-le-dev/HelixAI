@@ -440,7 +440,6 @@ export function ModelBehaviorPicker({
                                           : t("sans note publiée"),
                                         tf("{0} Go", m.downloadGb.toLocaleString(locale())),
                                         m.vision ? t("images") : "",
-                                        m.verifie ? "" : t("pas encore vérifié avec Helix"),
                                       ]
                                         .filter(Boolean)
                                         .join(" · ")}

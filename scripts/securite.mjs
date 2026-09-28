@@ -5785,7 +5785,7 @@ console.log("\n15 bis. Connecteurs réseaux sociaux et Google");
     const ko = /^\s+✗ (.*?)(?:  —  obtenu : .*)?$/.exec(ligne);
     if (ok) verifier(`natifs : ${ok[1]}`, true, "");
     else if (ko) verifier(`natifs : ${ko[1]}`, false, ligne.split("  —  obtenu : ")[1] ?? "");
-    else if (/^[A-F]\. /.test(ligne)) console.log(`  ${ligne}`);
+    else if (/^[A-H]\. /.test(ligne)) console.log(`  ${ligne}`);
   }
   verifier("natifs : l'essai contre les faux fournisseurs s'est déroulé jusqu'au bout", essai.status === 0 || lignes.some((l) => /vérification\(s\) réussie\(s\)/.test(l)), `${essai.status} ${lignes.slice(-6).join(" ")}`);
 }
@@ -5830,6 +5830,35 @@ console.log("\n15 quater. Tournée de la 2026.928.2 : connecteurs");
   verifier("un post trop long pour être montré en entier sur la carte est refusé sans carte", immense !== "carte posée" && immense.autorise === false && /en entier/.test(immense.message), JSON.stringify(immense).slice(0, 160));
   const source = readFileSync(join(RACINE, "gateway", "src", "outilsNatifs.ts"), "utf8");
   verifier("vidéo TikTok : lue par le fichier ouvert (O_NOFOLLOW), jamais relue par son nom", /O_NOFOLLOW/.test(source) && !/readFile\(/.test(source) && /nlink > 1/.test(source), "readFile");
+}
+
+/*
+ * X (ex-Twitter), 28/09/2026 (SECURITE.md § 42). De bout en bout dans
+ * essai-natifs.mjs (sections H, E, F et G, repris plus haut sous
+ * « natifs : ») ; ici, les pièces seules : la définition (portées, PKCE,
+ * hôtes), la barrière (lire libre, publier toujours sur carte), les préfixes
+ * réservés, l'adresse de retour sans « localhost », et l'image lue comme la
+ * vidéo de TikTok.
+ */
+console.log("\n15 quinquies. Connecteur X");
+{
+  const { pathToFileURL: versUrl } = await import("node:url");
+  const natif = await import(versUrl(join(RACINE, "gateway", "src", "oauthNatif.ts")).href);
+  const ap = await import(versUrl(join(RACINE, "gateway", "src", "approbation.ts")).href);
+  const x = natif.DEFINITIONS.x;
+  verifier("X : lecture par défaut au plus juste (tweet.read, users.read, offline.access), publier seulement si coché (tweet.write, media.write)", JSON.stringify(x.lecture) === JSON.stringify(["tweet.read", "users.read", "offline.access"]) && x.choix.length === 1 && x.choix[0].id === "ecriture" && JSON.stringify(x.choix[0].portees) === JSON.stringify(["tweet.write", "media.write"]), JSON.stringify([x.lecture, x.choix]));
+  verifier("X : PKCE S256, consentement chez x.com, un seul hôte joignable (api.x.com)", x.pkce === "S256" && x.consentement === "https://x.com/i/oauth2/authorize" && JSON.stringify(x.hotes) === JSON.stringify(["api.x.com"]) && x.jetons.hote === "api.x.com", JSON.stringify([x.pkce, x.consentement, x.hotes]));
+  verifier("X : adresse de retour sans « localhost » (X l'exige), les autres services inchangés", natif.adresseDeRetour("x", "http://localhost:8787") === "http://127.0.0.1:8787/helix/oauth/retour" && natif.adresseDeRetour("x", "https://helix.exemple.fr") === "https://helix.exemple.fr/helix/oauth/retour" && natif.adresseDeRetour("x", "http://localhost.exemple.fr:80") === "http://localhost.exemple.fr:80/helix/oauth/retour" && natif.adresseDeRetour("linkedin", "http://localhost:8787") === "http://localhost:8787/helix/oauth/retour", natif.adresseDeRetour("x", "http://localhost:8787"));
+  verifier("X : lire ne demande rien au niveau « Demander avant de modifier », publier demande une carte à chaque fois, à tout niveau", ["x__profil", "x__publications"].every((o) => !ap.modifie(o) && !ap.demandeToujours(o)) && ap.modifie("x__publier") && ap.demandeToujours("x__publier") && ap.modifie("x__supprimer"), "laissez-passer");
+  const carte = ap.resumerOutil("x__publier", { texte: "Bonjour à tous https://exemple.fr", image: "photo.png" });
+  verifier("X : la carte dit où, quoi, l'image, que l'adresse coûte plus cher, et qu'une publication ne se reprend pas", /sur X/.test(carte) && /Bonjour à tous/.test(carte) && /photo\.png/.test(carte) && /plus cher/.test(carte) && /ne se reprend pas/.test(carte), carte);
+  const reserves = readFileSync(join(RACINE, "gateway", "src", "connecteurs.ts"), "utf8").match(/const IDS_RESERVES = new Set\(\[([^\]]*)\]\)/)?.[1] ?? "";
+  const familles = readFileSync(join(RACINE, "gateway", "src", "outils.ts"), "utf8").match(/export const FAMILLES: Famille\[\] = \[([^\]]*)\]/)?.[1] ?? "";
+  verifier("X : le préfixe « x » est réservé aux connexions natives, et hors des familles des employés OpenClaw", reserves.includes('"x"') && !/"x"/.test(familles), `${reserves} | ${familles}`);
+  const source = readFileSync(join(RACINE, "gateway", "src", "outilsNatifs.ts"), "utf8");
+  verifier("X : l'image passe par la même lecture que la vidéo TikTok (fichier ouvert, un seul nom), plus sa signature", /fichierDuDossier\(args\.image, IMAGE_X\)/.test(source) && /fichierDuDossier\(args\.fichier, VIDEO_TIKTOK\)/.test(source) && /signature: typeImage/.test(source) && !/readFile\(/.test(source), "lecture");
+  const oauth = readFileSync(join(RACINE, "gateway", "src", "oauthNatif.ts"), "utf8");
+  verifier("X : aucun jeton ni secret écrit au journal par la connexion (journaliser ne reçoit que le service et les cases)", !/journaliser\([^)]*(jetons|acces|secret|clientSecret|verificateur)/.test(oauth), "journal");
 }
 
 console.log(`\n${reussis} vérification(s) réussie(s), ${echecs.length} échec(s).`);

@@ -65,6 +65,10 @@ export const MARQUE_DU_CONNECTEUR: Record<string, CleMarquePetite> = {
   firecrawl: "firecrawl",
   exa: "exa",
   x: "x",
+  // Logos permis pour signaler la compatibilité (relevé du 28/09/2026, scripts/marques/sources.json).
+  trello: "trello",
+  clickup: "clickup",
+  todoist: "todoist",
   // Page de marque de Tavily publiée depuis le premier relevé (seconde tournée, 28/09/2026).
   tavily: "tavily",
 };

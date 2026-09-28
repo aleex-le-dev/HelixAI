@@ -21,8 +21,6 @@ import {
   PlaySquare,
   Briefcase,
   Music2,
-  ClipboardList,
-  HardDrive,
   MessageCircle,
   MessagesSquare,
   Smartphone,
@@ -1058,9 +1056,9 @@ export function McpSettings() {
        * icônes neutres en attendant les logos (clés de marque googleDocs,
        * googleForms, dropbox), que pose un autre travail.
        */
-      ["docs", "Google Docs", t("Lire vos documents, en créer et y ajouter du texte après accord"), FileText, CATEGORIE],
-      ["forms", "Google Forms", t("Lire vos formulaires et leurs réponses"), ClipboardList, CATEGORIE],
-      ["dropbox", "Dropbox", t("Lister, chercher, lire, et envoyer un fichier après accord"), HardDrive, CATEGORIE],
+      ["docs", "Google Docs", t("Lire vos documents, en créer et y ajouter du texte après accord"), "googleDocs", CATEGORIE],
+      ["forms", "Google Forms", t("Lire vos formulaires et leurs réponses"), "googleForms", CATEGORIE],
+      ["dropbox", "Dropbox", t("Lister, chercher, lire, et envoyer un fichier après accord"), "dropbox", CATEGORIE],
       ["youtube", "YouTube", t("Vidéos et statistiques d'une chaîne"), PlaySquare, t("Réseaux sociaux")],
       ["linkedin", "LinkedIn", t("Publier après accord, et lire une page d'entreprise"), Briefcase, t("Réseaux sociaux")],
       ["facebook", "Facebook", t("Pages : publications, réactions, publier après accord"), "facebook", t("Réseaux sociaux")],
@@ -1101,7 +1099,8 @@ export function McpSettings() {
         label,
         description: e?.configure ? tf("Connecté : {0}", e.compte ?? "") : e?.aReconnecter ? t("Jeton refusé, à reconnecter") : description,
         categorie: t("Messageries"),
-        icone,
+        // Telegram a un logo permis (usage libre pour signaler la compatibilité) ; Discord et WhatsApp restent neutres (sources.json).
+        ...(id === "telegram" ? { marque: "telegram" as const } : { icone }),
         connecte: Boolean(e?.configure),
         ouvert: ouvert === id,
         onBasculer: () => basculer(id),

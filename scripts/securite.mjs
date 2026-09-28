@@ -7437,9 +7437,13 @@ console.log("\n19. Moteur ouvert llama.cpp (Mac Intel) : épinglé, local, sous 
   verifier("un téléchargement vérifié : empreinte fausse, fichier effacé sans être ouvert ; nom définitif seulement après vérification", /empreinte\.digest\("hex"\) !== attendu\.sha256/.test(src) && /renommer\(partiel, destination\)/.test(src), "telechargerVerifie");
   verifier("LM Studio coupé là où sert le moteur ouvert (un seul moteur local)", /enabled: !moteurOuvert\(\)/.test(config), "config.ts");
   verifier("hors Mac Intel, le moteur ouvert ne sert que sur demande explicite (`HELIX_MOTEUR=llamacpp`)", /return process\.arch === "x64";/.test(base) && /if \(process\.platform !== "darwin"\) return false;/.test(base), "moteurOuvert");
-  const statut = await (await fetch(`${G}/helix/provision`, { headers: avecSeance })).json().catch(() => ({}));
-  const attendu = process.platform === "darwin" && process.arch === "x64" ? "llamacpp" : "lmstudio";
-  verifier(`l'écran de mise en route présente le moteur de cette machine (${attendu})`, statut.moteur === attendu, statut.moteur);
+  // La passerelle d'essai est arrêtée à ce point de la batterie : lu dans le code.
+  const index = readFileSync(join(RACINE, "gateway", "src", "index.ts"), "utf8");
+  verifier(
+    "l'écran de mise en route dit quel moteur sert (llama.cpp : pas de conditions à accepter), et l'installation passe par la même route d'administrateur",
+    /moteur: ouvert \? "llamacpp" : "lmstudio"/.test(index) && /if \(moteurOuvert\(\)\) return installerMoteurOuvert\(qui\.userId, res\);/.test(index),
+    "index.ts",
+  );
 }
 
 console.log(`\n${reussis} vérification(s) réussie(s), ${echecs.length} échec(s).`);

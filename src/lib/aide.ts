@@ -156,6 +156,15 @@ const ARTICLES: Article[] = [
     corps: t("X se branche dans Réglages, Outils et connecteurs, avec l'application que votre organisation crée elle-même sur console.x.com. L'écran dit comment, en quelques étapes. Seul l'administrateur de l'instance branche X, et seul lui peut publier.\n\n- Lecture, sans rien cocher : le compte (abonnés, nombre de posts) et ses derniers posts, avec leurs vues, j'aime, reposts et réponses.\n- Publier, si la case est cochée à la connexion : un post de 280 caractères au plus, avec une image du dossier de travail si vous le demandez. Chaque post vous est montré en entier et ne part qu'après votre accord, à chaque fois, quel que soit le niveau d'approbation.\n\nL'API de X est payante : X n'a plus d'offre gratuite pour les nouveaux développeurs depuis février 2026. On lui achète des crédits, et chaque lecture ou publication est décomptée ; un post qui contient une adresse web coûte plus cher. Les tarifs publiés par X sont rappelés sur l'écran de connexion.\n\nPar prudence, dix publications par heure au plus pour toute l'instance, et le même post n'est pas publié deux fois de suite."),
   },
   {
+    // Google Docs, Google Forms, Dropbox, 28/09/2026 : gateway/src/natifs/documents.ts, SECURITE.md § 45.
+    id: "documents",
+    titre: t("Connecter Google Docs, Google Forms et Dropbox"),
+    resume: t("Lire documents, formulaires et fichiers ; écrire ou envoyer après accord."),
+    motsCles: ["google docs", "document", "google forms", "formulaire", "reponses", "dropbox", "fichier", "envoyer"],
+    lien: "/parametres/mcp",
+    corps: t("Ces trois services se branchent dans Réglages, Outils et connecteurs. Seul l'administrateur de l'instance les branche, et seul lui peut faire écrire ou envoyer.\n\n- Google Docs et Google Forms reprennent l'application Google de l'instance, celle de Drive et d'Agenda : il suffit d'activer « Google Docs API » ou « Google Forms API » dans le même projet de la console Google Cloud.\n- Dropbox demande une application que votre organisation crée sur dropbox.com/developers/apps. L'écran dit comment, en quelques étapes, et quelle adresse de retour y déclarer.\n\nCe que vos agents peuvent faire :\n- Google Docs : lire un document, onglets et tableaux compris ; si la case est cochée à la connexion, créer un document ou ajouter du texte à la fin d'un document, sans rien effacer.\n- Google Forms : lire un formulaire et ses réponses, les plus récentes d'abord. Rien n'est modifié.\n- Dropbox : lister un dossier, chercher, lire un fichier texte ; si la case est cochée, envoyer un fichier du dossier de travail. Un fichier du même nom n'est jamais remplacé.\n\nChaque écriture et chaque envoi vous est montré en entier et n'a lieu qu'après votre accord, à chaque fois, quel que soit le niveau d'approbation. Par prudence, dix écritures par heure au plus et par service pour toute l'instance, et la même demande n'est pas refaite deux fois de suite."),
+  },
+  {
     id: "reunions",
     titre: t("Réunions et transcription"),
     resume: t("Enregistrer, transcrire, résumer une réunion."),

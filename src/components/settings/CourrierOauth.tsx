@@ -6,6 +6,7 @@ import { InfoBox } from "@/components/ui/InfoBox";
 import { ACopier } from "@/components/ui/ACopier";
 import { branding } from "@/config/branding";
 import { connecterAvec } from "@/lib/courrier";
+import { instance } from "@/lib/instance";
 import { t, tf } from "@/lib/i18n";
 
 /**
@@ -175,12 +176,17 @@ export function CourrierOauth({
  *
  * C'est elle que le fournisseur doit connaître, parce que c'est là que le
  * navigateur reviendra. Sur un poste rattaché, ce n'est pas « localhost ».
+ *
+ * Lue par `instance()`, comme toutes les requêtes de l'écran. Tournée des
+ * connecteurs du 28/09/2026 : elle était lue dans le stockage local, où
+ * l'adresse ne se trouve plus depuis qu'elle vit dans le coffre du poste
+ * (lib/coffre.ts) ; l'écran retombait alors sur l'origine de la page, et
+ * l'application de bureau demandait de déclarer « helix://app/helix/oauth/retour »
+ * chez Google ou Microsoft, qui refusaient ensuite la connexion.
  */
 function instanceVue(): string {
   try {
-    const brut = localStorage.getItem("helix:instance");
-    const url = brut ? (JSON.parse(brut) as { url?: string }).url : undefined;
-    return (url ?? window.location.origin).replace(/\/+$/, "");
+    return instance().url.replace(/\/+$/, "");
   } catch {
     return window.location.origin;
   }

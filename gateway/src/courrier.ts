@@ -30,6 +30,11 @@ async function identifiantsSmtp(
   if (!compte.oauth) {
     return { ok: true, identifiant: compte.identifiant, motDePasse: compte.motDePasse };
   }
+  // Le jeton ouvre toute la boîte : il ne part qu'au serveur d'envoi du fournisseur (voir `reglerEnvoi`).
+  const attendu = SERVEURS[compte.oauth.fournisseur].smtp;
+  if (compte.smtp && compte.smtp.serveur.toLowerCase() !== attendu) {
+    return { ok: false, message: tf("Une boîte branchée avec {0} n'envoie que par son serveur, {1} : l'accès accordé n'est remis à aucun autre.", nomFournisseur(compte.oauth.fournisseur), attendu) };
+  }
   const acces = await accesValide(compte.oauth);
   if (!acces.ok) return { ok: false, message: acces.message };
   return {
@@ -431,7 +436,8 @@ export class ClientImap {
     }
 
     await this.rafraichirCapacites();
-    if (this.capacites.has("LOGINDISABLED")) {
+    // LOGINDISABLED ne ferme que LOGIN : une boîte branchée par autorisation s'identifie par AUTHENTICATE XOAUTH2.
+    if (!this.compte.oauth && this.capacites.has("LOGINDISABLED")) {
       throw new ErreurImap(
         "authentification",
         "Ce serveur refuse l'authentification par mot de passe sur cette connexion.",
@@ -725,7 +731,21 @@ export class ClientImap {
    * un CRLF ou une commande complète glissée dans un critère de recherche ne
    * sont que des octets comptés, jamais du protocole.
    */
-  private async commande(fragments: Fragment[]): Promise<ReponseImap> {
+  private async commande(
+    fragments: Fragment[],
+    /**
+     * Une demande de suite (« + … ») du serveur reçoit une réponse vide, et la
+     * commande continue jusqu'à sa conclusion. Pour AUTHENTICATE XOAUTH2
+     * seulement : en cas de refus, Google (et Microsoft) envoient d'abord
+     * « + <erreur en base 64> » et attendent une ligne vide avant le « NO »
+     * (https://developers.google.com/workspace/gmail/imap/xoauth2-protocol,
+     * lu le 28/09/2026). Sans cette réponse, la commande attendait jusqu'au
+     * délai d'inactivité : vingt secondes, puis « Le serveur a cessé de
+     * répondre » au lieu de dire que l'accès était refusé (tournée des
+     * connecteurs du 28/09/2026).
+     */
+    repondreSuite = false,
+  ): Promise<ReponseImap> {
     if (this.fin) throw this.fin;
     const etiquette = `h${String(++this.compteur).padStart(4, "0")}`;
     const lignes: LigneImap[] = [];
@@ -768,7 +788,13 @@ export class ClientImap {
         };
       }
       if (/^\* BYE/i.test(ligne.texte)) {
-        throw new ErreurImap("serveur", "Le serveur a mis fin à la session.");
+        throw new ErreurImap("serveur", t("Le serveur a mis fin à la session."));
+      }
+      if (repondreSuite && ligne.texte.startsWith("+")) {
+        // Une seule fois : un serveur qui redemande sans fin n'obtiendra pas une boucle.
+        repondreSuite = false;
+        this.ecrire(Buffer.from("\r\n", "utf8"));
+        continue;
       }
       lignes.push(ligne);
     }
@@ -803,16 +829,18 @@ export class ClientImap {
       if (!acces.ok) throw new ErreurImap("authentification", acces.message);
       // Le jeton renouvelé est rendu au module appelant, qui l'enregistrera.
       this.jetonsRenouveles = acces.jetons;
-      const r = await this.commande([
-        "AUTHENTICATE XOAUTH2 ",
-        chaineXoauth2(this.compte.adresse, acces.acces),
-      ]);
+      const r = await this.commande(
+        ["AUTHENTICATE XOAUTH2 ", chaineXoauth2(this.compte.adresse, acces.acces)],
+        true,
+      );
       if (r.etat !== "OK") {
         throw new ErreurImap(
           "authentification",
-          `${nomFournisseur(this.compte.oauth.fournisseur)} a refusé l'accès à la boîte. ` +
-            "L'autorisation a peut-être été retirée : rebranchez la boîte dans " +
-            "Réglages, Connecteurs.",
+          tf(
+            "{0} a refusé l'accès à la boîte {1}. L'autorisation a peut-être été retirée, ou elle a été donnée pour une autre adresse : rebranchez la boîte dans Paramètres, Connecteurs.",
+            nomFournisseur(this.compte.oauth.fournisseur),
+            this.compte.adresse,
+          ),
         );
       }
       return;
@@ -1839,9 +1867,26 @@ function compteComplet(enregistre: CompteEnregistre): CompteCourrier {
  * renouvellement tournant (Microsoft en rend un nouveau à chaque échange)
  * serait perdu, débranchant la boîte au bout d'une rotation.
  */
-export async function enregistrerJetons(jetons: JetonsCourrier): Promise<void> {
+export async function enregistrerJetons(jetons: JetonsCourrier, precedent?: string): Promise<void> {
   const enregistre = await lireCompte();
   if (!enregistre) return;
+  /*
+   * La boîte a pu être rebranchée (une autre, ou la même avec un nouvel
+   * accord) pendant que l'outil travaillait : ses jetons ne sont pas écrasés
+   * par ceux de l'ancienne connexion, qui les aurait rendus inutilisables
+   * (tournée des connecteurs du 28/09/2026). `precedent` : le jeton de
+   * renouvellement avec lequel la connexion a commencé.
+   */
+  if (precedent !== undefined) {
+    let actuel = "";
+    try {
+      const brut = enregistre.oauth !== undefined ? dechiffrer(enregistre.oauth) : null;
+      actuel = typeof brut === "string" ? String((JSON.parse(brut) as Partial<JetonsCourrier>).refreshToken ?? "") : "";
+    } catch {
+      return;
+    }
+    if (actuel !== precedent && actuel !== jetons.refreshToken) return;
+  }
   const suite: CompteEnregistre = { ...enregistre, oauth: chiffrer(JSON.stringify(jetons)) };
   await db().write(COLLECTION, suite);
   cache = suite;
@@ -2115,12 +2160,37 @@ export async function reglerEnvoi(brut: unknown): Promise<{ ok: boolean; message
   } catch (err) {
     return { ok: false, message: messageUtilisateur(err) };
   }
-  try {
-    await verifierSmtp({ ...smtp, identifiant: complet.identifiant, motDePasse: complet.motDePasse }, compte.adresse);
-  } catch (err) {
-    return { ok: false, message: err instanceof ErreurSmtp ? err.message : "Le serveur d'envoi ne répond pas." };
+  /*
+   * Boîte branchée par « Se connecter avec Google / Microsoft » : elle n'a pas
+   * de mot de passe. L'envoi s'essayait avec un mot de passe vide, que le
+   * serveur refusait toujours : une boîte dont l'envoi n'avait pas pu être
+   * essayé au branchement ne pouvait plus jamais l'activer. Et le jeton
+   * d'accès, qui ouvre toute la boîte, partait ensuite au serveur d'envoi
+   * saisi, quel qu'il soit (tournée des connecteurs du 28/09/2026). Il ne va
+   * plus qu'au serveur d'envoi du fournisseur, et l'essai se fait avec lui.
+   */
+  let jetonsRenouveles: JetonsCourrier | undefined;
+  if (complet.oauth) {
+    const attendu = SERVEURS[complet.oauth.fournisseur].smtp;
+    if (smtp.serveur.toLowerCase() !== attendu) {
+      return { ok: false, message: tf("Une boîte branchée avec {0} n'envoie que par son serveur, {1} : l'accès accordé n'est remis à aucun autre.", nomFournisseur(complet.oauth.fournisseur), attendu) };
+    }
+    const ids = await identifiantsSmtp(complet);
+    if (!ids.ok) return { ok: false, message: ids.message };
+    jetonsRenouveles = ids.jetons;
+    try {
+      await verifierSmtp({ ...smtp, identifiant: ids.identifiant, motDePasse: "", acces: ids.acces }, compte.adresse);
+    } catch (err) {
+      return { ok: false, message: err instanceof ErreurSmtp ? err.message : t("Le serveur d'envoi ne répond pas.") };
+    }
+  } else {
+    try {
+      await verifierSmtp({ ...smtp, identifiant: complet.identifiant, motDePasse: complet.motDePasse }, compte.adresse);
+    } catch (err) {
+      return { ok: false, message: err instanceof ErreurSmtp ? err.message : t("Le serveur d'envoi ne répond pas.") };
+    }
   }
-  const suite: CompteEnregistre = { ...compte, smtp };
+  const suite: CompteEnregistre = { ...compte, smtp, ...(jetonsRenouveles ? { oauth: chiffrer(JSON.stringify(jetonsRenouveles)) } : {}) };
   await db().write(COLLECTION, suite);
   cache = suite;
   return { ok: true, active: true, message: t("Envoi activé. Chaque mail vous sera montré en entier, et ne partira qu'après votre accord.") };
@@ -2367,7 +2437,8 @@ async function avecSession<T>(action: (client: ClientImap) => Promise<T>): Promi
    * d'une poignée de main TLS est très inférieur au coût d'un diagnostic de
    * session fantôme chez un client.
    */
-  const client = new ClientImap(compteComplet(cache));
+  const complet = compteComplet(cache);
+  const client = new ClientImap(complet);
   try {
     await client.connecter();
     return await action(client);
@@ -2375,10 +2446,12 @@ async function avecSession<T>(action: (client: ClientImap) => Promise<T>): Promi
     /*
      * Les jetons renouvelés pendant cette connexion sont enregistrés avant de
      * fermer. Sans cela, le fournisseur serait sollicité à chaque appel
-     * d'outil, et un jeton de renouvellement tournant se perdrait.
+     * d'outil, et un jeton de renouvellement tournant se perdrait. Seulement
+     * s'ils ont changé : chaque appel d'outil récrivait la boîte.
      */
-    if (client.jetonsRenouveles) {
-      await enregistrerJetons(client.jetonsRenouveles).catch(() => undefined);
+    const neufs = client.jetonsRenouveles;
+    if (neufs && complet.oauth && (neufs.accessToken !== complet.oauth.accessToken || neufs.refreshToken !== complet.oauth.refreshToken)) {
+      await enregistrerJetons(neufs, complet.oauth.refreshToken).catch(() => undefined);
     }
     await client.fermer();
   }
@@ -2789,10 +2862,19 @@ async function envoyer(args: Record<string, unknown>, dossier: string, qui: stri
     if (m.remise.length === 0) return refus("Donne au moins un destinataire dans « a ».");
     if (m.remise.length > 20) return refus("Vingt destinataires au plus.");
     const message = composer(m);
-    const complet = compteComplet(compte);
+    /*
+     * Les jetons que la connexion IMAP vient peut-être de renouveler, pas ceux
+     * lus avant elle : sinon l'envoi renouvelait une seconde fois avec l'ancien
+     * jeton de renouvellement, et chez Microsoft, qui le fait tourner, le plus
+     * ancien des deux nouveaux était enregistré en dernier (tournée des
+     * connecteurs du 28/09/2026).
+     */
+    const complet = { ...compteComplet(compte), ...(client.jetonsRenouveles ? { oauth: client.jetonsRenouveles } : {}) };
     try {
       const ids = await identifiantsSmtp(complet);
       if (!ids.ok) return refus(`Le mail n'est pas parti : ${ids.message}`);
+      // Enregistrés par `avecSession`, en sortant, même si l'envoi échoue : une seule écriture, la plus récente.
+      if (ids.jetons) client.jetonsRenouveles = ids.jetons;
       await envoyerSmtp(
         {
           ...compte.smtp!,
@@ -2804,7 +2886,6 @@ async function envoyer(args: Record<string, unknown>, dossier: string, qui: stri
         m.remise,
         message,
       );
-      if (ids.jetons) await enregistrerJetons(ids.jetons);
     } catch (err) {
       return refus(`Le mail n'est pas parti : ${err instanceof ErreurSmtp ? err.message : "le serveur d'envoi a échoué."} Dis-le à l'utilisateur.`);
     }

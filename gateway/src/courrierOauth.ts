@@ -1,5 +1,6 @@
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { t, tf } from "./langue.ts";
+import { requeteHttps } from "./clientHttps.ts";
 
 /**
  * Brancher une boîte Google ou Microsoft en cliquant, plutôt qu'en remplissant
@@ -155,9 +156,7 @@ export function valider(
   if (!clientId) {
     return {
       ok: false,
-      message:
-        "Indiquez l'identifiant d'application fourni par votre administrateur " +
-        "(« client ID »). Sans lui, votre fournisseur ne sait pas qui demande l'accès.",
+      message: t("Indiquez l'identifiant d'application fourni par votre administrateur (« client ID »). Sans lui, votre fournisseur ne sait pas qui demande l'accès."),
     };
   }
   const clientSecret = typeof r.clientSecret === "string" ? r.clientSecret.trim() : "";
@@ -246,13 +245,8 @@ export async function achever(code: string, etat: string): Promise<Resultat> {
   });
 
   try {
-    const reponse = await fetch(def.jetons(tenantDe(attente.reglage)), {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: corps.toString(),
-      signal: AbortSignal.timeout(15_000),
-    });
-    const texte = await reponse.text();
+    const reponse = await pointDeJetons(def, tenantDe(attente.reglage), corps);
+    const texte = reponse.texte;
     if (!reponse.ok) {
       return { ok: false, message: tf("{0} a refusé l'échange : {1}", def.nom, lisible(texte)) };
     }
@@ -264,10 +258,10 @@ export async function achever(code: string, etat: string): Promise<Resultat> {
     if (!json.refresh_token) {
       return {
         ok: false,
-        message:
-          `${def.nom} n'a pas fourni de jeton de renouvellement. L'accès expirerait au bout ` +
-          `d'une heure sans que rien ne puisse le prolonger. Retirez l'autorisation ` +
-          `donnée à cette application dans votre compte ${def.nom}, puis recommencez.`,
+        message: tf(
+          "{0} n'a pas fourni de jeton de renouvellement. L'accès expirerait au bout d'une heure sans que rien ne puisse le prolonger. Retirez l'autorisation donnée à cette application dans votre compte {0}, puis recommencez.",
+          def.nom,
+        ),
       };
     }
     return {
@@ -277,13 +271,51 @@ export async function achever(code: string, etat: string): Promise<Resultat> {
         ...attente.reglage,
         refreshToken: json.refresh_token,
         accessToken: json.access_token,
-        expire: json.expires_in ? Date.now() + json.expires_in * 1000 : undefined,
+        expire: json.expires_in ? Date.now() + Number(json.expires_in) * 1000 : undefined,
       },
     };
   } catch {
     return { ok: false, message: tf("{0} n'a pas répondu à la demande de jetons.", def.nom) };
   }
 }
+
+/**
+ * Le point de jetons du fournisseur, par le client HTTPS de la passerelle
+ * (clientHttps.ts) plutôt que `fetch` : réponse bornée à 64 Ko, aucune
+ * redirection suivie, délais bornés (tournée des connecteurs du 28/09/2026).
+ * L'adresse est une constante de ce module ; seul le locataire Microsoft y
+ * entre, et sa forme est vérifiée par `valider`.
+ */
+async function pointDeJetons(def: Definition, tenant: string, corps: URLSearchParams): Promise<{ ok: boolean; statut: number; texte: string }> {
+  const adresse = new URL(def.jetons(tenant));
+  const r = await requeteHttps(
+    {
+      methode: "POST",
+      hote: adresse.hostname,
+      chemin: `${adresse.pathname}${adresse.search}`,
+      entetes: { "Content-Type": "application/x-www-form-urlencoded", Accept: "application/json" },
+      corps: corps.toString(),
+      limiteOctets: 64 * 1024,
+      auDela: "refuser",
+      delaiMs: 15_000,
+      delaiTotalMs: 30_000,
+      agentUtilisateur: "Connecteur-Courrier/1",
+    },
+    def.nom,
+  );
+  return { ok: r.statut >= 200 && r.statut < 300, statut: r.statut, texte: r.corps.toString("utf8") };
+}
+
+type Renouvellement = { ok: true; acces: string; jetons: JetonsCourrier } | { ok: false; message: string };
+
+/**
+ * Renouvellements en cours, par jeton de renouvellement : deux lectures de la
+ * boîte en même temps (un Chat et une mission « à chaque mail ») n'en font
+ * qu'un. Chez Microsoft, qui fait tourner le jeton de renouvellement, deux
+ * renouvellements simultanés en rendaient deux, et l'on ne savait plus lequel
+ * garder (tournée des connecteurs du 28/09/2026).
+ */
+const renouvellements = new Map<string, Promise<Renouvellement>>();
 
 /**
  * Jeton d'accès valide, renouvelé si besoin.
@@ -298,7 +330,14 @@ export async function accesValide(
   if (jetons.accessToken && jetons.expire && jetons.expire - 60_000 > Date.now()) {
     return { ok: true, acces: jetons.accessToken, jetons };
   }
+  const deja = renouvellements.get(jetons.refreshToken);
+  if (deja) return deja;
+  const p = renouveler(jetons).finally(() => renouvellements.delete(jetons.refreshToken));
+  renouvellements.set(jetons.refreshToken, p);
+  return p;
+}
 
+async function renouveler(jetons: JetonsCourrier): Promise<Renouvellement> {
   const def = DEFINITIONS[jetons.fournisseur];
   const corps = new URLSearchParams({
     grant_type: "refresh_token",
@@ -308,19 +347,20 @@ export async function accesValide(
   });
 
   try {
-    const reponse = await fetch(def.jetons(tenantDe(jetons)), {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: corps.toString(),
-      signal: AbortSignal.timeout(15_000),
-    });
-    const texte = await reponse.text();
+    const reponse = await pointDeJetons(def, tenantDe(jetons), corps);
+    const texte = reponse.texte;
+    /*
+     * Une panne passagère (429, 5xx) n'est pas un refus : le message disait
+     * « il faut rebrancher la boîte », alors qu'il suffit d'attendre (tournée
+     * des connecteurs du 28/09/2026).
+     */
+    if (reponse.statut === 429 || reponse.statut >= 500) {
+      return { ok: false, message: tf("{0} ne peut pas renouveler l'accès à la boîte pour l'instant (code {1}). Réessayez dans quelques minutes : la boîte reste branchée.", def.nom, reponse.statut) };
+    }
     if (!reponse.ok) {
       return {
         ok: false,
-        message:
-          `${def.nom} a refusé de renouveler l'accès à la boîte : ${lisible(texte)}. ` +
-          `Il faut rebrancher la boîte depuis l'écran des connecteurs.`,
+        message: tf("{0} a refusé de renouveler l'accès à la boîte : {1}. Il faut rebrancher la boîte dans Paramètres, Connecteurs.", def.nom, lisible(texte)),
       };
     }
     const json = JSON.parse(texte) as {
@@ -339,7 +379,7 @@ export async function accesValide(
         accessToken: json.access_token,
         // Certains fournisseurs font tourner le jeton de renouvellement.
         refreshToken: json.refresh_token ?? jetons.refreshToken,
-        expire: json.expires_in ? Date.now() + json.expires_in * 1000 : undefined,
+        expire: json.expires_in ? Date.now() + Number(json.expires_in) * 1000 : undefined,
       },
     };
   } catch {
@@ -363,10 +403,12 @@ export const nomFournisseur = (f: FournisseurCourrier): string => DEFINITIONS[f]
  * dans un message d'interface.
  */
 function lisible(texte: string): string {
+  const net = (v: unknown) => String(v ?? "").replace(/[\u0000-\u001F\u007F-\u009F]+/g, " ").trim().slice(0, 200);
   try {
-    const json = JSON.parse(texte) as { error_description?: string; error?: string };
-    return (json.error_description ?? json.error ?? texte).slice(0, 200);
+    const json = JSON.parse(texte) as { error_description?: unknown; error?: unknown };
+    return net(json.error_description ?? json.error ?? texte);
   } catch {
-    return texte.slice(0, 200);
+    // Une page HTML (proxy, portail captif) ne se recopie pas à l'écran.
+    return /^\s*</.test(texte) ? t("réponse inattendue") : net(texte);
   }
 }

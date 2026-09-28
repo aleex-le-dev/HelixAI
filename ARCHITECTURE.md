@@ -1135,7 +1135,7 @@ Fichiers de `gateway/src/`, regroupés par rôle :
 | Types | `types.ts` |
 
 Côté application de bureau : `electron/main.cjs`, `passerelle.cjs` (la passerelle dans un
-`utilityProcess` depuis le 28/09/2026, fusible RunAsNode fermé, SECURITE.md § 51 ; son canal
+`utilityProcess` depuis le 28/09/2026, fusible RunAsNode fermé, SECURITE.md § 52 ; son canal
 côté passerelle : `gateway/src/canalApplication.ts`), `preload.cjs`, `miseAJour.cjs`,
 `sourceGithub.cjs` (publications GitHub, ADR-067), `textesMiseAJour.cjs` (messages de la
 mise à jour dans la langue de l'écran), `coffre.cjs` (secrets du poste dans le trousseau du

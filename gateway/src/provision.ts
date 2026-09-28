@@ -10,7 +10,7 @@ import { dossierLmStudio, dossierModelesLmStudio, moteurAPoser, preparerDossiers
 import { aEssayer, essayerModele, estDefaillant, nomDuModele, noterCoupure, noterEssai, type Verdict } from "./santeModeles.ts";
 import { autoProvisionEnabled } from "./deployment.ts";
 import { cleLlamaCpp, moteurOuvert, urlLlamaCpp } from "./llamaCppBase.ts";
-import { chargerModeleLlama, installerModeleLlama, llamaCppInstalle, modelesLlamaCpp, MODELES_GGUF } from "./llamaCpp.ts";
+import { chargerModeleLlama, dechargerModeleLlama, installerModeleLlama, llamaCppInstalle, modelesLlamaCpp, MODELES_GGUF } from "./llamaCpp.ts";
 import { invalidate, resolve } from "./router.ts";
 import { moteurDeLaMachine, type ModelInfo } from "./types.ts";
 
@@ -710,9 +710,23 @@ export function ensureLocalModel(
   catalogue: CatalogEntry[] = CATALOG,
 ): Promise<ProvisionState> {
   if (enCours) return enCours;
-  enCours = provision(requested, catalogue).finally(() => {
-    enCours = null;
-  });
+  /*
+   * « En cours » dès l'appel, avant la première attente (28/09/2026) : sous
+   * LM Studio, `provision` cherche d'abord `lms` avant de rien publier, et
+   * l'écran qui relisait l'état juste après sa demande y trouvait encore
+   * l'échec précédent. Il cessait alors de suivre, et restait sur cet
+   * échec pendant que la nouvelle installation tournait.
+   */
+  setState({ phase: "checking", message: t("Vérification des modèles disponibles..."), percent: undefined, error: undefined });
+  enCours = provision(requested, catalogue)
+    // Un rejet ne laisse pas l'écran sur « en cours » : l'essai au démarrage et le relais après défaillance ne font que le journaliser.
+    .catch((err: unknown) => {
+      setState({ phase: "error", message: t("L'installation du modèle a échoué."), error: err instanceof Error ? err.message : String(err) });
+      throw err;
+    })
+    .finally(() => {
+      enCours = null;
+    });
   return enCours;
 }
 
@@ -1038,6 +1052,18 @@ async function provisionOuverte(requested: string | undefined, catalogue: Catalo
 
     setState({ phase: "loading", message: tf("Chargement de {0} en mémoire...", choice.label), percent: undefined });
     const charge = await chargerModeleLlama(choice.key);
+    /*
+     * Le moteur lui-même en panne (il ne démarre pas, port pris par un autre
+     * programme, liste des modèles pas relue) : le modèle suivant n'irait pas
+     * mieux. Avant le 28/09/2026, la mise en route passait quand même au
+     * suivant, le téléchargeait (plusieurs Go) pour rien, et disait « trop
+     * lourd pour cette machine ».
+     */
+    if (!charge.ok && charge.moteur) {
+      console.error(`[helix] llama.cpp : ${charge.message}`);
+      setState({ phase: "error", message: t("Le chargement du modèle a échoué."), error: charge.message });
+      return state;
+    }
     if (!charge.ok) {
       console.error(`[helix] llama.cpp : chargement de ${choice.key} refusé : ${charge.message}`);
       echec = { message: t("Le chargement du modèle a échoué."), error: charge.message };
@@ -1053,6 +1079,12 @@ async function provisionOuverte(requested: string | undefined, catalogue: Catalo
       setState({ phase: "ready", message: tf("{0} est prêt.", choice.label), percent: 100 });
       return state;
     }
+    /*
+     * Mal répondu : déchargé, comme sous LM Studio (`essaiReussi`). Le
+     * routeur n'en garde qu'un à la fois, mais le dernier essayé restait sinon
+     * vingt minutes en mémoire, jusqu'à 5 Go sur un Mac de 8 Go (28/09/2026).
+     */
+    await dechargerModeleLlama(choice.key);
     invalidate();
     echec = {
       message: tf("{0} ne répond pas correctement sur cette machine.", choice.label),

@@ -101,6 +101,15 @@ function serveursDeLEssai() {
   }
 }
 
+const vivant = (pid) => {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
 let reussis = 0;
 const echecs = [];
 const verifier = (nom, ok, obtenu) => {
@@ -272,6 +281,35 @@ try {
     /"name":"meteo"/.test(outil) && /"ville":\s*"Lyon"/.test(argumentsRecus),
     argumentsRecus || outil.slice(-600),
   );
+
+  /*
+   * Passerelle tuée net (28/09/2026) : le llama-server qu'elle laisse était
+   * gardé au redémarrage, sans que personne ne sache plus l'arrêter (il
+   * survivait à la fermeture de Helix) ni lui faire voir un modèle posé
+   * depuis. Il est désormais arrêté par son PID, puis remplacé.
+   */
+  console.log("\nPasserelle tuée net");
+  const orphelins = serveursDeLEssai();
+  passerelle.kill("SIGKILL");
+  await attendre(1500);
+  verifier("son llama-server lui survit (orphelin)", orphelins.length >= 1 && orphelins.every(vivant), orphelins);
+  demarrer();
+  await pret();
+  await json("/helix/provision");
+  let remplacants = [];
+  for (let i = 0; i < 60; i++) {
+    remplacants = serveursDeLEssai();
+    if (remplacants.length >= 1 && orphelins.every((pid) => !vivant(pid))) break;
+    await attendre(500);
+  }
+  verifier(
+    "au redémarrage, l'orphelin est arrêté (par son PID) et remplacé",
+    orphelins.every((pid) => !vivant(pid)) && remplacants.length >= 1 && remplacants.every((pid) => !orphelins.includes(pid)),
+    `avant ${orphelins.join(",")} après ${remplacants.join(",")}`,
+  );
+  const encore = await flux({ effort: "aucun", messages: [{ role: "user", content: "Quelle est la capitale de l'Italie ? Réponds en un mot." }] });
+  // « Roma » compte aussi : un petit modèle répond parfois dans la langue de la ville (vu le 28/09/2026 avec Qwen3 1.7B).
+  verifier("le Chat répond encore, par le nouveau serveur : « Rome »", /\brom[ea]\b/i.test(texteDe(encore)), texteDe(encore) || encore.slice(-400));
 
   console.log("\nArrêt");
   const avantArret = serveursDeLEssai();

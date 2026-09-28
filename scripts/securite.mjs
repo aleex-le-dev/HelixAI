@@ -5731,7 +5731,12 @@ console.log("\n14 bis. Seconde tournée de l'audit : dépendances npm à date fi
   const tuile = src("src", "components", "settings", "TuileService.tsx");
   verifier(
     "logos : dessinés depuis des données embarquées, sans HTML injecté ni adresse externe",
-    !/https?:|url\((?!#)/.test(marquesTs) && !/dangerouslySetInnerHTML|<img|fetch\(/.test(tuile) && /EXCEPTION ASSUMÉE À LA RÈGLE DES TOKENS/.test(marquesTs),
+    // Une image n'est admise que si c'est le PNG officiel intégré en données (Instagram, 28/09/2026) : `<img>` ne lit que `dessin.image`, et chaque `image` de marques.ts est un PNG en base64.
+    !/https?:|url\((?!#)/.test(marquesTs) &&
+      !/dangerouslySetInnerHTML|fetch\(/.test(tuile) &&
+      (tuile.match(/<img\b[^>]*>/g) ?? []).every((balise) => /src=\{dessin\.image\}/.test(balise)) &&
+      [...marquesTs.matchAll(/"image":"([^"]*)"/g)].every((m) => /^data:image\/png;base64,[A-Za-z0-9+/=]+$/.test(m[1])) &&
+      /EXCEPTION ASSUMÉE À LA RÈGLE DES TOKENS/.test(marquesTs),
     "marques.ts ou LogoMarque",
   );
   /*

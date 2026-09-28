@@ -78,7 +78,7 @@ export function ChoixDepuisEspace({ onChoisis, onFermer }: { onChoisis: (f: File
 
   return (
     <Modal open onClose={occupe ? () => undefined : onFermer} size="md">
-      <h2 className="text-lg font-semibold text-foreground">{t("Depuis")}{" "}{branding.name}</h2>
+      <h2 className="text-lg font-semibold text-foreground">{tf("Depuis {0}", branding.name)}</h2>
       <SegmentedTabs
         className="mt-3"
         size="sm"

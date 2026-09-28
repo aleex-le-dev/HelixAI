@@ -466,7 +466,12 @@ function Bubble({ message }: { message: Message }) {
           <PiecesJointesMessage pieces={pieces} />
           {texte && (
             <div className="max-w-full rounded-2xl rounded-br-md bg-muted px-4 py-2.5 text-[15px] leading-relaxed text-foreground">
-              <p className="whitespace-pre-wrap">{texte}</p>
+              {/*
+                Une adresse ou un chemin long, sans espace, passe à la ligne
+                n'importe où (tournée à l'écran du 28/09/2026) : à 375 px, il
+                élargissait la bulle et tout le Chat défilait de côté.
+              */}
+              <p className="whitespace-pre-wrap [overflow-wrap:anywhere]">{texte}</p>
             </div>
           )}
         </div>

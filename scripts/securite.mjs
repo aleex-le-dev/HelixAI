@@ -7869,6 +7869,68 @@ console.log("\n27. Connexions aux outils : droits, usage unique, cartes liées �
   verifier("écran « Se connecter avec Google / Microsoft » : l'adresse de retour à déclarer est celle de instance(), pas le stockage local (vide dans l'application de bureau)", /instance\(\)\.url/.test(ecranCourrier) && !/localStorage\.getItem\("helix:instance"\)/.test(ecranCourrier), "instanceVue");
 }
 
+/*
+ * 28. Tournée à l'écran de la 2026.928.6 (28/09/2026) : ce que le parcours
+ * dans le navigateur a trouvé, en français, anglais et japonais, à 1280 et
+ * 375 px. La passerelle par `scripts/essai-tournee-ecran.mjs` (passerelle
+ * jetable, aucun réseau) ; l'interface par lecture du code.
+ */
+console.log("\n28. Tournée à l'écran : mise en route, Chat, réglages, écrans étroits, traductions");
+{
+  const { spawnSync: lancerEssai } = await import("node:child_process");
+  const essai = lancerEssai(process.execPath, [join(RACINE, "scripts", "essai-tournee-ecran.mjs")], { encoding: "utf8", timeout: 5 * 60_000 });
+  const lignes = `${essai.stdout ?? ""}${essai.stderr ?? ""}`.split("\n");
+  for (const ligne of lignes) {
+    const ok = /^\s+✓ (.*)$/.exec(ligne);
+    const ko = /^\s+✗ (.*?)(?:  —  obtenu : .*)?$/.exec(ligne);
+    if (ok) verifier(`tournée : ${ok[1]}`, true, "");
+    else if (ko) verifier(`tournée : ${ko[1]}`, false, ligne.split("  —  obtenu : ")[1] ?? "");
+    else if (/^[A-G]\. /.test(ligne)) console.log(`  ${ligne}`);
+  }
+  verifier("tournée : l'essai de la passerelle s'est déroulé jusqu'au bout", essai.status === 0, `${essai.status} ${essai.error?.message ?? ""} ${lignes.slice(-6).join(" ")}`);
+
+  const lire = (...p) => readFileSync(join(RACINE, ...p), "utf8");
+  const login = lire("src", "pages", "LoginPage.tsx");
+  verifier("connexion : un choix parmi zéro compte (instance neuve relue) repasse à la création du premier compte", /courant === "choix" && liste\.length === 0\s*\?\s*"creation"/.test(login), "LoginPage.tsx");
+  const outils = lire("src", "components", "chat", "OutilsChip.tsx");
+  verifier("outils du Chat : l'écran ne dit plus « pour cette conversation » d'un choix retenu d'un Chat à l'autre", !/\bt\("[^"]*(pour|de) cette conversation/.test(outils) && /t\("Actifs dans vos Chats, jusqu'à ce que vous les coupiez\."\)/.test(outils), "OutilsChip.tsx");
+  verifier("outils du Chat : le nombre de groupes passe par la traduction", /tf\("Groupes disponibles : \{0\}"/.test(outils) && !/groupe\(s\) disponible\(s\)/.test(outils), "OutilsChip.tsx");
+  verifier("projets : « … a rejoint le projet » passe par la traduction", /tf\("\{0\} a rejoint le projet\.", invitee\)/.test(lire("src", "pages", "ProjetsPage.tsx")), "ProjetsPage.tsx");
+  const chip = lire("src", "components", "ui", "Chip.tsx");
+  const picker = lire("src", "components", "chat", "ModelPicker.tsx");
+  verifier("375 px : le niveau de raisonnement se replie en icône, sans chevron, et laisse sa place au nom du modèle", /!chevronEtroit && "max-sm:hidden"/.test(chip) && /<Gauge[^>]*\/>\}[\s\S]{0,600}compacte\s+chevronEtroit=\{false\}/.test(picker), "Chip.tsx, ModelPicker.tsx");
+  verifier("375 px : un chemin ou une adresse sans espace passe à la ligne dans la bulle de la personne", /<p className="whitespace-pre-wrap \[overflow-wrap:anywhere\]">\{texte\}<\/p>/.test(lire("src", "components", "chat", "MessageList.tsx")), "MessageList.tsx");
+  verifier("375 px : les onglets pilule ne dépassent plus leur place (Installer les apps, Agents)", /max-w-full items-center gap-1 overflow-x-auto/.test(lire("src", "components", "ui", "SegmentedTabs.tsx")), "SegmentedTabs.tsx");
+  verifier("japonais : les pastilles Chat, Cowork, Code gagnent 6 px (écart de 2 px entre l'icône et le mot)", /\[:lang\(ja\)_&\]:gap-0\.5/.test(lire("src", "components", "layout", "Sidebar.tsx")), "Sidebar.tsx");
+  const params = lire("src", "pages", "ParametresPages.tsx");
+  verifier("375 px : les serveurs MCP et les séances passent à la ligne au lieu de se couper", /flex flex-wrap items-center gap-x-3 gap-y-2 p-3\.5/.test(params) && /flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl/.test(lire("src", "components", "settings", "SeancesEtJournal.tsx")), "ParametresPages.tsx, SeancesEtJournal.tsx");
+
+  /*
+   * Une phrase française dans un gabarit (`${n} groupe(s)…`) échappe au relevé
+   * des traductions, qui ne lit que t() et tf() : elle restait en français en
+   * anglais, chinois et japonais. Relevé large, par mots français courants ;
+   * les textes pour le modèle (pas pour l'écran) sont listés à part.
+   */
+  const { execSync: lister } = await import("node:child_process");
+  const sources = lister(`find "${join(RACINE, "src")}" -name '*.tsx' -o -name '*.ts'`, { encoding: "utf8" }).trim().split("\n").filter((f) => !f.includes("/i18n/"));
+  const gabarit = /`[^`]*\$\{[^`]*\}[^`]*`/g;
+  const francais = /\b(le|la|les|des|une|disponible|aucun|avec|pour|dans|fichier|outil|groupe|modèle|rejoint)\b/i;
+  const pourLeModele = [/Document joint à ce message/, /La demande précédente a été arrêtée par la personne/];
+  const trouves = [];
+  for (const f of sources) {
+    lire(f.slice(RACINE.length + 1)).split("\n").forEach((l, i) => {
+      const s = l.trim();
+      if (/^(\/\/|\*|\/\*)/.test(s) || /\bt\(|\btf\(|className|console\.|Error\(|journaliser|href|https?:/.test(l)) return;
+      for (const m of l.matchAll(gabarit)) {
+        // Le texte hors des trous : une phrase a au moins une espace (une adresse ou un identifiant, non).
+        const texte = m[0].slice(1, -1).replace(/\$\{[^}]*\}/g, "");
+        if (/\s/.test(texte) && francais.test(texte) && !pourLeModele.some((r) => r.test(l))) trouves.push(`${f.slice(RACINE.length + 1)}:${i + 1}`);
+      }
+    });
+  }
+  verifier("aucune phrase française affichée par un gabarit hors de t() / tf()", trouves.length === 0, trouves.join(", "));
+}
+
 console.log(`\n${reussis} vérification(s) réussie(s), ${echecs.length} échec(s).`);
 if (echecs.length) {
   console.log("Échecs :");

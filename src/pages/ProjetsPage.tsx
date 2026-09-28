@@ -416,7 +416,8 @@ function MembersModal({
     setEmail("");
 
     if (result.immediate) {
-      setFeedback({ ok: true, text: `${invitee} a rejoint le projet.` });
+      // Traduit comme les autres retours (tournée à l'écran du 28/09/2026 : il restait en français).
+      setFeedback({ ok: true, text: tf("{0} a rejoint le projet.", invitee) });
       return;
     }
     if (result.invitation?.envoye) {

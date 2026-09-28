@@ -412,7 +412,8 @@ function CarteInstance() {
   return (
     <Card>
       <div className="flex items-center justify-between gap-3">
-        <span className="min-w-0 truncate text-sm font-semibold text-foreground">
+        {/* L'adresse entière, à la ligne s'il le faut : à 375 px, elle se réduisait à « http://loc… » (28/09/2026). */}
+        <span className="min-w-0 text-sm font-semibold text-foreground [overflow-wrap:anywhere]">
           {courante.label ?? courante.url}
         </span>
         <Button
@@ -1189,16 +1190,22 @@ function McpServers() {
         <div className="mt-4 space-y-2">
           {state.servers.map((s) => (
             <div key={s.id} className="rounded-xl border border-border">
-              <div className="flex items-center gap-3 p-3.5">
+              {/*
+                Le nombre d'outils et l'interrupteur passent à la ligne quand la
+                place manque (tournée à l'écran du 28/09/2026) : à 375 px, le nom
+                du serveur passait sous « 14 outils » et sa description tenait
+                en 4 px.
+              */}
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-2 p-3.5">
                 <span
                   className={cn(
                     "h-2 w-2 shrink-0 rounded-full",
                     s.running ? "bg-success" : "bg-neutral-70",
                   )}
                 />
-                <div className="min-w-0 flex-1">
+                <div className="min-w-0 flex-1 basis-32">
                   <p className="text-sm font-medium text-foreground">{t(s.label)}</p>
-                  <p className="truncate text-xs text-muted-foreground">{s.description}</p>
+                  <p className="text-xs text-muted-foreground [overflow-wrap:anywhere]">{s.description}</p>
                   {s.error && <p className="text-xs text-destructive">{s.error}</p>}
                 </div>
                 {s.running && (

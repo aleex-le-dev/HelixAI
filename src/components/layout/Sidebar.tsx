@@ -348,6 +348,12 @@ function Badge({ children }: { children: string }) {
  * (vu par Medhi) : mesurés dans Electron à 13 px, « Chat », « Cowork » et
  * « Code » demandent 114,7 px ; il en restait 110. Une marge de 6 px au lieu
  * de 8 rend 12 px : 122 px de place, les mots entiers, sans baisser la taille.
+ *
+ * Et le japonais se coupait de nouveau avec cette police (tournée à l'écran
+ * du 28/09/2026) : mesurées dans le navigateur, les trois pastilles
+ * demandaient 223,5 px pour 223 de place, et chacune perdait sa dernière
+ * lettre (« チャッ… », « Cowo… », « Co… »). Un écart de 2 px entre l'icône et
+ * le mot, en japonais seulement, rend 6 px.
  */
 function PrimaryItem({ item }: { item: NavItem }) {
   const Icon = item.icon;
@@ -358,7 +364,7 @@ function PrimaryItem({ item }: { item: NavItem }) {
       title={item.label}
       className={({ isActive }) =>
         cn(
-          "flex min-w-0 grow items-center justify-center gap-1 rounded-xl px-1.5 py-1.5 [:lang(ja)_&]:px-1",
+          "flex min-w-0 grow items-center justify-center gap-1 rounded-xl px-1.5 py-1.5 [:lang(ja)_&]:gap-0.5 [:lang(ja)_&]:px-1",
           "text-[13px] font-medium transition-colors",
           isActive
             ? "border border-sidebar-border bg-sidebar-active text-foreground shadow-sm"

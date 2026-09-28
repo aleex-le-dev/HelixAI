@@ -19,7 +19,14 @@ interface SegmentedTabsProps {
   disabledTitle?: string;
 }
 
-/** Controle segmente (onglets pilule) : element actif = pastille claire surelevee. */
+/**
+ * Controle segmente (onglets pilule) : element actif = pastille claire surelevee.
+ *
+ * Jamais plus large que sa place (tournée à l'écran du 28/09/2026) : à 375 px,
+ * « Bureau, CLI, Mobile » dans Installer les apps mesurait 301 px pour 224, et
+ * toute la page des réglages défilait de côté. Les onglets gardent leur taille
+ * et défilent dans la pilule, sans barre visible.
+ */
 export function SegmentedTabs({
   options,
   value,
@@ -32,7 +39,7 @@ export function SegmentedTabs({
   return (
     <div
       className={cn(
-        "inline-flex items-center gap-1 rounded-full bg-muted p-1",
+        "inline-flex max-w-full items-center gap-1 overflow-x-auto rounded-full bg-muted p-1 [scrollbar-width:none]",
         className,
       )}
       role="tablist"
@@ -51,8 +58,8 @@ export function SegmentedTabs({
             title={indisponible ? disabledTitle : undefined}
             onClick={() => onChange(o.id)}
             className={cn(
-              "inline-flex items-center gap-1.5 rounded-full font-medium transition-colors",
-              size === "sm" ? "px-3 py-1 text-sm" : "px-4 py-1.5 text-sm",
+              "inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full font-medium transition-colors",
+              size === "sm" ? "px-3 py-1 text-sm" : "px-4 py-1.5 text-sm max-sm:px-3",
               active
                 ? "bg-card text-foreground shadow-sm"
                 : "text-muted-foreground hover:text-foreground",

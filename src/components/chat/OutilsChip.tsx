@@ -26,8 +26,10 @@ import { t, tf } from "@/lib/i18n";
  * en brancher un de plus.
  *
  * Sa fonction d'origine est conservée telle quelle : l'interrupteur en tête de
- * menu active ou coupe les outils pour la conversation en cours, et la puce
- * elle-même reste allumée ou éteinte à l'écran.
+ * menu active ou coupe les outils, et la puce elle-même reste allumée ou
+ * éteinte à l'écran. Le choix est retenu d'un Chat à l'autre (profile.ts,
+ * `outilsChat`) : l'écran disait « pour cette conversation », et un Chat
+ * nouveau les trouvait pourtant allumés (tournée à l'écran du 28/09/2026).
  */
 export function OutilsChip({
   actif,
@@ -35,7 +37,7 @@ export function OutilsChip({
   autorise,
   nomAgent,
 }: {
-  /** Les outils sont-ils activés pour cette conversation ? */
+  /** Les outils sont-ils activés (pour tous les Chats de la personne) ? */
   actif: boolean;
   onChange: (actif: boolean) => void;
   /** L'agent choisi a-t-il le droit d'utiliser des outils ? Son réglage prime. */
@@ -88,7 +90,7 @@ export function OutilsChip({
               ? tf("L'agent « {0} » n'est pas autorisé à utiliser des outils", nomAgent)
               : actif
                 ? t("L'agent peut utiliser ses outils")
-                : t("Choisir et activer les outils de cette conversation")
+                : t("Choisir et activer les outils de vos Chats")
           }
         >
           {t("Outils")}
@@ -104,7 +106,7 @@ export function OutilsChip({
           <p className="text-sm font-semibold text-foreground">{t("Outils de l'agent")}</p>
           <p className="text-xs text-muted-foreground">
             {actif
-              ? t("Actifs pour cette conversation.")
+              ? t("Actifs dans vos Chats, jusqu'à ce que vous les coupiez.")
               : t("Coupés : l'agent répond sans rien faire sur la machine.")}
           </p>
         </div>
@@ -129,7 +131,8 @@ export function OutilsChip({
         <>
           <p className="px-2.5 pb-1 pt-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
             {disponibles.length > 0
-              ? `${disponibles.length} groupe(s) disponible(s)`
+              ? // Traduit (tournée à l'écran du 28/09/2026 : restait en français en anglais, chinois et japonais).
+                tf("Groupes disponibles : {0}", disponibles.length)
               : t("Aucun outil disponible")}
           </p>
           <div className="max-h-64 overflow-y-auto">

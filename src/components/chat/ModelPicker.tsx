@@ -631,6 +631,15 @@ export function ReasoningPicker({
       trigger={(p) => (
         <Chip
           leading={<Gauge size={15} strokeWidth={1.75} />}
+          /*
+           * L'icône seule sous 640 px (tournée à l'écran du 28/09/2026) : à
+           * 375 px, « Moyen » restait entier et le nom du modèle, à côté,
+           * tombait à zéro pixel (« Auto » en français, « 自動 » réduit à un
+           * trait en japonais). Le modèle qui répond passe avant le niveau :
+           * sans chevron ni grande marge non plus, il rend 28 px au modèle.
+           */
+          compacte
+          chevronEtroit={false}
           onClick={p.onClick}
           active={open}
           aria-expanded={p["aria-expanded"]}

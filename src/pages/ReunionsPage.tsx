@@ -921,7 +921,8 @@ function CompteRenduVue({
                   {a.tache}
                   {(a.qui || a.echeance) && (
                     <span className="block text-xs text-muted-foreground">
-                      {[a.qui, a.echeance ? `pour ${a.echeance}` : ""].filter(Boolean).join(", ")}
+                      {/* L'échéance traduite (relevé du 28/09/2026 : « pour … » restait en français). */}
+                      {[a.qui, a.echeance ? tf("pour {0}", a.echeance) : ""].filter(Boolean).join(", ")}
                     </span>
                   )}
                 </span>

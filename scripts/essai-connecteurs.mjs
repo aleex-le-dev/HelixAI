@@ -475,7 +475,8 @@ const branches = {};
   const issueRefus = ((await (await appel("/helix/connecteurs", { headers: A })).json()).issues ?? {}).atlassian;
   verifier(
     "Atlassian : un refus dans la page du service est noté pour l'écran qui attend (issue en échec, message fixe), un refus au state inventé ne note rien",
-    refusRetour.status === 400 && !sansIssue.atlassian && issueRefus?.ok === false && /access_denied/.test(issueRefus?.message ?? ""),
+    // 28/09/2026 : le message dit la cause et le remède (refusOauth.ts) plutôt que le seul code.
+    refusRetour.status === 400 && !sansIssue.atlassian && issueRefus?.ok === false && /“Cancel”|« Annuler »/.test(issueRefus?.message ?? ""),
     JSON.stringify({ sansIssue, issueRefus }),
   );
   /*

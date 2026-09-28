@@ -175,7 +175,8 @@ function refusMicrosoft(erreur: string, description: string): string | null {
   if (/AADSTS(65001|90094|90008)|admin_consent|consent_required/i.test(d)) {
     return t("Microsoft 365 demande le consentement d'un administrateur de l'annuaire pour certaines permissions (SharePoint et Teams en particulier, ou toutes si votre organisation interdit aux personnes de consentir). Un administrateur l'accorde dans le portail Entra (« Autorisations de l'API », « Accorder un consentement d'administrateur »), puis reconnectez-vous. Rien n'a été enregistré.");
   }
-  if (/AADSTS50011/.test(d)) return t("Microsoft 365 refuse l'adresse de retour : déclarez http://localhost/microsoft à l'identique dans l'application, plateforme « Client public/natif (mobile et bureau) » ou « Web ». Rien n'a été enregistré.");
+  // Libellé du portail de 2026 (« Mobile and desktop applications », https://learn.microsoft.com/en-us/entra/identity-platform/how-to-add-redirect-uri, lu le 28/09/2026).
+  if (/AADSTS50011/.test(d)) return t("Microsoft 365 refuse l'adresse de retour : dans « Authentication », déclarez http://localhost/microsoft à l'identique, plateforme « Mobile and desktop applications » (ou « Web »). Rien n'a été enregistré.");
   if (/AADSTS700016/.test(d)) return t("Microsoft 365 ne trouve pas cette application dans l'annuaire indiqué : vérifiez l'identifiant de l'application et celui de l'annuaire. Rien n'a été enregistré.");
   if (/AADSTS50194/.test(d)) return t("L'application n'accepte que les comptes de son annuaire : indiquez l'identifiant de l'annuaire (tenant) plutôt que « common ». Rien n'a été enregistré.");
   return null;

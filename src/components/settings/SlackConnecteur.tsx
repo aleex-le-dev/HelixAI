@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Check, Copy, Info, Loader2, Lock, MessageSquare, ShieldAlert, Trash2 } from "lucide-react";
+import { Check, Copy, ExternalLink, Info, Loader2, Lock, MessageSquare, ShieldAlert, Trash2 } from "lucide-react";
 import {
   etat as lireEtat,
   configurer,
@@ -17,6 +17,7 @@ import { branding } from "@/config/branding";
 import { formaterDate } from "@/lib/formats";
 import { t, tf } from "@/lib/i18n";
 import { copierTexte } from "@/lib/pressePapiers";
+import { guideApplication } from "@/lib/guidesApplications";
 
 /**
  * Connecteur Slack.
@@ -56,6 +57,7 @@ export function SlackConnecteur({ onChange }: { onChange?: () => void } = {}) {
     [etat?.portees],
   );
   const bot = etat?.application || nomDeBot(branding.name);
+  const guideSlack = guideApplication("slack", { manifeste: texteManifeste });
 
   const copier = async () => {
     // lib/pressePapiers (27/09/2026) : dans l'application de bureau, `navigator.clipboard` était toujours refusé.
@@ -190,12 +192,24 @@ export function SlackConnecteur({ onChange }: { onChange?: () => void } = {}) {
         <p className="text-muted-foreground">
           {t("Cinq minutes, avec un compte autorisé à installer des applications dans votre espace Slack. L'application reste la vôtre :")}{" "}{branding.name}{" "}{t("lit Slack directement, sans intermédiaire.")}
         </p>
+        {/*
+         * 28/09/2026 (Medhi : « tout doit être simple, pour tout ») : un bouton qui ouvre
+         * la création d'application de Slack avec ce manifeste déjà rempli
+         * (`?new_app=1&manifest_json=…`, https://docs.slack.dev/app-manifests/configuring-apps-with-app-manifests/,
+         * lu le 28/09/2026). Il ne reste qu'à choisir l'espace de travail.
+         */}
+        <a
+          href={guideSlack?.consoles[0]?.url ?? "https://api.slack.com/apps?new_app=1"}
+          target="_blank"
+          rel="noreferrer noopener"
+          className="inline-flex min-h-8 max-w-full items-center gap-1.5 rounded-xl border border-border bg-card px-3 py-1.5 text-sm font-medium text-foreground transition-colors [overflow-wrap:break-word] hover:bg-muted"
+        >
+          <ExternalLink size={14} strokeWidth={1.75} className="shrink-0" />
+          <span className="min-w-0">{tf("Ouvrir {0}", guideSlack?.consoles[0]?.libelle ?? t("la création d'application Slack"))}</span>
+        </a>
         <ol className="list-decimal space-y-2 pl-5">
           <li>
-            {t("Ouvrez")}{" "}<span className="font-medium">api.slack.com/apps</span>{t(", cliquez sur « Create New App », puis sur « From a manifest ».")}
-          </li>
-          <li>
-            {t("Choisissez votre espace de travail, collez le manifeste ci-dessous, puis validez avec « Next » et « Create ».")}
+            {t("Le bouton ouvre la création d'application avec le manifeste ci-dessous déjà rempli : choisissez votre espace de travail, vérifiez, puis « Create ». Sinon : « Create New App », « From a manifest », et collez-le.")}
           </li>
           <li>
             {t("Dans « Install App », cliquez sur « Install to Workspace » et acceptez. Selon les règles de votre espace, un administrateur Slack devra peut-être approuver.")}

@@ -448,8 +448,9 @@ console.log("\nD. Retour : portées relues, compte lu, puis seulement enregistr�
   verifier("Microsoft ne dit pas ce qu'il accorde : refusé", sans.statut === 400 && (await etatMs())?.configure === false, sans.page.slice(0, 200));
   const admin = await retour(await depart(["teams"]), "", `&error=access_denied&error_description=${encodeURIComponent("AADSTS65001: The user or administrator has not consented")}`);
   verifier("consentement de l'administrateur manquant (AADSTS65001) : le message dit qui doit consentir, et où", admin.statut === 400 && /consentement d.un administrateur/.test(admin.page) && /Accorder un consentement/.test(admin.page), admin.page.slice(0, 300));
+  // 28/09/2026 : le refus dit maintenant la cause probable et le remède (refusOauth.ts), « n'a pas donné l'accès : soit « Annuler »… ».
   const refuse = await retour(await depart(["outlook"]), "", `&error=access_denied&error_description=${encodeURIComponent("AADSTS65004: User declined to consent")}`);
-  verifier("la personne refuse (AADSTS65004) : dit comme un refus, rien n'est enregistré", refuse.statut === 400 && /refusé l.accès/.test(refuse.page), refuse.page.slice(0, 200));
+  verifier("la personne refuse (AADSTS65004) : dit comme un refus, rien n'est enregistré", refuse.statut === 400 && /n.a pas donné l.accès/.test(refuse.page), refuse.page.slice(0, 200));
 
   // Lecture seule d'abord : les portées rendues encodées et préfixées, comme dans la page d'exemple de Microsoft.
   await regler(`scope=${encodeURIComponent(`${LECTURE} openid profile`)}&encode=1`);

@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState, type ReactNode } from "react";
-import { Check, ExternalLink, Info, KeyRound, Link2, Loader2, Lock, ShieldAlert, Trash2 } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import { Check, Info, Link2, Loader2, Lock, ShieldAlert, Trash2 } from "lucide-react";
 import {
   connecterMessagerie,
   etatMessageries,
@@ -15,6 +15,8 @@ import { Field, Input } from "@/components/ui/Field";
 import { InfoBox } from "@/components/ui/InfoBox";
 import { Switch } from "@/components/ui/Switch";
 import { ACopier } from "@/components/ui/ACopier";
+import { GuideApplication } from "@/components/settings/GuideApplication";
+import { guideApplication } from "@/lib/guidesApplications";
 import { branding } from "@/config/branding";
 import { formaterDate } from "@/lib/formats";
 import { t, tf } from "@/lib/i18n";
@@ -30,60 +32,11 @@ import { t, tf } from "@/lib/i18n";
  * des consoles changent, et l'écran le dit.
  */
 
-function Lien({ href, children }: { href: string; children: ReactNode }) {
-  return (
-    <a className="underline" href={href} target="_blank" rel="noreferrer noopener">
-      {children} <ExternalLink size={11} className="inline" />
-    </a>
-  );
-}
-
-/** Comment créer le bot, service par service. */
-function Guide({ id }: { id: IdMessagerie }) {
-  switch (id) {
-    case "telegram":
-      return (
-        <ol className="list-decimal space-y-1 pl-5">
-          <li>
-            {t("Dans Telegram, ouvrez la conversation avec")} <Lien href="https://t.me/BotFather">@BotFather</Lien>
-            {t(", envoyez /newbot, puis donnez un nom et un identifiant qui finit par « bot ».")}
-          </li>
-          <li>{t("BotFather répond avec le jeton du bot (123456789:AA…) : collez-le plus bas.")}</li>
-          <li>{t("Ajoutez le bot aux groupes à lire. Par défaut, dans un groupe, il ne voit que les messages qui le mentionnent ou lui répondent ; pour qu'il lise tout, envoyez /setprivacy à BotFather, choisissez « Disable », puis ajoutez-le de nouveau au groupe.")}</li>
-          <li>{t("Prenez un bot créé pour ce connecteur : un bot déjà branché sur un agent, ou sur un autre logiciel, sera refusé, car Telegram ne donne ses messages qu'à un seul lecteur.")}</li>
-        </ol>
-      );
-    case "discord":
-      return (
-        <ol className="list-decimal space-y-1 pl-5">
-          <li>
-            {t("Sur")} <Lien href="https://discord.com/developers/applications">discord.com/developers/applications</Lien>
-            {t(", « New Application » : un nom, puis « Create ».")}
-          </li>
-          <li>{t("Page « Bot » : « Reset Token », puis copiez le jeton et collez-le plus bas.")}</li>
-          <li>{t("Même page, « Privileged Gateway Intents » : activez « Message Content Intent ». Sans elle, Discord donne des messages vides, sauf ceux qui mentionnent le bot.")}</li>
-          <li>{t("Page « OAuth2 », « URL Generator » : cochez « bot », puis les permissions « View Channels », « Read Message History », et « Send Messages » pour envoyer. Ouvrez l'adresse produite et ajoutez le bot à votre serveur.")}</li>
-        </ol>
-      );
-    case "whatsapp":
-      return (
-        <ol className="list-decimal space-y-1 pl-5">
-          <li>
-            {t("Sur")} <Lien href="https://developers.facebook.com/apps">developers.facebook.com/apps</Lien>
-            {/* Meta ne propose plus de type d'app : un cas d'usage, puis le portefeuille d'entreprise (guide « Get started » de la Cloud API, relu le 28/09/2026). */}
-            {t(", « Créer une app » : choisissez le cas d'usage « Connect with customers through WhatsApp » (communiquer avec vos clients sur WhatsApp), puis le portefeuille d'entreprise de votre organisation. Reliez-y le compte WhatsApp Business et le numéro de votre organisation.")}
-          </li>
-          <li>{t("WhatsApp, « Configuration de l'API » : recopiez l'identifiant du numéro de téléphone et l'identifiant du compte WhatsApp Business.")}</li>
-          <li>
-            {t("Dans les")} <Lien href="https://business.facebook.com/settings">{t("paramètres de l'entreprise")}</Lien>
-            {t(", « Utilisateurs système » : créez-en un, donnez-lui l'app et le compte WhatsApp, puis générez un jeton avec whatsapp_business_messaging et whatsapp_business_management.")}
-          </li>
-          <li>{t("« Paramètres de l'app », « Général » : recopiez la clé secrète. Elle sert à reconnaître les messages que Meta envoie à l'instance.")}</li>
-          <li>{t("Une fois connecté : dans WhatsApp, « Configuration », déclarez l'adresse du webhook et le jeton de vérification que cet écran affichera, puis abonnez-vous au champ « messages ».")}</li>
-        </ol>
-      );
-  }
-}
+/*
+ * Comment créer le bot, service par service : lib/guidesApplications.ts depuis
+ * le 28/09/2026 (bouton vers BotFather, le portail de Discord ou la création
+ * d'app Meta, étapes dans l'ordre de la console), affiché par GuideApplication.tsx.
+ */
 
 /** Ce qu'il faut savoir avant de brancher : les règles du service qui changent ce que les agents peuvent faire. */
 function Regles({ id }: { id: IdMessagerie }) {
@@ -144,6 +97,7 @@ export function ConnecteurMessagerie({ id, onChange }: { id: IdMessagerie; onCha
     );
   }
   const admin = etats.administrateur;
+  const guide = guideApplication(id);
   const messages = (
     <>
       {erreur && (
@@ -264,13 +218,11 @@ export function ConnecteurMessagerie({ id, onChange }: { id: IdMessagerie; onCha
           {t("Le chiffrement des données n'est pas actif sur cette instance : aucun jeton ne sera enregistré tant que ce sera le cas.")}
         </InfoBox>
       )}
-      <InfoBox leading={<KeyRound size={15} strokeWidth={1.75} />}>
-        <div className="space-y-2">
-          <p className="font-medium">{id === "whatsapp" ? t("Préparer le numéro, une fois pour toute l'instance") : t("Créer le bot, une fois pour toute l'instance")}</p>
-          <Guide id={id} />
+      {guide && <GuideApplication guide={guide} titre={id === "whatsapp" ? t("Préparer le numéro, une fois pour toute l'instance") : t("Créer le bot, une fois pour toute l'instance")} />}
+      <InfoBox tone="muted">
+        <div className="space-y-1">
           <p className="font-medium">{t("Ce qu'il faut savoir")}</p>
           <Regles id={id} />
-          <p className="text-xs">{t("Les libellés des consoles changent parfois : cherchez l'équivalent.")}</p>
         </div>
       </InfoBox>
 
@@ -280,7 +232,7 @@ export function ConnecteurMessagerie({ id, onChange }: { id: IdMessagerie; onCha
         </InfoBox>
       ) : (
         <>
-          <Field label={id === "whatsapp" ? t("Jeton de l'utilisateur système") : t("Jeton du bot")} hint={t("Gardé chiffré sur l'instance, il n'en ressort jamais.")}>
+          <Field label={id === "whatsapp" ? t("Jeton de l'utilisateur système") : t("Jeton du bot")} hint={`${id !== "whatsapp" && guide?.champs?.identifiant ? `${guide.champs.identifiant} ` : ""}${t("Gardé chiffré sur l'instance, il n'en ressort jamais.")}`}>
             <Input type="password" value={jeton} onChange={(e) => setJeton(e.target.value)} autoComplete="off" spellCheck={false} placeholder={id === "telegram" ? "123456789:AA…" : id === "whatsapp" ? "EAA…" : ""} />
           </Field>
           {id === "whatsapp" && (

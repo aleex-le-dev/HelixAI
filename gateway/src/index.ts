@@ -156,6 +156,15 @@ import {
   achever as acheverCourrier,
   demarrer as demarrerCourrier,
   estEtatCourrier,
+  refuserCourrier,
+  courrierEnAttente,
+  retourEnvoye,
+  retourADeclarer,
+  surLaBoucle,
+  ouvrirBoucle as ouvrirBoucleCourrier,
+  collerRetourCourrier,
+  boucleOuverte,
+  issueCourrier,
   valider as validerOauthCourrier,
 } from "./courrierOauth.ts";
 import {
@@ -174,7 +183,7 @@ import * as messageries from "./natifs/messageries.ts";
 import * as commerce from "./natifs/commerce.ts";
 import { estMcpProjet } from "./natifs/projetsRegles.ts";
 import * as tachesProgrammees from "./tachesProgrammees.ts";
-import { chargerClientGoogle, effacerClientGoogle, enregistrerClientGoogle, etatClientGoogle } from "./clientGoogle.ts";
+import { chargerClientGoogle, clientGoogle, effacerClientGoogle, enregistrerClientGoogle, etatClientGoogle } from "./clientGoogle.ts";
 import * as slack from "./slack.ts";
 import { conservationJours, journaliser, lire as lireAudit, verifier as verifierAudit, jours as joursAudit } from "./audit.ts";
 import * as computer from "./computer.ts";
@@ -1221,13 +1230,31 @@ async function reserveeServiceCommun(res: http.ServerResponse, qui: Demandeur): 
   return reserveeALAdministration(res, qui, t("Seul l'administrateur de l'instance peut brancher, débrancher ou configurer ces services : ils agissent au nom de toute l'organisation."));
 }
 
-async function handleCourrierEtat(res: http.ServerResponse, url: URL): Promise<void> {
+async function handleCourrierEtat(req: http.IncomingMessage, res: http.ServerResponse, url: URL): Promise<void> {
   const adresse = url.searchParams.get("adresse") ?? "";
+  const base = adresseVue(req);
+  const microsoft = await natifs.applicationMicrosoft().catch(() => null);
   send(res, 200, {
     ...(await courrierEtat()),
     fournisseurs: fournisseursConnus(),
     // Réglages devinés depuis le domaine, quand l'interface en demande.
     suggestion: adresse ? reglagesConnus(adresse) : null,
+    /*
+     * « Se connecter avec Google / Microsoft » (28/09/2026) : les applications
+     * de l'instance qu'on peut reprendre (identifiants seulement, jamais de
+     * secret), les adresses de retour à déclarer telles que la passerelle les
+     * enverra, et l'issue du dernier retour par la boucle locale (Gmail).
+     */
+    oauth: {
+      google: { ...etatClientGoogle(), boucle: base ? surLaBoucle(base) : true, ...(base ? { retour: retourADeclarer("google", base) } : {}) },
+      microsoft: {
+        disponible: Boolean(microsoft),
+        ...(microsoft ? { identifiant: microsoft.clientId, annuaire: microsoft.annuaire, avecSecret: Boolean(microsoft.clientSecret) } : {}),
+        ...(base ? { retour: retourADeclarer("microsoft", base) } : {}),
+      },
+      attente: boucleOuverte(),
+      ...(issueCourrier() ? { issue: issueCourrier() } : {}),
+    },
   });
 }
 
@@ -1266,7 +1293,26 @@ async function handleCourrierOauth(
       error: { message: t("Indiquez l'adresse de la boîte, par exemple vous@entreprise.fr.") },
     });
   }
-  const verdict = validerOauthCourrier(body.reglage);
+  /*
+   * « application: instance » (28/09/2026) : reprendre l'application déjà
+   * enregistrée sur l'instance, celle de Drive et d'Agenda chez Google, celle
+   * de Microsoft 365 chez Microsoft, plutôt que d'en créer une de plus. Ses
+   * identifiants sont lus ici, jamais envoyés par l'écran : le secret ne
+   * quitte pas la passerelle.
+   */
+  const demande = (body.reglage ?? {}) as Record<string, unknown>;
+  let reglage: unknown = demande;
+  const instanceGoogle = demande.application === "instance" && demande.fournisseur === "google";
+  if (instanceGoogle) {
+    const g = clientGoogle();
+    if (!g.ok) return send(res, 400, { error: { message: t("Aucune application Google n'est enregistrée sur cette instance : renseignez-la d'abord, avec les étapes affichées.") } });
+    reglage = { fournisseur: "google", clientId: g.clientId, ...(g.clientSecret ? { clientSecret: g.clientSecret } : {}) };
+  } else if (demande.application === "instance" && demande.fournisseur === "microsoft") {
+    const m = await natifs.applicationMicrosoft();
+    if (!m) return send(res, 400, { error: { message: t("Aucune application Microsoft 365 n'est enregistrée sur cette instance : renseignez-la d'abord, avec les étapes affichées.") } });
+    reglage = { fournisseur: "microsoft", clientId: m.clientId, ...(m.clientSecret ? { clientSecret: m.clientSecret } : {}), ...(m.annuaire ? { tenant: m.annuaire } : {}) };
+  }
+  const verdict = validerOauthCourrier(reglage);
   if (!verdict.ok) return send(res, 400, { error: { message: verdict.message } });
 
   /*
@@ -1274,6 +1320,9 @@ async function handleCourrierOauth(
    * l'instance : il revient là d'où il est parti. Elle doit être inscrite à
    * l'identique dans l'application déclarée par l'administrateur, sinon le
    * fournisseur refuse — et l'écran le dit, plutôt que de laisser chercher.
+   * Gmail par l'application de l'instance (une « Application de bureau ») :
+   * rien à déclarer, le retour se fait par la boucle locale, comme pour
+   * Agenda (courrierOauth.ts, `ouvrirBoucle`).
    */
   const base = adresseVue(req);
   if (!base) {
@@ -1281,13 +1330,44 @@ async function handleCourrierOauth(
       error: { message: t("L'adresse de cette instance n'a pas pu être déterminée.") },
     });
   }
-  const redirection = `${base}/helix/oauth/retour`;
+  let redirection = retourEnvoye(verdict.reglage.fournisseur, base);
+  if (instanceGoogle) {
+    const b = await ouvrirBoucleCourrier(retourCourrierParLaBoucle);
+    if (!b.ok) return send(res, 400, { error: { message: b.message } });
+    redirection = b.redirection;
+  }
   const { url: destination } = demarrerCourrier(verdict.reglage, adresse, redirection);
   journaliser("donnees.ecrites", qui.userId, {
     collection: "courrier.oauth",
     fournisseur: verdict.reglage.fournisseur,
   });
-  send(res, 200, { url: destination, redirection });
+  send(res, 200, { url: destination, redirection, ...(instanceGoogle ? { boucle: true } : {}) });
+}
+
+/** Le retour de Google par la boucle locale (Gmail, 28/09/2026) : les mêmes étapes que la route publique. */
+async function retourCourrierParLaBoucle(parametres: URLSearchParams): Promise<{ ok: boolean; message: string; ignore?: boolean }> {
+  const etat = parametres.get("state") ?? "";
+  const erreur = parametres.get("error");
+  if (erreur) {
+    const refus = refuserCourrier(etat, erreur);
+    return refus ? { ok: false, message: refus } : { ok: false, message: t("Cette réponse ne correspond à aucune demande de connexion en cours : elle est ignorée."), ignore: true };
+  }
+  const code = parametres.get("code") ?? "";
+  if (!code || !courrierEnAttente(etat)) return { ok: false, message: t("Cette réponse ne correspond à aucune demande de connexion en cours : elle est ignorée."), ignore: true };
+  const r = await acheverCourrier(code, etat);
+  if (!r.ok) return { ok: false, message: r.message };
+  const branchement = await brancherParOauth(r.jetons, r.adresse);
+  return { ok: branchement.ok, message: branchement.message };
+}
+
+/** L'instance est sur une autre machine : l'adresse de retour de Google, collée à l'écran (courrierOauth.ts). */
+async function handleCourrierOauthColler(req: http.IncomingMessage, res: http.ServerResponse, url: URL): Promise<void> {
+  const qui = await demandeur(req, url);
+  if (!qui) return send(res, 401, sansSeance());
+  if (await reserveeALAdministration(res, qui, t("Seul l'administrateur de l'instance peut changer la boîte mail commune et son envoi."))) return;
+  const body = (await readJson(req).catch(() => ({}))) as { adresse?: unknown };
+  const r = await collerRetourCourrier(body.adresse);
+  send(res, r.ok ? 200 : 400, r);
 }
 
 async function handleCourrierConfigurer(
@@ -1856,6 +1936,7 @@ const EXECUTION: { methode: string; chemin: string }[] = [
   { methode: "POST", chemin: "/helix/courrier/configurer" },
   // Même famille : brancher une boîte par autorisation engage l'instance.
   { methode: "POST", chemin: "/helix/courrier/oauth" },
+  { methode: "POST", chemin: "/helix/courrier/oauth/coller" },
   { methode: "POST", chemin: "/helix/courrier/envoi" },
   { methode: "POST", chemin: "/helix/courrier/confirmation" },
   { methode: "POST", chemin: "/helix/courrier/oublier" },
@@ -3740,8 +3821,9 @@ async function handleMcpToggle(
 /* --------------------------- routes connecteurs ------------------------------- */
 
 /** Catalogue, connecteurs branchés, et régime de l'instance. Aucun secret. */
-async function handleConnecteursEtat(res: http.ServerResponse): Promise<void> {
-  send(res, 200, await connecteurs.etat());
+async function handleConnecteursEtat(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
+  // L'adresse de retour, telle que « Se connecter » l'enverra au service : l'écran la montre avant le premier essai (28/09/2026).
+  send(res, 200, await connecteurs.etat(adresseVue(req) ?? undefined));
 }
 
 /** Groupes d'outils réellement proposés au modèle : ce que le composeur affiche. */
@@ -3767,7 +3849,7 @@ async function handleConnecteurAjouter(
 
   const body = await readJson(req).catch(() => null);
   const resultat = await connecteurs.ajouter(body, qui.userId);
-  send(res, resultat.ok ? 200 : 400, { ...resultat, etat: await connecteurs.etat() });
+  send(res, resultat.ok ? 200 : 400, { ...resultat, etat: await connecteurs.etat(adresseVue(req) ?? undefined) });
 }
 
 /**
@@ -4059,7 +4141,7 @@ async function handleConnecteurConnecter(
     },
     body.ecriture,
   );
-  send(res, resultat.ok ? 200 : 400, { ...resultat, etat: await connecteurs.etat() });
+  send(res, resultat.ok ? 200 : 400, { ...resultat, etat: await connecteurs.etat(adresseVue(req) ?? undefined) });
 }
 
 /** Page rendue au navigateur au retour d'une autorisation. */
@@ -4127,9 +4209,16 @@ async function handleOauthRetour(
      * l'instance (revue du 26/09/2026). Le code d'erreur, lui, est un mot du
      * protocole, borné.
      */
-    const refus = tf("Le service a refusé la demande (code : {0}). Recommencez depuis {1}.", erreur.replace(/[^a-z_]/gi, "").slice(0, 40) || "inconnu", nomProduit());
-    // L'écran des connecteurs qui attend l'accord le lit aussi, au lieu d'attendre cinq minutes (28/09/2026).
-    await connecteurs.refuserAutorisation(url.searchParams.get("state") ?? "", refus);
+    const etatRefus = url.searchParams.get("state") ?? "";
+    /*
+     * La cause probable et le remède, par le code seul (refusOauth.ts,
+     * 28/09/2026) : « access_denied » chez Google, c'est le plus souvent un
+     * compte absent des utilisateurs de test. L'écran des connecteurs qui
+     * attend l'accord le lit aussi, au lieu d'attendre cinq minutes.
+     */
+    const refus =
+      (estEtatCourrier(etatRefus) ? refuserCourrier(etatRefus, erreur) : await connecteurs.refuserAutorisation(etatRefus, erreur)) ??
+      tf("Le service a refusé la demande (code : {0}). Recommencez depuis {1}.", erreur.replace(/[^a-z_]/gi, "").slice(0, 40) || "inconnu", nomProduit());
     return repondre(t("Autorisation refusée"), refus, false, 400);
   }
 
@@ -4195,7 +4284,7 @@ async function handleConnecteurRetirer(
 
   if (estMcpProjet(body.id) && (await reserveeALAdministration(res, qui, t("Seul l'administrateur de l'instance peut brancher, débrancher ou configurer ces services : ils agissent au nom de toute l'organisation.")))) return;
   const resultat = await connecteurs.retirer(body.id, qui.userId);
-  send(res, resultat.ok ? 200 : 400, { ...resultat, etat: await connecteurs.etat() });
+  send(res, resultat.ok ? 200 : 400, { ...resultat, etat: await connecteurs.etat(adresseVue(req) ?? undefined) });
 }
 
 /* ------------------------------ routes usage ---------------------------------- */
@@ -5895,11 +5984,13 @@ const traiter = (
     if (req.method === "POST" && path === "/helix/dictee") return handleDictee(req, res, url);
 
     if (req.method === "GET" && path === "/helix/courrier")
-      return handleCourrierEtat(res, url);
+      return handleCourrierEtat(req, res, url);
     if (req.method === "POST" && path === "/helix/courrier/configurer")
       return handleCourrierConfigurer(req, res, url);
     if (req.method === "POST" && path === "/helix/courrier/oauth")
       return handleCourrierOauth(req, res, url);
+    if (req.method === "POST" && path === "/helix/courrier/oauth/coller")
+      return handleCourrierOauthColler(req, res, url);
     if (req.method === "POST" && path === "/helix/courrier/envoi")
       return handleCourrierEnvoi(req, res, url);
     if (req.method === "POST" && path === "/helix/courrier/confirmation")
@@ -6009,7 +6100,7 @@ const traiter = (
       return handleWorkspace(req, res, url);
 
     if (req.method === "GET" && path === "/helix/connecteurs")
-      return handleConnecteursEtat(res);
+      return handleConnecteursEtat(req, res);
     if (req.method === "POST" && path === "/helix/connecteurs/ajouter")
       return handleConnecteurAjouter(req, res, url);
     if (req.method === "GET" && path === "/helix/reseau")

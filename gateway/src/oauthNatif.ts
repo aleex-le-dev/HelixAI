@@ -6,6 +6,7 @@ import { journaliser } from "./audit.ts";
 import { autresUsagesGoogle, clientGoogle, declarerUsageGoogle, messageSansRevocationGoogle } from "./clientGoogle.ts";
 import { requeteHttps, ErreurTransport, type DemandeHttps, type ReponseHttps } from "./clientHttps.ts";
 import { dansLaLangue, langue, t, tf, type Langue } from "./langue.ts";
+import { refusLisible } from "./refusOauth.ts";
 // Google Docs, Google Forms et Dropbox (28/09/2026) : leurs définitions et ce qui leur est propre vivent à part.
 import { definitionsDocuments, identiteDropbox, revoquerDropbox } from "./natifs/documents.ts";
 import { DEFINITIONS_PROJETS, identiteProjet, revocationProjet } from "./natifs/projetsRegles.ts";
@@ -666,6 +667,20 @@ function clientDe(id: IdNatif): Client {
   return { ok: true, clientId: a.clientId, clientSecret: secret, source: "ecran", ...(a.annuaire ? { annuaire: a.annuaire } : {}) };
 }
 
+/**
+ * L'application Microsoft 365 de l'instance, pour brancher aussi la boîte
+ * Outlook par IMAP (courrierOauth.ts, 28/09/2026) : une seule inscription dans
+ * Entra peut porter les deux adresses de retour et les deux jeux de
+ * permissions (https://learn.microsoft.com/en-us/entra/identity-platform/v2-oauth2-auth-code-flow,
+ * lu le 28/09/2026). Rien ne sort de la passerelle : l'écran n'en voit que
+ * l'identifiant, par `etat`.
+ */
+export async function applicationMicrosoft(): Promise<{ clientId: string; clientSecret: string; annuaire?: string } | null> {
+  await charger();
+  const c = clientDe("microsoft");
+  return c.ok ? { clientId: c.clientId, clientSecret: c.clientSecret, ...(c.annuaire ? { annuaire: c.annuaire } : {}) } : null;
+}
+
 /** Où consentir et où échanger les jetons : dans l'annuaire enregistré, pour Microsoft 365. */
 function adressesDe(id: IdNatif, client: { annuaire?: string }): { consentement: string; jetons: Definition["jetons"] } {
   const def = DEFINITIONS[id];
@@ -676,7 +691,7 @@ function adressesDe(id: IdNatif, client: { annuaire?: string }): { consentement:
 export async function enregistrerApplication(id: unknown, brutId: unknown, brutSecret: unknown, qui: string, brutAnnuaire?: unknown): Promise<{ ok: boolean; message: string }> {
   if (!estIdNatif(id)) return { ok: false, message: t("Service inconnu.") };
   const def = DEFINITIONS[id];
-  if (def.google) return { ok: false, message: t("Les services Google utilisent l'application Google de l'instance, saisie une fois pour Drive, Agenda, Sheets, Slides et YouTube.") };
+  if (def.google) return { ok: false, message: t("Les services Google utilisent l'application Google de l'instance, saisie une fois pour Gmail, Agenda, Drive, Sheets, Slides, Docs, Forms et YouTube.") };
   await charger();
   const clientId = typeof brutId === "string" ? brutId.trim() : "";
   const secret = typeof brutSecret === "string" ? brutSecret.trim() : "";
@@ -1017,13 +1032,22 @@ export function noterEcoute(adresse: string): void {
 }
 const ecouteSurIPv4 = () => ["127.0.0.1", "0.0.0.0", "::", ""].includes(ecoute);
 
+/**
+ * « localhost » réécrit en l'adresse de boucle où la passerelle écoute, pour
+ * un fournisseur qui le refuse (X, Mailchimp ; Zoom pour les serveurs MCP,
+ * connecteurs.ts, 28/09/2026). Une adresse nommée ou en https ne change pas.
+ */
+export function sansLocalhost(racine: string): string {
+  const boucle = ecouteSurIPv4() ? "127.0.0.1" : ecoute === "::1" ? "[::1]" : "localhost";
+  return racine.replace(/\/+$/, "").replace(/^(https?:\/\/)localhost(?=:\d{1,5}$|$)/i, (_, schema: string) => schema + boucle);
+}
+
 /** L'adresse de retour à déclarer chez le fournisseur, telle que l'écran doit la montrer. */
 export function adresseDeRetour(id: IdNatif, base: string): string {
   const def = DEFINITIONS[id];
   if (def.retour === "instance") {
     const racine = base.replace(/\/+$/, "");
-    const boucle = ecouteSurIPv4() ? "127.0.0.1" : ecoute === "::1" ? "[::1]" : "localhost";
-    return `${def.sansLocalhost ? racine.replace(/^(https?:\/\/)localhost(?=:\d{1,5}$|$)/i, (_, schema: string) => schema + boucle) : racine}/helix/oauth/retour`;
+    return `${def.sansLocalhost ? sansLocalhost(racine) : racine}/helix/oauth/retour`;
   }
   // Google accepte tout port de la boucle locale pour une application « de bureau » ; TikTok, le joker `*` ; Microsoft ignore le port de « localhost ».
   if (def.boucleLocalhost) return `http://localhost${def.cheminBoucle}`;
@@ -1181,7 +1205,8 @@ async function recevoirFlux(f: Flux, parametres: URLSearchParams, quiCollage: st
   if (erreur) {
     // Microsoft 365 : un code AADSTS dit ce qui manque (consentement de l'administrateur, adresse de retour) ; rien de la réponse n'est recopié.
     const propre = def.messages?.refus(erreur.slice(0, 100), (parametres.get("error_description") ?? "").slice(0, 2000));
-    return { ...conclure(f.id, false, propre ?? (/denied|cancel/i.test(erreur) ? tf("Vous avez refusé l'accès dans {0} : rien n'a été enregistré.", def.nom) : tf("{0} a interrompu l'autorisation : rien n'a été enregistré. Recommencez.", def.nom))), nom: def.nom };
+    // Sinon la cause probable et le remède, par le code du protocole (refusOauth.ts, 28/09/2026).
+    return { ...conclure(f.id, false, propre ?? refusLisible(erreur, def.nom, { google: def.google })), nom: def.nom };
   }
   const code = (parametres.get("code") ?? "").replace(/#_$/, "");
   if (!code || code.length > 2048) return { ...conclure(f.id, false, t("La réponse ne contient pas de code d'autorisation. Recommencez.")), nom: def.nom };

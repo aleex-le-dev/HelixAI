@@ -588,6 +588,57 @@ Marketplace », donc limitée à une lecture de 15 messages par minute depuis 20
 alors qu'une application interne garde les limites normales. Branchement réel à
 éprouver chez un premier client (SECURITE.md § 10.3).
 
+**Fait le 28/09/2026 : créer l'application chez le fournisseur, pas à pas, pour chaque
+connecteur.** Demandé par Medhi : « quand je veux connecter Gmail, il n'y a pas la
+redirection vers où je dois aller pour créer l'appli ; tout doit être simple, pour tout ».
+- *Un guide par service* (`src/lib/guidesApplications.ts`, affiché par
+  `src/components/settings/GuideApplication.tsx`) : en tête, un bouton « Ouvrir … » vers la
+  page exacte de la console ; des étapes numérotées dans l'ordre de la console ; l'adresse
+  de retour, avec « Copier », dans l'étape où on la colle ; les portées à cocher,
+  copiables ; « À ne pas faire » ; « Si … affiche une erreur » (les erreurs que le
+  fournisseur montre chez lui ne reviennent jamais à l'instance : elles ne s'expliquent
+  qu'avant d'essayer) ; sous chaque champ, où le trouver dans la console. Google,
+  Microsoft 365, boîte Outlook, LinkedIn, Facebook, Instagram, TikTok, X, Dropbox, Brevo,
+  Mailchimp, Salesforce, Pipedrive, Zendesk, Shopify, Stripe, WooCommerce, GitHub, Asana,
+  Zoom, Box, Slack (serveur et jeton), Telegram, Discord, WhatsApp. Liens et libellés
+  relus sur la documentation officielle du 28/09/2026, sources au-dessus de chaque guide.
+- *Gmail reprend l'application Google de l'instance* (celle de Drive et d'Agenda, une
+  « Application de bureau ») au lieu de demander un identifiant de plus : retour par la
+  boucle locale `http://127.0.0.1:<port>/`, comme Agenda (essayé en vrai le 26/09), donc
+  rien à déclarer chez Google ; instance sur une autre machine : on colle l'adresse
+  (`/helix/courrier/oauth/coller`). Si l'application n'existe pas, le formulaire de Google,
+  avec ses quatre boutons (projet, activation des huit API d'un coup, Google Auth Platform,
+  création du client), s'affiche dans le panneau de Gmail. Les panneaux Sheets, Slides,
+  Docs, Forms, YouTube disent que l'application existe déjà et donnent l'activation de
+  leur API. La boîte Outlook peut reprendre l'application Microsoft 365 de l'instance
+  (une adresse de retour et deux permissions à lui ajouter).
+- *Adresses de retour exactes* : l'état des connecteurs donne celle que « Se connecter »
+  enverra (même fonction, `adresseDeRetour`), avant le premier essai ; Zoom la reçoit en
+  127.0.0.1 (« Do not use localhost ») ; Outlook part sous « localhost » (le portail Entra
+  refuse 127.0.0.1 en http) et se déclare sans port. Sur un poste (macOS comme Windows) :
+  `http://localhost:8787/helix/oauth/retour` ; instance ouverte au réseau : son adresse en
+  https, telle que le navigateur l'atteint.
+- *Refus expliqués* (`gateway/src/refusOauth.ts`) : `access_denied` (utilisateurs de test,
+  « Audience », application « Interne »), `invalid_scope`, `redirect_uri_mismatch`,
+  consentement d'administrateur…, traduits, sans recopier le texte du fournisseur.
+- *Aide intégrée* : « Brancher Gmail pas à pas » et « Créer l'application d'un service,
+  pas à pas ». `npm run securite`, section 36.
+- **Pas essayé** (aucun compte ni console ouverte, tout est derrière une connexion) : les
+  consoles elles-mêmes, leurs libellés exacts en français, et les points que la
+  documentation ne tranche pas : une « Desktop app » Google accepte-t-elle aussi un chemin
+  (inutile désormais : Gmail revient sur `/`) ; LinkedIn, Instagram et Pipedrive
+  acceptent-ils `http://localhost` (LinkedIn écrit « HTTPS », un fil de Pipedrive dit non) ;
+  Zoom accepte-t-il 127.0.0.1 pour une « General App » avec secret ; Slack : son serveur
+  MCP veut une adresse en https, un client confidentiel, et PKCE (seule voie pour
+  localhost) le rend public pour de bon : sur un poste seul, l'écran renvoie à « Slack
+  (par jeton) » ; les liens `#view/…` d'Entra ne sont documentés nulle part (lien
+  officiel `go.microsoft.com/fwlink/?linkid=2083908`) ; la console d'administration de
+  Box (`app.box.com/master`) et celle de Zendesk (`<sous-domaine>.zendesk.com/admin/`) ne
+  sont pas citées telles quelles par leur documentation. LinkedIn : « Community
+  Management API » ne s'accorde qu'à une application sans autre produit, alors que Helix
+  demande `openid profile` sur la même application : la case « Page d'entreprise » ne
+  peut donc pas aboutir telle quelle (à revoir : une seconde application LinkedIn).
+
 **Fait le 28/09/2026 : Google Sheets, Google Slides, YouTube, LinkedIn, Facebook, Instagram
 et TikTok (version 2026.928.2).** Demandé par Medhi : « il manque plein de choses :
 Instagram, TikTok, LinkedIn, Google Sheets, Google Slides, Facebook, YouTube ; pas tout
@@ -3780,7 +3831,7 @@ JSON, délai, quoi déposer), messages clairs (fichier vide, JSON coupé, Takeou
 Gems seuls, .tgz, trop gros). **Toutes sources** : un Chat importé retient `importe` (source,
 clé d'origine, nombre de messages) ; déjà importé, il est grisé et ni présélectionné ni
 réimporté ; plus long dans un nouvel export, on peut en ajouter une copie complète à côté,
-jamais par-dessus. Sécurité : SECURITE.md § 60, `npm run securite` section 32. Sources du
+jamais par-dessus. Sécurité : SECURITE.md § 60, `npm run securite` section 34. Sources du
 format, lues le 28/09/2026 : aide de Google (support.google.com/gemini/answer/16920332 : ce
 qu'on coche, délai, lien 7 jours), recensement des lecteurs publics du projet panchat
 (docs/formats/gemini.md : clés `header`, `title` et ses préfixes traduits, `time`,

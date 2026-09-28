@@ -412,7 +412,7 @@ export function CourrierIMAP({ onChange }: { onChange?: () => void } = {}) {
             disabled={retrait}
             onClick={() => void retirer()}
           >
-            {retrait ? "Retrait…" : t("Retirer cette boîte")}
+            {retrait ? t("Retrait…") : t("Retirer cette boîte")}
           </Button>
         </div>
       </div>
@@ -476,11 +476,11 @@ export function CourrierIMAP({ onChange }: { onChange?: () => void } = {}) {
                 className="ml-auto"
                 onClick={() => setParAutorisation((v) => !v)}
               >
-                {parAutorisation ? t("Revenir au mot de passe") : "Essayer"}
+                {parAutorisation ? t("Revenir au mot de passe") : t("Essayer")}
               </Button>
             </div>
             <p className="mt-1 text-xs text-muted-foreground">
-              {t("Sans mot de passe à créer ni serveur à saisir. Demande une préparation, une fois, par la personne qui administre votre organisation.")}
+              {oauthPossible === "google" ? t("Sans mot de passe à créer ni serveur à saisir, avec l'application Google de l'instance (celle de Drive et d'Agenda) : l'écran dit comment la créer si elle n'existe pas encore.") : t("Sans mot de passe à créer ni serveur à saisir. Demande une application déclarée une fois chez Microsoft : l'écran dit comment.")}
             </p>
             {parAutorisation && (
               <div className="mt-3">

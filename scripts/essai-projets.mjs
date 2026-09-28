@@ -854,7 +854,8 @@ for (const d of [DONNEES, AUX, ESPACE]) rmSync(d, { recursive: true, force: true
 console.log("\nH. L'aide de l'écran nomme les portées que l'instance demande");
 {
   const { REGLES_MCP } = await import(pathToFileURL(join(RACINE, "gateway", "src", "natifs", "projetsRegles.ts")).href);
-  const ecran = readFileSync(join(RACINE, "src", "components", "settings", "ConnecteurProjets.tsx"), "utf8");
+  // Les étapes de Zoom vivent dans lib/guidesApplications.ts depuis le 28/09/2026 (guides des applications).
+  const ecran = readFileSync(join(RACINE, "src", "lib", "guidesApplications.ts"), "utf8");
   const oubliees = [...REGLES_MCP.zoom.lecture, ...REGLES_MCP.zoom.ecriture].filter((p) => !ecran.includes(p));
   verifier("Zoom : chaque portée demandée (lecture et écriture) figure dans l'aide pour créer l'application", oubliees.length === 0, oubliees.join(", "));
 }

@@ -8,6 +8,7 @@ import { lookup } from "node:dns/promises";
 import { interne } from "../sortieReseau.ts";
 import { ErreurNatif, messageUtilisateur } from "../oauthNatif.ts";
 import { avecLangueDe, langue, t, tf, type Langue } from "../langue.ts";
+import { refusLisible } from "../refusOauth.ts";
 
 /**
  * Commerce et relation client : Stripe, Shopify, WooCommerce, Salesforce,
@@ -1072,7 +1073,8 @@ async function conclureRetour(f: Flux, parametres: URLSearchParams): Promise<{ o
    */
   if (f.echangeEnCours) return { ok: false, message: t("La connexion est déjà en train d'aboutir.") };
   const erreur = parametres.get("error");
-  if (erreur) return { ...conclure(f.id, false, /denied|cancel/i.test(erreur) ? tf("Vous avez refusé l'accès dans {0} : rien n'a été enregistré.", def.nom) : tf("{0} a interrompu l'autorisation : rien n'a été enregistré. Recommencez.", def.nom)), nom: def.nom };
+  // La cause probable et le remède, par le code du protocole (refusOauth.ts, 28/09/2026).
+  if (erreur) return { ...conclure(f.id, false, refusLisible(erreur, def.nom)), nom: def.nom };
   const code = parametres.get("code") ?? "";
   if (!code || code.length > 2048) return { ...conclure(f.id, false, t("La réponse ne contient pas de code d'autorisation. Recommencez.")), nom: def.nom };
   if (f.echangeEnCours) return { ok: false, message: t("La connexion est déjà en train d'aboutir.") };

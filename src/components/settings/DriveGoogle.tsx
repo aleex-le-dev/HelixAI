@@ -283,7 +283,7 @@ export function DriveGoogle({ onChange }: { onChange?: () => void } = {}) {
                 {enCours
                   ? t("Préparation…")
                   : etat.aReconnecter
-                    ? "Reconnecter Google Drive"
+                    ? t("Reconnecter Google Drive")
                     : t("Se connecter avec Google")}
               </Button>
             </div>

@@ -53,6 +53,18 @@ export interface EtatCourrier {
   fournisseurs: ReglageFournisseur[];
   /** Réglages devinés à partir de l'adresse envoyée en paramètre. */
   suggestion: ReglageFournisseur | null;
+  /**
+   * « Se connecter avec Google / Microsoft » (28/09/2026) : les applications de
+   * l'instance qu'on peut reprendre (identifiants seulement), l'adresse de
+   * retour à déclarer telle que la passerelle l'enverra, et l'issue du dernier
+   * retour par la boucle locale (Gmail). Absent d'une instance plus ancienne.
+   */
+  oauth?: {
+    google: { disponible: boolean; identifiant?: string; source?: "config" | "ecran"; boucle: boolean; retour?: string };
+    microsoft: { disponible: boolean; identifiant?: string; annuaire?: string; avecSecret?: boolean; retour?: string };
+    attente: boolean;
+    issue?: { ok: boolean; message: string; quand: string };
+  };
 }
 
 /** Ce que le formulaire envoie. Le mot de passe ne repart jamais dans l'autre sens. */
@@ -207,12 +219,15 @@ export function deviner(
  */
 export async function connecterAvec(
   adresse: string,
-  reglage: {
-    fournisseur: "google" | "microsoft";
-    clientId: string;
-    clientSecret?: string;
-    tenant?: string;
-  },
+  reglage:
+    | {
+        fournisseur: "google" | "microsoft";
+        clientId: string;
+        clientSecret?: string;
+        tenant?: string;
+      }
+    /** L'application déjà enregistrée sur l'instance (Google : celle de Drive et d'Agenda ; Microsoft : celle de Microsoft 365). */
+    | { fournisseur: "google" | "microsoft"; application: "instance" },
 ): Promise<{ ok: true; url: string; redirection: string } | { ok: false; message: string }> {
   try {
     const res = await apiFetch("/helix/courrier/oauth", {
@@ -229,6 +244,25 @@ export async function connecterAvec(
       return { ok: false, message: corps.error?.message ?? t("L'autorisation n'a pas pu démarrer.") };
     }
     return { ok: true, url: corps.url, redirection: corps.redirection ?? "" };
+  } catch {
+    return { ok: false, message: t("L'instance n'a pas répondu.") };
+  }
+}
+
+/**
+ * L'instance est sur une autre machine : l'adresse affichée par le navigateur
+ * après l'accord chez Google (http://127.0.0.1:…), collée à l'écran, termine
+ * la connexion de la boîte (28/09/2026).
+ */
+export async function collerRetourCourrier(adresse: string): Promise<{ ok: boolean; message: string }> {
+  try {
+    const res = await apiFetch("/helix/courrier/oauth/coller", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ adresse }),
+    });
+    const corps = (await res.json().catch(() => ({}))) as { ok?: boolean; message?: string; error?: { message?: string } };
+    return { ok: res.ok && corps.ok !== false, message: corps.message ?? corps.error?.message ?? t("L'instance n'a pas répondu.") };
   } catch {
     return { ok: false, message: t("L'instance n'a pas répondu.") };
   }

@@ -37,6 +37,8 @@ import {
 } from "@/components/settings/marquesConnecteurs";
 import type { CleMarquePetite } from "@/components/ui/marques";
 import { AideMcpProjet } from "@/components/settings/ConnecteurProjets";
+import { GuideApplication } from "@/components/settings/GuideApplication";
+import { guideApplication } from "@/lib/guidesApplications";
 import { branding } from "@/config/branding";
 import { cn } from "@/lib/cn";
 import { formaterDate } from "@/lib/formats";
@@ -427,7 +429,7 @@ export function Connecteurs({ maison = [] }: { maison?: ServiceMaison[] } = {}) 
           {service.connecte ? t("Connecté") : t("Connecter")}
         </span>
       </button>
-      {service.ouvert && <div className="border-t border-border p-3.5">{service.panneau}</div>}
+      {service.ouvert && <div className="border-t border-border p-3.5 max-sm:p-2">{service.panneau}</div>}
     </div>
   );
 
@@ -535,7 +537,7 @@ export function Connecteurs({ maison = [] }: { maison?: ServiceMaison[] } = {}) 
 
         {ouvert === entree.id && (
           <form
-            className="space-y-3 border-t border-border p-3.5"
+            className="space-y-3 border-t border-border p-3.5 max-sm:p-2"
             onSubmit={(event) => {
               event.preventDefault();
               if (entree.oauth === "appli" || entree.ecritureAuChoix) void seConnecter(entree);
@@ -545,17 +547,32 @@ export function Connecteurs({ maison = [] }: { maison?: ServiceMaison[] } = {}) 
             {entree.ecritureAuChoix && <AideMcpProjet id={entree.id} nom={entree.label} />}
             {entree.oauth === "appli" ? (
               <>
-                <p className={cn("text-sm text-muted-foreground", entree.ecritureAuChoix && "hidden")}>
-                  {entree.label}{" "}{t("veut connaître l'application qui demande l'accès. Créez-la une fois chez eux, indiquez comme adresse de retour celle que l'instance vous donnera dans le message ci-dessous, puis collez son identifiant. Ensuite, « Se connecter » suffira à tout le monde.")}
-                </p>
-                <Field label={t("Identifiant de l'application (client ID)")} required>
+                {/*
+                 * 28/09/2026 (Medhi : « tout doit être simple, pour tout ») : l'adresse de
+                 * retour n'était donnée que dans le message d'un premier essai manqué, et
+                 * la console qu'en lien discret sous le formulaire. Le guide ouvre la page
+                 * exacte de création, dit les étapes dans l'ordre de la console, et porte
+                 * l'adresse de retour, copiable, dans l'étape où on la colle.
+                 */}
+                {guideApplication(entree.id) ? (
+                  <GuideApplication
+                    guide={guideApplication(entree.id)!}
+                    retour={etat.retours?.[entree.id] ?? etat.retour}
+                    noteRetour={t("C'est l'adresse par laquelle ce navigateur atteint l'instance. Si le service exige https, ouvrez l'instance par une adresse en https.")}
+                  />
+                ) : (
+                  <p className="text-sm text-muted-foreground">
+                    {entree.label}{" "}{t("veut connaître l'application qui demande l'accès. Créez-la une fois chez eux, indiquez comme adresse de retour celle que l'instance vous donnera dans le message ci-dessous, puis collez son identifiant. Ensuite, « Se connecter » suffira à tout le monde.")}
+                  </p>
+                )}
+                <Field label={t("Identifiant de l'application (client ID)")} hint={guideApplication(entree.id)?.champs?.identifiant} required>
                   <Input
                     autoComplete="off"
                     value={saisie.clientId ?? ""}
                     onChange={(e) => setSaisie((s) => ({ ...s, clientId: e.target.value }))}
                   />
                 </Field>
-                <Field label={t("Secret de l'application (si le service en donne un)")}>
+                <Field label={t("Secret de l'application (si le service en donne un)")} hint={guideApplication(entree.id)?.champs?.secret}>
                   <Input
                     type="password"
                     autoComplete="off"
@@ -668,7 +685,8 @@ export function Connecteurs({ maison = [] }: { maison?: ServiceMaison[] } = {}) 
         </InfoBox>
       )}
 
-      <Card>
+      {/* 375 px (28/09/2026) : quatre cadres imbriqués ne laissaient qu'une soixantaine de pixels aux étapes des guides ; les marges se resserrent. */}
+      <Card className="max-sm:p-3">
         <h3 className="flex items-center gap-2 text-lg font-semibold text-foreground">
           <Blocks size={18} strokeWidth={1.75} />{" "}{t("Services connectés")}
         </h3>

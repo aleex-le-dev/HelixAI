@@ -5,6 +5,7 @@ import { dirname, isAbsolute, join, resolve } from "node:path";
 import { journaliser } from "./audit.ts";
 import { apercuEnvoi, envoiSansAccord, presenterMessage } from "./courrier.ts";
 import { ECRITURES_COMMERCE, LECTURES_COMMERCE, resumeCommerce } from "./natifs/commerce.ts";
+import { APERCU_REQUIS, ECRITURES_PROJETS, estEcritureMcpProjet, estLectureMcpProjet, LECTURES_PROJETS, resumeProjet } from "./natifs/projetsRegles.ts";
 
 /**
  * Approbation des actions de l'agent.
@@ -242,6 +243,8 @@ export const LECTURES_NATIVES = new Set([
   "whatsapp__modeles",
   // Commerce et relation client (natifs/commerce.ts, SECURITE.md § 47).
   ...LECTURES_COMMERCE,
+  // Brevo et Mailchimp (natifs/projetsRegles.ts, SECURITE.md § 48).
+  ...LECTURES_PROJETS,
 ]);
 export const ECRITURES_NATIVES = new Set([
   "sheets__ecrire",
@@ -261,6 +264,7 @@ export const ECRITURES_NATIVES = new Set([
   "whatsapp__envoyer_modele",
   // Une note Salesforce ou Pipedrive, une réponse Zendesk : une carte à chaque fois (§ 47).
   ...ECRITURES_COMMERCE,
+  ...ECRITURES_PROJETS,
 ]);
 
 /**
@@ -276,8 +280,26 @@ export function definirApercuMessagerie(fn: ApercuMessagerie): void {
 }
 
 const TOUJOURS_CONFIRMER = new Set(["agenda__supprimer", "taches__programmer", ...ECRITURES_NATIVES]);
+/*
+ * Les serveurs MCP de Trello, Monday, ClickUp, Todoist, Calendly et Zoom
+ * (SECURITE.md § 48) : tout outil qui n'est pas une lecture reconnue à la
+ * liste de ses outils se confirme à chaque fois, à tout niveau. Reconnu par
+ * préfixe, donc même barrière chargée seule : elle échoue fermé.
+ */
+const toujoursConfirmer = (outil: string) => TOUJOURS_CONFIRMER.has(outil) || estEcritureMcpProjet(outil);
 
-export const demandeToujours = (outil: string) => TOUJOURS_CONFIRMER.has(outil) || (ENVOI.has(outil) && !envoiSansAccord());
+export const demandeToujours = (outil: string) => toujoursConfirmer(outil) || (ENVOI.has(outil) && !envoiSansAccord());
+
+/**
+ * Carte d'une campagne Brevo ou Mailchimp, préparée par natifs/projets.ts, qui
+ * s'inscrit ici à son chargement (la barrière ne l'importe pas : elle reste
+ * chargeable seule).
+ */
+type Apercu = (outil: string, args: Record<string, unknown>) => Promise<{ resume: string; affiche: string } | { refus: string }>;
+let apercuNatif: Apercu | null = null;
+export function definirApercuNatif(fn: Apercu): void {
+  apercuNatif = fn;
+}
 
 /**
  * Outils livrés d'OpenCode qui ne font que lire le dossier du projet
@@ -308,6 +330,8 @@ export function modifie(outil: string): boolean {
    * écrire, et ne doivent pas hériter du laissez-passer.
    */
   if (LECTURES_NATIVES.has(outil)) return false;
+  // Lectures reconnues des serveurs MCP de la famille « projets » (natifs/projetsRegles.ts, `classer`).
+  if (estLectureMcpProjet(outil)) return false;
   if (DRIVE_LECTURE.has(outil) || SLACK_LECTURE.has(outil) || BIBLIOTHEQUE_LECTURE.has(outil) || CONNAISSANCES_LECTURE.has(outil) || CONTROLE_LECTURE.has(outil) || WEB_LECTURE.has(outil)) return false;
   if (outil.startsWith("bureau__")) return !BUREAU_LECTURE.has(outil.slice("bureau__".length));
 
@@ -550,6 +574,8 @@ export function resumerOutil(outil: string, args: Record<string, unknown>): stri
  * le début, la carte le montre tel qu'il sera publié.
  */
 function resumeNatif(outil: string, args: Record<string, unknown>): string | null {
+  const projet = resumeProjet(outil, args);
+  if (projet) return projet;
   const extrait = (v: unknown, n = 120) => {
     const s = typeof v === "string" ? v.trim().replace(/\s+/g, " ") : "";
     return s ? ` « ${s.slice(0, n)}${s.length > n ? " …" : ""} »` : "";
@@ -1091,8 +1117,21 @@ export async function verifierOutil(
     if (!forcer && !demandeToujours(outil) && courant === "tout") return { autorise: true };
     return verifierEnvoi(contexte, outil, args, qui, courant, employe, origine);
   }
-  const toujours = TOUJOURS_CONFIRMER.has(outil);
-  const native = ECRITURES_NATIVES.has(outil);
+  const toujours = toujoursConfirmer(outil);
+  // Les écritures des serveurs MCP de la famille « projets » : même carte, arguments entiers (SECURITE.md § 48).
+  const native = ECRITURES_NATIVES.has(outil) || estEcritureMcpProjet(outil);
+  /*
+   * Brevo et Mailchimp : la carte d'une campagne est préparée par projets.ts
+   * (campagne relue chez le service, destinataires comptés). Sans cet aperçu,
+   * rien ne part : la barrière chargée seule refuse, elle ne devine pas.
+   */
+  let apercu: { resume: string; affiche: string } | null = null;
+  if (APERCU_REQUIS.has(outil)) {
+    const a = apercuNatif ? await apercuNatif(outil, args).catch((err: unknown) => ({ refus: err instanceof Error ? err.message : String(err) })) : { refus: "Refusé : la carte de cette campagne n'a pas pu être préparée. Rien n'a été fait." };
+    if ("refus" in a) return { autorise: false, message: a.refus };
+    if (a.affiche.length > CARTE_NATIVE_MAX) return { autorise: false, message: "Refusé sans rien demander : cette campagne est trop longue pour être montrée en entier sur la carte d'accord, et rien ne part sans avoir été lu en entier. Dis-le à l'utilisateur." };
+    apercu = a;
+  }
   if (native && (JSON.stringify(args, null, 2) ?? "").length > CARTE_NATIVE_MAX) {
     return {
       autorise: false,
@@ -1109,7 +1148,7 @@ export async function verifierOutil(
   if (!toujours && courant === "tout" && !forcer) return { autorise: true };
   if (!toujours && courant === "modifications" && !modifie(outil)) return { autorise: true };
 
-  let resume = resumerOutil(outil, args);
+  let resume = apercu?.resume ?? resumerOutil(outil, args);
   // Une réponse se juge à ce qu'elle répond : la carte nomme l'expéditeur et l'objet du message.
   if (outil === "courrier__brouillon" && !args.a && args.en_reponse_a) {
     const origine = await presenterMessage(Math.trunc(Number(args.en_reponse_a)), typeof args.dossier === "string" && args.dossier ? args.dossier : undefined);
@@ -1154,7 +1193,7 @@ export async function verifierOutil(
          * Hors fichiers, la carte montre ce que l'outil recevra (un connecteur,
          * un événement, une tâche) : le nom de l'outil ne dit pas ce qui part.
          */
-        ...(!porteeParDossier(outil) && !outil.startsWith("code__") ? { arguments: argumentsLisibles(args, native ? CARTE_NATIVE_MAX : undefined) } : {}),
+        ...(!porteeParDossier(outil) && !outil.startsWith("code__") ? { arguments: apercu?.affiche ?? argumentsLisibles(args, native ? CARTE_NATIVE_MAX : undefined) } : {}),
         // Messageries : le destinataire résolu, et le texte final d'un modèle WhatsApp, dans toutes les langues de l'écran.
         ...(() => {
           const a = native ? apercuMessagerie?.(outil, args) : null;

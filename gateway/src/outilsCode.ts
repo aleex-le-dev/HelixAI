@@ -16,6 +16,7 @@ import { journaliser } from "./audit.ts";
 import { api, cleOutilsValide, portEnCours } from "./opencode.ts";
 import { destinataireDe } from "./fluxCode.ts";
 import { sessionCode } from "./sessionsCode.ts";
+import { estEcritureMcpProjet } from "./natifs/projetsRegles.ts";
 
 /**
  * Les connecteurs de l'instance, servis par MCP à l'agent de code (OpenCode).
@@ -159,7 +160,8 @@ const contenus = { bibliotheque: false, reunions: false };
 /** Outils offerts à l'agent de code : les connecteurs, sans ce qui agit hors du projet. */
 export function outilsPourCode(): DefinitionOutil[] {
   return [
-    ...outilsMcp().filter((o) => !o.function.name.startsWith("fichiers__")),
+    // Ni les écritures de Trello, Monday, ClickUp, Todoist, Calendly et Zoom : réservées au Chat de l'administrateur (SECURITE.md § 48).
+    ...outilsMcp().filter((o) => !o.function.name.startsWith("fichiers__") && !estEcritureMcpProjet(o.function.name)),
     ...courrier.toolsForModel(),
     ...agenda.toolsForModel(),
     ...drive.toolsForModel(),

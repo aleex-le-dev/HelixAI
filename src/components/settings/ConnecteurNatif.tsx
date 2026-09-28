@@ -20,6 +20,7 @@ import { Field, Input } from "@/components/ui/Field";
 import { InfoBox } from "@/components/ui/InfoBox";
 import { ACopier } from "@/components/ui/ACopier";
 import { LogoMarqueGrand } from "@/components/settings/TuileService";
+import { estNatifProjet, GuideProjet, libelleChoixProjet, pourquoiApplicationProjet, revueProjet } from "@/components/settings/ConnecteurProjets";
 import { formaterDate } from "@/lib/formats";
 import { t, tf } from "@/lib/i18n";
 // Google Docs, Google Forms, Dropbox (28/09/2026) : leurs textes vivent à part.
@@ -75,6 +76,8 @@ function LogoYouTube({ nom }: { nom: string }) {
  * affiche, en anglais.
  */
 function Guide({ id }: { id: IdNatif }) {
+  // Brevo et Mailchimp (28/09/2026) : leurs textes sont dans ConnecteurProjets.tsx.
+  if (estNatifProjet(id)) return <GuideProjet id={id} />;
   switch (id) {
     case "sheets":
     case "slides":
@@ -154,7 +157,8 @@ function Guide({ id }: { id: IdNatif }) {
 
 /** Ce qui marche sans examen du fournisseur, et ce qui en demande un. */
 function Revue({ id }: { id: IdNatif }) {
-  const texte: Record<IdNatif, string> = {
+  if (estNatifProjet(id)) return <p>{revueProjet(id)}</p>;
+  const texte: Partial<Record<IdNatif, string>> = {
     ...revueDocuments(),
     sheets: t("Aucun examen pour une application interne à votre Google Workspace. Écrire ouvre toutes les feuilles du compte : Google n'a pas d'accès plus étroit pour une application de bureau."),
     slides: t("Aucun examen pour une application interne à votre Google Workspace. Lecture seule."),
@@ -171,6 +175,7 @@ function Revue({ id }: { id: IdNatif }) {
 
 /** Traduit au rendu, pas au chargement du module : la langue n'est pas encore connue à ce moment-là. */
 function libelleChoix(id: IdNatif, c: IdChoix): string {
+  if (estNatifProjet(id)) return libelleChoixProjet(c);
   if (c === "page") return t("Page d'entreprise : lire ses publications et statistiques, et y publier si la case du dessus est cochée.");
   const documents = libelleChoixDocuments(id);
   if (documents) return documents;
@@ -265,7 +270,11 @@ export function ConnecteurNatif({ id, onChange }: { id: IdNatif; onChange?: () =
   if (etat.configure) {
     const depuis = etat.depuis ? new Date(etat.depuis) : null;
     const expire = etat.expireLe ? new Date(etat.expireLe) : null;
-    const ecrit = etat.accordes?.includes("ecriture");
+    const ecrit = etat.accordes?.includes("ecriture") || etat.accordes?.includes("envoi");
+    // Brevo et Mailchimp : des brouillons, et l'envoi s'il est coché, pas des publications.
+    const droitsProjet = estNatifProjet(id)
+      ? [etat.accordes?.includes("ecriture") ? t("brouillons") : "", etat.accordes?.includes("envoi") ? t("envoi de campagnes") : ""].filter(Boolean)
+      : null;
     return (
       <div className="space-y-3">
         {logo}
@@ -273,7 +282,7 @@ export function ConnecteurNatif({ id, onChange }: { id: IdNatif; onChange?: () =
           <div className="min-w-0 flex-1">
             <p className="truncate font-medium text-foreground">{etat.compte}</p>
             <p className="text-sm text-muted-foreground">
-              {ecrit ? tf("{0}, lecture et publication", etat.nom) : tf("{0}, lecture seule", etat.nom)}
+              {droitsProjet && droitsProjet.length > 0 ? tf("{0}, lecture et {1}", etat.nom, droitsProjet.join(", ")) : ecrit ? tf("{0}, lecture et publication", etat.nom) : tf("{0}, lecture seule", etat.nom)}
               {etat.accordes?.includes("page") ? t(", page d'entreprise") : ""}
               {depuis && !Number.isNaN(depuis.getTime()) ? tf(", connecté le {0}", formaterDate(depuis)) : ""}
             </p>
@@ -333,6 +342,8 @@ export function ConnecteurNatif({ id, onChange }: { id: IdNatif; onChange?: () =
                 t("Avec l'application que votre organisation crée chez X, une fois. Le logiciel ne peut pas en fournir une commune : X facture chaque appel à l'application qui le fait, sur ses crédits.")
               : id === "dropbox"
                 ? t("Avec l'application que votre organisation crée chez Dropbox, une fois. Le logiciel ne peut pas en fournir une commune : Dropbox limite une application à 500 comptes, et l'examine avant d'en relier plus de 50.")
+              : estNatifProjet(id)
+                ? pourquoiApplicationProjet(id)
                 : tf("Avec l'application que votre organisation crée chez {0}, une fois. Le logiciel ne peut pas en fournir une commune : {0} examine les applications qui servent d'autres comptes que ceux de leur éditeur.", etat.nom)}
         </p>
       </div>
@@ -346,7 +357,7 @@ export function ConnecteurNatif({ id, onChange }: { id: IdNatif; onChange?: () =
         <div className="space-y-2 [overflow-wrap:anywhere]">
           <p className="font-medium">{t("Préparer l'application, une fois pour toute l'instance")}</p>
           <Guide id={id} />
-          <p className="font-medium">{id === "x" ? t("Ce que permet chaque offre de X") : t("Ce qui demande un examen du fournisseur")}</p>
+          <p className="font-medium">{id === "x" ? t("Ce que permet chaque offre de X") : estNatifProjet(id) ? t("Ce que permet ce branchement") : t("Ce qui demande un examen du fournisseur")}</p>
           <Revue id={id} />
           <p className="text-xs">{t("Les libellés des consoles changent parfois : cherchez l'équivalent.")}</p>
         </div>

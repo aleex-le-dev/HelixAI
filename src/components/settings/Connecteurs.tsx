@@ -36,6 +36,7 @@ import {
   ICONE_PAR_DEFAUT,
 } from "@/components/settings/marquesConnecteurs";
 import type { CleMarquePetite } from "@/components/ui/marques";
+import { AideMcpProjet } from "@/components/settings/ConnecteurProjets";
 import { branding } from "@/config/branding";
 import { cn } from "@/lib/cn";
 import { formaterDate } from "@/lib/formats";
@@ -141,6 +142,8 @@ export function Connecteurs({ maison = [] }: { maison?: ServiceMaison[] } = {}) 
   const [erreur, setErreur] = useState<string | null>(null);
   const [succes, setSucces] = useState<string | null>(null);
   const [recherche, setRecherche] = useState("");
+  /** Trello, Monday… : l'écriture cochée dans le formulaire (ConnecteurProjets.tsx). */
+  const [ecriture, setEcriture] = useState(false);
   const sondage = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const recharger = useCallback(() => {
@@ -232,6 +235,7 @@ export function Connecteurs({ maison = [] }: { maison?: ServiceMaison[] } = {}) 
         ? { clientId: "", clientSecret: "" }
         : Object.fromEntries(entree.secrets.map((s) => [s.nom, ""])),
     );
+    setEcriture(false);
     setErreur(null);
     setSucces(null);
   };
@@ -283,6 +287,7 @@ export function Connecteurs({ maison = [] }: { maison?: ServiceMaison[] } = {}) 
       entree.oauth === "appli"
         ? { clientId: saisie.clientId ?? "", clientSecret: saisie.clientSecret ?? "" }
         : undefined,
+      entree.ecritureAuChoix ? ecriture : undefined,
     );
     setEnCours(false);
     if (!resultat.ok) {
@@ -361,7 +366,7 @@ export function Connecteurs({ maison = [] }: { maison?: ServiceMaison[] } = {}) 
           marque={service.marque}
           icone={service.icone}
         />
-        <span className="min-w-0 flex-1">
+        <span className="min-w-[9rem] flex-1">
           <span className="block text-sm font-medium text-foreground">{service.label}</span>
           <span className="block text-xs text-muted-foreground">{service.description}</span>
         </span>
@@ -391,7 +396,11 @@ export function Connecteurs({ maison = [] }: { maison?: ServiceMaison[] } = {}) 
             id={entree.id}
             etat={branche && actif ? "actif" : branche ? "attention" : "eteint"}
           />
-          <div className="min-w-0 flex-1">
+          {/*
+            Une largeur minimale (28/09/2026) : sous 400 px, le texte se réduisait à un mot par
+            ligne et passait sous le bouton ; avec elle, c'est le bouton qui va à la ligne.
+          */}
+          <div className="min-w-[9rem] flex-1">
             <p className="flex items-center gap-1.5 text-sm font-medium text-foreground">
               {entree.label}
               {!entree.integre && (
@@ -459,7 +468,8 @@ export function Connecteurs({ maison = [] }: { maison?: ServiceMaison[] } = {}) 
               size="sm"
               icon={enCours ? Loader2 : ExternalLink}
               disabled={enCours || !etat.chiffrementDonnees}
-              onClick={() => void seConnecter(entree)}
+              // Trello, Monday… : d'abord le formulaire, qui dit ce qui se passe et propose l'écriture.
+              onClick={() => (entree.ecritureAuChoix ? ouvrir(entree) : void seConnecter(entree))}
             >
               {t("Se connecter")}
             </Button>
@@ -475,13 +485,14 @@ export function Connecteurs({ maison = [] }: { maison?: ServiceMaison[] } = {}) 
             className="space-y-3 border-t border-border p-3.5"
             onSubmit={(event) => {
               event.preventDefault();
-              if (entree.oauth === "appli") void seConnecter(entree);
+              if (entree.oauth === "appli" || entree.ecritureAuChoix) void seConnecter(entree);
               else void soumettreJeton(entree);
             }}
           >
+            {entree.ecritureAuChoix && <AideMcpProjet id={entree.id} nom={entree.label} />}
             {entree.oauth === "appli" ? (
               <>
-                <p className="text-sm text-muted-foreground">
+                <p className={cn("text-sm text-muted-foreground", entree.ecritureAuChoix && "hidden")}>
                   {entree.label}{" "}{t("veut connaître l'application qui demande l'accès. Créez-la une fois chez eux, indiquez comme adresse de retour celle que l'instance vous donnera dans le message ci-dessous, puis collez son identifiant. Ensuite, « Se connecter » suffira à tout le monde.")}
                 </p>
                 <Field label={t("Identifiant de l'application (client ID)")} required>
@@ -515,12 +526,22 @@ export function Connecteurs({ maison = [] }: { maison?: ServiceMaison[] } = {}) 
                     />
                   </Field>
                 ))}
-                {entree.secrets.length === 0 && (
+                {entree.secrets.length === 0 && !entree.ecritureAuChoix && (
                   <p className="text-sm text-muted-foreground">
                     {t("Ce connecteur ne demande aucun identifiant.")}
                   </p>
                 )}
               </>
+            )}
+
+            {entree.ecritureAuChoix && (
+              <label className="flex items-start gap-2 text-sm text-foreground">
+                <input type="checkbox" className="mt-1" checked={ecriture} onChange={(e) => setEcriture(e.target.checked)} />
+                <span>
+                  {tf("Permettre aussi d'écrire dans {0}.", entree.label)}{" "}
+                  <span className="text-muted-foreground">{t("Chaque écriture vous sera montrée en entier et demandera votre accord.")}</span>
+                </span>
+              </label>
             )}
 
             {erreur && (
@@ -536,7 +557,7 @@ export function Connecteurs({ maison = [] }: { maison?: ServiceMaison[] } = {}) 
                 icon={enCours ? Loader2 : Check}
                 disabled={enCours || !etat.chiffrementDonnees}
               >
-                {enCours ? t("Connexion...") : t("Connecter")}
+                {enCours ? t("Connexion...") : entree.ecritureAuChoix ? t("Se connecter") : t("Connecter")}
               </Button>
               {(entree.console ?? entree.documentation) && (
                 <a
@@ -546,7 +567,7 @@ export function Connecteurs({ maison = [] }: { maison?: ServiceMaison[] } = {}) 
                   className="inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
                 >
                   <ExternalLink size={14} strokeWidth={1.75} />
-                  {entree.oauth === "appli" ? t("Créer l'application") : t("Où trouver mon jeton")}
+                  {entree.oauth === "appli" ? t("Créer l'application") : entree.ecritureAuChoix ? t("Documentation du service") : t("Où trouver mon jeton")}
                 </a>
               )}
             </div>

@@ -5244,3 +5244,113 @@ la forme réelle de `scope` chez chacun ; `GET /v1/account` avec une clé restre
 `v66.0` de Salesforce et `Note` dans Lightning ; l'API v2 de Pipedrive (`/api/v2/persons/search`) ;
 la rotation du jeton d'actualisation de Zendesk sur un vrai client ; l'écran dans l'application
 empaquetée (vu dans une fenêtre Electron cachée sur `vite`).
+## 48. Projets et rendez-vous (28 septembre 2026)
+
+Trello, Monday, ClickUp, Todoist, Calendly et Zoom par les serveurs MCP officiels de leurs éditeurs
+(catalogue de `connecteurs.ts`), Brevo et Mailchimp en connexions natives (`oauthNatif.ts`), sur la
+branche `connecteurs-projets`, à la demande de Medhi. Règles et définitions :
+`gateway/src/natifs/projetsRegles.ts` ; outils de Brevo et Mailchimp : `gateway/src/natifs/projets.ts`.
+Choix service par service et sources : PROJET.md § 3.5 et l'en-tête de `projetsRegles.ts`
+(documentation et métadonnées OAuth publiques lues le 28/09/2026, sans compte). Contrôles :
+`scripts/essai-projets.mjs` (74, faux serveurs, aucune sortie), repris par `npm run securite`,
+section 16 sexies, avec les pièces seules. **Rien n'a été essayé contre les vrais services.**
+
+### 48.1 Ce qui est tenu
+
+- **Aucune adresse ni commande venue de la requête.** Les six serveurs sont écrits dans le
+  catalogue (https) ; la requête n'apporte que l'identifiant, la case d'écriture et, pour Zoom,
+  l'identifiant et le secret de l'application. Brevo et Mailchimp sont dans `DEFINITIONS` ;
+  l'hôte de l'API Mailchimp dépend du compte (`<dc>.api.mailchimp.com`) : il vient de Mailchimp, et
+  seule la forme d'un centre de données est acceptée (`motifHote`), relue à chaque appel. Les
+  préfixes `brevo` et `mailchimp` sont réservés (`IDS_RESERVES`).
+- **Qui a le droit.** Brancher et débrancher un des six serveurs MCP : l'administrateur seul (les
+  autres connecteurs du catalogue restent ouverts à toute séance : c'est une exception voulue,
+  ces services parlent au nom de l'organisation). Brevo et Mailchimp : comme au § 40.
+- **Lecture par défaut, portées minimales, relues.** Les portées sont demandées explicitement
+  (sans elles, le SDK MCP demanderait toutes celles que le service publie) : lecture seule tant que
+  rien n'est coché ; jamais `data:delete` chez Todoist, jamais `meeting:delete:meeting` chez Zoom.
+  La portée rendue est relue : ce qui déborde (une écriture non cochée, par exemple) fait effacer
+  le jeton et refuser la connexion ; une réponse sans `scope` vaut la portée demandée (RFC 6749
+  § 5.1). Monday n'en publie pas, et Mailchimp n'en a pas : pour eux, la lecture seule est tenue par
+  la passerelle, outil par outil, et l'écran le dit pour Mailchimp.
+- **Lire ou écrire, pour un outil MCP.** Classé quand le serveur liste ses outils
+  (`retenirOutils`) : une lecture n'a aucun verbe qui modifie **et** le dit (annotation
+  `readOnlyHint`) ou commence par un verbe de lecture ; une annotation d'écriture ou de destruction
+  l'emporte ; tout le reste est une écriture (un nom sans verbe aussi). Sans la case, les écritures
+  ne sont pas gardées dans la liste de la passerelle : aucun appel ne les atteint. Avec la case :
+  carte à chaque appel, même au niveau « Tout approuver », arguments entiers (même règle que les
+  écritures natives, 100 000 caractères) ; l'administrateur seul, vérifié au moment d'agir
+  (`outils.ts`) ; ni les employés OpenClaw (`outilsDeFamille`) ni l'agent de code
+  (`outilsPourCode`) ne les voient. La barrière chargée seule, sans ce classement, prend tout outil
+  de ces six préfixes pour une écriture : elle échoue fermé.
+- **`state` et PKCE.** Ceux du SDK MCP pour les six (`state` de 24 octets, dix minutes, comparé à
+  durée constante, `oauthMcp.ts`) ; ceux du § 40 pour Brevo (PKCE S256). Mailchimp ne documente pas
+  PKCE : le code ne vaut rien sans le secret, qui ne quitte pas l'instance. ClickUp et Calendly
+  n'enregistrent qu'un client public : l'instance s'inscrit avec `token_endpoint_auth_method: none`.
+- **Campagnes.** Brouillon et envoi se cochent séparément. La carte d'un brouillon montre ses
+  champs entiers et le nombre d'abonnés des listes visées. La carte d'un envoi n'est pas faite des
+  arguments du modèle : la campagne est relue chez le service (objet, expéditeur, listes, nombre de
+  destinataires, texte extrait du HTML et adresses des liens) ; cette lecture est retenue par une
+  empreinte ; au moment d'envoyer, la campagne est relue, et si elle a changé, ou si aucune carte ne
+  l'a montrée dans les cinq minutes, rien ne part ; une carte vaut un envoi. Brevo : seulement vers
+  des listes (le nombre d'un segment n'est pas donné d'avance), et le nombre montré est « au plus »
+  (listes additionnées, avant doublons et exclusions). Mailchimp : le `recipient_count` qu'il
+  calcule. Sans l'aperçu préparé par `projets.ts` (barrière chargée seule), un envoi est refusé sans
+  carte.
+- **Limites.** `sousGarde` (§ 41, § 43) : dix brouillons ou envois par heure et par service pour
+  l'instance, vérifiés et réservés d'un seul tenant, doublon refusé une demi-heure, issue incertaine
+  (5xx, délai) gardée, le message dit de vérifier chez le service.
+- **Jetons.** Chiffrés au repos et liés à leur place (`oauth#<id>#jetons`,
+  `connecteursNatifs#<service>#jetons`), jamais rendus par une route, jamais au journal ni au
+  modèle. Débrancher Brevo révoque les deux jetons (point de révocation de ses métadonnées) ;
+  Mailchimp n'en documente pas, l'écran dit de retirer l'application dans le compte.
+- **Appel recopié.** Une carte Trello ou un nom de campagne Brevo lus qui contiennent
+  `<tool_call>…</tool_call>`, recopiés par le modèle, ne sont pas lancés (`appelsLus`, § 41.1) :
+  essayé dans un vrai Chat avec le faux modèle, aucune carte, rien écrit ni envoyé.
+- **Écran, vu** dans une fenêtre Electron cachée (le navigateur intégré était pris par d'autres
+  sessions), contre une passerelle jetable (`"chiffrement": "fichier"`, données en dossier
+  temporaire, LM Studio et exo éteints) et `vite`, avec de faux services locaux : le parcours
+  complet de Trello (formulaire, case d'écriture, page d'autorisation du faux service, retour,
+  « branché ») et de Brevo (application saisie, deux cases, retour du faux Brevo, « Connecté ») ;
+  les formulaires de Zoom et ClickUp et le panneau de Mailchimp en français, anglais et japonais,
+  clair et sombre, 1440 et 375 px (36 captures) : textes traduits, aucun débordement horizontal
+  (page ni zone qui défile). Corrigé en le voyant : deux commandes de Brevo collées sur une ligne
+  (chacune sur la sienne désormais) ; à 375 px, les portées de Zoom et le guide de Brevo élargissaient
+  la zone de 16 à 90 px (les mots longs se coupent) ; le texte d'une ligne de la liste passait sous
+  le bouton (§ 43.3) : il garde une largeur minimale, c'est le bouton qui va à la ligne.
+
+### 48.2 Limites des fournisseurs relevées (documentation du 28/09/2026)
+
+ClickUp MCP : 50 appels par 24 heures en offre gratuite, 300 à partir d'Unlimited. Monday : les
+appels MCP comptent dans la limite quotidienne d'appels à l'API du compte. Brevo : contacts 36 000
+requêtes par heure et 10 par seconde, les autres points d'accès (campagnes, compte) 100 par heure en
+offre générale ; jeton d'accès d'une heure, d'actualisation de 30 jours ; applications OAuth privées
+seulement. Mailchimp : 10 connexions simultanées, jeton sans expiration. Zoom : jeton d'une heure,
+renouvelé par le SDK. Trello : un espace de travail par connexion.
+
+### 48.3 Soupçons, non démontrés
+
+- **Classement des vrais outils.** Les noms réels et leurs annotations n'ont pas été vus (pas de
+  compte) : un outil de lecture sans annotation ni verbe de lecture en tête sera pris pour une
+  écriture (plus de cartes, jamais moins) ; un serveur qui annoterait faussement une écriture en
+  lecture, sous un nom sans verbe qui modifie, passerait pour une lecture. C'est le serveur de
+  l'éditeur, déjà dépositaire des données.
+- **Révocation MCP.** Débrancher un des six efface le jeton ici sans le révoquer chez le service (le
+  SDK n'a pas de révocation), comme pour le reste du catalogue ; après une portée en trop, de même.
+- **Lecture par les collègues.** Comme au § 41.3 : toute séance lit, par le modèle, ce que le compte
+  branché voit (tableaux, campagnes, réunions). Brancher un compte dédié à l'organisation.
+- **Texte d'une campagne.** La carte montre le texte extrait du HTML et les liens ; la mise en forme,
+  les images et un texte masqué par la CSS ne sont pas rendus tels quels.
+- **Langue de la page de retour.** Le message laissé au panneau après la connexion de Brevo est
+  dans la langue du navigateur qui revient du service (anglais dans la fenêtre d'essai), pas
+  toujours celle de l'écran : même comportement que les autres connexions natives.
+- **375 px, panneau LinkedIn** (hors de cette famille, vu en mesurant) : la zone qui défile y
+  déborde de 66 px ; pas touché.
+
+### 48.4 Pas essayé
+
+Les vrais services (aucun compte, aucune application) : les connexions, les portées réellement
+rendues (Keycloak de Brevo, Zoom qui accorde les portées de l'application), l'adresse de retour en
+`http://127.0.0.1` chez Atlassian, Brevo et Mailchimp, les vrais outils des six serveurs, un vrai
+brouillon, un vrai envoi (et le `recipient_count` réel d'un segment Mailchimp), la révocation chez
+Brevo.

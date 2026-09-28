@@ -26,6 +26,8 @@ import {
 import { executerDocuments, outilsDocuments } from "./natifs/documents.ts";
 // Commerce et relation client (28/09/2026, SECURITE.md § 47) : leur module, branché ici par trois lignes.
 import * as commerce from "./natifs/commerce.ts";
+// Brevo et Mailchimp (SECURITE.md § 48) : leurs outils vivent à part, mêmes gardes que ceux-ci.
+import * as projets from "./natifs/projets.ts";
 
 /**
  * Les outils de l'agent pour Google Sheets, Google Slides, YouTube, LinkedIn,
@@ -74,6 +76,8 @@ const PREFIXES: Record<string, IdNatif> = {
   docs__: "docs",
   forms__: "forms",
   dropbox__: "dropbox",
+  brevo__: "brevo",
+  mailchimp__: "mailchimp",
 };
 
 /** Préfixes réservés : aucun connecteur ajouté ne peut les prendre (connecteurs.ts, `IDS_RESERVES`). */
@@ -224,6 +228,7 @@ export function toolsForModel(): Outil[] {
   }
   outils.push(...outilsDocuments());
   outils.push(...commerce.toolsForModel());
+  outils.push(...projets.toolsForModel());
   return outils;
 }
 
@@ -382,6 +387,7 @@ async function executer(nom: string, args: Record<string, unknown>): Promise<Res
     case "x__publier":
       return xPublier(args);
   }
+  if (nom.startsWith("brevo__") || nom.startsWith("mailchimp__")) return projets.executer(nom, args, sousGarde);
   return (await executerDocuments(nom, args)) ?? refus(`Outil inconnu : ${nom}.`);
 }
 

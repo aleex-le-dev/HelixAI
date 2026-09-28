@@ -8,9 +8,9 @@ import { t, tf } from "@/lib/i18n";
  * l'instance le garde chiffré.
  */
 
-// Google Docs, Google Forms et Dropbox depuis le 28/09/2026 (gateway/src/natifs/documents.ts).
-export type IdNatif = "sheets" | "slides" | "youtube" | "linkedin" | "facebook" | "instagram" | "tiktok" | "x" | "docs" | "forms" | "dropbox";
-export type IdChoix = "ecriture" | "page";
+// Brevo et Mailchimp : 28/09/2026 (gateway/src/natifs/projetsRegles.ts). `envoi` : envoyer une campagne.
+export type IdNatif = "sheets" | "slides" | "youtube" | "linkedin" | "facebook" | "instagram" | "tiktok" | "x" | "docs" | "forms" | "dropbox" | "brevo" | "mailchimp";
+export type IdChoix = "ecriture" | "page" | "envoi";
 
 export interface EtatNatif {
   id: IdNatif;

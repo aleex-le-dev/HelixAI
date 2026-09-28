@@ -161,6 +161,7 @@ import * as agendaGoogle from "./agendaGoogle.ts";
 import * as natifs from "./oauthNatif.ts";
 import * as messageries from "./natifs/messageries.ts";
 import * as commerce from "./natifs/commerce.ts";
+import { estMcpProjet } from "./natifs/projetsRegles.ts";
 import * as tachesProgrammees from "./tachesProgrammees.ts";
 import { chargerClientGoogle, effacerClientGoogle, enregistrerClientGoogle, etatClientGoogle } from "./clientGoogle.ts";
 import * as slack from "./slack.ts";
@@ -3788,17 +3789,26 @@ async function handleConnecteurConnecter(
     id?: string;
     clientId?: unknown;
     clientSecret?: unknown;
+    ecriture?: unknown;
   };
   if (typeof body.id !== "string" || !body.id) {
     return send(res, 400, { error: { message: t("`id` est requis.") } });
   }
+  // Trello, Monday, ClickUp, Todoist, Calendly, Zoom : un compte branché parle au nom de toute l'organisation (SECURITE.md § 48).
+  if (estMcpProjet(body.id) && (await reserveeALAdministration(res, qui, t("Seul l'administrateur de l'instance peut brancher, débrancher ou configurer ces services : ils agissent au nom de toute l'organisation.")))) return;
   const base = adresseVue(req);
   if (!base) return send(res, 400, { error: { message: t("Adresse d'instance illisible.") } });
 
-  const resultat = await connecteurs.connecter(body.id, qui.userId, base, {
-    clientId: body.clientId,
-    clientSecret: body.clientSecret,
-  });
+  const resultat = await connecteurs.connecter(
+    body.id,
+    qui.userId,
+    base,
+    {
+      clientId: body.clientId,
+      clientSecret: body.clientSecret,
+    },
+    body.ecriture,
+  );
   send(res, resultat.ok ? 200 : 400, { ...resultat, etat: await connecteurs.etat() });
 }
 
@@ -3935,6 +3945,7 @@ async function handleConnecteurRetirer(
   const body = (await readJson(req).catch(() => ({}))) as { id?: string };
   if (!body.id) return send(res, 400, { error: { message: t("`id` est requis.") } });
 
+  if (estMcpProjet(body.id) && (await reserveeALAdministration(res, qui, t("Seul l'administrateur de l'instance peut brancher, débrancher ou configurer ces services : ils agissent au nom de toute l'organisation.")))) return;
   const resultat = await connecteurs.retirer(body.id, qui.userId);
   send(res, resultat.ok ? 200 : 400, { ...resultat, etat: await connecteurs.etat() });
 }

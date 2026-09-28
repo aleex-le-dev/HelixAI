@@ -235,7 +235,7 @@ function DocumentsAgent({ employe }: { employe: Employe }) {
             {t("Ajouter un fichier")}
           </Button>
           <Button variant="ghost" size="sm" disabled={Boolean(occupe)} onClick={() => setDepuisEspace(true)}>
-            {t("Depuis")}{" "}{branding.name}
+            {tf("Depuis {0}", branding.name)}
           </Button>
         </span>
         {depuisEspace && <ChoixDepuisEspace onFermer={() => setDepuisEspace(false)} onChoisis={(f) => void ajouter(f)} />}

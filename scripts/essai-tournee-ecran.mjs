@@ -12,9 +12,10 @@
  * Tout vit dans un dossier temporaire : dossier personnel neuf, données
  * neuves, faux `security`, `lms`, `opencode` et `rtk`. Le moteur est llama.cpp
  * (HELIX_MOTEUR=llamacpp, macOS seulement) ; son téléchargement est refusé
- * par un module préalable (aucune sortie réseau, notée si elle est tentée),
- * puis un faux `llama-server` est posé à sa place, comme un moteur arrivé
- * autrement.
+ * par un module préalable (aucun `fetch` de la passerelle ne sort, chacun est
+ * noté), puis un faux `llama-server` est posé à sa place, comme un moteur
+ * arrivé autrement. Seul le serveur de fichiers livré (MCP) est pris par
+ * `npx`, comme à chaque démarrage, dans le dossier personnel jetable.
  *
  * A. L'échec d'installation du moteur est dit, puis oublié une fois le moteur là.
  * B. Un échec qui ne vient pas du moteur (le modèle) reste affiché.
@@ -177,7 +178,13 @@ try {
   await Promise.race([fin, attendre(10_000)]);
   if (passerelle.exitCode === null) passerelle.kill("SIGKILL");
   if (echecs.length && process.env.HELIX_ESSAI_BAVARD) console.log(journal.slice(-4000));
-  rmSync(TMP, { recursive: true, force: true });
+  // Un fils de la passerelle peut écrire encore un instant après son arrêt (ENOTEMPTY vu le 28/09/2026) : on réessaie, sans faire échouer l'essai.
+  await attendre(1500);
+  try {
+    rmSync(TMP, { recursive: true, force: true, maxRetries: 10, retryDelay: 300 });
+  } catch (err) {
+    console.log(`  (dossier temporaire laissé : ${TMP}, ${err instanceof Error ? err.message : err})`);
+  }
 }
 console.log(`\n${reussis} vérification(s) réussie(s), ${echecs.length} échec(s).`);
 process.exit(echecs.length ? 1 : 0);

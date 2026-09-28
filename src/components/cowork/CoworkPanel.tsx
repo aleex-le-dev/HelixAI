@@ -175,7 +175,8 @@ export function CoworkPanel({ files }: { files: TouchedFile[] }) {
                 >
                   <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-neutral-70" />
                   <FileText size={15} strokeWidth={1.5} className="shrink-0 text-muted-foreground" />
-                  <span className="truncate">{prettyTool(outil.name)}</span>
+                  {/* À la ligne plutôt que coupé : en japonais, « ファイルの読み取り（旧ツール） » perdait sa fin (28/09/2026). */}
+                  <span className="min-w-0 [overflow-wrap:anywhere]">{prettyTool(outil.name)}</span>
                   <span className="ml-auto shrink-0 text-[11px] text-muted-foreground">
                     {t(s.label).toLowerCase()}
                   </span>

@@ -1161,7 +1161,7 @@ function McpServers() {
                     onClick={() => setExpanded(expanded === s.id ? null : s.id)}
                     className="shrink-0 rounded-full bg-muted px-2.5 py-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
                   >
-                    {s.toolCount} outils
+                    {s.toolCount === 1 ? t("1 outil") : tf("{0} outils", s.toolCount)}
                   </button>
                 )}
                 <Switch

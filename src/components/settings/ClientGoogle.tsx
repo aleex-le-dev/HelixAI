@@ -4,7 +4,7 @@ import { enregistrerClientGoogle, type EtatClientGoogle } from "@/lib/google";
 import { Button } from "@/components/ui/Button";
 import { Field, Input } from "@/components/ui/Field";
 import { InfoBox } from "@/components/ui/InfoBox";
-import { t } from "@/lib/i18n";
+import { t, tf } from "@/lib/i18n";
 
 /**
  * L'application Google de l'instance, saisie une fois pour Drive et Agenda
@@ -59,7 +59,7 @@ export function FormulaireClientGoogle({
             </a>
             {t(", créez un projet (par exemple « Helix »).")}
           </li>
-          <li>{t("« API et services », puis « Bibliothèque » : cherchez")} « {api} » {t("et activez-la.")}</li>
+          <li>{tf("« API et services », puis « Bibliothèque » : cherchez « {0} » et activez-la.", api)}</li>
           <li>{t("« Écran de consentement OAuth » (ou « Google Auth Platform ») : type « Externe », un nom d'application et votre adresse. Dans « Audience », ajoutez votre adresse comme utilisateur, puis « Publier l'application » : en mode « Test », Google redemande la connexion chaque semaine.")}</li>
           <li>{t("« Clients », puis « Créer un client » : type « Application de bureau ». Google affiche un identifiant, qui se termine par « .apps.googleusercontent.com », et un code secret. Recopiez-les ci-dessous.")}</li>
         </ol>

@@ -149,7 +149,7 @@ export function OutilsChip({
                     {g.label}
                     {g.actif && (
                       <span className="ml-1.5 text-xs text-muted-foreground">
-                        {g.outils} outils
+                        {g.outils === 1 ? t("1 outil") : tf("{0} outils", g.outils)}
                       </span>
                     )}
                   </p>

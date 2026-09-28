@@ -619,11 +619,44 @@ async function dejaEnTelechargement(key: string): Promise<boolean> {
 }
 
 /**
+ * Le nom sous lequel LM Studio range (`ls`) ou sert (`ps`) un modèle du
+ * catalogue, ou `key` s'il n'en connaît pas d'autre.
+ *
+ * Pourquoi (essai Windows de bout en bout, 28/09/2026, llmster 0.0.25) :
+ * `lms get qwen3-1.7b` range le modèle sous « qwen/qwen3-1.7b ». La mise en
+ * route le chargeait par `lms load qwen3-1.7b` (servi sous
+ * « qwen/qwen3-1.7b », 32 768 jetons, TTL de 20 min), puis posait la question
+ * d'essai au nom « qwen3-1.7b » : le serveur, qui ne sert rien sous ce nom, en
+ * chargeait une SECONDE copie à sa façon (chargement à la demande :
+ * 8 192 jetons, quatre réponses en parallèle, une heure avant de libérer la
+ * mémoire). Deux copies en mémoire après chaque mise en route (`lms ps`), et
+ * deux fois le modèle au sélecteur du Chat ; avec Qwen3 8B sur un PC de
+ * 16 Go, de quoi saturer la machine. Chargé, essayé et déchargé désormais
+ * sous le nom que LM Studio lui donne.
+ */
+async function nomChezLmStudio(lms: string, key: string, commande: "ls" | "ps"): Promise<string> {
+  const { ok, output } = await run(lms, [commande, "--json"], () => {});
+  if (!ok) return key;
+  let entrees: { modelKey?: unknown; identifier?: unknown; type?: unknown }[] = [];
+  try {
+    const lu = JSON.parse(output);
+    if (Array.isArray(lu)) entrees = lu;
+  } catch {
+    return key;
+  }
+  const noms = entrees
+    .filter((e) => e.type !== "embedding")
+    .map((e) => (commande === "ps" ? (e.identifier ?? e.modelKey) : e.modelKey))
+    .filter((n): n is string => typeof n === "string");
+  return noms.find((n) => n === key) ?? noms.find((n) => memeModele(n, key)) ?? key;
+}
+
+/**
  * L'essai du modèle qu'on vient de charger (santeModeles.ts, 27/09/2026) :
  * une courte question, un verdict, noté pour cette machine. Réussi : l'écran
  * dit « prêt ». Raté : le modèle est déchargé et l'écran dit lequel suit.
  */
-async function essaiReussi(lms: string, choice: CatalogEntry, suivant: CatalogEntry | undefined): Promise<boolean> {
+async function essaiReussi(lms: string, choice: CatalogEntry, suivant: CatalogEntry | undefined, servi = choice.key): Promise<boolean> {
   setState({
     phase: "loading",
     message: tf("Vérification de {0} : une courte question d'essai...", choice.label),
@@ -631,13 +664,14 @@ async function essaiReussi(lms: string, choice: CatalogEntry, suivant: CatalogEn
   });
   const backend = backendById("lmstudio");
   // Sans serveur connu, rien à essayer : le modèle est pris tel quel, comme avant.
-  const verdict: Verdict = backend ? await essayerModele(backend.baseUrl, choice.key, backend.apiKey) : { ok: true, indecis: "sans serveur" };
+  // Sous le nom où il est chargé (`servi`) : sous un autre, LM Studio en chargeait une seconde copie (`nomChezLmStudio`).
+  const verdict: Verdict = backend ? await essayerModele(backend.baseUrl, servi, backend.apiKey) : { ok: true, indecis: "sans serveur" };
   noterEssai(choice.key, verdict);
   if (verdict.ok) {
     setState({ phase: "ready", message: tf("{0} est prêt.", choice.label), percent: 100 });
     return true;
   }
-  await run(lms, ["unload", choice.key], () => {});
+  await run(lms, ["unload", servi], () => {});
   invalidate();
   if (suivant) {
     setState({
@@ -845,7 +879,7 @@ async function provision(
 
     // Déjà en mémoire, jamais essayé : directement à l'essai.
     if (choice === start && dejaCharge) {
-      if (await essaiReussi(lms, choice, suivantDe(choice))) return state;
+      if (await essaiReussi(lms, choice, suivantDe(choice), await nomChezLmStudio(lms, choice.key, "ps"))) return state;
       echec = {
         message: tf("{0} ne répond pas correctement sur cette machine.", choice.label),
         error: t("Aucun autre modèle adapté à cette machine ne reste à essayer. Choisissez-en un dans le sélecteur de modèles du Chat, ou branchez un modèle par une clé."),
@@ -938,11 +972,13 @@ async function provision(
      * vision met alors plusieurs minutes à lire une capture au lieu d'une
      * vingtaine de secondes.
      */
+    // Le nom sous lequel LM Studio a rangé le modèle (« qwen/qwen3-1.7b » pour « qwen3-1.7b », `nomChezLmStudio`).
+    const cle = await nomChezLmStudio(lms, choice.key, "ls");
     const charger = () =>
-      run(lms, ["load", choice.key, "--yes", "--ttl", String(TTL_SECONDES), ...optionsDeChargement()], () => {});
+      run(lms, ["load", cle, "--yes", "--ttl", String(TTL_SECONDES), ...optionsDeChargement()], () => {});
 
     // Pas à côté d'un autre modèle si les deux ne tiennent pas : le Mac se figerait (voir backends.ts).
-    await faireLaPlace(lms, choice.key);
+    await faireLaPlace(lms, cle);
     /*
      * Le dossier interne du moteur sans interface, juste avant de charger
      * (27/09/2026) : ce chemin appelait `lms load` sans passer par le
@@ -967,7 +1003,7 @@ async function provision(
      * comprendre ni résoudre.
      */
     if (!loaded.ok && isResourceError(loaded.output)) {
-      const liberes = await unloadOthers(lms, choice.key);
+      const liberes = await unloadOthers(lms, cle);
       if (liberes > 0) {
         setState({
           phase: "loading",
@@ -978,7 +1014,7 @@ async function provision(
     }
 
     if (loaded.ok) {
-      if (await essaiReussi(lms, choice, suivantDe(choice))) return state;
+      if (await essaiReussi(lms, choice, suivantDe(choice), await nomChezLmStudio(lms, cle, "ps"))) return state;
       // Mal répondu : noté, déchargé, et le suivant est essayé (ou l'échec dit, s'il n'y en a plus).
       echec = {
         message: tf("{0} ne répond pas correctement sur cette machine.", choice.label),

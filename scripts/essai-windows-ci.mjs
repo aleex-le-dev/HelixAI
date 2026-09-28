@@ -293,6 +293,24 @@ async function etapes() {
   for (const [nom, args] of [["lms-ls.json", ["ls", "--json"]], ["lms-ps.json", ["ps", "--json"]]]) {
     const r = spawnSync(lmsExe, args, { encoding: "utf8", timeout: 60_000, windowsHide: true });
     writeFileSync(join(SORTIE, nom), `${r.stdout ?? ""}${r.stderr ? `\n-- stderr --\n${r.stderr}` : ""}`);
+    /*
+     * Une seule copie du modèle en mémoire après la mise en route et une
+     * question (essai du 28/09/2026 : deux, l'une chargée par Helix, l'autre
+     * par LM Studio à la question d'essai posée sous un autre nom).
+     */
+    if (nom === "lms-ps.json") {
+      let charges = [];
+      try {
+        charges = JSON.parse(r.stdout).filter((m) => m.type !== "embedding");
+      } catch {
+        /* illisible : dit ci-dessous */
+      }
+      verifier(
+        `une seule copie de ${MODELE} en mémoire (lms ps)`,
+        charges.length === 1 && nomDuModele(charges[0].modelKey ?? "") === MODELE,
+        charges.map((m) => `${m.identifier} (${m.path}, ${m.contextLength} jetons, TTL ${m.ttlMs} ms)`).join(" | ") || String(r.stdout).slice(0, 300),
+      );
+    }
   }
 
   /*

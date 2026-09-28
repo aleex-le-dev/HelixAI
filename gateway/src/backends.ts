@@ -102,12 +102,10 @@ interface LmsModelEntry {
  * répondu : c'est lui, et non la liste du serveur, qui dit ce qui est chargé
  * (voir `discover`).
  */
-async function lmStudioMetadata(): Promise<{ meta: Map<string, Partial<ModelInfo>>; enMemoireLu: boolean; alias: Map<string, string> }> {
+async function lmStudioMetadata(): Promise<{ meta: Map<string, Partial<ModelInfo>>; enMemoireLu: boolean }> {
   const meta = new Map<string, Partial<ModelInfo>>();
-  /** Nom servi → modèle téléchargé, quand un chargement porte un autre nom que le sien (voir plus bas). */
-  const alias = new Map<string, string>();
   const lms = await findLms();
-  if (!lms) return { meta, enMemoireLu: false, alias };
+  if (!lms) return { meta, enMemoireLu: false };
 
   /** `null` : la commande n'a pas répondu, ce qui ne dit rien de la mémoire. */
   const parse = async (args: string[]): Promise<LmsModelEntry[] | null> => {
@@ -148,21 +146,10 @@ async function lmStudioMetadata(): Promise<{ meta: Map<string, Partial<ModelInfo
     };
     meta.set(key, charge);
     // Une seconde copie (« qwen3-8b:2 ») est servie sous son propre nom : elle est chargée elle aussi.
-    if (entry.identifier && entry.identifier !== key) {
-      meta.set(entry.identifier, charge);
-      /*
-       * Le même chargement sous un autre nom, pas une copie (essai Windows du
-       * 28/09/2026) : la mise en route charge le modèle par son nom du
-       * catalogue (`lms load qwen3-1.7b`), que le moteur sans interface range
-       * sous « qwen/qwen3-1.7b » et sert sous les deux noms. Le sélecteur du
-       * Chat le montrait deux fois, « en mémoire » les deux fois. Noté ici
-       * pour que la découverte n'en garde qu'un.
-       */
-      if (!/:\d+$/.test(entry.identifier)) alias.set(entry.identifier, key);
-    }
+    if (entry.identifier && entry.identifier !== key) meta.set(entry.identifier, charge);
   }
 
-  return { meta, enMemoireLu: enMemoire !== null, alias };
+  return { meta, enMemoireLu: enMemoire !== null };
 }
 
 async function fetchJson(
@@ -590,9 +577,9 @@ export async function discover(options: { attendreLmStudio?: boolean } = {}): Pr
    * découverte, et interrogeait le LM Studio de la machine (vu dans la batterie
    * de sécurité, qui tournait à côté d'un LM Studio en service).
    */
-  const { meta: lmMeta, enMemoireLu, alias: aliasLm } = enabled.some((b) => b.kind === "lmstudio") && !lmStudioEnReveil
+  const { meta: lmMeta, enMemoireLu } = enabled.some((b) => b.kind === "lmstudio") && !lmStudioEnReveil
     ? await lmStudioMetadata()
-    : { meta: new Map<string, Partial<ModelInfo>>(), enMemoireLu: false, alias: new Map<string, string>() };
+    : { meta: new Map<string, Partial<ModelInfo>>(), enMemoireLu: false };
 
   const results = await Promise.all(
     enabled.map(async (backend): Promise<{ status: BackendStatus; models: ModelInfo[] }> => {
@@ -685,18 +672,6 @@ export async function discover(options: { attendreLmStudio?: boolean } = {}): Pr
             if (deja.has(cle)) continue;
             if (info.nature === "embedding" || /embed/i.test(cle)) continue;
             models.push(toModelInfo(cle, backend, lmMeta));
-          }
-          /*
-           * Un chargement servi sous deux noms (`alias`, lmStudioMetadata) :
-           * seul le nom du modèle téléchargé reste. C'est lui que LM Studio
-           * sert depuis le chargement en cours (essai Windows du 28/09/2026 :
-           * réponse en 4 s, sans second chargement), et lui qu'on retrouve
-           * après un redémarrage, où l'autre nom n'existe plus.
-           */
-          for (const [nomServi, cle] of aliasLm) {
-            if (!models.some((m) => m.id === cle)) continue;
-            const i = models.findIndex((m) => m.id === nomServi);
-            if (i >= 0) models.splice(i, 1);
           }
         }
         return {

@@ -7997,6 +7997,86 @@ console.log("\n31. Windows et mise en route : moteur de LM Studio installé en e
   verifier("l'écran de mise en route propose seulement les modèles qui tiennent, et montre celui qui s'installe", /possibles: modelesQuiTiennent\(hardware\)/.test(readFileSync(join(RACINE, "gateway", "src", "index.ts"), "utf8")) && /const affiche = enCours \?\? choisi;/.test(ecran), "index.ts, FirstRun.tsx");
 }
 
+console.log("\n32. Essai Windows de bout en bout (GitHub Actions), et ce qu'il a montré (28/09/2026)");
+{
+  const index = readFileSync(join(RACINE, "gateway", "src", "index.ts"), "utf8");
+  const back = readFileSync(join(RACINE, "gateway", "src", "backends.ts"), "utf8");
+  const flux = readFileSync(join(RACINE, ".github", "workflows", "essai-windows.yml"), "utf8");
+  const essai = readFileSync(join(RACINE, "scripts", "essai-windows-ci.mjs"), "utf8");
+  const route = index.slice(index.indexOf("async function handleEngineInstall("), index.indexOf("function installerMoteurOuvert("));
+  const validation = route.indexOf("modelesQuiTiennent(detectHardware()).some((m) => m.key === body.model)");
+  verifier(
+    "installation du moteur : le modèle qui suit n'est pris que parmi ceux qui tiennent sur la machine (400 sinon), vérifié avant l'accord au journal et avant toute installation",
+    validation > 0 &&
+      validation > route.indexOf("estAdministrateur(qui.userId)") &&
+      validation < route.indexOf('journaliser("moteur.conditions_acceptees"') &&
+      validation < route.indexOf("moteurEnInstallation = true") &&
+      /typeof body\.model !== "string"/.test(route) &&
+      /code: "modele_non_propose"/.test(route),
+    "index.ts, handleEngineInstall",
+  );
+  verifier(
+    "le modèle choisi suit le moteur, LM Studio comme llama.cpp (plus de demande de modèle greffée sur l'installation en cours)",
+    /apresMiseEnRoute\(await ensureLocalModel\(modeleChoisi\)\);[\s\S]{0,600}L'installation du moteur a échoué/.test(route) &&
+      /function installerMoteurOuvert\(userId: string, res: http\.ServerResponse, modeleChoisi\?: string\)[\s\S]{0,500}ensureLocalModel\(modeleChoisi\)/.test(index),
+    "index.ts",
+  );
+  verifier(
+    "moteur sans interface : un « server start » refusé juste après la levée du service est réessayé (quatre fois, cinq secondes d'écart), et un serveur qui écoute quand même vaut réussite",
+    /const essais = moteurSansInterface\(\) \? 4 : 1;/.test(back) && /if \(await repond\(LMSTUDIO_URL\)\) break;\n\s*if \(n >= essais\) throw err;/.test(back),
+    "backends.ts, ensureLmStudioServer",
+  );
+  verifier(
+    "un seul démarrage du serveur de LM Studio à la fois : les appels suivants attendent celui en cours (un second `server start` redémarrait le serveur)",
+    /demarrageServeur \?\?= demarrerServeurLmStudio\(\)\.finally\(/.test(back) && /export function ensureLmStudioServer\(\): Promise<boolean> \{/.test(back),
+    "backends.ts",
+  );
+  const sante = index.slice(index.indexOf("async function handleHealth("), index.indexOf("async function handleHealth(") + 400);
+  const decouverte = back.slice(back.indexOf("export async function discover("), back.indexOf("export async function discover(") + 1200);
+  verifier(
+    "/health n'attend pas le réveil de LM Studio (la fenêtre de l'application attend cette réponse), et `lms` n'est pas lancé par la passerelle tant que le serveur ne répond pas",
+    /discover\(\{ attendreLmStudio: false \}\)/.test(sante) &&
+      /if \(options\.attendreLmStudio !== false\) await ensureLmStudioServer\(\);\n\s*else if \(!\(await lmStudioRepond\(\)\)\) \{/.test(decouverte) &&
+      /&& !lmStudioEnReveil\n\s*\? await lmStudioMetadata\(\)/.test(back),
+    "index.ts, backends.ts",
+  );
+  const prov = readFileSync(join(RACINE, "gateway", "src", "provision.ts"), "utf8");
+  verifier(
+    "mise en route : le modèle est chargé, essayé et déchargé sous le nom que LM Studio lui donne (« qwen/qwen3-1.7b »), plus sous celui du catalogue, qui en faisait charger une seconde copie",
+    /const cle = await nomChezLmStudio\(lms, choice\.key, "ls"\);/.test(prov) &&
+      /run\(lms, \["load", cle, "--yes"/.test(prov) &&
+      !/run\(lms, \["load", choice\.key/.test(prov) &&
+      /essayerModele\(backend\.baseUrl, servi, backend\.apiKey\)/.test(prov) &&
+      /await run\(lms, \["unload", servi\]/.test(prov) &&
+      (prov.match(/await essaiReussi\(lms, choice, suivantDe\(choice\), await nomChezLmStudio\(/g) ?? []).length === 2,
+    "provision.ts",
+  );
+  verifier(
+    "le flux lance l'application empaquetée sur une machine Windows, et garde les journaux même en cas d'échec",
+    /runs-on: windows-latest/.test(flux) && /essai-windows-ci\.mjs --app release\/win-unpacked\/Helix\.exe/.test(flux) && /electron-builder --win dir --x64 --publish never/.test(flux) && /if: always\(\)/.test(flux),
+    "essai-windows.yml",
+  );
+  verifier(
+    "le flux ne lit que le dépôt, sans aucun secret ni publication, et ses actions sont figées par empreinte",
+    /permissions:\n  contents: read/.test(flux) &&
+      !/secrets\./.test(flux) &&
+      !/gh release|--publish always|--publish onTag/.test(flux) &&
+      /persist-credentials: false/.test(flux) &&
+      (flux.match(/uses: [^\n]+/g) ?? []).every((u) => /@[0-9a-f]{40} #/.test(u)),
+    "essai-windows.yml",
+  );
+  verifier(
+    "l'essai suit la mise en route par son flux, comme l'écran (relire l'état relançait le serveur de LM Studio et masquait l'échec), avec un mot de passe tiré au hasard",
+    /\/helix\/provision\/stream/.test(essai) && /randomBytes\(12\)/.test(essai) && !/password: "[^"]+"/.test(essai),
+    "essai-windows-ci.mjs",
+  );
+  // Sur ce Mac : l'essai refuse de tourner (il poserait le moteur dans le dossier personnel et en accepterait les conditions).
+  const { spawnSync } = await import("node:child_process");
+  const refus = spawnSync(process.execPath, [join(RACINE, "scripts", "essai-windows-ci.mjs")], { encoding: "utf8", env: { PATH: process.env.PATH }, timeout: 30_000 });
+  verifier("l'essai Windows refuse de tourner hors de Windows ou sans HELIX_ESSAI_MACHINE_JETABLE=1 (code 2, rien lancé)", refus.status === 2 && /Windows|jetable/.test(refus.stdout), `${refus.status} ${refus.stdout}`);
+  verifier("l'essai exige une machine déclarée jetable avant de rien faire", /process\.env\.HELIX_ESSAI_MACHINE_JETABLE !== "1"/.test(essai) && essai.indexOf("HELIX_ESSAI_MACHINE_JETABLE !== \"1\"") < essai.indexOf("mkdirSync(SORTIE"), "essai-windows-ci.mjs");
+}
+
 console.log(`\n${reussis} vérification(s) réussie(s), ${echecs.length} échec(s).`);
 if (echecs.length) {
   console.log("Échecs :");

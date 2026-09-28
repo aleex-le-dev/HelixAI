@@ -160,9 +160,11 @@ export function ConnecteurMessagerie({ id, onChange }: { id: IdMessagerie; onCha
     const dernier = etat.webhook?.dernier ? new Date(etat.webhook.dernier) : null;
     return (
       <div className="space-y-3">
-        <Card className="flex items-start gap-3">
-          <div className="min-w-0 flex-1">
-            <p className="truncate font-medium text-foreground">{etat.compte}</p>
+        {/* La pastille « Connecté » passe dessous quand la place manque : à 375 px, le nom se coupait lettre à lettre. */}
+        <Card className="flex flex-wrap items-start gap-3">
+          <div className="min-w-0 flex-1 basis-40">
+            {/* Un numéro ou un nom de bot se lit en entier, même à 375 px (vu à l'écran : « +… » coupé). */}
+            <p className="break-words font-medium text-foreground">{etat.compte}</p>
             <p className="text-sm text-muted-foreground">
               {etat.envoi ? tf("{0}, lecture et envoi après accord", etat.nom) : tf("{0}, lecture seule", etat.nom)}
               {depuis && !Number.isNaN(depuis.getTime()) ? tf(", connecté le {0}", formaterDate(depuis)) : ""}
@@ -187,7 +189,8 @@ export function ConnecteurMessagerie({ id, onChange }: { id: IdMessagerie; onCha
           </InfoBox>
         )}
         {id === "whatsapp" && etat.webhook && (
-          <Card className="space-y-3">
+          // Sans carte autour : à 375 px, une carte de plus dans le panneau ne laissait qu'une colonne de quelques mots aux adresses à copier.
+          <div className="space-y-3">
             <p className="text-sm font-medium text-foreground">{t("Recevoir les messages : le webhook à déclarer chez Meta")}</p>
             <ACopier valeur={etat.webhook.adresse} libelle={t("l'adresse du webhook")} note={t("Meta exige une adresse publique en https, avec un certificat valide. Si l'instance n'est joignable que sur ce réseau, les messages n'arriveront pas, et seuls les modèles pourront partir.")} />
             {etat.webhook.verification && <ACopier valeur={etat.webhook.verification} libelle={t("le jeton de vérification")} note={t("À coller dans « Jeton de vérification », à côté de l'adresse, puis abonnez-vous au champ « messages ».")} />}
@@ -199,7 +202,7 @@ export function ConnecteurMessagerie({ id, onChange }: { id: IdMessagerie; onCha
             <p className="text-xs text-muted-foreground">
               {dernier && !Number.isNaN(dernier.getTime()) ? tf("Dernière notification de Meta : {0}.", formaterDate(dernier)) : t("Aucune notification de Meta reçue pour l'instant.")}
             </p>
-          </Card>
+          </div>
         )}
 
         <InfoBox leading={<Lock size={15} strokeWidth={1.75} />}>

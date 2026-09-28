@@ -18,6 +18,7 @@
  * Usage : `faux-opencode.mjs --version` ou `faux-opencode.mjs serve --port N`.
  */
 import http from "node:http";
+import { spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
@@ -42,8 +43,8 @@ const emettre = (evenement, dossier) => {
   for (const [res, d] of flux) if (dossier === undefined || d === dossier) res.write(`data: ${JSON.stringify(evenement)}\n\n`);
 };
 
-/** L'environnement d'une commande, comme le calcule OpenCode 1.18.32. */
-async function environnementEnfant() {
+/** L'environnement d'une commande, comme le calcule OpenCode 1.18.32 (`entree` : ce que reçoit le crochet `shell.env`). */
+async function environnementEnfant(entree = { cwd: process.cwd() }) {
   const dossier = join(process.env.OPENCODE_CONFIG_DIR ?? "", "plugin");
   const sortie = { env: {} };
   let fichiers = [];
@@ -57,7 +58,7 @@ async function environnementEnfant() {
     for (const fabrique of Object.values(module)) {
       if (typeof fabrique !== "function") continue;
       const crochets = await fabrique({});
-      await crochets?.["shell.env"]?.({ cwd: process.cwd() }, sortie);
+      await crochets?.["shell.env"]?.(entree, sortie);
     }
   }
   return { ...process.env, ...sortie.env };
@@ -75,6 +76,27 @@ const serveur = http.createServer((req, res) => {
     };
     // Crochets d'essai, sans mot de passe : ils ne servent qu'à la batterie.
     if (chemin === "/essai/env") return json({ env: process.env, enfant: await environnementEnfant() });
+    /*
+     * Ajouté le 28/09/2026 (RTK, section 16) : lance une commande comme l'outil
+     * `bash` du vrai, une fois l'accord donné. Lu dans `ShellTool` de 1.18.32 :
+     * `spawn(commande, [], { shell, env })`, le shell venant du réglage `shell`
+     * de la configuration (sinon `SHELL`), l'environnement du crochet
+     * `shell.env` appelé avec `{ cwd, sessionID, callID }`.
+     */
+    if (chemin === "/essai/executer" && req.method === "POST") {
+      const d = JSON.parse(corps || "{}");
+      const config = JSON.parse(readFileSync(join(process.env.OPENCODE_CONFIG_DIR ?? "", "opencode.json"), "utf8"));
+      const shell = config.shell ?? process.env.SHELL ?? "/bin/sh";
+      const cwd = d.dossier ?? process.cwd();
+      const env = await environnementEnfant({ cwd, sessionID: d.sessionID, callID: id("call") });
+      const enfant = spawn(d.command, [], { shell, cwd, env, stdio: ["ignore", "pipe", "pipe"] });
+      let sortie = "";
+      enfant.stdout.on("data", (b) => (sortie += b));
+      enfant.stderr.on("data", (b) => (sortie += b));
+      enfant.on("close", (code) => json({ shell, sortie, code }));
+      enfant.on("error", (err) => json({ shell, sortie: String(err), code: -1 }));
+      return;
+    }
     if (chemin === "/essai/reponses") return json(reponses);
     if (chemin === "/essai/permission" && req.method === "POST") {
       const d = JSON.parse(corps || "{}");

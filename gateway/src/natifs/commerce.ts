@@ -652,6 +652,14 @@ async function rafraichir(id: IdCommerce, j: JetonsClairs): Promise<JetonsClairs
     } catch (err) {
       // Des portées qui ont changé : l'accès est perdu, pas seulement expiré.
       if (err instanceof ErreurNatif && err.categorie === "portee") return null;
+      /*
+       * Identifiants refusés (400, 401, 403 à l'échange) : le secret a été
+       * renouvelé ou l'application désinstallée, ce que l'écran conseille pour
+       * couper l'accès. L'écran disait encore « Connecté » et chaque outil
+       * échouait (vu sur le banc d'essai le 28/09/2026) : l'accès est marqué
+       * perdu, et le message qui dit pourquoi est gardé.
+       */
+      if (err instanceof ErreurNatif && err.categorie === "config") await marquerPerdu(id);
       throw err;
     }
   }
@@ -664,6 +672,14 @@ async function rafraichir(id: IdCommerce, j: JetonsClairs): Promise<JetonsClairs
   } else if (id === "zendesk" && a.hote) {
     r = await envoyer(id, { methode: "POST", hote: a.hote, chemin: "/oauth/tokens", entetes: JSON_, corps: JSON.stringify({ grant_type: "refresh_token", refresh_token: j.actualisation, client_id: a.clientId ?? "", ...(secret ? { client_secret: secret } : {}) }), octets: LIMITES.jetons });
   } else return null;
+  /*
+   * Une panne passagère du service (429, 5xx) pendant le renouvellement n'est
+   * pas un accès perdu. Elle débranchait le service (vu sur le banc d'essai le
+   * 28/09/2026) : les jetons de Zendesk durent 30 minutes, ceux de Pipedrive
+   * une heure, et un seul renouvellement tombé pendant une panne obligeait
+   * l'administrateur à tout reconnecter. Seul un refus (400, 401) le fait.
+   */
+  if (r.statut === 429 || r.statut >= 500) throw new ErreurNatif("quota", `${DEFINITIONS[id].nom} n'a pas pu renouveler l'accès pour l'instant (code ${r.statut}). Réessaie dans quelques minutes, et dis-le à l'utilisateur ; l'accès reste branché.`);
   if ((r.statut !== 200 && r.statut !== 201) || typeof r.json.access_token !== "string") return null;
   // Salesforce peut changer d'instance (migration) : seule une adresse de la bonne forme est suivie.
   if (id === "salesforce" && r.json.instance_url !== undefined) {
@@ -702,7 +718,8 @@ async function accesValide(id: IdCommerce, forcer = false): Promise<string> {
     const neufs = await rafraichir(id, j);
     if (!neufs) {
       await marquerPerdu(id);
-      throw new ErreurNatif("acces", `L'accès à ${def.nom} a expiré et ne se renouvelle pas seul : il faut le reconnecter dans Paramètres, Connecteurs.`);
+      // `forcer` : le service vient de refuser l'accès (401), il n'a pas seulement expiré.
+      throw new ErreurNatif("acces", forcer ? `${def.nom} n'accepte plus l'accès enregistré : il faut le reconnecter dans Paramètres, Connecteurs.` : `L'accès à ${def.nom} a expiré et ne se renouvelle pas seul : il faut le reconnecter dans Paramètres, Connecteurs.`);
     }
     c.jetons = chiffrer(neufs, placeJetons(id));
     await ecrire();
@@ -1567,7 +1584,9 @@ async function stripeAbonnements(args: Record<string, unknown>): Promise<Resulta
   const l = await stripeLister("subscriptions", p);
   const lignes = l.map((x) => {
     const elements = (((x.items ?? {}) as { data?: { price?: { unit_amount?: unknown; currency?: unknown; recurring?: { interval?: unknown } }; quantity?: unknown }[] }).data ?? []).slice(0, 5);
-    const prix = elements.map((e) => `${montant(e.price?.unit_amount, e.price?.currency)}${e.price?.recurring?.interval ? ` par ${texte(e.price.recurring.interval, 10)}` : ""}${Number(e.quantity) > 1 ? ` × ${texte(e.quantity, 6)}` : ""}`).join(", ");
+    // L'intervalle de Stripe est un mot anglais (day, week, month, year) : « 15,00 EUR par month » se lisait dans une phrase française.
+    const periode = (v: unknown) => ({ day: "jour", week: "semaine", month: "mois", year: "an" } as Record<string, string>)[texte(v, 10)] ?? texte(v, 10);
+    const prix = elements.map((e) => `${montant(e.price?.unit_amount, e.price?.currency)}${e.price?.recurring?.interval ? ` par ${periode(e.price.recurring.interval)}` : ""}${Number(e.quantity) > 1 ? ` × ${texte(e.quantity, 6)}` : ""}`).join(", ");
     return `- ${texte(x.status, 30)}, client ${texte(x.customer, 60)}${prix ? `, ${prix}` : ""}, depuis le ${quand(x.start_date ?? x.created)}${x.cancel_at_period_end ? ", résiliation prévue à la fin de la période" : ""} (${texte(x.id, 60)})`;
   });
   return { ok: true, content: lignes.length ? assembler(`${lignes.length} abonnement(s) Stripe :`, lignes) : "Aucun abonnement Stripe ne correspond." };
@@ -1736,7 +1755,18 @@ async function pipedriveContacts(args: Record<string, unknown>): Promise<Resulta
   const n = borner(args.nombre, 10, 50);
   const q = args.recherche !== undefined && args.recherche !== "" ? critereSur(args.recherche, 100) : null;
   const l = q && q.length >= 2 ? await pipedriveLister("/api/v2/persons/search", new URLSearchParams({ term: q, limit: String(n) })) : await pipedriveLister("/api/v2/persons", new URLSearchParams({ limit: String(n), sort_by: "update_time", sort_direction: "desc" }));
-  const lignes = l.map((x) => `- ${texte(x.name, 200)}${(x.organization as { name?: unknown } | null)?.name ? `, ${texte((x.organization as { name?: unknown }).name, 200)}` : ""} : ${valeurs(x.emails) || "sans e-mail"} ; ${valeurs(x.phones) || "sans téléphone"} (identifiant ${texte(x.id, 20)})`);
+  /*
+   * La recherche rend `organization` (nom) ; la liste de l'API v2 ne rend que
+   * `org_id` (https://developers.pipedrive.com/docs/api/v1/Persons#getPersons,
+   * v2, lu le 28/09/2026) : l'organisation n'apparaissait pas du tout.
+   */
+  const organisation = (x: Record<string, unknown>) => {
+    const nom = texte((x.organization as { name?: unknown } | null)?.name, 200);
+    if (nom) return `, ${nom}`;
+    const id = typeof x.org_id === "object" && x.org_id ? (x.org_id as { value?: unknown }).value : x.org_id;
+    return texte(id, 20) ? `, organisation ${texte(id, 20)}` : "";
+  };
+  const lignes = l.map((x) => `- ${texte(x.name, 200)}${organisation(x)} :${valeurs(x.emails) || "sans e-mail"} ; ${valeurs(x.phones) || "sans téléphone"} (identifiant ${texte(x.id, 20)})`);
   return { ok: true, content: lignes.length ? assembler(`${lignes.length} personne(s) Pipedrive :`, lignes) : "Aucune personne Pipedrive ne correspond." };
 }
 

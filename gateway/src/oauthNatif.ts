@@ -783,7 +783,12 @@ export async function accesValide(id: IdNatif, forcer = false): Promise<string> 
     const neufs = await rafraichir(id, j);
     if (!neufs) {
       await marquerPerdu(id);
-      throw new ErreurNatif("acces", `L'accès à ${DEFINITIONS[id].nom} a expiré et ne se renouvelle pas seul : il faut le reconnecter dans Paramètres, Connecteurs.`);
+      /*
+       * `forcer` : le service vient de refuser l'accès (401). Un jeton qui
+       * n'expire pas (Mailchimp) et qu'on a révoqué était dit « expiré » au
+       * modèle (banc d'essai du 28/09/2026).
+       */
+      throw new ErreurNatif("acces", forcer ? `${DEFINITIONS[id].nom} n'accepte plus l'accès enregistré : il faut le reconnecter dans Paramètres, Connecteurs.` : `L'accès à ${DEFINITIONS[id].nom} a expiré et ne se renouvelle pas seul : il faut le reconnecter dans Paramètres, Connecteurs.`);
     }
     c.jetons = chiffrer(neufs, placeJetons(id));
     await ecrire();
@@ -829,6 +834,12 @@ async function rafraichir(id: IdNatif, j: JetonsClairs): Promise<JetonsClairs | 
   const p: Record<string, string> = { ...qui.champs, grant_type: "refresh_token", refresh_token: j.actualisation };
   const point = adressesDe(id, client).jetons;
   const r = await envoyer(id, { methode: "POST", hote: point.hote, chemin: point.chemin, entetes: { ...FORM, ...qui.entetes }, corps: formulaire(p), octets: LIMITES.jetons });
+  /*
+   * Une panne passagère (429, 5xx) pendant le renouvellement n'est pas un
+   * accès perdu : elle débranchait le service (banc d'essai du 28/09/2026 ;
+   * Brevo renouvelle toutes les heures). Seul un refus le fait.
+   */
+  if (r.statut === 429 || r.statut >= 500) throw new ErreurNatif("quota", `${DEFINITIONS[id].nom} n'a pas pu renouveler l'accès pour l'instant (code ${r.statut}). Réessaie dans quelques minutes, et dis-le à l'utilisateur ; l'accès reste branché.`);
   if (r.statut !== 200 || typeof r.json.access_token !== "string") return null;
   return {
     acces: r.json.access_token,

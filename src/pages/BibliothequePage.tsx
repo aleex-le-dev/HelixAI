@@ -251,7 +251,11 @@ export function BibliothequePage() {
       )}
       {terme && (
         <p className="mt-4 text-sm text-muted-foreground">
-          {listage ? tf("{0} résultat{1} pour « {2} »", elements.length, elements.length > 1 ? "s" : "", terme) : "Recherche…"}
+          {listage
+            ? elements.length === 1
+              ? tf("1 résultat pour « {0} »", terme)
+              : tf("{0} résultats pour « {1} »", elements.length, terme)
+            : t("Recherche…")}
         </p>
       )}
 

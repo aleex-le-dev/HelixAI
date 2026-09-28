@@ -234,7 +234,7 @@ export function CodePage() {
           <div className="shrink-0 px-6 pb-5">
             <div className="mx-auto w-full max-w-[760px]">
               {composer}
-              {avis}
+              {moteur === "codex" && <AvisCodex etat={codex.etat} compact />}
             </div>
           </div>
         </section>

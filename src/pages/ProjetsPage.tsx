@@ -167,8 +167,8 @@ export function ProjetsPage() {
                     className="inline-flex w-fit items-center gap-1.5 rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground transition-colors hover:text-foreground"
                   >
                     <Users size={11} strokeWidth={2} />
-                    {actifs} membre{actifs > 1 ? "s" : ""}
-                    {invites > 0 && tf(" · {0} invité{1}", invites, invites > 1 ? "s" : "")}
+                    {(actifs === 1 ? t("1 membre") : tf("{0} membres", actifs))}
+                    {invites > 0 && ` · ${invites === 1 ? t("1 invité") : tf("{0} invités", invites)}`}
                   </button>
                   <button
                     type="button"
@@ -176,7 +176,7 @@ export function ProjetsPage() {
                     className="inline-flex w-fit items-center gap-1.5 rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground transition-colors hover:text-foreground"
                   >
                     <MessageSquare size={11} strokeWidth={2} />
-                    {chats} chat{chats > 1 ? "s" : ""}
+                    {chats === 1 ? t("1 Chat") : tf("{0} Chats", chats)}
                   </button>
                 </div>
               </li>

@@ -21,7 +21,7 @@ import {
 } from "@/lib/usage";
 import { cn } from "@/lib/cn";
 import { formaterDate } from "@/lib/formats";
-import { t, tf } from "@/lib/i18n";
+import { locale, t, tf } from "@/lib/i18n";
 
 /**
  * Consommation réelle, mesurée par l'instance.
@@ -133,6 +133,20 @@ function Courbe({ jours }: { jours: Rapport["jours"] }) {
   );
 }
 
+/**
+ * Le nom du modèle, et le service qui le sert (28/09/2026) : l'écran montrait
+ * l'identifiant technique (« cle-3f9a…/gpt-4o-mini »). L'identifiant reste au
+ * survol.
+ */
+function NomModele({ modele }: { modele: { uid: string; nom?: string; service?: string } }) {
+  return (
+    <span className="block min-w-0" title={modele.uid}>
+      <span className="block truncate text-xs text-foreground">{modele.nom ?? modele.uid}</span>
+      {modele.service && <span className="block truncate text-[11px] text-muted-foreground">{modele.service}</span>}
+    </span>
+  );
+}
+
 /** Saisie du tarif d'un modèle distant, avec le prix publié quand il est connu. */
 function LigneTarif({ modele, onChange }: { modele: ModeleDistant; onChange: () => void }) {
   const [entree, setEntree] = useState(modele.tarif ? String(modele.tarif.entree) : "");
@@ -157,6 +171,8 @@ function LigneTarif({ modele, onChange }: { modele: ModeleDistant; onChange: () 
     if (retirer) {
       setEntree("");
       setSortie("");
+      // Le prix publié s'applique de nouveau : sa devise revient, et non celle du tarif retiré.
+      setDevise(modele.publie?.devise ?? "EUR");
     }
     onChange();
   };
@@ -164,7 +180,7 @@ function LigneTarif({ modele, onChange }: { modele: ModeleDistant; onChange: () 
   return (
     <div className="flex flex-wrap items-end gap-3 border-b border-border py-3 last:border-b-0">
       <div className="min-w-40 flex-1">
-        <p className="truncate font-mono text-xs text-foreground">{modele.uid}</p>
+        <NomModele modele={modele} />
         {modele.tarif ? (
           <p className="mt-0.5 text-[11px] text-muted-foreground">{t("Tarif saisi : il l'emporte sur le prix publié.")}</p>
         ) : modele.publie ? (
@@ -258,7 +274,7 @@ export function Usage() {
 
       <div className="grid gap-3 cq-sm:grid-cols-2 cq-lg:grid-cols-4">
         {[
-          { nom: t("Requêtes"), valeur: totaux.requetes.toLocaleString("fr-FR") },
+          { nom: t("Requêtes"), valeur: totaux.requetes.toLocaleString(locale()) },
           { nom: t("Jetons en entrée"), valeur: jetons(totaux.entree) },
           { nom: t("Jetons en sortie"), valeur: jetons(totaux.sortie) },
           {
@@ -324,9 +340,11 @@ export function Usage() {
                   const cout = libelleCout(m.cout);
                   return (
                     <tr key={m.uid} className="border-t border-border">
-                      <td className="py-2 font-mono text-xs text-foreground">{m.uid}</td>
+                      <td className="max-w-[14rem] py-2 pr-2">
+                        <NomModele modele={m} />
+                      </td>
                       <td className="py-2 text-xs text-muted-foreground">{m.local ? t("Local") : t("Distant")}</td>
-                      <td className="py-2 text-right tabular-nums">{m.requetes.toLocaleString("fr-FR")}</td>
+                      <td className="py-2 text-right tabular-nums">{m.requetes.toLocaleString(locale())}</td>
                       <td className="py-2 text-right tabular-nums">{jetons(m.entree)}</td>
                       <td className="py-2 text-right tabular-nums">
                         {jetons(m.sortie)}

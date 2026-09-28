@@ -2581,14 +2581,15 @@ console.log("\n7 septies. Essai du modèle sur cette machine : celui qui répond
     sortie.A2 = { phase: a2.phase, message: a2.message, model: a2.model };
 
     // B. Poste déjà installé (le PC de Medhi) : Qwen3.5 4B en mémoire, jamais essayé ; essai au démarrage.
+    // Qwen3 4B installé aussi, mais il ne tient plus sur 8 Go avec 32 768 jetons (28/09/2026) : c'est Qwen3.5 2B qui prend le relais.
     process.env.HELIX_DATA_DIR = mkdtempSync(join(ici, "b-"));
-    poser(["qwen/qwen3.5-4b"], ["qwen/qwen3.5-4b", "qwen3-4b"]);
+    poser(["qwen/qwen3.5-4b"], ["qwen/qwen3.5-4b", "qwen3-4b", "qwen/qwen3.5-2b"]);
     const hw = p.detectHardware();
     const avant = p.recommend(hw).key;
     await enFr(() => p.verifierModeleEnPlace());
     const b = p.getProvisionState();
     sortie.B = { avant, apres: p.recommend(hw).key, phase: b.phase, model: b.model, messages: [...messages], appels: appels(), charges: charges(),
-      qwen35: s.ficheDe("qwen/qwen3.5-4b"), qwen3: s.ficheDe("qwen3-4b"),
+      qwen35: s.ficheDe("qwen/qwen3.5-4b"), qwen3: s.ficheDe("qwen/qwen3.5-2b"), qwen3Dense: s.ficheDe("qwen3-4b"),
       recommandes: p.adaptesALaMachine(hw).filter((e) => e.recommande && e.role === "chat").map((e) => e.key) };
     messages.length = 0;
     await enFr(() => p.verifierModeleEnPlace());
@@ -2674,10 +2675,10 @@ console.log("\n7 septies. Essai du modèle sur cette machine : celui qui répond
     JSON.stringify(essaisCasse),
   );
   verifier(
-    "poste déjà installé (Windows 8 Go simulé, Qwen3.5 4B en mémoire) : essai au démarrage, Qwen3.5 4B écarté, Qwen3 4B chargé et retenu, sans réinstaller",
-    B.avant === "qwen/qwen3.5-4b" && B.phase === "ready" && B.model === "qwen3-4b" && B.qwen35?.etat === "defaillant" && B.qwen35?.raison === "boucle" && B.qwen3?.etat === "valide" &&
-      JSON.stringify(B.appels) === JSON.stringify(["unload qwen/qwen3.5-4b", "load qwen3-4b"]) &&
-      B.messages?.some((m) => m.includes("Qwen3.5 4B ne répond pas correctement sur cette machine, essai de Qwen3 4B")),
+    "poste déjà installé (Windows 8 Go simulé, Qwen3.5 4B en mémoire) : essai au démarrage, Qwen3.5 4B écarté, Qwen3.5 2B chargé et retenu, sans réinstaller ; Qwen3 4B, qui ne tient pas avec 32 768 jetons, n'est pas essayé",
+    B.avant === "qwen/qwen3.5-4b" && B.phase === "ready" && B.model === "qwen/qwen3.5-2b" && B.qwen35?.etat === "defaillant" && B.qwen35?.raison === "boucle" && B.qwen3?.etat === "valide" && !B.qwen3Dense &&
+      JSON.stringify(B.appels) === JSON.stringify(["unload qwen/qwen3.5-4b", "load qwen/qwen3.5-2b"]) &&
+      B.messages?.some((m) => m.includes("Qwen3.5 4B ne répond pas correctement sur cette machine, essai de Qwen3.5 2B")),
     JSON.stringify(e.B ?? e).slice(0, 700),
   );
   verifier(
@@ -4860,6 +4861,178 @@ console.log("\n11 decies. Ce que l'écran affiche en anglais et en chinois (parc
     arret.abort();
     verifier(`flux ${chemin} : ouvert (en-têtes reçus) en moins de 3 s, sans attendre une première trame`, r?.status === 200 && delai < 3000, `${r?.status ?? "rien"} en ${delai} ms`);
   }
+}
+
+console.log("\n13 quinquies. Seconde tournée du 28/09/2026 : régressions entre fusions, sans navigateur");
+{
+  /*
+   * Ce que la seconde tournée de l'interface a trouvé et qui se vérifie sans
+   * écran (PROJET.md, 28/09/2026). Les modules de la passerelle sont chargés
+   * ici, avec le profil et le dossier de données jetables de la batterie.
+   * Placée avant la section 12 : l'instance principale y sert encore, et les
+   * essais de mot de passe n'y ont pas encore freiné les connexions.
+   */
+  const { pathToFileURL: versUrl } = await import("node:url");
+  const src = (f) => versUrl(join(RACINE, "gateway", "src", f)).href;
+
+  // 1. Un document joint à la neuvième question d'un Chat, contexte de 8 192 jetons : entier, et l'historique coupé.
+  const { integrerDocuments } = await import(src("documentsJoints.ts"));
+  const { tenirDansLaPlace, placeDeLaConversation } = await import(src("historique.ts"));
+  const lignesDoc = Array.from({ length: 120 }, (_, i) => `Ligne ${i} du rapport, chiffre ${i * 7}.`).join("\n");
+  const docJoint = `<document nom="rapport.txt" caracteres="${lignesDoc.length}">\n${lignesDoc}\n</document>`;
+  const fil = [{ role: "system", content: "Tu es Helix." }];
+  for (let i = 0; i < 8; i++) {
+    fil.push({ role: "user", content: `Question ${i} sur le budget` }, { role: "assistant", content: `Réponse ${i}. `.padEnd(3000, "Le modèle développe son explication. ") });
+  }
+  fil.push({ role: "user", content: `${docJoint}\n\nRésume ce rapport.` });
+  let partiesLues = 0;
+  const contexte = { contexte: 8192, reflechit: false, jetonsOutils: 0, modele: "essai", lirePartie: async () => (partiesLues++, "notes") };
+  const avec = await integrerDocuments(fil, { ...contexte, historiqueCoupe: true });
+  const coupe = tenirDansLaPlace(avec.messages, placeDeLaConversation(8192, false, 0));
+  const derniere = String(coupe.messages.at(-1)?.content ?? "");
+  verifier(
+    "documents et coupe : un document de 2 200 jetons joint après huit longs échanges part en entier, sans lecture en parties",
+    partiesLues === 0 && derniere.includes("Ligne 119 du rapport") && avec.annonces.length === 0,
+    `${partiesLues} partie(s) lue(s), annonces : ${avec.annonces.join(" | ")}`,
+  );
+  verifier(
+    "documents et coupe : ce sont les anciens échanges qui partent, la consigne système et la question restent, et le tout tient",
+    coupe.retires > 0 && coupe.messages[0]?.role === "system" && /Résume ce rapport/.test(derniere) && coupe.apres <= coupe.budget,
+    JSON.stringify({ retires: coupe.retires, apres: coupe.apres, budget: coupe.budget, premier: coupe.messages[0]?.role }),
+  );
+  partiesLues = 0;
+  const relais = await integrerDocuments(fil, contexte);
+  verifier(
+    "documents et coupe : sans coupe ensuite (relais d'un client), tout l'historique compte encore, et le document est lu en parties",
+    partiesLues > 0 && relais.annonces.length > 0,
+    `${partiesLues} partie(s)`,
+  );
+
+  // 2. Une collection dont l'écriture échoue ne laisse pas de fichier provisoire.
+  const { db: magasin } = await import(src("db.ts"));
+  const { readdirSync: lister, mkdirSync: creer, rmSync: effacer } = await import("node:fs");
+  const provisoires = () => lister(DONNEES).filter((f) => f.endsWith(".tmp"));
+  const avant = provisoires().length;
+  // Un dossier à la place du fichier de la collection : le renommage final échoue, comme un disque qui refuse.
+  const cible = join(DONNEES, "essai-ecriture-ratee.json");
+  creer(join(cible, "occupe"), { recursive: true });
+  let refus = null;
+  try {
+    await magasin().write("essai-ecriture-ratee", { a: 1 });
+  } catch (err) {
+    refus = err;
+  }
+  verifier("données : une écriture ratée remonte son erreur et ne laisse aucun fichier provisoire dans le dossier des données", refus !== null && provisoires().length === avant, `${refus ? "erreur" : "pas d'erreur"}, ${provisoires().join(", ")}`);
+  effacer(cible, { recursive: true, force: true });
+
+  // 3. La mémoire des modèles proposés à 32 768 jetons, sans carte graphique (config.json publiés, relevés le 28/09/2026).
+  const prov = await import(src("provision.ts"));
+  const pc = (go) => ({ platform: "win32", arch: "x64", totalMemoryGb: go, cpuCount: 8, appleSilicon: false });
+  const fiche = (cle) => prov.CATALOG.find((e) => e.key === cle);
+  verifier(
+    "mémoire : sur un PC de 8 Go sans carte, Qwen3.5 4B tient avec 32 768 jetons, Qwen3 4B et Ministral 3 3B (4,5 et 3,25 Gio de cache) non",
+    prov.tientSur(pc(8), fiche("qwen/qwen3.5-4b")) && !prov.tientSur(pc(8), fiche("qwen3-4b")) && !prov.tientSur(pc(8), fiche("mistralai/ministral-3-3b")),
+    ["qwen/qwen3.5-4b", "qwen3-4b", "mistralai/ministral-3-3b"].map((k) => `${k}:${prov.tientSur(pc(8), fiche(k))}`).join(" "),
+  );
+  const replis8 = prov.replis(pc(8), prov.CATALOG, prov.recommend(pc(8))).map((e) => e.key);
+  verifier("mémoire : sur 8 Go, les replis de Qwen3.5 4B ne passent plus par des modèles qui ne tiennent pas", !replis8.includes("qwen3-4b") && !replis8.includes("mistralai/ministral-3-3b"), replis8.join(" > "));
+  verifier(
+    "mémoire : sur 16 Go sans carte, le conseil reste Qwen3 8B (5 Go de poids, 4,5 Gio de cache) ; une carte NVIDIA garde l'ancienne règle",
+    prov.recommend(pc(16)).key === "qwen3-8b" && prov.tientSur({ ...pc(16), gpuVramGb: 8 }, fiche("qwen3-8b")),
+    prov.recommend(pc(16)).key,
+  );
+
+  // 4. Mon usage : le nom du modèle et son service, pas l'identifiant technique.
+  const { designation } = await import(src("usage.ts"));
+  const d1 = designation("essai/essai-chat");
+  const d2 = designation("cle-disparue123/gpt-4o-mini");
+  verifier("Mon usage : un modèle se nomme sans l'identifiant de son service, avec le nom du service ; une clé retirée laisse le nom du modèle", d1.nom === "essai-chat" && d1.service === "Essai" && d2.nom === "gpt-4o-mini" && !d2.service, JSON.stringify([d1, d2]));
+  const ecranUsage = readFileSync(join(RACINE, "src", "components", "settings", "Usage.tsx"), "utf8");
+  verifier("Mon usage : l'écran montre le nom (l'identifiant au survol) et ne garde plus de « dont » écrit en dur", !/\{m\.uid\}<\/td>|\{modele\.uid\}<\/p>/.test(ecranUsage) && !/>\s*dont \{/.test(ecranUsage), "uid affiché ou « dont » en dur");
+
+  // 5. Un employé dont le modèle n'est plus servi : refus avec un code, que la mise en service automatique reconnaît.
+  const conn = await (await appel("/helix/auth/verify", { method: "POST", headers: avecJeton, body: JSON.stringify({ accountId: compte.account?.id, password: "Mot2PasseSolide!42" }) })).json().catch(() => ({}));
+  const seance = { ...avecJeton, "X-Helix-Session": conn.session?.token };
+  const refusEmploye = await appel("/helix/employes", { method: "POST", headers: seance, body: JSON.stringify({ nom: "Essai disparu", poste: "Essai.", modele: "essai/modele-desinstalle" }) });
+  const corpsRefus = await refusEmploye.json().catch(() => ({}));
+  verifier("employés : un modèle qui n'est plus servi est refusé (400) avec le code « modele_indisponible », sans employé créé", refusEmploye.status === 400 && corpsRefus.error?.code === "modele_indisponible", `${refusEmploye.status} ${JSON.stringify(corpsRefus).slice(0, 200)}`);
+  const hook = readFileSync(join(RACINE, "src", "hooks", "useMiseEnService.ts"), "utf8");
+  verifier("employés : la mise en service automatique ne redemande pas un modèle disparu et dit d'en choisir un autre", /modeleIndisponible/.test(hook) && /modele_indisponible/.test(hook) && !/agent\.modeleEmploye \?\? agent\.modelUid\) \? \{ modele/.test(hook), "useMiseEnService.ts");
+
+  // 6. LM Studio coupé : ni la mise en route ni son écran ne lancent `lms` (faux `lms` qui note, dossier personnel jetable).
+  const { mkdirSync: md, writeFileSync: wf, chmodSync: cm, existsSync: ex, readFileSync: rf } = await import("node:fs");
+  const ICI = mkdtempSync(join(tmpdir(), "helix-lms-coupe-"));
+  md(join(ICI, "bin"));
+  md(join(ICI, "maison"));
+  wf(join(ICI, "bin", "lms"), `#!/bin/sh\necho "$*" >> "${join(ICI, "lms.log")}"\necho "{}"\n`);
+  cm(join(ICI, "bin", "lms"), 0o755);
+  wf(join(ICI, "bin", "security"), `#!/bin/sh\necho "$*" >> "${join(ICI, "security.log")}"\nexit 1\n`);
+  cm(join(ICI, "bin", "security"), 0o755);
+  wf(join(ICI, "profil.json"), JSON.stringify({ chiffrement: "fichier", backends: [{ id: "lmstudio", enabled: false }, { id: "exo", enabled: false }] }));
+  const PORT6 = await portLibre();
+  const sixieme = spawn(process.execPath, [join(RACINE, "gateway", "src", "index.ts")], {
+    cwd: RACINE,
+    env: {
+      PATH: `${join(ICI, "bin")}:/usr/bin:/bin`,
+      HOME: join(ICI, "maison"),
+      TMPDIR: tmpdir(),
+      HELIX_CONFIG: join(ICI, "profil.json"),
+      HELIX_DATA_DIR: join(ICI, "donnees"),
+      HELIX_GATEWAY_PORT: String(PORT6),
+      HELIX_GATEWAY_HOST: "127.0.0.1",
+      HELIX_LMSTUDIO_URL: "http://127.0.0.1:9/v1",
+      HELIX_EXO_URL: "http://127.0.0.1:9/v1",
+      HELIX_OPENCODE_BIN: "/usr/bin/true",
+    },
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  let journal6 = "";
+  sixieme.stdout.on("data", (b) => (journal6 += b));
+  sixieme.stderr.on("data", (b) => (journal6 += b));
+  const G6 = `http://127.0.0.1:${PORT6}`;
+  for (let i = 0; i < 80; i++) {
+    try {
+      await fetch(`${G6}/health`);
+      break;
+    } catch {
+      await attendre(250);
+    }
+  }
+  let jeton6 = "";
+  try {
+    jeton6 = rf(join(ICI, "donnees", "instance-token"), "utf8").trim();
+  } catch {
+    /* passerelle muette : les contrôles le diront */
+  }
+  const h6 = { "Content-Type": "application/json", Authorization: `Bearer ${jeton6}`, "X-Helix-Langue": "fr" };
+  const cree6 = await (await fetch(`${G6}/helix/auth/create`, { method: "POST", headers: h6, body: JSON.stringify({ fullName: "Essai Coupe", email: "coupe@example.test", password: "Mot2PasseSolide!42" }) }).catch(() => ({ json: async () => ({}) }))).json().catch(() => ({}));
+  const s6 = { ...h6, "X-Helix-Session": cree6.session?.token };
+  const etat6 = await (await fetch(`${G6}/helix/provision`, { headers: s6 }).catch(() => ({ json: async () => ({}) }))).json().catch(() => ({}));
+  await fetch(`${G6}/helix/provision/start`, { method: "POST", headers: s6, body: "{}" }).catch(() => null);
+  await attendre(1500);
+  const etatApres = await (await fetch(`${G6}/helix/provision`, { headers: s6 }).catch(() => ({ json: async () => ({}) }))).json().catch(() => ({}));
+  await fetch(`${G6}/v1/models`, { headers: s6 }).catch(() => null);
+  const fini6 = new Promise((ok) => sixieme.once("exit", ok));
+  sixieme.kill();
+  await Promise.race([fini6, attendre(5000)]);
+  const appelsLms = ex(join(ICI, "lms.log")) ? rf(join(ICI, "lms.log"), "utf8").trim() : "";
+  verifier("LM Studio coupé : l'écran de mise en route, sa demande d'installation et la liste des modèles ne lancent jamais `lms`", Boolean(jeton6) && appelsLms === "", appelsLms || journal6.slice(-300));
+  verifier(
+    "LM Studio coupé : l'écran de mise en route dit qu'il n'y a rien à installer d'ici, et la demande d'installation le dit sans rien tenter",
+    etat6.managed === true && etat6.moteurInstalle === false && etatApres.state?.phase === "error" && /coupé/.test(String(etatApres.state?.message)),
+    JSON.stringify({ managed: etat6.managed, moteur: etat6.moteurInstalle, etat: etatApres.state }).slice(0, 300),
+  );
+  verifier("LM Studio coupé : le trousseau n'a pas été appelé", !ex(join(ICI, "security.log")), "security appelé");
+  rmSync(ICI, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+
+  // 7. Écran : vocabulaire, libellés des outils, approbations relues.
+  const libelles = readFileSync(join(RACINE, "src", "lib", "libellesOutils.ts"), "utf8");
+  const lib = (outil) => new RegExp(`\\b${outil}: t\\("([^"]+)"\\)`).exec(libelles)?.[1];
+  verifier("écran : read_file et read_text_file, list_directory et list_directory_with_sizes ont chacun leur libellé", lib("read_file") !== lib("read_text_file") && lib("list_directory") !== lib("list_directory_with_sizes") && Boolean(lib("read_file")), `${lib("read_file")} / ${lib("read_text_file")}`);
+  const employesEcran = readFileSync(join(RACINE, "src", "components", "agents", "Employes.tsx"), "utf8");
+  verifier("écran : l'onglet où l'on parle à un agent s'appelle « Chat », plus « Discuter »", !/t\("Discuter"\)/.test(employesEcran) && /id: "discuter", label: t\("Chat"\)/.test(employesEcran), "Employes.tsx");
+  const approbations = readFileSync(join(RACINE, "src", "hooks", "useApprobation.ts"), "utf8");
+  verifier("écran : une lecture des approbations ratée est refaite, et ce que le flux dit pendant une lecture n'est pas écrasé par elle", /reessai = setTimeout/.test(approbations) && /pendantLecture\?\.ajoutees\.push/.test(approbations), "useApprobation.ts");
 }
 
 /* ------------------------------------------------------------------------- */

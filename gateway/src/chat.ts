@@ -1266,6 +1266,9 @@ export async function handleChatRequest(
         }
       },
       progression: (message) => signaler({ type: "statut", message }),
+      // L'historique sera raccourci plus bas (`tenirDansLaPlace`) : seulement pour l'écran de Helix, taille connue.
+      historiqueCoupe:
+        !callerTools && interfaceHelix && (model.backendKind === "lmstudio" || Boolean(backend.contexte) || Boolean(model.contextePublie)),
     });
     if (arret.signal.aborted) {
       res.end();

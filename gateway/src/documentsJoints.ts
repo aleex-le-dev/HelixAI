@@ -319,6 +319,13 @@ export interface Contexte {
   lirePartie: (consigne: string, jetonsNotes: number) => Promise<string | null>;
   /** Où en est la lecture, pour l'écran (vide : fini). */
   progression?: (message: string) => void;
+  /**
+   * Les anciens échanges seront raccourcis ensuite pour tenir dans la place
+   * (historique.ts, `tenirDansLaPlace`) : le document de la question n'a pas
+   * à leur céder la place. Faux quand rien ne coupe après (relais d'un client,
+   * taille de conversation supposée) : tout ce qui part compte alors.
+   */
+  historiqueCoupe?: boolean;
 }
 
 /**
@@ -344,9 +351,25 @@ export async function integrerDocuments(messages: unknown[], c: Contexte): Promi
     const p = porteurs.find((x) => x.index === i);
     return p ? { role: "user", content: p === actuel ? p.question : messageSansDocuments(p) } : m;
   });
-  const fixe = jetonsDesMessages(sansAucunDocument) + reservePourLaReponse(c.contexte, c.reflechit) + marge(c.contexte) + 200;
+  const reserve = reservePourLaReponse(c.contexte, c.reflechit) + marge(c.contexte) + 200;
+  const fixe = jetonsDesMessages(sansAucunDocument) + reserve;
   const placeAvec = c.contexte - fixe - c.jetonsOutils;
   const placeSans = c.contexte - fixe;
+  /*
+   * La place du document de la question, quand l'historique est raccourci
+   * ensuite (28/09/2026) : seuls restent sûrement la consigne système, la
+   * question et ce qui la suit. Mesuré avant ce jour sur un contexte de 8 192
+   * jetons : un document de 2 200 jetons, joint à la neuvième question d'un
+   * Chat, passait pour trop long à cause des huit échanges d'avant, et était
+   * lu en une seule partie sur plusieurs (le reste perdu) ; puis
+   * `tenirDansLaPlace` retirait justement ces échanges. Les documents des
+   * questions d'avant, eux, ne sont repris que si tout l'historique tient.
+   */
+  const debutGarde = derniereQuestion ?? sansAucunDocument.length;
+  const garde = sansAucunDocument.filter((m, i) => i >= debutGarde || (i === 0 && (m as { role?: string })?.role === "system"));
+  const fixeQuestion = jetonsDesMessages(garde) + reserve;
+  const placeAvecQuestion = c.historiqueCoupe ? c.contexte - fixeQuestion - c.jetonsOutils : placeAvec;
+  const placeSansQuestion = c.historiqueCoupe ? c.contexte - fixeQuestion : placeSans;
 
   /** Ce qu'un document d'avant occupera : ses notes s'il a été lu en parties, sinon son texte. */
   const blocAncien = (d: DocumentJoint) => NOTES_GARDEES.get(cleDesNotes(d, c.contexte)) ?? blocEntier(d);
@@ -362,10 +385,17 @@ export async function integrerDocuments(messages: unknown[], c: Contexte): Promi
    * comptent aussi : « et la page 3 ? » s'adresse encore au fichier.
    */
   let sansOutils = false;
-  let place = placeAvec;
-  if (besoinActuel + besoinAnciens > placeAvec && c.jetonsOutils > 0) {
+  let place = placeAvecQuestion;
+  /** Ce qui reste pour les documents d'avant : tout l'historique doit tenir avec eux. */
+  let placeAnciens = placeAvec;
+  const besoinTotal = besoinActuel + besoinAnciens;
+  const tropAvecOutils = c.historiqueCoupe
+    ? besoinActuel > placeAvecQuestion || (besoinAnciens > 0 && besoinTotal > placeAvec && besoinTotal <= placeSans)
+    : besoinTotal > placeAvec;
+  if (tropAvecOutils && c.jetonsOutils > 0) {
     sansOutils = true;
-    place = placeSans;
+    place = placeSansQuestion;
+    placeAnciens = placeSans;
     const noms = [...(actuel?.documents ?? []), ...anciens.flatMap((a) => a.documents)].map((d) => d.nom);
     annonces.push(tf("Pour lire « {0} », {1} répond cette fois sans outils : ils prenaient la place du document.", [...new Set(noms)].join(", "), c.modele));
   }
@@ -374,6 +404,7 @@ export async function integrerDocuments(messages: unknown[], c: Contexte): Promi
     if (besoinActuel <= place) {
       copie[actuel.index] = { ...(copie[actuel.index] as object), content: messageReconstruit(actuel.documents.map(blocEntier), actuel.question, actuel.fragments) };
       place -= besoinActuel;
+      placeAnciens -= besoinActuel;
       journal.push(`${actuel.documents.length} document(s) en entier, ~${besoinActuel} jetons sur ${c.contexte}`);
     } else {
       /*
@@ -467,6 +498,7 @@ export async function integrerDocuments(messages: unknown[], c: Contexte): Promi
       }
       copie[actuel.index] = { ...(copie[actuel.index] as object), content: messageReconstruit(blocs, actuel.question, actuel.fragments) };
       place = 0;
+      placeAnciens = 0;
     }
   }
 
@@ -480,9 +512,9 @@ export async function integrerDocuments(messages: unknown[], c: Contexte): Promi
   for (const ancien of [...anciens].reverse()) {
     const blocs = ancien.documents.map(blocAncien);
     const besoin = blocs.reduce((s, b) => s + jetonsEstimes(b), 0);
-    if (besoin <= place) {
+    if (besoin <= placeAnciens) {
       copie[ancien.index] = { ...(copie[ancien.index] as object), content: messageReconstruit(blocs, ancien.question, ancien.fragments) };
-      place -= besoin;
+      placeAnciens -= besoin;
       repris.push(...ancien.documents.map((d) => d.nom));
     } else {
       copie[ancien.index] = { ...(copie[ancien.index] as object), content: messageSansDocuments(ancien) };

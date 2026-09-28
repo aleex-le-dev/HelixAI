@@ -578,6 +578,20 @@ export interface PrixCite {
   releveLe: string;
 }
 
+/**
+ * Ce que l'écran montre d'un modèle : son nom, et le service qui le sert
+ * (28/09/2026). Mon usage montrait l'identifiant technique
+ * (« cle-3f9a…/gpt-4o-mini »), illisible pour qui a branché sa clé. Le service
+ * est son nom dans Helix (celui donné à la clé) ; une clé retirée depuis ne
+ * laisse que le nom du modèle.
+ */
+export function designation(uid: string): { nom: string; service?: string } {
+  const id = uid.split("/")[0] ?? "";
+  const b = tousLesBackends().find((x) => x.id === id);
+  const nom = uid.startsWith(`${id}/`) && uid.length > id.length + 1 ? uid.slice(id.length + 1) : uid;
+  return b ? { nom, service: b.label } : { nom };
+}
+
 /** Le prix publié pour un modèle distant, par son fournisseur, ou rien. */
 export function prixPublieDe(
   uid: string,
@@ -740,6 +754,9 @@ export interface Rapport {
   };
   modeles: (CompteursRendus & {
     uid: string;
+    /** Le nom du modèle et son service, pour l'écran (`designation`). */
+    nom: string;
+    service?: string;
     backend: string;
     local: boolean;
     cout: Cout;
@@ -748,6 +765,8 @@ export interface Rapport {
   /** Modèles distants connus, pour la saisie des tarifs, avec le prix publié quand il est connu. */
   distants: {
     uid: string;
+    nom: string;
+    service?: string;
     backend: string;
     tarif: { entree: number; sortie: number; devise: Devise; depuis: string } | null;
     publie: PrixCite | null;
@@ -836,7 +855,7 @@ export async function rapport(compte: string, periode: Periode): Promise<Rapport
   const modeles: Rapport["modeles"] = [...parModele.entries()]
     .map(([uid, { backend, local, c }]) => {
       const cout = coutDuModele(c, local, tableTarifs[uid], local ? null : publieDe(uid));
-      return { uid, backend, local, ...c, cout };
+      return { uid, ...designation(uid), backend, local, ...c, cout };
     })
     .sort((a, b) => b.entree + b.sortie - (a.entree + a.sortie));
 
@@ -904,6 +923,7 @@ export async function rapport(compte: string, periode: Periode): Promise<Rapport
         const t = tableTarifs[uid];
         return {
           uid,
+          ...designation(uid),
           backend,
           tarif: t ? { entree: t.entree, sortie: t.sortie, devise: deviseDuTarif(t), depuis: t.depuis } : null,
           publie: publieDe(uid),

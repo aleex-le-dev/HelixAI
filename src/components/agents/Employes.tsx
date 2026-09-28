@@ -726,7 +726,7 @@ export function PanneauEmploye({
 }) {
   const [onglet, setOnglet] = useState("discuter");
   const onglets = [
-    { id: "discuter", label: t("Discuter") },
+    { id: "discuter", label: t("Chat") },
     { id: "missions", label: tf("Missions ({0})", employe.missions.length) },
     { id: "activite", label: t("Activité") },
     { id: "canaux", label: tf("Canaux ({0})", employe.canaux?.length ?? 0) },

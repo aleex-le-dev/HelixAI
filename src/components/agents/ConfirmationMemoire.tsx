@@ -42,7 +42,7 @@ export function ConfirmationMemoire({
       </p>
       <p className="mt-1">
         {t("Avant qu'il prenne effet,")}{" "}{branding.name}{" "}
-        {t("met ses notes de côté (une copie chiffrée, que vous pourrez restaurer s'il redevient aussi fermé qu'aujourd'hui), puis vide sa mémoire : ses notes, les conversations de chacun avec lui chez l'agent, et l'index de sa mémoire. Les échanges affichés dans l'onglet Discuter restent.")}
+        {t("met ses notes de côté (une copie chiffrée, que vous pourrez restaurer s'il redevient aussi fermé qu'aujourd'hui), puis vide sa mémoire : ses notes, les conversations de chacun avec lui chez l'agent, et l'index de sa mémoire. Les échanges affichés dans l'onglet Chat restent.")}
       </p>
       <p className="mt-1">{t("Si sa mémoire ne peut pas être vidée entièrement, le changement n'est pas fait, et c'est dit ici.")}</p>
       <div className="mt-3 flex flex-wrap gap-2">

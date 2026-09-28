@@ -73,10 +73,11 @@ export function Popover({
    * s'ouvre du côté qui en a le plus quand le côté demandé en manque, et ne
    * dépasse jamais la fenêtre : au-delà, c'est lui qui défile, pas la page.
    */
-  const [placement, setPlacement] = useState<{ cote: "bottom" | "top"; hauteur: number; alignement: Align }>({
+  const [placement, setPlacement] = useState<{ cote: "bottom" | "top"; hauteur: number; alignement: Align; decalage: number; largeur?: number }>({
     cote: side,
     hauteur: 480,
     alignement: align,
+    decalage: 0,
   });
 
   useLayoutEffect(() => {
@@ -110,7 +111,31 @@ export function Popover({
       let alignement = align;
       if (align === "end" && cadre.right - large < marge && window.innerWidth - cadre.left > cadre.right) alignement = "start";
       if (align === "start" && cadre.left + large > window.innerWidth - marge && cadre.right > window.innerWidth - cadre.left) alignement = "end";
-      setPlacement({ cote, hauteur: Math.max(160, cote === "bottom" ? dessous : dessus), alignement });
+      /*
+       * Ni d'un côté ni de l'autre (28/09/2026, 375 pixels) : le choix du
+       * moteur de Code, large de 360 pixels, partait sous la barre latérale et
+       * y était coupé (« …ecran Code », « …nnecter avec ChatGPT »), la zone
+       * de contenu masquant ce qui dépasse. Le panneau est alors ramené dans
+       * la zone qui le contient, et rétréci s'il y est plus large qu'elle.
+       */
+      let gauche = 0;
+      let droite = window.innerWidth;
+      for (let e = rootRef.current?.parentElement ?? null; e && e !== document.body; e = e.parentElement) {
+        if (/(hidden|auto|scroll|clip)/.test(getComputedStyle(e).overflowX)) {
+          const b = e.getBoundingClientRect();
+          gauche = Math.max(gauche, b.left);
+          droite = Math.min(droite, b.right);
+          break;
+        }
+      }
+      const place = droite - gauche - 2 * marge;
+      const largeur = large > place && place > 0 ? place : undefined;
+      const effectif = largeur ?? large;
+      const debut =
+        alignement === "start" ? cadre.left : alignement === "end" ? cadre.right - effectif : cadre.left + cadre.width / 2 - effectif / 2;
+      const decalage =
+        debut < gauche + marge ? gauche + marge - debut : debut + effectif > droite - marge ? droite - marge - (debut + effectif) : 0;
+      setPlacement({ cote, hauteur: Math.max(160, cote === "bottom" ? dessous : dessus), alignement, decalage, ...(largeur ? { largeur } : {}) });
     };
     mesurer();
     window.addEventListener("resize", mesurer);
@@ -157,7 +182,12 @@ export function Popover({
         <div
           id={id}
           role="menu"
-          style={{ ...(width ? { width } : {}), maxHeight: placement.hauteur }}
+          style={{
+            ...(width ? { width } : {}),
+            ...(placement.largeur ? { width: placement.largeur } : {}),
+            ...(placement.decalage ? { translate: `${Math.round(placement.decalage)}px 0` } : {}),
+            maxHeight: placement.hauteur,
+          }}
           className={cn(
             // `overscroll-contain` : la molette arrivée au bout de la liste n'entraîne pas la page derrière.
             "absolute z-50 overflow-y-auto overscroll-contain rounded-xl border border-border bg-popover p-1.5 text-popover-foreground shadow-pop",

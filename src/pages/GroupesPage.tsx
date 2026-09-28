@@ -162,7 +162,7 @@ function CarteGroupe({ groupe, onOuvrir }: { groupe: Groupe; onOuvrir: () => voi
         <div className="min-w-0">
           <p className="truncate font-medium text-foreground">{groupe.nom}</p>
           <p className="text-xs text-muted-foreground">
-            {groupe.membres.length} membre{groupe.membres.length > 1 ? "s" : ""}
+            {(groupe.membres.length === 1 ? t("1 membre") : tf("{0} membres", groupe.membres.length))}
           </p>
         </div>
         {groupe.estMembre && (
@@ -412,7 +412,7 @@ function DetailGroupe({
 
       <div className="mt-5 flex items-center justify-between">
         <p className="text-sm font-medium text-foreground">
-          {groupe.membres.length} membre{groupe.membres.length > 1 ? "s" : ""}
+          {(groupe.membres.length === 1 ? t("1 membre") : tf("{0} membres", groupe.membres.length))}
         </p>
         {groupe.estResponsable && ajout === null && (
           <Button variant="ghost" size="sm" icon={Plus} onClick={() => setAjout([])}>

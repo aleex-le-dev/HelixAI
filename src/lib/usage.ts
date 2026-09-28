@@ -54,6 +54,10 @@ export interface Compteurs {
 
 export interface LigneModele extends Compteurs {
   uid: string;
+  /** Son nom, sans l'identifiant de la clé ou du service (absent d'une instance plus ancienne). */
+  nom?: string;
+  /** Le service qui le sert, tel que nommé dans Helix. */
+  service?: string;
   backend: string;
   local: boolean;
   cout: Cout;
@@ -61,6 +65,8 @@ export interface LigneModele extends Compteurs {
 
 export interface ModeleDistant {
   uid: string;
+  nom?: string;
+  service?: string;
   backend: string;
   tarif: { entree: number; sortie: number; devise: Devise; depuis: string } | null;
   /** Le prix publié par son fournisseur, appliqué tant qu'aucun tarif n'est saisi. */
@@ -118,9 +124,9 @@ export async function definirTarif(
 
 /** Nombre de jetons lisible : 1 234 · 12,3 k · 1,2 M. */
 export function jetons(n: number): string {
-  if (n < 10_000) return n.toLocaleString("fr-FR");
-  if (n < 1_000_000) return `${(n / 1000).toLocaleString("fr-FR", { maximumFractionDigits: 1 })} k`;
-  return `${(n / 1_000_000).toLocaleString("fr-FR", { maximumFractionDigits: 2 })} M`;
+  if (n < 10_000) return n.toLocaleString(locale());
+  if (n < 1_000_000) return `${(n / 1000).toLocaleString(locale(), { maximumFractionDigits: 1 })} k`;
+  return `${(n / 1_000_000).toLocaleString(locale(), { maximumFractionDigits: 2 })} M`;
 }
 
 /** Montant dans sa devise, avec assez de décimales pour les petites sommes. */

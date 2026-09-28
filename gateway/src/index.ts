@@ -60,6 +60,7 @@ import {
 } from "./provision.ts";
 import { estDefaillant, etatSurCetteMachine } from "./santeModeles.ts";
 import { deployment, autoProvisionEnabled } from "./deployment.ts";
+import { etat as etatRechercheWeb } from "./rechercheWeb.ts";
 import { db, isCollection, COLLECTIONS, migrerChiffrement, type Collection } from "./db.ts";
 import { exporterDonnees } from "./export.ts";
 import { chargerReglagesEcran, configEcran, definirModeEcran, modeModifiable } from "./reglagesEcran.ts";
@@ -5537,6 +5538,8 @@ const traiter = (
     if (req.method === "GET" && path === "/helix/machine/ecran") return handleMachineEcran(req, res, url);
     if (path === "/helix/videos" || path.startsWith("/helix/videos/")) return handleVideos(req, res, url, path.slice("/helix/videos".length).replace(/^\//, ""));
     if (req.method === "GET" && path === "/helix/images") return handleImagesEtat(req, res, url);
+    // La recherche sur le web du Chat : permise ou non par le profil, et le moteur que la puce nomme (rechercheWeb.ts).
+    if (req.method === "GET" && path === "/helix/recherche-web") return send(res, 200, etatRechercheWeb());
     if (routeEntrainement(path)) return handleEntrainement(req, res, url, path === "/helix/entrainement" ? "" : path.slice("/helix/entrainement/".length));
     if (req.method === "GET" && path === "/helix/import/logiciels") return handleImportLogiciels(req, res, url);
     if ((req.method === "GET" || req.method === "POST") && path.startsWith("/helix/import/logiciel/")) return handleImportLogiciels(req, res, url, path.slice("/helix/import/logiciel/".length));

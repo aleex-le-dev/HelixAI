@@ -7,6 +7,7 @@ import { t, tf } from "@/lib/i18n";
 import { creerImage as creerSurLaMachine, creerVideo as creerVideoSurLaMachine, type Format, type ImageCreee } from "@/lib/images";
 import type { NiveauRaisonnement } from "@/lib/store/profile";
 import type { Citation } from "@/lib/connaissances";
+import type { SourceWeb } from "@/lib/rechercheWeb";
 import {
   createSession,
   updateSession,
@@ -126,6 +127,8 @@ export interface Message {
    * écartées) ; `erreur` : les bases n'ont pas pu être consultées.
    */
   sources?: { citations: Citation[]; ignorees?: number; aReindexer?: number; erreur?: string };
+  /** Sources de la recherche sur le web pour cette réponse (numéro cité « [n] », titre, adresse, page ouverte ou non). */
+  sourcesWeb?: SourceWeb[];
   /** Durées mesurées de la réponse (réflexion, premier mot, réponse entière). */
   durees?: DureesReponse;
   error?: string;
@@ -244,6 +247,8 @@ interface Options {
   connaissances?: string[];
   /** L'agent choisi, pour que l'instance ajoute ses instructions masquées (store/agents.ts, `INSTRUCTIONS_MASQUEES`). */
   agent?: string;
+  /** La bascule « Rechercher sur le web » du menu « + » (28/09/2026). */
+  web?: boolean;
 }
 
 /** État d'une conversation branchée sur la passerelle, persistée en session. */
@@ -273,6 +278,7 @@ export function useChat(options: Options) {
         ...(m.pieces && m.pieces.length > 0 ? { pieces: m.pieces } : {}),
         // Les citations restent avec la réponse : rouvert, le Chat dit encore d'où elle venait.
         ...(m.sources && m.sources.citations.length > 0 ? { sources: m.sources.citations } : {}),
+        ...(m.sourcesWeb && m.sourcesWeb.length > 0 ? { sourcesWeb: m.sourcesWeb } : {}),
         /*
          * Les durées et les étapes restent avec la réponse (27/09/2026) : rouvert,
          * ou relu sur un autre poste après synchronisation, le Chat dit encore
@@ -458,6 +464,7 @@ export function useChat(options: Options) {
             tools: options.tools,
             connaissances: options.connaissances,
             agent: options.agent,
+            web: options.web,
             signal: controller.signal,
           },
           {
@@ -537,6 +544,8 @@ export function useChat(options: Options) {
                   if (last.debut !== undefined) last.duree = Date.now() - last.debut;
                 }
                 patch(replyId, { tools: traces.map((trace) => ({ ...trace })) });
+              } else if (event.type === "sources_web") {
+                patch(replyId, { sourcesWeb: event.sources ?? [] });
               } else if (event.type === "sources") {
                 patch(replyId, {
                   sources: { citations: event.sources ?? [], ignorees: event.ignorees, aReindexer: event.aReindexer, erreur: event.erreur },
@@ -644,6 +653,7 @@ export function useChat(options: Options) {
       options.origin,
       options.tools,
       options.connaissances,
+      options.web,
       attacher,
       finirReponse,
       persisterDans,
@@ -678,6 +688,7 @@ export function useChat(options: Options) {
           image: m.image,
           ...(Array.isArray(m.pieces) && m.pieces.length > 0 ? { pieces: m.pieces } : {}),
           ...(m.sources && m.sources.length > 0 ? { sources: { citations: m.sources } } : {}),
+          ...(Array.isArray(m.sourcesWeb) && m.sourcesWeb.length > 0 ? { sourcesWeb: m.sourcesWeb } : {}),
           ...(m.durees ? { durees: { ...m.durees } } : {}),
           ...(m.outils && m.outils.length > 0
             ? {

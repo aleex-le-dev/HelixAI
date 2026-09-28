@@ -41,6 +41,11 @@ export interface StoredMessage {
    */
   sources?: { n: number; base: string; document: string; documentId: string; extrait: string; debut: number; fin: number; similarite: number }[];
   /**
+   * Sources de la recherche sur le web (28/09/2026) : numéro, titre, adresse,
+   * page ouverte ou non. Gardées avec la réponse comme celles des bases.
+   */
+  sourcesWeb?: { n: number; titre: string; adresse: string; lue: boolean }[];
+  /**
    * Ce que la réponse a pris de temps, en millisecondes, mesuré à l'écran qui
    * l'a reçue (hooks/useChat.ts, `DureesReponse`), depuis le 27/09/2026.
    * Absent sur une réponse plus ancienne, ou qui n'a pas été mesurée : rien

@@ -7,6 +7,8 @@ import { OutilsChip } from "@/components/chat/OutilsChip";
 import { ConnaissancesChip } from "@/components/chat/ConnaissancesChip";
 import { useProjects } from "@/hooks/useProjects";
 import { ImageChip } from "@/components/chat/ImageChip";
+import { RechercheWebChip } from "@/components/chat/RechercheWebChip";
+import { etatRechercheWeb, type EtatRechercheWeb } from "@/lib/rechercheWeb";
 import type { Format } from "@/lib/images";
 import { InfoBox } from "@/components/ui/InfoBox";
 import { SuggestionList } from "@/components/chat/SuggestionList";
@@ -36,6 +38,23 @@ export function HomePage() {
   /** Une vidéo plutôt qu'une image (27/09/2026) : même mode, même pastille, autre genre. */
   const [modeVideo, setModeVideo] = useState(false);
   const [formatImage, setFormatImage] = useState<Format>("carre");
+  /*
+   * « Rechercher sur le web » (menu « + », 28/09/2026) : une bascule, montrée
+   * en puce tant qu'elle est active. Éteinte au départ, et sans effet si
+   * l'instance l'interdit : rien ne part vers le web sans ce choix.
+   */
+  const [rechercheWeb, setRechercheWeb] = useState(false);
+  const [etatWeb, setEtatWeb] = useState<EtatRechercheWeb | null | undefined>(undefined);
+  useEffect(() => {
+    let vivant = true;
+    void etatRechercheWeb().then((e) => {
+      if (vivant) setEtatWeb(e);
+    });
+    return () => {
+      vivant = false;
+    };
+  }, []);
+  const webActif = rechercheWeb && Boolean(etatWeb?.autorisee) && !modeImage;
   const { profile, update } = useProfile();
   const { models, loading: modelsLoading, refresh: refreshModels } = useModels();
 
@@ -97,6 +116,7 @@ export function HomePage() {
     origin,
     tools: toolsOn && toolsAllowed,
     connaissances,
+    web: webActif,
     ...(agent.id !== DEFAULT_AGENT.id ? { agent: agent.id } : {}),
   });
 
@@ -320,14 +340,30 @@ export function HomePage() {
       onCreerImage={() => {
         setModeVideo(false);
         setModeImage(true);
+        // Créer une image ne cherche rien : les deux modes ne se cumulent pas, comme chez ChatGPT.
+        setRechercheWeb(false);
       }}
       onCreerVideo={() => {
         setModeVideo(true);
         if (formatImage === "carre") setFormatImage("paysage");
         setModeImage(true);
+        setRechercheWeb(false);
+      }}
+      rechercheWeb={{
+        actif: webActif,
+        etat: etatWeb,
+        onChange: (actif) => {
+          setRechercheWeb(actif);
+          if (actif) {
+            setModeImage(false);
+            setModeVideo(false);
+          }
+        },
       }}
       accessoire={
-        modeImage ? (
+        webActif && etatWeb ? (
+          <RechercheWebChip moteur={etatWeb.moteur} onFermer={() => setRechercheWeb(false)} />
+        ) : modeImage ? (
           <ImageChip
             key={modeVideo ? "video" : "image"}
             genre={modeVideo ? "video" : "image"}

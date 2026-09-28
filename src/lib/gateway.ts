@@ -8,6 +8,7 @@ import { apiFetch } from "@/lib/endpoint";
 import type { NiveauRaisonnement } from "@/lib/store/profile";
 import { ouvrirFlux } from "@/lib/flux";
 import type { Citation } from "@/lib/connaissances";
+import type { SourceWeb } from "@/lib/rechercheWeb";
 import { t, tf } from "@/lib/i18n";
 
 export type Role = "chat" | "code" | "vision" | "gui" | "embed";
@@ -115,6 +116,8 @@ export type HelixEvent =
   | { type: "statut"; message: string }
   /* Passages des bases de connaissances donnés au modèle, pour les citer sous la réponse. */
   | { type: "sources"; sources: Citation[]; ignorees?: number; aReindexer?: number; erreur?: string }
+  /* Sources de la recherche sur le web, au fil des recherches et des pages lues (gateway/src/rechercheWeb.ts). */
+  | { type: "sources_web"; sources: SourceWeb[]; moteur?: string }
   | { type: "error"; message: string };
 
 export interface StreamHandlers {
@@ -289,6 +292,8 @@ export async function streamChat(
     connaissances?: string[];
     /** L'agent choisi : l'instance y ajoute elle-même ses instructions quand elles sont masquées (27/09/2026). */
     agent?: string;
+    /** La bascule « Rechercher sur le web » du menu « + » : sans elle, rien ne part vers un moteur de recherche. */
+    web?: boolean;
     signal?: AbortSignal;
   },
   handlers: StreamHandlers,
@@ -305,6 +310,7 @@ export async function streamChat(
       tools: opts.tools ?? false,
       ...(opts.connaissances && opts.connaissances.length > 0 ? { connaissances: opts.connaissances } : {}),
       ...(opts.agent ? { agent: opts.agent } : {}),
+      ...(opts.web ? { web: true } : {}),
       stream: true,
     }),
   });

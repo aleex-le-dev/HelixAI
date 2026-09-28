@@ -10,8 +10,11 @@ import { Film,
   Loader2,
   TriangleAlert,
   Paperclip,
+  Globe,
+  Check,
 } from "lucide-react";
 import { ACCEPT, type Attachment } from "@/lib/attachments";
+import type { EtatRechercheWeb } from "@/lib/rechercheWeb";
 import { IconButton } from "@/components/ui/IconButton";
 import { Popover } from "@/components/ui/Popover";
 import { Button } from "@/components/ui/Button";
@@ -50,6 +53,12 @@ interface ComposerProps {
   onCreerImage?: () => void;
   /** « Créer une vidéo » dans le menu « + » (27/09/2026). */
   onCreerVideo?: () => void;
+  /**
+   * « Rechercher sur le web » dans le menu « + » (28/09/2026) : une bascule,
+   * montrée ensuite en puce (`accessoire`). `etat` vient de l'instance :
+   * `undefined` pendant la lecture, `null` si elle ne répond pas.
+   */
+  rechercheWeb?: { actif: boolean; onChange: (actif: boolean) => void; etat: EtatRechercheWeb | null | undefined };
   /** Pastille affichée à côté du « + » (outil choisi dans le menu, par exemple « Image »). */
   accessoire?: ReactNode;
   /** Le moteur choisit lui-même son modèle (Codex, écran Code) : ni modèle ni niveau à proposer. */
@@ -79,6 +88,7 @@ export function Composer({
   onRetirerPiece,
   onCreerImage,
   onCreerVideo,
+  rechercheWeb,
   accessoire,
   sansModele = false,
 }: ComposerProps) {
@@ -351,6 +361,7 @@ export function Composer({
                     <span className="truncate text-xs text-muted-foreground">{t("Quelques secondes, sur cette machine")}</span>
                   </button>
                 )}
+                {rechercheWeb && <EntreeRechercheWeb {...rechercheWeb} fermer={() => setMenuPlus(false)} />}
               </Popover>
             ) : (
               <IconButton
@@ -400,6 +411,63 @@ export function Composer({
         </div>
       </div>
     </div>
+  );
+}
+
+/* ---------------------------- recherche sur le web ------------------------- */
+
+/**
+ * L'entrée « Rechercher sur le web » du menu « + » (28/09/2026) : une bascule,
+ * cochée quand elle est active. Elle dit à qui partent les questions ; quand
+ * l'instance l'interdit (profil de déploiement) ou ne répond pas, elle reste
+ * visible, désactivée, avec la raison sous son nom plutôt qu'au survol.
+ */
+function EntreeRechercheWeb({
+  actif,
+  onChange,
+  etat,
+  fermer,
+}: {
+  actif: boolean;
+  onChange: (actif: boolean) => void;
+  etat: EtatRechercheWeb | null | undefined;
+  fermer: () => void;
+}) {
+  const possible = Boolean(etat?.autorisee);
+  const raison =
+    etat === undefined
+      ? t("Lecture...")
+      : etat === null
+        ? t("Indisponible : l'instance ne répond pas.")
+        : !etat.autorisee
+          ? (etat.raison ?? t("Désactivée sur cette instance."))
+          : null;
+  return (
+    <button
+      type="button"
+      role="menuitemcheckbox"
+      aria-checked={actif}
+      disabled={!possible}
+      onClick={() => {
+        fermer();
+        onChange(!actif);
+      }}
+      className="flex w-full items-center gap-3 rounded-lg px-2.5 py-2 text-left hover:bg-muted disabled:cursor-not-allowed disabled:hover:bg-transparent"
+    >
+      <Globe size={16} strokeWidth={1.75} className={cn("shrink-0", possible ? "text-foreground" : "text-muted-foreground")} />
+      <span className="min-w-0 flex-1">
+        <span className="flex min-w-0 items-center gap-3">
+          <span className={cn("shrink-0 whitespace-nowrap text-sm", possible ? "text-foreground" : "text-muted-foreground")}>
+            {t("Rechercher sur le web")}
+          </span>
+          {possible && etat && (
+            <span className="truncate text-xs text-muted-foreground">{tf("Vos questions partent à {0}", etat.moteur)}</span>
+          )}
+        </span>
+        {raison && <span className="mt-0.5 block text-xs text-muted-foreground">{raison}</span>}
+      </span>
+      {actif && possible && <Check size={15} strokeWidth={2} className="shrink-0 text-foreground" />}
+    </button>
   );
 }
 

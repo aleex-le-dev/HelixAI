@@ -7489,7 +7489,7 @@ console.log("\n19. Moteur ouvert llama.cpp (Mac Intel) : épinglé, local, sous 
   const index = readFileSync(join(RACINE, "gateway", "src", "index.ts"), "utf8");
   verifier(
     "l'écran de mise en route dit quel moteur sert (llama.cpp : pas de conditions à accepter), et l'installation passe par la même route d'administrateur",
-    /moteur: ouvert \? "llamacpp" : "lmstudio"/.test(index) && /if \(moteurOuvert\(\)\) return installerMoteurOuvert\(qui\.userId, res\);/.test(index),
+    /moteur: ouvert \? "llamacpp" : "lmstudio"/.test(index) && /if \(moteurOuvert\(\)\) return installerMoteurOuvert\(qui\.userId, res, modeleChoisi\);/.test(index),
     "index.ts",
   );
 }

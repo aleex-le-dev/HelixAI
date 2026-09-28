@@ -214,38 +214,75 @@ async function etapes() {
   verifier("l'écran de mise en route propose LM Studio, pas encore installé", avant.statut === 200 && avant.json.moteur === "lmstudio" && avant.json.moteurInstalle === false, avant.texte.slice(0, 400));
   verifier(`${MODELE} fait partie des modèles proposés pour cette machine`, (avant.json.possibles ?? []).some((m) => m.key === MODELE), (avant.json.possibles ?? []).map((m) => m.key).join(","));
 
+  /*
+   * Suivi comme l'écran (useProvision.ts) : le flux de la mise en route,
+   * ouvert avant la demande, et rien d'autre tant qu'elle tourne. Relire
+   * `/helix/provision` toutes les trois secondes, comme le faisait la première
+   * version de cet essai, n'est pas neutre : chaque lecture cherche les
+   * modèles (`discover`), ce qui relance le serveur de LM Studio s'il ne
+   * répond pas ; l'essai réparait ainsi lui-même ce qu'il devait voir (essai
+   * du 28/09/2026).
+   */
+  const arretFlux = new AbortController();
+  const minuterie = setTimeout(() => arretFlux.abort(), DELAI_MS);
+  const flux = await fetch(`${G}/helix/provision/stream`, { headers: entetes(), signal: arretFlux.signal });
+  if (!verifier("le flux de la mise en route s'ouvre", flux.ok && Boolean(flux.body), flux.status)) return;
   const lance = await appel("/helix/provision/moteur", { conditionsAcceptees: true, model: MODELE });
   if (!verifier("installation du moteur acceptée (202)", lance.statut === 202, `${lance.statut} ${lance.texte.slice(0, 400)}`)) return;
 
-  // Suivi comme l'écran : l'état de la mise en route, noté à chaque changement.
+  const declaration = join(LMSTUDIO, ".internal", "llmster-install-location.json");
   let dernier = "";
   let etat = null;
-  let moteurVu = false;
-  const limite = Date.now() + DELAI_MS;
-  while (Date.now() < limite) {
-    if (application.exitCode !== null) break;
-    const r = await appel("/helix/provision").catch((err) => ({ statut: 0, json: {}, texte: String(err) }));
-    if (r.statut === 200) {
-      etat = r.json.state ?? {};
-      if (r.json.moteurInstalle && !moteurVu) {
-        moteurVu = true;
-        dire("   le moteur est installé et déclaré (moteurInstalle)");
+  let declareVu = false;
+  let tampon = "";
+  const lecteur = flux.body.getReader();
+  const decodeur = new TextDecoder();
+  try {
+    lecture: for (;;) {
+      const { value, done } = await lecteur.read();
+      if (done) break;
+      tampon += decodeur.decode(value, { stream: true });
+      let fin;
+      while ((fin = tampon.indexOf("\n\n")) >= 0) {
+        const bloc = tampon.slice(0, fin);
+        tampon = tampon.slice(fin + 2);
+        const donnees = bloc
+          .split("\n")
+          .filter((l) => l.startsWith("data: "))
+          .map((l) => l.slice(6))
+          .join("\n");
+        if (!donnees) continue;
+        try {
+          etat = JSON.parse(donnees);
+        } catch {
+          continue;
+        }
+        if (!declareVu && existsSync(declaration)) {
+          declareVu = true;
+          dire("   la déclaration du moteur est écrite (llmster-install-location.json)");
+        }
+        const pas = typeof etat.percent === "number" ? Math.floor(etat.percent / 10) * 10 : "";
+        const resume = `${etat.phase} | ${etat.model ?? "-"} | ${etat.message ?? ""}${pas === "" ? "" : ` (${pas} %)`}${etat.error ? ` | ${etat.error}` : ""}`;
+        if (resume !== dernier) {
+          dernier = resume;
+          dire(`   ${resume}`);
+        }
+        if (etat.phase === "ready" || etat.phase === "error") break lecture;
       }
-      const pas = typeof etat.percent === "number" ? Math.floor(etat.percent / 10) * 10 : "";
-      const resume = `${etat.phase} | ${etat.model ?? "-"} | ${etat.message ?? ""} ${pas === "" ? "" : `(${pas} %)`}${etat.error ? ` | ${etat.error}` : ""}`;
-      if (resume !== dernier) {
-        dernier = resume;
-        dire(`   ${resume}`);
-      }
-      if (etat.phase === "ready" || etat.phase === "error") break;
-    } else {
-      dire(`   /helix/provision : ${r.statut} ${r.texte.slice(0, 200)}`);
     }
-    await attendre(3000);
+  } catch (err) {
+    dire(`   flux interrompu : ${err?.name ?? err}`);
+  } finally {
+    clearTimeout(minuterie);
+    arretFlux.abort();
   }
-  verifier("le moteur de LM Studio est installé et déclaré", moteurVu, "moteurInstalle jamais vrai");
+  declareVu ||= existsSync(declaration);
+  verifier("le moteur de LM Studio est installé et déclaré (llmster-install-location.json)", declareVu, declaration);
   if (!verifier(`la mise en route arrive à « prêt » (en moins de ${DELAI_MS / 60_000} min)`, etat?.phase === "ready", JSON.stringify(etat))) return;
   verifier(`le modèle prêt est celui demandé (${MODELE})`, etat.model === MODELE, etat.model);
+  // Puis l'écran relit l'état, une fois (useProvision.ts, `load`).
+  const apres = await appel("/helix/provision");
+  verifier("l'écran relu : moteur installé, un modèle de Chat présent", apres.json.moteurInstalle === true && apres.json.hasChatModel === true, apres.texte.slice(0, 400));
 
   /* 4. Une question au Chat */
   dire("4. Une question au Chat, modèle local, en flux");

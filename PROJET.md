@@ -608,6 +608,46 @@ la réponse de jetons contient-elle `scope` (sinon la connexion est refusée, et
 crédit (l'outil suppose 402) ; X exige-t-il les droits « Read and write » de l'application en
 plus de `tweet.write`.
 
+**Fait le 28/09/2026 : commerce et relation client, branche `connecteurs-commerce`.** Demandé par
+Medhi : Stripe, Shopify, WooCommerce, Salesforce, Pipedrive, Zendesk. Code dans
+`gateway/src/natifs/commerce.ts` (module à part : ces services ont chacun leur adresse, et trois
+ne passent pas par un accord dans le navigateur), branché par des ajouts courts dans
+`outilsNatifs.ts`, `approbation.ts`, `index.ts` (`/helix/commerce…`, retour public aiguillé par le
+préfixe `commerce.` du `state`), `connecteurs.ts` (préfixes réservés), `db.ts` (collection interne
+`connecteursCommerce`). Écran : `src/components/settings/ConnecteurCommerce.tsx`, rubrique
+« Commerce et relation client » de Paramètres, Connecteurs ; article « Commerce et relation
+client » de l'aide.
+
+**La règle de choix** (un serveur MCP officiel distant avec OAuth va au catalogue ; sinon une
+connexion native ; sinon une clé d'administrateur) a été suivie, avec une précision décidée ici :
+les outils d'un serveur MCP passent par la barrière commune (une carte selon le niveau, aucune au
+niveau « Tout approuver », pas de contrôle « administrateur seulement »). Un serveur MCP qui écrit
+de façon générale ne tient donc pas les règles des connecteurs (SECURITE.md §§ 40 à 43). Choix,
+documentation lue le 28/09/2026 :
+
+| Service | Voie | Pourquoi | Lecture | Écriture (cochée, carte, administrateur) |
+|---|---|---|---|---|
+| Stripe | clé restreinte `rk_…` | serveur MCP officiel (`mcp.stripe.com`, OAuth) mais `stripe_api_write` couvre tout POST, remboursements compris ; demandé : rien qui déplace de l'argent | paiements (PaymentIntents), clients, factures, abonnements | aucune ; GET seulement, tenu par le transport ; une clé `sk_` est refusée |
+| Shopify | application du Dev Dashboard, « client credentials grant » | pas de serveur MCP officiel pour les données d'une boutique (Storefront, Customer Account, Checkout, Dev) | commandes (60 jours), produits, stocks ; `read_orders read_products read_inventory` relues à chaque jeton de 24 h | aucune ; requêtes GraphQL écrites dans le module, pas de mutation |
+| WooCommerce | clé REST en « Lecture », HTTP Basic sur https | son MCP est servi par le site du marchand, en préversion, par relais local et mot de passe WordPress ; son accord par navigateur exige un retour en https | commandes, produits | aucune ; GET seulement |
+| Salesforce | External Client App, OAuth + PKCE, `api refresh_token` | serveurs MCP hébergés (GA avril 2026) : `sobject-reads` sans la note, `sobject-mutations` écrit tout objet | contacts, opportunités (SOQL, mot cherché échappé) | une note (`Note`) sur un contact, une opportunité ou un compte |
+| Pipedrive | application privée, OAuth (Basic), `api_domain` suivi s'il est en `.pipedrive.com` | serveur MCP officiel `mcp.pipedrive.ai` (juin 2026) qui crée et modifie affaires, contacts, activités | personnes, affaires | une note sur une affaire ou une personne (`deals:full contacts:full`) |
+| Zendesk | client OAuth confidentiel, PKCE, JSON | aucun serveur MCP de Zendesk dans sa documentation de développeur (celui de la place de marché est d'un tiers) ; jetons d'API retirés en 2026-2027 | tickets et échanges (`tickets:read users:read`) | une réponse publique ou une note interne (`tickets:write`) |
+
+Règles tenues (détail et contrôles : SECURITE.md § 47) : lecture par défaut ; écrire coché à la
+connexion, par l'administrateur seul, vérifié au moment d'agir, derrière une carte à chaque fois
+(`TOUJOURS_CONFIRMER`) qui montre le texte entier ; `sousGarde` (dix par heure et par service,
+doublon refusé, place gardée après un 5xx) ; un appel recopié d'un ticket lu n'est pas lancé ;
+clés, secrets et jetons chiffrés, jamais rendus. Contrôles : `scripts/essai-commerce.mjs` (92, faux
+services, passerelle jetable, vrai Chat avec un faux modèle) et `scripts/securite.mjs`, section
+16 quinquies. Vu à l'écran dans une fenêtre Electron cachée contre une instance jetable : parcours
+Stripe (clé secrète refusée, clé restreinte acceptée) et Zendesk (application, accord, retour,
+connecté) en français, clair, 1440 px ; formulaires et états en anglais, japonais, chinois,
+clair et sombre, 1440 et 375 px, sans débordement horizontal. Logos : icônes neutres, clés de marque
+`stripe`, `shopify`, `woocommerce`, `salesforce`, `pipedrive`, `zendesk` à poser dans la liste de
+`ConnecteurCommerce.tsx` (une ligne « maison » ne lit pas `MARQUE_DU_CONNECTEUR`). Rien n'a été
+essayé contre les vrais services : ce qui reste à essayer est au § 5.
+
 ### 3.6 Découpage des tâches lourdes
 
 Ajouté en septembre 2026, après mesure. Un modèle de 8 milliards de paramètres perd le
@@ -3034,6 +3074,19 @@ vérifiés contre de faux serveurs, SECURITE.md § 41) et Google Drive et Slack 
 sur une vraie carte NVIDIA (Unsloth) ; le Mac virtuel (Lume) de bout en bout ; les modèles
 d'images et de vidéo marqués `verifie: false` (`images.ts`) et les modèles de conversation
 conseillés sans avoir été essayés (`provision.ts`) ; le japonais relu par un locuteur natif.
+
+**Commerce et relation client (28/09/2026, branche `connecteurs-commerce`, § 3.5 et SECURITE.md
+§ 47)** : aucun des six n'a vu le vrai service. À essayer, service par service, avec un compte de
+test : Stripe en mode test (clé restreinte `rk_test_` en lecture sur PaymentIntents, Customers,
+Invoices, Subscriptions ; vérifier que `GET /v1/account` passe ou non avec elle) ; Shopify (une
+boutique de développement de la même organisation, l'application du Dev Dashboard installée,
+le « client credentials grant » et la forme réelle de `scope`) ; WooCommerce sur un vrai
+WordPress en https (derrière un pare-feu applicatif, l'en-tête Authorization arrive-t-il ?) ;
+Salesforce avec une External Client App (l'adresse de retour `http://127.0.0.1:8787/…`
+acceptée ou non, la valeur réelle de `scope` rendue, `Note` visible dans Lightning) ; Pipedrive
+avec une application privée en brouillon (peut-on s'y connecter sans la passer « live », qui
+vérifie l'adresse de retour ?) ; Zendesk avec un client OAuth confidentiel (adresse de retour
+en http sur 127.0.0.1, réponse 201 et `scope` réels, révocation par `tokens/current`).
 
 ### Ce qui reste à faire
 

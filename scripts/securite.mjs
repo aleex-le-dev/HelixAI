@@ -7202,6 +7202,12 @@ console.log("\n18 bis. Tournée finale des écrans : aide, rubriques des connect
     /compacte && "max-sm:sr-only"/.test(sourceChip) && /compacte && "max-sm:shrink-0"/.test(sourceChip) && puceCompacte("MoteurCode.tsx") && puceCompacte("ReglageRtk.tsx"),
     "Chip.tsx, MoteurCode.tsx, ReglageRtk.tsx",
   );
+  const sourceComposer = readFileSync(join(RACINE, "src", "components", "chat", "Composer.tsx"), "utf8");
+  verifier(
+    "zone de saisie à 375 px : l'invite tient sur une ligne (elle passait sur deux dans un champ d'une ligne, le haut de la seconde visible)",
+    /<textarea[\s\S]{0,900}placeholder:whitespace-nowrap/.test(sourceComposer),
+    "Composer.tsx",
+  );
   verifier("Chat, sources du web : « N autre(s) résultat(s)… » aligné à gauche quand il passe sur deux lignes", /className="inline-flex items-center gap-1 text-left text-xs text-muted-foreground hover:text-foreground"/.test(sourceMessages), "MessageList.tsx");
 }
 

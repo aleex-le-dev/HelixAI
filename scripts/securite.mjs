@@ -7997,6 +7997,16 @@ console.log("\n31. Windows et mise en route : moteur de LM Studio installé en e
   verifier("l'écran de mise en route propose seulement les modèles qui tiennent, et montre celui qui s'installe", /possibles: modelesQuiTiennent\(hardware\)/.test(readFileSync(join(RACINE, "gateway", "src", "index.ts"), "utf8")) && /const affiche = enCours \?\? choisi;/.test(ecran), "index.ts, FirstRun.tsx");
 }
 
+console.log("\n32. Chat : remonter pendant une réponse sans être ramené en bas (28/09/2026)");
+{
+  const liste = readFileSync(join(RACINE, "src", "components", "chat", "MessageList.tsx"), "utf8");
+  verifier(
+    "le fil ne suit le texte qui arrive que si la personne est en bas ; un message qu'elle envoie ramène en bas ; plus de défilement doux repris à chaque mot",
+    /suivre\.current = conteneur\.scrollHeight - conteneur\.scrollTop - conteneur\.clientHeight < 80;/.test(liste) && /if \(!suivre\.current\) return;/.test(liste) && !/behavior: "smooth", block: "end"/.test(liste),
+    "MessageList.tsx",
+  );
+}
+
 console.log(`\n${reussis} vérification(s) réussie(s), ${echecs.length} échec(s).`);
 if (echecs.length) {
   console.log("Échecs :");

@@ -565,9 +565,33 @@ function DureeReponse({ durees }: { durees?: DureesReponse }) {
 
 export function MessageList({ messages }: { messages: Message[] }) {
   const endRef = useRef<HTMLDivElement>(null);
+  /*
+   * Suivre le texte qui arrive seulement si la personne est en bas (vu par
+   * Medhi le 28/09/2026 : pendant la réflexion, impossible de remonter lire
+   * la conversation, chaque mot ramenait tout en bas). Dès qu'elle remonte,
+   * on ne bouge plus ; elle redescend, le suivi reprend. Un message qu'elle
+   * vient d'envoyer ramène toujours en bas.
+   */
+  const suivre = useRef(true);
+  const nombre = useRef(messages.length);
 
   useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+    const conteneur = endRef.current?.closest(".overflow-y-auto");
+    if (!(conteneur instanceof HTMLElement)) return;
+    const surDefilement = () => {
+      suivre.current = conteneur.scrollHeight - conteneur.scrollTop - conteneur.clientHeight < 80;
+    };
+    conteneur.addEventListener("scroll", surDefilement, { passive: true });
+    return () => conteneur.removeEventListener("scroll", surDefilement);
+  }, []);
+
+  useEffect(() => {
+    const nouveau = messages.length !== nombre.current;
+    nombre.current = messages.length;
+    if (nouveau && messages[messages.length - 1]?.role === "user") suivre.current = true;
+    if (!suivre.current) return;
+    // Sans animation : un défilement doux, repris à chaque mot, se battait avec la main de la personne.
+    endRef.current?.scrollIntoView({ block: "end" });
   }, [messages]);
 
   return (

@@ -775,8 +775,6 @@
   "Mise à jour impossible : {0}": "无法更新：{0}",
   "Mise de côté des données de vos agents…": "正在暂存您的智能体数据…",
   "Mission introuvable.": "未找到该任务。",
-  "mode production": "正式模式",
-  "mode test": "测试模式",
   "Modèle {0} chargé (mémoire libérée au préalable).": "模型 {0} 已加载（已预先释放内存）。",
   "Modèle {0} chargé.": "模型 {0} 已加载。",
   "Modèle {0} déjà chargé.": "模型 {0} 已加载。",

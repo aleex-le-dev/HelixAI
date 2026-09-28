@@ -416,7 +416,7 @@ console.log("\nB. Clés et identifiants : essayés avant d'être gardés, jamais
   verifier("Stripe : une clé restreinte sans « Lecture » sur les factures est refusée, en disant laquelle manque, et rien n'est gardé", manque.status === 400 && /Invoices/.test(jManque.message ?? "") && (await service("stripe"))?.configure === false && (await service("stripe"))?.application?.disponible === false, jManque.message);
   const bonne = await enregistrer({ service: "stripe", cle: CLES.stripe });
   const tBonne = await bonne.text();
-  verifier("Stripe : la clé restreinte en lecture est essayée puis gardée ; la réponse ne la contient pas", bonne.status === 200 && !SECRETS.test(tBonne) && /Boutique Essai \(mode test\)/.test(tBonne), `${bonne.status} ${tBonne.slice(0, 200)}`);
+  verifier("Stripe : la clé restreinte en lecture est essayée puis gardée ; la réponse ne la contient pas", bonne.status === 200 && !SECRETS.test(tBonne) && /Boutique Essai \(test\)/.test(tBonne), `${bonne.status} ${tBonne.slice(0, 200)}`);
   verifier("Stripe : l'essai n'a fait que des lectures (GET)", recues.filter((x) => x.hote === "api.stripe.com").every((x) => x.methode === "GET"), recues.filter((x) => x.hote === "api.stripe.com").map((x) => x.methode).join(","));
 
   // ---- WooCommerce ----

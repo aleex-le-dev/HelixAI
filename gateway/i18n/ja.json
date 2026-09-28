@@ -775,8 +775,6 @@
   "Mise à jour impossible : {0}": "更新できません：{0}",
   "Mise de côté des données de vos agents…": "エージェントのデータを退避しています…",
   "Mission introuvable.": "ミッションが見つかりません。",
-  "mode production": "本番モード",
-  "mode test": "テストモード",
   "Modèle {0} chargé (mémoire libérée au préalable).": "モデル {0} を読み込みました（先にメモリを解放しました）。",
   "Modèle {0} chargé.": "モデル {0} を読み込みました。",
   "Modèle {0} déjà chargé.": "モデル {0} はすでに読み込まれています。",

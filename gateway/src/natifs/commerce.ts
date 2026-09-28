@@ -897,8 +897,14 @@ async function essayer(id: IdCommerce, qui: string): Promise<Compte> {
     const profil = (moi.json.business_profile ?? {}) as { name?: unknown };
     const reglages = ((moi.json.settings ?? {}) as { dashboard?: { display_name?: unknown } }).dashboard;
     const affiche = texte(profil.name ?? reglages?.display_name, 100);
-    const mode = cleEnTest(cle) ? t("mode test") : t("mode production");
-    return { ...base, compte: affiche ? `${affiche} (${mode})` : `Stripe (${mode})`, portees: [] };
+    /*
+     * Le nom du compte est gardé tel quel et relu par toutes les langues : le
+     * mode de la clé y est donc dit par le mot de Stripe (« test »), pas par une
+     * phrase traduite au moment de brancher (vu à l'écran en chinois : « mode
+     * test » restait en français).
+     */
+    const libelle = affiche || "Stripe";
+    return { ...base, compte: cleEnTest(cle) ? `${libelle} (test)` : libelle, portees: [] };
   }
   if (id === "woocommerce") {
     const a = magasin!.applications.woocommerce!;

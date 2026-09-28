@@ -775,8 +775,6 @@
   "Mise à jour impossible : {0}": "Update failed: {0}",
   "Mise de côté des données de vos agents…": "Setting your agents' data aside…",
   "Mission introuvable.": "Mission not found.",
-  "mode production": "live mode",
-  "mode test": "test mode",
   "Modèle {0} chargé (mémoire libérée au préalable).": "Model {0} loaded (memory freed beforehand).",
   "Modèle {0} chargé.": "Model {0} loaded.",
   "Modèle {0} déjà chargé.": "Model {0} already loaded.",

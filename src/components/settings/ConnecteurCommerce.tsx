@@ -247,8 +247,8 @@ export function ConnecteurCommerce({ id, onChange }: { id: IdCommerce; onChange?
     const ecrit = etat.accordes?.includes("ecriture");
     return (
       <div className="space-y-3">
-        <Card className="flex items-start gap-3">
-          <div className="min-w-0 flex-1">
+        <Card className="flex flex-wrap items-start gap-3">
+          <div className="min-w-0 flex-1 basis-40">
             <p className="break-words font-medium text-foreground">{etat.compte}</p>
             <p className="text-sm text-muted-foreground">
               {ecrit ? tf("{0}, lecture et écriture après accord", etat.nom) : tf("{0}, lecture seule", etat.nom)}
@@ -403,7 +403,7 @@ export function ConnecteurCommerce({ id, onChange }: { id: IdCommerce; onChange?
   }
 
   return (
-    <Card className="space-y-3">
+    <Card className="space-y-3 max-sm:border-0 max-sm:bg-transparent max-sm:p-0">
       <div>
         <p className="font-medium text-foreground">{tf("{0} : se connecter", etat.nom)}</p>
         <p className="text-sm text-muted-foreground">
@@ -420,7 +420,7 @@ export function ConnecteurCommerce({ id, onChange }: { id: IdCommerce; onChange?
         </InfoBox>
       )}
       <InfoBox leading={<KeyRound size={15} strokeWidth={1.75} />}>
-        <div className="space-y-2">
+        <div className="space-y-2 [overflow-wrap:anywhere]">
           <p className="font-medium">{oauth || id === "shopify" ? t("Préparer l'application, une fois pour toute l'instance") : t("Créer la clé, une fois pour toute l'instance")}</p>
           <Guide id={id} />
           <p className="font-medium">{t("Ce que permet la connexion")}</p>

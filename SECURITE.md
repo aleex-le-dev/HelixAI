@@ -4737,3 +4737,136 @@ image recodée) ; les tubes nommés sous Windows (pas de `O_NONBLOCK`, pas de `m
 l'application empaquetée (vu dans une fenêtre Electron sur `vite`, avec sa politique de contenu de
 développement) ; l'écran en chinois (vu en français, anglais et japonais) ; les panneaux YouTube
 (un autre travail y ajoutait le logo pendant la tournée).
+
+## 49. Connecteurs existants revérifiés (28 septembre 2026)
+
+Demandée par Medhi (« vérifier que les connecteurs actuels vont bien fonctionner »), sur la branche
+`verif-connecteurs`, partie de `main` à la 2026.928.4. Périmètre : les connecteurs présents sur
+`main` (natifs et catalogue MCP de `gateway/src/connecteurs.ts`), pas ceux que d'autres travaux
+ajoutaient le même jour. Sans aucun compte : la documentation officielle du jour, lue page par page ;
+pour chaque serveur MCP distant, ses métadonnées d'autorisation publiques
+(`/.well-known/oauth-protected-resource` et `oauth-authorization-server`, en GET, sans identifiant,
+sans inscription) ; pour chaque paquet, le registre npm. Essais : `scripts/essai-connecteurs.mjs`
+(nouveau, repris par `npm run securite` en section 16 septies sous « connecteurs : »), faux serveurs
+écrits d'après cette documentation ; écran vu dans une fenêtre Electron cachée contre une passerelle
+jetable (`"chiffrement": "fichier"`, dossier de données temporaire, LM Studio et exo éteints, aucune
+sortie réseau) et `vite`, en français et en anglais, clair et sombre, 1440 et 375 px.
+
+### 49.1 Ce qui ne marchait pas, et a été corrigé
+
+| Gravité | Connecteur | Ce qui se passait | Correctif | Contrôle |
+|---|---|---|---|---|
+| **Élevée** (panne) | Jira et Confluence | `https://mcp.atlassian.com/v1/sse` ne publie plus aucune métadonnée (404 partout) et c'est l'ancien transport SSE, que Helix ne parlait pas : « Se connecter » ne pouvait pas aboutir. | `https://mcp.atlassian.com/v2/mcp` (documentation d'Atlassian) ; ses métadonnées renvoient à `auth.atlassian.com/<locataire>`, qui accepte l'inscription automatique avec PKCE S256. | essai I, III ; 16 septies |
+| **Élevée** (panne) | Asana | Le serveur V1 (`/sse`) est arrêté depuis le 11/05/2026 d'après Asana ; le V2 n'accepte pas l'inscription automatique (pas de `registration_endpoint`). | `https://mcp.asana.com/v2/mcp`, en « application déclarée » (« MCP app » de la console d'Asana, identifiant et secret). | essai I, III ; 16 septies |
+| **Élevée** (panne) | Webflow | La seule adresse documentée (`/sse`) est l'ancien transport « HTTP + SSE » ; `mcp.ts` ne connaissait que le transport « streamable » : un POST sur `/sse` est refusé, le connecteur ne démarrait pas. | Repli prévu par la spécification MCP : sur un 4xx autre que 401 ou 403, rouvrir en SSE à la même adresse (`SSEClientTransport`, avec le même fournisseur d'autorisation). Un refus d'autorisation reste un refus. | essai I, III ; 16 septies |
+| Moyenne | Wix, Square, PayPal | Adresses `/sse` (Wix, Square) et `/mcp` (PayPal) que leur documentation ne donne plus ; Wix n'y publie plus de métadonnées à son chemin, et `/sse` n'est pas le transport que parle Helix. | `https://mcp.wix.com/mcp`, `https://mcp.squareup.com/mcp`, `https://mcp.paypal.com/http` (documentation de chacun ; métadonnées vérifiées à ces adresses). | 16 septies |
+| Moyenne | Figma, Vercel | Leur documentation dit que seuls les clients qu'ils ont approuvés peuvent se brancher (« Only clients listed in the Figma MCP Catalog », « Vercel MCP only supports AI clients that have been reviewed and approved by Vercel ») : le bouton promettait un branchement que le service refuse. | Retirés du catalogue. Un connecteur déjà installé reste tel quel. | essai I ; 16 septies |
+| Moyenne | Connecteurs branchés avant | Un connecteur distant garde l'adresse enregistrée à son branchement : les cinq adresses changées ci-dessus seraient restées en panne chez qui les avait branchées. | `aligner` réaligne l'adresse sur le catalogue ; l'autorisation obtenue pour une adresse n'est pas présentée à une autre (`oauthMcp.ts` : ni jeton, ni inscription ; un changement d'adresse repart de zéro) : la personne se reconnecte. | essai III |
+| Moyenne | Écran, services « application déclarée » (GitHub, Slack, Box, Asana) | « Se connecter » sans identifiant rendait le message qui donne l'adresse de retour à déclarer chez le service, puis l'ouverture du formulaire l'effaçait aussitôt (vu à l'écran) : le formulaire renvoie « au message ci-dessous », absent. Impossible de créer l'application sans cette adresse. | Message posé après l'ouverture du formulaire. Vu à l'écran après : l'adresse s'affiche, en fr et en en. | écran |
+| Faible | Box | La console indiquée (`app.box.com/developers/console`) n'est plus là où l'identifiant se crée : c'est la console d'administration (« Integrations », « Box MCP server », « Add Integration Credentials »). | Le lien mène à la page de Box qui décrit ces étapes. | — |
+| Faible | Facebook, Instagram (panneaux) | « Créer une app de type Entreprise » : Meta ne fait plus choisir de type, mais des cas d'usage, qu'on ne retire plus ensuite. | Les étapes nomment les cas d'usage (« Manage everything on your Page », « Manage messaging and content on Instagram ») et « Facebook Login for Business » (fr, en, zh, ja). | — |
+| Faible | Page publique de retour d'autorisation | Ouverte par le navigateur que le service renvoie, sans en-tête de l'application : toujours en anglais. | `langue.ts` prend, à défaut, la langue du navigateur (`Accept-Language`). | essai I ; 16 septies |
+| Faible | Messages de connexion MCP | Une dizaine de messages de `connecteurs.ts` (application à déclarer, chiffrement inactif, démarrage raté, retrait) et « Retrait... », « Connexion... » à l'écran restaient en français dans toutes les langues ; le nom du service n'était pas traduit. | `t()` / `tf()`, catalogues en, zh, ja à 100 %. | i18n |
+
+Le repli SSE fait entrer `eventsource` (MIT) dans la passerelle construite : `THIRD_PARTY_NOTICES.md`
+régénéré.
+
+### 49.2 Tableau par connecteur
+
+Relevé le 28/09/2026. « Métadonnées » : ce que le service publie lui-même, lu sans compte.
+
+**Connexions natives**
+
+| Connecteur | Ce qui est utilisé | Ce que dit la documentation aujourd'hui | Verdict |
+|---|---|---|---|
+| Gmail (courrier) | IMAP `imap.gmail.com:993`, SMTP 465 ; OAuth Google `https://mail.google.com/` (accounts.google.com/o/oauth2/v2/auth, oauth2.googleapis.com/token), ou mot de passe d'application | mêmes points d'accès ; retour sur la boucle locale pour une « Application de bureau » | à jour (pas rejoué ici : aucun faux IMAP dans 16 septies) |
+| Google Agenda | `calendar.readonly`, `calendar.events` en écriture, Calendar API v3, PKCE S256 | portées valides | à jour ; connexion et lecture essayées |
+| Google Drive | `drive.readonly` (restreinte), Drive API v3 | valide, « restreinte » | à jour ; connexion, renouvellement et lecture essayés |
+| Google Sheets, Slides, YouTube | `spreadsheets(.readonly)` v4, `presentations.readonly` v1, `youtube.readonly` Data API v3 | valides (Slides : « sensible ») | à jour (essai-natifs) |
+| LinkedIn | OAuth v2, `openid profile`, `w_member_social`, pages ; `LinkedIn-Version: 202609` | 202609 est la dernière version (septembre 2026) ; 202510 retirée le 15/10/2026 | à jour ; contrôle d'âge de la version ajouté (16 septies) |
+| Facebook | API Graph `v25.0`, `pages_show_list`, `pages_read_engagement`, `pages_manage_posts`, `appsecret_proof` | dernière version v26.0 (29/07/2026) ; v25.0 valable jusqu'au 29/07/2028 ; création d'app par cas d'usage ; `scope` accepté, `config_id` conseillé | version valide ; panneau corrigé ; contrôle de fin de version ajouté |
+| Instagram | instagram.com/oauth/authorize, api.instagram.com/oauth/access_token, graph.instagram.com v25.0 ; `instagram_business_*` ; métriques `views,reach,saved,shares,likes,comments` | mêmes points d'accès et portées ; métriques valides (`impressions` retirée) | à jour ; panneau corrigé |
+| TikTok | v2 authorize et token, PKCE en hexadécimal, `http://127.0.0.1:*/callback/` | identique | à jour |
+| X | relu pour le § 42 le même jour | — | à jour (§ 42) |
+| Slack natif | jeton de bot, `auth.test`, `users.conversations`, `conversations.history`, application interne | les limites de 2025 (1 lecture par minute) ne touchent pas les applications internes | à jour ; jeton et lecture essayés |
+
+**Serveurs MCP distants (bouton « Se connecter »)**
+
+| Connecteur | Adresse utilisée avant | Documentation et métadonnées aujourd'hui | Verdict |
+|---|---|---|---|
+| Notion | mcp.notion.com/mcp | idem ; inscription automatique, PKCE | à jour |
+| Linear | mcp.linear.app/mcp | idem (`/sse` déprécié) ; inscription automatique | à jour |
+| Jira et Confluence | mcp.atlassian.com/v1/sse | `/v2/mcp`, serveur d'autorisation auth.atlassian.com | **corrigé** |
+| Asana | mcp.asana.com/sse | V1 arrêté le 11/05/2026 ; `/v2/mcp`, application déclarée | **corrigé** |
+| Sentry | mcp.sentry.dev/mcp | idem ; inscription automatique | à jour |
+| Intercom | mcp.intercom.com/mcp | idem (espaces américains ; européens : mcp.eu.intercom.com, pas au catalogue) ; métadonnées à la racine | à jour |
+| Canva | mcp.canva.com/mcp | inscription automatique « dépréciée au profit de CIMD, toujours disponible » | à jour, à surveiller |
+| Figma | mcp.figma.com/mcp | clients du catalogue de Figma seulement | **retiré** |
+| Webflow | mcp.webflow.com/sse | seule adresse documentée ; transport SSE | **corrigé** (repli SSE) |
+| Wix | mcp.wix.com/sse | `/mcp` | **corrigé** |
+| Vercel | mcp.vercel.com | clients approuvés par Vercel seulement | **retiré** |
+| Square | mcp.squareup.com/sse | `/mcp` | **corrigé** |
+| PayPal | mcp.paypal.com/mcp | `/http` (et `/sse`) | **corrigé** |
+| GitHub | api.githubcopilot.com/mcp/ | idem ; pas d'inscription automatique (application OAuth) | à jour |
+| Slack (MCP) | mcp.slack.com/mcp | idem ; application interne ou publiée dans l'annuaire, jamais « non listée » ; `oauth/v2_user/authorize` | à jour ; lien de documentation mis à jour |
+| Box | mcp.box.com | idem ; identifiants créés dans la console d'administration | lien corrigé |
+| Airtable | mcp.airtable.com/mcp | idem ; inscription automatique | à jour |
+| GitLab | gitlab.com/api/v4/mcp | idem ; bêta, gratuit depuis GitLab 19.2 ; « Allow access to the MCP server » à cocher sur le groupe | à jour |
+
+**Serveurs lancés sur la machine (paquet npm épinglé)**
+
+| Connecteur | Paquet | Registre npm aujourd'hui | Verdict |
+|---|---|---|---|
+| Notion (par jeton) | @notionhq/notion-mcp-server@2.5.2 | dernière, MIT ; Notion le dit « plus activement maintenu » | à jour, à surveiller |
+| Airtable (par jeton) | airtable-mcp-server@1.14.0 | dernière, MIT | à jour |
+| HubSpot | @hubspot/mcp-server@0.4.0 | dernière (18/06/2025), MIT ; HubSpot met en avant son serveur distant mcp.hubspot.com | à jour, à surveiller |
+| Firecrawl | firecrawl-mcp@3.25.5 | dernière, MIT, `FIRECRAWL_API_KEY` | à jour |
+| Tavily | tavily-mcp@0.2.22 | dernière (05/08/2026), MIT, `TAVILY_API_KEY` | à jour |
+| Exa | exa-mcp-server@3.4.1 | dernière, MIT ; la documentation ne décrit plus que le serveur distant, `EXA_API_KEY` n'y est plus écrit | à jour, variable non revérifiée |
+| Brave Search | @brave/brave-search-mcp-server@2.1.4 | dernière, MIT, `BRAVE_API_KEY`, stdio par défaut | à jour |
+| Navigateur | @playwright/mcp@0.0.82 | dernière, Apache 2.0 | à jour |
+| Documentation des bibliothèques | @upstash/context7-mcp@4.1.1 | dernière, MIT | à jour |
+| Mémoire, Réflexion | @modelcontextprotocol/server-memory et server-sequential-thinking @2026.8.31 | dernières | à jour |
+| Kubernetes | mcp-server-kubernetes@4.1.7 | dernière, MIT ; lit `KUBECONFIG` (après `KUBECONFIG_YAML`, `KUBECONFIG_JSON`, `K8S_SERVER`, `KUBECONFIG_PATH`) | à jour |
+
+### 49.3 Ce que l'essai tient désormais
+
+`scripts/essai-connecteurs.mjs` (39 contrôles ; 16 échouent sur le code de `main`, ceux des MCP
+distants) : une passerelle neuve, un module préalable qui renvoie vers un faux serveur local ce que le
+SDK MCP (`fetch`) et `clientHttps.ts` (`https.request`) envoient aux hôtes des services, et refuse le
+reste.
+
+- **I. MCP distants, « Se connecter » de bout en bout** : Atlassian (métadonnées à chemin, serveur
+  d'autorisation sur un autre hôte, inscription automatique avec l'adresse de retour de l'instance,
+  PKCE S256 et `resource`, `state` inventé refusé sans échange, bon retour, outil listé, retour
+  rejoué refusé) ; Asana (sans application : le message dit où la créer et l'adresse de retour ;
+  avec : aucune inscription tentée, échange avec le secret, secret jamais rendu) ; Webflow (405 sur
+  le transport « streamable », repli SSE avec le jeton).
+- **II. Drive, Agenda, Slack** : consentement Google (portée seule, PKCE, accès durable, retour sur la
+  boucle locale), `state` faux refusé sans annuler, échange et compte lu avant tout enregistrement ;
+  jeton Slack essayé, autorisations relues, salons listés.
+- **III. Lecture, dans un second processus qui relit les données chiffrées** : un outil par service
+  (`getJiraIssue`, `get_task`, `sites_list` par SSE, `drive__chercher` après renouvellement du jeton,
+  `agenda__prochains`, `slack__messages`) ; adresses réalignées ; autorisation d'une adresse non
+  présentée à une autre.
+- **IV.** Retrait qui efface l'autorisation ; aucun jeton, secret ni code en clair sur le disque, dans
+  la sortie de la passerelle ou du second processus ; aucune requête hors des hôtes prévus.
+
+`securite.mjs`, 16 septies, en plus : adresses distantes en https, chaque « application déclarée »
+dit où la créer, plus aucune adresse périmée, ni Figma ni Vercel, repli SSE présent pour une adresse
+en `/sse`, version LinkedIn de moins de onze mois, version de l'API Graph avant sa fin annoncée
+(échoueront d'eux-mêmes le jour où il faudra relever la version), page de retour dans la langue du
+navigateur.
+
+### 49.4 Pas essayé
+
+Les vrais services, aucun : ni compte, ni application de développeur, ni inscription automatique
+réelle (la découverte s'est arrêtée aux métadonnées publiques). En particulier : qu'Atlassian V2,
+Canva, Wix, Square, PayPal, Webflow acceptent l'adresse de retour `http://127.0.0.1:…` d'un poste ;
+qu'une « MCP app » d'Asana, une application OAuth de GitHub, une application Slack interne et les
+identifiants Box acceptent cette adresse ; le vrai transport SSE de Webflow ; les portées réelles
+qu'Atlassian accorde sans `scope` demandé ; Intercom pour un espace européen ; le réglage de groupe
+de GitLab ; Gmail et Outlook par OAuth (pas de faux IMAP dans l'essai) ; la variable d'environnement
+d'Exa sur la version épinglée ; les panneaux de Meta avec « Facebook Login for Business » et `scope`
+au lieu de `config_id` ; l'écran en chinois et en japonais (vus en français et en anglais) et dans
+l'application empaquetée.

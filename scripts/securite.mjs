@@ -6218,6 +6218,69 @@ process.exit(0);
   verifier("lancement suivant : la relecture rend le modèle choisi, pas le précédent (le graphique montrait gpt-4.1-nano comme modèle en cours)", resultat.relance?.ici === qwen, JSON.stringify(resultat.relance ?? resultat));
 }
 
+/*
+ * Revérification des connecteurs déjà livrés (28/09/2026, SECURITE.md § 49).
+ * Le parcours complet (se connecter, puis un outil de lecture) est dans
+ * essai-connecteurs.mjs, repris ici sous « connecteurs : » ; ici, ce qui se
+ * lit dans les sources : les adresses du catalogue et les versions d'API qui
+ * se périment avec le temps.
+ */
+console.log("\n16 septies. Connecteurs existants revérifiés : parcours complet contre de faux serveurs");
+{
+  const sourceCatalogue = readFileSync(join(RACINE, "gateway", "src", "connecteurs.ts"), "utf8");
+  const bloc = sourceCatalogue.slice(sourceCatalogue.indexOf("export const CATALOGUE"), sourceCatalogue.indexOf("export const entreeCatalogue"));
+  const entrees = [...bloc.matchAll(/\{\s*id: "([a-z0-9-]+)",([\s\S]*?)\n  \},/g)].map(([, id, corps]) => ({ id, url: /url: "([^"]+)"/.exec(corps)?.[1], oauth: /oauth: "([a-z]+)"/.exec(corps)?.[1], console: /console: "([^"]+)"/.exec(corps)?.[1] }));
+  const distants = entrees.filter((e) => e.url);
+  verifier("catalogue : chaque service distant est en https, et chaque « application déclarée » dit où la créer", distants.length >= 15 && distants.every((e) => e.url.startsWith("https://") && (e.oauth !== "appli" || e.console?.startsWith("https://"))), JSON.stringify(distants.filter((e) => !e.url.startsWith("https://") || (e.oauth === "appli" && !e.console))));
+  // Adresses relevées le 28/09/2026 dans la documentation de chaque service ; les anciennes ne publiaient plus de métadonnées ou visaient un serveur arrêté.
+  const perimees = ["https://mcp.atlassian.com/v1/sse", "https://mcp.asana.com/sse", "https://mcp.wix.com/sse", "https://mcp.squareup.com/sse", "https://mcp.paypal.com/mcp"];
+  verifier("catalogue : plus aucune adresse périmée (Atlassian /v1/sse, Asana V1, Wix /sse, Square /sse, PayPal /mcp) ; Asana V2 demande une application", !distants.some((e) => perimees.includes(e.url)) && distants.find((e) => e.id === "asana")?.oauth === "appli", distants.map((e) => e.url).join(" "));
+  verifier("catalogue : ni Figma ni Vercel (leur serveur n'accepte que les clients qu'ils ont approuvés)", !entrees.some((e) => e.id === "figma" || e.id === "vercel"), entrees.map((e) => e.id).join(", "));
+  const sourceMcp = readFileSync(join(RACINE, "gateway", "src", "mcp.ts"), "utf8");
+  const sse = distants.filter((e) => /\/sse$/.test(e.url)).map((e) => e.id);
+  verifier("une adresse en /sse (Webflow) a le repli sur l'ancien transport dans mcp.ts", sse.length === 0 || (/new SSEClientTransport\(/.test(sourceMcp) && /UnauthorizedError/.test(sourceMcp)), sse.join(", "));
+  /*
+   * Versions d'API qui expirent : LinkedIn garde une version un an au moins
+   * (https://learn.microsoft.com/en-us/linkedin/marketing/versioning), Meta a
+   * annoncé la fin de v25.0 pour le 29/07/2028 (changelog de l'API Graph). Ce
+   * contrôle échouera le jour où la version épinglée sera trop vieille : c'est
+   * voulu, il faut alors la relever.
+   */
+  const outilsSrc = readFileSync(join(RACINE, "gateway", "src", "outilsNatifs.ts"), "utf8");
+  const natifSrc = readFileSync(join(RACINE, "gateway", "src", "oauthNatif.ts"), "utf8");
+  const vLinkedin = /VERSION_LINKEDIN = "(\d{6})"/.exec(outilsSrc)?.[1] ?? "";
+  const moisLinkedin = vLinkedin ? (new Date().getFullYear() - Number(vLinkedin.slice(0, 4))) * 12 + (new Date().getMonth() + 1 - Number(vLinkedin.slice(4))) : 99;
+  verifier(`LinkedIn : la version d'API épinglée (${vLinkedin}) a moins de onze mois (LinkedIn retire chaque version après un an)`, moisLinkedin >= 0 && moisLinkedin <= 10, `${vLinkedin} (${moisLinkedin} mois)`);
+  const vMeta = /VERSION_META = "(v\d+\.\d)"/.exec(natifSrc)?.[1] ?? "";
+  // Fin annoncée par Meta pour chaque version épinglée ; une version nouvelle s'ajoute ici avec la date lue dans le changelog.
+  const finMeta = { "v25.0": "2028-07-29" }[vMeta];
+  verifier(`Meta : la version de l'API Graph épinglée (${vMeta}) n'a pas atteint sa fin annoncée`, Boolean(finMeta) && Date.now() < Date.parse(finMeta) - 60 * 86_400_000, `${vMeta} → ${finMeta ?? "fin inconnue : relire le changelog de l'API Graph"}`);
+  const langueSrc = readFileSync(join(RACINE, "gateway", "src", "langue.ts"), "utf8");
+  verifier("page publique de retour d'autorisation : dans la langue du navigateur (Accept-Language) quand l'application n'en donne pas", /accept-language/.test(langueSrc), "toujours en anglais");
+
+  const { spawn: lancer } = await import("node:child_process");
+  const essai = await new Promise((fin) => {
+    const e = lancer(process.execPath, [join(RACINE, "scripts", "essai-connecteurs.mjs")], { stdio: ["ignore", "pipe", "pipe"] });
+    let sortie = "";
+    e.stdout.on("data", (b) => (sortie += b));
+    e.stderr.on("data", (b) => (sortie += b));
+    const minuterie = setTimeout(() => e.kill(), 5 * 60_000);
+    e.on("close", (status) => {
+      clearTimeout(minuterie);
+      fin({ status, sortie });
+    });
+  });
+  const lignes = essai.sortie.split("\n");
+  for (const ligne of lignes) {
+    const ok = /^\s+✓ (.*)$/.exec(ligne);
+    const ko = /^\s+✗ (.*?)(?:  —  obtenu : .*)?$/.exec(ligne);
+    if (ok) verifier(`connecteurs : ${ok[1]}`, true, "");
+    else if (ko) verifier(`connecteurs : ${ko[1]}`, false, ligne.split("  —  obtenu : ")[1] ?? "");
+    else if (/^(I|II|III|IV)\. /.test(ligne)) console.log(`  ${ligne}`);
+  }
+  verifier("connecteurs : l'essai contre les faux serveurs s'est déroulé jusqu'au bout", essai.status === 0 || lignes.some((l) => /vérification\(s\) réussie\(s\)/.test(l)), `${essai.status} ${lignes.slice(-6).join(" ")}`);
+}
+
 console.log(`\n${reussis} vérification(s) réussie(s), ${echecs.length} échec(s).`);
 if (echecs.length) {
   console.log("Échecs :");

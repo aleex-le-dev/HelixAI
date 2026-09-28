@@ -60,10 +60,19 @@ export function avecLangueDe<T>(
   travail: () => T,
 ): T {
   const entete = entetes["x-helix-langue"];
+  const navigateur = entetes["accept-language"];
   const brut =
     (Array.isArray(entete) ? entete[0] : entete) ??
     // Les flux d'évènements du navigateur ne portent pas d'en-tête.
     adresse.searchParams.get("langue") ??
+    /*
+     * Revérification des connecteurs du 28/09/2026 : la page publique de retour
+     * d'une autorisation (`/helix/oauth/retour`) est ouverte par le navigateur
+     * que le service renvoie, sans en-tête de l'application. Elle s'affichait
+     * donc toujours en anglais, même à qui venait de cliquer « Se connecter »
+     * en français. La langue du navigateur, faute de mieux.
+     */
+    (Array.isArray(navigateur) ? navigateur[0] : navigateur) ??
     undefined;
   return contexte.run(normaliser(brut ?? undefined), travail);
 }

@@ -651,7 +651,7 @@ Deux boutons, et l'écran dit lequel s'applique avant qu'on clique :
 
 - **« Se connecter »** pour les douze services qui publient leur serveur et acceptent
   l'enregistrement dynamique — Notion, Linear, Jira/Confluence, Asana, Sentry,
-  Intercom, Canva, Figma, Webflow, Wix, Vercel, Square, PayPal. La page
+  Intercom, Canva, Webflow, Wix, Square, PayPal (Figma et Vercel retirés le 28/09/2026, SECURITE.md § 49). La page
   d'autorisation qui s'ouvre est celle du service, dans le navigateur du système :
   Helix ne voit jamais le mot de passe. Pendant ce temps, le bouton devient « En
   attente de votre accord… » et l'écran relit l'état tout seul, jusqu'à afficher le

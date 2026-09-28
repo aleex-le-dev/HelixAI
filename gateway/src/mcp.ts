@@ -7,7 +7,9 @@ import {
   StdioClientTransport,
   getDefaultEnvironment,
 } from "@modelcontextprotocol/sdk/client/stdio.js";
-import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+import { StreamableHTTPClientTransport, StreamableHTTPError } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
+import { UnauthorizedError } from "@modelcontextprotocol/sdk/client/auth.js";
 import { deployment } from "./deployment.ts";
 import { t, tf } from "./langue.ts";
 import { cheminProtegeDans, filtrerResultat } from "./zonesProtegees.ts";
@@ -246,11 +248,28 @@ async function demarrerDistant(
     return { ok: false, error: entry.error };
   }
 
-  const transport = new StreamableHTTPClientTransport(adresse, {
-    ...(entry.config.auth ? { authProvider: entry.config.auth as never } : {}),
-  });
-  const client = new Client({ name: "helix-gateway", version: "1.0.0" }, { capabilities: {} });
-  await client.connect(transport);
+  const autorisation = entry.config.auth ? { authProvider: entry.config.auth as never } : {};
+  const nouveauClient = () => new Client({ name: "helix-gateway", version: "1.0.0" }, { capabilities: {} });
+  let client = nouveauClient();
+  try {
+    await client.connect(new StreamableHTTPClientTransport(adresse, autorisation));
+  } catch (err) {
+    /*
+     * Revérification des connecteurs du 28/09/2026 : Webflow ne documente que
+     * son adresse `/sse`, c'est-à-dire l'ancien transport « HTTP + SSE » du
+     * protocole (2024-11-05). Helix ne parlait que le transport « streamable » :
+     * un POST sur `/sse` y est refusé (4xx), et le connecteur ne pouvait pas
+     * démarrer, quoi que dise l'autorisation. La spécification prévoit le
+     * repli : sur un 4xx autre qu'un refus d'autorisation (401, 403), rouvrir
+     * en SSE à la même adresse. Un refus d'autorisation, lui, reste un refus :
+     * c'est « Se connecter » qu'il faut, pas un autre transport.
+     */
+    const code = err instanceof StreamableHTTPError ? (err.code ?? 0) : 0;
+    if (err instanceof UnauthorizedError || code < 400 || code >= 500 || code === 401 || code === 403) throw err;
+    await client.close().catch(() => undefined);
+    client = nouveauClient();
+    await client.connect(new SSEClientTransport(adresse, autorisation));
+  }
 
   const listed = await client.listTools();
   entry.client = client;

@@ -286,9 +286,15 @@ export function Connecteurs({ maison = [] }: { maison?: ServiceMaison[] } = {}) 
     );
     setEnCours(false);
     if (!resultat.ok) {
-      setErreur(resultat.message);
       // Un service qui réclame une application : on ouvre le formulaire.
       if (entree.oauth === "appli" && ouvert !== entree.id) ouvrir(entree);
+      /*
+       * Après `ouvrir`, qui efface le message (revérification du 28/09/2026) :
+       * posé avant, il disparaissait aussitôt, et avec lui l'adresse de retour
+       * à déclarer chez le service, que le formulaire annonce « dans le
+       * message ci-dessous ». Sans elle, impossible de créer l'application.
+       */
+      setErreur(resultat.message);
       return;
     }
     if (resultat.etat) setEtat(resultat.etat);
@@ -437,7 +443,7 @@ export function Connecteurs({ maison = [] }: { maison?: ServiceMaison[] } = {}) 
               disabled={retrait === entree.id}
               onClick={() => void retirerConnecteur(entree.id)}
             >
-              {retrait === entree.id ? "Retrait..." : t("Retirer")}
+              {retrait === entree.id ? t("Retrait...") : t("Retirer")}
             </Button>
           ) : attente === entree.id ? (
             <Button variant="ghost" size="sm" icon={Loader2} disabled>
@@ -530,7 +536,7 @@ export function Connecteurs({ maison = [] }: { maison?: ServiceMaison[] } = {}) 
                 icon={enCours ? Loader2 : Check}
                 disabled={enCours || !etat.chiffrementDonnees}
               >
-                {enCours ? "Connexion..." : t("Connecter")}
+                {enCours ? t("Connexion...") : t("Connecter")}
               </Button>
               {(entree.console ?? entree.documentation) && (
                 <a
@@ -664,7 +670,7 @@ export function Connecteurs({ maison = [] }: { maison?: ServiceMaison[] } = {}) 
                   disabled={retrait === c.id}
                   onClick={() => void retirerConnecteur(c.id)}
                 >
-                  {retrait === c.id ? "Retrait..." : t("Retirer")}
+                  {retrait === c.id ? t("Retrait...") : t("Retirer")}
                 </Button>
               </div>
             </div>

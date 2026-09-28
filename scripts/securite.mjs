@@ -5858,7 +5858,9 @@ console.log("\n15 quinquies. Connecteur X");
   const source = readFileSync(join(RACINE, "gateway", "src", "outilsNatifs.ts"), "utf8");
   verifier("X : l'image passe par la même lecture que la vidéo TikTok (fichier ouvert, un seul nom), plus sa signature", /fichierDuDossier\(args\.image, IMAGE_X\)/.test(source) && /fichierDuDossier\(args\.fichier, VIDEO_TIKTOK\)/.test(source) && /signature: typeImage/.test(source) && !/readFile\(/.test(source), "lecture");
   const oauth = readFileSync(join(RACINE, "gateway", "src", "oauthNatif.ts"), "utf8");
-  verifier("X : aucun jeton ni secret écrit au journal par la connexion (journaliser ne reçoit que le service et les cases)", !/journaliser\([^)]*(jetons|acces|secret|clientSecret|verificateur)/.test(oauth), "journal");
+  // Le détail du journal (troisième argument) ne porte que des clés connues : ni jeton, ni secret, ni vérificateur.
+  const detailsJournal = [...oauth.matchAll(/journaliser\("[^"]+", [^,]+, \{([^}]*)\}\)/g)].map((m) => m[1]);
+  verifier("X : aucun jeton ni secret écrit au journal par la connexion (journaliser ne reçoit que le service, les cases et l'issue)", detailsJournal.length >= 5 && detailsJournal.every((d) => !/jeton|acces|actualisation|secret|verificateur|code|Authorization/i.test(d)), detailsJournal.join(" | "));
 }
 
 console.log(`\n${reussis} vérification(s) réussie(s), ${echecs.length} échec(s).`);

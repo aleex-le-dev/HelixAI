@@ -280,7 +280,7 @@ const faux = serveurHttp(async (req, res) => {
       if (p === "/2/oauth2/revoke") return reponse(res, 200, { revoked: true });
       if (f.get("grant_type") === "refresh_token") {
         if (!/^ACTU-x-[12]$/.test(f.get("refresh_token") ?? "")) return reponse(res, 400, { error: "invalid_request" });
-        // X fait tourner le jeton d'actualisation : un nouveau à chaque renouvellement.
+        // Un nouveau jeton d'actualisation à chaque renouvellement : le cas le plus exigeant (la page de X ne dit pas s'il le fait).
         return reponse(res, 200, { token_type: "bearer", expires_in: 7200, access_token: "ACCES-x-2", refresh_token: "ACTU-x-2", scope: "tweet.read users.read offline.access tweet.write media.write" });
       }
       const code = f.get("code");

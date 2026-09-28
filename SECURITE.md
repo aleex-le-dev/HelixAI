@@ -4534,3 +4534,116 @@ question est le même) ; `O_NOFOLLOW` et le compte des liens durs sous Windows e
 Windows, Node n'a pas `O_NOFOLLOW` : l'ouverture y suit un lien, et seules les vérifications
 sur le fichier ouvert tiennent) ; un vrai modèle qui recopie une publication piégée (le faux
 modèle le fait à coup sûr, un vrai seulement parfois) ; l'interface en japonais à l'écran.
+
+## 42. Connecteur X (28 septembre 2026)
+
+X (ex-Twitter), demandé par Medhi, fait sur la branche `connecteur-x` exactement comme les
+sept connecteurs du § 40, avec les corrections de la tournée du § 41 déjà en place
+(`gateway/src/oauthNatif.ts`, définition `x` ; `outilsNatifs.ts`, `x__profil`,
+`x__publications`, `x__publier`). Documentation officielle lue le 28/09/2026 sur docs.x.com et
+citée dans le code. Contrôles : `scripts/essai-natifs.mjs`, section H (connexion) et sections
+E, F, G (jetons, outils, appel recopié), repris par `npm run securite` sous « natifs : » ;
+`scripts/securite.mjs`, section 15 quinquies. **Rien n'a été essayé contre le vrai service** :
+ni compte X, ni application de développeur, ni crédits ; faux serveur OAuth et fausse API
+seulement, écrits d'après la documentation.
+
+### 42.1 Ce qui est tenu
+
+- **Portées.** Lecture par défaut : `tweet.read users.read offline.access` (lire le compte et ses
+  posts, rester branché). Publier se coche : `tweet.write media.write` en plus, rien d'autre.
+  Pas de `dm.*`, `follows.*`, `like.*`, `bookmark.*`. La portée rendue par X est relue ; une
+  portée en trop (essayé : `dm.write`) ou en moins fait révoquer les deux jetons chez X, et
+  rien n'est gardé. X ne décrit pas `scope` dans sa réponse de jetons sur la page lue ; un
+  exemple de son forum le montre. S'il manquait, la connexion serait refusée (règle du § 40).
+- **PKCE et `state`.** PKCE S256 (jamais `plain`), vérificateur de 48 octets qui ne quitte pas
+  l'instance ; `state` de 32 octets, préfixe `natif.`, comparé à durée constante, dix minutes,
+  une fois ; un `state` inventé ou allongé ne mène à rien et n'annule pas la demande en cours ;
+  un retour rejoué ne vaut plus rien.
+- **Deux sortes d'application.** « Publique » (Native App) : pas de secret, `client_id` dans le
+  corps, PKCE seul. « Confidentielle » (Web App) : `Authorization: Basic` (identifiant et secret
+  encodés comme un formulaire, puis en base 64, RFC 6749 § 2.3.1), ni `client_id` ni
+  `client_secret` dans le corps, à l'échange, au renouvellement et à la révocation. Le secret
+  est chiffré au repos (`connecteursNatifs#x#secret`) et n'est rendu par aucune route ; l'en-tête
+  Basic n'apparaît ni sur le disque, ni au journal, ni dans la sortie de la passerelle (essai :
+  la base 64 du secret est cherchée partout, comme les jetons).
+- **Adresse de retour.** X exige une correspondance exacte et refuse « localhost » ; aucun joker
+  de port n'est documenté. Le retour passe donc par la route publique de l'instance
+  (`/helix/oauth/retour`, aiguillée par le préfixe du `state`), et `localhost` est réécrit en
+  `127.0.0.1` dans l'adresse demandée comme dans l'adresse montrée (`sansLocalhost`). La
+  passerelle écoute sur 127.0.0.1 par défaut : c'est la même instance. Le nom d'hôte vient de
+  `adresseVue` (forme vérifiée), comme pour LinkedIn et Meta.
+- **Un seul hôte.** `api.x.com` (jetons, révocation, compte, posts, image, publication) ;
+  `envoyer` refuse tout autre hôte avant toute connexion. Le consentement est une adresse de
+  `x.com` que le navigateur ouvre ; l'instance ne la joint pas.
+- **Qui a le droit.** Comme au § 40 : lire l'état, toute séance ; enregistrer l'application,
+  brancher, débrancher : l'administrateur ; publier : l'administrateur seulement, vérifié par
+  l'outil au moment d'agir (essai : un collègue et un appel sans personne sont refusés, rien ne
+  part). Le préfixe `x` est réservé (`IDS_RESERVES`) ; les outils X ne sont ni dans les familles
+  des employés OpenClaw ni dans l'agent de code.
+- **Carte d'accord.** `x__publier` est dans `ECRITURES_NATIVES`, donc `TOUJOURS_CONFIRMER` : une
+  carte à chaque appel, même au niveau « Tout approuver », l'accord ne vaut que pour cet appel,
+  les arguments entiers (texte et chemin de l'image) sont sur la carte. La phrase dit « sur X,
+  au nom du compte connecté », l'image, et qu'un post contenant une adresse coûte plus cher.
+- **Appel recopié.** Un post lu par `x__publications` qui contient
+  `<tool_call>{"name":"x__publier",…}</tool_call>`, recopié par le modèle dans son résumé, n'est
+  pas lancé (`appelsLus`, § 41.1) : essayé dans un vrai Chat avec le faux modèle, aucune carte,
+  rien publié, la citation reste du texte.
+- **Limites.** Dix publications par heure pour l'instance et un doublon dans la demi-heure
+  refusés d'un seul tenant (`sousGarde`) : essayé, le même post lancé trois fois en même temps
+  part une fois, douze posts lancés ensemble n'en font pas plus de dix. Le texte est compté comme
+  X le compte (NFC, une adresse 23, un emoji ou une suite d'emoji 2, un caractère hors des plages
+  latines 2) et refusé au-delà de 280, avant tout envoi.
+- **Image.** Facultative, une seule, du dossier de travail seulement, par la même lecture que la
+  vidéo TikTok (§ 41.1, désormais `fichierDuDossier`) : chemin réel dans le dossier, hors zones
+  protégées, extension jugée sur le chemin réel, `O_NOFOLLOW`, un seul nom (pas de lien dur),
+  5 Mo au plus, octets lus par le fichier ouvert ; en plus, la signature des premiers octets doit
+  être celle d'un JPEG, PNG ou WebP et correspondre à l'extension. Essayé : un texte renommé
+  `faux.jpg`, un lien `lien-image.jpg` vers les notes, un lien dur vers une image hors du
+  dossier, `/etc/hosts` : refusés, rien n'est envoyé. L'image part en base 64 dans un corps JSON
+  (`POST /2/media/upload`, `media_category: tweet_image`), puis le post la joint par son
+  identifiant, vérifié (chiffres seulement).
+- **Jetons.** Chiffrés au repos, jamais rendus par une route ni au modèle, jamais au journal.
+  Jeton d'accès de deux heures, renouvelé une fois sur un 401 (si X rend un nouveau jeton
+  d'actualisation, c'est lui qui est gardé ; la page lue ne dit pas s'il le fait) ; un second
+  401 débranche. Débrancher révoque le jeton
+  d'actualisation puis le jeton d'accès (`/2/oauth2/revoke`), et ne dit « révoqué » que si X a
+  confirmé les deux.
+
+### 42.2 Offres et limites de X relevées (documentation du 28/09/2026)
+
+Offres (docs.x.com, pages « pricing » et « changelog », et les annonces du forum des
+développeurs du 06/02/2026 et du 16/04/2026) : depuis le 06/02/2026, paiement à l'usage, par
+crédits achetés d'avance ; l'offre gratuite (« Legacy Free ») est fermée, ses utilisateurs
+récents ont reçu un bon unique de 10 $ ; Basic et Pro restent ouvertes à leurs abonnés. Tarifs :
+lire un post 0,005 $, ses propres posts 0,001 $ (« Owned Reads », quand le compte connecté
+possède l'application, depuis le 20/04/2026), un compte 0,010 $ ; publier 0,015 $, 0,20 $ avec
+une adresse. 3 millions de posts lus par mois au plus. Retirés des offres en libre-service :
+citer, suivre, aimer (20/04/2026) ; répondre seulement à qui a mentionné le compte
+(23/02/2026). Limites de débit : `POST /2/tweets` 100 par 15 minutes et par personne, 10 000
+par jour pour l'application ; `GET /2/users/me` 75 par 15 minutes ; `GET /2/users/:id/tweets`
+900 par 15 minutes ; `POST /2/media/upload` 500 par 15 minutes. Image : 5 Mo, JPEG, PNG, GIF
+ou WebP (GIF non proposé ici).
+
+### 42.3 Soupçons, non démontrés
+
+- **Coût.** Chaque lecture est facturée à l'organisation ; un modèle qui relit les posts en
+  boucle coûte de l'argent. `x__publications` rend au plus 100 posts par appel, et le dit au
+  modèle ; aucune limite de lectures par heure n'est posée (comme pour les autres services).
+- **Code 402.** Une requête sans crédit est dite « paiement requis, probablement plus de
+  crédits » : ce code n'est pas décrit dans les pages lues.
+- **Adresse de retour.** Une instance ouverte au réseau sous un nom et en https donne ce nom : X
+  l'accepte d'après sa documentation. Une instance atteinte par l'adresse IP de la machine
+  (`http://192.168.…`) donnerait une adresse que X accepterait peut-être, mais qui ne mène pas
+  toujours à la machine depuis le navigateur de l'administrateur.
+- **Mentions.** X restreint les mentions faites par programme (23/02/2026) : un post qui en
+  contient peut être refusé par X. La carte montre le texte tel quel.
+- **Connecteur ajouté avant cette version sous l'identifiant « x »** : ses outils seraient
+  aiguillés vers X natif et ne partiraient plus (même remarque qu'au § 41.3).
+
+### 42.4 Pas essayé
+
+Le vrai service : la connexion (l'écran de consentement de x.com, l'adresse de retour en
+`http://127.0.0.1`, le type d'application accepté), la réponse réelle de l'échange (présence
+de `scope`), la rotation du jeton d'actualisation, une lecture et une publication réelles,
+l'envoi réel d'une image, la révocation, les messages d'erreur réels (402, 403, 429), le compte
+des caractères sur des cas limites (adresses sans « http », drapeaux, caractères rares).

@@ -571,6 +571,43 @@ poste répond en http sur 127.0.0.1 (peut-être refusée) ; `r_organization_admi
 aux statistiques de page LinkedIn ; la version d'API LinkedIn (`202609`) est à relever
 chaque mois ; Meta liste aussi `pages_manage_engagement` pour publier, pas demandé.
 
+**Fait le 28/09/2026 : X (ex-Twitter), branche `connecteur-x`.** Demandé par Medhi, « exactement
+comme » les sept ci-dessus : mêmes fichiers (définition `x` dans `oauthNatif.ts`, outils
+`x__profil`, `x__publications`, `x__publier` dans `outilsNatifs.ts`, écran
+`ConnecteurNatif.tsx`, article « Connecter X » de l'aide), mêmes règles (lecture par défaut ;
+publier se coche à la connexion, administrateur seul, carte d'accord à chaque post même au
+niveau « Tout approuver », texte entier ; dix par heure, doublon refusé, `sousGarde`).
+
+| Service | Lecture (sans rien cocher) | En plus, si on le coche | Offre de X |
+|---|---|---|---|
+| X | `tweet.read users.read offline.access` : le compte, ses derniers posts et leurs statistiques publiques | `tweet.write media.write` : publier un post de 280 caractères, avec une image du dossier de travail si on le demande | payante à l'usage (crédits d'avance) pour tout nouveau développeur depuis le 06/02/2026 ; plus d'offre gratuite ; Basic et Pro pour leurs abonnés |
+
+Ce que la documentation de X dit le 28/09/2026 (SECURITE.md § 42.2, sources dans le code) : la
+consigne de départ (« avec l'offre gratuite, Helix peut publier mais pas lire vos posts »)
+décrivait l'ancienne offre gratuite, **fermée le 06/02/2026** ; l'écran dit donc l'état actuel :
+publier 0,015 $ (0,20 $ avec une adresse), lire ses propres posts 0,001 $ quand le compte branché
+est celui qui a créé l'application, 0,005 $ sinon, crédits nécessaires avant le premier appel.
+L'application peut être « publique » (Native App, sans secret, PKCE seul) ou « confidentielle »
+(Web App, secret envoyé par `Authorization: Basic`) : l'écran accepte les deux, le secret est
+facultatif pour X seulement. X refuse « localhost » dans l'adresse de retour et n'a pas de joker
+de port : le retour passe par la route publique de l'instance, réécrite en 127.0.0.1. L'image
+passe par la lecture de la vidéo TikTok (renommée `fichierDuDossier`), plus la signature des
+octets (JPEG, PNG, WebP). Logo : clé de marque `x`, icône neutre (`AtSign`) en attendant le logo
+officiel, que l'agent des logos ajoute ; aucun tableau de connecteurs dans les README, ils n'ont
+donc pas été touchés.
+
+**Pas encore essayé avec un vrai compte X ni une vraie application de développeur**, et sans
+crédits : vérifié contre un faux serveur OAuth et une fausse API (`scripts/essai-natifs.mjs`,
+section H et sections E, F, G ; `scripts/securite.mjs`, 15 quinquies), écrits d'après la
+documentation. Règle du 28/09/2026 : l'écran, l'aide et les README ne le disent pas ; c'est dit
+ici et au § 42 de SECURITE.md. À essayer sur le poste : créer l'application sur console.x.com
+(les deux types), déclarer `http://127.0.0.1:8787/helix/oauth/retour`, acheter quelques crédits,
+se connecter, lire, publier un post, puis un post avec image, débrancher. Points incertains :
+la réponse de jetons contient-elle `scope` (sinon la connexion est refusée, et la règle serait
+à revoir pour X) ; X fait-il tourner le jeton d'actualisation ; quel code rend une requête sans
+crédit (l'outil suppose 402) ; X exige-t-il les droits « Read and write » de l'application en
+plus de `tweet.write`.
+
 ### 3.6 Découpage des tâches lourdes
 
 Ajouté en septembre 2026, après mesure. Un modèle de 8 milliards de paramètres perd le

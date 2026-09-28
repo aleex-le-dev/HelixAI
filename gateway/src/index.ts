@@ -613,6 +613,20 @@ async function handleProvisionStatus(res: http.ServerResponse): Promise<void> {
   const lmStudioActif = backendById("lmstudio")?.enabled === true;
   // Mac Intel : le moteur ouvert, llama.cpp (llamaCpp.ts, 28/09/2026), à la place de LM Studio.
   const ouvert = moteurOuvert();
+  const moteurInstalle = ouvert
+    ? llamaCppInstalle()
+    : lmStudioActif && (await findLms()) !== null && !moteurAPoser() && !llmsterPoseAilleurs();
+  /*
+   * L'échec d'installation du moteur ne vaut plus une fois le moteur là
+   * (tournée à l'écran du 28/09/2026) : LM Studio posé à la main depuis
+   * lmstudio.ai, comme l'encadré d'erreur le propose, puis « Vérifier à
+   * nouveau ». L'écran passait au choix du modèle en affichant toujours
+   * « L'installation du moteur a échoué » sous le modèle recommandé.
+   */
+  if (moteurInstalle && echecDuMoteur && getProvisionState() === echecDuMoteur) {
+    echecDuMoteur = null;
+    setProvisionState({ phase: "idle", message: "", error: undefined, percent: undefined, model: undefined });
+  }
   send(res, 200, {
     hardware,
     recommended: conseilPourLaMachine(hardware),
@@ -631,7 +645,7 @@ async function handleProvisionStatus(res: http.ServerResponse): Promise<void> {
      * Compté comme absent : l'écran repropose l'installation, qui dit alors
      * le problème avant de rien télécharger (engine.ts).
      */
-    moteurInstalle: ouvert ? llamaCppInstalle() : lmStudioActif && (await findLms()) !== null && !moteurAPoser() && !llmsterPoseAilleurs(),
+    moteurInstalle,
     // Installation pilotée par l'intégrateur : l'écran de mise en route ne
     // propose rien, les modèles sont ceux du profil client.
     managed: !autoProvisionEnabled() || (!lmStudioActif && !ouvert),
@@ -671,6 +685,8 @@ const CONDITIONS_MOTEUR = {
 
 /** Une installation du moteur à la fois (revue de sécurité du 27/09/2026). */
 let moteurEnInstallation = false;
+/** L'état publié par le dernier échec d'installation du moteur, tant qu'il est l'état courant (handleProvisionStatus). */
+let echecDuMoteur: ReturnType<typeof getProvisionState> | null = null;
 
 async function handleEngineInstall(
   req: http.IncomingMessage,
@@ -751,18 +767,16 @@ async function handleEngineInstall(
        * étapes techniques dont il devrait comprendre l'ordre.
        */
       setProvisionState({ phase: "checking", message: t("Choix du modèle adapté à votre machine..."), percent: undefined });
-      await ensureLocalModel();
-      invalidate();
-      dicteeEnFond();
-      codeEnFond();
+      apresMiseEnRoute(await ensureLocalModel());
     })
-    .catch((err: unknown) =>
+    .catch((err: unknown) => {
       setProvisionState({
         phase: "error",
         message: t("L'installation du moteur a échoué."),
         error: err instanceof Error ? err.message : String(err),
-      }),
-    )
+      });
+      echecDuMoteur = getProvisionState();
+    })
     .finally(() => {
       moteurEnInstallation = false;
     });
@@ -782,18 +796,16 @@ function installerMoteurOuvert(userId: string, res: http.ServerResponse): void {
     .then(async () => {
       invalidate();
       setProvisionState({ phase: "checking", message: t("Choix du modèle adapté à votre machine..."), percent: undefined });
-      await ensureLocalModel();
-      invalidate();
-      dicteeEnFond();
-      codeEnFond();
+      apresMiseEnRoute(await ensureLocalModel());
     })
-    .catch((err: unknown) =>
+    .catch((err: unknown) => {
       setProvisionState({
         phase: "error",
         message: t("L'installation du moteur a échoué."),
         error: err instanceof Error ? err.message : String(err),
-      }),
-    )
+      });
+      echecDuMoteur = getProvisionState();
+    })
     .finally(() => {
       moteurEnInstallation = false;
     });
@@ -901,6 +913,21 @@ function codeEnFond(): void {
     .catch((err: unknown) => console.error("[helix] OpenCode en arrière-plan", err));
 }
 
+/**
+ * Après la mise en route du modèle : la dictée et l'agent de code, en fond,
+ * seulement si le modèle est prêt (tournée à l'écran du 28/09/2026).
+ * `ensureLocalModel` rend l'état final sans rejeter : un téléchargement raté
+ * (réseau coupé, disque plein) lançait quand même l'installation de la dictée,
+ * Python et son modèle compris (850 Mo mesurés sur le poste d'essai), sur le
+ * disque qui venait peut-être de manquer de place.
+ */
+function apresMiseEnRoute(etat: ReturnType<typeof getProvisionState>): void {
+  invalidate();
+  if (etat.phase !== "ready") return;
+  dicteeEnFond();
+  codeEnFond();
+}
+
 function handleProvisionStart(req: http.IncomingMessage, res: http.ServerResponse): void {
   readJson(req)
     .catch(() => ({}))
@@ -911,12 +938,9 @@ function handleProvisionStart(req: http.IncomingMessage, res: http.ServerRespons
       const catalogue = role === "gui" ? VISION_CATALOG : CATALOG;
       // Non bloquant : la progression se suit sur /helix/provision/stream.
       void ensureLocalModel(model, catalogue)
-        .then(() => {
-          invalidate();
-          if (role !== "gui") {
-            dicteeEnFond();
-            codeEnFond();
-          }
+        .then((etat) => {
+          if (role !== "gui") apresMiseEnRoute(etat);
+          else invalidate();
         })
         /*
          * Sans ce filet, un provisionnement qui rejette devient un rejet non

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
-import { Check, Cloud, CreditCard, ExternalLink, Handshake, Headset, KeyRound, Link2, Loader2, Lock, ShieldAlert, ShoppingBag, ShoppingCart, Trash2, type LucideIcon } from "lucide-react";
+import { Check, ExternalLink, KeyRound, Link2, Loader2, Lock, ShieldAlert, Trash2 } from "lucide-react";
 import type { ServiceMaison } from "@/components/settings/Connecteurs";
 import type { CleMarquePetite } from "@/components/ui/marques";
 import { connecterCommerce, enregistrerCommerce, etatCommerce, oublierCommerce, type EtatCommerce, type EtatsCommerce, type IdCommerce } from "@/lib/commerce";
@@ -25,19 +25,18 @@ import { t, tf } from "@/lib/i18n";
  */
 
 /*
- * Icônes neutres (Lucide) en attendant les logos officiels, qu'un autre
- * travail pose : une ligne de la liste « maison » ne lit pas
- * MARQUE_DU_CONNECTEUR, il suffira donc de donner ici la clé de marque
- * (`stripe`, `shopify`, `woocommerce`, `salesforce`, `pipedrive`, `zendesk`)
- * en quatrième colonne, qui passe avant l'icône.
+ * Le logo de chaque service (troisième tournée des logos, 28/09/2026,
+ * décision de Medhi ; sources dans scripts/marques/sources.json). Une ligne
+ * de la liste « maison » ne lit pas MARQUE_DU_CONNECTEUR : la clé de marque
+ * est donnée ici.
  */
-const LISTE: [IdCommerce, string, LucideIcon, CleMarquePetite?][] = [
-  ["stripe", "Stripe", CreditCard],
-  ["shopify", "Shopify", ShoppingBag],
-  ["woocommerce", "WooCommerce", ShoppingCart],
-  ["salesforce", "Salesforce", Cloud],
-  ["pipedrive", "Pipedrive", Handshake],
-  ["zendesk", "Zendesk", Headset],
+const LISTE: [IdCommerce, string, CleMarquePetite][] = [
+  ["stripe", "Stripe", "stripe"],
+  ["shopify", "Shopify", "shopify"],
+  ["woocommerce", "WooCommerce", "woocommerce"],
+  ["salesforce", "Salesforce", "salesforce"],
+  ["pipedrive", "Pipedrive", "pipedrive"],
+  ["zendesk", "Zendesk", "zendesk"],
 ];
 
 /** Les six lignes de la liste des connecteurs (Paramètres, Connecteurs), chacune avec son panneau. */
@@ -55,14 +54,14 @@ export function useServicesCommerce(ouvert: string | null, basculer: (cle: strin
     pipedrive: t("Contacts et affaires, notes après accord"),
     zendesk: t("Tickets, réponses après accord"),
   };
-  return LISTE.map(([id, label, icone, marque]) => {
+  return LISTE.map(([id, label, marque]) => {
     const e = etats.find((s) => s.id === id);
     return {
       id,
       label,
       description: e?.configure ? tf("Connecté : {0}", e.compte ?? "") : e?.aReconnecter ? t("Accès perdu, à reconnecter") : description[id],
       categorie: t("Commerce et relation client"),
-      ...(marque ? { marque } : { icone }),
+      marque,
       connecte: Boolean(e?.configure),
       ouvert: ouvert === id,
       onBasculer: () => basculer(id),

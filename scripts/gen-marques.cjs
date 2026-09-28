@@ -19,6 +19,13 @@
  * société publie, en couleur, et de sa version pour fond sombre quand elle en
  * livre une.
  *
+ * Troisième tournée du 28/09/2026 (décision de Medhi : « mets les vrais ») :
+ * plus aucune marque neutre par choix. Quand la société ne publie pas de kit
+ * téléchargeable sans case à cocher, la source est, dans l'ordre : le fichier
+ * servi par son site (souvent l'icône du site), son dépôt officiel, puis une
+ * reproduction fidèle sur Wikimedia Commons. Les PNG officiels restent admis,
+ * et un logo sombre sans version pour fond sombre reçoit une `pastille`.
+ *
  * Pourquoi un arbre de données plutôt que le SVG brut : un SVG est un document
  * qui peut porter du script, des liens, des feuilles de style. Injecter le
  * fichier tel quel (`dangerouslySetInnerHTML`) ferait confiance à chaque kit de
@@ -61,8 +68,12 @@ const ATTRIBUTS = {
   gradientUnits: "gradientUnits", gradientTransform: "gradientTransform",
   clipPathUnits: "clipPathUnits", maskUnits: "maskUnits",
 };
-/** Attributs sans effet sur le dessin, ignorés. */
-const SANS_EFFET = /^(xmlns(:.*)?|version|xml:space|data-.*|enable-background|role|aria-.*|style|class|xmlns:xlink|preserveAspectRatio|viewBox)$/;
+/**
+ * Attributs sans effet sur le dessin, ignorés (jamais recopiés). Les
+ * métadonnées d'éditeur `sodipodi:` et `inkscape:` s'y ajoutent à la troisième
+ * tournée (28/09/2026, fichier de Square repris de Wikimedia Commons).
+ */
+const SANS_EFFET = /^(xmlns(:.*)?|version|xml:space|data-.*|enable-background|role|aria-.*|style|class|xmlns:xlink|preserveAspectRatio|viewBox|focusable|(sodipodi|inkscape):[-A-Za-z]+)$/;
 
 /**
  * Fonctions admises dans une valeur : les transformations, les couleurs, et
@@ -114,7 +125,20 @@ function declarations(texte) {
 /** Règles `.cls-1 { fill: … }` d'une balise <style>, sélecteurs de classe seulement. */
 function reglesDeStyle(css, fichier) {
   const regles = {};
-  const propre = css.replace(/\/\*[\s\S]*?\*\//g, "");
+  /*
+   * Règles réservées au thème du système (`@media (prefers-color-scheme: …)`),
+   * que des icônes de site portent (Scaleway, Zendesk, troisième tournée du
+   * 28/09/2026) : Helix choisit son thème lui-même et pose, s'il le faut, un
+   * dessin « sombre » distinct. Elles sont retirées, jamais appliquées. Toute
+   * autre règle @ (import, font-face…) reste refusée par le contrôle des
+   * sélecteurs ci-dessous.
+   */
+  const propre = css
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/@media\s*\(\s*prefers-color-scheme\s*:\s*(dark|light)\s*\)\s*\{(?:[^{}]*\{[^{}]*\})*[^{}]*\}/g, "");
+  // Ce qui reste hors des règles (`@import …;`, une accolade d'un bloc @ non géré) arrête le script au lieu d'être ignoré en silence.
+  const horsRegles = propre.replace(/([^{}]+)\{([^{}]*)\}/g, "").trim();
+  if (horsRegles) throw new Error(`${fichier} : CSS non géré « ${horsRegles.slice(0, 60)} »`);
   for (const m of propre.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
     const decl = declarations(m[2]);
     for (const sel of m[1].split(",").map((s) => s.trim()).filter(Boolean)) {
@@ -304,11 +328,30 @@ for (const [cle, m] of Object.entries(sources.marques)) {
     if (Object.keys(reste).length || !(part >= 0 && part <= 2 && px >= 0 && px <= 40) || !(part > 0 || px > 0)) throw new Error(`${cle} : « marge » illisible`);
     champs.push(`    marge: ${JSON.stringify({ part, px })},`);
   }
+  /*
+   * Pastille claire en thème sombre (troisième tournée, 28/09/2026) : pour un
+   * logo sombre sans version pour fond sombre (Square, OVHcloud…), qui s'y
+   * perdrait. Le dessin n'est pas recoloré ; LogoMarque pose un fond clair
+   * derrière lui, en thème sombre seulement.
+   */
+  if (m.pastille !== undefined) {
+    if (m.pastille !== true) throw new Error(`${cle} : « pastille » illisible`);
+    if (m.sombre) throw new Error(`${cle} : « pastille » avec un dessin sombre, l'un des deux est de trop`);
+    champs.push(`    pastille: true,`);
+  }
   entrees.push(`  ${cle}: {\n${champs.join("\n")}\n  },`);
 }
 const grandes = Object.entries(sources.marques).filter(([, m]) => m.grand).map(([cle]) => JSON.stringify(cle));
 
 const neutres = Object.keys(sources.neutres).join(", ");
+const phraseNeutres = neutres
+  ? ` * Gardent une icône neutre, faute de source officielle : ${neutres}.
+ * Les raisons sont dans scripts/marques/sources.json.`
+  : ` * Aucune marque ne garde d'icône neutre par choix : décision de Medhi du
+ * 28/09/2026 (« mets les vrais »), qui assume le risque lié aux marques.
+ * Chaque service et chaque fournisseur affiché porte son vrai logo ; seuls
+ * les services qui ne sont la marque de personne (fichiers, mémoire…) gardent
+ * une icône neutre.`;
 
 const entete = `/**
  * Logos des services et des fournisseurs de modèles, en couleur, tels que les
@@ -331,14 +374,15 @@ const entete = `/**
  * dessin « sombre » (logo blanc de GitHub, X, Vercel…) : LogoMarque montre
  * l'un ou l'autre selon le thème. Sans dessin sombre, le même sert aux deux.
  *
- * Gardent une icône neutre, parce que leur charte l'exige ou faute de source
- * officielle : ${neutres}.
- * Les raisons sont dans scripts/marques/sources.json.
+${phraseNeutres}
  *
- * Marques « grandes » (\`grand\`) : leur charte fixe une hauteur minimale que
- * les lignes de liste n'atteignent pas (YouTube : 100 px de logo). Elles ne
- * passent que par LogoMarqueGrand, jamais par LogoMarque, dont le type
- * (CleMarquePetite) les exclut : les montrer en petit ne compile pas.
+ * Marques « grandes » (\`grand\`) : le logo complet, dessiné en grand dans un
+ * panneau (YouTube : 100 px de logo). Elles ne passent que par
+ * LogoMarqueGrand ; en petit, dans une liste, c'est une autre clé qui sert
+ * (\`youtubeIcone\`, l'icône seule).
+ *
+ * Pastille (\`pastille\`) : logo sombre sans version pour fond sombre ;
+ * LogoMarque pose un fond clair derrière lui en thème sombre.
  *
  * Taille minimale (\`tailleMin\`) et zone de protection (\`marge\`) : celles
  * que la charte écrit en chiffres. LogoMarque les applique à l'affichage.
@@ -378,6 +422,8 @@ export interface Marque {
    * que l'écran garantit déjà autour du logo.
    */
   marge?: { part: number; px: number };
+  /** Fond clair derrière le logo en thème sombre, pour un logo sombre sans version pour fond sombre. */
+  pastille?: true;
 }
 
 export const MARQUES = {

@@ -8,6 +8,7 @@ import {
   nomDeBot,
   type EtatSlack,
 } from "@/lib/slack";
+import { LogoMarque } from "@/components/settings/TuileService";
 import { Card } from "@/components/settings/SettingsShell";
 import { Button } from "@/components/ui/Button";
 import { Field, Input } from "@/components/ui/Field";
@@ -129,7 +130,10 @@ export function SlackConnecteur({ onChange }: { onChange?: () => void } = {}) {
     return (
       <div className="space-y-3">
         <Card className="flex items-start gap-3">
-          <MessageSquare size={20} strokeWidth={1.75} className="mt-0.5 shrink-0 text-muted-foreground" />
+          {/* Le logo de Slack (troisième tournée des logos, 28/09/2026) ; gap-3 : 12 px libres autour. */}
+          <span className="mt-0.5 flex shrink-0">
+            <LogoMarque marque="slack" taille={20} degagement={12} />
+          </span>
           <div className="min-w-0 flex-1">
             <p className="truncate font-medium text-foreground">{t("Espace «")}{" "}{etat.espace} »</p>
             <p className="truncate text-sm text-muted-foreground">

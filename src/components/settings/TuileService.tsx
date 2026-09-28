@@ -70,7 +70,8 @@ function Dessin({
   // dans `url(#…)` sans échappement, d'où leur retrait.
   const prefixe = useId().replace(/:/g, "") + "-";
   if (dessin.image) {
-    return <img src={dessin.image} width={taille} height={taille} alt="" aria-hidden="true" className={cn("shrink-0", classe)} />;
+    // object-contain : quelques PNG officiels ne sont pas tout à fait carrés (HubSpot, 267 × 269) ; ils gardent leurs proportions.
+    return <img src={dessin.image} width={taille} height={taille} alt="" aria-hidden="true" className={cn("shrink-0 object-contain", classe)} />;
   }
   return (
     <svg
@@ -105,6 +106,11 @@ function Dessin({
  * `degagement` est l'espace que l'écran laisse déjà autour du logo (l'écart
  * de la ligne, sa marge intérieure) ; il ne manque que la différence, posée
  * en marge autour du dessin. Sans `degagement`, toute la zone est ajoutée.
+ *
+ * Troisième tournée (28/09/2026, décision de Medhi : « mets les vrais ») :
+ * chaque service et chaque fournisseur affiché a son logo, et `pastille`
+ * pose un fond clair derrière un logo sombre qui n'a pas de version pour fond
+ * sombre (Square, OVHcloud, PayPal), pour qu'il reste lisible.
  */
 export function LogoMarque({
   marque,
@@ -112,7 +118,7 @@ export function LogoMarque({
   taille = 22,
   degagement = 0,
 }: {
-  /** Jamais une marque « grande » (YouTube) : sa charte interdit la taille d'une ligne. */
+  /** Jamais une marque « grande » (le logo complet de YouTube) : en petit, c'est `youtubeIcone`. */
   marque?: CleMarquePetite;
   icone?: LucideIcon;
   taille?: number;
@@ -123,7 +129,12 @@ export function LogoMarque({
   if (m && !(m.tailleMin && taille < m.tailleMin)) {
     const zone = m.marge ? Math.max(m.marge.part * taille, m.marge.px) : 0;
     const manque = Math.max(0, Math.ceil(zone - degagement));
-    const dessins = !m.sombre ? (
+    const dessins = m.pastille ? (
+      // Logo sombre sans version pour fond sombre : un fond clair derrière lui, en thème sombre seulement (styles/index.css).
+      <span className="marque-pastille inline-flex shrink-0">
+        <Dessin dessin={m.clair} taille={taille} />
+      </span>
+    ) : !m.sombre ? (
       <Dessin dessin={m.clair} taille={taille} />
     ) : (
       <>
@@ -145,10 +156,11 @@ export function LogoMarque({
 }
 
 /**
- * Logo d'une marque dont la charte fixe une hauteur minimale, trop grande pour
- * une ligne de liste (28/09/2026) : YouTube, jamais sous 100 px en numérique
- * (https://brand.youtube/youtube-logo/). La liste des connecteurs garde donc
- * une icône neutre, et le logo ne paraît qu'ici, en grand.
+ * Logo complet d'une marque, en grand, en tête de son panneau (28/09/2026) :
+ * YouTube, à 100 px au moins, comme sa charte le demande
+ * (https://brand.youtube/youtube-logo/). Depuis la troisième tournée du même
+ * jour, la liste des connecteurs montre aussi l'icône de YouTube en petit
+ * (clé `youtubeIcone`, décision de Medhi) ; le logo complet reste ici.
  *
  * `hauteur` est celle du logo lui-même. Le dessin garde tout le plan de
  * travail du kit : la marge vide que YouTube livre autour du logo est plus

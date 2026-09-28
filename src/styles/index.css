@@ -231,6 +231,19 @@
   :root[data-theme="sombre"] .marque-sombre {
     display: block;
   }
+  /*
+   * Logo sombre sans version pour fond sombre (Square, OVHcloud, PayPal ;
+   * troisième tournée du 28/09/2026) : un fond clair derrière lui, en thème
+   * sombre seulement. L'anneau (box-shadow) déborde sans changer la taille de
+   * la ligne ; le dessin, lui, n'est pas touché.
+   */
+  .marque-pastille {
+    border-radius: 4px;
+  }
+  :root[data-theme="sombre"] .marque-pastille {
+    background-color: hsl(var(--pastille-marque));
+    box-shadow: 0 0 0 2px hsl(var(--pastille-marque));
+  }
 
   /* Fond en pointillés (ecrans Cowork / Code). */
   .bg-dotted {

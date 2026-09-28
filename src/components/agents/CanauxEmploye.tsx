@@ -22,6 +22,17 @@ import {
   type TypeCanal,
 } from "@/lib/employes";
 import { t, tf } from "@/lib/i18n";
+import { LogoMarque } from "@/components/settings/TuileService";
+import type { CleMarquePetite } from "@/components/ui/marques";
+
+/** Le logo de chaque messagerie (troisième tournée des logos, 28/09/2026, décision de Medhi). */
+const MARQUE_DU_CANAL: Partial<Record<TypeCanal, CleMarquePetite>> = {
+  telegram: "telegram",
+  whatsapp: "whatsapp",
+  discord: "discord",
+  slack: "slack",
+  mattermost: "mattermost",
+};
 
 /**
  * Les messageries où l'on peut écrire à un employé : Telegram, WhatsApp,
@@ -171,7 +182,8 @@ function LigneCanal({
   return (
     <div className="rounded-xl border border-border p-3">
       <div className="flex flex-wrap items-center gap-2">
-        <MessageCircle size={16} strokeWidth={1.75} className="text-muted-foreground" />
+        {/* gap-2 et p-3 : 8 px libres autour du logo. */}
+        <LogoMarque marque={MARQUE_DU_CANAL[type]} icone={MessageCircle} taille={16} degagement={8} />
         <span className="font-medium text-foreground">{c.nom}</span>
         <span
           className={cn(
@@ -322,8 +334,10 @@ function AjoutCanal({
               key={t}
               type="button"
               onClick={() => setType(t)}
-              className="rounded-xl border border-border px-3 py-2.5 text-left text-sm font-medium text-foreground transition-colors hover:bg-muted"
+              className="flex items-center gap-2.5 rounded-xl border border-border px-3 py-2.5 text-left text-sm font-medium text-foreground transition-colors hover:bg-muted"
             >
+              {/* gap-2.5 et py-2.5 : 10 px libres autour du logo. */}
+              <LogoMarque marque={MARQUE_DU_CANAL[t]} icone={MessageCircle} taille={18} degagement={10} />
               {etat.catalogueCanaux[t].nom}
             </button>
           ))}

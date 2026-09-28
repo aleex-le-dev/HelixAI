@@ -6,7 +6,6 @@ import {
   ExternalLink,
   LogOut,
   Server,
-  MessageSquare,
   Info,
   Mail,
   FileText,
@@ -18,16 +17,7 @@ import {
   Trash2,
   Plus,
   Loader2,
-  PlaySquare,
-  Briefcase,
-  Music2,
-  MessageCircle,
-  MessagesSquare,
-  Smartphone,
-  Send,
-  Megaphone,
 } from "lucide-react";
-import type { LucideIcon } from "lucide-react";
 import type { CleMarquePetite } from "@/components/ui/marques";
 import { useProfile } from "@/hooks/useProfile";
 import { useComputer } from "@/hooks/useComputer";
@@ -1021,86 +1011,65 @@ export function McpSettings() {
     {
       id: "slack",
       label: "Slack",
-      /*
-       * Icône neutre : la charte de Slack soumet l'usage du logo à une licence
-       * écrite et interdit de le redistribuer (scripts/marques/sources.json).
-       */
+      // Son logo depuis la troisième tournée des logos (28/09/2026, décision de Medhi ; scripts/marques/sources.json).
       description: resumeSlack(slack),
       categorie: CATEGORIE,
-      icone: MessageSquare,
+      marque: "slack",
       connecte: Boolean(slack?.configure),
       ouvert: ouvert === "slack",
       onBasculer: () => basculer("slack"),
       panneau: <SlackConnecteur onChange={relire} />,
     },
     /*
-     * Sheets, Slides, YouTube et réseaux sociaux (28/09/2026,
-     * ConnecteurNatif.tsx). Sheets et Slides portent l'icône de produit de
-     * Google, que sa charte permet dans une liste de services compatibles.
-     * Les autres gardent une icône neutre (28/09/2026) : la charte de YouTube
-     * fixe une hauteur minimale de 100 px, que la ligne (22 px) n'atteint pas ;
-     * son logo officiel s'affiche donc en grand, à 100 px, en tête de son
-     * panneau seulement (LogoYouTube, ConnecteurNatif.tsx ; décision de Medhi
-     * du 28/09/2026), et le type CleMarquePetite interdit de le mettre dans
-     * cette liste. LinkedIn réserve son logo aux boutons « Share » et
-     * « Follow », TikTok le soumet à son accord. Facebook et Instagram ont leur
-     * logo depuis que Medhi a accepté les conditions de Meta (28/09/2026). Les glyphes « marque » de Lucide (Youtube, Linkedin, Facebook,
-     * Instagram) ont été retirés aussi : ce sont des copies approximatives de
-     * ces logos, précisément ce que les chartes interdisent.
+     * Sheets, Slides, Docs, Forms, Dropbox, YouTube, réseaux sociaux et
+     * campagnes e-mail (28/09/2026, ConnecteurNatif.tsx). Chaque ligne porte le
+     * vrai logo du service, en couleur, depuis la troisième tournée des logos
+     * (28/09/2026, décision de Medhi : « mets les vrais »). YouTube montre ici
+     * son icône (`youtubeIcone`) ; le logo complet reste en grand, en tête de
+     * son panneau (LogoYouTube, ConnecteurNatif.tsx). Les glyphes « marque »
+     * de Lucide restent écartés : ce sont des copies approximatives des logos.
      */
     ...([
       ["sheets", "Google Sheets", t("Lire vos feuilles, et y écrire après accord"), "googleSheets", CATEGORIE],
       ["slides", "Google Slides", t("Lire vos présentations"), "googleSlides", CATEGORIE],
-      /*
-       * Google Docs, Google Forms, Dropbox (28/09/2026, natifs/documents.ts) :
-       * icônes neutres en attendant les logos (clés de marque googleDocs,
-       * googleForms, dropbox), que pose un autre travail.
-       */
       ["docs", "Google Docs", t("Lire vos documents, en créer et y ajouter du texte après accord"), "googleDocs", CATEGORIE],
       ["forms", "Google Forms", t("Lire vos formulaires et leurs réponses"), "googleForms", CATEGORIE],
       ["dropbox", "Dropbox", t("Lister, chercher, lire, et envoyer un fichier après accord"), "dropbox", CATEGORIE],
-      ["youtube", "YouTube", t("Vidéos et statistiques d'une chaîne"), PlaySquare, t("Réseaux sociaux")],
-      ["linkedin", "LinkedIn", t("Publier après accord, et lire une page d'entreprise"), Briefcase, t("Réseaux sociaux")],
+      ["youtube", "YouTube", t("Vidéos et statistiques d'une chaîne"), "youtubeIcone", t("Réseaux sociaux")],
+      ["linkedin", "LinkedIn", t("Publier après accord, et lire une page d'entreprise"), "linkedin", t("Réseaux sociaux")],
       ["facebook", "Facebook", t("Pages : publications, réactions, publier après accord"), "facebook", t("Réseaux sociaux")],
       ["instagram", "Instagram", t("Compte professionnel : publications, statistiques, publier après accord"), "instagram", t("Réseaux sociaux")],
-      ["tiktok", "TikTok", t("Vidéos, statistiques, publier après accord"), Music2, t("Réseaux sociaux")],
-      // X : son logo officiel (kit de marque de X, noir sur fond clair, blanc sur fond sombre ; marques.ts).
+      ["tiktok", "TikTok", t("Vidéos, statistiques, publier après accord"), "tiktok", t("Réseaux sociaux")],
       ["x", "X", t("Ex-Twitter : posts, statistiques, publier après accord"), "x", t("Réseaux sociaux")],
-      // Brevo et Mailchimp (28/09/2026, ConnecteurProjets.tsx) : icônes neutres, les logos viendront d'un autre travail.
-      ["brevo", "Brevo", t("Campagnes e-mail et listes : lire, brouillons et envoi après accord"), Send, t("Campagnes e-mail")],
-      ["mailchimp", "Mailchimp", t("Campagnes e-mail et audiences : lire, brouillons et envoi après accord"), Megaphone, t("Campagnes e-mail")],
-    ] as [IdNatif, string, string, LucideIcon | CleMarquePetite, string][]).map(([id, label, description, dessin, categorie]): ServiceMaison => {
+      ["brevo", "Brevo", t("Campagnes e-mail et listes : lire, brouillons et envoi après accord"), "brevo", t("Campagnes e-mail")],
+      ["mailchimp", "Mailchimp", t("Campagnes e-mail et audiences : lire, brouillons et envoi après accord"), "mailchimp", t("Campagnes e-mail")],
+    ] as [IdNatif, string, string, CleMarquePetite, string][]).map(([id, label, description, marque, categorie]): ServiceMaison => {
       const e = natifs.find((s) => s.id === id);
       return {
         id,
         label,
         description: e?.configure ? tf("Connecté : {0}", e.compte ?? "") : e?.aReconnecter ? t("Accès perdu, à reconnecter") : description,
         categorie,
-        ...(typeof dessin === "string" ? { marque: dessin } : { icone: dessin }),
+        marque,
         connecte: Boolean(e?.configure),
         ouvert: ouvert === id,
         onBasculer: () => basculer(id),
         panneau: <ConnecteurNatif id={id} onChange={relire} />,
       };
     }),
-    /*
-     * Messageries (28/09/2026, ConnecteurMessagerie.tsx). Clés de marque
-     * `telegram`, `discord`, `whatsapp` : une icône neutre en attendant les
-     * logos, qu'un autre travail ajoute (chartes à relire, comme pour X).
-     */
+    // Messageries (28/09/2026, ConnecteurMessagerie.tsx), chacune avec son logo (troisième tournée des logos).
     ...([
-      ["telegram", "Telegram", t("Lire les messages reçus par un bot, envoyer après accord"), MessageCircle],
-      ["discord", "Discord", t("Lire les salons d'un serveur, envoyer après accord"), MessagesSquare],
-      ["whatsapp", "WhatsApp Business", t("Messages reçus, réponses dans les 24 h et modèles, après accord"), Smartphone],
-    ] as [IdMessagerie, string, string, LucideIcon][]).map(([id, label, description, icone]): ServiceMaison => {
+      ["telegram", "Telegram", t("Lire les messages reçus par un bot, envoyer après accord"), "telegram"],
+      ["discord", "Discord", t("Lire les salons d'un serveur, envoyer après accord"), "discord"],
+      ["whatsapp", "WhatsApp Business", t("Messages reçus, réponses dans les 24 h et modèles, après accord"), "whatsapp"],
+    ] as [IdMessagerie, string, string, CleMarquePetite][]).map(([id, label, description, marque]): ServiceMaison => {
       const e = messageries.find((s) => s.id === id);
       return {
         id,
         label,
         description: e?.configure ? tf("Connecté : {0}", e.compte ?? "") : e?.aReconnecter ? t("Jeton refusé, à reconnecter") : description,
         categorie: t("Messageries"),
-        // Telegram a un logo permis (usage libre pour signaler la compatibilité) ; Discord et WhatsApp restent neutres (sources.json).
-        ...(id === "telegram" ? { marque: "telegram" as const } : { icone }),
+        marque,
         connecte: Boolean(e?.configure),
         ouvert: ouvert === id,
         onBasculer: () => basculer(id),

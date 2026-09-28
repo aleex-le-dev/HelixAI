@@ -12,7 +12,7 @@ refaite à l'envers.
 |---|---|
 | Version | 2026.928.2 (`package.json`) |
 | Dernière mise à jour | 28 septembre 2026 |
-| Vérifié | `npm run securite` : 936 contrôles, 0 échec (28/09/2026) ; `npm run typecheck` ; traductions à 100 % (interface 2 945 phrases, passerelle 966) |
+| Vérifié | `npm run securite` : 938 contrôles, 0 échec (28/09/2026) ; `npm run typecheck` ; traductions à 100 % en anglais, chinois et japonais (interface 3 042 phrases, passerelle 1 020) |
 | Reste à essayer | sur les vraies machines : § 5, « Ce qui reste à essayer sur les postes de Medhi » |
 | Documents liés | [ARCHITECTURE.md](ARCHITECTURE.md), [SECURITE.md](SECURITE.md), [SCREENS.md](SCREENS.md), [SIGNATURE.md](SIGNATURE.md), [README.md](README.md), [docs/GUIDE.md](docs/GUIDE.md) |
 
@@ -1332,6 +1332,17 @@ illisibles, rien n'est écrit par-dessus, et l'écran le dit.
 **À essayer sur le poste** : une vraie clé (OpenAI, Mistral) pour voir le point du modèle
 au graphique et son coût dans Mon usage avec la mention du prix publié ; les identifiants que
 chaque fournisseur rend vraiment (seuls ceux de la documentation ont été vus).
+
+**Vu à l'écran le 28/09/2026**, après l'allègement à une douzaine de repères (passerelle jetable,
+faux OpenAI servant `gpt-4.1-nano`, faux LM Studio servant `qwen3-8b`, Vite ; 1440 et 375 px,
+clair et sombre, français et anglais) : « DeepSeek V4 Pro 0813 » était écrit à cheval sur les
+points de Gemini 3.7 Flash et de Grok 4.6. Un nom ne se pose plus sur aucun point, et peut se
+poser à droite ou à gauche du sien ; deux noms restent espacés de leur hauteur (Mistral Medium
+3.5 et GPT-4.1 se touchaient d'un pixel). Contrôlé dans la page : aucun nom sur un autre, ni sur
+un point, ni hors du cadre, les douze repères nommés. À 375 px, la phrase d'en-tête était tassée
+dans une colonne de 200 px par le bouton du tableau : elle passe dessous, sur toute la largeur,
+et le bouton n'y montre que son icône. Le graphique garde sa largeur minimale de 560 px et
+défile à l'horizontale sur un téléphone.
 
 ### 3.16 Ce qui n'a pas été essayé se dit ici, plus à l'écran ni sur GitHub (28/09/2026)
 

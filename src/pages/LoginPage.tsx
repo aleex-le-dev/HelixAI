@@ -87,10 +87,19 @@ export function LoginPage({ onSignedIn }: { onSignedIn: () => void }) {
       setAccounts(liste);
       // On ne bascule que depuis l'écran de création automatique : si la
       // personne a explicitement demandé « Ajouter un compte », on la laisse.
+      /*
+       * Et l'inverse : un choix parmi zéro compte. La liste de départ vient de
+       * la copie gardée par ce poste ; une instance neuve (réinstallée, ou une
+       * autre passerelle sur la même adresse) en compte zéro une fois relue.
+       * L'écran restait sur « Choisissez votre compte pour continuer » sans
+       * aucun compte à choisir (tournée à l'écran du 28/09/2026).
+       */
       setMode((courant) =>
         courant === "creation" && liste.length > 0 && !fullName && !email && !invitationEnCours()
           ? "choix"
-          : courant,
+          : courant === "choix" && liste.length === 0
+            ? "creation"
+            : courant,
       );
     };
     window.addEventListener(ACCOUNTS_CHANGED, relire);

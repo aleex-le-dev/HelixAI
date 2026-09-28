@@ -435,7 +435,12 @@ export async function discover(): Promise<Discovery> {
   // conclure qu'il n'y a aucun modèle.
   if (enabled.some((b) => b.id === "lmstudio")) await ensureLmStudioServer();
   // Le moteur ouvert (Mac Intel, llamaCpp.ts) : démarré s'il a de quoi servir.
-  if (enabled.some((b) => b.kind === "llamacpp")) await assurerServeurLlama();
+  /*
+   * Faux s'il n'est pas reconnu à l'écoute (un autre programme sur son port,
+   * test d'intrusion du 28/09/2026, SECURITE.md § 58) : il n'est alors pas
+   * interrogé ci-dessous, la clé et les Chats ne partent pas chez cet autre.
+   */
+  const llamaSur = enabled.some((b) => b.kind === "llamacpp") ? await assurerServeurLlama() : false;
 
   /*
    * `lms` seulement si une source LM Studio est activée : ses réponses ne
@@ -456,6 +461,7 @@ export async function discover(): Promise<Discovery> {
         const distant = backend.origine === "agence" || backend.origine === "cle";
         const refus = await refusSortie(backend);
         if (refus) throw new Error(refus);
+        if (backend.kind === "llamacpp" && !llamaSur) throw new Error(t("Le moteur llama.cpp ne répond pas."));
         const retenus = backend.modeles ? new Set(backend.modeles) : null;
         /*
          * Un fournisseur cloud : sa liste lue dans son dialecte, pages

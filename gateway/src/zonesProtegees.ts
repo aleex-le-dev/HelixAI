@@ -253,15 +253,30 @@ const developper = (chemin: string) =>
  * Rend le chemin fautif, ou null.
  */
 export function cheminProtegeDans(args: Record<string, unknown>, espace: string): string | null {
-  const valeurs: string[] = [];
+  const valeurs: { brut: string; deplace: boolean }[] = [];
   for (const cle of ["path", "source", "destination"]) {
-    if (typeof args[cle] === "string") valeurs.push(args[cle] as string);
+    if (typeof args[cle] === "string") valeurs.push({ brut: args[cle] as string, deplace: cle !== "path" });
   }
-  if (Array.isArray(args.paths)) for (const p of args.paths) if (typeof p === "string") valeurs.push(p);
-  for (const brut of valeurs) {
+  if (Array.isArray(args.paths)) for (const p of args.paths) if (typeof p === "string") valeurs.push({ brut: p, deplace: false });
+  for (const { brut, deplace } of valeurs) {
     const d = developper(brut.trim());
     const candidats = isAbsolute(d) ? [d] : [resolve(espace, d), resolve(process.cwd(), d)];
-    for (const c of candidats) if (estProtege(cheminReel(c))) return brut;
+    for (const c of candidats) {
+      const r = cheminReel(c);
+      if (estProtege(r)) return brut;
+      /*
+       * Un déplacement (`move_file`) ne touche pas qu'un chemin : tout ce qui
+       * est dessous part avec lui. Test d'intrusion du 28/09/2026
+       * (SECURITE.md § 58) : renommer un dossier qui **contient** une zone
+       * (`~/.local`, `~/Library`, le dossier choisi pour les modèles sur un
+       * autre disque, ouvert aux agents en « Tout mon poste ») était permis,
+       * puisque seul le chemin lui-même était comparé aux zones ; ce qu'elle
+       * gardait se trouvait ensuite sous un nom qui n'en est plus une. Et une
+       * destination qui contient une zone absente (`~/.cache` sans
+       * `lm-studio`) la ferait naître d'un dossier préparé par l'agent.
+       */
+      if (deplace && contientUneZone(r)) return brut;
+    }
   }
   return null;
 }

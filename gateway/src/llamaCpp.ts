@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { execFile, spawn, type ChildProcess } from "node:child_process";
+import { execFile, execFileSync, spawn, type ChildProcess } from "node:child_process";
 import {
   chmodSync,
   closeSync,
@@ -10,6 +10,7 @@ import {
   mkdtempSync,
   openSync,
   readdirSync,
+  realpathSync,
   rmdirSync,
   rmSync,
   statSync,
@@ -465,11 +466,55 @@ export function assurerServeurLlama(): Promise<boolean> {
   return demarrage;
 }
 
+/**
+ * Le programme qui écoute sur le port est-il le `llama-server` posé par Helix ?
+ *
+ * Test d'intrusion du 28/09/2026 (SECURITE.md § 58) : la passerelle
+ * demandait d'abord « le serveur répond-il avec notre clé ? », à quiconque
+ * tenait le port. Essayé avec un faux serveur lancé avant elle sur ce port :
+ * il a reçu la clé à chaque découverte, et ses « modèles » étaient présentés
+ * comme le modèle local de la machine, qui aurait reçu les Chats. La clé
+ * protège le serveur de ceux qui lui parlent ; elle ne dit pas à qui parle la
+ * passerelle. Désormais, rien ne part avec la clé tant que le programme qui
+ * écoute n'est pas reconnu : notre processus enfant (par son numéro), ou un
+ * serveur resté d'une passerelle arrêtée net, reconnu par le fichier qu'il
+ * exécute (lu par `lsof`, que le programme ne choisit pas, contrairement à sa
+ * ligne de commande).
+ */
+function ecouteurReconnu(): boolean {
+  const lsof = (args: string[]) =>
+    execFileSync("/usr/sbin/lsof", args, { encoding: "utf8", timeout: 5000, stdio: ["ignore", "pipe", "ignore"] });
+  try {
+    const pids = lsof(["-nP", "-a", `-iTCP:${portLlamaCpp()}`, "-sTCP:LISTEN", "-t"])
+      .split("\n")
+      .map(Number)
+      .filter((n) => Number.isInteger(n) && n > 0);
+    if (pids.length === 0) return false;
+    const attendu = realpathSync(serveurLlamaCpp());
+    return pids.every((pid) => {
+      if (serveur && serveur.exitCode === null && serveur.pid === pid) return true;
+      return lsof(["-nP", "-a", "-p", String(pid), "-d", "txt", "-Fn"])
+        .split("\n")
+        .some((l) => l.startsWith("n") && l.slice(1) === attendu);
+    });
+  } catch {
+    // `lsof` absent, ou rien à lire (un programme d'un autre compte) : pas reconnu.
+    return false;
+  }
+}
+
+/** Le numéro de notre serveur, une fois reconnu à l'écoute : il n'y a plus à le relire tant qu'il tourne. */
+let reconnu: number | null = null;
+
 async function lancer(): Promise<boolean> {
-  if (await llamaCppRepond()) return true;
-  if (serveur && serveur.exitCode === null) return attendreReponse(20_000);
+  if (serveur && serveur.exitCode === null) {
+    if (reconnu === serveur.pid) return llamaCppRepond();
+    return attendreReponse(20_000);
+  }
   if (await portPrisParUnAutre()) {
-    console.warn(`[helix] llama.cpp : le port ${portLlamaCpp()} est déjà pris par un autre programme (HELIX_LLAMACPP_PORT pour en changer).`);
+    // Un serveur resté d'une passerelle arrêtée net : gardé s'il est bien le nôtre.
+    if (ecouteurReconnu()) return llamaCppRepond();
+    console.warn(`[helix] llama.cpp : le port ${portLlamaCpp()} est déjà pris par un autre programme, qui n'est pas le moteur de Helix : rien ne lui est envoyé (HELIX_LLAMACPP_PORT pour changer de port).`);
     return false;
   }
   cleLlamaCpp();
@@ -497,6 +542,7 @@ async function lancer(): Promise<boolean> {
   const lui = serveur;
   lui.on("exit", (code, signal) => {
     if (serveur === lui) serveur = null;
+    if (reconnu === lui.pid) reconnu = null;
     if (code !== 0 && signal !== "SIGTERM") console.warn(`[helix] llama.cpp s'est arrêté (code ${code ?? signal}) : voir ${fichierJournal()}.`);
   });
   lui.on("error", (err) => console.warn(`[helix] llama.cpp n'a pas pu démarrer : ${err.message}`));
@@ -507,8 +553,12 @@ async function lancer(): Promise<boolean> {
 async function attendreReponse(delaiMs: number): Promise<boolean> {
   const fin = Date.now() + delaiMs;
   while (Date.now() < fin) {
-    if (await llamaCppRepond()) return true;
     if (!serveur || serveur.exitCode !== null) return false;
+    // La clé ne part qu'une fois notre processus reconnu à l'écoute (`ecouteurReconnu`).
+    if ((await portPrisParUnAutre()) && ecouteurReconnu()) {
+      reconnu = serveur?.pid ?? null;
+      if (await llamaCppRepond()) return true;
+    }
     await new Promise((r) => setTimeout(r, 300));
   }
   return false;
@@ -516,10 +566,11 @@ async function attendreReponse(delaiMs: number): Promise<boolean> {
 
 /** Relit la liste des modèles (après en avoir posé un) ; relance le serveur s'il ne le voit pas. */
 async function rechargerListe(): Promise<void> {
-  if (!(await llamaCppRepond())) {
-    await assurerServeurLlama();
-    return;
-  }
+  // Par `assurerServeurLlama` : la clé ne part que vers notre serveur, reconnu à l'écoute.
+  const avant = serveur;
+  if (!(await assurerServeurLlama())) return;
+  // Démarré à l'instant : il a lu la liste à jour en démarrant.
+  if (serveur && serveur !== avant) return;
   try {
     const r = await fetch(`${urlLlamaCpp().replace(/\/v1$/, "")}/models?reload=1`, { headers: entetes(), signal: AbortSignal.timeout(10_000) });
     const json = (await r.json()) as { data?: { id?: string }[] };
@@ -592,6 +643,8 @@ export async function chargerModeleLlama(cle: string, delaiMs = 5 * 60_000): Pro
 
 /** Décharge `cle` de la mémoire (après un essai raté). */
 export async function dechargerModeleLlama(cle: string): Promise<void> {
+  // Rien avec la clé vers un programme qui n'est pas reconnu comme notre serveur (`ecouteurReconnu`).
+  if (!(await assurerServeurLlama())) return;
   try {
     const r = await fetch(`${urlLlamaCpp().replace(/\/v1$/, "")}/models/unload`, {
       method: "POST",

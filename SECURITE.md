@@ -6092,3 +6092,69 @@ d'OpenClaw par `cmd.exe`, OpenClaw qui démarre, ses modules natifs (koffi, node
 x64 et arm64 publiés, pas chargés), ses messageries, PowerShell qui lit une ligne de commande,
 `taskkill`, l'antivirus (Defender) pendant l'installation, un nom de compte avec espace ou accent,
 les chemins de plus de 260 caractères.
+
+## 58. Test d'intrusion final de la 2026.928.6 (28 septembre 2026)
+
+Demandé par Medhi avant la publication (« vérifier qu'il n'y a vraiment pas de faille de sécurité, et
+corriger »). Périmètre : tout ce qui a changé depuis `v2026.928.5` (`git diff origin/main..HEAD`),
+en priorité le moteur ouvert (`llamaCpp.ts`, `llamaCppBase.ts`), l'emplacement des modèles
+(`emplacementModeles.ts`), OpenClaw sous Windows (`plateformeOpenClaw.ts`, `installationOpenClaw.ts`,
+`employes.ts`), `mcp.ts`, la recherche web, la création de compte par l'administrateur, les routes
+ajoutées dans `index.ts`, `electron/*.cjs` et `installer-macos.sh`. Attaquants pensés : un membre de
+l'instance, un agent guidé par un contenu lu, une page web, un serveur MCP ou un fournisseur hostile,
+un autre programme de la machine. Passerelles jetables (`"chiffrement": "fichier"`, dossier personnel
+et données temporaires, faux `security`, faux `lms`, faux fichiers du moteur), jamais de vrai LM
+Studio, de vrai llama-server ni de vrai service. Chaque faille a été reproduite, corrigée à la racine,
+et son contrôle (`scripts/essai-intrusion-928-6.mjs`, repris par `npm run securite`, section 25)
+échoue sur le code d'avant et réussit après.
+
+### 58.1 Failles corrigées
+
+| Gravité | Composant | Ce qui se passait | Correctif | Contrôle |
+|---|---|---|---|---|
+| Moyenne | Zones protégées, serveur de fichiers (`zonesProtegees.ts`, `cheminProtegeDans`) | Seul le chemin de l'appel était comparé aux zones. Un `move_file` d'un dossier qui **contient** une zone était donc permis : `~/.local` (qui garde `share/opencode/auth.json`), `~/Library` (trousseaux, profil de l'application), et depuis cette version le dossier choisi pour les modèles sur un autre disque, ouvert aux agents en « Tout mon poste », dont le sous-dossier protégé est celui d'où la passerelle lance `bin/lms` ou charge les modèles. Une fois renommé, ce que la zone gardait se trouvait sous un nom qui n'en est plus une. De même une destination qui contient une zone absente (`~/.cache` sans `lm-studio`). Relevé avec la fonction elle-même : `null` (permis) pour `~/.local` et `~/Library`. | Pour `source` et `destination`, refus aussi quand le chemin réel contient une zone (`contientUneZone`). Lire ou lister un dossier qui en contient reste permis (le dossier personnel en contient toujours). | essai A (4), 25 |
+| Moyenne | Emplacement des modèles (`emplacementModeles.ts`, `engine.ts`) | Les contrôles (espace des agents, zones protégées, partage réseau, propriétaire) portaient sur le chemin réel du dossier choisi, pas sur le sous-dossier créé dedans. Un `LM Studio` ou `modeles-llamacpp` déjà posé en lien symbolique n'y repassait pas : essayé, le pointeur de LM Studio était écrit vers un lien qui aboutissait dans l'espace des agents (200), et `dossierLmStudio` le suivait (il comparait l'espace au chemin écrit) ; les modèles du moteur ouvert allaient dans les données de l'instance (200). | Le sous-dossier ne doit pas être un lien, avant et après sa création, et son chemin réel doit être celui écrit. `dossierLmStudio` ne suit pas un pointeur vers un lien, et compare l'espace des agents au chemin réel aussi. | essai B (3), 25 |
+| Faible | Moteur ouvert (`llamaCpp.ts`, `backends.ts`) | La passerelle demandait « le serveur répond-il avec notre clé ? » à quiconque tenait le port 8795. Essayé avec un faux serveur lancé avant la passerelle : il a reçu la clé à chaque découverte, et son « modèle » était présenté comme le modèle local (`llamacpp/qwen3-1.7b`), qui aurait reçu les Chats. Un programme de la machine (un autre compte, une application en bac à sable qui a le droit d'écouter) suffisait. La clé protège le serveur de ceux qui lui parlent, elle ne disait pas à qui parlait la passerelle. | Rien ne part avec la clé tant que le programme qui écoute n'est pas reconnu : notre processus enfant (son numéro, lu par `lsof`), ou un serveur resté d'une passerelle arrêtée net, reconnu par le fichier qu'il exécute (`lsof -d txt`, que le programme ne choisit pas, au contraire de sa ligne de commande). Sinon la découverte ne l'interroge pas, et le journal dit que le port est pris. | essai C (4), 25 |
+| Faible | OpenClaw sous Windows (`plateformeOpenClaw.ts`, `employes.ts`) | L'orphelin était reconnu par « openclaw » et « gateway » dans sa ligne de commande : celle de l'OpenClaw personnel (`gateway run --port 18789`) aussi. Un numéro de processus noté par Helix, puis réutilisé par lui après un redémarrage, l'aurait fait arrêter (`taskkill /T /F`). | Sous Windows, la ligne doit porter le port de Helix (`--port <port>`). macOS et Linux : inchangé (OpenClaw s'y renomme, sa ligne ne porte plus ses arguments). | 25 |
+| Faible | Arrêt de la passerelle sous Windows (`electron/passerelle.cjs`) | `spawn("taskkill")` par le PATH, où Windows regarde aussi le dossier courant en premier ; `processus.ts` avait déjà été corrigé, pas ce fichier nouveau. | `taskkill.exe` de `System32`, lu dans `SystemRoot`. | 25 |
+
+### 58.2 Attaqué, et qui tient
+
+| Surface | Ce qui a été essayé ou relu | Tenu par |
+|---|---|---|
+| Routes ajoutées (`index.ts`) | séance, rôle, entrée, ce qui est rendu : emplacement (lecture pour une séance, choix et sonde pour l'administrateur), messageries, commerce, `code/rtk` (session à la personne), recherche web (séance exigée), invitations (`administrateur` seul en plus) | `demandeur`, `reserveeALAdministration`, `refusSessionCode` ; jeton d'instance exigé partout sauf le webhook signé de WhatsApp (§ 53.2) |
+| Création de compte par l'administrateur | non-administrateur connecté : 403 ; mot de passe choisi par lui provisoire, remplacé à la première connexion ; pas de séance rendue au nom du compte créé | `handleAuthCreate` |
+| Chemin choisi pour les modèles | relatif, caractère de contrôle, `\\serveur`, lien vers l'espace des agents, dossier personnel, zone protégée (essai de la § 55, 49 contrôles, rejoué après les correctifs) | `validerEmplacement` |
+| Téléchargements du moteur ouvert | taille et empreinte SHA-256 écrites dans le code, reprise `Range` relue et revérifiée, nom définitif seulement après vérification | `telechargerVerifie` |
+| Environnement des processus lancés | llama-server : HOME, TMPDIR, LANG, USER, PATH système ; OpenClaw : liste fermée sans la casse sous Windows ; npm : `npm_*`, `HELIX_*`, `ELECTRON_*` retirés ; serveurs MCP : ni clés ni `HELIX_*` | `envServeur`, `garderVariables`, `envInstallation`, `mcp.ts` |
+| PowerShell | un seul entier dans le script encodé, vérifié avant ; lettre de lecteur réduite à `[A-Za-z]` | `commandeLigneDeProcessus`, `lecteurReseauWindows` |
+| Noms d'outils MCP | `^[A-Za-z0-9_-]{1,64}$`, uniques, préfixés par l'identifiant du serveur (sans `__`, réservés refusés) : un serveur hostile ne prend pas le nom d'un outil natif | `nomPourModele`, `connecteurs.ts` |
+| Recherche web | une adresse ne s'ouvre que déjà vue, jamais celle écrite par le modèle, bornes tirées au sort, garde réseau à chaque redirection | `rechercheWeb.ts`, `webGarde.ts` (§ 51, § 53) |
+| Mise à jour et installation macOS | partie `macIntel` du manifeste lue seulement sur un Mac Intel, mêmes vérifications (nom, SHA-512, taille, même publication) ; `installer-macos.sh` : un seul nom accepté, empreinte comparée | `sourceGithub.cjs`, `installer-macos.sh` |
+| Sélecteur de dossier | libellés seulement (texte de 200 caractères au plus), le chemin reste celui que la personne désigne ; la fenêtre de l'application seule | `helix:choisir-dossier`, `depuisLaFenetre` |
+| Lanceur `helix` | chemins entre guillemets simples échappés ; Node de Helix dans les données (zone protégée) | `contenuLanceur` |
+
+### 58.3 Soupçons, non démontrés
+
+- **Moteur ouvert arrêté en cours de route.** Si notre llama-server s'arrête de lui-même et qu'un autre
+  programme prend aussitôt son port, un Chat parti dans les cinq secondes où la liste des modèles est
+  gardée irait encore à ce port (la découverte suivante ne l'interroge plus). Non essayé.
+- **Disque externe sans propriétaires.** Un disque exFAT ou « propriétaires ignorés » sous macOS, ou un
+  second disque NTFS sous Windows (les comptes authentifiés y créent et modifient par défaut), laisse
+  un autre compte de la machine écrire dans le dossier choisi pour les modèles ; `mode: 0o700` n'y vaut
+  rien. Le contrôle du propriétaire lit alors le compte courant. Pas de réglage des droits sous Windows
+  (`icacls`) : non écrit, faute de Windows pour l'essayer.
+- **Liens posés après le choix.** Le sous-dossier choisi est une zone protégée et son parent ne se
+  déplace plus par les outils de fichiers ; une commande acceptée (Code, palier Libre d'un employé) peut
+  toujours tout faire sous ce compte (§ 50.4).
+- **LM Studio installé derrière un lien.** Un pointeur écrit à la main vers un lien n'est plus suivi :
+  Helix reprend alors `~/.lmstudio`. Aucune installation de cette forme n'a été vue.
+
+### 58.4 Pas essayé
+
+Windows (lien et jonction du sous-dossier, `taskkill` de System32, ligne de commande lue par
+PowerShell) ; le vrai llama-server reconnu par `lsof` (essayé avec des remplaçants : une copie de Node
+posée à sa place pour le serveur resté, un script qui laisse la place à Node sous le même numéro pour
+celui que lance la passerelle ; `essai-llamacpp.mjs`, qui télécharge le vrai, n'a pas été relancé) ; un Mac Intel ; un
+vrai serveur de fichiers MCP qui reçoit le `move_file` refusé (refusé avant de lui parvenir, par la
+même fonction) ; l'application empaquetée.

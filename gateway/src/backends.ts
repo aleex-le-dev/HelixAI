@@ -327,7 +327,31 @@ export async function ensureLmStudioServer(): Promise<boolean> {
   }
   try {
     console.log("[helix] serveur LM Studio arrêté, démarrage...");
-    await lancerLms(lms, "server start", 60_000);
+    /*
+     * Le moteur sans interface juste posé ou juste levé peut refuser le
+     * premier `server start` (essai Windows de bout en bout du 28/09/2026,
+     * application empaquetée, scripts/essai-windows-ci.mjs : « Error:
+     * WebSocket connection closed », code 1, une seconde après `daemon up`,
+     * pendant que le service redémarrait). Helix abandonnait alors, et la
+     * mise en route finissait sur « Le moteur est installé, mais il n'a pas
+     * démarré » ; l'essai n'était passé que parce qu'il relisait l'état
+     * toutes les trois secondes, ce qui relançait le serveur. Quatre essais,
+     * cinq secondes d'écart, tant que le serveur ne répond pas.
+     */
+    const essais = moteurSansInterface() ? 4 : 1;
+    for (let n = 1; ; n++) {
+      try {
+        await lancerLms(lms, "server start", 60_000);
+        break;
+      } catch (err) {
+        // Refusé, mais le serveur écoute quand même (lancé entre-temps) : c'est ce qui compte.
+        if (await repond(LMSTUDIO_URL)) break;
+        if (n >= essais) throw err;
+        const detail = `${(err as { stderr?: unknown }).stderr ?? ""}${(err as Error).message ?? ""}`;
+        console.warn(`[helix] \`lms server start\` refusé (essai ${n}/${essais}), nouvel essai dans 5 s :`, detail.slice(-200));
+        await new Promise((r) => setTimeout(r, 5000));
+      }
+    }
   } catch (err) {
     /*
      * macOS : l'application LM Studio posée mais jamais ouverte (vu sur un

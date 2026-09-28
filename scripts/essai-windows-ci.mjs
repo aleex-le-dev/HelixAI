@@ -34,7 +34,11 @@
  *     le téléchargement), puis suivi jusqu'à « prêt » ;
  *  4. une question au Chat (`/v1/chat/completions`, modèle local, en flux) :
  *     une réponse non vide et lisible ;
- *  5. réussi ou non, dans `--sortie` : le journal de cet essai, celui de
+ *  5. le lendemain : l'application quittée, le service de LM Studio arrêté
+ *     (comme après un redémarrage de la machine), l'application rouverte, et
+ *     la même question : c'est là que le service doit être relevé par
+ *     l'application empaquetée ;
+ *  6. réussi ou non, dans `--sortie` : le journal de cet essai, celui de
  *     l'application (sa sortie), `passerelle.log`, la liste de
  *     `%USERPROFILE%\.lmstudio` et le contenu des `*install-location.json`.
  *
@@ -179,19 +183,7 @@ async function appel(chemin, corps, delaiMs = 30_000) {
 async function etapes() {
   /* 1. L'application et sa passerelle */
   dire("1. L'application empaquetée démarre, sa passerelle répond");
-  lancerApplication();
-  let sante = null;
-  for (let i = 0; i < 360 && !sante; i++) {
-    if (application.exitCode !== null) break;
-    try {
-      const r = await fetch(`${G}/health`, { signal: AbortSignal.timeout(2000) });
-      if (r.ok) sante = await r.json().catch(() => ({}));
-    } catch {
-      await attendre(500);
-    }
-  }
-  if (!verifier("la passerelle de l'application répond sur 127.0.0.1:8787/health", Boolean(sante), "aucune réponse au bout du délai")) return;
-  dire(`   /health : ${JSON.stringify(sante).slice(0, 300)}`);
+  if (!(await demarrerEtAttendre())) return;
   const fichierJeton = join(DONNEES, "instance-token");
   for (let i = 0; i < 20 && !existsSync(fichierJeton); i++) await attendre(500);
   JETON = existsSync(fichierJeton) ? readFileSync(fichierJeton, "utf8").trim() : "";
@@ -262,7 +254,9 @@ async function etapes() {
           dire("   la déclaration du moteur est écrite (llmster-install-location.json)");
         }
         const pas = typeof etat.percent === "number" ? Math.floor(etat.percent / 10) * 10 : "";
-        const resume = `${etat.phase} | ${etat.model ?? "-"} | ${etat.message ?? ""}${pas === "" ? "" : ` (${pas} %)`}${etat.error ? ` | ${etat.error}` : ""}`;
+        // Une ligne par dizaine de pour cent, pas une par pour cent.
+        const message = pas === "" ? (etat.message ?? "") : `${String(etat.message ?? "").replace(/[\d.,]+\s*%/g, "").trim()} ${pas} %`;
+        const resume = `${etat.phase} | ${etat.model ?? "-"} | ${message}${etat.error ? ` | ${etat.error}` : ""}`;
         if (resume !== dernier) {
           dernier = resume;
           dire(`   ${resume}`);
@@ -286,11 +280,60 @@ async function etapes() {
 
   /* 4. Une question au Chat */
   dire("4. Une question au Chat, modèle local, en flux");
+  if (!(await questionAuChat("1"))) return;
+
+  /*
+   * 5. Le lendemain : l'application quittée, la machine redémarrée (le
+   * service de LM Studio ne tourne plus), l'application rouverte. C'est ici
+   * que la passerelle, dans son `utilityProcess`, doit faire lever le service
+   * par l'application (electron/moteurWindows.cjs) : le défaut « Timed out
+   * waiting for LM Studio daemon to start » de la 2026.928.6.
+   */
+  dire("5. Quitter, arrêter le service de LM Studio (comme un redémarrage), rouvrir");
+  arreterApplication();
+  await attendre(3000);
+  const lmsExe = join(LMSTUDIO, "bin", "lms.exe");
+  const bas = spawnSync(lmsExe, ["daemon", "down"], { encoding: "utf8", timeout: 60_000, windowsHide: true });
+  dire(`   lms daemon down : code ${bas.status} ${String(bas.stdout ?? "").trim().slice(0, 200)} ${String(bas.stderr ?? "").trim().slice(0, 200)}`);
+  const statut = spawnSync(lmsExe, ["daemon", "status", "--json"], { encoding: "utf8", timeout: 30_000, windowsHide: true });
+  dire(`   lms daemon status : ${String(statut.stdout ?? "").trim().slice(0, 200)}`);
+  const serveurEteint = await fetch("http://127.0.0.1:1234/v1/models", { signal: AbortSignal.timeout(3000) }).then(
+    () => false,
+    () => true,
+  );
+  verifier("le serveur de LM Studio ne répond plus (service arrêté)", serveurEteint, "il répond encore");
+  if (!(await demarrerEtAttendre())) return;
+  // La séance survit à la fermeture de l'application, comme pour une personne qui rouvre Helix.
+  const relu = await appel("/helix/provision");
+  verifier("la séance ouverte hier sert encore", relu.statut === 200, `${relu.statut} ${relu.texte.slice(0, 200)}`);
+  if (!(await questionAuChat("2"))) return;
+}
+
+/** Lance l'application et attend sa passerelle (/health). */
+async function demarrerEtAttendre() {
+  lancerApplication();
+  let sante = null;
+  for (let i = 0; i < 360 && !sante; i++) {
+    if (application.exitCode !== null) break;
+    try {
+      const r = await fetch(`${G}/health`, { signal: AbortSignal.timeout(2000) });
+      if (r.ok) sante = await r.json().catch(() => ({}));
+    } catch {
+      await attendre(500);
+    }
+  }
+  if (!verifier("la passerelle de l'application répond sur 127.0.0.1:8787/health", Boolean(sante), "aucune réponse au bout du délai")) return false;
+  dire(`   /health : ${JSON.stringify(sante).slice(0, 300)}`);
+  return true;
+}
+
+/** Une question au Chat, au modèle local, en flux ; `n` numérote la réponse gardée. */
+async function questionAuChat(n) {
   const modeles = await appel("/v1/models");
   const ids = (modeles.json.data ?? []).map((m) => m.id);
   dire(`   /v1/models : ${ids.join(", ")}`);
   const local = ids.find((id) => id.toLowerCase().endsWith(MODELE.toLowerCase()));
-  if (!verifier(`le Chat voit ${MODELE}`, Boolean(local), ids.join(","))) return;
+  if (!verifier(`le Chat voit ${MODELE}`, Boolean(local), ids.join(","))) return false;
   const question = "Quelle est la capitale de la France ? Réponds en une courte phrase.";
   const t0 = Date.now();
   const r = await fetch(`${G}/v1/chat/completions`, {
@@ -300,7 +343,7 @@ async function etapes() {
     signal: AbortSignal.timeout(20 * 60_000),
   });
   const brut = await r.text();
-  writeFileSync(join(SORTIE, "reponse-chat.sse.txt"), brut);
+  writeFileSync(join(SORTIE, `reponse-chat-${n}.sse.txt`), brut);
   let texte = "";
   let reflexion = "";
   const erreurs = [];
@@ -318,18 +361,19 @@ async function etapes() {
   }
   dire(`   ${r.status}, ${((Date.now() - t0) / 1000).toFixed(1)} s ; réponse : ${JSON.stringify(texte.trim()).slice(0, 500)}`);
   if (reflexion) dire(`   réflexion : ${reflexion.length} lettres`);
-  verifier("la requête du Chat est acceptée (200)", r.status === 200, `${r.status} ${brut.slice(0, 400)}`);
-  verifier("aucune erreur dans le flux", erreurs.length === 0, erreurs.join(" | "));
+  const acceptee = verifier("la requête du Chat est acceptée (200)", r.status === 200, `${r.status} ${brut.slice(0, 400)}`);
+  const sansErreur = verifier("aucune erreur dans le flux", erreurs.length === 0, erreurs.join(" | "));
   const net = texte.trim();
   const lettres = (net.match(/\p{L}/gu) ?? []).length;
-  verifier("une réponse non vide", net.length > 0, JSON.stringify(brut.slice(-600)));
-  verifier(
+  const nonVide = verifier("une réponse non vide", net.length > 0, JSON.stringify(brut.slice(-600)));
+  const lisible = verifier(
     "une réponse lisible (surtout des lettres, aucun caractère de remplacement ni de contrôle)",
     net.length > 0 && lettres / net.length > 0.5 && !/\uFFFD|[\u0000-\u0008\u000B\u000C\u000E-\u001F]/.test(net),
     JSON.stringify(net).slice(0, 300),
   );
   // Indicatif : un petit modèle peut tourner sa phrase autrement.
   dire(`   (la réponse ${/paris/i.test(net) ? "nomme" : "ne nomme pas"} Paris)`);
+  return acceptee && sansErreur && nonVide && lisible;
 }
 
 /* ── Ce qu'on garde, réussi ou non ──────────────────────────────────────── */

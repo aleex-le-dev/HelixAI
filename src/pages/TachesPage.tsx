@@ -37,6 +37,9 @@ import {
   CalendarClock,
   PanelLeftClose,
   PanelLeftOpen,
+  Maximize2,
+  Download,
+  Copy,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { IconButton } from "@/components/ui/IconButton";
@@ -47,6 +50,8 @@ import { Popover } from "@/components/ui/Popover";
 import { Input } from "@/components/ui/Field";
 import { Switch } from "@/components/ui/Switch";
 import { cn } from "@/lib/cn";
+import { TexteRiche } from "@/components/ui/TexteRiche";
+import { copierTexte } from "@/lib/pressePapiers";
 import { useTasks } from "@/hooks/useTasks";
 import { useAgents } from "@/hooks/useAgents";
 import { useProjects } from "@/hooks/useProjects";
@@ -683,6 +688,62 @@ function CaseFiltre({
 
 const basculer = <T,>(liste: T[], valeur: T): T[] =>
   liste.includes(valeur) ? liste.filter((v) => v !== valeur) : [...liste, valeur];
+
+/* ========================================================================== */
+/* Compte rendu d'une tâche : agrandir, copier, télécharger                    */
+/* ========================================================================== */
+
+/*
+ * Demandé par Medhi le 28/09/2026 : un compte rendu long (résumé de mails, plan)
+ * se lisait mal dans sa petite case. On peut l'ouvrir en grand, le copier, ou
+ * l'enregistrer en Markdown, titre de la tâche en tête.
+ */
+function nomDeFichierCompteRendu(titre: string): string {
+  const base =
+    titre
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^A-Za-z0-9]+/g, "-")
+      .replace(/^-|-$/g, "")
+      .slice(0, 60) || "tache";
+  return `${base}-compte-rendu.md`;
+}
+
+function telechargerCompteRendu(titre: string, texte: string) {
+  const fichier = new Blob([`# ${titre}\n\n${texte.trim()}\n`], { type: "text/markdown;charset=utf-8" });
+  const adresse = URL.createObjectURL(fichier);
+  const lien = document.createElement("a");
+  lien.href = adresse;
+  lien.download = nomDeFichierCompteRendu(titre);
+  document.body.appendChild(lien);
+  lien.click();
+  lien.remove();
+  // Laisse au navigateur le temps de lire le fichier avant de le libérer.
+  setTimeout(() => URL.revokeObjectURL(adresse), 60_000);
+}
+
+function ActionsCompteRendu({ titre, texte, onAgrandir }: { titre: string; texte: string; onAgrandir?: () => void }) {
+  const [copie, setCopie] = useState(false);
+  return (
+    <div className="flex shrink-0 items-center gap-0.5">
+      {onAgrandir && <IconButton icon={Maximize2} label={t("Agrandir")} size={28} iconSize={15} onClick={onAgrandir} />}
+      <IconButton
+        icon={copie ? Check : Copy}
+        label={copie ? t("Copié") : t("Copier")}
+        size={28}
+        iconSize={15}
+        onClick={() =>
+          void copierTexte(texte).then((ok) => {
+            if (!ok) return;
+            setCopie(true);
+            setTimeout(() => setCopie(false), 1500);
+          })
+        }
+      />
+      <IconButton icon={Download} label={t("Télécharger")} size={28} iconSize={15} onClick={() => telechargerCompteRendu(titre, texte)} />
+    </div>
+  );
+}
 
 /* ========================================================================== */
 /* Panneau de gauche                                                           */
@@ -1378,6 +1439,9 @@ export function TachesPage() {
   const [projetModal, setProjetModal] = useState(false);
   const [nomProjet, setNomProjet] = useState("");
   const [detail, setDetail] = useState<Task | null>(null);
+  /** Le compte rendu de la tâche ouverte, en grand (28/09/2026). */
+  const [compteRenduGrand, setCompteRenduGrand] = useState(false);
+  useEffect(() => setCompteRenduGrand(false), [detail?.id]);
   const [filtreOuvert, setFiltreOuvert] = useState(false);
   const [triOuvert, setTriOuvert] = useState(false);
 
@@ -2106,12 +2170,27 @@ export function TachesPage() {
 
             {liveDetail.result && (
               <div className="mt-4">
-                <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                  {t("Compte rendu")}
-                </p>
-                <p className="whitespace-pre-wrap rounded-xl bg-muted/40 p-3.5 text-sm text-foreground">
-                  {liveDetail.result}
-                </p>
+                <div className="mb-1.5 flex items-center justify-between gap-2">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    {t("Compte rendu")}
+                  </p>
+                  <ActionsCompteRendu titre={liveDetail.title} texte={liveDetail.result} onAgrandir={() => setCompteRenduGrand(true)} />
+                </div>
+                <div className="max-h-64 overflow-y-auto rounded-xl bg-muted/40 p-3.5 text-sm text-foreground">
+                  <TexteRiche texte={liveDetail.result} />
+                </div>
+                <Modal open={compteRenduGrand} onClose={() => setCompteRenduGrand(false)} size="xl">
+                  <div className="flex items-start justify-between gap-4 pr-10">
+                    <div className="min-w-0">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{t("Compte rendu")}</p>
+                      <h2 className="mt-1 text-lg font-semibold text-foreground">{liveDetail.title}</h2>
+                    </div>
+                    <ActionsCompteRendu titre={liveDetail.title} texte={liveDetail.result} />
+                  </div>
+                  <div className="mt-4 max-h-[70vh] overflow-y-auto text-[15px] leading-relaxed text-foreground">
+                    <TexteRiche texte={liveDetail.result} />
+                  </div>
+                </Modal>
               </div>
             )}
 

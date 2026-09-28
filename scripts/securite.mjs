@@ -6235,7 +6235,7 @@ console.log("\n16 septies. Connecteurs existants revérifiés : parcours complet
   // Adresses relevées le 28/09/2026 dans la documentation de chaque service ; les anciennes ne publiaient plus de métadonnées ou visaient un serveur arrêté.
   const perimees = ["https://mcp.atlassian.com/v1/sse", "https://mcp.asana.com/sse", "https://mcp.wix.com/sse", "https://mcp.squareup.com/sse", "https://mcp.paypal.com/mcp"];
   verifier("catalogue : plus aucune adresse périmée (Atlassian /v1/sse, Asana V1, Wix /sse, Square /sse, PayPal /mcp) ; Asana V2 demande une application", !distants.some((e) => perimees.includes(e.url)) && distants.find((e) => e.id === "asana")?.oauth === "appli", distants.map((e) => e.url).join(" "));
-  verifier("catalogue : ni Figma ni Vercel (leur serveur n'accepte que les clients qu'ils ont approuvés)", !entrees.some((e) => e.id === "figma" || e.id === "vercel"), entrees.map((e) => e.id).join(", "));
+  verifier("catalogue : Figma et Vercel présents (Vercel accepte Helix, vu par Medhi le 28/09/2026)", entrees.some((e) => e.id === "figma") && entrees.some((e) => e.id === "vercel"), entrees.map((e) => e.id).join(", "));
   const sourceMcp = readFileSync(join(RACINE, "gateway", "src", "mcp.ts"), "utf8");
   const sse = distants.filter((e) => /\/sse$/.test(e.url)).map((e) => e.id);
   verifier("une adresse en /sse (Webflow) a le repli sur l'ancien transport dans mcp.ts", sse.length === 0 || (/new SSEClientTransport\(/.test(sourceMcp) && /UnauthorizedError/.test(sourceMcp)), sse.join(", "));

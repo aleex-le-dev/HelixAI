@@ -502,7 +502,7 @@ const branches = {};
   const etat = await (await appel("/helix/connecteurs", { headers: A })).text();
   verifier("l'état des connecteurs ne contient ni jeton, ni secret, ni identifiant d'application", !SECRETS.test(etat) && !etat.includes(ASANA.secret) && !etat.includes("dcr-"), etat.match(SECRETS)?.[0] ?? "identifiant");
   const catalogue = JSON.parse(etat).catalogue ?? [];
-  verifier("catalogue servi : ni Figma ni Vercel (clients approuvés seulement), Asana demande une application", !catalogue.some((e) => e.id === "figma" || e.id === "vercel") && catalogue.find((e) => e.id === "asana")?.oauth === "appli", catalogue.map((e) => e.id).join(", "));
+  verifier("catalogue servi : Figma et Vercel présents, Asana demande une application", catalogue.some((e) => e.id === "figma") && catalogue.some((e) => e.id === "vercel") && catalogue.find((e) => e.id === "asana")?.oauth === "appli", catalogue.map((e) => e.id).join(", "));
 }
 
 /* ------------------------------------------------------------------------- */

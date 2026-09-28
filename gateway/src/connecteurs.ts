@@ -260,13 +260,32 @@ export const CATALOGUE: EntreeCatalogue[] = [
     secrets: [],
   },
   /*
-   * Figma et Vercel retirés du catalogue le 28/09/2026 : leur documentation dit
-   * que seuls les clients qu'ils ont approuvés peuvent se brancher (« Only
-   * clients listed in the Figma MCP Catalog », « Vercel MCP only supports AI
-   * clients that have been reviewed and approved by Vercel »). Une instance
-   * Helix n'en fait pas partie : le bouton aurait promis un branchement que le
-   * service refuse. Un connecteur déjà installé reste tel quel (`aligner`).
+   * Figma et Vercel : leur documentation parle de clients « approuvés », et ils
+   * avaient été retirés du catalogue le matin du 28/09/2026 pour cette raison.
+   * Remis le même jour : Medhi a branché Helix à Vercel depuis l'écran, la page
+   * d'autorisation de Vercel a accepté Helix et le compte est autorisé (capture
+   * du 28/09/2026). Si un service refuse un jour, l'écran montre sa réponse.
    */
+  {
+    id: "figma",
+    label: "Figma",
+    description: "Fichiers et composants Figma, vus depuis l'agent.",
+    categorie: "Documents et données",
+    url: "https://mcp.figma.com/mcp",
+    oauth: "auto",
+    documentation: "https://www.figma.com",
+    secrets: [],
+  },
+  {
+    id: "vercel",
+    label: "Vercel",
+    description: "Projets, déploiements et journaux Vercel.",
+    categorie: "Développement",
+    url: "https://mcp.vercel.com",
+    oauth: "auto",
+    documentation: "https://vercel.com",
+    secrets: [],
+  },
   {
     id: "webflow",
     label: "Webflow",
@@ -747,7 +766,7 @@ export function aligner(c: ConnecteurEnregistre): ConnecteurEnregistre {
    * plus dans le transport qu'on parle) : on le réaligne sur le catalogue,
    * qui seul décide où partent les jetons. L'autorisation obtenue pour
    * l'ancienne adresse n'est pas présentée à la nouvelle (oauthMcp.ts) : la
-   * personne se reconnecte. Hors catalogue (Figma, Vercel), rien ne change.
+   * personne se reconnecte.
    */
   if (c.url) return e?.url && e.url !== c.url ? { ...c, url: e.url } : c;
   if (c.command !== "npx") return c;

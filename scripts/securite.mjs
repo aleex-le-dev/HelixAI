@@ -6352,6 +6352,63 @@ console.log("\n16 ter. Google Docs, Google Forms et Dropbox");
   verifier("documents : l'essai contre les faux fournisseurs s'est déroulé jusqu'au bout", essai.status === 0, `${essai.status} ${lignes.slice(-6).join(" ")}`);
 }
 
+/*
+ * Messageries : Telegram, Discord, WhatsApp Business (gateway/src/natifs/messageries.ts,
+ * 28/09/2026, SECURITE.md § 46). Les pièces seules d'abord (barrière, préfixes,
+ * route publique du webhook), puis, de bout en bout, une passerelle jetable
+ * devant de faux services (scripts/essai-messageries.mjs, lancé à part comme
+ * essai-natifs.mjs). Aucun vrai bot ni numéro n'est joint.
+ */
+console.log("\n16 quater. Messageries : Telegram, Discord, WhatsApp");
+{
+  const { pathToFileURL: versUrl } = await import("node:url");
+  const ap = await import(versUrl(join(RACINE, "gateway", "src", "approbation.ts")).href);
+  const lectures = ["telegram__conversations", "telegram__messages", "discord__salons", "discord__messages", "whatsapp__conversations", "whatsapp__messages", "whatsapp__modeles"];
+  const envois = ["telegram__envoyer", "discord__envoyer", "whatsapp__envoyer", "whatsapp__envoyer_modele"];
+  verifier("messageries : lire ne demande rien au niveau « Demander avant de modifier »", lectures.every((o) => !ap.modifie(o) && !ap.demandeToujours(o)), lectures.filter((o) => ap.modifie(o)).join(", "));
+  verifier("messageries : envoyer demande une carte à chaque fois, à tout niveau, même « Tout approuver »", envois.every((o) => ap.modifie(o) && ap.demandeToujours(o)), envois.filter((o) => !ap.demandeToujours(o)).join(", "));
+  verifier("messageries : un outil inconnu de ces préfixes est traité comme une modification", ["telegram__supprimer", "discord__bannir", "whatsapp__bloquer"].every((o) => ap.modifie(o)), "laissez-passer");
+  // Sans le module chargé, la carte dit l'identifiant brut ; le destinataire résolu est vérifié de bout en bout dans l'essai.
+  const carte = ap.resumerOutil("telegram__envoyer", { conversation: "-1001234567890", texte: "Bonjour à tous" });
+  verifier("messageries : la carte dit à qui, quoi, et qu'un message envoyé ne se reprend pas", /-1001234567890/.test(carte) && /Bonjour à tous/.test(carte) && /ne se reprend pas/.test(carte), carte);
+  const immense = await Promise.race([ap.verifierOutil(null, "telegram__envoyer", { conversation: "1", texte: "é".repeat(100_001) }, "securite"), new Promise((r) => setTimeout(() => r("carte posée"), 500))]);
+  verifier("messageries : un message trop long pour être montré en entier sur la carte est refusé sans carte", immense !== "carte posée" && immense.autorise === false, JSON.stringify(immense).slice(0, 160));
+  const reserves = readFileSync(join(RACINE, "gateway", "src", "connecteurs.ts"), "utf8").match(/const IDS_RESERVES = new Set\(\[([^\]]*)\]\)/)?.[1] ?? "";
+  const familles = readFileSync(join(RACINE, "gateway", "src", "outils.ts"), "utf8").match(/export const FAMILLES: Famille\[\] = \[([^\]]*)\]/)?.[1] ?? "";
+  verifier("messageries : les trois préfixes sont réservés, et hors des familles des employés OpenClaw (ils n'envoient pas)", ["telegram", "discord", "whatsapp"].every((p) => reserves.includes(`"${p}"`)) && !/telegram|discord|whatsapp/.test(familles), `${reserves} | ${familles}`);
+  const auth = readFileSync(join(RACINE, "gateway", "src", "auth.ts"), "utf8");
+  const debitSource = readFileSync(join(RACINE, "gateway", "src", "debit.ts"), "utf8");
+  verifier("webhook WhatsApp : seule route publique ajoutée, et son débit est limité", /"\/helix\/messageries\/whatsapp\/webhook"/.test(auth) && !/"\/helix\/messageries"[,\n]/.test(auth) && /\/helix\/messageries\/whatsapp\/webhook", regle/.test(debitSource), "route");
+  const source = readFileSync(join(RACINE, "gateway", "src", "natifs", "messageries.ts"), "utf8");
+  const webhook = source.slice(source.indexOf("export async function webhookWhatsApp"), source.indexOf("function fenetreOuverte"));
+  verifier("webhook WhatsApp : la signature est vérifiée (à durée constante) avant de lire le corps comme du JSON", webhook.indexOf("memeValeur(signature, attendue)") > 0 && webhook.indexOf("memeValeur(signature, attendue)") < webhook.indexOf("JSON.parse") && /timingSafeEqual/.test(source), "ordre");
+  const detailsJournal = [...source.matchAll(/journaliser\("[^"]+", [^,]+, \{([^}]*)\}\)/g)].map((m) => m[1]);
+  verifier("messageries : le journal ne reçoit que le service, l'outil et les cases (jamais le jeton ni le texte)", detailsJournal.length >= 4 && detailsJournal.every((d) => !/jeton|texte|secret|corps|verification/i.test(d)), detailsJournal.join(" | "));
+  verifier("Discord : aucune mention permise dans un message envoyé", /allowed_mentions: \{ parse: \[\] \}/.test(source), "allowed_mentions");
+
+  const { spawn: lancer } = await import("node:child_process");
+  const essai = await new Promise((fin) => {
+    const e = lancer(process.execPath, [join(RACINE, "scripts", "essai-messageries.mjs")], { stdio: ["ignore", "pipe", "pipe"] });
+    let sortie = "";
+    e.stdout.on("data", (b) => (sortie += b));
+    e.stderr.on("data", (b) => (sortie += b));
+    const minuterie = setTimeout(() => e.kill(), 5 * 60_000);
+    e.on("close", (status) => {
+      clearTimeout(minuterie);
+      fin({ status, sortie });
+    });
+  });
+  const lignes = essai.sortie.split("\n");
+  for (const ligne of lignes) {
+    const ok = /^\s+✓ (.*)$/.exec(ligne);
+    const ko = /^\s+✗ (.*?)(?:  —  obtenu : .*)?$/.exec(ligne);
+    if (ok) verifier(`messageries : ${ok[1]}`, true, "");
+    else if (ko) verifier(`messageries : ${ko[1]}`, false, ligne.split("  —  obtenu : ")[1] ?? "");
+    else if (/^[A-F]\. /.test(ligne)) console.log(`  ${ligne}`);
+  }
+  verifier("messageries : l'essai contre les faux services s'est déroulé jusqu'au bout", essai.status === 0 || lignes.some((l) => /vérification\(s\) réussie\(s\)/.test(l)), `${essai.status} ${lignes.slice(-6).join(" ")}`);
+}
+
 console.log(`\n${reussis} vérification(s) réussie(s), ${echecs.length} échec(s).`);
 if (echecs.length) {
   console.log("Échecs :");

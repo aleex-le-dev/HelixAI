@@ -78,6 +78,18 @@ const LIBELLES_OUTILS: Record<string, string> = {
   ecran__enregistrer_document: t("Enregistrement du document"),
   ecran__saisir_tableau: t("Saisie d'un tableau"),
   ecran__deplacer: t("Déplacement du curseur"),
+  // Messageries (gateway/src/natifs/messageries.ts, 28/09/2026) : la carte d'un envoi, hors du français, commence par ce libellé.
+  telegram__conversations: t("Conversations Telegram"),
+  telegram__messages: t("Lecture de messages Telegram"),
+  telegram__envoyer: t("Envoi d'un message Telegram"),
+  discord__salons: t("Salons Discord"),
+  discord__messages: t("Lecture de messages Discord"),
+  discord__envoyer: t("Envoi d'un message Discord"),
+  whatsapp__conversations: t("Conversations WhatsApp"),
+  whatsapp__messages: t("Lecture de messages WhatsApp"),
+  whatsapp__modeles: t("Modèles de message WhatsApp"),
+  whatsapp__envoyer: t("Envoi d'un message WhatsApp"),
+  whatsapp__envoyer_modele: t("Envoi d'un modèle WhatsApp"),
 };
 
 /** Nom d'outil qualifié « serveur__outil » rendu lisible. */

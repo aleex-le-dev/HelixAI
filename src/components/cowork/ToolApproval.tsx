@@ -129,10 +129,20 @@ export function ToolApproval() {
    * programmée ce qu'elle fera seule chaque jour. Et tous les fichiers visés,
    * pas seulement le premier.
    */
-  const { arguments: donnees, cibles, tache, unique } = demande.detail ?? {};
+  const { arguments: donnees, cibles, tache, unique, destinataire, texteFinal } = demande.detail ?? {};
   const contenu =
     donnees || (cibles && cibles.length > 1) ? (
       <div className="space-y-2">
+        {/* Messageries (28/09/2026) : le destinataire résolu, et le texte final d'un modèle WhatsApp, dans la langue de l'écran. */}
+        {destinataire && (
+          <p className="break-words text-sm text-foreground">{tf("Destinataire : {0}", destinataire)}</p>
+        )}
+        {texteFinal && (
+          <div className="space-y-1">
+            <p className="text-xs text-muted-foreground">{t("Texte qui sera envoyé")}</p>
+            <p className="max-h-56 overflow-y-auto whitespace-pre-wrap break-words rounded-xl border border-border bg-muted/40 px-3 py-2.5 text-sm text-foreground">{texteFinal}</p>
+          </div>
+        )}
         {cibles && cibles.length > 1 && (
           <ul className="max-h-32 overflow-y-auto rounded-xl border border-border bg-muted/40 px-3 py-2 font-mono text-xs text-foreground">
             {cibles.map((c) => (

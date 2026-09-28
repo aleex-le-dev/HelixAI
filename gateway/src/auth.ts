@@ -48,6 +48,14 @@ const PUBLIC_PATHS = new Set([
    * elle ne rend rien.
    */
   "/helix/invitations/rejoindre",
+  /*
+   * Notifications de WhatsApp (natifs/messageries.ts, 28/09/2026) : c'est Meta
+   * qui appelle, sans jeton ni séance. Ce qui protège la route : la signature
+   * HMAC de chaque notification, faite avec le secret de l'application et
+   * vérifiée avant toute lecture, et le jeton de vérification de l'abonnement,
+   * tiré au sort par l'instance. Elle ne rend que « reçu ».
+   */
+  "/helix/messageries/whatsapp/webhook",
 ]);
 
 let token: string | null = null;

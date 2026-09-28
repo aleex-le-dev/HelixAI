@@ -686,6 +686,52 @@ le parcours de connexion de Dropbox et de Google Docs, en fr, en et ja, clair et
 (SECURITE.md § 45.5). Deux défauts de 375 px corrigés pour tous les panneaux natifs ; un défaut plus
 ancien relevé, pas corrigé : le message rangé au retour du fournisseur est en anglais sur un écran
 français (la requête de retour n'a pas de langue).
+**Fait le 28/09/2026 : messageries, Telegram, Discord et WhatsApp Business (branche
+`connecteurs-messageries`).** Demandé par Medhi : des connecteurs pour le Chat et Cowork, lire
+les derniers messages d'une conversation et envoyer un message derrière une carte. Code dans
+`gateway/src/natifs/messageries.ts` (connexion, relevé, webhook, outils), écran
+`src/components/settings/ConnecteurMessagerie.tsx` (rubrique « Messageries » de Paramètres,
+Connecteurs, icônes neutres en attendant les logos, clés `telegram`, `discord`, `whatsapp`),
+article « Connecter Telegram, Discord ou WhatsApp » de l'aide ; courts ajouts dans les registres
+communs (approbation.ts, outils.ts, chat.ts, connecteurs.ts, index.ts, auth.ts, debit.ts, db.ts).
+
+| Service | Ce qu'on colle | Lire | Envoyer (coché, administrateur, carte à chaque fois) |
+|---|---|---|---|
+| Telegram (API des bots) | le jeton donné par @BotFather | `telegram__conversations`, `telegram__messages` : les messages reçus par le bot, relevés chaque minute par `getUpdates` (Telegram ne les garde que 24 h) et gardés chiffrés (100 par conversation, 30 jours) | `telegram__envoyer`, seulement dans une conversation d'où un message a été reçu (un bot ne peut pas écrire le premier) |
+| Discord (bot) | le jeton du bot (portail développeur) | `discord__salons`, `discord__messages` : l'API HTTP, sans connexion permanente ; texte vide sans l'intention « Message Content », ce que l'écran et le modèle disent | `discord__envoyer`, dans un salon listé, sans aucune mention, `nonce` imposé |
+| WhatsApp Business (Cloud API de Meta) | jeton d'utilisateur système, identifiants du numéro et du compte, clé secrète | `whatsapp__conversations`, `whatsapp__messages` : les messages que Meta dépose sur le webhook de l'instance (route publique signée), `whatsapp__modeles` | `whatsapp__envoyer` (texte libre, dans la fenêtre de 24 h seulement), `whatsapp__envoyer_modele` (modèle approuvé, n'importe quand, facturé par Meta) |
+
+**Pourquoi ce n'est pas le code des canaux des employés** (§ 3.4) : là, Helix ne parle ni à
+Telegram ni à Discord ; il garde le jeton et le passe à OpenClaw, qui tient la connexion et fait
+répondre l'employé. Le bot y est l'interface de l'employé. Ici, c'est la fenêtre de
+l'organisation sur ses conversations. Rien n'était réutilisable, sauf la façon de garder un
+secret. Conséquence : **un bot par usage**. Telegram ne donne les messages d'un bot qu'à un seul
+lecteur (409, ou webhook posé) ; un bot déjà branché sur un employé est refusé à la connexion,
+et son webhook n'est jamais retiré. WhatsApp n'a rien de commun : l'employé passe par WhatsApp
+Web (Baileys) ; ici, c'est l'API officielle.
+
+**La fenêtre des 24 heures** (règle de Meta) : Helix ne la connaît que par les messages reçus,
+donc par le webhook ; Meta exige une adresse publique en https avec un vrai certificat. Une
+instance sur un poste, en http sur 127.0.0.1, ne reçoit rien : seuls les modèles approuvés
+peuvent partir. L'écran le dit. Le texte d'un modèle est relu chez Meta au moment d'envoyer, et
+doit être celui que la carte a montré, mot pour mot.
+
+**Règles** (celles des connecteurs natifs) : lecture par défaut ; envoyer se coche, se règle
+ensuite sans ressaisir le jeton ; l'administrateur seul, vérifié par l'outil ; une carte à
+chaque message, même au niveau « Tout approuver », avec le texte entier, le destinataire résolu
+(nom de la conversation, du salon, numéro et fenêtre) et, pour un modèle, le texte final ;
+vingt envois par heure et par messagerie, le même texte au même destinataire refusé une
+demi-heure, `sousGarde` ; un appel recopié depuis un message lu n'est pas lancé (`appelsLus`) ;
+un message reçu est une donnée (dit en tête de chaque lecture, un message par ligne, rien ne
+se déclenche seul). Ni les employés OpenClaw ni l'agent de code n'ont ces outils.
+
+**Pas encore essayé avec un vrai bot, un vrai serveur Discord ni un vrai numéro WhatsApp** :
+vérifié contre de faux services écrits d'après la documentation lue le 28/09/2026
+(`scripts/essai-messageries.mjs`, 71 contrôles ; `scripts/securite.mjs`, 16 quater ; sur la
+branche, `npm run securite` : 1 079 contrôles, 0 échec). L'écran et
+l'aide ne le disent pas (§ 3.16) ; c'est dit ici, au § 5 et au § 46 de SECURITE.md. Écran vu
+dans une fenêtre Electron cachée, contre une passerelle jetable et `vite` : fr, en, ja, clair et
+sombre, 1440 et 375 px, connexion de WhatsApp faite à l'écran.
 
 ### 3.6 Découpage des tâches lourdes
 
@@ -3113,6 +3159,26 @@ vérifiés contre de faux serveurs, SECURITE.md § 41) et Google Drive et Slack 
 sur une vraie carte NVIDIA (Unsloth) ; le Mac virtuel (Lume) de bout en bout ; les modèles
 d'images et de vidéo marqués `verifie: false` (`images.ts`) et les modèles de conversation
 conseillés sans avoir été essayés (`provision.ts`) ; le japonais relu par un locuteur natif.
+
+**Messageries (28/09/2026, § 3.5, SECURITE.md § 46)**, jamais essayées avec un vrai service :
+1. **Telegram** : créer un bot avec @BotFather, le brancher (envoi coché), écrire au bot en
+   privé puis dans un groupe (avec et sans `/setprivacy`), demander au Chat « résume mes
+   messages Telegram », puis « réponds à Paul que c'est d'accord » : relever la carte, le
+   message reçu dans Telegram, et que le relevé toutes les minutes ne perd rien. Brancher
+   ensuite le même bot sur un agent (canal Telegram) : le connecteur doit dire le conflit (409).
+2. **Discord** : application sur le portail développeur, intention « Message Content »
+   cochée, bot invité sur un serveur d'essai avec « View Channels », « Read Message
+   History », « Send Messages » ; lire un salon, envoyer un message contenant « @everyone »
+   (il doit partir sans notifier personne) ; décocher l'intention et reconnecter (l'écran
+   doit le dire, les messages arriver vides).
+3. **WhatsApp Business** : app Meta de type Entreprise, numéro de test de Meta, utilisateur
+   système et son jeton, clé secrète ; instance ouverte en https avec un vrai certificat (ou un
+   tunnel) pour le webhook ; déclarer l'adresse et le jeton de vérification, s'abonner à
+   « messages ». Écrire au numéro depuis un téléphone, lire, répondre librement ; attendre
+   24 h (ou prendre un autre numéro) et vérifier le refus ; envoyer un modèle approuvé, et
+   relever ce que Meta facture. Points incertains : la forme exacte du jeton système
+   (`EA…` supposé), l'acceptation de `appsecret_proof` avec un jeton système, le champ
+   `parameter_name` des modèles à variables nommées, l'erreur 131047 hors fenêtre.
 
 ### Ce qui reste à faire
 

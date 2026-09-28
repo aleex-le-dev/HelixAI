@@ -23,6 +23,9 @@ import {
   Music2,
   ClipboardList,
   HardDrive,
+  MessageCircle,
+  MessagesSquare,
+  Smartphone,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { CleMarquePetite } from "@/components/ui/marques";
@@ -55,6 +58,8 @@ import { DriveGoogle } from "@/components/settings/DriveGoogle";
 import { SlackConnecteur } from "@/components/settings/SlackConnecteur";
 import { ConnecteurNatif } from "@/components/settings/ConnecteurNatif";
 import { etatNatifs, type EtatNatif, type IdNatif } from "@/lib/natifs";
+import { ConnecteurMessagerie } from "@/components/settings/ConnecteurMessagerie";
+import { etatMessageries, type EtatMessagerie, type IdMessagerie } from "@/lib/messageries";
 import { etat as etatDrive, type EtatDrive } from "@/lib/drive";
 import { etat as etatSlack, type EtatSlack } from "@/lib/slack";
 import type { ServiceMaison } from "@/components/settings/Connecteurs";
@@ -959,8 +964,10 @@ export function McpSettings() {
   const [drive, setDrive] = useState<EtatDrive | null>(null);
   const [slack, setSlack] = useState<EtatSlack | null>(null);
   const [natifs, setNatifs] = useState<EtatNatif[]>([]);
+  const [messageries, setMessageries] = useState<EtatMessagerie[]>([]);
 
   const relire = useCallback(() => {
+    void etatMessageries().then((e) => setMessageries(e?.services ?? []));
     void etatCourrier().then((e) => setCourrierPret(Boolean(e?.configure)));
     void etatAgenda().then((e) => setAgendaPret(Boolean(e?.configure)));
     void etatDrive().then(setDrive);
@@ -1067,6 +1074,29 @@ export function McpSettings() {
         ouvert: ouvert === id,
         onBasculer: () => basculer(id),
         panneau: <ConnecteurNatif id={id} onChange={relire} />,
+      };
+    }),
+    /*
+     * Messageries (28/09/2026, ConnecteurMessagerie.tsx). Clés de marque
+     * `telegram`, `discord`, `whatsapp` : une icône neutre en attendant les
+     * logos, qu'un autre travail ajoute (chartes à relire, comme pour X).
+     */
+    ...([
+      ["telegram", "Telegram", t("Lire les messages reçus par un bot, envoyer après accord"), MessageCircle],
+      ["discord", "Discord", t("Lire les salons d'un serveur, envoyer après accord"), MessagesSquare],
+      ["whatsapp", "WhatsApp Business", t("Messages reçus, réponses dans les 24 h et modèles, après accord"), Smartphone],
+    ] as [IdMessagerie, string, string, LucideIcon][]).map(([id, label, description, icone]): ServiceMaison => {
+      const e = messageries.find((s) => s.id === id);
+      return {
+        id,
+        label,
+        description: e?.configure ? tf("Connecté : {0}", e.compte ?? "") : e?.aReconnecter ? t("Jeton refusé, à reconnecter") : description,
+        categorie: t("Messageries"),
+        icone,
+        connecte: Boolean(e?.configure),
+        ouvert: ouvert === id,
+        onBasculer: () => basculer(id),
+        panneau: <ConnecteurMessagerie id={id} onChange={relire} />,
       };
     }),
   ];

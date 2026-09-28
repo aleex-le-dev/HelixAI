@@ -10,9 +10,9 @@ refaite à l'envers.
 
 | | |
 |---|---|
-| Version | 2026.928.5 (`package.json`) |
+| Version | 2026.928.6 (`package.json`) |
 | Dernière mise à jour | 28 septembre 2026 |
-| Vérifié | `npm run securite` : 1000 contrôles, 0 échec (28/09/2026) ; `npm run typecheck` ; traductions à 100 % en anglais, chinois et japonais (interface 3 042 phrases, passerelle 1 020) |
+| Vérifié | `npm run securite` : 1649 contrôles, 0 échec (28/09/2026) ; `npm run typecheck` ; traductions à 100 % en anglais, chinois et japonais (interface 3 042 phrases, passerelle 1 020) |
 | Reste à essayer | sur les vraies machines : § 5, « Ce qui reste à essayer sur les postes de Medhi » |
 | Documents liés | [ARCHITECTURE.md](ARCHITECTURE.md), [SECURITE.md](SECURITE.md), [SCREENS.md](SCREENS.md), [SIGNATURE.md](SIGNATURE.md), [README.md](README.md), [docs/GUIDE.md](docs/GUIDE.md) |
 

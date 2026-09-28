@@ -161,6 +161,16 @@ type Fiche = Omit<CatalogEntry, "description">;
  * dépasse), Granite 4.1 30B, OLMo 3, LFM2, MiniMax M2 (121 Go),
  * Nemotron 3 (licence NVIDIA).
  */
+/*
+ * Tailles relevées sur lmstudio.ai/models le 28/09/2026 (revue du catalogue) :
+ * six fiches annonçaient moins que le téléchargement réel (Qwen3.5 9B 6 Go au
+ * lieu de 7, Ministral 3 8B 5,5 au lieu de 6,5, OLMo 3 7B Think 4,5 au lieu de
+ * 6 et son cache sans les couches à fenêtre glissante…). Corrigé, parce que
+ * `tientSur` juge sur ces chiffres : trop bas, un modèle passait pour tenir
+ * sur une machine qu'il sature (Medhi : « pas de modèles trop puissants qui
+ * vont tout faire crasher »). Conséquence voulue : Qwen3.5 9B n'est plus
+ * conseillé sur une carte NVIDIA de 8 Go.
+ */
 const FICHES: Fiche[] = [
   /*
    * Pour les très grosses machines (Mac Studio de 256 Go et plus). Kimi K3
@@ -173,10 +183,10 @@ const FICHES: Fiche[] = [
   { key: "qwen/qwen3.5-35b-a3b", label: "Qwen3.5 35B A3B", editeur: "Alibaba (Qwen)", licence: "Apache 2.0", downloadGb: 20, moe: true, vision: true, outils: true, raisonne: true, verifie: false },
   { key: "zai-org/glm-4.7-flash", label: "GLM-4.7 Flash", editeur: "Zhipu (Z.ai)", licence: "MIT", downloadGb: 16, moe: true, outils: true, raisonne: true, verifie: false },
   { key: "meta/muse-glimmer", label: "Muse Glimmer", editeur: "Meta", licence: "Apache 2.0", downloadGb: 25, vision: true, outils: true, raisonne: true, verifie: false },
-  { key: "qwen/qwen3.5-9b", label: "Qwen3.5 9B", editeur: "Alibaba (Qwen)", licence: "Apache 2.0", downloadGb: 6, vision: true, kvGo: 1.0, outils: true, raisonne: true, verifie: true },
-  { key: "qwen/qwen3.5-4b", label: "Qwen3.5 4B", editeur: "Alibaba (Qwen)", licence: "Apache 2.0", downloadGb: 3, vision: true, kvGo: 1.0, outils: true, raisonne: true, verifie: false },
+  { key: "qwen/qwen3.5-9b", label: "Qwen3.5 9B", editeur: "Alibaba (Qwen)", licence: "Apache 2.0", downloadGb: 7, vision: true, kvGo: 1.0, outils: true, raisonne: true, verifie: true },
+  { key: "qwen/qwen3.5-4b", label: "Qwen3.5 4B", editeur: "Alibaba (Qwen)", licence: "Apache 2.0", downloadGb: 3.75, vision: true, kvGo: 1.0, outils: true, raisonne: true, verifie: false },
   { key: "openai/gpt-oss-20b", label: "gpt-oss 20B", editeur: "OpenAI", licence: "Apache 2.0", downloadGb: 12, moe: true, outils: true, raisonne: true, verifie: false },
-  { key: "mistralai/magistral-small-2509", label: "Magistral Small", editeur: "Mistral AI", licence: "Apache 2.0", downloadGb: 14, vision: true, outils: true, raisonne: true, verifie: false },
+  { key: "mistralai/magistral-small-2509", label: "Magistral Small", editeur: "Mistral AI", licence: "Apache 2.0", downloadGb: 15.35, vision: true, outils: true, raisonne: true, verifie: false },
   { key: "qwen/qwen3-32b", label: "Qwen3 32B", editeur: "Alibaba (Qwen)", licence: "Apache 2.0", downloadGb: 19, outils: true, raisonne: true, verifie: true },
   { key: "qwen/qwen3-14b", label: "Qwen3 14B", editeur: "Alibaba (Qwen)", licence: "Apache 2.0", downloadGb: 9, outils: true, raisonne: true, verifie: true },
   { key: "qwen/qwen3-30b-a3b", label: "Qwen3 30B A3B", editeur: "Alibaba (Qwen)", licence: "Apache 2.0", downloadGb: 18, moe: true, outils: true, raisonne: true, verifie: true },
@@ -186,8 +196,8 @@ const FICHES: Fiche[] = [
   { key: "ibm/granite-4.1-8b", label: "Granite 4.1 8B", editeur: "IBM", licence: "Apache 2.0", downloadGb: 5, kvGo: 5.0, outils: true, verifie: false },
   { key: "mistralai/ministral-3-14b-reasoning", label: "Ministral 3 14B", editeur: "Mistral AI", licence: "Apache 2.0", downloadGb: 9, vision: true, outils: true, raisonne: true, verifie: false },
   { key: "qwen3-1.7b", label: "Qwen3 1.7B", editeur: "Alibaba (Qwen)", licence: "Apache 2.0", downloadGb: 1.2, kvGo: 3.5, outils: true, raisonne: true, verifie: true },
-  { key: "mistralai/ministral-3-8b", label: "Ministral 3 8B", editeur: "Mistral AI", licence: "Apache 2.0", downloadGb: 5.5, vision: true, kvGo: 4.25, outils: true, verifie: false },
-  { key: "allenai/olmo-3-7b-think", label: "OLMo 3 7B Think", editeur: "Ai2", licence: "Apache 2.0", downloadGb: 4.5, kvGo: 4.0, raisonne: true, verifie: false },
+  { key: "mistralai/ministral-3-8b", label: "Ministral 3 8B", editeur: "Mistral AI", licence: "Apache 2.0", downloadGb: 6.5, vision: true, kvGo: 4.25, outils: true, verifie: false },
+  { key: "allenai/olmo-3-7b-think", label: "OLMo 3 7B Think", editeur: "Ai2", licence: "Apache 2.0", downloadGb: 6, kvGo: 5.5, raisonne: true, verifie: false },
   { key: "mistralai/ministral-3-3b", label: "Ministral 3 3B", editeur: "Mistral AI", licence: "Apache 2.0", downloadGb: 2.5, vision: true, kvGo: 3.25, outils: true, verifie: false },
 ];
 
@@ -290,7 +300,7 @@ const FICHES_ECRAN: Fiche[] = [
   { key: "qwen/qwen3-vl-30b", label: "Qwen3-VL 30B A3B", editeur: "Alibaba (Qwen)", licence: "Apache 2.0", downloadGb: 18, moe: true, vision: true, outils: true, verifie: true },
   { key: "qwen3-vl-8b", label: "Qwen3-VL 8B", editeur: "Alibaba (Qwen)", licence: "Apache 2.0", downloadGb: 6, vision: true, outils: true, verifie: true },
   { key: "qwen3-vl-4b", label: "Qwen3-VL 4B", editeur: "Alibaba (Qwen)", licence: "Apache 2.0", downloadGb: 3.5, vision: true, outils: true, verifie: true },
-  { key: "qwen3-vl-2b", label: "Qwen3-VL 2B", editeur: "Alibaba (Qwen)", licence: "Apache 2.0", downloadGb: 2, vision: true, outils: true, verifie: true },
+  { key: "qwen3-vl-2b", label: "Qwen3-VL 2B", editeur: "Alibaba (Qwen)", licence: "Apache 2.0", downloadGb: 3, vision: true, outils: true, verifie: true },
   /*
    * Au choix seulement (28/09/2026) : même famille que les essayés, pas
    * essayée au pointage. Dense, 20 Go (lmstudio.ai/models/qwen/qwen3-vl-32b),

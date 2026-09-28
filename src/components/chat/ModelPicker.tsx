@@ -15,6 +15,7 @@ import {
   Download,
   ChevronLeft,
   ChevronRight,
+  Boxes,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { Chip } from "@/components/ui/Chip";
@@ -197,15 +198,18 @@ export function ModelBehaviorPicker({
    */
   const [installables, setInstallables] = useState<ModeleInstallable[]>([]);
   const [installation, setInstallation] = useState<EtatInstallation | undefined>();
+  // Des modèles s'installent sur cette machine (pas d'intégrateur qui les prépare) : la page « Modèles » a un sens.
+  const [catalogueLocal, setCatalogueLocal] = useState(false);
   const enCours = installation && ["checking", "downloading", "loading"].includes(installation.phase);
   useEffect(() => {
     if (!open && !enCours) return;
     let actif = true;
     const lire = () =>
       lireInstallables()
-        .then(({ liste, etat }) => {
+        .then(({ liste, etat, local }) => {
           if (!actif) return;
           setInstallables(liste);
+          setCatalogueLocal(local);
           setInstallation((avant) => {
             const avantEnCours = avant && ["checking", "downloading", "loading"].includes(avant.phase);
             if (avantEnCours && etat && !["checking", "downloading", "loading"].includes(etat.phase)) refresh();
@@ -395,6 +399,25 @@ export function ModelBehaviorPicker({
             <p className="px-2 pb-1.5 text-[11px] leading-relaxed text-muted-foreground">
               {t("Seulement ceux que cette machine fait tourner sans ralentir, du mieux noté au moins bien noté.")}
             </p>
+            {/*
+             * La courte liste reste courte ; tout le catalogue libre est sur
+             * la page « Modèles » (28/09/2026, demandé par Medhi : « laisser
+             * le choix comme avec LM Studio »). En haut : en bas de la liste,
+             * il fallait la faire défiler pour le trouver (vu à l'écran).
+             */}
+            <button
+              type="button"
+              onClick={() => {
+                setOpen(false);
+                navigate("/modeles");
+              }}
+              className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            >
+              <Boxes size={15} strokeWidth={1.75} />
+              <span className="flex-1 text-left">{t("Voir tous les modèles")}</span>
+              <ChevronRight size={15} strokeWidth={1.75} />
+            </button>
+            <div className="my-1 h-px bg-border" />
             {installables.map((m) => {
                           const celuiCi = enCours && installation?.model === m.key;
                           return (
@@ -530,6 +553,20 @@ export function ModelBehaviorPicker({
                         <span className="flex-1 text-left">
                           {enCours ? installation?.message : t("Installer un modèle sur cette machine")}
                         </span>
+                        <ChevronRight size={15} strokeWidth={1.75} />
+                      </button>
+                    )}
+                    {i === 0 && installables.length === 0 && catalogueLocal && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setOpen(false);
+                          navigate("/modeles");
+                        }}
+                        className="mt-1 flex w-full items-center gap-2 rounded-lg px-2 py-2 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                      >
+                        <Boxes size={15} strokeWidth={1.75} />
+                        <span className="flex-1 text-left">{t("Voir tous les modèles")}</span>
                         <ChevronRight size={15} strokeWidth={1.75} />
                       </button>
                     )}

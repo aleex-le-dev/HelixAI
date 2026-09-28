@@ -253,9 +253,9 @@ Toutes exigent le jeton d'instance, sauf `GET /` et `GET /health`. Celles marqu�
 | `GET /v1/models`, `GET /helix/models` | Catalogue des modèles, avec leurs rôles. `/v1/models` accepte aussi une clé d'API seule | non |
 | `POST /v1/chat/completions` | OpenAI-compatible. Accepte en plus `role`, `effort`, `tools` et `connaissances` ; accepte aussi une clé d'API seule (voir « Clés d'API ») | si `tools: true` |
 | `POST /helix/models/load` | Charge un modèle en mémoire | oui |
-| `GET /helix/provision`, `GET /helix/provision/stream` | État et progression de la mise en route | non |
+| `GET /helix/provision`, `GET /helix/provision/stream` | État et progression de la mise en route ; `modeles` : tout le catalogue libre pour la page Modèles, avec `installe` et, pour ceux qui ne tiennent pas, `tropLourd` (raison chiffrée) | non |
 | `POST /helix/provision/moteur` | Installe le moteur de LM Studio (llmster sur Mac à puce Apple, Windows et Linux ; llama.cpp sur Mac Intel, sans conditions à accepter) ; administrateur seul, une installation à la fois, conditions de LM Studio acceptées | oui |
-| `POST /helix/provision/start` | Télécharge et charge un modèle du catalogue | oui |
+| `POST /helix/provision/start` | Télécharge et charge un modèle du catalogue (`{ "model": "<clé>", "role": "chat" \| "gui" }`) ; 409 avec la raison si le modèle nommé ne tient pas sur la machine | oui |
 | `GET /helix/emplacement-modeles` | Où vont le moteur et les modèles, place libre, place nécessaire, ce qui peut changer | oui |
 | `POST /helix/emplacement-modeles` | Choisit l'emplacement (`{ "dossier": "D:\\IA" }`, ou `null` pour l'habituel) ; déplace les modèles de llama.cpp s'il y en a ; administrateur seul, au journal | oui |
 | `POST /helix/emplacement-modeles/verifier` | Juge un dossier sans rien changer (sous-dossier qui serait créé, place libre) ; administrateur seul | oui |
@@ -1026,6 +1026,12 @@ l'agent d'orchestration par défaut. Aucun tiret cadratin dans les textes affich
 - « Comparer intelligence et prix » (sélecteur de modèles) : notes ECI d'Epoch AI
   (CC BY 4.0), prix publiés des éditeurs, tous les modèles de la personne au graphique ou
   listés « pas de note publiée » (27/09/2026) ;
+- page **Modèles** (`/modeles`, 28/09/2026), par « Voir tous les modèles » dans « Installer
+  un modèle » du sélecteur : tout le catalogue libre (Apache 2.0 et MIT, une soixantaine de
+  modèles, `gateway/src/provision.ts`), recherche, tri, filtres ; seuls ceux qui tiennent sur la
+  machine s'installent, les autres sont grisés avec la raison chiffrée. Les modèles ajoutés ce
+  jour-là (`auChoix`) ne sont jamais installés d'office : le conseil pour la machine ne change
+  pas ;
 - Réglages → **Profil** : nom et adresse enregistrés ; changer d'adresse exige
   le mot de passe actuel et n'hérite d'aucune invitation ;
 - Réglages → **Préférences** : apparence, et formats de date et d'heure

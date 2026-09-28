@@ -17,7 +17,7 @@ import { useProvision } from "@/hooks/useProvision";
 import { EmplacementModeles } from "@/components/onboarding/EmplacementModeles";
 import { isDesktopApp } from "@/lib/instance";
 import { cn } from "@/lib/cn";
-import { t, tf } from "@/lib/i18n";
+import { t, tf, locale } from "@/lib/i18n";
 
 /**
  * Première mise en route : aucun modèle n'est disponible.
@@ -278,7 +278,7 @@ export function FirstRun({ onReady }: { onReady: () => void }) {
         <div className="mt-1.5 flex items-baseline justify-between gap-3">
           <span className="font-medium text-foreground">{affiche.label}</span>
           <span className="text-xs text-muted-foreground">
-            {tf("environ {0} Go", affiche.downloadGb)}
+            {tf("environ {0} Go", affiche.downloadGb.toLocaleString(locale()))}
           </span>
         </div>
         <p className="mt-1 whitespace-pre-line text-sm text-muted-foreground">{affiche.description}</p>
@@ -340,6 +340,8 @@ export function FirstRun({ onReady }: { onReady: () => void }) {
               <p className="text-xs text-muted-foreground">
                 {t("Seuls les modèles que cette machine fait tourner sans ralentir sont proposés. Un modèle plus léger répond plus vite, avec des réponses plus simples.")}
               </p>
+              {/* Le catalogue élargi du 28/09/2026 (une quarantaine de modèles sur une grosse machine) : la liste défile dans sa hauteur. */}
+              <div className="max-h-72 space-y-1.5 overflow-y-auto pr-1">
               {possibles.map((m) => (
                 <label
                   key={m.key}
@@ -353,11 +355,13 @@ export function FirstRun({ onReady }: { onReady: () => void }) {
                     <span className="block truncate font-medium text-foreground">{m.label}</span>
                     <span className="block text-xs text-muted-foreground">
                       {m.key === recommended.key ? `${t("Recommandé")} · ` : ""}
-                      {tf("environ {0} Go", m.downloadGb)}
+                      {m.editeur ? `${m.editeur} · ` : ""}
+                      {tf("environ {0} Go", m.downloadGb.toLocaleString(locale()))}
                     </span>
                   </span>
                 </label>
               ))}
+              </div>
             </div>
           )}
         </div>

@@ -61,6 +61,8 @@ import {
   conseilPourLaMachine,
   miseEnRouteEnCours,
   modelesQuiTiennent,
+  catalogueComplet,
+  refusTropLourd,
 } from "./provision.ts";
 import { choisirEmplacement, etatEmplacement, moteurLocal, placeNecessaire, verifierEmplacement, type MoteurLocal } from "./emplacementModeles.ts";
 import { moteurOuvert } from "./llamaCppBase.ts";
@@ -606,6 +608,12 @@ async function handleProvisionStatus(res: http.ServerResponse): Promise<void> {
   const { models: available } = await discover();
   const chatModels = available.filter((m) => m.roles.includes("chat"));
   /*
+   * « Déjà là » se juge sur le nom sans le préfixe d'éditeur : LM Studio range
+   * Qwen3-VL 4B sous « qwen/qwen3-vl-4b », le catalogue l'appelle « qwen3-vl-4b ».
+   */
+  const nomSansEditeur = (id: string) => id.toLowerCase().split("/").pop() ?? id;
+  const presents = new Set(available.map((m) => nomSansEditeur(m.id)));
+  /*
    * LM Studio coupé par le profil (28/09/2026) : pas de `lms` à chercher. Cet
    * écran lançait `lms version` sur la machine à chaque ouverture, comme la
    * découverte avant le 27/09 (backends.ts). Rien à installer d'ici : l'écran
@@ -654,16 +662,15 @@ async function handleProvisionStatus(res: http.ServerResponse): Promise<void> {
     managed: !autoProvisionEnabled() || (!lmStudioActif && !ouvert),
     client: deployment().client ?? null,
     state: getProvisionState(),
+    // Ce qu'on peut encore ajouter, adapté à la machine : la courte liste du sélecteur.
+    installables: adaptesALaMachine(hardware).filter((e) => !presents.has(nomSansEditeur(e.key))),
     /*
-     * Ce qu'on peut encore ajouter, adapté à la machine. « Déjà là » se juge
-     * sur le nom sans le préfixe d'éditeur : LM Studio range Qwen3-VL 4B sous
-     * « qwen/qwen3-vl-4b », le catalogue l'appelle « qwen3-vl-4b ».
+     * Tout le catalogue, pour la page « Modèles » (28/09/2026) : installé ou
+     * non, et, pour ceux qui ne tiennent pas, la raison chiffrée. La page ne
+     * propose d'installer que ceux qui tiennent ; `/helix/provision/start`
+     * refuse les autres (`refusTropLourd`).
      */
-    installables: (() => {
-      const nom = (id: string) => id.toLowerCase().split("/").pop() ?? id;
-      const presents = new Set(available.map((m) => nom(m.id)));
-      return adaptesALaMachine(hardware).filter((e) => !presents.has(nom(e.key)));
-    })(),
+    modeles: catalogueComplet(hardware).map((e) => ({ ...e, installe: presents.has(nomSansEditeur(e.key)) })),
   });
 }
 
@@ -939,6 +946,9 @@ function handleProvisionStart(req: http.IncomingMessage, res: http.ServerRespons
       // Le catalogue d'écran est distinct : un modèle de conversation ne voit
       // pas les images, il ne peut donc pas remplacer un modèle de vision.
       const catalogue = role === "gui" ? VISION_CATALOG : CATALOG;
+      // Trop lourd pour la machine : refusé avant de rien télécharger (28/09/2026, `refusTropLourd`).
+      const refus = typeof model === "string" ? refusTropLourd(detectHardware(), model, role === "gui" ? "gui" : "chat") : null;
+      if (refus) return send(res, 409, { error: { message: refus } });
       // Non bloquant : la progression se suit sur /helix/provision/stream.
       void ensureLocalModel(model, catalogue)
         .then((etat) => {

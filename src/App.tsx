@@ -25,6 +25,7 @@ import { BibliothequePage } from "@/pages/BibliothequePage";
 import { GroupesPage } from "@/pages/GroupesPage";
 import { ReunionsPage } from "@/pages/ReunionsPage";
 import { TachesPage } from "@/pages/TachesPage";
+import { ModelesPage } from "@/pages/ModelesPage";
 import { SettingsLayout } from "@/components/settings/SettingsShell";
 import {
   ProfilSettings,
@@ -91,6 +92,8 @@ const router = creerRouteur([
       ...when(features.reunions, { path: "/reunions", element: <ReunionsPage /> }),
       ...when(features.groupes, { path: "/groupes", element: <GroupesPage /> }),
       ...when(features.taches, { path: "/taches", element: <TachesPage /> }),
+      // Tout le catalogue des modèles libres, ouvert depuis le sélecteur du Chat (28/09/2026).
+      { path: "/modeles", element: <ModelesPage /> },
       {
         path: "/parametres",
         element: <SettingsLayout />,

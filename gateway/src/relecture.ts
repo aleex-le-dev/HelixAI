@@ -10,6 +10,8 @@ import { inflateRawSync } from "node:zlib";
  * fait lever `inflateRawSync` (rattrapé plus bas : l'entrée est alors ignorée).
  */
 const DECOMPRESSION_MAX = 16 * 1024 * 1024;
+/** Pour toute l'archive, tous noms confondus (voir `lireZip`). */
+const DECOMPRESSION_TOTALE = 32 * 1024 * 1024;
 
 /**
  * Relit un document bureautique enregistré par l'agent, sur le poste même :
@@ -28,6 +30,18 @@ const DECOMPRESSION_MAX = 16 * 1024 * 1024;
  */
 export function lireZip(buf: Buffer, voulus: string[]): Map<string, string> {
   const sortie = new Map<string, string>();
+  /*
+   * Chaque nom voulu n'est décompressé qu'une fois, la lecture s'arrête quand
+   * ils le sont tous, et la décompression est bornée au total, pas seulement
+   * par entrée. Tournée des connecteurs du 28/09/2026 : un .docx de 4 Mo dont
+   * le répertoire central répète 65 535 fois « word/document.xml », chaque
+   * fois vers la même entrée qui gonfle à 16 Mo, faisait décompresser
+   * 65 535 × 16 Mo dans le seul fil de la passerelle (une demi-heure environ,
+   * estimée) ; il suffisait de le déposer dans un OneDrive ou un SharePoint
+   * partagé et qu'un agent le lise.
+   */
+  const restants = new Set(voulus);
+  let budget = DECOMPRESSION_TOTALE;
   let fin = -1;
   for (let i = buf.length - 22; i >= Math.max(0, buf.length - 65_557); i--) {
     if (buf.readUInt32LE(i) === 0x06054b50) {
@@ -38,7 +52,7 @@ export function lireZip(buf: Buffer, voulus: string[]): Map<string, string> {
   if (fin < 0) return sortie;
   const nombre = buf.readUInt16LE(fin + 10);
   let p = buf.readUInt32LE(fin + 16);
-  for (let n = 0; n < nombre && p + 46 <= buf.length && buf.readUInt32LE(p) === 0x02014b50; n++) {
+  for (let n = 0; n < nombre && restants.size > 0 && budget > 0 && p + 46 <= buf.length && buf.readUInt32LE(p) === 0x02014b50; n++) {
     const methode = buf.readUInt16LE(p + 10);
     const taille = buf.readUInt32LE(p + 20);
     const lNom = buf.readUInt16LE(p + 28);
@@ -47,13 +61,20 @@ export function lireZip(buf: Buffer, voulus: string[]): Map<string, string> {
     const local = buf.readUInt32LE(p + 42);
     const nom = buf.toString("utf8", p + 46, p + 46 + lNom);
     p += 46 + lNom + lExtra + lCommentaire;
-    if (!voulus.includes(nom) || local + 30 > buf.length || buf.readUInt32LE(local) !== 0x04034b50) continue;
+    if (!restants.has(nom)) continue;
+    // Le premier exemplaire seulement, lisible ou non : un doublon ne se décompresse jamais.
+    restants.delete(nom);
+    if (local + 30 > buf.length || buf.readUInt32LE(local) !== 0x04034b50) continue;
     const debut = local + 30 + buf.readUInt16LE(local + 26) + buf.readUInt16LE(local + 28);
     const donnees = buf.subarray(debut, debut + taille);
+    const plafond = Math.min(DECOMPRESSION_MAX, budget);
     try {
-      sortie.set(nom, (methode === 8 ? inflateRawSync(donnees, { maxOutputLength: DECOMPRESSION_MAX }) : donnees.subarray(0, DECOMPRESSION_MAX)).toString("utf8"));
+      const clair = methode === 8 ? inflateRawSync(donnees, { maxOutputLength: plafond }) : donnees.subarray(0, plafond);
+      budget -= clair.length;
+      sortie.set(nom, clair.toString("utf8"));
     } catch {
-      /* entrée illisible : ignorée */
+      /* entrée illisible, ou au-delà de la borne : ignorée */
+      budget -= plafond;
     }
   }
   return sortie;

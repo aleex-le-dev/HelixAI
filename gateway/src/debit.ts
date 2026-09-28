@@ -59,7 +59,12 @@ const REGLES: { methode: string; chemin: string; regle: Regle }[] = [
    * coûte un HMAC. Meta les groupe (jusqu'à 1000 par envoi) : 300 par minute
    * laissent passer un pic réel et arrêtent un envoi en boucle.
    */
-  { methode: "POST", chemin: "/helix/messageries/whatsapp/webhook", regle: { max: 300, fenetreMs: 60_000 } },
+  /*
+   * Compté par le module lui-même, seulement pour les requêtes qui portent une
+   * signature de la bonne forme (natifs/messageries.ts, `CHEMIN_DEBIT_SIGNE`,
+   * tournée du 28/09/2026) : ce chemin n'est celui d'aucune requête.
+   */
+  { methode: "POST", chemin: "/helix/messageries/whatsapp/webhook#signee", regle: { max: 300, fenetreMs: 60_000 } },
   { methode: "GET", chemin: "/helix/messageries/whatsapp/webhook", regle: { max: 30, fenetreMs: 60_000 } },
 ];
 

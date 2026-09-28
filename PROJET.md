@@ -1923,6 +1923,29 @@ collections, Canva, Firecrawl, Tavily et Exa n'y ont jamais figuré : tous
 reçoivent une icône neutre, ce qui est aussi plus prudent juridiquement qu'un
 dessin approximatif.
 
+**Les vrais logos, en couleur (28/09/2026, branche `logos`).** Medhi : « mets
+les vrais logos », « là, les logos sont sans couleur ». Simple Icons est
+abandonné : chaque logo est désormais le fichier officiel du kit ou de la page
+de marque de la société, relevé le 28/09/2026, en couleur, avec sa version pour
+fond sombre quand elle existe (GitHub, X, Vercel, Linear… passent au blanc).
+33 marques, fichiers et empreintes dans `scripts/marques/` (`sources.json`
+donne l'adresse, la page et la règle d'usage retenue de chacun) ;
+`scripts/gen-marques.cjs` les vérifie et les convertit en données de dessin,
+sans HTML injecté ni appel réseau ; `LogoMarque` pose les deux versions et le
+thème en montre une, par CSS. Les logos gagnent aussi les clés d'API (liste des
+fournisseurs) et « Comparer les modèles ». Les chartes ont été lues une à une,
+et 23 marques gardent une icône neutre : Slack (licence écrite, redistribution
+interdite), OpenAI (autorisation préalable), LinkedIn (boutons « Share » et
+« Follow » seulement), Facebook, Instagram et Llama (téléchargement derrière
+une case « j'accepte » que l'agent n'a pas cochée à la place de Medhi), TikTok,
+HubSpot, Intercom, Box, PayPal (autorisation), YouTube (100 px de haut au
+minimum), Asana, Airtable, Square (pas de symbole seul autorisé), DeepSeek,
+Qwen, Gemma, Tavily, Groq, Scaleway, OVHcloud, IONOS (pas de source officielle
+utilisable). Les glyphes Lucide qui imitaient YouTube, LinkedIn, Facebook et
+Instagram sont retirés. THIRD_PARTY_NOTICES.md § 4 bis, contrôlé par
+`npm run securite`. Si Medhi accepte les conditions de Meta, les logos de
+Facebook et d'Instagram se posent dans `scripts/marques/` comme les autres.
+
 **Le sélecteur de modèles, un seul panneau (0.26.0).** Il y en avait deux :
 « comportement », puis « modèle précis » derrière un chevron. Deux défauts,
 tous deux constatés à l'usage.

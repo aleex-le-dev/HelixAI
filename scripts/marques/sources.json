@@ -99,6 +99,7 @@
     "figma": {
       "titre": "Figma",
       "clair": "figma.svg",
+      "cadre": "312 340 400 600",
       "source": "https://static.figma.com/uploads/4fbf4d754dbbc027ba1530205f8747cd97d532e5 (Figma Icon (Full-color).svg)",
       "page": "https://www.figma.com/using-the-figma-brand/",
       "regle": "Usage permis pour signaler la compatibilité avec Figma ; la marque de l'application doit rester plus grande et plus visible.",
@@ -145,6 +146,7 @@
       "titre": "Atlassian",
       "clair": "atlassian.svg",
       "sombre": "atlassian.sombre.svg",
+      "cadre": "7 4 34.69 34.63",
       "source": "https://atlassian.design/assets/06c6b5ff60de/logos/atlassian_logo.zip (Atlassian mark brand RGB.svg, Atlassian mark inverse RGB.svg)",
       "page": "https://www.atlassian.com/legal/trademark",
       "regle": "Logos d'Atlassian permis pour signaler qu'un produit est compatible, reproduits exactement, sans modification autre que la taille ; sert au connecteur « Jira et Confluence ».",
@@ -179,6 +181,7 @@
     "gitlab": {
       "titre": "GitLab",
       "clair": "gitlab.svg",
+      "cadre": "112.13 115 155.74 150",
       "source": "https://about.gitlab.com/images/press/gitlab-logo-500-rgb.svg",
       "page": "https://about.gitlab.com/press/press-kit/",
       "regle": "Logomark en couleur ; ni recoloration, ni transformation, ni effet ; au moins 20 px en numérique (https://design.gitlab.com/brand-logo/core-logo).",
@@ -297,6 +300,7 @@
       "titre": "Perplexity",
       "clair": "perplexity.svg",
       "sombre": "perplexity.sombre.svg",
+      "cadre": "27.68 22.72 115.98 125.9",
       "source": "https://live.standards.site/perplexity/logo (Perplexity_AllLogos_Final.zip, perplexity-icon-dark.svg, perplexity-icon-light.svg)",
       "page": "https://live.standards.site/perplexity/logo",
       "regle": "Le symbole s'emploie seul là où le logo complet ne tient pas ; ne pas le remplir ni le tourner ; teinte claire sur fond sombre, sombre sur fond clair.",

@@ -2,8 +2,10 @@
  * Engendre `src/components/ui/marques.ts` depuis les logos officiels rangés
  * dans `scripts/marques/`.
  *
- *   node scripts/gen-marques.cjs           vérifie les empreintes, puis engendre
- *   node scripts/gen-marques.cjs --noter   réécrit les empreintes (après un relevé)
+ *   node scripts/gen-marques.cjs             vérifie les empreintes, puis engendre
+ *   node scripts/gen-marques.cjs --noter     réécrit les empreintes (après un relevé)
+ *   node scripts/gen-marques.cjs --verifier  n'écrit rien : dit si marques.ts est à jour
+ *                                            (appelé par scripts/securite.mjs)
  *
  * D'où viennent les fichiers : `scripts/marques/sources.json` donne, pour
  * chaque marque, l'adresse du fichier officiel, la page de marque de la
@@ -31,6 +33,7 @@ const { join } = require("node:path");
 const DOSSIER = join(__dirname, "marques");
 const SORTIE = join(__dirname, "..", "src", "components", "ui", "marques.ts");
 const NOTER = process.argv.includes("--noter");
+const VERIFIER = process.argv.includes("--verifier");
 
 const sources = JSON.parse(readFileSync(join(DOSSIER, "sources.json"), "utf8"));
 
@@ -291,5 +294,15 @@ const pied = `} satisfies Record<string, Marque>;
 export type CleMarque = keyof typeof MARQUES;
 `;
 
-writeFileSync(SORTIE, entete + entrees.join("\n") + "\n" + pied, "utf8");
-console.log(`marques.ts engendré : ${entrees.length} marques, ${Object.keys(sources.neutres).length} laissées neutres.`);
+const contenu = entete + entrees.join("\n") + "\n" + pied;
+if (VERIFIER) {
+  // Pour scripts/securite.mjs : marques.ts doit être exactement ce que ces fichiers donnent.
+  if (readFileSync(SORTIE, "utf8") !== contenu) {
+    console.error("src/components/ui/marques.ts ne correspond pas à scripts/marques/ : relancer node scripts/gen-marques.cjs.");
+    process.exit(1);
+  }
+  console.log(`marques.ts à jour : ${entrees.length} marques, ${Object.keys(sources.neutres).length} laissées neutres.`);
+} else {
+  writeFileSync(SORTIE, contenu, "utf8");
+  console.log(`marques.ts engendré : ${entrees.length} marques, ${Object.keys(sources.neutres).length} laissées neutres.`);
+}

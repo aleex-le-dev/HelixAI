@@ -2738,6 +2738,13 @@ console.log("\n7 septies. Essai du modèle sur cette machine : celui qui répond
   mkdirSync(BIN);
   mkdirSync(join(ICI, "maison"));
   /*
+   * Un LM Studio installé se déclare (`llmster-install-location.json`,
+   * lmstudio-js) : sans déclaration, le moteur compte comme à poser depuis le
+   * 28/09/2026 (engine.ts, `moteurAPoser`, Windows). Le faux s'y déclare aussi.
+   */
+  mkdirSync(join(ICI, "maison", ".lmstudio", ".internal"), { recursive: true });
+  writeFileSync(join(ICI, "maison", ".lmstudio", ".internal", "llmster-install-location.json"), JSON.stringify({ path: process.execPath, argv: [], cwd: join(ICI, "maison") }));
+  /*
    * Clé de chiffrement en fichier (27/09/2026) : sans profil, macOS la range au
    * trousseau, et `security` lancé avec ce dossier personnel jetable ouvrait
    * chez Medhi « Trousseau introuvable ». Le trousseau du poste n'est plus
@@ -3339,6 +3346,13 @@ console.log("\n7 decies. Petit modèle local sans carte graphique : ce qui part 
   const BIN = join(ICI, "bin");
   mkdirSync(BIN);
   mkdirSync(join(ICI, "maison"));
+  /*
+   * Un LM Studio installé se déclare (`llmster-install-location.json`,
+   * lmstudio-js) : sans déclaration, le moteur compte comme à poser depuis le
+   * 28/09/2026 (engine.ts, `moteurAPoser`, Windows). Le faux s'y déclare aussi.
+   */
+  mkdirSync(join(ICI, "maison", ".lmstudio", ".internal"), { recursive: true });
+  writeFileSync(join(ICI, "maison", ".lmstudio", ".internal", "llmster-install-location.json"), JSON.stringify({ path: process.execPath, argv: [], cwd: join(ICI, "maison") }));
   mkdirSync(join(ICI, "espace"));
   symlinkSync(process.execPath, join(BIN, "node"));
   // Le faux `lms` : `ps` rend ce qui est chargé, avec sa taille de conversation ; `load` note ses options.
@@ -7964,6 +7978,23 @@ console.log("\n30. Windows : moteur LM Studio présent mais non déclaré (28/09
     /daemon is not running\|no valid installation\|failed to start or connect to local LM Studio/.test(prov) && /Le moteur des modèles ne démarre pas sur cette machine\./.test(prov),
     "provision.ts",
   );
+}
+
+console.log("\n31. Windows et mise en route : moteur de LM Studio installé en entier, service lancé par l'application, choix du modèle (28/09/2026)");
+{
+  const moteur = readFileSync(join(RACINE, "gateway", "src", "engine.ts"), "utf8");
+  const back = readFileSync(join(RACINE, "gateway", "src", "backends.ts"), "utf8");
+  const main = readFileSync(join(RACINE, "electron", "main.cjs"), "utf8");
+  const mw = readFileSync(join(RACINE, "electron", "moteurWindows.cjs"), "utf8");
+  const prov = readFileSync(join(RACINE, "gateway", "src", "provision.ts"), "utf8");
+  const ecran = readFileSync(join(RACINE, "src", "components", "onboarding", "FirstRun.tsx"), "utf8");
+  verifier("`llmster bootstrap` n'est plus lancé par execFile (sortie bornée à 1 Mo : l'installation était coupée net, sans déclaration)", !/exec\(amorce, \["bootstrap"\]/.test(moteur) && /spawn\(amorce, \["bootstrap"\]/.test(moteur), "engine.ts");
+  verifier("l'installation n'est faite que si elle est déclarée ; sinon un second essai, puis l'erreur avec le diagnostic", /for \(let essai = 1; essai <= 2; essai\+\+\)/.test(moteur) && /existsSync\(lmsDeLlmster\(\)\) && !moteurAPoser\(\)\) break;/.test(moteur), "engine.ts");
+  verifier("sous Windows, `lms daemon up` et `lms server start` passent par l'application (hors du processus utilitaire)", /process\.platform === "win32" && canalOuvert\(\)/.test(back) && /m\.type === "lancer-lms"/.test(main), "backends.ts, main.cjs");
+  verifier("l'application ne lance par ce canal que `lms.exe` du dossier de LM Studio, et seulement `daemon up` ou `server start`", /const COMMANDES = \{ "daemon up": 180_000, "server start": 60_000 \};/.test(mw) && /!permis\.includes\(lms\.toLowerCase\(\)\)/.test(mw), "moteurWindows.cjs");
+  verifier("la sortie de la passerelle est gardée dans un journal sur le poste (passerelle.log)", /ouvrirJournal\(app\.getPath\("logs"\)\)/.test(main) && /passerelle\.log/.test(mw), "main.cjs, moteurWindows.cjs");
+  verifier("un modèle à experts doit tenir dans la mémoire vive seule, même avec une carte NVIDIA", /if \(f\.moe\) return besoin \+ reserve <= hw\.totalMemoryGb;\n    return besoin <= vram;/.test(prov), "provision.ts, tientSur");
+  verifier("l'écran de mise en route propose seulement les modèles qui tiennent, et montre celui qui s'installe", /possibles: modelesQuiTiennent\(hardware\)/.test(readFileSync(join(RACINE, "gateway", "src", "index.ts"), "utf8")) && /const affiche = enCours \?\? choisi;/.test(ecran), "index.ts, FirstRun.tsx");
 }
 
 console.log(`\n${reussis} vérification(s) réussie(s), ${echecs.length} échec(s).`);

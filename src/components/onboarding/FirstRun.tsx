@@ -27,6 +27,9 @@ import { t, tf } from "@/lib/i18n";
 export function FirstRun({ onReady }: { onReady: () => void }) {
   const { status, state, unreachable, start, installerMoteur, refresh } = useProvision();
   const [conditions, setConditions] = useState(false);
+  // Le modèle choisi à la place du recommandé (null : le recommandé), et la liste dépliée.
+  const [choix, setChoix] = useState<string | null>(null);
+  const [listeOuverte, setListeOuverte] = useState(false);
 
   const busy =
     state.phase === "checking" ||
@@ -221,6 +224,22 @@ export function FirstRun({ onReady }: { onReady: () => void }) {
 
   const { hardware, recommended } = status;
   /*
+   * Le modèle choisi (28/09/2026, demandé par Medhi : pouvoir prendre plus
+   * petit, comme pour un modèle cloud). Seuls les modèles qui tiennent sur la
+   * machine sont proposés (`possibles`, provision.ts) : jamais un modèle qui
+   * la ferait saturer. Par défaut, le recommandé.
+   */
+  const possibles = status.possibles?.length ? status.possibles : [recommended];
+  const choisi = possibles.find((m) => m.key === choix) ?? recommended;
+  /*
+   * La carte montre le modèle en cours (vu par Medhi le 28/09/2026 : elle
+   * annonçait « Qwen3.5 35B A3B » pendant que l'erreur parlait de Qwen3 1.7B,
+   * un modèle de repli). Pendant une installation ou après un échec : celui
+   * que la mise en route traite ; sinon, celui qui est choisi.
+   */
+  const enCours = (busy || state.phase === "error") && state.model ? status.catalog.find((m) => m.key === state.model) ?? possibles.find((m) => m.key === state.model) : undefined;
+  const affiche = enCours ?? choisi;
+  /*
    * « Prêt » sans modèle de Chat (modèle d'écran installé depuis les
    * réglages, modèle retiré depuis) : « Commencer » ne menait nulle part.
    * L'écran repropose alors l'installation (revue du 27/09/2026).
@@ -254,16 +273,16 @@ export function FirstRun({ onReady }: { onReady: () => void }) {
       {/* Modèle recommandé */}
       <div className="mt-4 w-full max-w-md rounded-2xl border border-border bg-card p-4 text-left">
         <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-          {t("Recommandé pour votre machine")}
+          {affiche.key === recommended.key ? t("Recommandé pour votre machine") : t("Modèle choisi")}
         </p>
         <div className="mt-1.5 flex items-baseline justify-between gap-3">
-          <span className="font-medium text-foreground">{recommended.label}</span>
+          <span className="font-medium text-foreground">{affiche.label}</span>
           <span className="text-xs text-muted-foreground">
-            {tf("environ {0} Go", recommended.downloadGb)}
+            {tf("environ {0} Go", affiche.downloadGb)}
           </span>
         </div>
-        <p className="mt-1 whitespace-pre-line text-sm text-muted-foreground">{recommended.description}</p>
-        {recommended.verifie === false && (
+        <p className="mt-1 whitespace-pre-line text-sm text-muted-foreground">{affiche.description}</p>
+        {affiche.verifie === false && (
           <p className="mt-1 text-xs text-muted-foreground">
             {t("S'il ne se charge pas, un autre modèle adapté à la machine prend le relais.")}
           </p>
@@ -305,10 +324,49 @@ export function FirstRun({ onReady }: { onReady: () => void }) {
         )}
       </div>
 
+      {/* Choisir un autre modèle : seulement ceux qui tiennent sur la machine. */}
+      {!busy && !pret && possibles.length > 1 && (
+        <div className="w-full max-w-md text-left">
+          <button
+            type="button"
+            className="text-sm text-muted-foreground underline underline-offset-2 hover:text-foreground"
+            aria-expanded={listeOuverte}
+            onClick={() => setListeOuverte((o) => !o)}
+          >
+            {listeOuverte ? t("Masquer les autres modèles") : t("Choisir un autre modèle")}
+          </button>
+          {listeOuverte && (
+            <div className="mt-2 space-y-1.5" role="radiogroup" aria-label={t("Modèles adaptés à cette machine")}>
+              <p className="text-xs text-muted-foreground">
+                {t("Seuls les modèles que cette machine fait tourner sans ralentir sont proposés. Un modèle plus léger répond plus vite, avec des réponses plus simples.")}
+              </p>
+              {possibles.map((m) => (
+                <label
+                  key={m.key}
+                  className={cn(
+                    "flex cursor-pointer items-center gap-3 rounded-xl border px-3 py-2 text-sm",
+                    m.key === choisi.key ? "border-primary bg-muted" : "border-border hover:bg-muted",
+                  )}
+                >
+                  <input type="radio" name="modele-mise-en-route" checked={m.key === choisi.key} onChange={() => setChoix(m.key)} />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate font-medium text-foreground">{m.label}</span>
+                    <span className="block text-xs text-muted-foreground">
+                      {m.key === recommended.key ? `${t("Recommandé")} · ` : ""}
+                      {tf("environ {0} Go", m.downloadGb)}
+                    </span>
+                  </span>
+                </label>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Où ira le modèle, et la place qu'il y a : avant « Installer et démarrer ». */}
       {!busy && !pret && (
         <div className="mt-3 flex w-full justify-center">
-          <EmplacementModeles onChange={refresh} />
+          <EmplacementModeles onChange={refresh} modeleChoisi={choisi.key === recommended.key ? undefined : choisi} />
         </div>
       )}
 
@@ -318,7 +376,7 @@ export function FirstRun({ onReady }: { onReady: () => void }) {
             {t("Commencer")}
           </Button>
         ) : (
-          <Button icon={Download} disabled={busy} onClick={() => start()}>
+          <Button icon={Download} disabled={busy} onClick={() => start(choisi.key === recommended.key ? undefined : choisi.key)}>
             {busy ? t("Installation en cours...") : t("Installer et démarrer")}
           </Button>
         )}

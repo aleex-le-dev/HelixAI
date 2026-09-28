@@ -46,6 +46,8 @@ interface Status {
   hardware: Hardware;
   recommended: CatalogEntry;
   catalog: CatalogEntry[];
+  /** Les modèles que la machine fait tourner sans risque, du mieux noté au moins bien noté (le seul choix proposé). */
+  possibles?: CatalogEntry[];
   hasChatModel: boolean;
   /** Le moteur d'exécution des modèles est-il présent sur la machine ? */
   moteurInstalle: boolean;

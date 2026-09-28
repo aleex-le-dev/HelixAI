@@ -2,7 +2,7 @@ import { execFileSync, spawn } from "node:child_process";
 import os from "node:os";
 import { readdirSync, statSync, type Dirent } from "node:fs";
 import { join } from "node:path";
-import { backendById, faireLaPlace, findLms, lmStudioRepond, optionsDeChargement } from "./backends.ts";
+import { backendById, ensureLmStudioServer, faireLaPlace, findLms, lmStudioRepond, optionsDeChargement } from "./backends.ts";
 import { nomProduit } from "./marque.ts";
 import { langue, t, tf } from "./langue.ts";
 import { noteDuModele } from "./notesModeles.ts";
@@ -258,7 +258,16 @@ export function tientSur(hw: Hardware, f: { downloadGb: number; moe?: boolean; k
   const reserve = Math.min(8, Math.max(3, hw.totalMemoryGb * 0.3));
   if (hw.appleSilicon) return besoin + reserve <= hw.totalMemoryGb;
   if (vram >= 6) {
-    if (f.moe) return besoin + reserve <= vram + hw.totalMemoryGb;
+    /*
+     * Un modèle à experts ne compte plus sur la carte pour tenir (28/09/2026,
+     * demandé par Medhi : « pas de modèles trop puissants qui vont tout faire
+     * crasher »). En additionnant la carte et la mémoire vive, un PC de 32 Go
+     * avec 8 Go de carte se voyait conseiller Qwen3.5 35B A3B (20 Go, 34 Go
+     * avec son cache et la réserve), et un PC de 16 Go gpt-oss 20B : la machine
+     * au bord de la saturation. Il doit maintenant tenir dans la mémoire vive
+     * seule, réserve comprise ; la carte n'est qu'une marge.
+     */
+    if (f.moe) return besoin + reserve <= hw.totalMemoryGb;
     return besoin <= vram;
   }
   if (f.moe) return besoin + reserve <= hw.totalMemoryGb;
@@ -375,6 +384,17 @@ export function adaptesALaMachine(hw: Hardware): (CatalogEntry & { role: "chat" 
       .slice(0, 3)
       .map((e) => ({ ...e, role: "gui" as const, recommande: e.key === conseilEcran })),
   ];
+}
+
+/**
+ * Les modèles de conversation que cette machine fait tourner sans risque,
+ * pour l'écran de mise en route (28/09/2026, demandé par Medhi : pouvoir
+ * choisir plus petit, comme pour un modèle cloud, mais jamais un modèle trop
+ * lourd pour la machine). Tous ceux qui tiennent (`tientSur`), du mieux noté
+ * au moins bien noté, avec le moteur qui sert ici ; aucun autre n'est proposé.
+ */
+export function modelesQuiTiennent(hw: Hardware): CatalogEntry[] {
+  return classement(hw, moteurOuvert() ? catalogueOuvert() : CATALOG, false);
 }
 
 export function recommend(hw: Hardware): CatalogEntry {
@@ -760,6 +780,14 @@ async function provision(
     });
     return state;
   }
+
+  /*
+   * Le service de LM Studio d'abord, par la voie de l'application sous Windows
+   * (backends.ts, `lancerLms`, 28/09/2026) : sans lui, `lms get` le démarrait
+   * lui-même depuis la passerelle, là où il ne démarrait pas (« Timed out
+   * waiting for LM Studio daemon to start »). Sans effet s'il tourne déjà.
+   */
+  await ensureLmStudioServer().catch(() => false);
 
   const hw = detectHardware();
   const start = requested

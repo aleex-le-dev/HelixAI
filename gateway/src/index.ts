@@ -60,6 +60,7 @@ import {
   catalogueOuvert,
   conseilPourLaMachine,
   miseEnRouteEnCours,
+  modelesQuiTiennent,
 } from "./provision.ts";
 import { choisirEmplacement, etatEmplacement, moteurLocal, placeNecessaire, verifierEmplacement, type MoteurLocal } from "./emplacementModeles.ts";
 import { moteurOuvert } from "./llamaCppBase.ts";
@@ -630,6 +631,8 @@ async function handleProvisionStatus(res: http.ServerResponse): Promise<void> {
   send(res, 200, {
     hardware,
     recommended: conseilPourLaMachine(hardware),
+    // Ce que la personne peut choisir à la place du conseillé : seulement ce qui tient sur la machine (provision.ts).
+    possibles: modelesQuiTiennent(hardware),
     catalog: ouvert ? catalogueOuvert() : CATALOG,
     // Le moteur que l'écran de mise en route présente : LM Studio (conditions à accepter) ou llama.cpp (MIT, rien à accepter).
     moteur: ouvert ? "llamacpp" : "lmstudio",

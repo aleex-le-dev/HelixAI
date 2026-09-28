@@ -29,6 +29,7 @@ const path = require("node:path");
 const http = require("node:http");
 const fs = require("node:fs");
 const os = require("node:os");
+const moteurWindows = require("./moteurWindows.cjs");
 const { pathToFileURL } = require("node:url");
 const { lancerPasserelle, envoyerALaPasserelle, arreterPasserelle } = require("./passerelle.cjs");
 
@@ -168,6 +169,8 @@ const ATTENTE_MAX_MS = 30_000;
 
 /** Banc d'essai des pages de Helix Code (electron/rendu.cjs), démarré une fois, prêté à la passerelle. */
 let rendu = null;
+/** Le journal de la passerelle (passerelle.log, dossier des journaux de l'application). */
+let journalPasserelle = null;
 
 async function startGateway() {
   if (!rendu && app.isReady()) rendu = await demarrerRendu().catch(() => null);
@@ -224,6 +227,11 @@ async function startGateway() {
       reponsesPasserelle.get(m.id)?.(m);
       return;
     }
+    // Windows : le service de LM Studio lancé d'ici, comme avant la 2026.928.6 (electron/moteurWindows.cjs).
+    if (m.type === "lancer-lms") {
+      void moteurWindows.lancerLms(m).then((r) => envoyerALaPasserelle(enfant, { type: "lancer-lms", id: m.id, ...r }));
+      return;
+    }
     if (m.type !== "permission-ecran") return;
     let statut = "inconnu";
     try {
@@ -235,10 +243,17 @@ async function startGateway() {
   });
   gateway = enfant;
 
-  enfant.stdout?.on("data", (b) => process.stdout.write(`[passerelle] ${b}`));
+  // Gardée aussi dans un fichier : la console de l'application ne se voit pas sur un poste (electron/moteurWindows.cjs).
+  journalPasserelle ??= moteurWindows.ouvrirJournal(app.getPath("logs"));
+  const noter = (b) => journalPasserelle?.write(`${new Date().toISOString()} ${b}${String(b).endsWith("\n") ? "" : "\n"}`);
+  enfant.stdout?.on("data", (b) => {
+    process.stdout.write(`[passerelle] ${b}`);
+    noter(b);
+  });
   enfant.stderr?.on("data", (b) => {
     const texte = String(b);
     process.stderr.write(`[passerelle] ${texte}`);
+    noter(b);
     /*
      * Port déjà pris : le diagnostic doit être explicite. C'est le cas d'un
      * second Helix ouvert, ou d'un serveur de développement laissé en marche.

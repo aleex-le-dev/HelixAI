@@ -15,6 +15,7 @@ import { fournisseurDuBackend } from "./prixPublies.ts";
 // Cycle voulu (provision.ts importe ce module) : `detectHardware` n'est appelée qu'au chargement d'un modèle, jamais à l'import.
 import { calculSurProcesseur, detectHardware, relaisApresDefaillance } from "./provision.ts";
 import { aEssayer, essayerModele, noterEssai } from "./santeModeles.ts";
+import { canalOuvert, ecouterLApplication, envoyerALApplication } from "./canalApplication.ts";
 
 const exec = promisify(execFile);
 
@@ -206,6 +207,58 @@ async function repond(url: string): Promise<boolean> {
  * S'assure que le serveur LM Studio écoute. Renvoie `true` s'il répond à la
  * sortie, que ce soit parce qu'il tournait déjà ou parce qu'on l'a démarré.
  */
+let numeroLancement = 0;
+
+/**
+ * `lms daemon up` et `lms server start`, lancés sous Windows par le processus
+ * principal de l'application (electron/moteurWindows.cjs, 28/09/2026) : lancé
+ * d'ici, dans le `utilityProcess` d'Electron, le service de LM Studio ne
+ * démarrait pas chez plusieurs personnes (« Timed out waiting for LM Studio
+ * daemon to start »), alors qu'il démarrait jusqu'à la 2026.928.5, quand la
+ * passerelle était un processus ordinaire. Ailleurs, ou sans application
+ * (serveur, essais), comme avant. Rejette comme `execFile` en cas d'échec.
+ */
+async function lancerLms(lms: string, commande: "daemon up" | "server start", delaiMs: number): Promise<void> {
+  if (process.platform === "win32" && canalOuvert()) {
+    const id = ++numeroLancement;
+    const r = await new Promise<{ code?: unknown; fin?: unknown } | null>((resolve) => {
+      const minuterie = setTimeout(() => {
+        arreter();
+        resolve(null);
+      }, delaiMs + 15_000);
+      const arreter = ecouterLApplication((m) => {
+        const msg = m as { type?: unknown; id?: unknown; code?: unknown; fin?: unknown } | null;
+        if (!msg || msg.type !== "lancer-lms" || msg.id !== id) return;
+        clearTimeout(minuterie);
+        arreter();
+        resolve(msg);
+      });
+      if (!envoyerALApplication({ type: "lancer-lms", id, lms, commande })) {
+        clearTimeout(minuterie);
+        arreter();
+        resolve(null);
+      }
+    });
+    // Une application trop ancienne pour ce message (aucune réponse) : lancé d'ici, comme avant.
+    if (r) {
+      if (r.code === 0) return;
+      throw Object.assign(new Error(`lms ${commande} : code ${String(r.code)}`), { stderr: typeof r.fin === "string" ? r.fin : "" });
+    }
+  }
+  await exec(lms, commande.split(" "), { timeout: delaiMs });
+}
+
+/** Le service de LM Studio tourne-t-il ? (`lms daemon status`, sans rien démarrer.) */
+async function serviceLmStudioEnMarche(lms: string): Promise<boolean> {
+  try {
+    const { stdout } = await exec(lms, ["daemon", "status", "--json"], { timeout: 15_000 });
+    const etat = JSON.parse(String(stdout).trim() || "{}") as { running?: unknown; status?: unknown };
+    return etat.running === true || etat.status === "running";
+  } catch {
+    return false;
+  }
+}
+
 export async function ensureLmStudioServer(): Promise<boolean> {
   if (!LMSTUDIO_URL) return false;
   // Avant tout, même serveur déjà en marche : sans ce dossier, llmster ne charge aucun modèle (engine.ts).
@@ -255,13 +308,26 @@ export async function ensureLmStudioServer(): Promise<boolean> {
    * elle, partagée, qui sert.
    */
   if (moteurSansInterface()) {
-    await exec(lms, ["daemon", "up"], { timeout: 180_000 }).catch((err) =>
-      console.error("[helix] `lms daemon up` en échec :", String((err as { stderr?: unknown }).stderr ?? (err as Error).message ?? err).slice(-300)),
+    const leve = await lancerLms(lms, "daemon up", 180_000).then(
+      () => true,
+      (err) => {
+        console.error("[helix] `lms daemon up` en échec :", String((err as { stderr?: unknown }).stderr ?? (err as Error).message ?? err).slice(-300));
+        return false;
+      },
     );
+    /*
+     * Premier démarrage lent (28/09/2026) : `lms` abandonne au bout d'une
+     * minute (« Timed out waiting for LM Studio daemon to start »), alors que
+     * le service, sous Windows, peut mettre plus longtemps (l'antivirus lit
+     * ses milliers de fichiers). On attend encore, jusqu'à trois minutes.
+     */
+    if (!leve) {
+      for (let i = 0; i < 36 && !(await serviceLmStudioEnMarche(lms)); i++) await new Promise((r) => setTimeout(r, 5000));
+    }
   }
   try {
     console.log("[helix] serveur LM Studio arrêté, démarrage...");
-    await exec(lms, ["server", "start"], { timeout: 60_000 });
+    await lancerLms(lms, "server start", 60_000);
   } catch (err) {
     /*
      * macOS : l'application LM Studio posée mais jamais ouverte (vu sur un

@@ -1,4 +1,4 @@
-import { execFile, execFileSync } from "node:child_process";
+import { execFile, execFileSync, spawn } from "node:child_process";
 import { promisify } from "node:util";
 import { createHash } from "node:crypto";
 import { createWriteStream, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, realpathSync, statSync } from "node:fs";
@@ -539,6 +539,43 @@ function bibliothequesManquantes(): string[] {
 }
 
 
+/**
+ * Lance `llmster bootstrap` comme le fait l'installateur officiel : variables
+ * de l'installateur, dossier de l'archive ouverte, sortie lue au fil de l'eau
+ * sans limite (seules les 8 000 dernières lettres sont gardées). Dix minutes
+ * au plus : un service qui garderait la sortie ouverte ne bloque pas Helix.
+ */
+export function amorcer(amorce: string): Promise<{ code: number | null; signal: NodeJS.Signals | null; fin: string }> {
+  return new Promise((resolve) => {
+    let fin = "";
+    const garder = (b: Buffer) => {
+      fin = (fin + b.toString()).slice(-8000);
+    };
+    const enfant = spawn(amorce, ["bootstrap"], {
+      /*
+       * Le dossier personnel, comme l'installateur officiel lancé d'un
+       * terminal : la déclaration de LM Studio garde un dossier de travail
+       * (`cwd`, lmstudio-js), et celui de l'archive est effacé juste après.
+       */
+      cwd: homedir(),
+      env: { ...process.env, LMS_BOOTSTRAP_INSTALL_SH: "1", LMS_NO_MODIFY_PATH: "1" },
+      stdio: ["ignore", "pipe", "pipe"],
+      windowsHide: true,
+    });
+    enfant.stdout.on("data", garder);
+    enfant.stderr.on("data", garder);
+    const garde = setTimeout(() => enfant.kill(), 600_000);
+    enfant.on("error", (err) => {
+      clearTimeout(garde);
+      resolve({ code: -1, signal: null, fin: `${fin}\n${err.message}` });
+    });
+    enfant.on("close", (code, signal) => {
+      clearTimeout(garde);
+      resolve({ code, signal, fin });
+    });
+  });
+}
+
 async function installerLlmster(onProgress: (p: EngineProgress) => void): Promise<string> {
   // Emplacement choisi introuvable, ou moteur déjà posé ailleurs : dit avant de télécharger quoi que ce soit.
   const incoherence = incoherenceEmplacement();
@@ -611,22 +648,33 @@ async function installerLlmster(onProgress: (p: EngineProgress) => void): Promis
     const amorce = join(dossier, process.platform === "win32" ? "llmster.exe" : "llmster");
     if (!existsSync(amorce)) throw new Error(t("L'archive du moteur ne contient pas ce qui était attendu. Installation interrompue."));
     // Ce que fait l'installateur officiel, sans toucher au PATH ni aux profils du terminal.
-    try {
-      await exec(amorce, ["bootstrap"], {
-        timeout: 600_000,
-        env: { ...process.env, LMS_BOOTSTRAP_INSTALL_SH: "1", LMS_NO_MODIFY_PATH: "1" },
-      });
-    } catch (err) {
-      /*
-       * `lms` posé malgré l'erreur (délai dépassé parce qu'un service garde la
-       * sortie ouverte, par exemple) : l'installation est faite, on continue
-       * en le notant (revue Windows du 27/09/2026, supposé, pas vu).
-       */
-      if (!existsSync(lmsDeLlmster())) {
+    /*
+     * `llmster bootstrap`, sans garder sa sortie en mémoire (28/09/2026).
+     * Lancé jusqu'ici par `execFile`, dont la mémoire de sortie est bornée à
+     * 1 Mo : au-delà, le programme est arrêté net. Vu chez plusieurs personnes
+     * sous Windows (2026.928.6) : `lms.exe` était déjà copié, la déclaration de
+     * l'installation (`llmster-install-location.json`) jamais écrite, et Helix,
+     * qui ne regardait que `lms.exe`, passait au modèle ; chaque téléchargement
+     * finissait sur « LM Studio daemon is not running and no valid installation
+     * could be found ». L'installateur officiel (install.ps1) laisse la sortie
+     * au terminal, sans borne. Ici, seule la fin est gardée, pour le journal.
+     * Et l'installation n'est faite que si elle est déclarée : sinon, un second
+     * essai, puis l'erreur avec ce que le dossier de LM Studio contient.
+     */
+    for (let essai = 1; essai <= 2; essai++) {
+      const issue = await amorcer(amorce);
+      if (issue.code !== 0) console.warn(`[helix] llmster bootstrap (essai ${essai}) : code ${issue.code ?? issue.signal}, fin de sortie : ${issue.fin.slice(-600)}`);
+      if (existsSync(lmsDeLlmster()) && !moteurAPoser()) break;
+      if (essai === 2) {
         const autrePart = incoherenceEmplacement(true);
-        throw autrePart ? new Error(autrePart) : err;
+        if (autrePart) throw new Error(autrePart);
+        console.error(`[helix] moteur posé mais non déclaré : ${diagnosticInstallation()}`);
+        throw new Error(
+          existsSync(lmsDeLlmster())
+            ? t("Le moteur s'est installé, mais LM Studio ne le reconnaît pas. Réessayez ; si cela se répète, installez LM Studio depuis lmstudio.ai et ouvrez-le une fois.")
+            : t("Le moteur s'est installé, mais son outil `lms` est introuvable. Réessayez, ou installez LM Studio depuis lmstudio.ai."),
+        );
       }
-      console.warn("[helix] llmster bootstrap en erreur, mais `lms` est posé :", err instanceof Error ? err.message : err);
     }
     // Posé ailleurs qu'à l'emplacement choisi : dit tel quel (le prochain essai s'arrête avant de retélécharger).
     const ailleursQueChoisi = incoherenceEmplacement(true);
@@ -638,10 +686,6 @@ async function installerLlmster(onProgress: (p: EngineProgress) => void): Promis
      * (`llmster-install-location.json`). Absente, Helix redemanderait
      * l'installation en boucle, 600 Mo à chaque fois (revue du 27/09/2026).
      */
-    if (moteurAPoser()) {
-      console.error(`[helix] moteur posé mais non déclaré : ${diagnosticInstallation()}`);
-      throw new Error(t("Le moteur s'est installé, mais LM Studio ne le reconnaît pas. Réessayez ; si cela se répète, installez LM Studio depuis lmstudio.ai et ouvrez-le une fois."));
-    }
     preparerDossiersLlmster();
     onProgress({ phase: "pret", message: tf("Moteur installé (version {0}).", version), percent: 100 });
     return lms;

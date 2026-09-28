@@ -30,7 +30,16 @@ import { t, taille, tf } from "@/lib/i18n";
  *    installé (la passerelle ne déplace pas le dossier d'un LM Studio qui
  *    tourne, gateway/src/emplacementModeles.ts).
  */
-export function EmplacementModeles({ reglages = false, onChange }: { reglages?: boolean; onChange?: () => void }) {
+export function EmplacementModeles({
+  reglages = false,
+  onChange,
+  modeleChoisi,
+}: {
+  reglages?: boolean;
+  onChange?: () => void;
+  /** Le modèle choisi à la mise en route, quand ce n'est pas le conseillé (FirstRun.tsx, 28/09/2026) : la place se compte pour lui. */
+  modeleChoisi?: { label: string; downloadGb: number };
+}) {
   const [etat, setEtat] = useState<EtatEmplacement | null>(null);
   const [erreur, setErreur] = useState<string | null>(null);
   const [saisie, setSaisie] = useState(false);
@@ -73,7 +82,14 @@ export function EmplacementModeles({ reglages = false, onChange }: { reglages?: 
   const windows = /^[A-Za-z]:\\/.test(etat.habituel);
   const exemple = windows ? "D:\\Modeles" : "/Volumes/Disque";
   // À la mise en route seulement : dans les réglages, le modèle conseillé est souvent déjà là.
-  const manque = !reglages && etat.libre !== null && etat.libre < etat.necessaire;
+  /*
+   * La place pour le modèle choisi, pas pour le conseillé (vu le 28/09/2026 :
+   * Qwen3 4B coché, l'encadré comptait encore Qwen3.5 9B). La part du moteur
+   * et la marge restent celles que l'instance a comptées.
+   */
+  const modele = modeleChoisi ?? etat.modele;
+  const necessaire = etat.necessaire - Math.round(etat.modele.downloadGb * 1e9) + Math.round(modele.downloadGb * 1e9);
+  const manque = !reglages && etat.libre !== null && etat.libre < necessaire;
   const selecteur = selecteurDossier();
 
   /** Applique un choix (ou le retour à l'emplacement habituel). */
@@ -144,8 +160,12 @@ export function EmplacementModeles({ reglages = false, onChange }: { reglages?: 
           ` ${
             // Le moteur ouvert (11 Mo) reste dans les données de l'instance : seul le modèle compte ici.
             etat.moteurPose || etat.moteur === "llamacpp"
-              ? tf("Il faut environ {0} pour le modèle conseillé ({1}).", taille(etat.necessaire), etat.modele.label)
-              : tf("Il faut environ {0} pour le moteur et le modèle conseillé ({1}).", taille(etat.necessaire), etat.modele.label)
+              ? modeleChoisi
+                ? tf("Il faut environ {0} pour le modèle choisi ({1}).", taille(necessaire), modele.label)
+                : tf("Il faut environ {0} pour le modèle conseillé ({1}).", taille(necessaire), modele.label)
+              : modeleChoisi
+                ? tf("Il faut environ {0} pour le moteur et le modèle choisi ({1}).", taille(necessaire), modele.label)
+                : tf("Il faut environ {0} pour le moteur et le modèle conseillé ({1}).", taille(necessaire), modele.label)
           }`}
         {etat.moteur === "llamacpp" && (etat.occupe ?? 0) > 0 && ` ${tf("Les modèles posés occupent {0}.", taille(etat.occupe ?? 0))}`}
       </p>

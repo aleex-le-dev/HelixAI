@@ -81,13 +81,23 @@ interface Place {
   yNom: number;
 }
 
-/** Descend chaque nom jusqu'à ce qu'il ait sa place, sans bouger le point, qui dit quelque chose de vrai. */
+/**
+ * Descend chaque nom jusqu'à ce qu'il ait sa place, sans bouger le point, qui
+ * dit quelque chose de vrai.
+ *
+ * Les noms s'écrivent à droite des points, pas au-dessus (tournée de la
+ * 2026.928.3, SECURITE.md § 43) : centrés sur la colonne, un nom descendu pour
+ * laisser la place au précédent tombait sur le point suivant. Vu à l'écran avec
+ * kimi-k2, gpt-oss-20b et qwen3-8b, notés à un point d'écart : « gpt-oss-20b »
+ * et « qwen3-8b » barrés par un point. Les points sont tous sur une même
+ * verticale, les noms à côté : aucun ne peut plus en couvrir un.
+ */
 function empiler(entrees: { modele: GatewayModel; note: ModeleNote }[], hauteurDe: (n: number) => number): Place[] {
   const poses: Place[] = [];
   let precedent = -Infinity;
   for (const e of [...entrees].sort((a, b) => b.note.eci - a.note.eci)) {
     const py = hauteurDe(e.note.eci);
-    const yNom = Math.max(py - 10, precedent + 16);
+    const yNom = Math.max(py + 4, precedent + 14);
     precedent = yNom;
     poses.push({ ...e, py, yNom });
   }
@@ -198,8 +208,11 @@ export function ComparerModeles({
 
   const gauche = empiler(machine, hauteurDe);
   const droite = empiler(sansPrix, hauteurDe);
+  // Centre des colonnes (leur titre), et la verticale de leurs points, à gauche des noms.
   const xGauche = MARGE.gauche + BANDE / 2;
   const xDroite = LARGEUR - MARGE.droite - BANDE / 2;
+  const pointsGauche = MARGE.gauche + 8;
+  const pointsDroite = LARGEUR - MARGE.droite - BANDE + 8;
 
   const rang = actuel?.note
     ? [...MODELES_NOTES].sort((a, b) => b.eci - a.eci).findIndex((m) => m.nom === actuel.note?.nom) + 1
@@ -270,18 +283,20 @@ export function ComparerModeles({
     v.toLocaleString(locale(), { style: "currency", currency: "USD", maximumFractionDigits: v < 0.1 ? 3 : 2 });
   const nombre = (v: number) => v.toLocaleString(locale(), { maximumFractionDigits: 2 });
 
-  /** Un modèle de la personne dans une bande : point plein, nom au-dessus. */
+  /** Un modèle de la personne dans une bande : point plein, nom à sa droite (20 caractères, le nom entier au survol). */
   const pointDeBande = (p: Place, cx: number) => {
     const actif = p.modele.uid === choisi;
     return (
       <g key={p.modele.uid}>
+        {/* Un nom descendu loin de son point y reste relié par un trait. */}
+        {p.yNom - 4 - p.py > 3 && <line x1={cx + 5} y1={p.py} x2={cx + 11} y2={p.yNom - 4} className="stroke-border" strokeWidth={1} />}
         <text
-          x={cx}
+          x={cx + 12}
           y={p.yNom}
-          textAnchor="middle"
+          textAnchor="start"
           className={cn("fill-foreground text-[11px]", actif ? "font-semibold" : "font-medium")}
         >
-          {nomCourt(p.modele.id)}
+          {p.modele.id.length > 20 ? `${p.modele.id.slice(0, 19)}…` : p.modele.id}
         </text>
         <circle
           cx={cx}
@@ -411,7 +426,7 @@ export function ComparerModeles({
                   <text x={xGauche} y={HAUTEUR - MARGE.bas + 16} textAnchor="middle" className="fill-muted-foreground text-[11px]">
                     {t("sans frais d'API")}
                   </text>
-                  {gauche.map((p) => pointDeBande(p, xGauche))}
+                  {gauche.map((p) => pointDeBande(p, pointsGauche))}
                 </g>
               )}
 
@@ -429,7 +444,7 @@ export function ComparerModeles({
                   <text x={xDroite} y={MARGE.haut - 12} textAnchor="middle" className="fill-muted-foreground text-[11px]">
                     {t("Cloud, prix non relevé")}
                   </text>
-                  {droite.map((p) => pointDeBande(p, xDroite))}
+                  {droite.map((p) => pointDeBande(p, pointsDroite))}
                 </g>
               )}
 

@@ -4647,3 +4647,93 @@ Le vrai service : la connexion (l'écran de consentement de x.com, l'adresse de 
 de `scope`), la rotation du jeton d'actualisation, une lecture et une publication réelles,
 l'envoi réel d'une image, la révocation, les messages d'erreur réels (402, 403, 429), le compte
 des caractères sur des cas limites (adresses sans « http », drapeaux, caractères rares).
+
+## 43. Tournée de la 2026.928.3 (28 septembre 2026)
+
+Demandée par Medhi, sur la branche `tournee-928-3`, partie de `main` au commit « Connecteur X : son
+logo officiel dans la liste ». Périmètre : ce qui a changé depuis `v2026.928.2` (connecteur X, logos
+officiels, retrait des mentions « pas encore essayé », fusions). Instances jetables seulement
+(`"chiffrement": "fichier"`, dossier de données temporaire, LM Studio et exo éteints), faux serveurs
+d'`essai-natifs.mjs`, faux modèles ; jamais le vrai X, ni `security`, ni `lms`. L'écran a été vu dans
+une fenêtre Electron cachée, contre une passerelle jetable et `vite` (le navigateur intégré était
+occupé par une autre session). Chaque faille ci-dessous a été reproduite, corrigée à la racine, et a
+son contrôle, qui échoue sur le code d'avant et réussit après : `scripts/essai-natifs.mjs` (sections
+H et F, reprises par `npm run securite` sous « natifs : ») et `scripts/securite.mjs`, section
+15 septies.
+
+### 43.1 Failles et bugs corrigés
+
+| Gravité | Composant | Ce qui se passait | Correctif | Contrôle |
+|---|---|---|---|---|
+| Moyenne | Dossier de l'équipe (`espace.ts`, `GET /helix/espace/fichier`) | Trouvé en cherchant le même piège que l'image de X ailleurs. Le fichier était ouvert par `openSync` sans `O_NONBLOCK` : un tube nommé (FIFO) du dossier faisait attendre l'ouverture un écrivain, et avec elle **toute la passerelle** (appel synchrone). Essayé : une personne connectée demande `tuyau.txt`, la passerelle ne répond plus, `/health` compris, jusqu'à ce qu'on la tue. Il faut qu'un tube existe dans le dossier (créé sur la machine, ou par un agent qui a un terminal). | `O_NONBLOCK` à l'ouverture : le tube s'ouvre tout de suite, `isFile` le refuse (400). Sans effet sur un fichier ordinaire. | 15 septies (processus à part, durée bornée) |
+| Faible | Image de X et vidéo TikTok (`outilsNatifs.ts`, `fichierDuDossier`) | Même cause, en asynchrone : un tube nommé `tuyau.png` gardait l'outil `x__publier` bloqué pour toujours (essayé : rien au bout de 3 s), et un fil du réservoir de libuv avec lui (quatre par défaut, partagés par tous les accès disque). Il fallait que l'administrateur accepte la carte. | `O_NONBLOCK`, même raison. | essai F (1), 15 septies (1) |
+| Faible | Poids d'un post X (`poidsX`) | Une adresse allait jusqu'au premier blanc (`\S+`) et pesait 23. Essayé : `https://a.fr/` suivi de 200 caractères chinois (poids réel 423), ou de mots séparés par le blanc du braille (U+2800, qui n'est pas un blanc pour `\s`, 413 caractères) : comptés 23, envoyés à X, qui les aurait refusés. La carte montrait bien tout le texte : c'est la borne des 280 qui ne tenait pas. | L'adresse ne prend que les caractères ASCII d'une adresse (RFC 3986, sans parenthèses) et rend sa ponctuation finale au texte, comme twitter-text : en cas de doute on compte plus que X, jamais moins. | essai F (2), 15 septies (1) |
+| Faible | Publications natives (`sousGarde`) | Un envoi sans réponse claire (X répond 5xx, délai dépassé, connexion coupée) rendait sa place comme un refus. Essayé : `x__publier` reçoit 503, le modèle relance le même post, une seconde carte est acceptée, et le post part deux fois ; or un 503 ne dit pas que rien n'est parti. Vaut pour les huit services. | L'issue incertaine garde sa place : le même contenu n'est pas renvoyé pendant une demi-heure, et le message dit « c'est peut-être déjà publié, vérifiez sur le service ». Un certificat refusé, lui, n'a rien laissé partir. | essai F (1) |
+| Faible | Connexion à X sans crédit (`identite`) | Lire le compte est facturé : sans crédit, X refuse la connexion (402). La page de retour disait « X n'a pas laissé lire le compte avec l'accès accordé (code 402) », sans dire qu'il faut acheter des crédits. | Message propre au 402 : « l'application X de l'organisation n'a probablement pas de crédits ; achetez-en dans la console de X, puis reconnectez-vous » (fr, en, zh, ja). Côté outil, le 402 était déjà dit et envoyé une seule fois, sans reprise (vérifié, contrôle ajouté). | essai H (1), essai F (1) |
+| Faible | Adresse de retour de X (`adresseDeRetour`) | « localhost » était toujours réécrit en 127.0.0.1. Avec `HELIX_GATEWAY_HOST=::1`, ou `localhost` (que macOS résout d'abord en ::1), la passerelle n'écoute pas sur 127.0.0.1 : essayé, l'adresse montrée ne menait à rien (connexion refusée), et la connexion à X ne pouvait pas aboutir. | La passerelle note l'adresse qu'elle a vraiment ouverte (`noterEcoute`) ; « localhost » devient 127.0.0.1 si elle y écoute (127.0.0.1, 0.0.0.0, ::), `[::1]` sinon. X ne dit pas s'il accepte `[::1]`. | 15 septies (1) |
+| Faible | Générateur de logos (`gen-marques.cjs`) | Le contrôle ne cherchait que `url(` en minuscules. Essayé sur des fichiers piégés, dans une copie du générateur en dossier temporaire : `fill="URL(https://…)"`, `u\72l(…)`, `mask="\75rl(//…)"`, une classe `.a{fill:URL(…)}` et `image-set(…)` passaient jusqu'à `marques.ts`. Le navigateur lit ces valeurs comme du CSS, où les noms de fonction ignorent la casse et s'écrivent avec des échappements. La politique de contenu de l'application (`img-src 'self' data: blob:`, `default-src 'self'`) aurait bloqué la requête ; la promesse « aucune adresse externe » du générateur, elle, ne tenait pas. `<script>`, `onload`, `<foreignObject>`, `href`, `<use>`, `<set>` étaient déjà refusés (essayé). | Refus de tout échappement, de toute entité, de toute fonction hors d'une liste (transformations, couleurs, `url(#…)`), de toute `url()` qui ne vise pas le dessin, en toute casse. | 15 septies (2) |
+| Faible | Identifiants des logos (`gen-marques.cjs`) | Les `id` des dessins sont renommés et préfixés au rendu (aucun dégradé volé, vérifié à l'écran : aucune référence cassée, aucun doublon) ; celui de la racine `<svg>` passait tel quel, sans préfixe : « Layer_1 » chez GitLab et Together, deux fois sur la page, et un kit pouvait y mettre « root ». | L'`id` de la racine est retiré (rien ne le désigne ; une référence vers lui ferait échouer le script). | 15 septies (2) |
+| Faible | Contrôle du § 15 quinquies (`securite.mjs`) | Il visait les phrases « pas encore essayé », et prenait aussi des phrases légitimes : « Vous n'avez pas encore essayé ce modèle », « Your email address is not yet verified », une clause de licence « fourni sans garantie », des prix « donnés sans garantie », l'avertissement de Google écrit « 此应用尚未经过 Google 验证 », « 保証はありません ». Chacune aurait fait échouer `npm run securite`, et poussé à retirer une phrase juste. | Motifs resserrés sur ce qui parle de l'essai du logiciel ; témoins : neuf phrases légitimes non prises, les vingt-deux phrases retirées le 28/09 (fr, en, zh, ja) toujours vues. | 15 septies (2) |
+| Faible | Comparer les modèles (`ComparerModeles.tsx`) | Dans les colonnes « Sur votre machine » et « Cloud, prix non relevé », les noms étaient centrés au-dessus des points et descendus pour se laisser la place : ils tombaient sur les points suivants. Vu à l'écran (1440 px) : « gpt-oss-20b » et « qwen3-8b » barrés par un point, mesuré (quatre recouvrements). | Les noms s'écrivent à droite des points, alignés sur eux, reliés par un trait s'ils ont dû descendre ; vingt caractères, le nom entier au survol. Mesuré après : aucun recouvrement. | 15 septies (1) |
+| Faible | Panneau X (`ConnecteurNatif.tsx`) | La phrase commune aux services disait « X examine les applications qui servent d'autres comptes que ceux de leur éditeur », que contredit la rubrique de X juste dessous (« Aucun examen de X »). | Phrase propre à X : l'application est la vôtre parce que X facture chaque appel à l'application qui le fait (fr, en, zh, ja). | 15 septies (1) |
+
+### 43.2 Examiné, et qui tient
+
+- **Client public de X** (sans secret) : finir la connexion à la place de l'administrateur demande le
+  `state` (32 octets, jamais rendu par une route, § 41.2) et un code émis pour le défi PKCE de l'instance ; le vérificateur ne quitte pas
+  l'instance. Un code volé sur le chemin du retour (http sur la boucle locale) ne s'échange pas sans
+  lui. Brancher, débrancher, enregistrer l'application : l'administrateur seul (403 pour un collègue).
+  Passer d'une application confidentielle à publique efface le secret : c'est un geste
+  d'administrateur.
+- **Réécriture de `localhost`** : elle ne touche que « localhost » suivi d'un port ou de rien
+  (`localhost.exemple.fr`, `localhost.` restent tels quels) ; le nom d'hôte vient de `adresseVue`, qui
+  n'accepte que des lettres, chiffres, points, tirets et un port, depuis le navigateur de
+  l'administrateur, avec son jeton et sa séance : une page tierce ne peut pas poser `Host` ni ces
+  en-têtes. La route publique de retour rend une page fixe, sans `Location` : pas de redirection
+  ouverte. En https, le certificat de l'instance porte `IP:127.0.0.1` (`tls.ts`).
+- **Image jointe** : lien symbolique, lien dur, fichier hors du dossier, texte renommé `.jpg`
+  (contrôles du § 42) ; taille bornée à 5 Mo par le fichier ouvert. Une image « polyglotte » (vrais
+  octets PNG, puis autre chose) part telle quelle : c'est un fichier du dossier que l'administrateur a
+  vu nommé sur la carte ; X recode les images (non vérifié).
+- **402** : un seul envoi, aucune reprise automatique (`appelerApi` ne reprend que sur 401), le
+  message dit de racheter des crédits et que rien n'a été fait ; la place est rendue (rien n'est
+  parti).
+- **Logos** : rendus par `createElement` depuis un arbre de données, jamais par du HTML ; en thème
+  sombre, les dessins blancs (GitHub, X, Vercel, Linear, Anthropic…) sont montrés par la CSS, vus à
+  l'écran ; chaque dessin a son préfixe `useId`, aucun dégradé cassé ni `id` en double relevé dans la
+  liste des connecteurs, le sélecteur, les clés d'API et la comparaison.
+- **Retrait des mentions** : le conseil « S'il ne se charge pas, un autre modèle adapté à la machine
+  prend le relais » reste à l'accueil quand `recommended.verifie` est faux (le champ est bien rendu
+  par `GET /helix/provision`) ; le Mac virtuel garde son « si elle ne démarre pas, le message dira
+  où ». Les modèles d'images n'ont pas de relais : `verifie` n'y sert plus à rien à l'écran, et
+  `modeleActif` choisit le modèle voulu, sinon le conseillé, sinon un autre installé, sans le lire.
+- **Écran, régressions entre fusions** : connecteurs (liste, panneaux X et Google Drive), sélecteur de
+  modèles, clés d'API, Comparer les modèles, vus en français, anglais et japonais, clair et sombre,
+  1440 et 375 px : textes traduits, aucun débordement horizontal de la page, aucune erreur de console
+  hors l'avertissement de développement d'Electron.
+
+### 43.3 Soupçons, non démontrés
+
+- **Autres lectures du dossier** : l'outil « Système de fichiers » (serveur MCP à part) et d'autres
+  lectures par nom n'ont pas été passés au tube nommé ; au pire, c'est leur processus qui attend.
+- **Issue incertaine** : garder la place après un 5xx bloque aussi, une demi-heure, un post qui
+  n'était pas parti (le message dit « peut-être ») ; les limites restent en mémoire et repartent de
+  zéro au redémarrage (§ 41.3).
+- **`[::1]` chez X** : la documentation demande `http://127.0.0.1` ; une instance qui n'écoute que sur
+  ::1 donne désormais une adresse vraie, que X refusera peut-être.
+- **Poids d'un post** : une adresse sans « http » (« exemple.fr ») est toujours comptée lettre à
+  lettre (X la compte 23) ; un nom de domaine au suffixe inconnu de X est compté 23 alors que X le
+  compte lettre à lettre. Dans les deux cas X refuse lui-même, rien ne part.
+- **375 px, liste des connecteurs** : sous 400 px, la colonne du texte d'une ligne est très étroite et
+  un mot long (« statistiques ») passe sous la pastille « Connecter ». Pas une régression de cette
+  version (`Connecteurs.tsx` n'a pas changé depuis la 2026.928.2).
+- **Logo de xAI** : le symbole est large (834 × 318) et, posé dans un carré de 22 px, n'a que 8 px de
+  haut ; la charte interdit de l'étirer.
+
+### 43.4 Pas essayé
+
+Le vrai X (ni compte, ni crédits, ni application : l'adresse `[::1]`, le vrai corps d'un 402, une
+image recodée) ; les tubes nommés sous Windows (pas de `O_NONBLOCK`, pas de `mkfifo`) ; l'écran dans
+l'application empaquetée (vu dans une fenêtre Electron sur `vite`, avec sa politique de contenu de
+développement) ; l'écran en chinois (vu en français, anglais et japonais) ; les panneaux YouTube
+(un autre travail y ajoutait le logo pendant la tournée).

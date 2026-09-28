@@ -7,7 +7,7 @@ import { journaliser } from "./audit.ts";
 import { workspace } from "./mcp.ts";
 import { estProtege } from "./zonesProtegees.ts";
 import { interne } from "./sortieReseau.ts";
-import { borner, critereSur, dateFrancaise } from "./clientHttps.ts";
+import { borner, critereSur, dateFrancaise, ErreurTransport } from "./clientHttps.ts";
 import {
   aChoisi,
   appelerApi,
@@ -222,8 +222,26 @@ export function toolsForModel(): Outil[] {
 /* Garde-fous des écritures                                            */
 /* ------------------------------------------------------------------ */
 
-/** Publications récentes, pour l'instance entière : un compteur par service, et le texte pour refuser un doublon. */
-const recentes: { service: IdNatif; quand: number; empreinte: string }[] = [];
+/**
+ * Publications récentes, pour l'instance entière : un compteur par service, et
+ * le texte pour refuser un doublon. `incertaine` : envoyée, mais le service
+ * n'a pas dit si elle était faite (voir `issueIncertaine`).
+ */
+const recentes: { service: IdNatif; quand: number; empreinte: string; incertaine?: boolean }[] = [];
+
+/**
+ * Une erreur après laquelle on ne sait pas si l'écriture a eu lieu : le
+ * service a répondu 5xx, la réponse n'est pas arrivée à temps, ou la connexion
+ * a été coupée en route. Tournée de la 2026.928.3 (SECURITE.md § 43) : la place
+ * était rendue comme après un refus, le modèle relançait le même post (« X est
+ * momentanément indisponible »), une seconde carte était acceptée, et le post
+ * partait deux fois (essayé : deux envois du même texte après un 503). Un
+ * certificat refusé, lui, n'a rien laissé partir.
+ */
+function issueIncertaine(err: unknown): boolean {
+  if (err instanceof ErreurTransport) return err.categorie !== "certificat";
+  return err instanceof ErreurNatif && err.incertaine === true;
+}
 
 /**
  * Réserve la place d'une écriture ou d'une publication, **avant** l'appel au
@@ -242,13 +260,17 @@ async function sousGarde(service: IdNatif, contenu: string, agir: () => Promise<
   while (recentes.length && maintenant - recentes[0]!.quand > 60 * 60_000) recentes.shift();
   const empreinte = contenu.trim().toLowerCase().replace(/\s+/g, " ");
   // Mesuré sur Google Agenda le 26/09/2026 : un petit modèle refait trois fois la même action de suite.
-  if (recentes.some((r) => r.service === service && r.empreinte === empreinte && maintenant - r.quand < LIMITES.doublonMs)) {
+  const meme = recentes.find((r) => r.service === service && r.empreinte === empreinte && maintenant - r.quand < LIMITES.doublonMs);
+  if (meme?.incertaine) {
+    return refus("Ce même contenu a été envoyé il y a quelques minutes, sans réponse claire du service : il est peut-être déjà publié. Rien n'a été renvoyé. Dis à l'utilisateur de vérifier sur le service ; ne le relance pas.");
+  }
+  if (meme) {
     return refus("Déjà fait : ce même contenu vient d'être publié ou écrit il y a quelques minutes. Rien n'a été refait ; ne le relance pas.");
   }
   if (recentes.filter((r) => r.service === service).length >= LIMITES.publicationsParHeure) {
     return refus(`Refusé : ${LIMITES.publicationsParHeure} écritures ou publications sur ce service dans l'heure, pour toute l'instance. C'est la limite de sécurité ; dis-le à l'utilisateur.`);
   }
-  const place = { service, quand: maintenant, empreinte };
+  const place: (typeof recentes)[number] = { service, quand: maintenant, empreinte };
   recentes.push(place);
   const rendre = () => {
     const i = recentes.indexOf(place);
@@ -259,6 +281,11 @@ async function sousGarde(service: IdNatif, contenu: string, agir: () => Promise<
     if (!r.ok) rendre();
     return r;
   } catch (err) {
+    // Peut-être parti : la place reste prise, et le même contenu n'est pas renvoyé pendant une demi-heure.
+    if (issueIncertaine(err)) {
+      place.incertaine = true;
+      return refus(`${messageUtilisateur(err)} Le service n'a pas dit si c'était fait : c'est peut-être déjà publié ou écrit. Dis à l'utilisateur de vérifier sur le service avant de recommencer ; ce même contenu ne sera pas renvoyé avant une demi-heure.`);
+    }
     rendre();
     throw err;
   }
@@ -353,7 +380,7 @@ function erreurApi(service: string, r: ReponseApi): ErreurNatif {
   if (r.statut === 429) return new ErreurNatif("quota", `${service} limite momentanément le nombre de requêtes. Réessaie plus tard, et dis-le à l'utilisateur.`);
   if (r.statut === 403) return new ErreurNatif("acces", `${service} refuse cette action avec l'accès accordé (code 403). Vérifie que le compte a les droits nécessaires ; sinon, dis-le à l'utilisateur.`);
   if (r.statut === 404) return new ErreurNatif("api", `${service} ne trouve pas cet élément (code 404), ou le compte connecté n'y a pas accès.`);
-  if (r.statut >= 500) return new ErreurNatif("api", `${service} est momentanément indisponible.`);
+  if (r.statut >= 500) return new ErreurNatif("api", `${service} est momentanément indisponible.`, true);
   return new ErreurNatif("api", `${service} a refusé la requête (code ${r.statut}).`);
 }
 
@@ -886,8 +913,16 @@ async function fichierDuDossier(brut: unknown, g: Genre): Promise<{ chemin: stri
   if (!type) return { erreur: `Ce chemin mène à un fichier qui n'est pas ${g.forme} : refusé.` };
   let fichier: Awaited<ReturnType<typeof open>> | undefined;
   try {
-    // O_NOFOLLOW : si le chemin réel est devenu un lien entre-temps, l'ouverture échoue au lieu de le suivre.
-    fichier = await open(reel, constants.O_RDONLY | constants.O_NOFOLLOW);
+    /*
+     * O_NOFOLLOW : si le chemin réel est devenu un lien entre-temps, l'ouverture
+     * échoue au lieu de le suivre. O_NONBLOCK (tournée de la 2026.928.3,
+     * SECURITE.md § 43) : un tube nommé (FIFO) « photo.png » faisait attendre
+     * l'ouverture un écrivain, pour toujours, et avec elle un fil du réservoir de
+     * libuv (quatre par défaut, partagés par tous les accès disque de la
+     * passerelle) ; il s'ouvre maintenant tout de suite, et `isFile` le refuse.
+     * Sans effet sur un fichier ordinaire. Absent sous Windows (0).
+     */
+    fichier = await open(reel, constants.O_RDONLY | constants.O_NOFOLLOW | (constants.O_NONBLOCK ?? 0));
     const info = await fichier.stat();
     if (!info.isFile()) return { erreur: "Ce chemin n'est pas un fichier." };
     if (info.nlink > 1) return { erreur: `Ce fichier a plusieurs noms (lien dur) : on ne peut pas dire qu'il est seulement dans le dossier de travail. Refusé ; copiez ${g.quoi} dans le dossier.` };
@@ -993,12 +1028,23 @@ function idX(): string {
  * de poids 1 sont celles de la bibliothèque twitter-text, citée par la page.
  * Une adresse sans « http » (« exemple.fr ») est comptée lettre à lettre :
  * X la compterait 23 ; il refuserait alors lui-même un post trop long.
+ *
+ * Tournée de la 2026.928.3 (SECURITE.md § 43) : l'adresse allait jusqu'au
+ * premier blanc (`\S+`). « https://a.fr/ » suivi de 200 caractères chinois, ou
+ * de mots séparés par le blanc du braille (U+2800, qui n'est pas un blanc pour
+ * `\s`), pesait 23 et partait : X, qui arrête l'adresse au premier caractère
+ * qu'une adresse ne contient pas, l'aurait refusé. L'adresse ne prend donc
+ * plus que les caractères ASCII d'une adresse (RFC 3986, sans parenthèses), et
+ * rend la ponctuation finale au texte, comme twitter-text : en cas de doute on
+ * compte plus que X, jamais moins.
  */
 export function poidsX(brut: string): number {
   let poids = 0;
-  const sans = brut.normalize("NFC").replace(/https?:\/\/\S+/gi, () => {
+  const sans = brut.normalize("NFC").replace(/https?:\/\/[A-Za-z0-9\-._~:/?#[\]@!$&'*+,;=%]+/gi, (adresse) => {
+    // Comme twitter-text : une adresse finit sur une lettre, un chiffre ou l'un de « = _ # / + - » ; le reste est du texte.
+    const fin = /[^A-Za-z0-9=_#/+\-]+$/.exec(adresse)?.[0] ?? "";
     poids += 23;
-    return "";
+    return fin;
   });
   const leger = (cp: number) => cp <= 4351 || (cp >= 8192 && cp <= 8205) || (cp >= 8208 && cp <= 8223) || (cp >= 8242 && cp <= 8247);
   for (const { segment } of new Intl.Segmenter("fr", { granularity: "grapheme" }).segment(sans)) {

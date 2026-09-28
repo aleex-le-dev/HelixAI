@@ -1018,5 +1018,6 @@
   "Webflow": "Webflow",
   "WhatsApp n'est pas branché sur cet agent.": "此智能体未接入 WhatsApp。",
   "Windows 10 version 1803 ou plus récent est nécessaire : l'outil tar de Windows est absent.": "需要 Windows 10 1803 或更高版本：缺少 Windows 的 tar 工具。",
-  "Wix": "Wix"
+  "Wix": "Wix",
+  "X refuse de lire le compte (code 402, paiement requis) : l'application X de l'organisation n'a probablement pas de crédits. Achetez-en dans la console de X (console.x.com), puis reconnectez-vous. Rien n'a été enregistré.": "X 拒绝读取该账号（代码 402，需要付款）：贵组织的 X 应用可能没有额度。请在 X 控制台（console.x.com）购买额度，然后重新连接。未保存任何内容。"
 }

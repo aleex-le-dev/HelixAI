@@ -112,7 +112,14 @@ export function lireFichierEspace(relatif: string): Resultat<{ nom: string; tail
    */
   let fd: number;
   try {
-    fd = openSync(r.valeur.reel, constants.O_RDONLY | constants.O_NOFOLLOW);
+    /*
+     * O_NONBLOCK (tournée de la 2026.928.3, SECURITE.md § 43) : un tube nommé
+     * (FIFO) du dossier faisait attendre `openSync` un écrivain, et avec lui
+     * toute la passerelle, qui ne répondait plus à rien (essayé : /health muet).
+     * Il s'ouvre maintenant tout de suite, et `isFile` le refuse. Sans effet sur
+     * un fichier ordinaire ; absent sous Windows (0).
+     */
+    fd = openSync(r.valeur.reel, constants.O_RDONLY | constants.O_NOFOLLOW | (constants.O_NONBLOCK ?? 0));
   } catch {
     return { ok: false, statut: 404, message: t("Fichier introuvable.") };
   }

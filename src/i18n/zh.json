@@ -602,6 +602,7 @@
   "Avec curl": "使用 curl",
   "Avec l'AppImage, l'application change de place à chaque lancement : la commande ne resterait pas en place. Installez le paquet .deb pour l'avoir.": "使用 AppImage 时，应用每次启动都会换位置：命令无法保留。请安装 .deb 包以使用它。",
   "Avec l'application que votre organisation crée chez {0}, une fois. Le logiciel ne peut pas en fournir une commune : {0} examine les applications qui servent d'autres comptes que ceux de leur éditeur.": "使用贵组织在 {0} 创建的应用，只需创建一次。本软件无法提供共用的应用：{0} 会审核为开发者以外的账号提供服务的应用。",
+  "Avec l'application que votre organisation crée chez X, une fois. Le logiciel ne peut pas en fournir une commune : X facture chaque appel à l'application qui le fait, sur ses crédits.": "使用贵组织在 X 上创建的应用，只需创建一次。本软件无法提供共用的应用：X 会把每次调用计入发起调用的应用，从其额度中扣除。",
   "Avec mes outils (courrier, agenda, fichiers…).": "使用我的工具（邮件、日历、文件……）。",
   "Avec moins de 20 exemples, aucun n'est mis de côté pour la vérification : vous poserez vos propres questions à l'étape Comparer.": "示例少于 20 个时，不会预留检验示例：您将在「对比」步骤中提出自己的问题。",
   "Base de connaissances créée": "知识库已创建",

@@ -64,6 +64,32 @@ const ATTRIBUTS = {
 /** Attributs sans effet sur le dessin, ignorés. */
 const SANS_EFFET = /^(xmlns(:.*)?|version|xml:space|data-.*|enable-background|role|aria-.*|style|class|xmlns:xlink|preserveAspectRatio|viewBox)$/;
 
+/**
+ * Fonctions admises dans une valeur : les transformations, les couleurs, et
+ * `url(#…)` vers un élément du dessin lui-même.
+ */
+const FONCTIONS = new Set(["matrix", "translate", "scale", "rotate", "skewx", "skewy", "rgb", "rgba", "hsl", "hsla", "hwb", "lab", "lch", "oklab", "oklch", "color", "url"]);
+
+/**
+ * Une valeur d'attribut sans rien qui sorte du dessin.
+ *
+ * Tournée de la 2026.928.3 (SECURITE.md § 43) : le contrôle ne cherchait que
+ * `url(` en minuscules. Le navigateur lit une valeur de présentation comme du
+ * CSS, où les noms de fonction ignorent la casse et s'écrivent aussi avec des
+ * échappements : `URL(https://…)`, `u\72l(…)`, `\75rl(//…)`, ou une classe
+ * `.a{fill:URL(…)}`, passaient jusqu'à marques.ts (essayé sur des fichiers
+ * piégés, dans un dossier temporaire), de même qu'`image-set(…)`. Refusés :
+ * tout échappement, toute entité, toute fonction hors de la liste, toute
+ * `url()` qui ne désigne pas un identifiant du dessin, quelle que soit la casse.
+ */
+function valeurSure(v, fichier) {
+  if (/[\\&<>`]/.test(v)) throw new Error(`${fichier} : échappement ou caractère non admis dans « ${v} »`);
+  for (const m of v.matchAll(/([A-Za-z_-][-A-Za-z0-9_]*)\s*\(/g)) {
+    if (!FONCTIONS.has(m[1].toLowerCase())) throw new Error(`${fichier} : fonction non admise « ${m[1]}( » dans « ${v} »`);
+  }
+  if (/url\(\s*['"]?(?!#)/i.test(v) || /javascript:/i.test(v)) throw new Error(`${fichier} : référence externe « ${v} »`);
+}
+
 function attributsBruts(texte) {
   const a = {};
   for (const m of texte.matchAll(/([A-Za-z_:][-A-Za-z0-9_:.]*)\s*=\s*("([^"]*)"|'([^']*)')/g)) {
@@ -143,9 +169,7 @@ function lireSvg(fichier) {
       else if (nom === "href" || nom === "xlink:href") throw new Error(`${fichier} : lien non géré (${nom})`);
       else if (!SANS_EFFET.test(nom)) throw new Error(`${fichier} : attribut non admis « ${nom} » sur <${balise}>`);
     }
-    for (const v of Object.values(attributs)) {
-      if (/url\(\s*['"]?(?!#)/.test(v) || /javascript:/i.test(v)) throw new Error(`${fichier} : référence externe « ${v} »`);
-    }
+    for (const v of Object.values(attributs)) valeurSure(v, fichier);
     const noeud = { balise, attributs, enfants: [] };
     pile[pile.length - 1].enfants.push(noeud);
     if (!auto) pile.push(noeud);
@@ -209,7 +233,11 @@ function dessin(fichier, cadre) {
   if (!/^-?[\d.]+(\s+-?[\d.]+){3}$/.test(viewBox.trim())) throw new Error(`${fichier} : viewBox illisible « ${viewBox} »`);
   // Les attributs du <svg> racine (fill="none", par exemple) passent à un <g>
   // qui enveloppe le dessin : le rendu pose son propre <svg>.
-  const { viewBox: _v, width: _w, height: _h, ...heritage } = svg.attributs;
+  // Son `id` (« Layer_1 » chez GitLab et Together) n'était ni renommé ni
+  // préfixé : deux logos sur la page portaient le même, et un kit pouvait y
+  // mettre « root » (tournée de la 2026.928.3, § 43). Rien ne le désigne : il
+  // est retiré, et une référence vers lui ferait échouer `renommerIds`.
+  const { viewBox: _v, width: _w, height: _h, id: _id, ...heritage } = svg.attributs;
   const ids = renommerIds(svg);
   const enfants = svg.enfants.map(compacter);
   const corps = Object.keys(heritage).length ? [["g", heritage, enfants]] : enfants;

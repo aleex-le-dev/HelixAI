@@ -5907,15 +5907,26 @@ console.log("\n15 quater. Tournée de la 2026.928.2 : connecteurs");
  * langue) : aucune ne doit plus dire « pas encore essayé » ni ses variantes.
  * Les « réessayez » et les constats (« essayé : refusé ») ne sont pas visés.
  */
+/*
+ * Tournée de la 2026.928.3 (SECURITE.md § 43) : les motifs prenaient aussi des
+ * phrases légitimes (section 15 septies). Ils ne visent plus que ce qui parle
+ * de l'essai du logiciel : pas ce que la personne n'a pas encore essayé
+ * (« vous n'avez pas encore essayé », « you have not yet tried »), ni une
+ * adresse pas encore vérifiée (« not yet verified. »), ni une clause « sans
+ * garantie » (licence, prix relevés), seulement « devrait fonctionner, sans
+ * garantie » ; ni l'avertissement de Google (« 尚未经过 Google 验证 »).
+ */
+const MENTION_FR = /(?<!['’](?:avez|as) )pas encore (été )?(essay|éprouv)|pas encore vérifié avec|(fonctionner|marcher)[^.]{0,20}sans garantie|faux serveurs/i;
+const MENTION_LANGUES = {
+  en: /(?<!\byou (?:have |'ve )?)not yet (been )?(tried|tested|proven)|not yet verified with|(work|run)[^.]{0,20}without guarantee|fake servers/i,
+  // « Google 尚未验证此应用 », « 尚未经过 Google 验证 » (Google n'a pas validé l'application) et « 尚未经过 Apple 签名 » ne sont pas visés.
+  zh: /尚未(?:在|用|经(?!过?\s*(?:Google|Apple|谷歌|苹果))).{0,20}(?:试用|试过|测试|验证)|(应该|应当)[^。]{0,20}不作保证|模拟服务器/,
+  ja: /まだ.{0,8}(試して|動作確認|未検証)|はずですが、?保証はあ/,
+};
 console.log("\n15 quinquies. Écran : plus de « pas encore essayé » (28/09/2026)");
 {
-  const francais = /pas encore (été )?(essay|éprouv)|pas encore vérifié avec|sans garantie|faux serveurs/i;
-  const parLangue = {
-    en: /not yet (been )?(tried|tested|verified)|without guarantee|fake servers/i,
-    // « Google 尚未验证此应用 » (Google n'a pas validé l'application) et « 尚未经过 Apple 签名 » ne sont pas visés.
-    zh: /尚未(在|用|经).{0,20}(试用|试过|测试|验证)|不作保证|模拟服务器/,
-    ja: /まだ.{0,8}(試して|動作確認|未検証)|保証はあ/,
-  };
+  const francais = MENTION_FR;
+  const parLangue = MENTION_LANGUES;
   const fautifs = [];
   for (const cote of ["src", "gateway"]) {
     for (const [langue, motif] of Object.entries(parLangue)) {
@@ -5963,6 +5974,129 @@ console.log("\n15 sexies. Connecteur X");
   // Le détail du journal (troisième argument) ne porte que des clés connues : ni jeton, ni secret, ni vérificateur.
   const detailsJournal = [...oauth.matchAll(/journaliser\("[^"]+", [^,]+, \{([^}]*)\}\)/g)].map((m) => m[1]);
   verifier("X : aucun jeton ni secret écrit au journal par la connexion (journaliser ne reçoit que le service, les cases et l'issue)", detailsJournal.length >= 5 && detailsJournal.every((d) => !/jeton|acces|actualisation|secret|verificateur|code|Authorization/i.test(d)), detailsJournal.join(" | "));
+}
+
+/*
+ * Tournée de la 2026.928.3 (SECURITE.md § 43). Le connecteur X lui-même est
+ * éprouvé de bout en bout dans essai-natifs.mjs (repris plus haut sous
+ * « natifs : ») ; ici, les logos et le contrôle du § 15 quinquies.
+ */
+console.log("\n15 septies. Tournée de la 2026.928.3 : logos, mentions, X");
+{
+  /*
+   * Logos : une copie du générateur, dans un dossier temporaire, sur des
+   * fichiers piégés (les vrais ne sont pas touchés). Tout doit être refusé ;
+   * avant la tournée, `URL(…)`, `u\72l(…)`, une classe `.a{fill:URL(…)}` et
+   * `image-set(…)` passaient jusqu'à marques.ts.
+   */
+  const PIEGES = {
+    script: `<svg viewBox="0 0 10 10"><script>alert(1)</script><path d="M0 0h10v10z"/></svg>`,
+    onload: `<svg viewBox="0 0 10 10" onload="alert(1)"><path d="M0 0h10v10z"/></svg>`,
+    foreignObject: `<svg viewBox="0 0 10 10"><foreignObject><div xmlns="http://www.w3.org/1999/xhtml">x</div></foreignObject></svg>`,
+    hrefJavascript: `<svg viewBox="0 0 10 10"><a href="javascript:alert(1)"><path d="M0 0h10v10z"/></a></svg>`,
+    useExterne: `<svg viewBox="0 0 10 10"><use href="https://exemple.test/x.svg#a"/></svg>`,
+    styleUrl: `<svg viewBox="0 0 10 10"><path style="fill:url(https://exemple.test/p.svg#g)" d="M0 0h10v10z"/></svg>`,
+    urlMajuscules: `<svg viewBox="0 0 10 10"><path fill="URL(https://exemple.test/p.svg#g)" d="M0 0h10v10z"/></svg>`,
+    urlEchappe: `<svg viewBox="0 0 10 10"><path fill="u\\72l(https://exemple.test/p.svg#g)" d="M0 0h10v10z"/></svg>`,
+    masqueEchappe: `<svg viewBox="0 0 10 10"><path mask="\\75rl(//exemple.test/m.svg#m)" d="M0 0h10v10z"/></svg>`,
+    classeUrl: `<svg viewBox="0 0 10 10"><style>.a{fill:URL(//exemple.test/p.svg#g)}</style><path class="a" d="M0 0h10v10z"/></svg>`,
+    imageSet: `<svg viewBox="0 0 10 10"><path fill="image-set('https://exemple.test/i.png' 1x)" d="M0 0h10v10z"/></svg>`,
+    entite: `<svg viewBox="0 0 10 10"><path fill="&#117;rl(https://exemple.test/p.svg#g)" d="M0 0h10v10z"/></svg>`,
+  };
+  const { copyFileSync, writeFileSync: ecrireFichier } = await import("node:fs");
+  const genererAvec = (svg) => {
+    const r = mkdtempSync(join(tmpdir(), "helix-marques-piege-"));
+    mkdirSync(join(r, "scripts", "marques"), { recursive: true });
+    mkdirSync(join(r, "src", "components", "ui"), { recursive: true });
+    copyFileSync(join(RACINE, "scripts", "gen-marques.cjs"), join(r, "scripts", "gen-marques.cjs"));
+    ecrireFichier(join(r, "scripts", "marques", "piege.svg"), svg);
+    ecrireFichier(join(r, "scripts", "marques", "sources.json"), JSON.stringify({ releve: "2026-09-28", marques: { piege: { titre: "Piège", clair: "piege.svg" } }, neutres: {} }));
+    let sortie = null;
+    try {
+      execFileSync(process.execPath, [join(r, "scripts", "gen-marques.cjs"), "--noter"], { stdio: "ignore" });
+      execFileSync(process.execPath, [join(r, "scripts", "gen-marques.cjs")], { stdio: "ignore" });
+      sortie = readFileSync(join(r, "src", "components", "ui", "marques.ts"), "utf8");
+    } catch {
+      sortie = null;
+    }
+    rmSync(r, { recursive: true, force: true });
+    return sortie;
+  };
+  const passes = Object.entries(PIEGES).filter(([, svg]) => genererAvec(svg) !== null).map(([nom]) => nom);
+  verifier("logos : un SVG piégé (script, onload, foreignObject, lien javascript:, use, url() en majuscules, échappée ou par une classe, image-set, entité) n'arrive jamais à marques.ts", passes.length === 0, passes.join(", "));
+  const temoinLogo = genererAvec(`<svg id="root" viewBox="0 0 10 10"><defs><linearGradient id="g"><stop offset="0" stop-color="#000"/></linearGradient></defs><path fill="url(#g)" transform="matrix(1 0 0 1 0 0)" d="M0 0h10v10z" style="fill-opacity:color(display-p3 1 0 0)"/></svg>`);
+  verifier("logos, témoin : un dessin ordinaire (dégradé désigné par url(#…), matrix, color()) passe, sans l'id de sa racine", temoinLogo !== null && /url\(#a\)/.test(temoinLogo) && !/"root"/.test(temoinLogo), temoinLogo ? temoinLogo.slice(-300) : "refusé");
+  const marquesTs = readFileSync(join(RACINE, "src", "components", "ui", "marques.ts"), "utf8");
+  const idsBruts = [...marquesTs.matchAll(/"id":"([^"]*)"/g)].map((m) => m[1]).filter((id) => !/^[a-z]$/.test(id));
+  verifier("logos : marques.ts n'a ni url() hors du dessin (en toute casse), ni échappement, ni id venu tel quel d'un kit (« Layer_1 » deux fois sur la page)", !/url\(\s*['"]?(?!#)/i.test(marquesTs) && !/\\\\/.test(marquesTs.replace(/^[\s\S]*?export const MARQUES/, "")) && idsBruts.length === 0, idsBruts.join(", "));
+
+  /*
+   * Le contrôle du § 15 quinquies visait des phrases, et prenait aussi des
+   * phrases légitimes : un avertissement de licence (« sans garantie »), une
+   * adresse pas encore vérifiée, ce que la personne n'a pas encore essayé,
+   * l'avertissement de Google écrit à la chinoise (« 尚未经过 Google 验证 »).
+   * Chacune aurait fait échouer npm run securite, et poussé à la retirer.
+   */
+  const legitimes = {
+    fr: ["Vous n'avez pas encore essayé ce modèle : posez-lui une question.", "Fourni sans garantie, selon les termes de la licence AGPL-3.0.", "Prix relevés chez les éditeurs, donnés sans garantie : vérifiez leur page."],
+    en: ["Your email address is not yet verified.", "You have not yet tried this model: ask it a question.", "Prices taken from the publishers, given without guarantee: check their page."],
+    zh: ["登录时，Google 会显示“此应用尚未经过 Google 验证”：这是正常的。", "价格取自各厂商页面，不作保证：请以其页面为准。"],
+    ja: ["価格は各社の公開ページから取得したもので、保証はありません。"],
+  };
+  const pris = [...legitimes.fr.filter((p) => MENTION_FR.test(p)), ...["en", "zh", "ja"].flatMap((l) => legitimes[l].filter((p) => MENTION_LANGUES[l].test(p)))];
+  verifier("§ 15 quinquies : une phrase légitime (licence « sans garantie », adresse pas encore vérifiée, ce que la personne n'a pas essayé, avertissement de Google) n'est pas prise pour « pas encore essayé »", pris.length === 0, pris.join(" | "));
+  // Les phrases retirées le 28/09/2026 (catalogues de la 2026.928.2) : toutes doivent encore être vues.
+  const retirees = {
+    fr: ["Pas encore essayé avec {0} : s'il ne se charge pas, un autre modèle adapté à la machine prend le relais.", "Pas encore essayé avec un vrai compte {0} : ce branchement a été vérifié contre de faux serveurs, d'après la documentation du fournisseur. Dites-nous ce qui ne marche pas.", "pas encore vérifié avec Helix", "Ce réglage n'a pas encore été essayé de bout en bout sur une machine comme celle-ci. Il devrait fonctionner, sans garantie.", "• Pas encore éprouvée de bout en bout : si elle ne démarre pas, le message dira où, et le bureau Linux reste possible.", "Mac virtuel : Safari et LibreOffice dans un macOS isolé, 8 Go de mémoire, environ 23 Go à télécharger la première fois. Pas encore éprouvé de bout en bout ; le bureau Linux l'est.", "Ce chemin n'a pas encore été essayé sur une vraie machine."],
+    en: ["Not yet tried with {0}: if it does not load, another model suited to the machine takes over.", "Not yet tried with a real {0} account: this connection was checked against fake servers, based on the provider's documentation. Tell us what does not work.", "not yet verified with Helix", "This setup has not yet been tested end to end on a machine like this one. It should work, without guarantee.", "• Not yet tested end to end: if it does not start, the message will say where, and the Linux desktop remains available."],
+    zh: ["尚未在 {0} 中试用：如果无法加载，将改用另一个适合本机的模型。", "尚未用真实的 {0} 账号试过：此连接是依据服务商文档，用模拟服务器验证的。如有问题请告诉我们。", "尚未经 Helix 验证", "此配置尚未在同类机器上完整测试。应该可以运行，但不作保证。", "• 尚未经过完整的端到端测试：如果无法启动，提示会说明卡在哪里，Linux 桌面仍然可用。"],
+    ja: ["{0} ではまだ試していません。読み込めない場合は、マシンに合った別のモデルが代わりに使われます。", "実際の {0} アカウントではまだ試していません。この接続は、プロバイダーのドキュメントに基づき、模擬サーバーに対して検証したものです。うまくいかない点があればお知らせください。", "Helix ではまだ未検証", "この設定は、このようなマシンではまだ一通りの動作確認をしていません。動作するはずですが、保証はありません。", "この方法はまだ実機で試していません。"],
+  };
+  const manques = [...retirees.fr.filter((p) => !MENTION_FR.test(p)), ...["en", "zh", "ja"].flatMap((l) => retirees[l].filter((p) => !MENTION_LANGUES[l].test(p)))];
+  verifier("§ 15 quinquies, témoin : chaque phrase retirée le 28/09/2026 (fr, en, zh, ja) serait encore vue", manques.length === 0, manques.join(" | "));
+
+  // X : les pièces seules des corrections (de bout en bout dans essai-natifs.mjs, section F).
+  const { pathToFileURL: versUrl } = await import("node:url");
+  const outils = await import(versUrl(join(RACINE, "gateway", "src", "outilsNatifs.ts")).href);
+  const cache = outils.poidsX("https://a.fr/" + "字".repeat(200));
+  verifier("X : ce qui suit une adresse et n'en fait pas partie compte dans les 280 (un texte chinois derrière « https://a.fr/ » pesait 23)", cache > 280 && outils.poidsX("https://exemple.fr/" + "a".repeat(300)) === 23 && outils.poidsX("Lien : https://a.fr.") === 31, `${cache}`);
+  const sourceOutils = readFileSync(join(RACINE, "gateway", "src", "outilsNatifs.ts"), "utf8");
+  verifier("X et TikTok : le fichier du dossier est ouvert sans attendre (O_NONBLOCK : un tube nommé ne bloque plus l'outil)", /O_NOFOLLOW \| \(constants\.O_NONBLOCK \?\? 0\)/.test(sourceOutils), "O_NONBLOCK absent");
+
+  /*
+   * Même piège que l'image de X, ailleurs : GET /helix/espace/fichier ouvrait
+   * le fichier avec `openSync`, sans O_NONBLOCK. Un tube nommé du dossier de
+   * l'équipe figeait toute la passerelle (essayé : /health muet). Ici, dans un
+   * processus à part, dont on borne la durée : il doit répondre, et refuser.
+   */
+  let tubeEspace = "pas de mkfifo";
+  const dossierTube = mkdtempSync(join(tmpdir(), "helix-tube-"));
+  try {
+    mkdirSync(join(dossierTube, "espace"));
+    execFileSync("mkfifo", [join(dossierTube, "espace", "tuyau.txt")]);
+    const sonde = `const e = await import(${JSON.stringify(versUrl(join(RACINE, "gateway", "src", "espace.ts")).href)}); const r = e.lireFichierEspace("tuyau.txt"); console.log("RENDU " + r.ok + " " + (r.statut ?? ""));`;
+    tubeEspace = execFileSync(process.execPath, ["--input-type=module", "-e", sonde], { env: { ...process.env, HELIX_WORKSPACE: join(dossierTube, "espace"), HELIX_DATA_DIR: join(dossierTube, "donnees") }, encoding: "utf8", timeout: 8000, stdio: ["ignore", "pipe", "ignore"] }).trim();
+  } catch (e) {
+    tubeEspace = e.code === "ETIMEDOUT" || e.signal ? "bloqué" : `erreur ${String(e.message).slice(0, 120)}`;
+  }
+  rmSync(dossierTube, { recursive: true, force: true });
+  verifier("dossier de l'équipe : un tube nommé est refusé tout de suite (il figeait toute la passerelle)", /RENDU false 400/.test(tubeEspace), tubeEspace);
+
+  // L'adresse de retour de X suit l'adresse où la passerelle écoute vraiment (essayé : sur ::1, 127.0.0.1 ne menait à rien).
+  const natifX = await import(versUrl(join(RACINE, "gateway", "src", "oauthNatif.ts")).href);
+  const retours = {};
+  for (const ecoute of ["::1", "0.0.0.0", "127.0.0.1"]) {
+    natifX.noterEcoute?.(ecoute);
+    retours[ecoute] = natifX.adresseDeRetour("x", "http://localhost:8787");
+  }
+  verifier("X : « localhost » n'est réécrit en 127.0.0.1 que si la passerelle y écoute ; sur ::1 seulement (HELIX_GATEWAY_HOST=::1 ou localhost), l'adresse montrée est [::1]", typeof natifX.noterEcoute === "function" && retours["::1"] === "http://[::1]:8787/helix/oauth/retour" && retours["0.0.0.0"] === "http://127.0.0.1:8787/helix/oauth/retour" && retours["127.0.0.1"] === "http://127.0.0.1:8787/helix/oauth/retour", JSON.stringify(retours));
+
+  // Écran (vu dans une fenêtre cachée, contre une instance jetable).
+  const natifEcran = readFileSync(join(RACINE, "src", "components", "settings", "ConnecteurNatif.tsx"), "utf8");
+  verifier("X, panneau : ne dit plus « X examine les applications » (sa rubrique dit « Aucun examen de X ») ; il dit pourquoi l'application est la vôtre", /id === "x"\s*\?[\s\S]{0,900}X facture chaque appel/.test(natifEcran), "phrase commune donnée à X");
+  const comparer = readFileSync(join(RACINE, "src", "components", "chat", "ComparerModeles.tsx"), "utf8");
+  const bande = comparer.slice(comparer.indexOf("const pointDeBande"), comparer.indexOf("</circle>", comparer.indexOf("const pointDeBande")));
+  verifier("Comparer les modèles : dans les colonnes « Sur votre machine » et « Cloud, prix non relevé », les noms s'écrivent à droite des points (centrés au-dessus, un nom descendu tombait sur le point suivant)", /x=\{cx \+ 12\}/.test(bande) && /textAnchor="start"/.test(bande) && /Math\.max\(py \+ 4, precedent \+ 14\)/.test(comparer), "noms centrés sur les points");
 }
 
 console.log(`\n${reussis} vérification(s) réussie(s), ${echecs.length} échec(s).`);

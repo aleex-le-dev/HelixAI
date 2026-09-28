@@ -602,6 +602,7 @@
   "Avec curl": "With curl",
   "Avec l'AppImage, l'application change de place à chaque lancement : la commande ne resterait pas en place. Installez le paquet .deb pour l'avoir.": "With the AppImage, the app moves at every launch: the command would not stay in place. Install the .deb package to get it.",
   "Avec l'application que votre organisation crée chez {0}, une fois. Le logiciel ne peut pas en fournir une commune : {0} examine les applications qui servent d'autres comptes que ceux de leur éditeur.": "With the app your organisation creates at {0}, once. The software cannot provide a shared one: {0} reviews apps that serve accounts other than their publisher's.",
+  "Avec l'application que votre organisation crée chez X, une fois. Le logiciel ne peut pas en fournir une commune : X facture chaque appel à l'application qui le fait, sur ses crédits.": "With the app your organisation creates at X, once. The software cannot provide a shared one: X bills every call to the app that makes it, from its credits.",
   "Avec mes outils (courrier, agenda, fichiers…).": "With my tools (mail, calendar, files…).",
   "Avec moins de 20 exemples, aucun n'est mis de côté pour la vérification : vous poserez vos propres questions à l'étape Comparer.": "With fewer than 20 examples, none are held out for checking: you will ask your own questions in the Compare step.",
   "Base de connaissances créée": "Knowledge base created",

@@ -451,9 +451,12 @@ export function remplacerTransportPourEssais(fn: Transport | null): void {
 
 export class ErreurNatif extends Error {
   categorie: "config" | "acces" | "api" | "quota" | "portee";
-  constructor(categorie: "config" | "acces" | "api" | "quota" | "portee", message: string) {
+  /** Le service n'a pas dit si l'action était faite (5xx) : une écriture a peut-être eu lieu (outilsNatifs.ts, `sousGarde`). */
+  incertaine: boolean;
+  constructor(categorie: "config" | "acces" | "api" | "quota" | "portee", message: string, incertaine = false) {
     super(message);
     this.categorie = categorie;
+    this.incertaine = incertaine;
   }
 }
 
@@ -859,12 +862,31 @@ function pageBoucle(res: http.ServerResponse, statut: number, titre: string, mes
   );
 }
 
+/**
+ * L'adresse sur laquelle la passerelle écoute vraiment (index.ts, à
+ * l'ouverture du port). « localhost » ne se réécrit en 127.0.0.1 que si
+ * 127.0.0.1 mène à elle.
+ *
+ * Tournée de la 2026.928.3 (SECURITE.md § 43) : avec `HELIX_GATEWAY_HOST=::1`,
+ * ou `localhost` (que macOS résout d'abord en ::1), la passerelle n'écoute pas
+ * sur 127.0.0.1 ; l'adresse de retour de X, réécrite en 127.0.0.1, ne menait
+ * à rien (essayé : connexion refusée), et la connexion à X ne pouvait pas
+ * aboutir. Elle est alors écrite `[::1]`, la même machine par l'adresse où
+ * l'instance écoute ; la documentation de X ne dit pas s'il l'accepte.
+ */
+let ecoute = "127.0.0.1";
+export function noterEcoute(adresse: string): void {
+  ecoute = adresse;
+}
+const ecouteSurIPv4 = () => ["127.0.0.1", "0.0.0.0", "::", ""].includes(ecoute);
+
 /** L'adresse de retour à déclarer chez le fournisseur, telle que l'écran doit la montrer. */
 export function adresseDeRetour(id: IdNatif, base: string): string {
   const def = DEFINITIONS[id];
   if (def.retour === "instance") {
     const racine = base.replace(/\/+$/, "");
-    return `${def.sansLocalhost ? racine.replace(/^(https?:\/\/)localhost(?=:\d{1,5}$|$)/i, "$1127.0.0.1") : racine}/helix/oauth/retour`;
+    const boucle = ecouteSurIPv4() ? "127.0.0.1" : ecoute === "::1" ? "[::1]" : "localhost";
+    return `${def.sansLocalhost ? racine.replace(/^(https?:\/\/)localhost(?=:\d{1,5}$|$)/i, (_, schema: string) => schema + boucle) : racine}/helix/oauth/retour`;
   }
   // Google accepte tout port de la boucle locale pour une application « de bureau » ; TikTok, le joker `*`.
   return def.google ? "http://127.0.0.1" : `http://127.0.0.1:*${def.cheminBoucle}`;
@@ -1179,6 +1201,13 @@ async function identite(id: IdNatif, acces: string, client: { clientId: string; 
     case "x": {
       // https://docs.x.com/x-api/users/get-my-user (`tweet.read`, `users.read`). L'identifiant sert ensuite à lire ses posts.
       const r = await envoyer(id, { methode: "GET", hote: "api.x.com", chemin: "/2/users/me?user.fields=username,name", entetes: bearer });
+      /*
+       * Lire le compte est facturé (0,010 $) : sans crédit, c'est ici que la
+       * connexion échoue. Tournée de la 2026.928.3 (SECURITE.md § 43) : la page
+       * disait « n'a pas laissé lire le compte avec l'accès accordé (code
+       * 402) », sans dire que la seule chose à faire est d'acheter des crédits.
+       */
+      if (r.statut === 402) throw new ErreurNatif("quota", t("X refuse de lire le compte (code 402, paiement requis) : l'application X de l'organisation n'a probablement pas de crédits. Achetez-en dans la console de X (console.x.com), puis reconnectez-vous. Rien n'a été enregistré."));
       const u = (r.json.data ?? {}) as { id?: unknown; username?: unknown; name?: unknown };
       if (r.statut !== 200 || typeof u.id !== "string" || !/^\d{1,19}$/.test(u.id)) throw echec(r);
       const pseudo = texteCourt(u.username, 50);

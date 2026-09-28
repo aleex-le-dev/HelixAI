@@ -306,7 +306,15 @@ export function ConnecteurNatif({ id, onChange }: { id: IdNatif; onChange?: () =
         <p className="text-sm text-muted-foreground">
           {etat.google
             ? t("Par la connexion Google, avec l'application Google de votre organisation.")
-            : tf("Avec l'application que votre organisation crée chez {0}, une fois. Le logiciel ne peut pas en fournir une commune : {0} examine les applications qui servent d'autres comptes que ceux de leur éditeur.", etat.nom)}
+            : id === "x"
+              ? /*
+                 * Tournée de la 2026.928.3 (SECURITE.md § 43) : X recevait la
+                 * phrase commune, « X examine les applications… », que
+                 * contredit sa rubrique (« Aucun examen de X »). Ce qui
+                 * empêche une application commune chez X, c'est la facture.
+                 */
+                t("Avec l'application que votre organisation crée chez X, une fois. Le logiciel ne peut pas en fournir une commune : X facture chaque appel à l'application qui le fait, sur ses crédits.")
+              : tf("Avec l'application que votre organisation crée chez {0}, une fois. Le logiciel ne peut pas en fournir une commune : {0} examine les applications qui servent d'autres comptes que ceux de leur éditeur.", etat.nom)}
         </p>
       </div>
       {etat.aReconnecter && (

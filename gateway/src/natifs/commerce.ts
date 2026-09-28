@@ -1611,7 +1611,18 @@ async function shopifyLire(requete: string, args: Record<string, unknown>): Prom
   if (args.recherche !== undefined && args.recherche !== "" && !q) throw new ErreurNatif("api", "La recherche n'est pas lisible.");
   const r = await appelerApi("shopify", () => ({ methode: "POST", chemin: `/admin/api/${VERSION_SHOPIFY}/graphql.json`, entetes: JSON_, corps: JSON.stringify({ query: requete, variables: { n: borner(args.nombre, 10, 50), q } }) }));
   if (r.statut !== 200) throw erreurApi("Shopify", r);
-  if (Array.isArray(r.json.errors) && r.json.errors.length) throw new ErreurNatif("api", "Shopify a refusé la requête (accès ou recherche). Dis-le à l'utilisateur.");
+  if (Array.isArray(r.json.errors) && r.json.errors.length) {
+    /*
+     * GraphQL de Shopify : une limite de débit dépassée rend 200 avec
+     * `errors[].extensions.code` « THROTTLED », pas un 429
+     * (https://shopify.dev/docs/api/usage/limits, lu le 28/09/2026). Elle était
+     * dite « accès ou recherche refusés », et le modèle ne réessayait pas.
+     */
+    const codes = (r.json.errors as { extensions?: { code?: unknown } }[]).map((e) => e?.extensions?.code);
+    if (codes.includes("THROTTLED")) throw new ErreurNatif("quota", "Shopify limite momentanément le nombre de requêtes. Réessaie dans quelques secondes, et dis-le à l'utilisateur.");
+    if (codes.includes("ACCESS_DENIED")) throw new ErreurNatif("acces", "Shopify refuse cette lecture avec l'accès accordé : l'application doit avoir read_orders, read_products et read_inventory. Dis-le à l'utilisateur.");
+    throw new ErreurNatif("api", "Shopify a refusé la requête (accès ou recherche). Dis-le à l'utilisateur.");
+  }
   return (r.json.data ?? {}) as Record<string, unknown>;
 }
 

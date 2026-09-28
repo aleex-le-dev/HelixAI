@@ -6215,3 +6215,44 @@ CalDAV admise vers un même « domaine » lu sur ses deux derniers morceaux (`*.
 derrière un mandataire, une requête qui porte une fausse signature de la bonne forme compte encore
 dans la limite du webhook. Les panneaux Drive, Agenda et Slack disent le refus au membre quand il
 essaie, sans le dire d'avance.
+
+## 60. Essai Windows de bout en bout, et ce qu'il a trouvé (28-29 septembre 2026)
+
+Un flux GitHub Actions (`.github/workflows/essai-windows.yml`, pilotage dans
+`scripts/essai-windows-ci.mjs`) fait, sur une machine `windows-latest` neuve et avec l'application
+empaquetée, le parcours de la mise en route jusqu'au Chat, puis la réouverture après l'arrêt du
+service de LM Studio (PROJET.md § 3.21). Contrôles : `npm run securite`, section 32.
+
+### 60.1 Le flux lui-même
+
+- `permissions: contents: read`, aucun secret lu, `persist-credentials: false` : le code du dépôt
+  construit et lancé là ne peut rien pousser ni publier ; `electron-builder --publish never`, sans
+  signature, sans clé d'éditeur (`HELIX_SANS_CLE_EDITEUR=1`).
+- Actions figées par empreinte de commit (checkout, setup-node, upload-artifact), pas par étiquette.
+- Le script refuse de tourner hors de Windows et sans `HELIX_ESSAI_MACHINE_JETABLE=1` : il pose le
+  moteur dans `%USERPROFILE%\.lmstudio` et accepte les conditions de LM Studio (accord de Medhi, pour
+  cet usage interne d'essai). Données, profil et clé de l'instance jetables (`HELIX_DATA_DIR`,
+  `HELIX_PROFIL_ESSAI`, `"chiffrement":"fichier"`), mises à jour coupées. Le mot de passe du compte
+  d'essai est tiré au hasard à chaque exécution et n'est écrit nulle part.
+- Les artefacts (journaux, liste du dossier de LM Studio, journal d'audit de l'instance jetable) ne
+  contiennent ni le jeton de l'instance ni la séance : ils sont gardés 14 jours, visibles de qui voit
+  le dépôt. Le fichier `lms-key-2` de LM Studio n'est que listé (nom et taille), jamais copié.
+
+### 60.2 Trouvé et corrigé
+
+| Gravité | Défaut | Correction |
+|---|---|---|
+| Moyenne | Deux copies du modèle en mémoire après chaque mise en route sous Windows (llmster) : chargé par le nom du catalogue, rangé par LM Studio sous « qwen/… », la question d'essai sous le nom du catalogue en faisait charger une seconde par le serveur, avec ses propres réglages (quatre réponses en parallèle, une heure avant de libérer la mémoire). Déni de service de la machine avec un modèle de 8 B sur 16 Go. | Chargé, essayé et déchargé sous le nom que LM Studio donne (`nomChezLmStudio`, provision.ts) ; l'essai vérifie une seule copie (`lms ps`). |
+| Moyenne | Plusieurs `lms server start` en même temps à la réouverture ; un `server start` sur un serveur en marche le redémarre et coupe les réponses en cours. | Un seul démarrage à la fois (`ensureLmStudioServer`, backends.ts). |
+| Faible | `/health` attendait la levée du service de LM Studio (70 s) : fenêtre de l'application ouverte au bout d'une minute. | Réveil lancé sans l'attendre pour `/health` ; `lms` pas lancé par la passerelle tant que le serveur ne répond pas (il lèverait le service lui-même, hors de l'application). |
+| Faible | Premier `lms server start` refusé juste après la levée du service : mise en route arrêtée sur « le moteur n'a pas démarré ». | Quatre essais, cinq secondes d'écart. |
+
+Nouvelle entrée : `model` dans `POST /helix/provision/moteur` (administrateur seulement, comme la
+route) : une chaîne, prise seulement parmi `modelesQuiTiennent` de la machine, sinon 400
+`modele_non_propose`, vérifiée avant l'inscription de l'accord au journal et avant toute
+installation.
+
+### 60.3 Pas essayé
+
+Un PC Windows de particulier (antivirus tiers, carte NVIDIA, compte sans droits d'administration),
+l'installateur NSIS, l'écran lui-même, la fermeture par l'icône de la zone de notification.

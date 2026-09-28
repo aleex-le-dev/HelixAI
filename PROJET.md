@@ -2024,6 +2024,53 @@ la mémoire faisait conseiller Qwen3.5 35B A3B sur un PC de 32 Go, gpt-oss 20B s
 **Pas essayé** : tout cela sur un vrai PC Windows. À vérifier sur le poste de Medhi ou d'une des
 personnes touchées : installation du moteur de bout en bout, démarrage du service, `passerelle.log`.
 
+**Essai Windows de bout en bout (28-29/09/2026)** : un flux GitHub Actions
+(`.github/workflows/essai-windows.yml`, pilotage dans `scripts/essai-windows-ci.mjs`) construit
+l'application Windows sur une machine `windows-latest` neuve (Windows Server, 4 processeurs, 16 Go,
+sans carte graphique), lance **l'application empaquetée** `win-unpacked\Helix.exe` (passerelle dans
+son `utilityProcess`, fusible RunAsNode fermé) avec des données jetables, et fait par la passerelle
+le parcours de l'écran de mise en route : compte administrateur, moteur de LM Studio (conditions
+acceptées pour cet usage interne d'essai, accord de Medhi), Qwen3 1.7B, une question au Chat en
+« Auto » ; puis l'application quittée, le service de LM Studio arrêté (`lms daemon down`, comme un
+redémarrage), l'application rouverte, la même question. Il part à chaque poussée sur `main` qui
+touche `gateway/`, `electron/`, `src/` ou `package.json`. **Avant chaque publication, il doit être
+vert** (docs/GUIDE.md). Ce qu'il a vu tenir dès la première exécution : `llmster bootstrap` pose et
+déclare le moteur (`llmster-install-location.json`), `lms daemon up` et `lms server start` passent
+par l'application (message `lancer-lms`), le modèle se télécharge, se charge, passe l'essai, répond
+« La capitale de la France est Paris. ». Les deux pannes de la 2026.928.6 ne se sont pas montrées
+avec la 2026.928.7. Ce qu'il a trouvé, et qui est corrigé :
+
+- **Le premier `lms server start` refusé** juste après la levée du service (« Error: WebSocket
+  connection closed », code 1, vu à la première exécution) : Helix abandonnait et la mise en route
+  finissait sur « Le moteur est installé, mais il n'a pas démarré ». La première version de l'essai
+  n'était passée que parce qu'elle relisait `/helix/provision` toutes les trois secondes, ce qui
+  relançait le serveur (`discover`) ; l'essai suit désormais le flux, comme l'écran. Corrigé :
+  quatre essais à cinq secondes d'écart (`ensureLmStudioServer`, backends.ts).
+- **Plusieurs `server start` en même temps** à la réouverture (découverte du démarrage, sonde de
+  l'application, écran : trois en deux secondes au journal), alors qu'un `server start` sur un
+  serveur en marche le redémarre. Corrigé : un seul démarrage à la fois, les autres l'attendent.
+- **La fenêtre ouverte au bout d'une minute le lendemain** : `/health` attendait la levée du service
+  (70 s mesurées), l'application attend `/health` pour ouvrir sa fenêtre et abandonnait au bout de
+  40 sondes (« la passerelle n'a pas démarré à temps »). Corrigé : `/health` lance le réveil sans
+  l'attendre (`discover({ attendreLmStudio: false })`), et ne lance pas `lms` tant que le serveur ne
+  répond pas (`lms ls` aurait levé le service lui-même, depuis la passerelle). Mesuré ensuite : 0,6 s.
+- **Deux copies du modèle en mémoire après chaque mise en route**, et deux fois le modèle au
+  sélecteur du Chat (`lms ps`) : llmster range `lms get qwen3-1.7b` sous « qwen/qwen3-1.7b » ; Helix
+  chargeait par le nom du catalogue, puis posait la question d'essai sous ce nom, et le serveur, qui
+  ne servait rien sous ce nom, chargeait une seconde copie à sa façon (8 192 jetons, quatre réponses
+  en parallèle, une heure). Avec Qwen3 8B sur un PC de 16 Go, de quoi saturer la machine. Corrigé :
+  chargé, essayé et déchargé sous le nom que LM Studio donne (`nomChezLmStudio`, provision.ts).
+- **Le modèle qui suit le moteur** ne pouvait pas être choisi : « installer le moteur » enchaînait
+  toujours sur le conseillé, et une demande de modèle faite pendant l'installation se greffait sur
+  celle-ci. `POST /helix/provision/moteur` accepte `model`, pris seulement parmi ceux qui tiennent
+  sur la machine (400 `modele_non_propose` sinon), vérifié avant l'accord au journal ; l'écran ne
+  l'envoie pas encore (il installe le conseillé, comme avant).
+
+Toujours **pas essayé** : un PC Windows de particulier (antivirus tiers, carte NVIDIA, compte non
+administrateur, disque lent), l'installateur NSIS lui-même (l'essai lance le dossier
+`win-unpacked`), l'écran (l'essai passe par l'API, comme lui), la vraie fermeture par l'icône de la
+zone de notification (l'essai arrête l'arbre de processus), un modèle plus gros que Qwen3 1.7B.
+
 ## 4. Sécurité
 
 Le détail est dans [SECURITE.md](SECURITE.md). Voici ce qu'il faut avoir en tête.

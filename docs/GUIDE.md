@@ -121,7 +121,8 @@ gh run watch                # puis, s'il échoue : gh run view --log-failed
 gh run download <numéro>    # les journaux, gardés 14 jours
 ```
 
-Une exécution prend une dizaine de minutes (construction comprise). Qu'il passe ou non, il
+Une exécution prend de cinq à dix minutes, construction comprise (plus si le téléchargement du
+modèle est lent). Qu'il passe ou non, il
 garde en artefact `essai-windows-journaux` : le déroulé de l'essai (`essai.log`), la sortie
 de l'application, `passerelle.log`, la liste de `%USERPROFILE%\.lmstudio` et de son
 `.internal`, le contenu des `*install-location.json`, les journaux du serveur de LM Studio,

@@ -64,7 +64,14 @@ function LogoYouTube({ nom }: { nom: string }) {
   return <LogoMarqueGrand marque="youtube" hauteur={100} lien="https://www.youtube.com/" libelle={tf("Ouvrir {0}", nom)} />;
 }
 
-/** Comment créer l'application, service par service. */
+/**
+ * Comment créer l'application, service par service.
+ *
+ * Revérifié le 28/09/2026 : Meta ne fait plus choisir un « type » d'app
+ * (« Entreprise ») mais des cas d'usage (https://developers.facebook.com/docs/development/create-an-app) ;
+ * les étapes de Facebook et d'Instagram les nomment, telles que la console les
+ * affiche, en anglais.
+ */
 function Guide({ id }: { id: IdNatif }) {
   switch (id) {
     case "sheets":
@@ -91,9 +98,9 @@ function Guide({ id }: { id: IdNatif }) {
         <ol className="list-decimal space-y-1 pl-5">
           <li>
             {t("Sur")} <Lien href="https://developers.facebook.com/apps">developers.facebook.com/apps</Lien>
-            {t(", « Créer une app », de type « Entreprise », pour gérer une Page.")}
+            {t(", « Créer une app » : choisissez le cas d'usage « Manage everything on your Page » (gérer tout sur votre Page). Meta ne demande plus de type d'app : il propose des cas d'usage, qu'on ne peut plus retirer ensuite.")}
           </li>
-          <li>{t("Ajoutez le produit « Facebook Login » ; dans ses paramètres, « URI de redirection OAuth valides » : l'adresse de retour ci-dessous, à l'identique.")}</li>
+          <li>{t("Dans les paramètres de connexion de l'app (« Facebook Login for Business »), « URI de redirection OAuth valides » : l'adresse de retour ci-dessous, à l'identique.")}</li>
           <li>{t("« Paramètres de l'app », « Général » : recopiez l'« ID de l'app » et la « Clé secrète ».")}</li>
           <li>{t("La personne qui se connecte doit avoir un rôle dans l'application (« Rôles de l'app ») et gérer la Page.")}</li>
         </ol>
@@ -104,7 +111,7 @@ function Guide({ id }: { id: IdNatif }) {
           <li>{t("Le compte Instagram doit être professionnel (Entreprise ou Créateur), dans les réglages de l'application Instagram.")}</li>
           <li>
             {t("Sur")} <Lien href="https://developers.facebook.com/apps">developers.facebook.com/apps</Lien>
-            {t(", dans une app de type « Entreprise », ajoutez le produit « Instagram », puis « Configuration de l'API avec connexion Instagram ». Recopiez l'« ID de l'app Instagram » et sa « Clé secrète » : ce ne sont pas ceux de Facebook.")}
+            {t(", créez une app avec le cas d'usage « Manage messaging and content on Instagram », puis ouvrez « API setup with Instagram login ». Recopiez l'« ID de l'app Instagram » et sa « Clé secrète » : ce ne sont pas ceux de Facebook.")}
           </li>
           <li>{t("« Configurer la connexion professionnelle Instagram » : adresse de redirection, l'adresse de retour ci-dessous, à l'identique.")}</li>
           <li>{t("« Rôles de l'app » : ajoutez le compte Instagram comme testeur, puis acceptez l'invitation depuis Instagram.")}</li>

@@ -2,7 +2,7 @@ import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { db, type StoredCollection } from "../db.ts";
 import { chiffrer, dechiffrer, chiffrementActif, estChiffreLie } from "../secret.ts";
 import { journaliser } from "../audit.ts";
-import { requeteHttps, borner, critereSur, dateFrancaise, type DemandeHttps, type ReponseHttps } from "../clientHttps.ts";
+import { requeteHttps, borner, critereSur, dateFrancaise, ErreurTransport, type DemandeHttps, type ReponseHttps } from "../clientHttps.ts";
 import { estAdministrateur } from "../roles.ts";
 import { lookup } from "node:dns/promises";
 import { interne } from "../sortieReseau.ts";
@@ -715,7 +715,16 @@ async function accesValide(id: IdCommerce, forcer = false): Promise<string> {
   const deja = enCours.get(id);
   if (deja) return deja;
   const p = (async () => {
-    const neufs = await rafraichir(id, j);
+    /*
+     * Une coupure pendant le renouvellement n'a rien laissé partir : dite
+     * comme une erreur ordinaire, pas comme un transport qui aurait peut-être
+     * écrit. Sinon `sousGarde` (outilsNatifs.ts) annonçait « c'est peut-être
+     * déjà publié » et bloquait le même contenu une demi-heure, alors que rien
+     * n'était parti (tournée des connecteurs du 28/09/2026).
+     */
+    const neufs = await rafraichir(id, j).catch((err: unknown) => {
+      throw err instanceof ErreurTransport ? new ErreurNatif("api", err.message) : err;
+    });
     if (!neufs) {
       await marquerPerdu(id);
       // `forcer` : le service vient de refuser l'accès (401), il n'a pas seulement expiré.
@@ -1055,6 +1064,13 @@ export async function recevoir(parametres: URLSearchParams): Promise<{ ok: boole
 
 async function conclureRetour(f: Flux, parametres: URLSearchParams): Promise<{ ok: boolean; message: string; nom?: string }> {
   const def = DEFINITIONS[f.id];
+  /*
+   * D'abord : un échange en cours n'est interrompu par rien. Un second retour
+   * (même `state`, `error=…`) fermait la demande pendant l'échange, qui
+   * enregistrait pourtant le compte ensuite, et l'écran disait « refusé »
+   * (tournée des connecteurs du 28/09/2026).
+   */
+  if (f.echangeEnCours) return { ok: false, message: t("La connexion est déjà en train d'aboutir.") };
   const erreur = parametres.get("error");
   if (erreur) return { ...conclure(f.id, false, /denied|cancel/i.test(erreur) ? tf("Vous avez refusé l'accès dans {0} : rien n'a été enregistré.", def.nom) : tf("{0} a interrompu l'autorisation : rien n'a été enregistré. Recommencez.", def.nom)), nom: def.nom };
   const code = parametres.get("code") ?? "";
@@ -1083,6 +1099,8 @@ async function echanger(f: Flux, code: string): Promise<string> {
   const a = magasin!.applications[id];
   if (!a?.clientId) throw new ErreurNatif("config", tf("L'application {0} n'est plus configurée sur cette instance.", def.nom));
   const secret = secretDe(id);
+  // L'application telle qu'elle a servi à l'échange : si elle change avant l'enregistrement, le jeton n'est pas le sien.
+  const empreinte = empreinteApplication(id);
   let r: ReponseApi;
   if (id === "salesforce") {
     r = await envoyer(id, { methode: "POST", hote: a.bac ? "test.salesforce.com" : "login.salesforce.com", chemin: "/services/oauth2/token", entetes: FORM, corps: formulaire({ grant_type: "authorization_code", code, client_id: a.clientId, ...(secret ? { client_secret: secret } : {}), redirect_uri: f.redirection, code_verifier: f.verificateur }), octets: LIMITES.jetons });
@@ -1133,6 +1151,16 @@ async function echanger(f: Flux, code: string): Promise<string> {
   }
 
   await charger();
+  /*
+   * L'application a été enregistrée de nouveau pendant l'échange (tournée des
+   * connecteurs du 28/09/2026) : le jeton obtenu avec l'ancienne était gardé
+   * comme s'il venait de la nouvelle, et partait, chez Zendesk, vers le
+   * nouveau sous-domaine. Il est révoqué, et rien n'est gardé.
+   */
+  if (empreinteApplication(id) !== empreinte) {
+    await revocation(id, jetons).catch(() => false);
+    throw new ErreurNatif("config", tf("L'application {0} a changé pendant la connexion : rien n'a été enregistré. Recommencez.", def.nom));
+  }
   const avant = magasin!.comptes[id];
   magasin!.comptes[id] = {
     compte,
@@ -1140,7 +1168,7 @@ async function echanger(f: Flux, code: string): Promise<string> {
     portees: f.portees,
     ...(hote ? { hote } : {}),
     jetons: chiffrer(jetons, placeJetons(id)),
-    empreinte: empreinteApplication(id),
+    empreinte,
     depuis: new Date().toISOString(),
     par: f.qui,
   };
@@ -1735,7 +1763,8 @@ async function salesforceAffaires(args: Record<string, unknown>): Promise<Result
 }
 
 async function salesforceNoter(args: Record<string, unknown>): Promise<Resultat> {
-  const fiche = critereSur(args.fiche, 18);
+  // Lu en entier, jamais coupé : coupée à 18 caractères, une valeur plus longue désignait une autre fiche que celle que la carte montrait (tournée du 28/09/2026).
+  const fiche = critereSur(args.fiche, 60);
   // Identifiants de 15 ou 18 caractères ; 003 contact, 006 opportunité, 001 compte.
   if (!fiche || !/^(?:001|003|006)[A-Za-z0-9]{12}(?:[A-Za-z0-9]{3})?$/.test(fiche)) return refus("« fiche » doit être l'identifiant Salesforce d'un contact (003…), d'une opportunité (006…) ou d'un compte (001…), rendu par les outils de lecture.");
   const titre = texteAEcrire(args.titre, LIMITES.titre);
@@ -1796,8 +1825,16 @@ async function pipedriveAffaires(args: Record<string, unknown>): Promise<Resulta
 const idNumerique = (v: unknown) => (typeof v === "number" && Number.isInteger(v) && v > 0 && v < 1e12 ? v : typeof v === "string" && /^\d{1,12}$/.test(v) && Number(v) > 0 ? Number(v) : null);
 
 async function pipedriveNoter(args: Record<string, unknown>): Promise<Resultat> {
-  const affaire = args.affaire !== undefined && args.affaire !== "" ? idNumerique(args.affaire) : null;
-  const personne = args.personne !== undefined && args.personne !== "" ? idNumerique(args.personne) : null;
+  /*
+   * Une valeur donnée mais illisible (`null`, `0`, « abc ») est refusée, pas
+   * prise pour une absence : la carte disait « sur l'affaire ? » d'une note
+   * qui partait sur la personne (tournée des connecteurs du 28/09/2026). La
+   * carte (commerceRegles.ts) suit la même règle.
+   */
+  const donne = (v: unknown) => v !== undefined && v !== null && v !== "";
+  const affaire = donne(args.affaire) ? idNumerique(args.affaire) : null;
+  const personne = donne(args.personne) ? idNumerique(args.personne) : null;
+  if ((donne(args.affaire) && affaire === null) || (donne(args.personne) && personne === null)) return refus("« affaire » et « personne » sont des identifiants numériques, rendus par les outils de lecture de Pipedrive.");
   if ((affaire === null) === (personne === null)) return refus("Donne soit « affaire » (identifiant d'une affaire), soit « personne » (identifiant d'une personne), pas les deux.");
   const corps = texteAEcrire(args.texte);
   if (!corps) return refus(`Donne « texte », ${LIMITES.texte} caractères au plus.`);

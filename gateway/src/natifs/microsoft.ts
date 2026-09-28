@@ -757,12 +757,22 @@ async function canaux(equipe: string): Promise<{ id: string; nom: string }[]> {
  * identifiant, par nom exact, ou par un morceau de nom qu'un seul porte. Deux
  * possibles : refusé avec leurs noms (la leçon des pages Facebook, SECURITE.md § 41).
  */
-function choisir<T extends { id: string; nom: string }>(elements: T[], brut: unknown, quoi: string, outil: string): T {
+function choisir<T extends { id: string; nom: string }>(elements: T[], brut: unknown, quoi: string, outil: string, exactSeulement = false): T {
   const v = critereSur(brut, 200);
   if (!v) throw new ErreurNatif("api", `Donne « ${quoi} » : le nom ou l'identifiant rendu par ${outil}.`);
   const n = v.toLowerCase();
   const exact = elements.find((e) => e.id === v) ?? elements.find((e) => e.nom.toLowerCase() === n);
   if (exact) return exact;
+  /*
+   * Poster : le nom exact, ou l'identifiant, rien d'autre. La carte montre ce
+   * que le modèle a écrit ; un morceau de nom (« Direction ») menait à
+   * l'équipe qui seule le contenait (« Comité de direction, partenaires
+   * externes »), que la carte ne nommait pas (tournée des connecteurs du
+   * 28/09/2026).
+   */
+  if (exactSeulement) {
+    throw new ErreurNatif("api", `Aucun ${quoi} ne s'appelle exactement « ${v} » : pour poster, redonne le nom exact ou l'identifiant. Possibles : ${elements.map((e) => `${e.nom} (${e.id})`).join(", ") || "aucun"} (voir ${outil}). Rien n'a été posté.`);
+  }
   const proches = elements.filter((e) => e.nom.toLowerCase().includes(n));
   if (proches.length === 1) return proches[0]!;
   if (proches.length > 1) throw new ErreurNatif("api", `Plusieurs ${quoi}s correspondent à « ${v} » : ${proches.map((e) => `${e.nom} (${e.id})`).join(", ")}. Rien n'a été fait : redonne le nom exact ou l'identifiant.`);
@@ -780,9 +790,9 @@ async function teamsEquipes(): Promise<Resultat> {
   return { ok: true, content: assembler(`${l.length} équipe(s) Teams :`, lignes) };
 }
 
-async function canalDe(args: Record<string, unknown>): Promise<{ equipe: { id: string; nom: string }; canal: { id: string; nom: string } }> {
-  const equipe = choisir(await equipes(), args.equipe, "équipe", "teams__equipes");
-  const canal = choisir(await canaux(equipe.id), args.canal, "canal", "teams__equipes");
+async function canalDe(args: Record<string, unknown>, exactSeulement = false): Promise<{ equipe: { id: string; nom: string }; canal: { id: string; nom: string } }> {
+  const equipe = choisir(await equipes(), args.equipe, "équipe", "teams__equipes", exactSeulement);
+  const canal = choisir(await canaux(equipe.id), args.canal, "canal", "teams__equipes", exactSeulement);
   return { equipe, canal };
 }
 
@@ -806,7 +816,7 @@ async function teamsPoster(args: Record<string, unknown>, gardes: Gardes): Promi
   const brut = typeof args.texte === "string" ? args.texte.trim() : "";
   if (!brut) return refus("Donne « texte », le texte du message.");
   if (brut.length > LIMITES.texteTeams) return refus(`Message trop long : ${LIMITES.texteTeams} caractères au plus.`);
-  const { equipe, canal } = await canalDe(args);
+  const { equipe, canal } = await canalDe(args, true);
   return gardes.sousGarde("microsoft", `teams|${equipe.id}|${canal.id}|${brut}`, async () => {
     // Texte brut : ni mention (`<at>`), ni balise, ni image que la carte n'aurait pas montrées (https://learn.microsoft.com/en-us/graph/api/channel-post-messages).
     const r = await graph("POST", `/teams/${encodeURIComponent(equipe.id)}/channels/${encodeURIComponent(canal.id)}/messages`, { body: { contentType: "text", content: brut } });

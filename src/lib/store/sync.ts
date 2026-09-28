@@ -252,6 +252,8 @@ const aRepousser = new Set<Collection>();
 
 /** Tire une collection depuis l'instance vers le cache local. */
 async function pull(collection: Collection): Promise<Tirage> {
+  // Une écriture faite ici pendant la lecture est plus récente que ce que l'instance va rendre.
+  const ecrituresAvant = ecrituresLocales.get(collection) ?? 0;
   let payload: { value: unknown; revision: number };
   try {
     const res = await apiFetch(`/helix/data/${collection}`);
@@ -270,7 +272,14 @@ async function pull(collection: Collection): Promise<Tirage> {
   }
   // Les conversations et les agents partagés à un groupe se lisent selon les groupes de la personne : on les relit avec.
   if (collection === "sessions" || collection === "agents") await relireMesGroupes();
-  const enAttenteIci = enAttente().has(collection);
+  /*
+   * Écrite ici pendant que la lecture était en route (28/09/2026) : la copie
+   * rendue par l'instance est plus ancienne que celle du poste. Elle est
+   * fusionnée, comme une modification en attente, au lieu de la remplacer, puis
+   * le résultat repart.
+   */
+  const ecritPendant = (ecrituresLocales.get(collection) ?? 0) !== ecrituresAvant;
+  const enAttenteIci = ecritPendant || enAttente().has(collection);
   const valeur = enAttenteIci ? fusionner(readLocal(collection), payload.value, derniersConnus.get(collection)) : payload.value;
   if (!writeLocal(collection, valeur)) {
     /*
@@ -342,9 +351,50 @@ export function dernierEnvoi(collection: Collection): Promise<boolean> {
   return envois.get(collection) ?? Promise.resolve(false);
 }
 
+/*
+ * Une poussée à la fois par collection, et les écritures faites pendant
+ * qu'elle part (parcours du 28/09/2026).
+ *
+ * Mesuré : un Chat neuf écrit deux fois de suite, à sa création puis avec la
+ * question, partait en deux PUT simultanés portant la même révision de départ.
+ * L'instance prenait le premier et refusait le second (409) ; la relecture qui
+ * suit fusionnait, et comme les deux copies du Chat avaient la même date à la
+ * milliseconde, celle de l'instance, vide, l'emportait. La question disparaissait
+ * du Chat, ici comme sur l'instance, et rechargée pendant la réponse, la page
+ * rouvrait un Chat vide. Les poussées d'une collection partent désormais l'une
+ * après l'autre, celles demandées pendant un envoi se regroupent en une seule,
+ * qui lit la copie locale au moment de partir.
+ */
+const enVol = new Map<Collection, Promise<boolean>>();
+const enFile = new Map<Collection, Promise<boolean>>();
+/** Écritures locales demandées par collection : une relecture qui les voit changer ne remplace pas la copie du poste. */
+const ecrituresLocales = new Map<Collection, number>();
+
+function lancer(collection: Collection): Promise<boolean> {
+  const envoi = pousser(collection).finally(() => {
+    if (enVol.get(collection) === envoi) enVol.delete(collection);
+  });
+  enVol.set(collection, envoi);
+  return envoi;
+}
+
 /** Pousse le cache local vers l'instance. */
 export function push(collection: Collection): Promise<boolean> {
-  const envoi = pousser(collection);
+  ecrituresLocales.set(collection, (ecrituresLocales.get(collection) ?? 0) + 1);
+  const courant = enVol.get(collection);
+  let envoi: Promise<boolean>;
+  if (!courant) envoi = lancer(collection);
+  else {
+    envoi =
+      enFile.get(collection) ??
+      courant
+        .catch(() => false)
+        .then(() => {
+          enFile.delete(collection);
+          return lancer(collection);
+        });
+    enFile.set(collection, envoi);
+  }
   envois.set(collection, envoi);
   return envoi;
 }

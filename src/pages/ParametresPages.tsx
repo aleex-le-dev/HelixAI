@@ -52,6 +52,7 @@ import { CourrierIMAP } from "@/components/settings/CourrierIMAP";
 import { DriveGoogle } from "@/components/settings/DriveGoogle";
 import { SlackConnecteur } from "@/components/settings/SlackConnecteur";
 import { ConnecteurNatif } from "@/components/settings/ConnecteurNatif";
+import { lignesMicrosoft } from "@/components/settings/ConnecteurMicrosoft";
 import { etatNatifs, type EtatNatif, type IdNatif } from "@/lib/natifs";
 import { etat as etatDrive, type EtatDrive } from "@/lib/drive";
 import { etat as etatSlack, type EtatSlack } from "@/lib/slack";
@@ -1059,6 +1060,8 @@ export function McpSettings() {
         panneau: <ConnecteurNatif id={id} onChange={relire} />,
       };
     }),
+    // Microsoft 365 (28/09/2026) : six lignes, une seule connexion (ConnecteurMicrosoft.tsx).
+    ...lignesMicrosoft(natifs.find((s) => s.id === "microsoft"), ouvert, basculer, relire),
   ];
 
   return (

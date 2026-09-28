@@ -3,20 +3,30 @@ import { t, tf } from "@/lib/i18n";
 
 /**
  * Google Sheets, Google Slides, YouTube, LinkedIn, Facebook, Instagram,
- * TikTok et X (gateway/src/oauthNatif.ts). Aucun jeton ni secret ne revient par
- * ici : le secret d'une application part une fois, à l'enregistrement, et
- * l'instance le garde chiffré.
+ * TikTok, X et Microsoft 365 (gateway/src/oauthNatif.ts). Aucun jeton ni
+ * secret ne revient par ici : le secret d'une application part une fois, à
+ * l'enregistrement, et l'instance le garde chiffré.
  */
 
 export type IdNatif = "sheets" | "slides" | "youtube" | "linkedin" | "facebook" | "instagram" | "tiktok" | "x";
-export type IdChoix = "ecriture" | "page";
+/**
+ * Microsoft 365 (28/09/2026) : une seule connexion pour Outlook, OneDrive,
+ * SharePoint, Excel, Word et Teams, avec son propre panneau
+ * (ConnecteurMicrosoft.tsx). Elle reste hors de `IdNatif`, que le panneau
+ * commun (ConnecteurNatif.tsx) parcourt service par service.
+ */
+export type ServiceMicrosoft = "outlook" | "onedrive" | "sharepoint" | "excel" | "word" | "teams";
+export type IdNatifTous = IdNatif | "microsoft";
+export type IdChoix = "ecriture" | "page" | ServiceMicrosoft;
 
 export interface EtatNatif {
-  id: IdNatif;
+  id: IdNatifTous;
   nom: string;
   google: boolean;
-  application: { disponible: boolean; identifiant?: string; avecSecret?: boolean; source?: "google" | "ecran" };
-  choix: { id: IdChoix; portees: string[]; revue: boolean }[];
+  /** `annuaire` : Microsoft 365 seulement (identifiant de l'annuaire Entra, domaine ou « common »). */
+  application: { disponible: boolean; identifiant?: string; avecSecret?: boolean; source?: "google" | "ecran"; annuaire?: string };
+  /** `ecriture` : portées ajoutées si l'écriture est cochée ; `admin` : consentement de l'administrateur de l'annuaire (Microsoft 365). */
+  choix: { id: IdChoix; portees: string[]; revue: boolean; ecriture?: string[]; admin?: boolean }[];
   lecture: string[];
   retour: string;
   configure: boolean;
@@ -68,8 +78,9 @@ async function poster(suite: string, corps: Record<string, unknown>): Promise<Re
   }
 }
 
-export const enregistrerApplication = (service: IdNatif, clientId: string, clientSecret: string) => poster("/application", { service, clientId, clientSecret });
-export const effacerApplication = (service: IdNatif) => poster("/application/effacer", { service });
-export const connecterNatif = (service: IdNatif, choix: IdChoix[]) => poster("/connecter", { service, choix });
-export const collerAdresseNatif = (service: IdNatif, adresse: string) => poster("/code", { service, adresse });
-export const oublierNatif = (service: IdNatif) => poster("/oublier", { service });
+export const enregistrerApplication = (service: IdNatifTous, clientId: string, clientSecret: string, annuaire?: string) =>
+  poster("/application", { service, clientId, clientSecret, ...(annuaire !== undefined ? { annuaire } : {}) });
+export const effacerApplication = (service: IdNatifTous) => poster("/application/effacer", { service });
+export const connecterNatif = (service: IdNatifTous, choix: IdChoix[]) => poster("/connecter", { service, choix });
+export const collerAdresseNatif = (service: IdNatifTous, adresse: string) => poster("/code", { service, adresse });
+export const oublierNatif = (service: IdNatifTous) => poster("/oublier", { service });

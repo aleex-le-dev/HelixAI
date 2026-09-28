@@ -12,6 +12,8 @@ import {
   FileText,
   BookOpenText,
   Timer,
+  Globe,
+  ExternalLink,
 } from "lucide-react";
 import { dureeCourte, dureeMesuree, useMaintenant } from "@/lib/durees";
 import type { Citation } from "@/lib/connaissances";
@@ -23,6 +25,7 @@ import type { DureesReponse, EtapePlan, Message, ToolTrace } from "@/hooks/useCh
 import { TexteRiche } from "@/components/ui/TexteRiche";
 import { urlImage, type ImageCreee } from "@/lib/images";
 import { cibleAffichee, libelleOutil } from "@/lib/libellesOutils";
+import { lienSur, siteDe, type SourceWeb } from "@/lib/rechercheWeb";
 import { t, tf } from "@/lib/i18n";
 
 /**
@@ -375,6 +378,80 @@ function Sources({ message }: { message: Message }) {
   );
 }
 
+/**
+ * Sources de la recherche sur le web, sous la réponse (28/09/2026), sur le
+ * modèle des citations des bases de connaissances : en avant, celles que la
+ * réponse cite par leur numéro ([3]) ; les autres, repliées et dites pour ce
+ * qu'elles sont. Un petit modèle oublie souvent les numéros : les pages
+ * qu'il a ouvertes restent alors montrées, sous « Pages consultées », sans
+ * les faire passer pour des citations.
+ *
+ * Chaque source est un lien vers la page, ouvert hors de l'application
+ * (electron/main.cjs, `setWindowOpenHandler`), et seulement en http ou https.
+ */
+function SourcesWeb({ message }: { message: Message }) {
+  const [autres, setAutres] = useState(false);
+  const liste = message.sourcesWeb;
+  if (!liste || liste.length === 0) return null;
+  const citesDansLeTexte = new Set([...message.content.matchAll(/\[(\d{1,3})\]/g)].map((m) => Number(m[1])));
+  const citees = liste.filter((s) => citesDansLeTexte.has(s.n));
+  const enAvant = citees.length > 0 ? citees : liste.filter((s) => s.lue);
+  const reste = liste.filter((s) => !enAvant.includes(s));
+  const lien = (s: SourceWeb) => {
+    const href = lienSur(s.adresse);
+    const contenu = (
+      <>
+        <Globe size={12} strokeWidth={1.75} className="shrink-0" />
+        <span className="truncate">
+          [{s.n}] {s.titre}
+          <span className="opacity-70"> · {siteDe(s.adresse)}</span>
+        </span>
+        {href && <ExternalLink size={11} strokeWidth={1.75} className="shrink-0 opacity-70" />}
+      </>
+    );
+    const classe =
+      "inline-flex max-w-full items-center gap-1.5 rounded-full bg-muted/70 px-2.5 py-1 text-xs text-muted-foreground transition-colors hover:text-foreground";
+    return href ? (
+      <a key={s.n} href={href} target="_blank" rel="noreferrer noopener" title={s.adresse} className={classe}>
+        {contenu}
+      </a>
+    ) : (
+      <span key={s.n} title={s.adresse} className={classe}>
+        {contenu}
+      </span>
+    );
+  };
+  return (
+    <div className="mt-3 space-y-1.5">
+      {enAvant.length > 0 && (
+        <>
+          <p className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+            <Globe size={13} strokeWidth={1.75} />
+            {citees.length > 0 ? t("Sources du web") : t("Pages consultées sur le web")}
+          </p>
+          <div className="flex min-w-0 flex-wrap gap-1.5">{enAvant.map(lien)}</div>
+        </>
+      )}
+      {!message.streaming && reste.length > 0 && (
+        <div>
+          <button
+            type="button"
+            aria-expanded={autres}
+            onClick={() => setAutres((a) => !a)}
+            className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+          >
+            {enAvant.length > 0
+              ? tf("{0} autre(s) résultat(s) de recherche, non cité(s)", reste.length)
+              : tf("{0} résultat(s) de recherche consulté(s), aucun cité par la réponse", reste.length)}
+            <ChevronDown size={12} strokeWidth={2} className={cn("transition-transform", autres && "rotate-180")} />
+          </button>
+          {autres && <div className="mt-1.5 flex min-w-0 flex-wrap gap-1.5">{reste.map(lien)}</div>}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function Bubble({ message }: { message: Message }) {
   const isUser = message.role === "user";
 
@@ -443,6 +520,7 @@ function Bubble({ message }: { message: Message }) {
           </div>
         )}
         <Sources message={message} />
+        <SourcesWeb message={message} />
         {message.error && (
           <p
             className={cn(

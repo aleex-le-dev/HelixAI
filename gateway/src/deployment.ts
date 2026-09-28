@@ -163,6 +163,17 @@ export interface DeploymentProfile {
    * alors le réactiver à sa connexion suivante.
    */
   deuxFacteursObligatoire?: boolean;
+  /**
+   * La recherche sur le web du Chat (rechercheWeb.ts, 28/09/2026). Absent ou
+   * `true` : chacun peut l'activer dans le menu « + », question par question,
+   * et rien ne part tant qu'elle n'est pas activée. `false` : l'entrée reste
+   * visible mais désactivée, et l'écran dit que c'est ce profil qui l'interdit ;
+   * la passerelle refuse aussi une demande qui la réclamerait quand même.
+   *
+   * Ne touche ni au palier « étendu » des employés OpenClaw ni à la recherche
+   * web de Helix Code, qui ont leurs propres réglages.
+   */
+  rechercheWeb?: boolean;
 }
 
 const DEFAULT_PROFILE: DeploymentProfile = {

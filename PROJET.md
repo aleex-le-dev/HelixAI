@@ -3388,6 +3388,12 @@ simulé) ; rien de cela n'a tourné sur la vraie machine.*
     la saisie et la puce « RTK ». Puis un petit modèle local avec « Toujours » : relances en
     moins ou en plus, réponses justes ou non (RTK coupe `git log` à dix commits sur une ligne,
     et reformate `ls` et `grep`). Sous Linux, l'installation seule (archive glibc sur arm64).
+**Recherche sur le web du Chat (28/09/2026, entrée plus bas)**
+15. Avec le vrai DuckDuckGo : « + », « Rechercher sur le web », une question d'actualité, avec
+    Qwen3 8B puis Ministral 3B (recherche faite avant la réponse) ; relever les sources sous la
+    réponse, les numéros cités, le temps, et ce qui arrive après cinq ou six questions
+    rapprochées (DuckDuckGo freine : le message doit le dire). Un modèle que LM Studio déclare
+    sans outils (`trainedForToolUse: false`) : la recherche avant la réponse, sans outils.
 
 **Toujours ouverts, d'avant** : Linux sur une vraie machine (`.deb` et AppArmor, AppImage sur
 Fedora) ; une tâche programmée partie seule à l'heure dite ; la dictée au micro dans
@@ -3484,6 +3490,58 @@ ne restent ici que les points ouverts.*
     Medhi (« ajoute ») et fait le même jour pour Codex, dans l'écran Code, réservé au
     propriétaire du poste ; pas encore essayé avec le vrai programme (essai 10 de la liste
     ci-dessus). Claude par abonnement reste exclu sans accord écrit d'Anthropic.
+
+**Fait le 28/09/2026 : la recherche sur le web dans le Chat, branche `recherche-web`.** Demandé
+par Medhi : « ajoute la recherche web dans le Chat, dans le + ». Une entrée « Rechercher sur le
+web » dans le menu « + » ; choisie, elle reste en puce « Web · DuckDuckGo » à côté du « + »
+jusqu'à ce qu'on la retire (la croix), comme chez ChatGPT et Claude ; elle ne se cumule pas
+avec « Créer une image ». Son panneau dit que chaque question part à DuckDuckGo, sans compte,
+que l'instance ouvre les pages trouvées, et que rien ne part sans la puce. Sous la réponse,
+« Sources du web » : les pages citées par leur numéro (« [3] »), en liens qui s'ouvrent hors de
+l'application (http et https seulement), les autres résultats repliés ; sans numéro cité (un
+petit modèle les oublie), les pages ouvertes restent montrées sous « Pages consultées sur le
+web ». Les sources sont gardées avec la réponse, comme celles des bases de connaissances, et
+numérotées après elles. Article d'aide, ligne dans les README (et la promesse « rien ne sort »
+complétée), clé `rechercheWeb` dans `helix.config.example.json`.
+- **Le moteur : DuckDuckGo, par le web gardé des employés (`webGarde.ts`), pas Tavily ni Exa.**
+  Il marche sur toute instance, sans clé ni abonnement, et chaque sortie passe par la garde
+  réseau de Helix (`sortieReseau.ts`) avec des lectures bornées ; Tavily et Exa sont des
+  programmes tiers lancés par npx, qui cherchent et lisent hors de ces gardes, dont les noms
+  d'outils et la forme des résultats changent d'une version à l'autre, payants et hébergés aux
+  États-Unis. Ils restent utilisables par la puce « Outils » quand ils sont branchés. Le prix de
+  ce choix : DuckDuckGo freine les recherches trop rapprochées (mesuré le 27/09/2026), ce qui
+  est dit au modèle et à l'écran. `webGarde.ts` ne change pas de comportement : la recherche et
+  la lecture en sont tirées (`chercher`, `lire`) pour servir aux deux.
+- **Ce qui protège** (`rechercheWeb.ts`, SECURITE.md § 51) : les outils web ne sont proposés
+  qu'avec `web: true` (l'écran de Helix seulement), et un outil non proposé ne part pas ; une
+  page ne s'ouvre que si son adresse a déjà été vue pendant la demande (écrite par la personne,
+  dans un résultat, dans une page lue, dans le résultat d'un autre outil), ce qui empêche une
+  page piégée de faire composer une adresse qui emporterait ce que le modèle a lu ; le texte du
+  web arrive entre des bornes tirées au sort ; un appel recopié d'un contenu lu n'est lancé ni
+  écrit dans le texte (règle du § 41) ni fait en vrai appel ; six recherches et huit pages au
+  plus par demande, 2 Mo lus et 15 000 caractères rendus par page. Les recherches passent par la
+  barrière comme des lectures : une carte au niveau « Demander pour tout » seulement.
+- **Petits modèles** : un modèle de 8,5 milliards ou moins (`petitsModeles.ts`), ou que LM
+  Studio déclare sans outils, reçoit une recherche faite par l'instance avant la réponse, à
+  partir de la question (résultats et début de la première page, en contexte, montrée à
+  l'écran comme une étape) ; s'il sait appeler des outils, il garde les deux outils, avec une
+  consigne de quatre lignes numérotées. Les réparations d'appels de `petitsModeles.ts`
+  s'appliquent comme aux autres outils. Pas de découpage en étapes quand le web est le seul
+  outil.
+- **Profil** : `"rechercheWeb": false` grise l'entrée, avec la raison sous son nom (« son
+  profil de déploiement interdit… », traduite par l'instance), et l'instance refuse (403) une
+  demande qui la réclamerait. Ne touche ni aux employés ni à Helix Code.
+**Vérifié ici** : `npm run typecheck` ; traductions à 100 % en anglais, chinois et japonais
+(dont Figma et Vercel, laissés sans traduction dans la passerelle par la fusion précédente) ;
+`npm run securite`, 1 188 contrôles, 0 échec, dont la section 17 et `scripts/essai-recherche-web.mjs`
+(29 contrôles de bout en bout : faux DuckDuckGo, fausses pages, faux modèles, résolution de noms
+et sorties interceptées, aucune requête vers le vrai web) ; trois mutations (appel recopié,
+adresse composée, fausse borne) font bien échouer l'essai. À l'écran, passerelle jetable et
+Vite dans une fenêtre Electron cachée : menu « + », puce et son panneau, réponse avec ses
+sources, en français, anglais et japonais, clair et sombre, 1 440 et 375 px, et l'entrée grisée
+d'une instance au profil fermé ; le nom du moteur se coupait à 375 px en japonais dans le menu,
+il passe désormais à la ligne. **Pas essayé** : le vrai DuckDuckGo, un vrai modèle (essai 15 de
+la liste plus haut).
 
 **Fait le 28/09/2026 : la documentation remise à l'état réel.** L'aide intégrée
 (`src/lib/aide.ts`) passe à vingt articles : « Code : OpenCode ou Codex » (brancher Codex,

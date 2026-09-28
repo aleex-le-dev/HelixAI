@@ -53,6 +53,9 @@ const LIBELLES_OUTILS: Record<string, string> = {
   reunions__chercher: t("Recherche dans les réunions"),
   reunions__lire: t("Lecture d'une réunion"),
   controle__site_web: t("Contrôle du code web"),
+  // Recherche sur le web du Chat (gateway/src/rechercheWeb.ts) et web gardé des employés : mêmes noms.
+  web__chercher: t("Recherche sur le web"),
+  web__lire: t("Lecture d'une page web"),
   // Outils livrés de l'agent de code, quand ils demandent un accord (gateway/src/permissionsCode.ts).
   code__bash: t("Commande de l'agent de code"),
   code__edit: t("Modification d'un fichier du projet"),
@@ -110,7 +113,7 @@ export function libelleOutil(name: string): string {
  * s'affichaient.
  */
 export function cibleAffichee(args: Record<string, unknown>): string | undefined {
-  for (const key of ["path", "query", "url", "pattern", "source"]) {
+  for (const key of ["path", "query", "url", "pattern", "source", "requete", "adresse"]) {
     const value = args[key];
     if (typeof value === "string" && value) return value;
   }

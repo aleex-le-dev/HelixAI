@@ -9,9 +9,9 @@ const path = require("node:path");
 const R = path.join(__dirname, "..", "..");
 const b64 = (p) => fs.readFileSync(path.join(R, p)).toString("base64");
 const page = `<!doctype html><html><head><meta charset="utf-8"><style>
-@font-face { font-family: Satoshi; src: url(data:font/woff2;base64,${b64("public/fonts/satoshi.woff2")}) format("woff2"); font-weight: 300 900; }
+@font-face { font-family: "Plus Jakarta Sans"; src: url(data:font/woff2;base64,${b64("public/fonts/plus-jakarta-sans-latin.woff2")}) format("woff2"); font-weight: 200 800; }
 * { margin: 0; box-sizing: border-box; }
-html, body { width: 1280px; height: 640px; overflow: hidden; background: #FAFAF7; font-family: Satoshi, -apple-system, sans-serif; color: #16140F; }
+html, body { width: 1280px; height: 640px; overflow: hidden; background: #FAFAF7; font-family: "Plus Jakarta Sans", -apple-system, sans-serif; color: #16140F; }
 .fond { position: absolute; inset: 0; background: radial-gradient(900px 520px at 88% 30%, #EFEDE6 0%, rgba(239,237,230,0) 70%); }
 .gauche { position: absolute; left: 72px; top: 0; bottom: 0; width: 560px; display: flex; flex-direction: column; justify-content: center; }
 .logo { width: 330px; margin-left: -59px; margin-bottom: 26px; }

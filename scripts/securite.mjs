@@ -5584,9 +5584,16 @@ console.log("\n14 bis. Seconde tournée de l'audit : dépendances npm à date fi
     ressourcesMac.join(", ") || "rien",
   );
   verifier(
-    "THIRD_PARTY_NOTICES.md : Electron, la police Satoshi, Epoch AI et les téléchargements hors Apache/MIT y sont nommés, avec l'avertissement « pas un avis juridique »",
-    ["Electron 44", "LICENSES.chromium.html", "Satoshi", "ITF Free Font License", "CC BY 4.0", "x264", "MPL-2.0", "MIT-CMU", "LibreOffice", "pas un avis juridique"].every((m) => notices.includes(m)),
+    "THIRD_PARTY_NOTICES.md : Electron, la police de l'interface, Epoch AI et les téléchargements hors Apache/MIT y sont nommés, avec l'avertissement « pas un avis juridique »",
+    ["Electron 44", "LICENSES.chromium.html", "Plus Jakarta Sans", "SIL Open Font License", "CC BY 4.0", "x264", "MPL-2.0", "MIT-CMU", "LibreOffice", "pas un avis juridique"].every((m) => notices.includes(m)),
     "mention manquante",
+  );
+  // Satoshi retirée le 28/09/2026 (licence ITF, SECURITE.md § 39) : l'interface ne livre que des polices sous OFL, avec leur licence.
+  const polices = readdirSync(join(RACINE, "public", "fonts"));
+  verifier(
+    "polices livrées : Plus Jakarta Sans et sa licence OFL, plus aucun fichier Satoshi",
+    polices.some((f) => /^plus-jakarta-sans-latin\.woff2$/.test(f)) && polices.includes("OFL-plus-jakarta-sans.txt") && !polices.some((f) => /satoshi/i.test(f)) && !/satoshi/i.test(readFileSync(join(RACINE, "src", "styles", "tokens.css"), "utf8")),
+    polices.join(", "),
   );
 
   // Epoch AI : attribution complète (auteur, titre, lien, licence, modifications), à l'écran et dans le dépôt.

@@ -102,8 +102,8 @@
   --transition-base: 300ms cubic-bezier(0.4, 0, 0.2, 1);
 
   /* --- Typographie -------------------------------------------------------- */
- --font-body: "Satoshi", "Satoshi Fallback", ui-sans-serif, system-ui, sans-serif;
-  --font-display: "Satoshi", "Satoshi Fallback", ui-sans-serif, system-ui, sans-serif;
+ --font-body: "Plus Jakarta Sans", "Plus Jakarta Sans Fallback", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Plus Jakarta Sans", "Plus Jakarta Sans Fallback", ui-sans-serif, system-ui, sans-serif;
 
   /* Indique au systeme quelles couleurs natives employer (ascenseurs, champs). */
   color-scheme: light;

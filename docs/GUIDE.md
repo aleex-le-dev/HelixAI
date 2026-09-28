@@ -830,7 +830,7 @@ dans les composants.**
 | Fond | `--background` | `hsl(40 22% 97%)` crème |
 | Accent (interactif, badges) | `--accent` | `hsl(162 70% 38%)` vert émeraude |
 | Info (encarts) | `--info` | `hsl(221 83% 53%)` bleu |
-| Police | Satoshi | 300–900 (`public/fonts/satoshi.woff2`) |
+| Police | Plus Jakarta Sans (SIL OFL 1.1) | 200–800 (`public/fonts/plus-jakarta-sans-*.woff2`) |
 
 ## Stack
 

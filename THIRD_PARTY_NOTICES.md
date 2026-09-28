@@ -18,7 +18,7 @@ l'application construite (copié dans ses ressources par electron-builder).
 | Chromium, Node.js, V8 et les 779 composants recensés par Electron | surtout BSD-3-Clause ; aussi MIT, Apache-2.0, LGPL-2.1 (FFmpeg de Chromium), MPL-2.0, ICU, zlib… | Oui : licences permissives, ou LGPL pour des bibliothèques liées dynamiquement et non modifiées. La redistribution exige de fournir leurs mentions : c'est `LICENSES.chromium.html`, livré avec l'application (voir § 1.1). |
 | Paquets npm fondus dans la passerelle et l'interface (§ 5) | MIT, ISC, BSD-3-Clause, Apache-2.0 | Oui : toutes permissives, compatibles avec l'AGPL-3.0 (Apache-2.0 l'est avec la version 3 des GPL). Leur texte est recopié au § 5, comme ces licences le demandent. |
 | Paquets npm livrés dans `app.asar` (§ 5) | MIT, ISC, BSD-2/3-Clause, BlueOak-1.0.0, Python-2.0 | Oui. `argparse` porte la licence de Python (PSF), que la Free Software Foundation tient pour compatible avec la GPL depuis Python 2.0.1. Chaque paquet voyage avec son fichier de licence. |
-| Police Satoshi (`public/fonts/satoshi.woff2`), Indian Type Foundry | ITF Free Font License 2.0 (17/08/2026), propriétaire gratuite | **Non.** Voir § 2. |
+| Police Plus Jakarta Sans (`public/fonts/plus-jakarta-sans-*.woff2`), The Plus Jakarta Sans Project Authors | SIL Open Font License 1.1 | Oui : l'OFL permet d'utiliser, de modifier et de redistribuer la police avec un logiciel, y compris sous AGPL, tant que la police n'est pas vendue seule. Texte dans `public/fonts/OFL-plus-jakarta-sans.txt`. Voir § 2. |
 | Code repris d'autres projets : données de conception de ui-ux-pro-max (`gateway/design/`), découpeur de texte porté de LangChain.js, idées d'AnythingLLM (`gateway/rag/`) | MIT | Oui ; leurs mentions sont à côté du code (`LICENCE-*.txt`). |
 | Notes des modèles (indice ECI d'Epoch AI) | CC BY 4.0 | Oui, avec l'attribution du § 3. La Free Software Foundation tient CC BY 4.0 pour compatible avec la GPL version 3. |
 | Prix des fournisseurs cloud (`gateway/src/prixPublies.ts`) | faits relevés sur les pages de prix de chaque fournisseur | Des tarifs publiés sont des faits ; ils sont recopiés tels quels, avec la page et la date du relevé. |
@@ -57,22 +57,21 @@ OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ```
 
-## 2. La police Satoshi : à régler
+## 2. La police de l'interface : Plus Jakarta Sans
 
-`public/fonts/satoshi.woff2` est la police Satoshi Variable 2.000 d'Indian Type Foundry (métadonnées
-du fichier : « Copyright 2017-2021 Indian Type Foundry. All rights reserved. », licence
-`https://fontshare.com/terms`). Sa licence, l'ITF Free Font License 2.0 (texte lu dans l'archive
-officielle de Fontshare le 28/09/2026), permet de l'intégrer à ses propres applications, mais sa
-section 02 interdit de la rendre disponible à d'autres, « including distributing the Font Software
-through […] repository […] publicly accessible servers », et de la modifier (sous-ensemble,
-conversion de format comprise). Elle n'accorde rien à qui reçoit HelixAI : une organisation qui
-installe sa propre instance, ou qui redistribue le code sous AGPL, n'a aucun droit sur ce fichier.
+L'interface utilise Plus Jakarta Sans (police variable, graisses 200 à 800), Copyright 2020 The Plus
+Jakarta Sans Project Authors (https://github.com/tokotype/PlusJakartaSans), sous SIL Open Font
+License 1.1. Les fichiers `public/fonts/plus-jakarta-sans-latin.woff2` et
+`plus-jakarta-sans-latin-ext.woff2` sont ceux du paquet `@fontsource-variable/plus-jakarta-sans`
+5.3.0, sans modification ; le texte de la licence est à côté
+(`public/fonts/OFL-plus-jakarta-sans.txt`).
 
-Ce fichier est dans le dépôt public depuis sa création. **Rien n'a été changé dans cette tournée** :
-c'est la police de la marque, et le choix revient à Medhi. Trois voies : une police sous SIL Open
-Font License, qui permet tout cela ; une licence écrite d'Indian Type Foundry (sa section 09 le
-prévoit) ; ou ne plus livrer le fichier (la police de repli, calée sur Arial, est déjà déclarée dans
-`src/styles/index.css`). Le retirer du dépôt ne le retire pas de son historique.
+**Historique** : jusqu'au 28/09/2026, l'interface utilisait Satoshi (Indian Type Foundry, ITF Free
+Font License 2.0). Cette licence interdit de rendre la police disponible par un dépôt ou un serveur
+public, et n'accorde rien à qui reçoit le logiciel (relevé à la seconde tournée, SECURITE.md § 39).
+Medhi a choisi de la remplacer le 28/09/2026 ; le fichier `public/fonts/satoshi.woff2` est retiré du
+dépôt à partir de la version 2026.928.1. Il reste dans l'historique git des versions précédentes :
+le retirer de là demanderait de réécrire l'historique public.
 
 ## 3. Epoch AI : attribution des notes des modèles
 

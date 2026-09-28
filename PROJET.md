@@ -696,8 +696,9 @@ local, conforme à la règle du § 1) :
 
 **Relevé le 28/09/2026** (seconde tournée de l'audit, SECURITE.md § 39) : tous les composants
 tiers, avec leur licence et leur compatibilité avec l'AGPL-3.0, sont dans `THIRD_PARTY_NOTICES.md`
-(livré avec l'application). **À décider par Medhi** : la police Satoshi (ITF Free Font License,
-qui interdit sa diffusion par un dépôt public) ; les roues de PyAV de la dictée, qui embarquent
+(livré avec l'application). **Décidé par Medhi le 28/09/2026** : la police Satoshi (ITF Free Font
+License, qui interdit sa diffusion par un dépôt public) est remplacée par Plus Jakarta Sans (SIL OFL
+1.1), dès la version 2026.928.1 ; Satoshi reste dans l'historique git. **À décider par Medhi** : les roues de PyAV de la dictée, qui embarquent
 x264 et x265 (GPL-2.0-or-later) à côté d'un FFmpeg LGPL-3.0 ; le modèle de conversation, que
 `lms get` ne sait ni épingler ni vérifier ; les empreintes de la pile NVIDIA, relevables mais à
 essayer sur une carte NVIDIA avant d'être imposées.

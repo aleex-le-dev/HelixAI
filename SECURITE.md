@@ -5500,3 +5500,94 @@ d'actualisation, chaque lecture et chaque écriture réelles, l'apostrophe et le
 vrai classeur, le téléchargement depuis un vrai SharePoint, les messages AADSTS réels, les
 comptes Microsoft personnels (non pris en charge : leur adresse de téléchargement n'est pas sur
 `sharepoint.com`), les clouds nationaux ; l'écran en chinois et dans l'application empaquetée.
+## 50. RTK dans Helix Code (28 septembre 2026)
+
+Demandé par Medhi (PROJET.md § 3.17) : RTK (github.com/rtk-ai/rtk, Apache-2.0, 0.50.0 du
+24/09/2026) condense la sortie des commandes de l'agent de code avant qu'elle parte au modèle, pour
+consommer moins de jetons chez un fournisseur cloud. Code : `gateway/src/rtk.ts` ; contrôles :
+`npm run securite`, section 16 (17 contrôles) ; essai avec les vrais programmes :
+`node scripts/essai-rtk.mjs` (13 contrôles, vrai OpenCode 1.18.32 et vrai RTK, dossier personnel
+jetable, aucun modèle).
+
+### 50.1 Où RTK se place : après la barrière
+
+L'intégration que RTK propose pour OpenCode (`rtk init --opencode`) est un greffon
+`tool.execute.before` qui remplace `git status` par `rtk git status` **avant** que l'outil `bash`
+demande l'autorisation (lu dans `ShellTool` d'OpenCode 1.18.32 : la demande `permission: "bash"`
+est faite dans `execute`, après les crochets). La carte aurait montré `rtk …`, la barrière aurait
+jugé l'enveloppe, et une règle écrite pour `git` n'aurait plus reconnu la commande. Écartée.
+
+Helix place RTK au moment où la commande part. OpenCode lance chaque commande par
+`spawn(commande, [], { shell })` ; son réglage `shell` (« Default shell to use for terminal and
+bash tool ») accepte tout exécutable sauf fish et nu. Helix y met `<données>/rtk/shell-code`, un
+script POSIX réécrit à chaque démarrage d'OpenCode, qui reçoit `-c <commande approuvée>` :
+
+1. sans `HELIX_RTK_DB` (session sans RTK, Cowork, tout autre usage), il passe la main au vrai shell
+   avec les mêmes arguments ;
+2. sinon, il demande `rtk rewrite <commande>` : codes 0 et 3 avec un texte, il lance ce texte par le
+   vrai shell, le dossier de RTK en tête du PATH de cette seule commande ; code 1 (RTK ne connaît
+   pas la commande) ou 2 (règle de refus lue par RTK), la commande d'origine ;
+3. RTK absent, ou `rtk rewrite` en panne (tout autre code) : la commande d'origine, et une ligne
+   dans `<données>/rtk/replis.log`, relayée au journal de la passerelle (`[rtk] repli : …`).
+
+`HELIX_RTK_DB` vient du greffon d'environnement de Helix (crochet `shell.env`, qui reçoit
+`sessionID` dans 1.18.32) : il ne la donne qu'aux sessions notées dans `<données>/rtk/sessions.json`
+par la passerelle à chaque demande (modèle cloud et réglage « cloud », ou « toujours »), et à leurs
+sous-agents. Vérifié avec le vrai OpenCode : la carte montre `git status`, l'accord fait lire au
+modèle la sortie de RTK, un refus ne lance rien, `echo` passe tel quel, « jamais » et un modèle
+local (réglage « cloud ») donnent la sortie brute, RTK retiré laisse passer la commande et le
+journal le dit.
+
+**Ce qui ne change pas** : la configuration d'OpenCode (permissions, `OPENCODE_DISABLE_PROJECT_CONFIG`,
+`XDG_CONFIG_HOME` et `OPENCODE_TEST_HOME` privés, § 35 et § 37) ; les zones protégées, le niveau
+d'approbation, les règles réseau de la barrière, le journal d'audit : ils portent sur la commande
+d'origine, jamais sur sa réécriture.
+
+### 50.2 Ce que RTK envoie : rien
+
+Lu dans le code de la 0.50.0 : le seul code réseau est `ureq`, dans `core/telemetry.rs` (un envoi
+par jour vers `telemetry.rtk-ai.app/ping`, adresse compilée dans le binaire publié, relevée dans
+ses chaînes) et `core/telemetry_cmd.rs` (`rtk telemetry forget`, jamais lancé). L'envoi exige un
+consentement écrit dans la configuration de RTK par `rtk init` (jamais lancé par Helix), et
+`RTK_TELEMETRY_DISABLED=1`, que Helix pose à **chaque** appel (enveloppe, essai de version,
+total des jetons), le coupe avant même de lire ce consentement. Essayé : configuration jetable
+portant `consent_given = true`, réseau coupé par `sandbox-exec` ; sans la variable, RTK pose sa
+marque d'envoi (`.telemetry_last_ping`, écrite juste avant d'envoyer) ; avec, non.
+
+Les commandes réécrites gardent leur propre réseau (`rtk curl` lance `curl`, `rtk git push` lance
+`git push`) : c'est la commande approuvée, rien de plus.
+
+### 50.3 Ce que RTK écrit et lit
+
+| Quoi | Où | Pourquoi / contenu |
+|---|---|---|
+| Binaire | `<données>/rtk/0.50.0/rtk` | Archive de la publication, empreinte SHA-256 écrite dans `rtk.ts` (relevée dans `checksums.txt` et recalculée sur les cinq archives), taille bornée, `--version` vérifié avant la mise en place. |
+| Historique | `<données>/rtk/sessions/<session>.db` (`RTK_DB_PATH`) | Base SQLite de RTK : **texte des commandes**, jetons avant et après, 90 jours. Sert au total « N jetons économisés ». Retirée par Helix après 90 jours sans usage. Une commande qui porte un secret en argument l'y laisse, comme l'historique d'un shell. |
+| Sorties complètes | nulle part | `RTK_RECALL=0` : RTK ne recopie pas la sortie entière des commandes en échec (secrets affichés compris) pour `rtk recall`. |
+| Sessions, replis, enveloppe | `<données>/rtk/sessions.json`, `replis.log`, `shell-code` | Écrits par Helix (et par l'enveloppe pour `replis.log`), dans `<données>/rtk`, dossier 0700. |
+| Lu : réglages de RTK | `config.toml` du dossier de configuration de la personne, s'il existe | Réglages de sa propre installation de RTK (commandes exclues, limites). Rien n'y est écrit. |
+| Lu : règles de Claude Code | `~/.claude/settings.json` | `rtk rewrite` y cherche des règles de refus ; un refus veut dire « pas de réécriture », la commande part telle quelle. |
+| Lu : filtres du projet | `.rtk/filters.toml` | Ignoré tant que la personne ne l'a pas approuvé par `rtk trust` (empreinte gardée par RTK) ; un dépôt cloné ne choisit donc pas ce que le modèle lit. |
+
+### 50.4 Limites et soupçons
+
+- **Un dossier de plus dans le PATH de la commande réécrite** : une commande lancée par une commande
+  réécrite (script de test) trouve `rtk`. Elle a déjà les droits du compte.
+- **Enveloppe modifiable par une commande approuvée** : comme `~/.zshenv`, que `zsh -c` lit à chaque
+  commande. Réécrite à chaque démarrage d'OpenCode ; une commande approuvée peut de toute façon
+  tout faire sous ce compte.
+- **Ce que le modèle lit change** : RTK garde dix commits de `git log`, une ligne chacun ; reformate
+  `ls` et `grep` ; lit un fichier par `rtk read` quand l'agent lance `cat` ou `head` (contenu entier
+  au niveau par défaut). Un modèle peut s'y tromper ; c'est le prix de l'économie, et « Jamais »
+  l'enlève.
+- **Windows** : archive épinglée, rien de branché ni de téléchargé (shell choisi autrement par
+  OpenCode, enveloppe POSIX) ; l'écran le dit. **Linux arm64** : RTK ne publie qu'une archive glibc.
+- **Codex** : pas concerné. L'intégration de RTK pour Codex écrit `$CODEX_HOME/hooks.json` ou
+  `.codex/hooks.json` dans le projet, et réécrit avant l'approbation de Codex (documentation de
+  RTK) ; écartée.
+
+### 50.5 Pas essayé
+
+L'application empaquetée (l'écran n'a été vu que sous `vite`, dans une fenêtre Electron cachée) ;
+Linux ; un vrai modèle qui lit les sorties
+condensées ; les réglages et filtres personnels de RTK d'une personne qui s'en sert déjà.

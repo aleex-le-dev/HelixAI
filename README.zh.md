@@ -125,7 +125,7 @@ Windows 上暂不提供：全天候智能体（OpenClaw 在 Windows 上需要 WS
 - **模型比较**：您可以使用的每个模型都按能力评分与其发布方的价格排布，本地模型和云端模型可以在同一张图上权衡。
 - **知识库（RAG）**：汇集文档，实例在本机为其建立索引，回答会引用所用的段落。每个人只能找到自己有权查看的文档。
 - **Cowork**：在您的文件上工作的智能体，经您同意后还可在虚拟桌面（LibreOffice、浏览器）上操作，生成 Word、Excel、PowerPoint 和 PDF 文档。
-- **Helix Code**：作用于项目文件夹的代码智能体（基于 OpenCode），配有实时面板，显示其任务、命令和修改的文件；也可在 **VS Code**（附带扩展）和终端中通过 **`helix` 命令行**使用。
+- **Helix Code**：作用于项目文件夹的代码智能体（基于 OpenCode），配有实时面板，显示其任务、命令和修改的文件；也可在 **VS Code**（附带扩展）和终端中通过 **`helix` 命令行**使用。在 macOS 和 Linux 上使用云端模型时，其命令的输出会先经过 [RTK](https://github.com/rtk-ai/rtk) 精简，以减少 token 消耗；审批卡片仍显示原始命令。
 - **连接器**：邮件、Google 日历（读写）、Google Drive、Slack、Notion 和 MCP 服务器，均受**审批机制**保护：任何修改操作都须经您同意。
 - **定时任务**：一条指令加一个频率（每天、周一至周五、每周或每月某天），用您的工具执行，即使窗口关闭也会运行，可指定执行的智能体。
 - **全天候智能体**：定时任务、回复收到的邮件和即时消息，并可使用各自的知识库和头像。处理收到的邮件时权限受限：上网时只打开已见过的地址。
@@ -197,6 +197,7 @@ helix code               # 在当前文件夹上运行代码智能体
 
 本项目基于众多开源成果构建，其中包括：
 [OpenCode](https://github.com/anomalyco/opencode)、
+[RTK](https://github.com/rtk-ai/rtk)、
 [OpenClaw](https://github.com/openclaw/openclaw)、
 [stable-diffusion.cpp](https://github.com/leejet/stable-diffusion.cpp)、
 [MLX](https://github.com/ml-explore/mlx)、

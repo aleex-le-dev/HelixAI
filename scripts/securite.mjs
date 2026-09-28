@@ -283,6 +283,37 @@ const FAUX_CODEX = join(AUX, "codex-essai");
   writeFileSync(FAUX_CODEX, `#!/bin/sh\nFAUX_CODEX_AUX="${AUX_CODEX}" exec "${process.execPath}" "${join(RACINE, "scripts", "faux-codex.mjs")}" "$@"\n`);
   chmodSync(FAUX_CODEX, 0o755);
 }
+/*
+ * Un faux RTK (section 16, 28/09/2026) : la batterie ne télécharge ni ne lance
+ * le vrai (scripts/essai-rtk.mjs le fait, à part). Il note chaque appel avec
+ * les variables qui coupent la télémétrie et la copie des sorties, réécrit ce
+ * qui commence par « git » (code 3, comme le vrai), rien d'autre (code 1), et
+ * tombe en panne sur « panne » (code 101). Lancé sur une commande, il la
+ * précède de « RTK-FILTRE » et touche sa base, comme le vrai y écrit son historique.
+ * Il s'appelle `rtk` : l'enveloppe le trouve par le PATH de la commande réécrite.
+ */
+const FAUX_RTK = join(AUX, "rtk-faux", "rtk");
+{
+  const { mkdirSync, writeFileSync, chmodSync } = await import("node:fs");
+  mkdirSync(join(AUX, "rtk-faux"), { recursive: true });
+  writeFileSync(
+    FAUX_RTK,
+    [
+      "#!/bin/sh",
+      `printf '%s | TELEMETRIE=%s RECALL=%s BASE=%s\\n' "$*" "\${RTK_TELEMETRY_DISABLED:-}" "\${RTK_RECALL:-}" "\${RTK_DB_PATH:-}" >> "${join(AUX, "rtk-appels.log")}"`,
+      'case "$1" in',
+      '  --version) echo "rtk 0.50.0" ;;',
+      '  rewrite) case "$2" in "git "*) printf "rtk %s" "$2"; exit 3 ;; panne*) exit 101 ;; *) exit 1 ;; esac ;;',
+      '  gain) [ -f "$RTK_DB_PATH" ] && echo \'{"summary":{"total_commands":2,"total_input":400,"total_output":100,"total_saved":300,"avg_savings_pct":75.0,"total_time_ms":1,"avg_time_ms":1}}\' ;;',
+      '  *) [ -n "${RTK_DB_PATH:-}" ] && : >> "$RTK_DB_PATH"; echo "RTK-FILTRE"; exec "$@" ;;',
+      "esac",
+      "",
+    ].join("\n"),
+  );
+  chmodSync(FAUX_RTK, 0o755);
+}
+// Hérité par les passerelles d'essai lancées avec `...process.env` : aucune ne télécharge RTK.
+process.env.HELIX_RTK_BIN = FAUX_RTK;
 const CANARI = "canari-secret-de-l-hote-7731";
 /*
  * Un secret de l'hôte sous un nom ordinaire, sans le préfixe `HELIX_` que
@@ -1199,6 +1230,183 @@ console.log("\n6 ter. Helix Code : la session à sa propriétaire, les outils d'
     statutS3 >= 400 && apresS3.enCours === false && demandesVues(apresS3) === 1 && !(listeApres.sessions ?? []).some((x) => x.enCours),
     `${statutS3} enCours=${apresS3.enCours} demandes=${demandesVues(apresS3)} liste=${(listeApres.sessions ?? []).filter((x) => x.enCours).length}`,
   );
+}
+
+/* ------------------------------------------------------------------------- */
+console.log("\n16. RTK dans Helix Code : après la barrière, épinglé, sans réseau (28/09/2026)");
+/*
+ * RTK raccourcit la sortie des commandes de l'agent (gateway/src/rtk.ts,
+ * SECURITE.md § 50). Avec le faux OpenCode et le faux RTK : aucun modèle,
+ * aucun téléchargement. L'essai avec les vrais est scripts/essai-rtk.mjs.
+ */
+{
+  const { writeFileSync, realpathSync, appendFileSync } = await import("node:fs");
+  const { spawnSync } = await import("node:child_process");
+  const source = readFileSync(join(RACINE, "gateway", "src", "rtk.ts"), "utf8");
+  const sansCommentaires = source.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+
+  // 1. Épinglage : relevées le 28/09/2026 dans checksums.txt de la publication v0.50.0, et recalculées sur les archives.
+  const ATTENDUES = {
+    "rtk-aarch64-apple-darwin.tar.gz": "fe54761a9950266e3a78ddb66a8af5e067251169da306a288e0751de63d836fe",
+    "rtk-x86_64-apple-darwin.tar.gz": "ac23e20024ab3c71e7f50069f8b34190aec1b2d8f0c2cc19834039b3dac73373",
+    "rtk-x86_64-unknown-linux-musl.tar.gz": "bc2b8902b0d9c796c82ef45f16ae2307e17757afeca5ee156235a3dc7bda5f89",
+    "rtk-aarch64-unknown-linux-gnu.tar.gz": "d1cc49dfa2cd443fc32625444b59fe616b6c80478cca210985118347174dd758",
+    "rtk-x86_64-pc-windows-msvc.zip": "cb03399305135dd59ee23eb59a3260ccdeea5a8e08fbc7a271b115b85583a6c9",
+  };
+  const ecrites = Object.fromEntries([...source.matchAll(/fichier: "([^"]+)", sha256: "([0-9a-f]{64})"/g)].map((m) => [m[1], m[2]]));
+  verifier(
+    "RTK : version 0.50.0 épinglée, une empreinte SHA-256 écrite par archive (macOS arm64 et x64, Linux x64 et arm64, Windows x64), identique à checksums.txt",
+    /const VERSION = "0\.50\.0";/.test(source) && /const DEPOT = "https:\/\/github\.com\/rtk-ai\/rtk\/releases\/download";/.test(source) && Object.keys(ATTENDUES).length === Object.keys(ecrites).length && Object.entries(ATTENDUES).every(([f, h]) => ecrites[f] === h),
+    JSON.stringify(ecrites).slice(0, 200),
+  );
+  verifier("RTK : aucun script d'installation lancé, rien posé hors des données de Helix", !/install\.sh|curl .*\| *sh|brew |cargo install|\.local\/bin/.test(sansCommentaires), "installation hors épinglage");
+
+  // 2. Installation : une archive à la mauvaise empreinte n'est pas posée ; un profil qui réserve les installations n'en fait aucune.
+  const d16 = mkdtempSync(join(tmpdir(), "helix-rtk-"));
+  writeFileSync(join(d16, "libre.json"), JSON.stringify({ chiffrement: "fichier", backends: [{ id: "lmstudio", enabled: false }, { id: "exo", enabled: false }] }));
+  writeFileSync(join(d16, "integrateur.json"), JSON.stringify({ chiffrement: "fichier", autoProvision: false, backends: [{ id: "lmstudio", enabled: false }, { id: "exo", enabled: false }] }));
+  const sondeRtk = `const appels = []; globalThis.fetch = async (u) => { appels.push(String(u)); return new Response(new Blob([new Uint8Array(4096).fill(7)]).stream(), { status: 200 }); };
+    const r = await import("./gateway/src/rtk.ts"); const fs = await import("node:fs");
+    const verdict = r.rtkEnFond();
+    for (let i = 0; i < 200 && r.etatInstallationRtk().enCours; i++) await new Promise((ok) => setTimeout(ok, 50));
+    console.log("VERDICT", verdict, "APPELS", appels.join(" ") || "aucun", "POSE", fs.existsSync(r.rtkDeHelix()), "ERREUR", r.etatInstallationRtk().erreur);`;
+  const essaiRtk = (profil) =>
+    spawnSync(process.execPath, ["--experimental-strip-types", "--no-warnings", "--input-type=module", "-e", sondeRtk], {
+      cwd: RACINE,
+      env: { HOME: d16, PATH: "/usr/bin:/bin", HELIX_CONFIG: join(d16, profil), HELIX_DATA_DIR: join(d16, "donnees") },
+      encoding: "utf8",
+      timeout: 60_000,
+    });
+  const parProfil = essaiRtk("integrateur.json");
+  verifier("RTK : rien n'est téléchargé quand le profil réserve les installations à l'intégrateur", `${parProfil.stdout}`.includes("VERDICT profil APPELS aucun"), `${parProfil.stdout}${parProfil.stderr}`.slice(-200));
+  const cibleRtk = { "darwin-arm64": "rtk-aarch64-apple-darwin.tar.gz", "darwin-x64": "rtk-x86_64-apple-darwin.tar.gz", "linux-x64": "rtk-x86_64-unknown-linux-musl.tar.gz", "linux-arm64": "rtk-aarch64-unknown-linux-gnu.tar.gz" }[`${process.platform}-${process.arch}`];
+  if (cibleRtk) {
+    const absent = `${essaiRtk("libre.json").stdout}`;
+    verifier(
+      "RTK : absent, la version épinglée est demandée à github.com, et une archive à la mauvaise empreinte n'est pas posée",
+      absent.includes(`VERDICT lancee APPELS https://github.com/rtk-ai/rtk/releases/download/v0.50.0/${cibleRtk} POSE false ERREUR`) && /empreinte|checksum/.test(absent),
+      absent.slice(-240),
+    );
+  }
+  rmSync(d16, { recursive: true, force: true });
+
+  // 3. OpenCode garde son isolement, et lance ses commandes par l'enveloppe de Helix.
+  const config = JSON.parse(readFileSync(join(DONNEES, "opencode", "opencode.json"), "utf8"));
+  const enveloppe = join(DONNEES, "rtk", "shell-code");
+  const portFaux = Number(journal.match(/prêt sur le port (\d+)/)?.[1] ?? 0);
+  const vu = await (await fetch(`http://127.0.0.1:${portFaux}/essai/env`)).json().catch(() => ({ env: {} }));
+  verifier(
+    "RTK : OpenCode lance ses commandes par l'enveloppe (réglage `shell`), et garde OPENCODE_DISABLE_PROJECT_CONFIG et son XDG_CONFIG_HOME privé",
+    config.shell === enveloppe && existsSync(enveloppe) && vu.env?.OPENCODE_DISABLE_PROJECT_CONFIG === "true" && String(vu.env?.XDG_CONFIG_HOME ?? "").startsWith(join(DONNEES, "opencode", "prive")),
+    `${config.shell} ${vu.env?.OPENCODE_DISABLE_PROJECT_CONFIG} ${vu.env?.XDG_CONFIG_HOME}`,
+  );
+
+  // 4. Réglage « cloud » (défaut) : le modèle d'essai vient du profil (origine « agence ») ; « jamais » le coupe.
+  const ouvrir = async () => (await (await appel("/helix/code/session", { method: "POST", headers: avecSeance, body: JSON.stringify({ model: "essai-chat", dossier: PROJET_A }) })).json().catch(() => ({}))).data?.id;
+  const SR = await ouvrir();
+  const SJ = await ouvrir();
+  // Le faux OpenCode n'appelle aucun modèle : chaque demande finit en échec au bout d'une quinzaine de secondes (section 6 ter). On n'attend que la décision.
+  const demandes = [
+    appel("/helix/code/prompt", { method: "POST", headers: avecSeance, body: JSON.stringify({ sessionID: SR, text: "Statut du dépôt, essai RTK." }) }).then((r) => r.text()).catch(() => ""),
+    appel("/helix/code/prompt", { method: "POST", headers: avecSeance, body: JSON.stringify({ sessionID: SJ, text: "Statut du dépôt, essai RTK.", rtk: "jamais" }) }).then((r) => r.text()).catch(() => ""),
+  ];
+  let notees = {};
+  for (let i = 0; i < 40 && !(SR in notees); i++) {
+    await attendre(100);
+    notees = JSON.parse(readFileSync(join(DONNEES, "rtk", "sessions.json"), "utf8").trim() || "{}");
+  }
+  verifier("RTK : réglage par défaut, modèle cloud → la session est notée pour RTK ; « jamais » → elle ne l'est pas", notees[SR] === SR && !(SJ in notees), JSON.stringify(notees));
+  const { pathToFileURL } = await import("node:url");
+  const { rtkPourDemande, lireReglageRtk } = await import(pathToFileURL(join(RACINE, "gateway", "src", "rtk.ts")).href);
+  verifier(
+    "RTK : « cloud » ne vaut que pour un modèle cloud (clé ou prestataire), « toujours » aussi pour un modèle local, « jamais » pour aucun ; un réglage inconnu vaut « cloud »",
+    rtkPourDemande("cloud", "cle") && rtkPourDemande("cloud", "agence") && !rtkPourDemande("cloud", "local") && !rtkPourDemande("cloud", undefined) && rtkPourDemande("toujours", "local") && !rtkPourDemande("jamais", "cle") && lireReglageRtk("n'importe") === "cloud",
+    "table fausse",
+  );
+
+  // 5. La carte montre la commande d'origine ; l'accord la fait passer par RTK, avec la télémétrie et la copie des sorties coupées.
+  const permission = async (sessionID, commande) =>
+    (await (await fetch(`http://127.0.0.1:${portFaux}/essai/permission`, { method: "POST", body: JSON.stringify({ sessionID, permission: "bash", patterns: [commande], metadata: { command: commande } }) })).json()).id;
+  const reponseDe = async (id) => {
+    for (let t = 0; t < 4000; t += 100) {
+      const r = (await (await fetch(`http://127.0.0.1:${portFaux}/essai/reponses`)).json()).find((x) => x.id === id);
+      if (r) return r;
+      await attendre(100);
+    }
+    return undefined;
+  };
+  const carteDe = async () => {
+    for (let t = 0; t < 3000; t += 100) {
+      const c = ((await (await appel("/helix/approbation", { headers: avecSeance })).json().catch(() => ({}))).enAttente ?? []).find((d) => d.detail?.surface === "code");
+      if (c) return c;
+      await attendre(100);
+    }
+    return undefined;
+  };
+  const executer = async (sessionID, command) =>
+    (await (await fetch(`http://127.0.0.1:${portFaux}/essai/executer`, { method: "POST", body: JSON.stringify({ sessionID, command, dossier: realpathSync(PROJET_A) }) })).json().catch(() => ({})));
+  const JOURNAL_RTK = join(AUX, "rtk-appels.log");
+  appendFileSync(JOURNAL_RTK, "");
+  const lignesRtk = () => readFileSync(JOURNAL_RTK, "utf8").split("\n").filter(Boolean);
+
+  const p1 = await permission(SR, "git --version");
+  const carte1 = await carteDe();
+  verifier("RTK : la carte d'accord montre la commande d'origine (« git --version », pas « rtk git --version »)", carte1?.detail?.commande === "git --version", JSON.stringify(carte1?.detail ?? carte1).slice(0, 200));
+  await appel("/helix/approbation/repondre", { method: "POST", headers: avecSeance, body: JSON.stringify({ id: carte1?.id, accord: true }) });
+  const r1 = await reponseDe(p1);
+  const avant1 = lignesRtk().length;
+  const x1 = await executer(SR, "git --version");
+  const appels1 = lignesRtk().slice(avant1);
+  verifier("RTK : la commande accordée passe par RTK dans une session où il sert", r1?.reply === "once" && x1.shell === enveloppe && /^RTK-FILTRE\ngit version/.test(x1.sortie ?? ""), `${r1?.reply} ${x1.shell} ${JSON.stringify(x1.sortie)}`);
+  verifier(
+    "RTK : aucune sortie réseau (RTK_TELEMETRY_DISABLED=1) ni copie des sorties (RTK_RECALL=0) à chaque appel, historique dans les données de Helix",
+    appels1.length === 2 && appels1.every((l) => l.includes(`TELEMETRIE=1 RECALL=0 BASE=${join(DONNEES, "rtk", "sessions", `${SR}.db`)}`)) && /^rewrite git --version/.test(appels1[0]) && /^git --version/.test(appels1[1]),
+    appels1.join(" / "),
+  );
+  const gain = await (await appel(`/helix/code/rtk?sessionID=${SR}`, { headers: avecSeance })).json().catch(() => ({}));
+  const gainB = await appel(`/helix/code/rtk?sessionID=${SR}`, { headers: avecSeanceB });
+  const gainJeton = await appel(`/helix/code/rtk?sessionID=${SR}`, { headers: avecJeton });
+  verifier("RTK : jetons économisés lus dans l'historique de la session, pour sa propriétaire seule (B → 403, jeton seul → 401)", gain.session?.actif === true && gain.session?.economies?.jetons === 300 && gainB.status === 403 && gainJeton.status === 401, `${JSON.stringify(gain.session)} ${gainB.status} ${gainJeton.status}`);
+
+  // 6. Une commande refusée à la carte reste refusée : la réponse à OpenCode est « reject », et le vrai ne lance alors rien.
+  const p2 = await permission(SR, "git status && touch rtk-refuse.txt");
+  const carte2 = await carteDe();
+  await appel("/helix/approbation/repondre", { method: "POST", headers: avecSeance, body: JSON.stringify({ id: carte2?.id, accord: false }) });
+  const r2 = await reponseDe(p2);
+  verifier("RTK : une commande refusée à la carte dans une session RTK reste refusée (« reject »), carte montrant la commande d'origine", r2?.reply === "reject" && carte2?.detail?.commande === "git status && touch rtk-refuse.txt", `${r2?.reply} ${carte2?.detail?.commande}`);
+
+  // 7. Ce que RTK ne connaît pas, les sessions sans RTK, et les replis.
+  const avant3 = lignesRtk().length;
+  const x3 = await executer(SR, "echo inconnue-de-rtk");
+  verifier("RTK : une commande qu'il ne connaît pas passe telle quelle", x3.sortie === "inconnue-de-rtk\n" && lignesRtk().slice(avant3).length === 1, `${JSON.stringify(x3.sortie)} ${lignesRtk().slice(avant3).join(" / ")}`);
+  const avant4 = lignesRtk().length;
+  const x4 = await executer(SJ, "git --version");
+  verifier("RTK : dans une session sans RTK, RTK n'est même pas appelé", /^git version/.test(x4.sortie ?? "") && lignesRtk().length === avant4, `${JSON.stringify(x4.sortie)} ${lignesRtk().length - avant4}`);
+  const x5 = await executer(SR, "panne ; echo apres-panne");
+  const replis = readFileSync(join(DONNEES, "rtk", "replis.log"), "utf8");
+  await appel(`/helix/code/rtk?sessionID=${SR}`, { headers: avecSeance });
+  await attendre(200);
+  verifier("RTK : `rtk rewrite` en panne → la commande passe sans lui, et le journal le dit", /apres-panne/.test(x5.sortie ?? "") && /rtk rewrite a échoué \(code 101\)/.test(replis) && /\[rtk\] repli : .*code 101/.test(journal), `${JSON.stringify(x5.sortie)} ${replis.slice(-120)}`);
+  // RTK absent : l'enveloppe est essayée seule, écrite pour un RTK qui n'existe pas.
+  const d17 = mkdtempSync(join(tmpdir(), "helix-rtk-absent-"));
+  const sondeAbsent = `const r = await import("./gateway/src/rtk.ts"); console.log(r.ecrireEnveloppe());`;
+  const env17 = { HOME: d17, PATH: "/usr/bin:/bin", HELIX_CONFIG: join(d17, "p.json"), HELIX_DATA_DIR: join(d17, "donnees"), HELIX_RTK_BIN: join(d17, "nulle-part", "rtk") };
+  writeFileSync(join(d17, "p.json"), JSON.stringify({ chiffrement: "fichier" }));
+  const env17Chemin = spawnSync(process.execPath, ["--experimental-strip-types", "--no-warnings", "--input-type=module", "-e", sondeAbsent], { cwd: RACINE, env: env17, encoding: "utf8" }).stdout.trim();
+  const x6 = spawnSync(env17Chemin, ["-c", "echo sans-rtk"], { env: { ...env17, HELIX_RTK_DB: join(d17, "x.db") }, encoding: "utf8" });
+  const replis6 = existsSync(join(d17, "donnees", "rtk", "replis.log")) ? readFileSync(join(d17, "donnees", "rtk", "replis.log"), "utf8") : "";
+  verifier("RTK : absent → la commande passe sans lui, et le repli est noté", x6.stdout === "sans-rtk\n" && /RTK absent/.test(replis6), `${JSON.stringify(x6.stdout)} ${replis6}`);
+  rmSync(d17, { recursive: true, force: true });
+
+  // 8. Aucune sortie réseau : le seul code réseau de RTK est sa télémétrie ; chaque appel par Helix la coupe.
+  const appelsRtk = (sansCommentaires.match(/execFile\(\s*(exe|rtk)\b/g) ?? []).length;
+  verifier(
+    "RTK : chaque lancement par Helix (essai de version, total des jetons, enveloppe) porte RTK_TELEMETRY_DISABLED=1 et RTK_RECALL=0",
+    appelsRtk === 2 && (sansCommentaires.match(/\.\.\.ENV_RTK/g) ?? []).length === 2 && /ENV_RTK = \{ RTK_TELEMETRY_DISABLED: "1", RTK_RECALL: "0" \}/.test(source) && (sansCommentaires.match(/RTK_TELEMETRY_DISABLED=1 RTK_RECALL=0 RTK_DB_PATH/g) ?? []).length === 1 && /RTK_TELEMETRY_DISABLED=1; RTK_RECALL=0; RTK_DB_PATH=/.test(sansCommentaires),
+    `${appelsRtk} lancements`,
+  );
+  // Les deux demandes d'essai finissent (échec attendu, sans modèle) avant la section suivante.
+  await Promise.all(demandes);
 }
 
 /* ------------------------------------------------------------------------- */
@@ -4994,6 +5202,8 @@ console.log("\n13 quinquies. Seconde tournée du 28/09/2026 : régressions entre
       HELIX_LMSTUDIO_URL: "http://127.0.0.1:9/v1",
       HELIX_EXO_URL: "http://127.0.0.1:9/v1",
       HELIX_OPENCODE_BIN: "/usr/bin/true",
+      // Le faux RTK : sans lui, le démarrage de l'agent de code poserait le vrai (rtk.ts, `rtkEnFond`).
+      HELIX_RTK_BIN: FAUX_RTK,
     },
     stdio: ["ignore", "pipe", "pipe"],
   });

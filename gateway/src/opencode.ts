@@ -27,6 +27,7 @@ import { optionsDeChargement } from "./backends.ts";
 import { contientUneZone, estProtege } from "./zonesProtegees.ts";
 import type { ModelInfo } from "./types.ts";
 import { arreterArbre } from "./processus.ts";
+import { codeGreffonRtk, ecrireEnveloppe, menageBases, rtkEnFond } from "./rtk.ts";
 
 /**
  * Moteur de l'écran Code : OpenCode en mode serveur (ARCHITECTURE.md, ADR-003).
@@ -390,11 +391,24 @@ async function writeConfig(dir: string): Promise<void> {
   const defaultModel = preferred ?? usable[0]?.id ?? "auto";
 
   const fichierConfig = cheminConfig();
+  /*
+   * RTK (rtk.ts, 28/09/2026) : les commandes de l'agent partent par une
+   * enveloppe du shell, **après** la barrière d'approbation, qui les fait
+   * passer par RTK dans les sessions où il sert, et les laisse telles quelles
+   * ailleurs. Aucune sous Windows : OpenCode garde son propre choix.
+   */
+  let enveloppe: string | null = null;
+  try {
+    enveloppe = ecrireEnveloppe();
+  } catch (err) {
+    console.warn(`[rtk] enveloppe non écrite, commandes sans RTK : ${err instanceof Error ? err.message : String(err)}`);
+  }
   writeFileSync(
     fichierConfig,
     JSON.stringify(
       {
         $schema: "https://opencode.ai/config.json",
+        ...(enveloppe ? { shell: enveloppe } : {}),
         provider: {
           helix: {
             npm: "@ai-sdk/openai-compatible",
@@ -588,12 +602,15 @@ function ecrireGreffonEnvironnement(): void {
   writeFileSync(
     fichier,
     [
+      // Les `import` en tête : le morceau de RTK en porte (rtk.ts, `codeGreffonRtk`).
+      ...codeGreffonRtk(),
       "// Écrit par la passerelle Helix (gateway/src/opencode.ts) : ne pas modifier.",
       "// Les commandes lancées par l'agent ne reçoivent ni le mot de passe du serveur ni les clés de la passerelle.",
       `const VIDES = ${JSON.stringify(vides)};`,
       "export const HelixEnvironnement = async () => ({",
-      '  "shell.env": async (_entree, sortie) => {',
-      "    sortie.env = { ...(sortie.env ?? {}), ...VIDES };",
+      // `HELIX_RTK_DB` : seulement dans les sessions où RTK sert ; l'enveloppe du shell le lit (rtk.ts).
+      '  "shell.env": async (entree, sortie) => {',
+      "    sortie.env = { ...(sortie.env ?? {}), ...VIDES, HELIX_RTK_DB: baseRtk(entree?.sessionID) };",
       "  },",
       "});",
       "",
@@ -794,6 +811,9 @@ export async function ensureServer(): Promise<number | null> {
 
     // OpenCode démarre dans le dossier de l'instance ; chaque session porte le sien (`?directory=`).
     const dir = dossierParDefaut();
+    // RTK posé en arrière-plan s'il manque (rtk.ts) ; en attendant, les commandes partent sans lui.
+    rtkEnFond();
+    menageBases();
     await writeConfig(dir);
 
     /*

@@ -170,6 +170,7 @@ import * as computer from "./computer.ts";
 import * as approbation from "./approbation.ts";
 import * as usage from "./usage.ts";
 import { installerOpencode } from "./opencodePrive.ts";
+import { economiesSession, etatRtk, lireReglageRtk, noterRtkSession, relayerReplis, rtkActifDans, rtkPourDemande } from "./rtk.ts";
 import { routeCodex, arreterCodex, surLeBureau, depuisLaBoucle } from "./codex.ts";
 import {
   oublierOpencode,
@@ -2951,6 +2952,8 @@ async function traiterCodePrompt(
     /** Réglages de l'écran au moment de l'envoi ; absents : ceux de la session. */
     model?: string;
     effort?: string;
+    /** Réglage RTK de l'écran Code (rtk.ts) : « cloud » (défaut), « toujours » ou « jamais ». */
+    rtk?: unknown;
   };
   if (!body.sessionID || !body.text) {
     return send(res, 400, { error: { message: t("`sessionID` et `text` sont requis.") } });
@@ -3111,6 +3114,15 @@ async function traiterCodePrompt(
   if (auteur) noterDemandeCode(body.sessionID, auteur.userId, dossierDemande);
   // Les accords donnés aux outils d'OpenCode valent pour un tour (permissionsCode.ts).
   nouveauTourCode(body.sessionID);
+  /*
+   * RTK dans cette session, pour ce tour (rtk.ts) : d'office avec un modèle
+   * cloud, à la demande de Medhi (28/09/2026) ; avec un modèle local si la
+   * personne l'a choisi. Décidé ici, avant l'envoi : la première commande
+   * peut suivre de près. Les commandes passent toujours d'abord par la barrière.
+   */
+  const choixRtk = await resolve({ model: reglageEnvoi.modele });
+  const rtkActif = rtkPourDemande(lireReglageRtk(body.rtk), "error" in choixRtk ? undefined : choixRtk.model.origine);
+  noterRtkSession(body.sessionID, rtkActif);
 
   /*
    * `prompt_async` rend la main tout de suite (204), comme le faisait la
@@ -3178,6 +3190,7 @@ async function traiterCodePrompt(
         const nouvelle = creation.id;
         if (auteur) noterDemandeCode(nouvelle, auteur.userId, dossier);
         nouveauTourCode(nouvelle);
+        noterRtkSession(nouvelle, rtkActif);
         /*
          * La session relancée remplace la perdue dans la liste de Code, avec
          * la même demande pour titre, et à la même propriétaire. La perdue est
@@ -5500,6 +5513,22 @@ const traiter = (
     }
     if (req.method === "POST" && path === "/helix/code/interrupt")
       return handleCodeInterrupt(req, res);
+    /*
+     * RTK (rtk.ts) : s'il est posé, et les jetons qu'il a épargnés dans une
+     * session, d'après l'historique qu'il tient sur ce poste. Séance requise,
+     * et la session doit être à la personne : ses commandes n'intéressent qu'elle.
+     */
+    if (req.method === "GET" && path === "/helix/code/rtk") {
+      return avecSeance(req, res, url, async (qui) => {
+        relayerReplis();
+        const sessionID = url.searchParams.get("sessionID");
+        if (!sessionID) return send(res, 200, { etat: etatRtk() });
+        if (!SESSION_CODE.test(sessionID)) return send(res, 400, { error: { message: t("`sessionID` invalide.") } });
+        const acces = await refusSessionCode(sessionID, qui.userId);
+        if ("statut" in acces) return send(res, acces.statut, { error: { message: acces.message } });
+        send(res, 200, { etat: etatRtk(), session: { actif: rtkActifDans(sessionID), economies: await economiesSession(sessionID) } });
+      });
+    }
     /*
      * Sessions de Code de la personne (sessionsCode.ts) : la liste, l'historique
      * d'une session pour la rouvrir, et « retirer de la liste » (la conversation

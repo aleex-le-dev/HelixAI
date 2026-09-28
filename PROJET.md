@@ -1707,6 +1707,35 @@ replis de l'installation s'en servent) ; il n'est plus affiché, sauf pour chois
 conseil de l'accueil. `npm run securite` (§ 15 quinquies) vérifie qu'aucune phrase des
 catalogues, en français comme dans ses traductions, ne dit plus « pas encore essayé ».
 
+### 3.17 RTK dans Helix Code : après la barrière, jamais à sa place (28/09/2026)
+
+**Demande de Medhi, 28/09/2026** : « Pour les modèles cloud, si possible, mettre RTK pour limiter
+la consommation de jetons. » RTK (github.com/rtk-ai/rtk, Apache-2.0, 0.50.0 du 24/09/2026)
+condense la sortie des commandes de développement (`git`, `ls`, `grep`, `find`, tests) avant
+qu'elle parte au modèle. Détail et mesures au § 5 (« Fait le 28/09/2026 : RTK »), sécurité au
+§ 50 de SECURITE.md.
+
+Ce qui a été décidé, et pourquoi :
+
+- **Pas le greffon que RTK propose pour OpenCode** (`rtk init --opencode`, crochet
+  `tool.execute.before`). Il réécrit `git status` en `rtk git status` *avant* la demande
+  d'autorisation (lu dans OpenCode 1.18.32) : la carte aurait montré l'enveloppe, et la
+  barrière aurait jugé `rtk` au lieu de la commande. **RTK passe après la barrière** : le
+  réglage `shell` d'OpenCode désigne une enveloppe écrite par Helix, qui reçoit la commande
+  déjà approuvée et demande à `rtk rewrite` son équivalent. Carte, zones, niveau, journal :
+  inchangés, ils ne voient que la commande d'origine.
+- **Par session, décidé à chaque demande** : d'office avec un modèle cloud (origine « clé » ou
+  « prestataire »), comme Medhi l'a demandé ; « toujours » au choix, pour les petits modèles
+  locaux qui ont peu de place ; « jamais » possible. Le réglage est dans l'écran Code (puce
+  « RTK »), retenu dans le profil de la personne.
+- **Sans télémétrie, sans copie des sorties** : `RTK_TELEMETRY_DISABLED=1` et `RTK_RECALL=0` à
+  chaque appel ; l'historique de RTK (d'où vient « N jetons économisés ») est une base par
+  session dans les données de Helix.
+- **Pas sous Windows, pas avec Codex** : sous Windows, OpenCode choisit son shell autrement et
+  l'enveloppe est un script POSIX ; Codex ne passe pas par OpenCode, et l'intégration que RTK
+  lui propose écrit dans `~/.codex` ou dans le projet (`.codex/hooks.json`) et réécrit avant
+  l'approbation de Codex (documentation de RTK) : écartée.
+
 ---
 
 ## 4. Sécurité
@@ -3353,6 +3382,13 @@ simulé) ; rien de cela n'a tourné sur la vraie machine.*
     session, pendant une vraie préparation d'application ; « Signaler un problème » ouvert
     pour de vrai (ticket prérempli vu sur GitHub, brouillon dans la messagerie).
 
+**RTK dans Helix Code (§ 3.17)**
+15. Dans l'application de bureau, sur un Mac : Code avec un modèle d'une vraie clé, une tâche
+    qui lance `git status`, `git log`, les tests ; relever la ligne « N jetons économisés » sous
+    la saisie et la puce « RTK ». Puis un petit modèle local avec « Toujours » : relances en
+    moins ou en plus, réponses justes ou non (RTK coupe `git log` à dix commits sur une ligne,
+    et reformate `ls` et `grep`). Sous Linux, l'installation seule (archive glibc sur arm64).
+
 **Toujours ouverts, d'avant** : Linux sur une vraie machine (`.deb` et AppArmor, AppImage sur
 Fedora) ; une tâche programmée partie seule à l'heure dite ; la dictée au micro dans
 l'application ; la vidéo Wan 2.2 sur 32 Go, et la vidéo sous Windows et Linux ; le bot dans
@@ -4560,6 +4596,52 @@ dans la fenêtre Electron d'essai et a écrit dans le presse-papiers du Mac.
 **Pas essayé** : l'application de bureau avec ces changements (vu dans le code et, pour le
 graphique, dans le navigateur contre une instance jetable) ; le téléchargement du compte rendu
 dans Electron (même mécanisme que l'export des données, déjà en place).
+
+**Fait le 28/09/2026 : RTK, moins de jetons pour la sortie des commandes (branche `rtk`).**
+Demandé par Medhi (§ 3.17). `gateway/src/rtk.ts` pose RTK 0.50.0 dans `<données>/rtk/0.50.0/`
+(archive officielle, empreinte SHA-256 écrite dans le code, relevée dans `checksums.txt` de la
+publication et recalculée sur les cinq archives : identiques), en arrière-plan au démarrage de
+l'agent de code, comme OpenCode ; rien dans le PATH de la personne. OpenCode lance ses commandes
+par l'enveloppe `<données>/rtk/shell-code` (réglage `shell`) ; le greffon d'environnement lui
+donne `HELIX_RTK_DB` dans les seules sessions où RTK sert (les sous-agents suivent leur session).
+`OPENCODE_DISABLE_PROJECT_CONFIG` et les dossiers privés (`XDG_CONFIG_HOME`) ne changent pas.
+Écran Code : puce « RTK » (Avec les modèles cloud, Toujours, Jamais) et « RTK : N jetons
+économisés sur cette session » sous la saisie (`GET /helix/code/rtk`, séance et propriétaire de
+la session requises). Codex non concerné (§ 3.17).
+
+*Mesuré le 28/09/2026* sur ce Mac, dépôt jetable (le code de RTK en 50 commits, quatre fichiers
+modifiés, cinq non suivis ; un petit projet npm de 49 tests `node --test`, dont un qui échoue),
+dossier personnel jetable, octets de la sortie avec et sans RTK (RTK compte environ un jeton pour
+quatre caractères) :
+
+| Commande | Sans RTK | Avec RTK | Écart |
+|---|---|---|---|
+| `git status` | 618 | 126 | −80 % |
+| `git log` | 11 662 | 782 | −93 % (RTK n'en garde que dix commits, une ligne chacun) |
+| `git log -n 10` | 2 294 | 1 151 | −50 % |
+| `git diff` | 969 | 762 | −21 % |
+| `ls -la` (racine, 43 entrées) | 2 600 | 873 | −66 % |
+| `ls -la src/core` | 1 333 | 473 | −65 % |
+| `grep -rn Config src` | 17 823 | 10 246 | −43 % |
+| `grep -rn fn` sur un fichier | 897 | 897 | 0 |
+| `find . -name '*.md'` | 3 442 | 1 026 | −70 % |
+| `npm run test` | 2 303 | 2 270 | −1 % |
+| `npm test` | 2 301 | 2 301 | non réécrite par RTK |
+| **Total** | **46 242** | **20 907** | **−55 %** (≈ 11 600 → 5 200 jetons) |
+
+De bout en bout (`node scripts/essai-rtk.mjs` : vrai OpenCode 1.18.32, dossier personnel jetable,
+RTK téléchargé et vérifié par la passerelle, un faux fournisseur qui joue le modèle), `git status`
+lu par le modèle : 419 octets sans RTK, 71 avec (« * main », puis une ligne par fichier) ; 13
+contrôles réussis (carte, refus, commande inconnue, réglages, repli, télémétrie). `npm run
+securite`, section 16 : 17 contrôles, batterie entière 1 014 contrôles, 0 échec (un témoin
+d'Electron, SIGUSR1, a échoué une fois sur trois passages, sans lien avec RTK).
+
+Écran vu dans une fenêtre Electron cachée sur `vite`, contre une instance jetable (faux OpenCode,
+faux RTK) : puce, liste des trois réglages, total sous la saisie, en français à 1 280 px, en
+anglais et en japonais à 375 px (le menu défile, aucun débordement de la page).
+
+**Pas essayé** : l'application empaquetée ; Linux (archives épinglées, enveloppe écrite pour `/bin/bash` ou `/bin/sh`) ; un vrai modèle qui
+lit ces sorties condensées.
 
 **Fait le 28/09/2026 : seconde tournée, les régressions entre fusions.** Sur le code fusionné le
 27/09 au soir (6b77c21), contre une instance jetable (clé des données en fichier, dossier de données,

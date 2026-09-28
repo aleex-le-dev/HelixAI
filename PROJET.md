@@ -4262,8 +4262,11 @@ contrôles réussis (carte, refus, commande inconnue, réglages, repli, télém�
 securite`, section 16 : 17 contrôles, batterie entière 1 014 contrôles, 0 échec (un témoin
 d'Electron, SIGUSR1, a échoué une fois sur trois passages, sans lien avec RTK).
 
-**Pas essayé** : l'application de bureau (écran vu nulle part, code et traductions seulement) ;
-Linux (archives épinglées, enveloppe écrite pour `/bin/bash` ou `/bin/sh`) ; un vrai modèle qui
+Écran vu dans une fenêtre Electron cachée sur `vite`, contre une instance jetable (faux OpenCode,
+faux RTK) : puce, liste des trois réglages, total sous la saisie, en français à 1 280 px, en
+anglais et en japonais à 375 px (le menu défile, aucun débordement de la page).
+
+**Pas essayé** : l'application empaquetée ; Linux (archives épinglées, enveloppe écrite pour `/bin/bash` ou `/bin/sh`) ; un vrai modèle qui
 lit ces sorties condensées.
 
 **Fait le 28/09/2026 : seconde tournée, les régressions entre fusions.** Sur le code fusionné le

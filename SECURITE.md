@@ -4826,5 +4826,6 @@ Les commandes réécrites gardent leur propre réseau (`rtk curl` lance `curl`, 
 
 ### 50.5 Pas essayé
 
-L'application de bureau (écran vu nulle part) ; Linux ; un vrai modèle qui lit les sorties
+L'application empaquetée (l'écran n'a été vu que sous `vite`, dans une fenêtre Electron cachée) ;
+Linux ; un vrai modèle qui lit les sorties
 condensées ; les réglages et filtres personnels de RTK d'une personne qui s'en sert déjà.

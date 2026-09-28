@@ -118,6 +118,16 @@ export interface CatalogEntry {
   kvGo?: number;
   /** Lit les images (captures, photos, documents scannés). */
   vision?: boolean;
+  /** Appelle des outils : badge « Trained for tool use » de la fiche LM Studio (relevé du 28/09/2026). */
+  outils?: boolean;
+  /** Raisonne avant de répondre : badge « Reasoning » de la fiche LM Studio, ou fiche du modèle (28/09/2026). */
+  raisonne?: boolean;
+  /**
+   * Proposé au choix seulement (28/09/2026, page « Modèles ») : jamais
+   * installé d'office, ni conseillé, ni pris en repli, ni dans la courte liste
+   * du sélecteur. Voir `FICHES_AU_CHOIX`.
+   */
+  auChoix?: boolean;
   /**
    * Essayé avec Helix : niveaux de raisonnement, outils, découpage des tâches.
    * Seul un modèle vérifié est installé d'office ; les autres sont proposés,
@@ -158,27 +168,116 @@ const FICHES: Fiche[] = [
    * centaines de Go : ils ne tournent que sur un serveur à plusieurs cartes, et
    * s'utilisent dans Helix par un prestataire ou une clé, pas en local.
    */
-  { key: "deepseek/deepseek-v4-flash", label: "DeepSeek V4 Flash", editeur: "DeepSeek", licence: "MIT", downloadGb: 150, moe: true, verifie: false },
-  { key: "qwen/qwen3.8-27b", label: "Qwen3.8 27B", editeur: "Alibaba (Qwen)", licence: "Apache 2.0", downloadGb: 16, vision: true, verifie: false },
-  { key: "qwen/qwen3.5-35b-a3b", label: "Qwen3.5 35B A3B", editeur: "Alibaba (Qwen)", licence: "Apache 2.0", downloadGb: 20, moe: true, vision: true, verifie: false },
-  { key: "zai-org/glm-4.7-flash", label: "GLM-4.7 Flash", editeur: "Zhipu (Z.ai)", licence: "MIT", downloadGb: 16, moe: true, verifie: false },
-  { key: "meta/muse-glimmer", label: "Muse Glimmer", editeur: "Meta", licence: "Apache 2.0", downloadGb: 25, vision: true, verifie: false },
-  { key: "qwen/qwen3.5-9b", label: "Qwen3.5 9B", editeur: "Alibaba (Qwen)", licence: "Apache 2.0", downloadGb: 6, vision: true, kvGo: 1.0, verifie: true },
-  { key: "qwen/qwen3.5-4b", label: "Qwen3.5 4B", editeur: "Alibaba (Qwen)", licence: "Apache 2.0", downloadGb: 3, vision: true, kvGo: 1.0, verifie: false },
-  { key: "openai/gpt-oss-20b", label: "gpt-oss 20B", editeur: "OpenAI", licence: "Apache 2.0", downloadGb: 12, moe: true, verifie: false },
-  { key: "mistralai/magistral-small-2509", label: "Magistral Small", editeur: "Mistral AI", licence: "Apache 2.0", downloadGb: 14, vision: true, verifie: false },
-  { key: "qwen/qwen3-32b", label: "Qwen3 32B", editeur: "Alibaba (Qwen)", licence: "Apache 2.0", downloadGb: 19, verifie: true },
-  { key: "qwen/qwen3-14b", label: "Qwen3 14B", editeur: "Alibaba (Qwen)", licence: "Apache 2.0", downloadGb: 9, verifie: true },
-  { key: "qwen/qwen3-30b-a3b", label: "Qwen3 30B A3B", editeur: "Alibaba (Qwen)", licence: "Apache 2.0", downloadGb: 18, moe: true, verifie: true },
-  { key: "qwen3-8b", label: "Qwen3 8B", editeur: "Alibaba (Qwen)", licence: "Apache 2.0", downloadGb: 5, kvGo: 4.5, verifie: true },
-  { key: "qwen3-4b", label: "Qwen3 4B", editeur: "Alibaba (Qwen)", licence: "Apache 2.0", downloadGb: 2.5, kvGo: 4.5, verifie: true },
-  { key: "qwen/qwen3.5-2b", label: "Qwen3.5 2B", editeur: "Alibaba (Qwen)", licence: "Apache 2.0", downloadGb: 1.6, vision: true, kvGo: 0.38, verifie: false },
-  { key: "ibm/granite-4.1-8b", label: "Granite 4.1 8B", editeur: "IBM", licence: "Apache 2.0", downloadGb: 5, kvGo: 5.0, verifie: false },
-  { key: "mistralai/ministral-3-14b-reasoning", label: "Ministral 3 14B", editeur: "Mistral AI", licence: "Apache 2.0", downloadGb: 9, vision: true, verifie: false },
-  { key: "qwen3-1.7b", label: "Qwen3 1.7B", editeur: "Alibaba (Qwen)", licence: "Apache 2.0", downloadGb: 1.2, kvGo: 3.5, verifie: true },
-  { key: "mistralai/ministral-3-8b", label: "Ministral 3 8B", editeur: "Mistral AI", licence: "Apache 2.0", downloadGb: 5.5, vision: true, kvGo: 4.25, verifie: false },
-  { key: "allenai/olmo-3-7b-think", label: "OLMo 3 7B Think", editeur: "Ai2", licence: "Apache 2.0", downloadGb: 4.5, kvGo: 4.0, verifie: false },
-  { key: "mistralai/ministral-3-3b", label: "Ministral 3 3B", editeur: "Mistral AI", licence: "Apache 2.0", downloadGb: 2.5, vision: true, kvGo: 3.25, verifie: false },
+  { key: "deepseek/deepseek-v4-flash", label: "DeepSeek V4 Flash", editeur: "DeepSeek", licence: "MIT", downloadGb: 150, moe: true, outils: true, raisonne: true, verifie: false },
+  { key: "qwen/qwen3.8-27b", label: "Qwen3.8 27B", editeur: "Alibaba (Qwen)", licence: "Apache 2.0", downloadGb: 16, vision: true, outils: true, raisonne: true, verifie: false },
+  { key: "qwen/qwen3.5-35b-a3b", label: "Qwen3.5 35B A3B", editeur: "Alibaba (Qwen)", licence: "Apache 2.0", downloadGb: 20, moe: true, vision: true, outils: true, raisonne: true, verifie: false },
+  { key: "zai-org/glm-4.7-flash", label: "GLM-4.7 Flash", editeur: "Zhipu (Z.ai)", licence: "MIT", downloadGb: 16, moe: true, outils: true, raisonne: true, verifie: false },
+  { key: "meta/muse-glimmer", label: "Muse Glimmer", editeur: "Meta", licence: "Apache 2.0", downloadGb: 25, vision: true, outils: true, raisonne: true, verifie: false },
+  { key: "qwen/qwen3.5-9b", label: "Qwen3.5 9B", editeur: "Alibaba (Qwen)", licence: "Apache 2.0", downloadGb: 6, vision: true, kvGo: 1.0, outils: true, raisonne: true, verifie: true },
+  { key: "qwen/qwen3.5-4b", label: "Qwen3.5 4B", editeur: "Alibaba (Qwen)", licence: "Apache 2.0", downloadGb: 3, vision: true, kvGo: 1.0, outils: true, raisonne: true, verifie: false },
+  { key: "openai/gpt-oss-20b", label: "gpt-oss 20B", editeur: "OpenAI", licence: "Apache 2.0", downloadGb: 12, moe: true, outils: true, raisonne: true, verifie: false },
+  { key: "mistralai/magistral-small-2509", label: "Magistral Small", editeur: "Mistral AI", licence: "Apache 2.0", downloadGb: 14, vision: true, outils: true, raisonne: true, verifie: false },
+  { key: "qwen/qwen3-32b", label: "Qwen3 32B", editeur: "Alibaba (Qwen)", licence: "Apache 2.0", downloadGb: 19, outils: true, raisonne: true, verifie: true },
+  { key: "qwen/qwen3-14b", label: "Qwen3 14B", editeur: "Alibaba (Qwen)", licence: "Apache 2.0", downloadGb: 9, outils: true, raisonne: true, verifie: true },
+  { key: "qwen/qwen3-30b-a3b", label: "Qwen3 30B A3B", editeur: "Alibaba (Qwen)", licence: "Apache 2.0", downloadGb: 18, moe: true, outils: true, raisonne: true, verifie: true },
+  { key: "qwen3-8b", label: "Qwen3 8B", editeur: "Alibaba (Qwen)", licence: "Apache 2.0", downloadGb: 5, kvGo: 4.5, outils: true, raisonne: true, verifie: true },
+  { key: "qwen3-4b", label: "Qwen3 4B", editeur: "Alibaba (Qwen)", licence: "Apache 2.0", downloadGb: 2.5, kvGo: 4.5, outils: true, raisonne: true, verifie: true },
+  { key: "qwen/qwen3.5-2b", label: "Qwen3.5 2B", editeur: "Alibaba (Qwen)", licence: "Apache 2.0", downloadGb: 1.6, vision: true, kvGo: 0.38, outils: true, raisonne: true, verifie: false },
+  { key: "ibm/granite-4.1-8b", label: "Granite 4.1 8B", editeur: "IBM", licence: "Apache 2.0", downloadGb: 5, kvGo: 5.0, outils: true, verifie: false },
+  { key: "mistralai/ministral-3-14b-reasoning", label: "Ministral 3 14B", editeur: "Mistral AI", licence: "Apache 2.0", downloadGb: 9, vision: true, outils: true, raisonne: true, verifie: false },
+  { key: "qwen3-1.7b", label: "Qwen3 1.7B", editeur: "Alibaba (Qwen)", licence: "Apache 2.0", downloadGb: 1.2, kvGo: 3.5, outils: true, raisonne: true, verifie: true },
+  { key: "mistralai/ministral-3-8b", label: "Ministral 3 8B", editeur: "Mistral AI", licence: "Apache 2.0", downloadGb: 5.5, vision: true, kvGo: 4.25, outils: true, verifie: false },
+  { key: "allenai/olmo-3-7b-think", label: "OLMo 3 7B Think", editeur: "Ai2", licence: "Apache 2.0", downloadGb: 4.5, kvGo: 4.0, raisonne: true, verifie: false },
+  { key: "mistralai/ministral-3-3b", label: "Ministral 3 3B", editeur: "Mistral AI", licence: "Apache 2.0", downloadGb: 2.5, vision: true, kvGo: 3.25, outils: true, verifie: false },
+];
+
+/*
+ * Au choix seulement (28/09/2026, demandé par Medhi : « je veux laisser le
+ * choix comme avec LM Studio », et des modèles plus petits si on veut). Ces
+ * modèles s'installent depuis la page « Modèles » et l'écran de mise en
+ * route ; ils ne sont jamais installés d'office, conseillés, pris en repli
+ * ni mis dans la courte liste du sélecteur (`auChoix`). Le conseil et les
+ * replis restent ceux du catalogue ci-dessus, choisi et en partie essayé :
+ * certains d'ici sont mieux notés (Qwen3.6 35B A3B, Qwen3 30B A3B Thinking 2507), et les y
+ * faire entrer changerait ce que Helix installe sur chaque machine. C'est à
+ * Medhi d'en décider (PROJET.md § 3.22). Aucun n'a été chargé avec Helix.
+ *
+ * Relevé le 28/09/2026, pour chacun :
+ *  - l'identifiant, la taille et les capacités (outils, raisonnement, images)
+ *    sur sa fiche de lmstudio.ai/models : c'est ce que `lms get` télécharge ;
+ *  - la licence sur la fiche Hugging Face du dépôt d'origine (celui que cite
+ *    le GGUF de lmstudio-community comme `base_model`) : Apache 2.0 ou MIT ;
+ *  - `kvGo` sur le `config.json` de ce dépôt, comme plus haut, en comptant
+ *    aussi les couches à fenêtre glissante (OLMo 3 : 4 096 jetons, gpt-oss :
+ *    128) pour ce qu'elles gardent.
+ *
+ * Écartés : Phi-4 (16 384 jetons au plus, Helix charge à 32 768), Bonsai 27B
+ * (poids à 1 bit, noyaux encore dans les copies de l'éditeur), Laguna S 2.1
+ * (licence OpenMDW), LFM2 (licence LFM), Nemotron 3 (licence NVIDIA),
+ * Codestral (licence non commerciale), Devstral 2 123B (licence « other »),
+ * les distillations Llama de DeepSeek R1 (licence Llama), Gemma et Llama,
+ * GLM-5.3 Flash (seulement dans le cloud de LM Studio), Qwen3 0.6B et
+ * SmolLM3 (absents du catalogue de LM Studio).
+ *
+ * Deux notes sont données ici parce que la clé de LM Studio ne porte pas le
+ * mot « Instruct » sous lequel Epoch AI les publie : Qwen3 30B A3B 2507
+ * (« Qwen3-30B-A3B-Instruct (Jul 2025) », 137,42) et Qwen3 235B A22B 2507
+ * (« Qwen3-235B-A22B-Instruct (Jul 2025) », 138,93). Les autres se lisent par
+ * le nom (notesModeles.ts).
+ */
+const AU_CHOIX = { auChoix: true, verifie: false } as const;
+const FICHES_AU_CHOIX: Fiche[] = [
+  // Alibaba (Qwen), Apache 2.0.
+  { key: "qwen/qwen3-4b-2507", label: "Qwen3 4B Instruct 2507", editeur: "Alibaba (Qwen)", licence: "Apache 2.0", downloadGb: 2.3, kvGo: 4.5, outils: true, ...AU_CHOIX },
+  { key: "qwen/qwen3-4b-thinking-2507", label: "Qwen3 4B Thinking 2507", editeur: "Alibaba (Qwen)", licence: "Apache 2.0", downloadGb: 2.3, kvGo: 4.5, outils: true, raisonne: true, ...AU_CHOIX },
+  { key: "qwen/qwen3-30b-a3b-2507", label: "Qwen3 30B A3B Instruct 2507", editeur: "Alibaba (Qwen)", licence: "Apache 2.0", downloadGb: 17.4, moe: true, kvGo: 3.0, eci: 137.42, outils: true, ...AU_CHOIX },
+  { key: "qwen/qwen3-30b-a3b-thinking-2507", label: "Qwen3 30B A3B Thinking 2507", editeur: "Alibaba (Qwen)", licence: "Apache 2.0", downloadGb: 17.4, moe: true, kvGo: 3.0, outils: true, raisonne: true, ...AU_CHOIX },
+  { key: "qwen/qwen3-coder-30b", label: "Qwen3 Coder 30B A3B", editeur: "Alibaba (Qwen)", licence: "Apache 2.0", downloadGb: 15, moe: true, kvGo: 3.0, outils: true, ...AU_CHOIX },
+  { key: "qwen/qwen3.5-27b", label: "Qwen3.5 27B", editeur: "Alibaba (Qwen)", licence: "Apache 2.0", downloadGb: 17, vision: true, kvGo: 2.0, outils: true, raisonne: true, ...AU_CHOIX },
+  { key: "qwen/qwen3.6-27b", label: "Qwen3.6 27B", editeur: "Alibaba (Qwen)", licence: "Apache 2.0", downloadGb: 16.1, vision: true, kvGo: 2.0, outils: true, raisonne: true, ...AU_CHOIX },
+  { key: "qwen/qwen3.6-35b-a3b", label: "Qwen3.6 35B A3B", editeur: "Alibaba (Qwen)", licence: "Apache 2.0", downloadGb: 20.4, moe: true, vision: true, kvGo: 0.63, outils: true, raisonne: true, ...AU_CHOIX },
+  { key: "qwen/qwen3-next-80b", label: "Qwen3 Next 80B A3B", editeur: "Alibaba (Qwen)", licence: "Apache 2.0", downloadGb: 42, moe: true, kvGo: 0.75, outils: true, ...AU_CHOIX },
+  { key: "qwen/qwen3-235b-a22b-2507", label: "Qwen3 235B A22B Instruct 2507", editeur: "Alibaba (Qwen)", licence: "Apache 2.0", downloadGb: 134.3, moe: true, kvGo: 5.9, eci: 138.93, outils: true, ...AU_CHOIX },
+  { key: "qwen/qwen3-235b-a22b-thinking-2507", label: "Qwen3 235B A22B Thinking 2507", editeur: "Alibaba (Qwen)", licence: "Apache 2.0", downloadGb: 134.3, moe: true, kvGo: 5.9, outils: true, raisonne: true, ...AU_CHOIX },
+  // Mistral AI (France), Apache 2.0.
+  { key: "mistralai/ministral-3-3b-reasoning", label: "Ministral 3 3B Reasoning", editeur: "Mistral AI", licence: "Apache 2.0", downloadGb: 2, vision: true, kvGo: 3.25, outils: true, raisonne: true, ...AU_CHOIX },
+  { key: "mistralai/mistral-7b-instruct-v0.3", label: "Mistral 7B Instruct v0.3", editeur: "Mistral AI", licence: "Apache 2.0", downloadGb: 4.1, kvGo: 4.0, ...AU_CHOIX },
+  { key: "mistralai/ministral-3-8b-reasoning", label: "Ministral 3 8B Reasoning", editeur: "Mistral AI", licence: "Apache 2.0", downloadGb: 6.5, vision: true, kvGo: 4.25, outils: true, raisonne: true, ...AU_CHOIX },
+  { key: "mistralai/mistral-nemo-instruct-2407", label: "Mistral NeMo 12B", editeur: "Mistral AI", licence: "Apache 2.0", downloadGb: 6.9, kvGo: 5.0, ...AU_CHOIX },
+  { key: "mistralai/ministral-3-14b", label: "Ministral 3 14B Instruct", editeur: "Mistral AI", licence: "Apache 2.0", downloadGb: 9.5, vision: true, kvGo: 5.0, outils: true, ...AU_CHOIX },
+  { key: "mistralai/mistral-small-3.2", label: "Mistral Small 3.2", editeur: "Mistral AI", licence: "Apache 2.0", downloadGb: 14.3, vision: true, kvGo: 5.0, ...AU_CHOIX },
+  { key: "mistralai/devstral-small-2507", label: "Devstral Small 2507", editeur: "Mistral AI", licence: "Apache 2.0", downloadGb: 14.5, kvGo: 5.0, outils: true, ...AU_CHOIX },
+  { key: "mistralai/devstral-small-2-2512", label: "Devstral Small 2", editeur: "Mistral AI", licence: "Apache 2.0", downloadGb: 16.3, vision: true, kvGo: 5.0, outils: true, ...AU_CHOIX },
+  // Microsoft, MIT.
+  { key: "microsoft/phi-4-mini", label: "Phi-4 mini", editeur: "Microsoft", licence: "MIT", downloadGb: 2.1, kvGo: 4.0, ...AU_CHOIX },
+  { key: "microsoft/phi-4-mini-reasoning", label: "Phi-4 mini Reasoning", editeur: "Microsoft", licence: "MIT", downloadGb: 3, kvGo: 4.0, outils: true, raisonne: true, ...AU_CHOIX },
+  { key: "microsoft/phi-4-reasoning", label: "Phi-4 Reasoning", editeur: "Microsoft", licence: "MIT", downloadGb: 8, kvGo: 6.25, outils: true, raisonne: true, ...AU_CHOIX },
+  { key: "microsoft/phi-4-reasoning-plus", label: "Phi-4 Reasoning Plus", editeur: "Microsoft", licence: "MIT", downloadGb: 8, kvGo: 6.25, outils: true, raisonne: true, ...AU_CHOIX },
+  // IBM, Apache 2.0. Les « H » sont hybrides (Mamba) : un cache presque nul.
+  { key: "ibm/granite-4-h-micro", label: "Granite 4.0 H Micro", editeur: "IBM", licence: "Apache 2.0", downloadGb: 2.08, kvGo: 0.25, outils: true, ...AU_CHOIX },
+  { key: "ibm/granite-4.1-3b", label: "Granite 4.1 3B", editeur: "IBM", licence: "Apache 2.0", downloadGb: 2.1, kvGo: 2.5, outils: true, ...AU_CHOIX },
+  { key: "ibm/granite-4-micro", label: "Granite 4.0 Micro", editeur: "IBM", licence: "Apache 2.0", downloadGb: 2.25, kvGo: 2.5, outils: true, ...AU_CHOIX },
+  { key: "ibm/granite-4-h-tiny", label: "Granite 4.0 H Tiny", editeur: "IBM", licence: "Apache 2.0", downloadGb: 4.54, moe: true, kvGo: 0.25, outils: true, ...AU_CHOIX },
+  { key: "ibm/granite-4.1-30b", label: "Granite 4.1 30B", editeur: "IBM", licence: "Apache 2.0", downloadGb: 17.5, kvGo: 8.0, outils: true, ...AU_CHOIX },
+  { key: "ibm/granite-4-h-small", label: "Granite 4.0 H Small", editeur: "IBM", licence: "Apache 2.0", downloadGb: 20.94, moe: true, kvGo: 0.5, outils: true, ...AU_CHOIX },
+  // DeepSeek, MIT. Les distillations raisonnent (fiche du modèle), sans badge chez LM Studio.
+  { key: "deepseek/deepseek-r1-distill-qwen-7b", label: "DeepSeek R1 Distill Qwen 7B", editeur: "DeepSeek", licence: "MIT", downloadGb: 4.3, kvGo: 1.75, raisonne: true, ...AU_CHOIX },
+  { key: "deepseek/deepseek-r1-0528-qwen3-8b", label: "DeepSeek R1 0528 Qwen3 8B", editeur: "DeepSeek", licence: "MIT", downloadGb: 4.3, kvGo: 4.5, outils: true, raisonne: true, ...AU_CHOIX },
+  { key: "deepseek/deepseek-r1-distill-qwen-14b", label: "DeepSeek R1 Distill Qwen 14B", editeur: "DeepSeek", licence: "MIT", downloadGb: 8.4, kvGo: 6.0, raisonne: true, ...AU_CHOIX },
+  { key: "deepseek/deepseek-r1-distill-qwen-32b", label: "DeepSeek R1 Distill Qwen 32B", editeur: "DeepSeek", licence: "MIT", downloadGb: 18.7, kvGo: 8.0, raisonne: true, ...AU_CHOIX },
+  // OpenAI, Apache 2.0 : pour les très grosses machines.
+  { key: "openai/gpt-oss-120b", label: "gpt-oss 120B", editeur: "OpenAI", licence: "Apache 2.0", downloadGb: 65, moe: true, kvGo: 1.13, outils: true, raisonne: true, ...AU_CHOIX },
+  // Ai2, Apache 2.0.
+  { key: "allenai/olmo-3-7b", label: "OLMo 3 7B Instruct", editeur: "Ai2", licence: "Apache 2.0", downloadGb: 6, kvGo: 5.5, outils: true, ...AU_CHOIX },
+  { key: "allenai/olmo-3-32b-think", label: "OLMo 3 32B Think", editeur: "Ai2", licence: "Apache 2.0", downloadGb: 19, kvGo: 2.75, raisonne: true, ...AU_CHOIX },
+  // Zhipu (Z.ai), MIT.
+  { key: "zai-org/glm-4.6v-flash", label: "GLM-4.6V Flash", editeur: "Zhipu (Z.ai)", licence: "MIT", downloadGb: 8, vision: true, kvGo: 1.25, outils: true, raisonne: true, ...AU_CHOIX },
+  // Baidu, Apache 2.0.
+  { key: "baidu/ernie-4.5-21b-a3b", label: "ERNIE 4.5 21B A3B", editeur: "Baidu", licence: "Apache 2.0", downloadGb: 12, moe: true, kvGo: 1.75, ...AU_CHOIX },
+  // ByteDance (Seed), Apache 2.0.
+  { key: "bytedance/seed-oss-36b", label: "Seed-OSS 36B", editeur: "ByteDance (Seed)", licence: "Apache 2.0", downloadGb: 21, kvGo: 8.0, outils: true, raisonne: true, ...AU_CHOIX },
+  // Essential AI, Apache 2.0 : entraîné de zéro (architecture proche de Gemma 3, pas ses poids), 32 768 jetons au plus.
+  { key: "essentialai/rnj-1", label: "Rnj-1 8B", editeur: "Essential AI", licence: "Apache 2.0", downloadGb: 5.5, kvGo: 4.0, outils: true, raisonne: true, ...AU_CHOIX },
 ];
 
 /**
@@ -188,10 +287,18 @@ const FICHES: Fiche[] = [
  * éprouvés au pointage.
  */
 const FICHES_ECRAN: Fiche[] = [
-  { key: "qwen/qwen3-vl-30b", label: "Qwen3-VL 30B A3B", editeur: "Alibaba (Qwen)", licence: "Apache 2.0", downloadGb: 18, moe: true, vision: true, verifie: true },
-  { key: "qwen3-vl-8b", label: "Qwen3-VL 8B", editeur: "Alibaba (Qwen)", licence: "Apache 2.0", downloadGb: 6, vision: true, verifie: true },
-  { key: "qwen3-vl-4b", label: "Qwen3-VL 4B", editeur: "Alibaba (Qwen)", licence: "Apache 2.0", downloadGb: 3.5, vision: true, verifie: true },
-  { key: "qwen3-vl-2b", label: "Qwen3-VL 2B", editeur: "Alibaba (Qwen)", licence: "Apache 2.0", downloadGb: 2, vision: true, verifie: true },
+  { key: "qwen/qwen3-vl-30b", label: "Qwen3-VL 30B A3B", editeur: "Alibaba (Qwen)", licence: "Apache 2.0", downloadGb: 18, moe: true, vision: true, outils: true, verifie: true },
+  { key: "qwen3-vl-8b", label: "Qwen3-VL 8B", editeur: "Alibaba (Qwen)", licence: "Apache 2.0", downloadGb: 6, vision: true, outils: true, verifie: true },
+  { key: "qwen3-vl-4b", label: "Qwen3-VL 4B", editeur: "Alibaba (Qwen)", licence: "Apache 2.0", downloadGb: 3.5, vision: true, outils: true, verifie: true },
+  { key: "qwen3-vl-2b", label: "Qwen3-VL 2B", editeur: "Alibaba (Qwen)", licence: "Apache 2.0", downloadGb: 2, vision: true, outils: true, verifie: true },
+  /*
+   * Au choix seulement (28/09/2026) : même famille que les essayés, pas
+   * essayée au pointage. Dense, 20 Go (lmstudio.ai/models/qwen/qwen3-vl-32b),
+   * cache de 8 Gio à 32 768 jetons (config.json de Qwen/Qwen3-VL-32B-Instruct).
+   * Hors du conseil : sans note, le plus lourd passe devant, et il aurait
+   * remplacé Qwen3-VL 30B A3B sur les grosses machines.
+   */
+  { key: "qwen/qwen3-vl-32b", label: "Qwen3-VL 32B", editeur: "Alibaba (Qwen)", licence: "Apache 2.0", downloadGb: 20, vision: true, kvGo: 8.0, outils: true, ...AU_CHOIX },
 ];
 
 /**
@@ -205,11 +312,16 @@ function decrire(f: Fiche, ecran = false): CatalogEntry {
     ...f,
     ...(eci !== undefined ? { eci } : {}),
     get description() {
+      // Sans outils (badge absent chez LM Studio, 28/09/2026) : on ne les promet pas.
       const usage = ecran
         ? t("Lit l'écran et désigne les éléments à cliquer.")
         : f.vision
-          ? t("Conversation, rédaction, outils et images.")
-          : t("Conversation, rédaction et outils.");
+          ? f.outils
+            ? t("Conversation, rédaction, outils et images.")
+            : t("Conversation, rédaction et images.")
+          : f.outils
+            ? t("Conversation, rédaction et outils.")
+            : t("Conversation et rédaction.");
       const note =
         eci !== undefined
           ? tf("Note ECI d'Epoch AI : {0}.", eci.toLocaleString(({ fr: "fr-FR", zh: "zh-CN", ja: "ja-JP" } as Record<string, string>)[langue()] ?? "en-US"))
@@ -221,8 +333,42 @@ function decrire(f: Fiche, ecran = false): CatalogEntry {
   };
 }
 
-export const CATALOG: CatalogEntry[] = FICHES.map((f) => decrire(f));
+/*
+ * Les modèles au choix sont dans le même catalogue (28/09/2026) : c'est lui
+ * que la mise en route lit pour installer le modèle demandé
+ * (`ensureLocalModel`). `auChoix` les tient à l'écart du conseil et des replis.
+ */
+export const CATALOG: CatalogEntry[] = [...FICHES, ...FICHES_AU_CHOIX].map((f) => decrire(f));
 export const VISION_CATALOG: CatalogEntry[] = FICHES_ECRAN.map((f) => decrire(f, true));
+
+/**
+ * Pourquoi un modèle ne tient pas sur cette machine, chiffré pour l'écran
+ * (page « Modèles », 28/09/2026) ; `null` s'il tient. Mêmes calculs que
+ * `tientSur`, qui reste la seule règle : `npm run securite` (§ 32) vérifie
+ * que les deux disent la même chose sur tout le catalogue et plusieurs
+ * machines.
+ *
+ *  - « memoire » : il faut `demandeGo` de mémoire (poids, cache, réserve du
+ *    système), la machine en a `disponibleGo` ;
+ *  - « carte » : un modèle dense doit tenir sur la carte NVIDIA ;
+ *  - « processeur » : sans carte graphique, un modèle dense de plus de 5 Go
+ *    répond trop lentement (`disponibleGo` vaut alors 5).
+ */
+export function pourquoiTropLourd(
+  hw: Hardware,
+  f: { downloadGb: number; moe?: boolean; kvGo?: number },
+): { raison: "memoire" | "carte" | "processeur"; demandeGo: number; disponibleGo: number } | null {
+  if (tientSur(hw, f)) return null;
+  const vram = hw.gpuVramGb ?? 0;
+  const memeMemoire = hw.appleSilicon || vram < 6;
+  const besoin =
+    f.kvGo !== undefined && memeMemoire && hw.totalMemoryGb <= 36 ? f.downloadGb + f.kvGo + 0.5 : f.downloadGb * 1.3;
+  const reserve = Math.min(8, Math.max(3, hw.totalMemoryGb * 0.3));
+  const arrondi = (n: number) => Math.ceil(n * 10) / 10;
+  if (!hw.appleSilicon && vram >= 6 && !f.moe) return { raison: "carte", demandeGo: arrondi(besoin), disponibleGo: vram };
+  if (!hw.appleSilicon && vram < 6 && !f.moe && f.downloadGb > 5) return { raison: "processeur", demandeGo: f.downloadGb, disponibleGo: 5 };
+  return { raison: "memoire", demandeGo: arrondi(besoin + reserve), disponibleGo: hw.totalMemoryGb };
+}
 
 /**
  * Ce modèle tourne-t-il confortablement sur cette machine ?
@@ -289,10 +435,14 @@ export function tientSur(hw: Hardware, f: { downloadGb: number; moe?: boolean; k
  * Sans les modèles qui ont mal répondu sur cette machine (santeModeles.ts,
  * 27/09/2026) : ils ne sont plus installés, recommandés ni proposés d'office.
  * On peut toujours les choisir à la main.
+ *
+ * Sans les modèles au choix (`auChoix`, 28/09/2026), sauf pour les listes où
+ * la personne choisit elle-même (`avecAuChoix`) : ils ne sont ni conseillés
+ * ni pris en repli.
  */
-function classement(hw: Hardware, catalogue: CatalogEntry[], verifiesSeulement: boolean): CatalogEntry[] {
+function classement(hw: Hardware, catalogue: CatalogEntry[], verifiesSeulement: boolean, avecAuChoix = false): CatalogEntry[] {
   return catalogue
-    .filter((e) => (!verifiesSeulement || e.verifie) && tientSur(hw, e) && !estDefaillant(e.key))
+    .filter((e) => (avecAuChoix || !e.auChoix) && (!verifiesSeulement || e.verifie) && tientSur(hw, e) && !estDefaillant(e.key))
     .sort((a, b) => {
       if (a.eci !== undefined && b.eci !== undefined) return b.eci - a.eci || a.downloadGb - b.downloadGb;
       if (a.eci !== undefined) return -1;
@@ -330,7 +480,8 @@ function legerVerifie(catalogue: CatalogEntry[]): CatalogEntry | undefined {
  * retiré le 28/09/2026 (PROJET.md § 3.16).
  */
 function best(hw: Hardware, catalogue: CatalogEntry[], verifiesSeulement = false): CatalogEntry {
-  return classement(hw, catalogue, verifiesSeulement)[0] ?? legerVerifie(catalogue) ?? catalogue[catalogue.length - 1]!;
+  const dernier = catalogue.filter((e) => !e.auChoix).at(-1) ?? catalogue[catalogue.length - 1]!;
+  return classement(hw, catalogue, verifiesSeulement)[0] ?? legerVerifie(catalogue) ?? dernier;
 }
 
 /**
@@ -394,7 +545,8 @@ export function adaptesALaMachine(hw: Hardware): (CatalogEntry & { role: "chat" 
  * au moins bien noté, avec le moteur qui sert ici ; aucun autre n'est proposé.
  */
 export function modelesQuiTiennent(hw: Hardware): CatalogEntry[] {
-  return classement(hw, moteurOuvert() ? catalogueOuvert() : CATALOG, false);
+  // Les modèles au choix aussi : c'est la personne qui choisit (28/09/2026).
+  return classement(hw, moteurOuvert() ? catalogueOuvert() : CATALOG, false, true);
 }
 
 export function recommend(hw: Hardware): CatalogEntry {
@@ -407,6 +559,71 @@ export function recommend(hw: Hardware): CatalogEntry {
  */
 export function recommendVision(hw: Hardware): CatalogEntry {
   return best(hw, VISION_CATALOG);
+}
+
+/** Un nombre de gigaoctets, écrit comme on l'écrit dans la langue de la demande. */
+function go(n: number): string {
+  return n.toLocaleString(({ fr: "fr-FR", zh: "zh-CN", ja: "ja-JP" } as Record<string, string>)[langue()] ?? "en-US", { maximumFractionDigits: 1 });
+}
+
+/** La raison, en une phrase, pour laquelle ce modèle n'est pas proposé ici. */
+function phraseTropLourd(label: string, r: NonNullable<ReturnType<typeof pourquoiTropLourd>>): string {
+  if (r.raison === "carte") {
+    return tf("{0} demande environ {1} Go sur la carte graphique, celle de cette machine en a {2}.", label, go(r.demandeGo), go(r.disponibleGo));
+  }
+  if (r.raison === "processeur") {
+    return tf("{0} pèse {1} Go : sans carte graphique, seuls les modèles de {2} Go au plus, ou à experts, répondent assez vite.", label, go(r.demandeGo), go(r.disponibleGo));
+  }
+  return tf("{0} demande environ {1} Go de mémoire, cette machine en a {2}.", label, go(r.demandeGo), go(r.disponibleGo));
+}
+
+export type ModeleDuCatalogue = CatalogEntry & {
+  role: "chat" | "gui";
+  recommande: boolean;
+  /** Pourquoi il ne tient pas ici, chiffré ; absent s'il tient. */
+  tropLourd?: NonNullable<ReturnType<typeof pourquoiTropLourd>> & { texte: string };
+};
+
+/**
+ * Tout le catalogue, pour la page « Modèles » (28/09/2026) : ce qui tient sur
+ * la machine, installable, et le reste, visible avec la raison chiffrée.
+ * Mac Intel : le seul catalogue GGUF épinglé du moteur ouvert (llamaCpp.ts),
+ * à la taille de ses fichiers, et aucun modèle d'écran.
+ *
+ * Copies faites à la lecture : la description et la phrase se calculent dans
+ * la langue de la demande.
+ */
+export function catalogueComplet(hw: Hardware): ModeleDuCatalogue[] {
+  const avecRaison = (e: CatalogEntry, role: "chat" | "gui", conseil: string): ModeleDuCatalogue => {
+    const r = pourquoiTropLourd(hw, e);
+    return { ...e, role, recommande: e.key === conseil, ...(r ? { tropLourd: { ...r, texte: phraseTropLourd(e.label, r) } } : {}) };
+  };
+  if (moteurOuvert()) {
+    const liste = catalogueOuvert();
+    const conseil = best(hw, liste).key;
+    return liste.map((e) => avecRaison(e, "chat", conseil));
+  }
+  const conseilChat = best(hw, CATALOG).key;
+  const conseilEcran = best(hw, VISION_CATALOG).key;
+  return [...CATALOG.map((e) => avecRaison(e, "chat", conseilChat)), ...VISION_CATALOG.map((e) => avecRaison(e, "gui", conseilEcran))];
+}
+
+/**
+ * Une demande d'installation nommée, refusée si le modèle ne tient pas sur la
+ * machine (28/09/2026, Medhi : « il ne faut pas proposer des modèles trop
+ * puissants qui vont tout faire crasher »). L'écran ne le propose pas ; la
+ * passerelle le refuse aussi, pour une demande faite à la main. Le modèle
+ * conseillé passe toujours : sur une machine où rien ne tient, c'est le plus
+ * léger essayé, que la mise en route installe déjà sans qu'on le nomme.
+ * Un nom hors catalogue garde l'ancien comportement (le conseillé est pris).
+ */
+export function refusTropLourd(hw: Hardware, key: string, role: "chat" | "gui"): string | null {
+  const liste = role === "gui" ? VISION_CATALOG : CATALOG;
+  const choix = moteurOuvert() ? catalogueOuvert(liste) : liste;
+  const fiche = choix.find((e) => e.key === key);
+  if (!fiche || fiche.key === best(hw, choix).key) return null;
+  const r = pourquoiTropLourd(hw, fiche);
+  return r ? phraseTropLourd(fiche.label, r) : null;
 }
 
 /** Délai d'inactivité au bout duquel un modèle libère la mémoire. */

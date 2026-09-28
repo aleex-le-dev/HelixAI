@@ -176,7 +176,7 @@ L'interface est sur `http://localhost:5173`, la passerelle sur
 `helix` (`cli/helix.mjs`, Node 20 ou plus, sans dépendance) parle à l'instance comme
 l'interface : il affiche, et transmet vos réponses ; modèles, outils, barrière
 d'approbation et journal restent ceux de l'instance. Sur un poste qui a le dépôt :
-`npm link` (ou `node cli/helix.mjs`). Avec l'application : Paramètres > Installer les
+`npm link` (ou `node cli/helix.mjs`). Avec l'application : Réglages > Installer les
 apps > CLI > « Mettre en place », qui pose `~/.local/bin/helix` (depuis le 25/09/2026).
 
 ```
@@ -219,7 +219,7 @@ Elle découvre automatiquement les moteurs disponibles :
 D'autres backends OpenAI-compatibles (cloud européen, second cluster) s'ajoutent
 par `backends` dans `helix.config.json`.
 
-Une personne peut aussi brancher **sa propre clé** (Paramètres, Modèles cloud) : Mistral,
+Une personne peut aussi brancher **sa propre clé** (Réglages, Modèles cloud) : Mistral,
 Scaleway, OVHcloud, IONOS, OpenAI, Anthropic, Google Gemini, OpenRouter, Groq, DeepSeek,
 xAI, Together AI, ou tout service compatible OpenAI par son adresse
 (`gateway/src/fournisseurs.ts`). Tous sont appelés par leur point d'accès compatible
@@ -291,7 +291,7 @@ Toutes exigent le jeton d'instance, sauf `GET /` et `GET /health`. Celles marqu�
 
 #### Clés d'API
 
-Depuis le 26/09/2026, une clé créée dans Paramètres → API développeur remplace le
+Depuis le 26/09/2026, une clé créée dans Réglages → API développeur remplace le
 jeton d'instance **et** la séance, sur `GET /v1/models` et `POST /v1/chat/completions`
 seulement, au nom de sa titulaire (ses modèles, ses bases, sa consommation, son
 journal). Elle se présente dans `Authorization: Bearer hlx_…`, jamais dans l'adresse.
@@ -576,7 +576,7 @@ l'installation faite, une instance fonctionne sans accès à Internet.
 
 **Sortent uniquement si quelqu'un le décide :** un backend cloud ajouté par l'intégrateur
 dans `helix.config.json`, ou un fournisseur dont une personne a branché la clé
-(Paramètres, Modèles cloud), reçoit les conversations envoyées à ses modèles. Chaque
+(Réglages, Modèles cloud), reçoit les conversations envoyées à ses modèles. Chaque
 modèle affiche où il tourne, et aucun modèle cloud n'est choisi d'office. Un employé au
 palier Étendu consulte le web (recherche DuckDuckGo, pages lues) ; un employé branché
 sur une messagerie échange avec ses serveurs (Telegram, WhatsApp, Discord, Slack,
@@ -618,13 +618,13 @@ Trois règles, appliquées par l'instance :
   détenant le jeton pourrait s'inscrire à l'adresse d'un invité en attente et
   hériter de ses projets.
 
-Chacun peut activer la **double authentification** dans Paramètres, Sécurité : un
+Chacun peut activer la **double authentification** dans Réglages, Sécurité : un
 code à six chiffres affiché par une application du téléphone (Aegis, 2FAS, Mots de
 passe d'Apple, Google Authenticator...), après le mot de passe. Aucun service tiers
 n'intervient. Dix codes de secours sont remis à l'activation. L'intégrateur peut
 l'imposer à tous (`deuxFacteursObligatoire`, profil de déploiement).
 
-**Supprimer son compte** : Paramètres, Profil, Zone de danger. L'écran montre d'abord
+**Supprimer son compte** : Réglages, Profil, Zone de danger. L'écran montre d'abord
 ce qui disparaît et ce qui est confié à un collègue (les projets partagés), puis
 demande le mot de passe, et un code si la double authentification est active. Le
 journal d'audit, scellé, est conservé. Pour une personne qui a quitté l'entreprise,
@@ -640,7 +640,7 @@ node "/Applications/Helix.app/Contents/Resources/dist-gateway/motdepasse.cjs"
 
 (le nom `Helix` est celui de l'application livrée au client). Sans Node sur le poste,
 celui que Helix pose fait l'affaire (`~/.helix/data/openclaw-moteur/node/bin/node` ;
-Paramètres, Ligne de commande, « Mettre en place » le pose s'il manque). Jusqu'au
+Réglages, Ligne de commande, « Mettre en place » le pose s'il manque). Jusqu'au
 28/09/2026, l'outil tournait avec le binaire de l'application (`ELECTRON_RUN_AS_NODE=1`) :
 ce n'est plus possible, le fusible RunAsNode étant fermé (SECURITE.md § 52). Essayé le
 28/09/2026 avec le Node du système sur le `motdepasse.cjs` d'un paquet fabriqué. Il redéfinit un mot de
@@ -713,14 +713,14 @@ son adresse. Sur une installation isolée, « partagé » signifie « partagé e
 comptes de cette machine ».
 
 Deux façons de l'ouvrir : `"share": true` dans `helix.config.json`, réservé à
-l'intégrateur d'une instance d'entreprise, ou l'interrupteur **Paramètres → Profil →
+l'intégrateur d'une instance d'entreprise, ou l'interrupteur **Réglages → Profil →
 « Ouvrir l'instance à mes collègues »**, qui demande le mot de passe et le rôle
 d'administrateur. Dans les deux cas l'instance chiffre dès qu'elle écoute, et le
 jeton reste exigé : ouvrir l'écoute n'ouvre pas l'accès.
 
 ### Inviter quelqu'un, et par où il vous rejoint
 
-**Paramètres → Profil → Inviter un collègue.** Une adresse email, un bouton. La
+**Réglages → Profil → Inviter un collègue.** Une adresse email, un bouton. La
 personne reçoit un lien : un clic ouvre son application avec l'adresse et le code
 déjà remplis, et elle confirme. Le rattachement n'est jamais automatique, parce
 qu'un lien `helix://` peut venir d'ailleurs que du mail attendu (`SECURITE.md` § 19).
@@ -751,7 +751,7 @@ explicitement partagé.
 **Réunions → Enregistrer, Importer, ou Envoyer le bot.** Le micro du poste enregistre
 (le son part par morceaux de dix secondes, chiffrés sur l'instance) ; un fichier audio
 ou vidéo s'importe (2 Go) ; le **bot** (application de bureau) rejoint une réunion
-Google Meet comme invité, sans micro ni caméra, sous le nom réglé dans Paramètres, Bot
+Google Meet comme invité, sans micro ni caméra, sous le nom réglé dans Réglages, Bot
 Recorder, et enregistre jusqu'à la fin. Un participant doit l'admettre, et c'est à
 vous de prévenir les personnes présentes. Il peut aussi rejoindre seul les réunions
 Google Meet de l'agenda.
@@ -999,7 +999,7 @@ l'agent d'orchestration par défaut. Aucun tiret cadratin dans les textes affich
   (macOS, et le `.deb` sous Linux ; pas sous Windows ni avec l'AppImage). Les
   connecteurs (serveurs MCP, courrier, Drive…) marchent aussi dans Helix Code depuis
   le 25/09/2026, derrière la même barrière ;
-- **Entraîner un modèle** (Paramètres, 25/09/2026) : apprendre à un petit modèle
+- **Entraîner un modèle** (Réglages, 25/09/2026) : apprendre à un petit modèle
   ouvert (Qwen3, Apache 2.0) les faits de son organisation à partir d'exemples, le
   comparer au modèle de départ, puis l'installer dans LM Studio : MLX-LM sur un Mac à
   puce Apple, Unsloth (QLoRA) sur une carte NVIDIA. Le modèle installé est visible de
@@ -1013,12 +1013,12 @@ l'agent d'orchestration par défaut. Aucun tiret cadratin dans les textes affich
   projet, un filtre (statut, priorité, agent) et un tri (échéance, priorité, mise à
   jour) ;
 - Comptes, connexion, séances révocables, **double authentification**, journal
-  d'audit consultable dans Paramètres → Sécurité ;
-- Paramètres → **Confidentialité** : export RGPD de toutes ses données en JSON ;
-- Paramètres → **Connecteurs** : courrier en IMAP, agenda en CalDAV, Notion et
+  d'audit consultable dans Réglages → Sécurité ;
+- Réglages → **Confidentialité** : export RGPD de toutes ses données en JSON ;
+- Réglages → **Connecteurs** : courrier en IMAP, agenda en CalDAV, Notion et
   serveurs MCP du catalogue ;
 - la barrière d'approbation des actions de Cowork ;
-- Paramètres → **Mon usage** : jetons exacts lus dans la réponse de chaque
+- Réglages → **Mon usage** : jetons exacts lus dans la réponse de chaque
   moteur, par modèle et par jour, gratuit pour un modèle local ; pour un modèle distant,
   le tarif saisi, sinon (27/09/2026) le prix publié par son fournisseur, avec la date du
   relevé et le lien, et le coût dit « estimé ». Sans prix connu, « tarif non renseigné »,
@@ -1026,22 +1026,22 @@ l'agent d'orchestration par défaut. Aucun tiret cadratin dans les textes affich
 - « Comparer intelligence et prix » (sélecteur de modèles) : notes ECI d'Epoch AI
   (CC BY 4.0), prix publiés des éditeurs, tous les modèles de la personne au graphique ou
   listés « pas de note publiée » (27/09/2026) ;
-- Paramètres → **Profil** : nom et adresse enregistrés ; changer d'adresse exige
+- Réglages → **Profil** : nom et adresse enregistrés ; changer d'adresse exige
   le mot de passe actuel et n'hérite d'aucune invitation ;
-- Paramètres → **Préférences** : apparence, et formats de date et d'heure
+- Réglages → **Préférences** : apparence, et formats de date et d'heure
   appliqués partout où une date s'affiche ;
 - **dictée** : bouton micro du composer, transcription par Whisper sur la
   machine, installée sur demande ;
 - **suggestions de l'accueil** : chacune mène à un écran réel ou pose au Chat une
   question qu'il sait traiter ;
-- Paramètres → **Contrôle de l'écran** (activable depuis l'interface sur un poste
+- Réglages → **Contrôle de l'écran** (activable depuis l'interface sur un poste
   autonome), Personnalisation de l'IA ;
-- Paramètres → **Connecteurs** : Google Drive et Slack en lecture seule ;
-- Paramètres → Préférences, **À propos** : mise à jour de l'application depuis le
+- Réglages → **Connecteurs** : Google Drive et Slack en lecture seule ;
+- Réglages → Préférences, **À propos** : mise à jour de l'application depuis le
   serveur de l'agence, l'instance du poste rattaché ou les publications GitHub ;
   automatique une fois l'application signée par Apple, d'un clic sinon (macOS, et Windows
   depuis le 27/09/2026), signature de l'éditeur vérifiée ;
-- Paramètres → **Signaler un problème** (27/09/2026), aussi depuis l'aide : un ticket
+- Réglages → **Signaler un problème** (27/09/2026), aussi depuis l'aide : un ticket
   GitHub ou un mail préremplis, relus et envoyés par la personne, rien en arrière-plan ;
 - **Agents** toujours actifs (OpenClaw) : missions à heure fixe ou à chaque mail
   reçu, messageries, documents de référence, installation et mise à jour depuis la
@@ -1049,8 +1049,8 @@ l'agent d'orchestration par défaut. Aucun tiret cadratin dans les textes affich
   ses Réglages et servi à chacun de ses appels ;
 - **Groupes**, **Bibliothèque** (documents chiffrés, recherche dans le contenu),
   **Réunions** (micro, import, bot Google Meet, transcription et compte rendu sur la
-  machine), Paramètres → **Bot Recorder** ;
-- Paramètres → **Profil** : photo de profil ;
+  machine), Réglages → **Bot Recorder** ;
+- Réglages → **Profil** : photo de profil ;
 - la **cloche de notifications** et l'**aide intégrée** de la barre latérale (0.22.0) ;
 - l'**archivage** des chats, à côté de leur suppression (0.22.0) ;
 - le branchement d'un service **en un clic** : « Se connecter », autorisation dans
@@ -1060,7 +1060,7 @@ l'agent d'orchestration par défaut. Aucun tiret cadratin dans les textes affich
 - l'**invitation d'un collègue** par mail : il reçoit un code, rattache son poste,
   ouvre son compte et choisit son propre mot de passe (0.23.0) ;
 - l'**ouverture de l'instance depuis l'écran** : un interrupteur sous mot de passe,
-  dans Paramètres → Profil, au lieu d'un fichier JSON à éditer (0.23.0) ;
+  dans Réglages → Profil, au lieu d'un fichier JSON à éditer (0.23.0) ;
 - le **lien d'invitation** : le mail porte un lien qui ouvre l'application avec
   l'adresse et le code déjà remplis. Le lien reste collable dans le champ
   d'adresse, et le mail garde les deux lignes à saisir à la main (0.24.0) ;
@@ -1093,7 +1093,7 @@ l'agent d'orchestration par défaut. Aucun tiret cadratin dans les textes affich
   l'interface et 650 dans la passerelle ; le 28/09/2026, 2 945 et 966, traduites à
   100 % dans les deux langues (`npm run i18n` le mesure). Ce que vous écrivez n'est
   jamais traduit (0.25.0) ;
-- **Paramètres → Abonnement** : l'offre d'hébergement des modèles, quatre
+- **Réglages → Abonnement** : l'offre d'hébergement des modèles, quatre
   formules, avec ce qu'elles comprennent. Éteinte par défaut en marque blanche.
   Aucun paiement n'y est branché, et l'écran le dit (0.24.0).
 

@@ -50,7 +50,7 @@ Toutes les routes déclarées dans `src/App.tsx`, dans l'ordre du fichier.
 | `/reunions` | Réunions | `reunions` | ✅ **fonctionne** (0.16.0), bot dans l'application de bureau |
 | `/groupes` | Groupes | `groupes` | ✅ **fonctionne** (0.16.0) |
 | `/taches` | Tâches | `taches` | ✅ **fonctionne** |
-| `/parametres/*` | Paramètres, 12 sous-pages | toujours | mixte, voir § 5 |
+| `/parametres/*` | Réglages, 12 sous-pages | toujours | mixte, voir § 5 |
 | `*` | repli sur l'accueil | | |
 
 Deux écrans vivent **hors du routeur**, parce qu'ils précèdent tout le reste
@@ -387,7 +387,7 @@ dernier sous mot de passe), et onglet **Canaux** : brancher Telegram, WhatsApp (
 code affiché, à scanner depuis le téléphone), Discord, Slack, Mattermost, voir leur
 état, accepter les personnes qui demandent à lui parler.
 
-**Paramètres, Modèles cloud** (0.12.0, `src/components/settings/ModelesCloud.tsx`) :
+**Réglages, Modèles cloud** (0.12.0, `src/components/settings/ModelesCloud.tsx`) :
 brancher la clé d'un fournisseur (Mistral, Scaleway, OVHcloud, IONOS, OpenAI,
 Anthropic, Google, OpenRouter, et depuis le 27/09/2026 Groq, DeepSeek, xAI, Together AI,
 ou une adresse compatible OpenAI), la vérifier, choisir les modèles à proposer, pour soi
@@ -511,7 +511,7 @@ personnes, nommer ou retirer un responsable, retirer un membre, quitter, supprim
 Le partage à un groupe se fait depuis la conversation (Partager), la bibliothèque et
 la fiche d'une réunion.
 
-## 5. Paramètres
+## 5. Réglages
 
 `src/components/settings/SettingsShell.tsx` pour la navigation,
 `src/pages/ParametresPages.tsx` pour les pages. Quinze entrées, toutes atteignables
@@ -768,7 +768,7 @@ pour que personne ne les cherche dans `screenshots/`.
 
 ### Importer depuis d'autres IA (24/09/2026)
 
-Paramètres > « Importer depuis d'autres IA » : une carte **« Depuis les
+Réglages > « Importer depuis d'autres IA » : une carte **« Depuis les
 logiciels de cet ordinateur »** liste les logiciels d'IA trouvés (Claude Code,
 Codex, Cursor : nombre de conversations, instructions ; ChatGPT et Claude :
 pourquoi on ne peut pas les lire), avec « Reprendre ». La suite est celle de
@@ -793,7 +793,7 @@ en a reçu la copie : ils y restent. »
 
 ### Signaler un problème (27/09/2026)
 
-Paramètres > **Signaler un problème** (dernière entrée), ou l'aide, « Besoin d'une
+Réglages > **Signaler un problème** (dernière entrée), ou l'aide, « Besoin d'une
 personne » (`src/components/settings/SignalerProbleme.tsx`, `src/lib/signalement.ts`).
 Trois champs : ce qui ne va pas (obligatoire), ce que la personne faisait, ce qu'elle
 attendait ; une case **« Joindre les informations techniques »**, cochée par défaut
@@ -816,7 +816,7 @@ dit. **Vu le 27/09/2026** dans l'interface de développement : adresse du ticket
 
 ### Entraîner un modèle (25/09/2026)
 
-Paramètres > **Entraîner un modèle** (`src/components/settings/EntrainerModele.tsx`).
+Réglages > **Entraîner un modèle** (`src/components/settings/EntrainerModele.tsx`).
 En tête : ce que la machine permet (raison, modèle de départ et sa licence,
 avertissement « pas encore essayé » quand c'est le cas), puis « Installer le moteur
 d'entraînement » avec la place et le téléchargement annoncés, ou « Retirer le
@@ -858,7 +858,7 @@ affichées « ✓ Écriture index.html »). Clic droit sur une sélection :
 ### Apparence, quatre modes
 
 `src/lib/store/apparence.ts`, `src/hooks/useApparence.ts`,
-`src/styles/tokens.css`, `src/lib/soleil.ts`. Réglé dans Paramètres,
+`src/styles/tokens.css`, `src/lib/soleil.ts`. Réglé dans Réglages,
 Préférences.
 
 | Mode | Comportement |
@@ -1150,7 +1150,7 @@ Tout est embarqué : l'aide fonctionne sans Internet. En pied de fenêtre, l'adr
 support de l'intégrateur, le lien vers son site, et un bouton qui copie les
 informations techniques (version, cadre d'exécution, adresse d'instance, système) —
 ni messages, ni documents, ni clés. Depuis le 27/09/2026, un bouton **« Signaler un
-problème »** y referme l'aide et ouvre l'écran du même nom (Paramètres, voir § 6).
+problème »** y referme l'aide et ouvre l'écran du même nom (Réglages, voir § 6).
 
 **Bandeau « fichier des Chats illisible »** (25/09/2026,
 `src/components/layout/AvisChatsIllisibles.tsx`) : par-dessus l'écran, où que l'on

@@ -237,7 +237,7 @@ La signature et la notarisation sont prêtes et n'attendent qu'un certificat App
 ### Ligne de commande
 
 L'application de bureau fournit la commande `helix`. Mettez-la en place depuis
-**Paramètres › Installer les apps › CLI**, puis :
+**Réglages › Installer les apps › CLI**, puis :
 
 ```bash
 helix connexion          # se connecter une fois avec son compte de l'instance
@@ -261,7 +261,7 @@ Les contributions sont les bienvenues, d'une coquille à un nouveau connecteur.
   request.
 - Questions et idées : [Discussions](https://github.com/medhiclb/HelixAI/discussions).
 - Défauts et demandes : [Issues](https://github.com/medhiclb/HelixAI/issues), ou depuis
-  l'application : Paramètres › Signaler un problème, qui prépare un ticket ou un mail que vous
+  l'application : Réglages › Signaler un problème, qui prépare un ticket ou un mail que vous
   relisez et envoyez vous-même.
 - Failles de sécurité : à signaler en privé, voir [SECURITY.md](SECURITY.md).
 - [Code de conduite](CODE_OF_CONDUCT.md).

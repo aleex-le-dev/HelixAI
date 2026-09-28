@@ -502,6 +502,26 @@ async function preparerEtLancer(zip, url, dossier) {
   const identifiant = await lirePlist(actuelle, "CFBundleIdentifier");
   if ((await lirePlist(nouvelle, "CFBundleShortVersionString")) !== annonce.version) throw new Error(tx("autreVersion"));
   /*
+   * Le processeur de ce Mac (relecture du 28/09/2026, sourceGithub.processeursMachO) :
+   * une instance sur puce Apple sert l'archive de sa propre application à un
+   * Mac Intel qui lui est rattaché. Installée, elle remplaçait l'ancienne et ne
+   * démarrait pas. Lu dans l'exécutable lui-même, pas dans un nom de fichier.
+   */
+  const executable = path.basename(await lirePlist(nouvelle, "CFBundleExecutable"));
+  let entete = Buffer.alloc(0);
+  try {
+    const fd = fs.openSync(path.join(nouvelle, "Contents", "MacOS", executable), "r");
+    try {
+      entete = Buffer.alloc(4096);
+      entete = entete.subarray(0, fs.readSync(fd, entete, 0, 4096, 0));
+    } finally {
+      fs.closeSync(fd);
+    }
+  } catch {
+    /* exécutable absent : refusé ci-dessous */
+  }
+  if (!executable || !sourceGithub.processeursMachO(entete).has(process.arch)) throw new Error(tx("autreProcesseur"));
+  /*
    * La signature de l'éditeur (electron/signatureEditeur.cjs, 27/09/2026).
    * L'empreinte ci-dessus vient de la même source que l'archive : elle dit
    * que rien ne s'est abîmé en route, pas qui l'a faite. La clé qui tranche

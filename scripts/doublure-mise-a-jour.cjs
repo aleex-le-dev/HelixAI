@@ -48,7 +48,7 @@ const attendre = async (fini) => {
   for (let i = 0; i < 400 && !fini(); i++) await new Promise((r) => setTimeout(r, 50));
 };
 const plist = (version) =>
-  `<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n<plist version="1.0"><dict><key>CFBundleIdentifier</key><string>fr.helix.plateforme</string><key>CFBundleShortVersionString</key><string>${version}</string></dict></plist>\n`;
+  `<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n<plist version="1.0"><dict><key>CFBundleExecutable</key><string>Helix</string><key>CFBundleIdentifier</key><string>fr.helix.plateforme</string><key>CFBundleShortVersionString</key><string>${version}</string></dict></plist>\n`;
 /*
  * Un vrai programme (Mach-O) signé ad hoc, pour les scénarios « mac-code-… »
  * (seconde tournée, 28/09/2026) : une copie de /usr/bin/true, jamais lancée.
@@ -66,7 +66,13 @@ async function fausseApplication(dossier, version) {
   const app = path.join(dossier, "Helix.app");
   for (const d of ["Contents/Resources", "Contents/MacOS"]) fs.mkdirSync(path.join(app, d), { recursive: true });
   fs.writeFileSync(path.join(app, "Contents/Info.plist"), plist(version));
-  fs.writeFileSync(path.join(app, "Contents/MacOS/Helix"), "binaire", { mode: 0o755 });
+  /*
+   * L'exécutable principal est un vrai programme (copie de /usr/bin/true,
+   * universel, jamais lancé) depuis le 28/09/2026 : la mise à jour lit son
+   * processeur avant de rien remplacer (miseAJour.cjs, `autreProcesseur`).
+   */
+  fs.copyFileSync("/usr/bin/true", path.join(app, "Contents/MacOS/Helix"));
+  signerProgramme(path.join(app, "Contents/MacOS/Helix"));
   fs.writeFileSync(path.join(app, "Contents/Resources/app.asar"), `application ${version}`);
   if (scenario.startsWith("mac-code")) {
     fs.mkdirSync(path.join(app, "Contents/Frameworks"), { recursive: true });
@@ -131,6 +137,14 @@ async function fausseApplication(dossier, version) {
     // Le code authentique, re-signé ad hoc par la source : sans durcissement, ou avec un droit de plus. Le relevé signé ne change pas.
     if (scenario === "mac-code-sans-durci") signerProgramme(path.join(nouvelle, PROGRAMME), { durci: false });
     if (scenario === "mac-code-droit") signerProgramme(path.join(nouvelle, PROGRAMME), { droits: ["com.apple.security.cs.allow-jit", "com.apple.security.get-task-allow"] });
+    if (scenario === "mac-autre-processeur") {
+      // L'application d'un Mac Intel (en-tête Mach-O x86_64), signée par l'éditeur comme la vraie, servie à ce Mac à puce Apple.
+      const entete = Buffer.alloc(64);
+      entete.writeUInt32BE(0xcffaedfe, 0);
+      entete.writeUInt32LE(0x01000007, 4);
+      fs.writeFileSync(path.join(nouvelle, "Contents/MacOS/Helix"), entete, { mode: 0o755 });
+      await sig.signerApplication(nouvelle, cle, { identifiant: "fr.helix.plateforme", version: "9.0.1" });
+    }
     if (scenario.startsWith("mac-code")) resultat.releveInchange = (await sig.verifierApplication(nouvelle, sig.cleDeLApplication(installee), { identifiant: "fr.helix.plateforme", version: "9.0.1" })).ok;
     if (scenario === "mac-droits") {
       // L'application authentique, rendue modifiable par tous : droits 0777 et ACL « everyone ».

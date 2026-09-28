@@ -6215,3 +6215,50 @@ CalDAV admise vers un même « domaine » lu sur ses deux derniers morceaux (`*.
 derrière un mandataire, une requête qui porte une fausse signature de la bonne forme compte encore
 dans la limite du webhook. Les panneaux Drive, Agenda et Slack disent le refus au membre quand il
 essaie, sans le dire d'avance.
+
+## 60. Import des Chats de Gemini (28 septembre 2026)
+
+Réglages, « Importer depuis d'autres IA », lit maintenant l'export Gemini de Google Takeout
+(`src/lib/importGemini.ts`, appelé par `lireExport`, `src/lib/importChats.ts`). Comme pour
+ChatGPT et Claude, l'archive est lue **dans la fenêtre de l'application, sur le poste** :
+rien ne passe par la passerelle, rien ne part ailleurs que dans l'instance (synchronisation
+ordinaire des Chats). Ce qui est nouveau : les réponses de Gemini arrivent **en HTML**
+(`safeHtmlItem[].html` en JSON, le corps des cartes en HTML), écrit par un service tiers et,
+à travers lui, par quiconque a fait écrire Gemini.
+
+### 60.1 Ce qui est tenu
+
+- **Aucun HTML interprété.** Pas de `DOMParser`, d'`innerHTML` ni d'élément créé : le HTML est
+  parcouru balise par balise par `parcourirBalises` (`gateway/src/texteBrut.ts`, § 53), en temps
+  linéaire. `script`, `style`, `noscript`, `template`, `iframe`, `object`, `embed`, `svg`, `head`,
+  `title`, `select`, `button` sont retirés avec leur contenu, les commentaires aussi ; aucune
+  balise ne reste dans le texte repris (`<scr<script>ipt>` ne recompose rien). Les entités sont
+  décodées **en texte** : un exemple de code (`&lt;div&gt;`) redevient `<div>`, et s'affiche comme
+  texte, `TexteRiche` n'interprétant aucun HTML (aucun `dangerouslySetInnerHTML` dans `src`).
+- **Liens.** Gardés en texte, « libellé (adresse) », pour `http:`, `https:` et `mailto:` seulement ;
+  `javascript:`, `data:` et le reste ne gardent que leur libellé. Rien n'est cliquable (TexteRiche).
+- **Taille.** Un fichier d'activité est refusé au-delà de 300 Mo décompressés : taille annoncée
+  par le répertoire de l'archive vérifiée d'abord, puis lecture **arrêtée en cours de
+  décompression** si l'archive ment (301 Mo compressés en 0,3 Mo : arrêté à la limite). Un
+  message est coupé à 100 000 caractères, marqué « [...] » ; 500 000 activités au plus.
+- **Mauvais produit.** Le journal d'un autre produit (Recherche) est écarté même s'il parle de
+  « gemini » : le produit se lit dans `header`/`products` ou l'hôte de `titleUrl`, jamais dans le
+  texte de la question. Le lien de conversation se lit hors de la question et de la réponse.
+- **Rien d'écrasé.** Les Chats importés sont ajoutés (`ajouterSessionsImportees`, identifiants
+  neufs), jamais écrits par-dessus. Chaque Chat importé retient `importe: { source, cle, messages }` ;
+  un Chat déjà importé par la même personne n'est ni présélectionné ni réimporté (relu au moment
+  d'importer : un autre onglet a pu le faire entre-temps). Vaut pour toutes les sources.
+
+Contrôlé par `npm run securite`, section 32 (le vrai lecteur, empaqueté, sur du HTML piégé ; temps
+linéaire ; bornes ; déduplication), et par `node scripts/essai-import-gemini.mjs` (66 contrôles).
+
+### 60.2 Pas essayé, ou laissé
+
+Aucun vrai export Gemini n'a été lu (pas de compte Google d'essai, pas d'archive du client) : le
+format suit les relevés publics (en-tête d'`importGemini.ts`) et l'archive d'essai publique du
+projet gemini-exporter (structure HTML). Le format JSON réel, en particulier l'endroit où Google y
+range le lien de conversation, n'a pas été vu : sans lien, les Chats sont reconstitués par
+proximité dans le temps, et l'écran le dit. Laissé : la question (`title`) d'un export JSON est
+reprise telle que la personne l'a écrite, sans retirer ce qui ressemble à du HTML (c'est son texte,
+affiché comme texte). Les Chats importés avant le 28/09/2026 n'ont pas de marque `importe` : un
+export repris par-dessus ces anciens imports les double encore.

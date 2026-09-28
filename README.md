@@ -185,7 +185,7 @@ at the "Free" level go through PowerShell.
   `/v1/chat/completions`, knowledge bases included), in your name and nothing more, revocable at
   once.
 - **Meetings**: record or import, transcription and minutes on the machine, meeting bot.
-- **Import** your history from ChatGPT, Claude, Claude Code, Codex and Cursor.
+- **Import** your history from ChatGPT, Claude, Gemini (Google Takeout), Claude Code, Codex and Cursor.
 - **Teams**: accounts, groups, sharing, two-factor authentication, audit log, GDPR export, data
   encrypted at rest.
 - **White label**: the product name, logo and colours come from one configuration file.

@@ -791,6 +791,24 @@ inscriptible et stockage du navigateur rempli : « 2 Chat(s) repris sur 2. Ni le
 chiffré de cet ordinateur ni le stockage du navigateur n'ont pu les garder […] L'instance
 en a reçu la copie : ils y restent. »
 
+**Gemini (28/09/2026)** : la liste des services porte une troisième ligne, « Gemini :
+Google Takeout, « Mes activités », « Applications Gemini » seulement », et un dépliant
+**« Exporter ses Chats de Gemini, pas à pas »** : sept étapes numérotées (lien
+« Ouvrez Google Takeout », qui ouvre takeout.google.com avec « Mes activités » ;
+quoi cocher, format JSON, .zip, délai et lien valable 7 jours, quoi déposer), puis ce
+que l'export contient et ne contient pas. Le sélecteur de fichier accepte .zip, .json et
+.html. Après lecture, un encart dit comment les Chats ont été regroupés (par lien de
+conversation, ou reconstitués par proximité dans le temps), les questions sans réponse,
+les fichiers seulement nommés, les dates reconstituées et les activités écartées. Toutes
+sources : un Chat déjà importé est grisé, « déjà importé », sa case désactivée ; s'il a
+grandi, « déjà importé, {0} message(s) de plus : une copie complète sera ajoutée », case
+libre mais non cochée ; si tout l'export est déjà là, « Tous les Chats de cet export sont
+déjà importés : rien de nouveau à reprendre. » ; le bilan compte les Chats laissés tels
+quels. **Vu le 28/09/2026** (serveur de développement, instance jetable, fixtures
+fictives) : archive JSON, 5 Chats importés et rouverts ; même archive redéposée, 5 lignes
+grisées, « Importer 0 Chat(s) » ; archive HTML aux chemins français, 4 Chats ; Takeout
+sans Gemini, message clair ; 375 px sans défilement horizontal.
+
 ### Signaler un problème (27/09/2026)
 
 Réglages > **Signaler un problème** (dernière entrée), ou l'aide, « Besoin d'une

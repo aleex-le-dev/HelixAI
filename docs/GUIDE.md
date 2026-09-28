@@ -980,8 +980,21 @@ l'agent d'orchestration par défaut. Aucun tiret cadratin dans les textes affich
   compte ChatGPT du propriétaire du poste (27/09/2026) ;
 - Images : « + » > « Créer une image » dans le Chat, sur la machine (Z-Image
   Turbo, FLUX.2 klein 4B, Qwen-Image selon la mémoire, licences Apache 2.0) ;
-- Import : archives ChatGPT et Claude, et sans export depuis Claude Code, Codex
-  et Cursor installés sur le poste ;
+- Import : archives ChatGPT et Claude, export **Gemini** de Google Takeout, et sans
+  export depuis Claude Code, Codex et Cursor installés sur le poste. Pour Gemini
+  (28/09/2026) : sur takeout.google.com, cocher seulement « Mes activités », puis,
+  dans « Toutes les données d'activité sont incluses », seulement « Applications
+  Gemini » (le produit « Gemini » seul ne contient que les Gems) ; format JSON
+  conseillé (« Plusieurs formats »), HTML lu aussi ; archive .zip. On dépose
+  l'archive telle quelle, ou `MyActivity.json` / `MyActivity.html`. Google exporte
+  un journal de questions (réponse et date), pas des conversations : Helix regroupe
+  par le lien de conversation que Google range avec chaque question, sinon par
+  proximité dans le temps (moins de 30 minutes), et l'écran dit lequel. Pas de
+  titres (chaque Chat prend sa première question), ni images, ni fichiers joints
+  (leur nom est noté), ni Gems. Toutes sources : un Chat déjà importé est signalé
+  et n'est jamais réimporté ni écrasé ; s'il a grandi dans un export plus récent,
+  on peut en ajouter une copie complète à côté. Code : `src/lib/importGemini.ts`,
+  essai `node scripts/essai-import-gemini.mjs` ;
 - Extension VS Code (`extensions/vscode/`) : Chat, Helix Code sur le dossier
   ouvert, expliquer ou améliorer une sélection ;
 - **Bases de connaissances** (RAG, 25/09/2026) : dans Fichiers, onglet « Bases de

@@ -306,8 +306,11 @@ async function etapes() {
   // La séance survit à la fermeture de l'application, comme pour une personne qui rouvre Helix.
   const relu = await appel("/helix/provision");
   verifier("la séance ouverte hier sert encore", relu.statut === 200, `${relu.statut} ${relu.texte.slice(0, 200)}`);
-  if (!(await questionAuChat("2"))) return;
+  if (!(await questionAuChat("2", 3 * 60_000))) return;
 }
+
+/** Nom comparable d'un modèle, sans source ni éditeur (« lmstudio/qwen/qwen3-1.7b » → « qwen3-1.7b »), comme santeModeles.ts. */
+const nomDuModele = (id) => (String(id).toLowerCase().split("/").pop() ?? "").replace(/:\d+$/, "");
 
 /** Lance l'application et attend sa passerelle (/health). */
 async function demarrerEtAttendre() {
@@ -327,19 +330,32 @@ async function demarrerEtAttendre() {
   return true;
 }
 
-/** Une question au Chat, au modèle local, en flux ; `n` numérote la réponse gardée. */
-async function questionAuChat(n) {
-  const modeles = await appel("/v1/models");
-  const ids = (modeles.json.data ?? []).map((m) => m.id);
-  dire(`   /v1/models : ${ids.join(", ")}`);
-  const local = ids.find((id) => id.toLowerCase().endsWith(MODELE.toLowerCase()));
-  if (!verifier(`le Chat voit ${MODELE}`, Boolean(local), ids.join(","))) return false;
+/**
+ * Une question au Chat, en flux, le sélecteur sur « Auto » (le défaut d'une
+ * personne : aucun modèle nommé). `n` numérote ce qui est gardé ;
+ * `attenteMs` : le temps laissé au modèle pour apparaître dans le sélecteur
+ * (l'application rouverte relève d'abord le service de LM Studio).
+ */
+async function questionAuChat(n, attenteMs = 0) {
+  const t00 = Date.now();
+  let liste = [];
+  for (;;) {
+    const modeles = await appel("/helix/models").catch(() => ({ json: {} }));
+    liste = modeles.json.models ?? [];
+    if (liste.some((m) => nomDuModele(m.id) === MODELE) || Date.now() - t00 >= attenteMs) break;
+    await attendre(5000);
+  }
+  writeFileSync(join(SORTIE, `modeles-${n}.json`), JSON.stringify(liste, null, 1));
+  dire(`   sélecteur (${((Date.now() - t00) / 1000).toFixed(0)} s) : ${liste.map((m) => `${m.id}${m.loaded ? " [en mémoire]" : ""}`).join(", ")}`);
+  if (!verifier(`le sélecteur du Chat propose ${MODELE}`, liste.some((m) => nomDuModele(m.id) === MODELE), liste.map((m) => m.id).join(","))) return false;
+  const doublons = liste.filter((m) => nomDuModele(m.id) === MODELE);
+  verifier(`${MODELE} n'apparaît qu'une fois dans le sélecteur`, doublons.length === 1, doublons.map((m) => `${m.id} (${m.uid ?? "-"})`).join(", "));
   const question = "Quelle est la capitale de la France ? Réponds en une courte phrase.";
   const t0 = Date.now();
   const r = await fetch(`${G}/v1/chat/completions`, {
     method: "POST",
     headers: entetes(),
-    body: JSON.stringify({ model: local, stream: true, messages: [{ role: "user", content: question }] }),
+    body: JSON.stringify({ stream: true, messages: [{ role: "user", content: question }] }),
     signal: AbortSignal.timeout(20 * 60_000),
   });
   const brut = await r.text();
@@ -347,11 +363,13 @@ async function questionAuChat(n) {
   let texte = "";
   let reflexion = "";
   const erreurs = [];
+  const servi = new Set();
   for (const ligne of brut.split("\n")) {
     if (!ligne.startsWith("data: ") || ligne.startsWith("data: [DONE]")) continue;
     try {
       const evt = JSON.parse(ligne.slice(6));
       if (evt.error) erreurs.push(JSON.stringify(evt.error));
+      if (typeof evt.model === "string") servi.add(evt.model);
       const delta = evt.choices?.[0]?.delta ?? {};
       if (typeof delta.content === "string") texte += delta.content;
       if (typeof delta.reasoning_content === "string") reflexion += delta.reasoning_content;
@@ -361,6 +379,8 @@ async function questionAuChat(n) {
   }
   dire(`   ${r.status}, ${((Date.now() - t0) / 1000).toFixed(1)} s ; réponse : ${JSON.stringify(texte.trim()).slice(0, 500)}`);
   if (reflexion) dire(`   réflexion : ${reflexion.length} lettres`);
+  dire(`   modèle qui a répondu (« Auto ») : ${[...servi].join(", ") || "non dit"}`);
+  if (servi.size) verifier(`en « Auto », c'est ${MODELE} qui répond`, [...servi].every((s) => nomDuModele(s) === MODELE), [...servi].join(", "));
   const acceptee = verifier("la requête du Chat est acceptée (200)", r.status === 200, `${r.status} ${brut.slice(0, 400)}`);
   const sansErreur = verifier("aucune erreur dans le flux", erreurs.length === 0, erreurs.join(" | "));
   const net = texte.trim();

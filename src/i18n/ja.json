@@ -601,6 +601,7 @@
   "Avec curl": "curl を使う",
   "Avec l'AppImage, l'application change de place à chaque lancement : la commande ne resterait pas en place. Installez le paquet .deb pour l'avoir.": "AppImage では起動のたびにアプリケーションの場所が変わるため、コマンドが定まりません。コマンドを使うには .deb パッケージをインストールしてください。",
   "Avec l'application que votre organisation crée chez {0}, une fois. Le logiciel ne peut pas en fournir une commune : {0} examine les applications qui servent d'autres comptes que ceux de leur éditeur.": "組織が {0} で一度だけ作成するアプリケーションを使います。このソフトウェアで共通のアプリケーションを用意することはできません。{0} は、開発元以外のアカウントに使われるアプリケーションを審査するためです。",
+  "Avec l'application que votre organisation crée chez X, une fois. Le logiciel ne peut pas en fournir une commune : X facture chaque appel à l'application qui le fait, sur ses crédits.": "組織が X で一度だけ作成するアプリケーションを使います。このソフトウェアで共通のアプリケーションを用意することはできません。X は呼び出しのたびに、呼び出したアプリケーションのクレジットから料金を差し引くためです。",
   "Avec mes outils (courrier, agenda, fichiers…).": "ツール（メール、カレンダー、ファイル…）を使う。",
   "Avec moins de 20 exemples, aucun n'est mis de côté pour la vérification : vous poserez vos propres questions à l'étape Comparer.": "例が 20 件未満の場合、確認用に取り置かれる例はありません。「比較」のステップでご自身の質問をしてください。",
   "Base de connaissances créée": "ナレッジベースを作成しました",

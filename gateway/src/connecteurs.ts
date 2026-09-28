@@ -147,7 +147,11 @@ export const CATEGORIES: Categorie[] = [
  * avec un nom approchant, ferait installer au client un paquet que quelqu'un
  * d'autre a publié sous ce nom.
  *
- * Vérifié le 2026-09-18.
+ * Vérifié le 2026-09-18, revérifié le 2026-09-28 (SECURITE.md § 49) : pour
+ * chaque service distant, la documentation officielle du jour et ses
+ * métadonnées d'autorisation publiques (`/.well-known/oauth-protected-resource`
+ * et `oauth-authorization-server`, lues sans compte ni identifiant) ; pour
+ * chaque paquet, sa version et sa licence sur le registre npm.
  */
 export const CATALOGUE: EntreeCatalogue[] = [
   {
@@ -190,9 +194,16 @@ export const CATALOGUE: EntreeCatalogue[] = [
     label: "Jira et Confluence",
     description: "Tickets Jira et pages Confluence de votre organisation Atlassian.",
     categorie: "Travail en équipe",
-    url: "https://mcp.atlassian.com/v1/sse",
+    /*
+     * 28/09/2026 : `/v1/sse` ne publiait plus aucune métadonnée d'autorisation
+     * (404 partout), et c'est l'ancien transport SSE. La documentation
+     * d'Atlassian donne `/v2/mcp` ; ses métadonnées renvoient au serveur
+     * d'autorisation d'Atlassian (auth.atlassian.com), qui accepte
+     * l'enregistrement automatique, avec PKCE S256.
+     */
+    url: "https://mcp.atlassian.com/v2/mcp",
     oauth: "auto",
-    documentation: "https://www.atlassian.com",
+    documentation: "https://support.atlassian.com/atlassian-rovo-mcp-server/docs/getting-started-with-the-atlassian-remote-mcp-server/",
     secrets: [],
   },
   {
@@ -200,9 +211,17 @@ export const CATALOGUE: EntreeCatalogue[] = [
     label: "Asana",
     description: "Tâches, projets et portefeuilles Asana.",
     categorie: "Travail en équipe",
-    url: "https://mcp.asana.com/sse",
-    oauth: "auto",
-    documentation: "https://asana.com",
+    /*
+     * 28/09/2026 : le serveur V1 (`/sse`) est arrêté par Asana depuis le
+     * 11/05/2026 d'après sa documentation. Le V2 (`/v2/mcp`) n'accepte pas
+     * l'enregistrement automatique (pas de `registration_endpoint` dans ses
+     * métadonnées) : il faut une « MCP app » créée dans la console d'Asana,
+     * avec un identifiant et un secret.
+     */
+    url: "https://mcp.asana.com/v2/mcp",
+    oauth: "appli",
+    console: "https://app.asana.com/0/my-apps",
+    documentation: "https://developers.asana.com/docs/integrating-with-asanas-mcp-server",
     secrets: [],
   },
   {
@@ -220,9 +239,10 @@ export const CATALOGUE: EntreeCatalogue[] = [
     label: "Intercom",
     description: "Conversations clients et articles d'aide Intercom.",
     categorie: "Vente et relation client",
+    // Espaces Intercom hébergés aux États-Unis ; ceux d'Europe ont une autre adresse (mcp.eu.intercom.com), pas au catalogue.
     url: "https://mcp.intercom.com/mcp",
     oauth: "auto",
-    documentation: "https://www.intercom.com",
+    documentation: "https://developers.intercom.com/docs/guides/mcp",
     secrets: [],
   },
   {
@@ -230,29 +250,35 @@ export const CATALOGUE: EntreeCatalogue[] = [
     label: "Canva",
     description: "Créations et gabarits Canva : chercher, produire, exporter.",
     categorie: "Documents et données",
+    /*
+     * 28/09/2026 : Canva dit l'enregistrement automatique « déprécié au profit
+     * de CIMD, mais toujours disponible » ; ses métadonnées le publient encore.
+     */
     url: "https://mcp.canva.com/mcp",
     oauth: "auto",
-    documentation: "https://www.canva.com",
+    documentation: "https://www.canva.dev/docs/apps/mcp/access/",
     secrets: [],
   },
-  {
-    id: "figma",
-    label: "Figma",
-    description: "Fichiers et composants Figma, vus depuis l'agent.",
-    categorie: "Documents et données",
-    url: "https://mcp.figma.com/mcp",
-    oauth: "auto",
-    documentation: "https://www.figma.com",
-    secrets: [],
-  },
+  /*
+   * Figma et Vercel retirés du catalogue le 28/09/2026 : leur documentation dit
+   * que seuls les clients qu'ils ont approuvés peuvent se brancher (« Only
+   * clients listed in the Figma MCP Catalog », « Vercel MCP only supports AI
+   * clients that have been reviewed and approved by Vercel »). Une instance
+   * Helix n'en fait pas partie : le bouton aurait promis un branchement que le
+   * service refuse. Un connecteur déjà installé reste tel quel (`aligner`).
+   */
   {
     id: "webflow",
     label: "Webflow",
     description: "Sites, collections et éléments Webflow.",
     categorie: "Web et recherche",
+    /*
+     * La seule adresse que Webflow documente (28/09/2026) : l'ancien transport
+     * SSE, que mcp.ts rouvre quand le transport « streamable » est refusé.
+     */
     url: "https://mcp.webflow.com/sse",
     oauth: "auto",
-    documentation: "https://webflow.com",
+    documentation: "https://developers.webflow.com/data/docs/ai-tools",
     secrets: [],
   },
   {
@@ -260,19 +286,10 @@ export const CATALOGUE: EntreeCatalogue[] = [
     label: "Wix",
     description: "Sites Wix : contenu, boutique, réservations.",
     categorie: "Web et recherche",
-    url: "https://mcp.wix.com/sse",
+    // 28/09/2026 : `/mcp`, l'adresse de la documentation de Wix ; `/sse` n'a plus de métadonnées à son chemin.
+    url: "https://mcp.wix.com/mcp",
     oauth: "auto",
-    documentation: "https://www.wix.com",
-    secrets: [],
-  },
-  {
-    id: "vercel",
-    label: "Vercel",
-    description: "Projets, déploiements et journaux Vercel.",
-    categorie: "Développement",
-    url: "https://mcp.vercel.com",
-    oauth: "auto",
-    documentation: "https://vercel.com",
+    documentation: "https://dev.wix.com/docs/sdk/articles/use-the-wix-mcp/about-the-wix-mcp",
     secrets: [],
   },
   {
@@ -280,9 +297,10 @@ export const CATALOGUE: EntreeCatalogue[] = [
     label: "Square",
     description: "Catalogue, commandes et paiements Square.",
     categorie: "Paiement et gestion",
-    url: "https://mcp.squareup.com/sse",
+    // 28/09/2026 : `/mcp`, l'adresse de la documentation de Square (le transport « streamable »).
+    url: "https://mcp.squareup.com/mcp",
     oauth: "auto",
-    documentation: "https://squareup.com",
+    documentation: "https://developer.squareup.com/docs/mcp",
     secrets: [],
   },
   {
@@ -290,9 +308,10 @@ export const CATALOGUE: EntreeCatalogue[] = [
     label: "PayPal",
     description: "Factures, commandes et remboursements PayPal.",
     categorie: "Paiement et gestion",
-    url: "https://mcp.paypal.com/mcp",
+    // 28/09/2026 : PayPal documente `/http` (transport « streamable ») et `/sse`, pas `/mcp`.
+    url: "https://mcp.paypal.com/http",
     oauth: "auto",
-    documentation: "https://www.paypal.com",
+    documentation: "https://developer.paypal.com/tools/mcp-server/",
     secrets: [],
   },
 
@@ -316,7 +335,8 @@ export const CATALOGUE: EntreeCatalogue[] = [
     url: "https://mcp.slack.com/mcp",
     oauth: "appli",
     console: "https://api.slack.com/apps",
-    documentation: "https://api.slack.com/authentication/oauth-v2",
+    // Une application interne à l'espace de travail, ou publiée dans l'annuaire de Slack : les autres n'ont pas droit au serveur MCP.
+    documentation: "https://docs.slack.dev/ai/slack-mcp-server/",
     secrets: [],
   },
   {
@@ -326,8 +346,14 @@ export const CATALOGUE: EntreeCatalogue[] = [
     categorie: "Documents et données",
     url: "https://mcp.box.com/",
     oauth: "appli",
-    console: "https://app.box.com/developers/console",
-    documentation: "https://developer.box.com/guides/authentication/oauth2/",
+    /*
+     * 28/09/2026 : l'identifiant et le secret ne se créent plus dans la console
+     * des développeurs mais dans la console d'administration de Box
+     * (« Integrations », « Box MCP server », « Add Integration Credentials ») :
+     * on renvoie à la page qui le décrit.
+     */
+    console: "https://developer.box.com/guides/box-mcp/remote/",
+    documentation: "https://developer.box.com/guides/box-mcp/remote/",
     secrets: [],
   },
   {
@@ -350,6 +376,7 @@ export const CATALOGUE: EntreeCatalogue[] = [
       "Même service que « Notion », mais par un jeton d'intégration interne, sans passer par le navigateur.",
     categorie: "Travail en équipe",
     command: "npx",
+    // 28/09/2026 : Notion dit ce serveur local « plus activement maintenu » et conseille son serveur distant (l'entrée « Notion »).
     args: ["-y", "@notionhq/notion-mcp-server@2.5.2"],
     documentation: "https://www.notion.so/profile/integrations",
     secrets: [
@@ -713,7 +740,17 @@ export function aligner(c: ConnecteurEnregistre): ConnecteurEnregistre {
     }
     return { ...c, command: "npx", args: ["-y", `${nom}@${DERNIERES_VERSIONS[nom]}`, ...autres], libre: false };
   }
-  if (c.url || c.command !== "npx") return c;
+  /*
+   * Revérification du 28/09/2026 : cinq adresses distantes ont changé
+   * (Atlassian, Asana, Wix, Square, PayPal). Un connecteur branché avant garde
+   * l'adresse enregistrée à son branchement, que le service ne sert plus (ou
+   * plus dans le transport qu'on parle) : on le réaligne sur le catalogue,
+   * qui seul décide où partent les jetons. L'autorisation obtenue pour
+   * l'ancienne adresse n'est pas présentée à la nouvelle (oauthMcp.ts) : la
+   * personne se reconnecte. Hors catalogue (Figma, Vercel), rien ne change.
+   */
+  if (c.url) return e?.url && e.url !== c.url ? { ...c, url: e.url } : c;
+  if (c.command !== "npx") return c;
   if (e?.command === "npx" && e.args) return { ...c, args: [...e.args] };
   const args = (c.args ?? []).map((a) => (sansVersion(a) && DERNIERES_VERSIONS[a] ? `${a}@${DERNIERES_VERSIONS[a]}` : a));
   return { ...c, args };

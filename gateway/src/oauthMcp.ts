@@ -89,9 +89,22 @@ async function majeur(id: string, changements: Partial<Autorisation>): Promise<v
   const liste = await lire();
   const i = liste.findIndex((a) => a.id === id);
   if (i < 0) liste.push({ id, url: "", ...changements });
-  else liste[i] = { ...liste[i]!, ...changements };
+  else if (changements.url && liste[i]!.url && liste[i]!.url !== changements.url) {
+    /*
+     * L'adresse du service a changé (revérification du 28/09/2026 : Asana,
+     * Atlassian, Wix, Square, PayPal). L'enregistrement et les jetons obtenus
+     * pour l'ancienne valaient pour un autre serveur d'autorisation, parfois
+     * un autre éditeur de client (Asana V2 veut une application déclarée) :
+     * on ne les garde pas, on repart de zéro pour la nouvelle.
+     */
+    liste[i] = { id, url: changements.url, ...changements };
+  } else liste[i] = { ...liste[i]!, ...changements };
   await ecrire(liste);
 }
+
+/** L'autorisation enregistrée vaut-elle pour cette adresse ? Une autre adresse n'en hérite pas. */
+const pourAdresse = (a: Autorisation | undefined, url: string): Autorisation | undefined =>
+  a && (!a.url || a.url === url) ? a : undefined;
 
 const place = (id: string, quoi: string) => `oauth#${id}#${quoi}`;
 
@@ -166,7 +179,7 @@ export class FournisseurAutorisation {
   }
 
   async clientInformation(): Promise<Record<string, unknown> | undefined> {
-    const a = (await lire()).find((x) => x.id === this.id);
+    const a = pourAdresse((await lire()).find((x) => x.id === this.id), this.url);
     if (!a?.client) return undefined;
     const clair = dechiffrer(a.client, place(this.id, "client"));
     return clair as Record<string, unknown>;
@@ -177,7 +190,7 @@ export class FournisseurAutorisation {
   }
 
   async tokens(): Promise<Record<string, unknown> | undefined> {
-    const a = (await lire()).find((x) => x.id === this.id);
+    const a = pourAdresse((await lire()).find((x) => x.id === this.id), this.url);
     if (!a?.jetons) return undefined;
     return dechiffrer(a.jetons, place(this.id, "jetons")) as Record<string, unknown>;
   }

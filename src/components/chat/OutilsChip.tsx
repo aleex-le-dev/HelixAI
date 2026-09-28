@@ -77,6 +77,12 @@ export function OutilsChip({
           disabled={!autorise}
           aria-expanded={p["aria-expanded"]}
           className={cn(!autorise && "opacity-40")}
+          /*
+           * L'icône seule sous 640 px (parcours du 28/09/2026) : à 375 px, les
+           * quatre puces du Chat se partageaient la ligne, les libellés étaient
+           * tronqués à rien, et celui des connaissances à « C… ».
+           */
+          compacte
           title={
             !autorise
               ? tf("L'agent « {0} » n'est pas autorisé à utiliser des outils", nomAgent)

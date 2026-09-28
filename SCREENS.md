@@ -1116,7 +1116,7 @@ quand la fenêtre est basse. Voir `SECURITE.md` § 2.
   réglages et aide. Les entrées sont filtrées par les modules actifs.
 - **Barre latérale repliée** : rail d'icônes, mêmes entrées.
 
-**Chaque chat porte trois actions au survol (0.22.0)** : partager, **archiver**,
+**Chaque chat porte quatre actions au survol** (0.22.0, renommer ajouté depuis) : **renommer** (aussi par double clic ; Entrée garde, Échap annule), partager, **archiver**,
 supprimer. Archiver range le chat sous « Archivés », en bas de la liste, repliable et
 compté ; rien n'est effacé, et un clic le remet en place. C'est un rangement
 personnel : archiver un chat partagé ne le retire pas de la liste des autres.

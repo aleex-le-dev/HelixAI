@@ -68,7 +68,7 @@ export function ShareSessionModal({
       setEmail("");
       refresh();
     } else {
-      setFeedback({ ok: false, text: result.reason ?? "Partage impossible." });
+      setFeedback({ ok: false, text: result.reason ?? t("Partage impossible.") });
     }
   };
 
@@ -122,7 +122,7 @@ export function ShareSessionModal({
                     const g = groupesProposes.find((x) => x.id === groupe);
                     shareWithGroup(sessionId, groupe);
                     setGroupe(undefined);
-                    setFeedback({ ok: true, text: tf("Les membres de « {0} » ont maintenant accès à cette conversation.", g?.nom ?? "ce groupe") });
+                    setFeedback({ ok: true, text: tf("Les membres de « {0} » ont maintenant accès à cette conversation.", g?.nom ?? t("ce groupe")) });
                     refresh();
                   }}
                 >

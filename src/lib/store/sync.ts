@@ -192,9 +192,11 @@ function noterEnAttente(collection: Collection, attente: boolean): void {
   }
 }
 
-type AvecId = { id: unknown; updatedAt?: unknown };
 const aUnId = (o: unknown): o is AvecId => typeof o === "object" && o !== null && "id" in o;
-const quand = (o: AvecId) => (typeof o.updatedAt === "string" ? Date.parse(o.updatedAt) || 0 : 0);
+type AvecId = { id: unknown; updatedAt?: unknown; modifieLe?: unknown };
+const date = (v: unknown) => (typeof v === "string" ? Date.parse(v) || 0 : 0);
+/** La modification la plus récente d'un élément : son contenu (`updatedAt`) ou le reste (`modifieLe`, sessions.ts). */
+const quand = (o: AvecId) => Math.max(date(o.updatedAt), date(o.modifieLe));
 
 /**
  * Fusion à trois : `depart` est ce que l'instance avait quand ce poste l'a lu
@@ -242,7 +244,13 @@ function fusionner(local: unknown, distant: unknown, depart?: unknown): unknown 
     const changeIci = avantLui !== undefined && JSON.stringify(l) !== avantLui;
     const changeEnFace = avantLui !== undefined && JSON.stringify(resultat[i]) !== avantLui;
     if (changeIci && !changeEnFace) resultat[i] = l;
-    else if (quand(l) > quand(resultat[i] as AvecId)) resultat[i] = l;
+    /*
+     * Né depuis le départ connu et présent des deux côtés : c'est l'écho de ce
+     * que ce poste a lui-même créé, et sa copie à lui est la plus avancée. À
+     * dates égales, elle l'emporte (28/09/2026 : un Chat créé puis écrit dans
+     * la même milliseconde perdait sa question face à sa propre copie vide).
+     */
+    else if (Array.isArray(depart) && avantLui === undefined ? quand(l) >= quand(resultat[i] as AvecId) : quand(l) > quand(resultat[i] as AvecId)) resultat[i] = l;
   }
   return resultat;
 }
@@ -252,6 +260,8 @@ const aRepousser = new Set<Collection>();
 
 /** Tire une collection depuis l'instance vers le cache local. */
 async function pull(collection: Collection): Promise<Tirage> {
+  // Une écriture faite ici pendant la lecture est plus récente que ce que l'instance va rendre.
+  const ecrituresAvant = ecrituresLocales.get(collection) ?? 0;
   let payload: { value: unknown; revision: number };
   try {
     const res = await apiFetch(`/helix/data/${collection}`);
@@ -270,7 +280,14 @@ async function pull(collection: Collection): Promise<Tirage> {
   }
   // Les conversations et les agents partagés à un groupe se lisent selon les groupes de la personne : on les relit avec.
   if (collection === "sessions" || collection === "agents") await relireMesGroupes();
-  const enAttenteIci = enAttente().has(collection);
+  /*
+   * Écrite ici pendant que la lecture était en route (28/09/2026) : la copie
+   * rendue par l'instance est plus ancienne que celle du poste. Elle est
+   * fusionnée, comme une modification en attente, au lieu de la remplacer, puis
+   * le résultat repart.
+   */
+  const ecritPendant = (ecrituresLocales.get(collection) ?? 0) !== ecrituresAvant;
+  const enAttenteIci = ecritPendant || enAttente().has(collection);
   const valeur = enAttenteIci ? fusionner(readLocal(collection), payload.value, derniersConnus.get(collection)) : payload.value;
   if (!writeLocal(collection, valeur)) {
     /*
@@ -342,9 +359,50 @@ export function dernierEnvoi(collection: Collection): Promise<boolean> {
   return envois.get(collection) ?? Promise.resolve(false);
 }
 
+/*
+ * Une poussée à la fois par collection, et les écritures faites pendant
+ * qu'elle part (parcours du 28/09/2026).
+ *
+ * Mesuré : un Chat neuf écrit deux fois de suite, à sa création puis avec la
+ * question, partait en deux PUT simultanés portant la même révision de départ.
+ * L'instance prenait le premier et refusait le second (409) ; la relecture qui
+ * suit fusionnait, et comme les deux copies du Chat avaient la même date à la
+ * milliseconde, celle de l'instance, vide, l'emportait. La question disparaissait
+ * du Chat, ici comme sur l'instance, et rechargée pendant la réponse, la page
+ * rouvrait un Chat vide. Les poussées d'une collection partent désormais l'une
+ * après l'autre, celles demandées pendant un envoi se regroupent en une seule,
+ * qui lit la copie locale au moment de partir.
+ */
+const enVol = new Map<Collection, Promise<boolean>>();
+const enFile = new Map<Collection, Promise<boolean>>();
+/** Écritures locales demandées par collection : une relecture qui les voit changer ne remplace pas la copie du poste. */
+const ecrituresLocales = new Map<Collection, number>();
+
+function lancer(collection: Collection): Promise<boolean> {
+  const envoi = pousser(collection).finally(() => {
+    if (enVol.get(collection) === envoi) enVol.delete(collection);
+  });
+  enVol.set(collection, envoi);
+  return envoi;
+}
+
 /** Pousse le cache local vers l'instance. */
 export function push(collection: Collection): Promise<boolean> {
-  const envoi = pousser(collection);
+  ecrituresLocales.set(collection, (ecrituresLocales.get(collection) ?? 0) + 1);
+  const courant = enVol.get(collection);
+  let envoi: Promise<boolean>;
+  if (!courant) envoi = lancer(collection);
+  else {
+    envoi =
+      enFile.get(collection) ??
+      courant
+        .catch(() => false)
+        .then(() => {
+          enFile.delete(collection);
+          return lancer(collection);
+        });
+    enFile.set(collection, envoi);
+  }
   envois.set(collection, envoi);
   return envoi;
 }
@@ -402,6 +460,8 @@ async function pousser(collection: Collection, reprise = false): Promise<boolean
       derniersConnus.set(collection, value);
     }
     noterEnAttente(collection, !res.ok);
+    // Même règle que la relève : une erreur de serveur dit l'instance injoignable, et son retour fera repartir l'envoi.
+    if (res.status >= 500) online = false;
     return res.ok;
   } catch {
     online = false;
@@ -431,7 +491,18 @@ export function relireMaintenant(): Promise<void> {
 async function refresh(): Promise<void> {
   try {
     const res = await apiFetch(`/helix/data`);
-    if (!res.ok) return;
+    if (!res.ok) {
+      /*
+       * Une erreur de serveur ici vient de ce qui se tient devant l'instance
+       * (proxy du serveur de développement, relais d'une instance d'entreprise)
+       * quand elle ne répond plus : c'est une coupure, comme un réseau tombé
+       * (parcours du 28/09/2026). Sans cela, `online` restait vrai, le retour
+       * de l'instance passait inaperçu, et ce qui avait été modifié pendant la
+       * coupure (un Chat renommé, une question) ne repartait jamais vers elle.
+       */
+      if (res.status >= 500) online = false;
+      return;
+    }
     const { revisions: remote } = (await res.json()) as {
       revisions: Record<Collection, number>;
     };

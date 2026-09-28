@@ -430,6 +430,14 @@ export function useChat(options: Options) {
       const persist = () => persisterDans(session, enCours.history);
       attacher(session.id);
       ecrire([...enCours.history, userMsg, { id: replyId, role: "assistant", content: "", streaming: true }]);
+      /*
+       * La question est gardée dès l'envoi, pas seulement à la fin de la
+       * réponse (parcours du 28/09/2026) : une page rechargée pendant que le
+       * modèle écrivait laissait un Chat dont le titre était dans la liste et
+       * qui s'ouvrait vide, question comprise, ici comme sur l'instance. La
+       * réponse vide en cours d'écriture n'est pas enregistrée (persisterDans).
+       */
+      persist();
       abortRef.current = controller;
 
       let content = "";

@@ -33,7 +33,8 @@ import {
 } from "@/lib/store/accounts";
 import { ACCOUNTS_CHANGED } from "@/lib/store/sync";
 import { setCurrentUser } from "@/lib/store/identity";
-import { invitationEnCours, oublierInvitation } from "@/lib/invitations";
+import { estCodeInvitation, invitationEnCours, oublierInvitation, rejoindreAvecCode } from "@/lib/invitations";
+import { GATEWAY_BASE } from "@/lib/endpoint";
 import { claimInvitations } from "@/lib/store/projects";
 import { claimSessionShares } from "@/lib/store/sessions";
 import { cn } from "@/lib/cn";
@@ -124,12 +125,44 @@ export function LoginPage({ onSignedIn }: { onSignedIn: () => void }) {
    * été rattaché avec un code (lib/invitations.ts). Elle porte l'adresse
    * invitée, et l'instance imposera celle-là quoi qu'il arrive.
    */
-  const [invitation] = useState(() => invitationEnCours());
+  const [invitationDuLien] = useState(() => invitationEnCours());
+  /*
+   * Code d'invitation saisi ici même, sur un poste déjà rattaché à l'instance
+   * (parcours du 28/09/2026). « Ajouter un compte » menait à un formulaire
+   * que l'instance refusait toujours une fois rempli : elle a déjà des comptes,
+   * et n'en ouvre plus que sur invitation ou par l'administrateur connecté
+   * (gateway/src/index.ts, `handleAuthCreate`). Or l'écran de connexion est
+   * justement celui où personne n'est connecté. Le code demandé d'emblée, et
+   * vérifié dès qu'il est complet, en fait un parcours qui aboutit.
+   */
+  const [codeSaisi, setCodeSaisi] = useState("");
+  const [invitationSaisie, setInvitationSaisie] = useState<{ code: string; email: string } | null>(null);
+  const invitation = invitationDuLien ?? invitationSaisie;
+  const codeRequis = !invitationDuLien && accounts.length > 0;
 
   // L'adresse du code, posée une fois : le champ est ensuite en lecture seule.
   useEffect(() => {
     if (invitation) setEmail(invitation.email);
   }, [invitation]);
+
+  useEffect(() => {
+    if (!codeRequis) return;
+    const code = codeSaisi.trim();
+    setInvitationSaisie(null);
+    if (!estCodeInvitation(code)) return;
+    let abandon = false;
+    // La même vérification que pour rattacher un poste : elle ne consomme pas le code.
+    void rejoindreAvecCode(GATEWAY_BASE, code).then((r) => {
+      if (abandon) return;
+      if (r.ok) {
+        setInvitationSaisie({ code, email: r.email });
+        setError(undefined);
+      } else setError(r.message);
+    });
+    return () => {
+      abandon = true;
+    };
+  }, [codeSaisi, codeRequis]);
   const [error, setError] = useState<string | undefined>();
   const [busy, setBusy] = useState(false);
 
@@ -594,6 +627,26 @@ export function LoginPage({ onSignedIn }: { onSignedIn: () => void }) {
         {/* Création de compte */}
         {mode === "creation" && (
           <div className="space-y-4">
+            {!invitation && codeRequis && (
+              <InfoBox leading={<Mail size={15} strokeWidth={1.75} />}>
+                {t("Cette instance a déjà des comptes : un nouveau s'ouvre avec le code d'invitation qu'un collègue vous a envoyé (Réglages, Profil, Inviter un collègue).")}
+              </InfoBox>
+            )}
+            {codeRequis && (
+              <Field
+                label={t("Code d'invitation")}
+                hint={invitationSaisie ? t("Code d'invitation reconnu. Vous choisirez votre mot de passe juste après.") : undefined}
+              >
+                <Input
+                  value={codeSaisi}
+                  autoFocus
+                  placeholder={t("ABCD-EFGH-IJKL-MNOP")}
+                  autoComplete="off"
+                  spellCheck={false}
+                  onChange={(e) => setCodeSaisi(e.target.value)}
+                />
+              </Field>
+            )}
             {invitation && (
               <InfoBox leading={<Mail size={15} strokeWidth={1.75} />}>
                 {t("Vous avez été invité sur cette instance. Choisissez votre mot de passe : il n'appartient qu'à vous, personne d'autre ne le connaîtra.")}
@@ -602,7 +655,7 @@ export function LoginPage({ onSignedIn }: { onSignedIn: () => void }) {
             <Field label={t("Nom complet")}>
               <Input
                 value={fullName}
-                autoFocus
+                autoFocus={!codeRequis}
                 placeholder={t("Marie Durand")}
                 onChange={(e) => setFullName(e.target.value)}
               />
@@ -628,7 +681,7 @@ export function LoginPage({ onSignedIn }: { onSignedIn: () => void }) {
             <Button
               icon={UserPlus}
               block
-              disabled={busy || !fullName.trim() || !email.trim() || !nouveauValide}
+              disabled={busy || !fullName.trim() || !email.trim() || !nouveauValide || (codeRequis && !invitationSaisie)}
               onClick={() => void create()}
             >
               {t("Créer mon compte")}

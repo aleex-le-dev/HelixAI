@@ -312,6 +312,86 @@ export function ComparerModeles({
     );
   };
 
+  /*
+   * Ce qui ne se place pas sur le graphique : les modèles de la personne sans
+   * note publiée, et le bandeau du modèle en cours. Rendu sous le graphique ET
+   * sous le tableau (parcours du 28/09/2026) : dans le tableau, les modèles sans
+   * note n'apparaissaient nulle part, alors que la phrase d'en-tête les disait
+   * « listés », et le modèle en cours n'y était pas distingué des autres.
+   */
+  const aPart = (
+    <>
+      {sansNote.length > 0 && (
+        <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs">
+          <span className="text-muted-foreground">{t("Pas de note publiée par Epoch AI pour :")}</span>
+          {sansNote.map(({ modele, local }) => {
+            const actif = modele.uid === choisi;
+            return (
+              <button
+                key={modele.uid}
+                type="button"
+                onClick={onChoisir ? () => onChoisir(modele.uid) : undefined}
+                disabled={!onChoisir}
+                title={local ? t("Sur votre machine") : (lieuDuModele(modele) ?? undefined)}
+                className={cn(
+                  "inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 transition-colors",
+                  actif ? "border-info/40 bg-info/10 font-medium text-foreground" : "border-border text-foreground hover:bg-muted",
+                )}
+              >
+                <span className={cn("h-2 w-2 rounded-full border-[1.5px] border-dashed", actif ? "border-info" : "border-accent")} />
+                {nomCourt(modele.id)}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {/*
+       * Le bandeau du modèle en cours : un nuage répond à « où se situent
+       * les modèles », pas à « et le mien, alors ? ». Quand le modèle n'est
+       * pas noté, le bandeau le dit au lieu de disparaître.
+       */}
+      {actuel && (
+        <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 rounded-xl bg-muted px-3.5 py-2.5 text-sm">
+          <span className="inline-flex items-center gap-2 font-medium text-foreground">
+            <LogoMarque marque={marqueDuModele(actuel.modele.id)} icone={Cpu} taille={16} degagement={8} />
+            {actuel.modele.id}
+          </span>
+          {actuel.note ? (
+            <>
+              {actuel.note.nom !== actuel.modele.id && (
+                <span className="text-muted-foreground">{tf("noté comme « {0} »", actuel.note.nom)}</span>
+              )}
+              <span className="text-muted-foreground">
+                {t("Note ECI")} <span className="tabular-nums text-foreground">{nombre(actuel.note.eci)}</span>
+              </span>
+              <span className="text-muted-foreground">{tf("{0}e sur {1}", rang, MODELES_NOTES.length)}</span>
+              {actuel.local ? (
+                <span className="text-muted-foreground">{t("Sur votre machine : aucun frais d'API.")}</span>
+              ) : actuel.prix ? (
+                <span className="text-muted-foreground">
+                  {tf(
+                    "Prix de {0} : {1} en entrée, {2} en sortie",
+                    actuel.prix.fournisseur.nom,
+                    dollars(actuel.prix.tarif.entree),
+                    dollars(actuel.prix.tarif.sortie),
+                  )}
+                </span>
+              ) : (
+                <span className="text-muted-foreground">{t("Prix de l'éditeur non relevé.")}</span>
+              )}
+            </>
+          ) : (
+            <span className="text-muted-foreground">
+              {t("Pas de note publiée par Epoch AI pour ce modèle : il ne peut pas être placé parmi les autres.")}
+            </span>
+          )}
+        </div>
+      )}
+
+    </>
+  );
+
   return (
     <Modal open={open} onClose={onClose} size="xl">
       {/*
@@ -343,14 +423,14 @@ export function ComparerModeles({
           ? t("Aucun modèle n'est servi par votre instance pour l'instant.")
           : sansNote.length === siens.length
             ? siens.length === 1
-              ? t("Votre modèle n'a pas de note publiée : il est listé sous le graphique, sans position sur l'axe.")
-              : tf("Aucun de vos {0} modèles n'a de note publiée : ils sont listés sous le graphique, sans position sur l'axe.", siens.length)
+              ? t("Votre modèle n'a pas de note publiée : il est listé à part, en dessous.")
+              : tf("Aucun de vos {0} modèles n'a de note publiée : ils sont listés à part, en dessous.", siens.length)
             : sansNote.length === 0
               ? siens.length === 1
                 ? t("Votre modèle y figure.")
                 : tf("Vos {0} modèles y figurent.", siens.length)
               : tf(
-                  "Vos {0} modèles y figurent, dont {1} sans note publiée : ils sont listés sous le graphique, sans position sur l'axe.",
+                  "Vos {0} modèles y figurent, dont {1} sans note publiée : ceux-là sont listés à part, en dessous.",
                   siens.length,
                   sansNote.length,
                 )}
@@ -495,74 +575,7 @@ export function ComparerModeles({
             </svg>
           </div>
 
-          {sansNote.length > 0 && (
-            <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs">
-              <span className="text-muted-foreground">{t("Pas de note publiée par Epoch AI pour :")}</span>
-              {sansNote.map(({ modele, local }) => {
-                const actif = modele.uid === choisi;
-                return (
-                  <button
-                    key={modele.uid}
-                    type="button"
-                    onClick={onChoisir ? () => onChoisir(modele.uid) : undefined}
-                    disabled={!onChoisir}
-                    title={local ? t("Sur votre machine") : (lieuDuModele(modele) ?? undefined)}
-                    className={cn(
-                      "inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 transition-colors",
-                      actif ? "border-info/40 bg-info/10 font-medium text-foreground" : "border-border text-foreground hover:bg-muted",
-                    )}
-                  >
-                    <span className={cn("h-2 w-2 rounded-full border-[1.5px] border-dashed", actif ? "border-info" : "border-accent")} />
-                    {nomCourt(modele.id)}
-                  </button>
-                );
-              })}
-            </div>
-          )}
-
-          {/*
-           * Le bandeau du modèle en cours : un nuage répond à « où se situent
-           * les modèles », pas à « et le mien, alors ? ». Quand le modèle n'est
-           * pas noté, le bandeau le dit au lieu de disparaître.
-           */}
-          {actuel && (
-            <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 rounded-xl bg-muted px-3.5 py-2.5 text-sm">
-              <span className="inline-flex items-center gap-2 font-medium text-foreground">
-                <LogoMarque marque={marqueDuModele(actuel.modele.id)} icone={Cpu} taille={16} degagement={8} />
-                {actuel.modele.id}
-              </span>
-              {actuel.note ? (
-                <>
-                  {actuel.note.nom !== actuel.modele.id && (
-                    <span className="text-muted-foreground">{tf("noté comme « {0} »", actuel.note.nom)}</span>
-                  )}
-                  <span className="text-muted-foreground">
-                    {t("Note ECI")} <span className="tabular-nums text-foreground">{nombre(actuel.note.eci)}</span>
-                  </span>
-                  <span className="text-muted-foreground">{tf("{0}e sur {1}", rang, MODELES_NOTES.length)}</span>
-                  {actuel.local ? (
-                    <span className="text-muted-foreground">{t("Sur votre machine : aucun frais d'API.")}</span>
-                  ) : actuel.prix ? (
-                    <span className="text-muted-foreground">
-                      {tf(
-                        "Prix de {0} : {1} en entrée, {2} en sortie",
-                        actuel.prix.fournisseur.nom,
-                        dollars(actuel.prix.tarif.entree),
-                        dollars(actuel.prix.tarif.sortie),
-                      )}
-                    </span>
-                  ) : (
-                    <span className="text-muted-foreground">{t("Prix de l'éditeur non relevé.")}</span>
-                  )}
-                </>
-              ) : (
-                <span className="text-muted-foreground">
-                  {t("Pas de note publiée par Epoch AI pour ce modèle : il est listé sous le graphique, sans position.")}
-                </span>
-              )}
-            </div>
-          )}
-
+          {aPart}
           <p className="mt-3 text-xs text-muted-foreground">
             {proche
               ? tf(
@@ -577,6 +590,7 @@ export function ComparerModeles({
           </p>
         </>
       ) : (
+        <>
         <div className="mt-4 max-h-[420px] overflow-auto">
           <table className="w-full text-sm">
             <thead className="sticky top-0 bg-card">
@@ -592,18 +606,26 @@ export function ComparerModeles({
               {MODELES_NOTES.map((m) => {
                 const servi = servis.get(m.nom) ?? siens.find((s) => s.local && s.note === m)?.modele;
                 const p = prixDeLEditeur(m);
+                // Le modèle en cours, mis en avant comme sur le graphique (la couleur de sa pastille).
+                const enCours = actuel?.note === m;
                 return (
-                  <tr key={m.nom} className={cn("border-b border-border/60", servi && "bg-muted/60")}>
+                  <tr key={m.nom} className={cn("border-b border-border/60", enCours ? "bg-info/10" : servi && "bg-muted/60")}>
                     <td className="py-2 pr-3 text-foreground">
                       <span className="mr-2 inline-flex align-[-3px]">
                         {/* Le nom d'abord ; sinon l'éditeur (« Muse Spark », de Meta, ne dit pas « Llama »). */}
                         <LogoMarque marque={marqueDuModele(m.nom) ?? marqueDuModele(m.editeur ?? "")} icone={Cpu} taille={16} degagement={8} />
                       </span>
                       {m.nom}
-                      {servi && (
-                        <span className="ml-2 rounded-full bg-accent/15 px-1.5 py-0.5 text-[10px] font-medium text-foreground">
-                          {t("chez vous")}
+                      {enCours ? (
+                        <span className="ml-2 rounded-full bg-info/15 px-1.5 py-0.5 text-[10px] font-medium text-foreground">
+                          {t("Modèle en cours")}
                         </span>
+                      ) : (
+                        servi && (
+                          <span className="ml-2 rounded-full bg-accent/15 px-1.5 py-0.5 text-[10px] font-medium text-foreground">
+                            {t("chez vous")}
+                          </span>
+                        )
                       )}
                     </td>
                     <td className="py-2 pr-3 text-muted-foreground">{m.editeur || "?"}</td>
@@ -619,6 +641,8 @@ export function ComparerModeles({
             {t("Prix par million de jetons, chez l'éditeur ; « ? » : non relevé.")}
           </p>
         </div>
+        {aPart}
+        </>
       )}
 
       {/* Attribution exigée par la licence CC BY 4.0 d'Epoch AI : la source, l'auteur, la licence, le lien, et ce qui a été modifié (section 3(a)(1)(B) de la licence ; détail dans THIRD_PARTY_NOTICES.md § 3). */}

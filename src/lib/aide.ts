@@ -40,11 +40,11 @@ const ARTICLES: Article[] = [
   },
   {
     id: "chats",
-    titre: t("Chats : archiver, supprimer, partager"),
+    titre: t("Chats : renommer, archiver, supprimer, partager"),
     resume: t("Ranger vos conversations sans rien perdre."),
-    motsCles: ["chat", "conversation", "archive", "archiver", "supprimer", "partager", "ranger"],
+    motsCles: ["chat", "conversation", "archive", "archiver", "supprimer", "partager", "ranger", "renommer", "nom", "titre"],
     lien: "/",
-    corps: t("Chaque chat de la barre latérale porte trois actions, visibles au survol.\n\n- Partager : vous invitez une personne par son adresse. Elle voit la conversation, elle ne peut pas la ranger à votre place.\n- Archiver : le chat quitte la liste et se retrouve sous « Archivés », en bas. Rien n'est effacé, et un clic le remet en place. L'archivage est personnel : archiver un chat partagé ne le retire pas de la liste des autres.\n- Supprimer : les messages sont effacés pour de bon. Il n'y a pas de corbeille ; archivez plutôt si vous hésitez.\n\nUn chat peut aussi être rangé dans un Projet, depuis le champ de saisie. Ce classement ne partage rien : il ne fait qu'ordonner votre propre écran."),
+    corps: t("Chaque chat de la barre latérale porte quatre actions, visibles au survol.\n\n- Renommer (ou un double clic sur son nom) : le nom se change sur place, Entrée le garde, Échap l'annule. Le chat ne remonte pas en tête de liste pour autant.\n- Partager : vous invitez une personne par son adresse. Elle voit la conversation, elle ne peut pas la ranger à votre place.\n- Archiver : le chat quitte la liste et se retrouve sous « Archivés », en bas. Rien n'est effacé, et un clic le remet en place. L'archivage est personnel : archiver un chat partagé ne le retire pas de la liste des autres.\n- Supprimer : les messages sont effacés pour de bon. Il n'y a pas de corbeille ; archivez plutôt si vous hésitez.\n\nUn chat peut aussi être rangé dans un Projet, depuis le champ de saisie. Ce classement ne partage rien : il ne fait qu'ordonner votre propre écran."),
   },
   {
     id: "documents-joints",

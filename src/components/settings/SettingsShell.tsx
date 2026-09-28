@@ -89,10 +89,11 @@ function SettingsNav() {
     >
       <div className="mb-2 hidden items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-muted-foreground md:flex">
         <Search size={15} strokeWidth={1.75} />
+        {/* Libellé court : « Rechercher dans les paramètres » était coupé à « …les para » dans cette colonne (vu le 28/09/2026). */}
         <input
           className="w-full bg-transparent text-sm text-foreground placeholder:text-muted-foreground focus:outline-none"
-          placeholder={t("Rechercher dans les paramètres")}
-          aria-label={t("Rechercher dans les paramètres")}
+          placeholder={t("Rechercher un réglage")}
+          aria-label={t("Rechercher un réglage")}
           value={recherche}
           onChange={(event) => setRecherche(event.target.value)}
         />

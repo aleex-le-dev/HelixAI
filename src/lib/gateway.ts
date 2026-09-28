@@ -320,14 +320,25 @@ export async function streamChat(
   });
 
   if (!res.ok) {
-    let message = tf("Erreur {0}", res.status);
+    let message: string | undefined;
     try {
       const body = await res.json();
-      message = body?.error?.message ?? message;
+      message = body?.error?.message;
     } catch {
       /* réponse non JSON */
     }
-    throw new Error(message);
+    /*
+     * Pas de message de l'instance et une erreur de serveur : ce n'est pas elle
+     * qui a répondu, mais ce qui se tient devant (le proxy du serveur de
+     * développement, ou le relais d'une instance d'entreprise) parce qu'elle ne
+     * répond plus. Le Chat affichait « Erreur 500 », seul (parcours du
+     * 28/09/2026, passerelle coupée) : on dit la même chose qu'en cas de réseau
+     * coupé (useChat.ts, `messageDErreur`).
+     */
+    if (!message && res.status >= 500) {
+      message = t("L'instance ne répond pas : la réponse n'a pas pu être obtenue. Vérifiez que l'application est ouverte, puis réessayez.");
+    }
+    throw new Error(message ?? tf("Erreur {0}", res.status));
   }
 
   const served = res.headers.get("X-Helix-Model");

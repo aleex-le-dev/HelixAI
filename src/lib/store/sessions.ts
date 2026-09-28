@@ -135,7 +135,19 @@ export interface Session {
   messages: StoredMessage[];
   createdAt: string;
   updatedAt: string;
+  /**
+   * Dernière modification qui ne touche pas `updatedAt` (renommer, archiver,
+   * ranger, choisir un agent ou des bases), pour que la synchronisation sache
+   * laquelle de deux copies est la plus récente (sync.ts, `quand`). Avant le
+   * 28/09/2026, un Chat renommé pendant que l'instance ne répondait pas, puis la
+   * page rechargée, reprenait son ancien nom : à `updatedAt` égal, la copie de
+   * l'instance l'emportait. `updatedAt` garde son rôle : l'ordre de la liste.
+   */
+  modifieLe?: string;
 }
+
+/** Marque une modification qui ne fait pas remonter le Chat dans la liste (voir `modifieLe`). */
+const touche = <T extends Session>(s: T): T => ({ ...s, modifieLe: new Date().toISOString() });
 
 const KEY = "sessions";
 
@@ -225,7 +237,7 @@ export function updateSession(id: string, changes: Partial<Session>): void {
 export function renommerSession(id: string, titre: string): void {
   const propre = titre.replace(/\s+/g, " ").trim().slice(0, 120);
   if (!propre) return;
-  persist(all().map((s) => (s.id === id ? { ...s, title: propre } : s)));
+  persist(all().map((s) => (s.id === id ? touche({ ...s, title: propre }) : s)));
 }
 
 /**
@@ -233,13 +245,13 @@ export function renommerSession(id: string, titre: string): void {
  * choisir un agent n'écrit rien dans la conversation.
  */
 export function memoriserAgent(id: string, agentId: string, agentNom: string): void {
-  persist(all().map((s) => (s.id === id && s.agentId !== agentId ? { ...s, agentId, agentNom } : s)));
+  persist(all().map((s) => (s.id === id && s.agentId !== agentId ? touche({ ...s, agentId, agentNom }) : s)));
 }
 
 /** Retient les bases de connaissances choisies pour un Chat ; même règle que l'agent pour `updatedAt`. */
 export function memoriserConnaissances(id: string, connaissances: string[]): void {
   const cle = (l?: string[]) => [...(l ?? [])].sort().join(",");
-  persist(all().map((s) => (s.id === id && cle(s.connaissances) !== cle(connaissances) ? { ...s, connaissances } : s)));
+  persist(all().map((s) => (s.id === id && cle(s.connaissances) !== cle(connaissances) ? touche({ ...s, connaissances }) : s)));
 }
 
 /**
@@ -286,9 +298,9 @@ export function archiverSession(id: string, user: User, archivee: boolean): void
       // conversation jamais archivée, et celle que les anciens postes attendent.
       if (suite.length === 0) {
         const { archivedBy: _ancien, ...reste } = s;
-        return reste;
+        return touche(reste);
       }
-      return { ...s, archivedBy: suite };
+      return touche({ ...s, archivedBy: suite });
     }),
   );
 }
@@ -317,7 +329,7 @@ export function rattacherProjet(
   user: User,
 ): { ok: boolean; reason?: string } {
   const session = getSession(id);
-  if (!session) return { ok: false, reason: "Conversation introuvable." };
+  if (!session) return { ok: false, reason: t("Conversation introuvable.") };
   if (session.ownerId !== user.id) {
     return {
       ok: false,
@@ -333,7 +345,7 @@ export function rattacherProjet(
       // Un champ absent vaut mieux qu'un champ vide : c'est la forme d'une
       // conversation jamais rangée, et la seule que les filtres attendent.
       const { projectId: _ancien, ...reste } = s;
-      return projectId ? { ...reste, projectId } : reste;
+      return touche(projectId ? { ...reste, projectId } : reste);
     }),
   );
   return { ok: true };

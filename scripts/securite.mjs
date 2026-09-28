@@ -7477,6 +7477,71 @@ console.log("\n20. Serveurs MCP : protocole, transports, OAuth, MCP personnalis�
   verifier("mcp : l'essai s'est déroulé jusqu'au bout", essai.status === 0, `${essai.status} ${lignes.slice(-6).join(" ")}`);
 }
 
+/*
+ * 18 ter. Défauts trouvés en parcourant l'interface contre une instance jetable
+ * et un faux modèle (28/09/2026) : chacun a été vu à l'écran, corrigé, puis revu.
+ * Ces contrôles gardent la correction en place ; le parcours, lui, se refait à la main.
+ */
+console.log("\n18 ter. Parcours à l'écran : synchronisation, Chat rechargé, invitation, puces étroites (28/09/2026)");
+{
+  const lire = (...chemin) => readFileSync(join(RACINE, ...chemin), "utf8");
+  const sourceSync = lire("src", "lib", "store", "sync.ts");
+  verifier(
+    "synchronisation : les poussées d'une collection partent l'une après l'autre (deux PUT simultanés, même révision : le second refusé, la question du Chat perdue)",
+    /const enVol = new Map/.test(sourceSync) && /enFile\.get\(collection\) \?\?\s*courant/.test(sourceSync),
+    "sync.ts, push",
+  );
+  verifier(
+    "synchronisation : une relecture pendant laquelle le poste a écrit fusionne au lieu de remplacer sa copie",
+    /const ecritPendant = \(ecrituresLocales\.get\(collection\) \?\? 0\) !== ecrituresAvant/.test(sourceSync) && /const enAttenteIci = ecritPendant \|\|/.test(sourceSync),
+    "sync.ts, pull",
+  );
+  verifier(
+    "synchronisation : une erreur de serveur (relais devant l'instance coupée) vaut coupure, pour que le retour de l'instance fasse repartir ce qui attend",
+    (sourceSync.match(/res\.status >= 500\) online = false/g) ?? []).length >= 2,
+    "sync.ts, refresh et pousser",
+  );
+  verifier(
+    "synchronisation : renommer, archiver, ranger datent la copie (modifieLe), et la fusion compare cette date",
+    /const quand = \(o: AvecId\) => Math\.max\(date\(o\.updatedAt\), date\(o\.modifieLe\)\)/.test(sourceSync) && /touche\(\{ \.\.\.s, title: propre \}\)/.test(lire("src", "lib", "store", "sessions.ts")),
+    "sync.ts, sessions.ts",
+  );
+  const sourceUseChat = lire("src", "hooks", "useChat.ts");
+  verifier(
+    "Chat : la question est enregistrée dès l'envoi (page rechargée pendant la réponse : Chat vide, question comprise)",
+    /streaming: true \}\]\);\s*\/\*[\s\S]{0,700}?\*\/\s*persist\(\);/.test(sourceUseChat),
+    "useChat.ts, send",
+  );
+  verifier(
+    "Chat : une erreur de serveur sans message de l'instance dit qu'elle ne répond pas, au lieu de « Erreur 500 » seul",
+    /!message && res\.status >= 500/.test(lire("src", "lib", "gateway.ts")),
+    "gateway.ts, streamChat",
+  );
+  const sourceLogin = lire("src", "pages", "LoginPage.tsx");
+  verifier(
+    "connexion : « Ajouter un compte » sur une instance qui a déjà des comptes demande le code d'invitation, vérifié sans être consommé, et le transmet",
+    /const codeRequis = !invitationDuLien && accounts\.length > 0/.test(sourceLogin) && /rejoindreAvecCode\(GATEWAY_BASE, code\)/.test(sourceLogin) && /\(codeRequis && !invitationSaisie\)/.test(sourceLogin),
+    "LoginPage.tsx",
+  );
+  const puce = (...chemin) => /<Chip[\s\S]{0,900}\bcompacte\b/.test(lire("src", "components", ...chemin));
+  verifier(
+    "Chat et Cowork à 375 px : projet, agent, outils, connaissances et écran passent à l'icône seule (« Pr », « A », « K » coupés net)",
+    puce("chat", "OutilsChip.tsx") && puce("chat", "ConnaissancesChip.tsx") && puce("chat", "ScreenAccessChip.tsx") && (lire("src", "components", "chat", "ContextSelectors.tsx").match(/^\s*compacte$/gm) ?? []).length >= 2,
+    "OutilsChip, ConnaissancesChip, ScreenAccessChip, ContextSelectors",
+  );
+  const sourceComparerTableau = lire("src", "components", "chat", "ComparerModeles.tsx");
+  verifier(
+    "Comparer les modèles, vue tableau : le modèle en cours est mis en avant et les modèles sans note y sont listés",
+    /const enCours = actuel\?\.note === m/.test(sourceComparerTableau) && (sourceComparerTableau.match(/\{aPart\}/g) ?? []).length >= 2,
+    "ComparerModeles.tsx",
+  );
+  verifier(
+    "aide : l'article des Chats décrit les quatre actions de la barre latérale, Renommer compris",
+    /porte quatre actions, visibles au survol\.\\n\\n- Renommer/.test(lire("src", "lib", "aide.ts")),
+    "aide.ts",
+  );
+}
+
 console.log(`\n${reussis} vérification(s) réussie(s), ${echecs.length} échec(s).`);
 if (echecs.length) {
   console.log("Échecs :");

@@ -1,11 +1,12 @@
 import { apiFetch } from "./endpoint";
 /**
- * Reprendre ses Chats et ses projets depuis ChatGPT ou Claude.
+ * Reprendre ses Chats et ses projets depuis ChatGPT, Claude ou Gemini.
  *
- * Les deux services exportent les données d'un compte en une archive ZIP
+ * Les trois services exportent les données d'un compte en une archive ZIP
  * (ChatGPT : Paramètres, Contrôle des données, Exporter ; Claude : Paramètres,
- * Confidentialité, Exporter les données). On la lit ici, sur le poste : rien
- * ne part ailleurs que dans l'instance de la personne.
+ * Confidentialité, Exporter les données ; Gemini : Google Takeout, « Mes
+ * activités », « Applications Gemini », lu par importGemini.ts). On la lit
+ * ici, sur le poste : rien ne part ailleurs que dans l'instance de la personne.
  *
  * L'archive peut peser des gigaoctets (ChatGPT y met les images) : on n'en lit
  * que le répertoire, puis les seuls fichiers JSON utiles, par tranches du
@@ -14,6 +15,7 @@ import { apiFetch } from "./endpoint";
  */
 
 import { t, tf } from "@/lib/i18n";
+import { GEMINI_FICHIER_MAX, activitesDepuisHtml, activitesDepuisJson, chatsDepuisActivites, type LectureGemini } from "./importGemini";
 
 /* ------------------------------------------------------------------ */
 /* Lecture ZIP                                                          */
@@ -23,6 +25,8 @@ interface EntreeZip {
   nom: string;
   methode: number;
   tailleCompressee: number;
+  /** Taille annoncée une fois décompressée (le répertoire peut mentir : `lireEntree` compte aussi). */
+  tailleNormale: number;
   debutEnTete: number;
 }
 
@@ -45,7 +49,7 @@ async function repertoire(f: Blob): Promise<EntreeZip[]> {
       break;
     }
   }
-  if (eocd < 0) throw new Error(t("Ce fichier n'est pas une archive ZIP lisible. Choisissez l'archive telle que ChatGPT ou Claude l'a envoyée."));
+  if (eocd < 0) throw new Error(t("Ce fichier n'est pas une archive ZIP lisible. Choisissez l'archive telle que ChatGPT, Claude ou Google l'a envoyée."));
   let nombre = u16(fin, eocd + 10);
   let tailleRep = u32(fin, eocd + 12);
   let debutRep = u32(fin, eocd + 16);
@@ -68,7 +72,7 @@ async function repertoire(f: Blob): Promise<EntreeZip[]> {
     if (u32(rep, o) !== 0x02014b50) break;
     const methode = u16(rep, o + 10);
     let tailleCompressee = u32(rep, o + 20);
-    const tailleNormale = u32(rep, o + 24);
+    let tailleNormale = u32(rep, o + 24);
     const lNom = u16(rep, o + 28);
     const lExtra = u16(rep, o + 30);
     const lComm = u16(rep, o + 32);
@@ -82,7 +86,10 @@ async function repertoire(f: Blob): Promise<EntreeZip[]> {
       const taille = u16(rep, e + 2);
       if (id === 0x0001) {
         let p = e + 4;
-        if (tailleNormale === 0xffffffff) p += 8;
+        if (tailleNormale === 0xffffffff) {
+          tailleNormale = u64(rep, p);
+          p += 8;
+        }
         if (tailleCompressee === 0xffffffff) {
           tailleCompressee = u64(rep, p);
           p += 8;
@@ -91,20 +98,47 @@ async function repertoire(f: Blob): Promise<EntreeZip[]> {
       }
       e += 4 + taille;
     }
-    entrees.push({ nom, methode, tailleCompressee, debutEnTete });
+    entrees.push({ nom, methode, tailleCompressee, tailleNormale, debutEnTete });
     o += 46 + lNom + lExtra + lComm;
   }
   return entrees;
 }
 
-async function lireEntree(f: Blob, e: EntreeZip): Promise<string> {
+/**
+ * Le contenu d'un fichier de l'archive, en texte. Avec `max`, la lecture
+ * s'arrête dès que le fichier décompressé le dépasse (une archive qui annonce
+ * une petite taille et se décompresse en gigaoctets ne remplit pas la
+ * mémoire) : rend alors `null`.
+ */
+async function lireEntree(f: Blob, e: EntreeZip): Promise<string>;
+async function lireEntree(f: Blob, e: EntreeZip, max: number): Promise<string | null>;
+async function lireEntree(f: Blob, e: EntreeZip, max?: number): Promise<string | null> {
   const entete = await tranche(f, e.debutEnTete, e.debutEnTete + 30);
   const debut = e.debutEnTete + 30 + u16(entete, 26) + u16(entete, 28);
   const brut = f.slice(debut, debut + e.tailleCompressee);
-  if (e.methode === 0) return brut.text();
-  if (e.methode !== 8) throw new Error(tf("Compression {0} non prise en charge dans cette archive.", e.methode));
-  const flux = brut.stream().pipeThrough(new DecompressionStream("deflate-raw"));
-  return new Response(flux).text();
+  if (e.methode !== 0 && e.methode !== 8) throw new Error(tf("Compression {0} non prise en charge dans cette archive.", e.methode));
+  if (max === undefined) {
+    if (e.methode === 0) return brut.text();
+    return new Response(brut.stream().pipeThrough(new DecompressionStream("deflate-raw"))).text();
+  }
+  if (e.tailleNormale > max || (e.methode === 0 && brut.size > max)) return null;
+  const flux = e.methode === 0 ? brut.stream() : brut.stream().pipeThrough(new DecompressionStream("deflate-raw"));
+  const lecteur = flux.getReader();
+  const decodeur = new TextDecoder();
+  const morceaux: string[] = [];
+  let lus = 0;
+  for (;;) {
+    const { done, value } = await lecteur.read();
+    if (done) break;
+    lus += value.byteLength;
+    if (lus > max) {
+      await lecteur.cancel().catch(() => undefined);
+      return null;
+    }
+    morceaux.push(decodeur.decode(value, { stream: true }));
+  }
+  morceaux.push(decodeur.decode());
+  return morceaux.join("");
 }
 
 /* ------------------------------------------------------------------ */
@@ -145,19 +179,22 @@ export interface ProjetImporte {
 }
 
 export interface Import {
-  source: "chatgpt" | "claude" | "claude-code" | "codex" | "cursor";
+  source: "chatgpt" | "claude" | "gemini" | "claude-code" | "codex" | "cursor";
   chats: ChatImporte[];
   projets: ProjetImporte[];
   /** Instructions générales reprises d'un logiciel du poste (CLAUDE.md, AGENTS.md). */
   instructions?: string;
   /** Logiciel du poste dont les messages restent à demander pour les Chats choisis (`completerChats`). */
   aCompleter?: string;
+  /** Ce que l'écran doit dire de la lecture (Gemini : comment les Chats ont été reconstitués, ce qui manque à l'export). */
+  remarques?: string[];
 }
 
 /** Nom affiché d'une source d'import. */
 export const NOM_SOURCE: Record<Import["source"], string> = {
   chatgpt: "ChatGPT",
   claude: "Claude",
+  gemini: "Gemini",
   "claude-code": "Claude Code",
   codex: "Codex",
   // Absent jusqu'ici : un import Cursor s'affichait « undefined : 3 Chat(s) » et créait l'agent « Comme dans undefined ».
@@ -381,37 +418,151 @@ function lireClaude(conversations: unknown, projetsBruts: unknown): Import {
   return { source: "claude", chats, projets };
 }
 
+/* --- Gemini ----------------------------------------------------------- */
+
+/** Rassemble les lectures de fichiers d'activité Gemini en Chats, ou dit clairement pourquoi il n'y en a pas. */
+function importGemini(lectures: LectureGemini[]): Import {
+  const activites = lectures.flatMap((l) => l.activites);
+  const ignorees = lectures.reduce((n, l) => n + l.ignorees, 0);
+  if (!lectures.some((l) => l.gemini)) {
+    throw new Error(t("Ce journal d'activité Google ne contient aucune activité Gemini : dans Google Takeout, cochez « Mes activités », puis « Applications Gemini » seulement."));
+  }
+  if (activites.length === 0) {
+    throw new Error(t("Ce fichier d'activité Gemini ne contient aucune question, seulement d'autres activités (retours donnés, brouillons choisis). Vérifiez que l'activité dans les applications Gemini était activée sur ce compte."));
+  }
+  const { chats, remarques } = chatsDepuisActivites(activites, ignorees);
+  return { source: "gemini", chats, projets: [], remarques };
+}
+
+const tropGrand = () =>
+  new Error(tf("Le fichier d'activité Gemini dépasse {0} Mo une fois décompressé : il est trop grand pour être lu dans cette fenêtre.", Math.round(GEMINI_FICHIER_MAX / 1024 / 1024)));
+
+/** Un fichier lu en texte, refusé s'il est trop grand pour la mémoire de la fenêtre. */
+async function texteBorne(fichier: File): Promise<string> {
+  if (fichier.size > GEMINI_FICHIER_MAX) throw tropGrand();
+  return fichier.text();
+}
+
+/** JSON illisible (fichier vide, coupé, pas du JSON) : un message clair, pas l'erreur brute du navigateur. */
+function lireJson(texte: string): unknown {
+  if (!texte.trim()) throw new Error(t("Ce fichier est vide."));
+  try {
+    return JSON.parse(texte);
+  } catch {
+    throw new Error(t("Ce fichier n'est pas un JSON lisible : il est peut-être incomplet. Choisissez-le tel que le service l'a envoyé."));
+  }
+}
+
+/** Un journal d'activité Google au format JSON : un tableau d'objets à `title` et `header`, `time` ou `products`. */
+const estJournal = (liste: unknown[]) =>
+  liste.some((r) => typeof r === "object" && r !== null && typeof (r as { title?: unknown }).title === "string" && ("header" in r || "time" in r || "products" in r));
+
+/**
+ * Les fichiers d'activité Gemini d'une archive Takeout. Le chemin est traduit
+ * selon la langue du compte (« Takeout/My Activity/Gemini Apps/MyActivity.json »,
+ * « Takeout/Mes activités/Applications Gemini/… ») : on retient les fichiers
+ * JSON ou HTML d'un dossier dont le nom parle de Gemini (ou de Bard, son ancien
+ * nom), puis ceux nommés « MyActivity » ailleurs ; c'est leur contenu qui
+ * décide (le journal d'un autre produit, comme la Recherche, est écarté).
+ */
+function fichiersGemini(entrees: EntreeZip[]): EntreeZip[] {
+  const dossier = (nom: string) => nom.replace(/[^/]*$/, "");
+  const lisible = (e: EntreeZip) => /\.(json|html?)$/i.test(e.nom);
+  const parDossier = entrees.filter((e) => lisible(e) && /gemini|bard/i.test(dossier(e.nom)));
+  const autres = entrees.filter((e) => lisible(e) && !parDossier.includes(e) && /(^|\/)MyActivity\.(json|html?)$/i.test(e.nom));
+  // Le JSON d'abord : ses dates sont exactes, celles du HTML sont écrites dans la langue du compte.
+  const html = (e: EntreeZip) => Number(/\.html?$/i.test(e.nom));
+  return [...parDossier, ...autres].sort((a, b) => html(a) - html(b)).slice(0, 40);
+}
+
+/** Les activités Gemini d'une archive Takeout ; `null` s'il n'y en a aucune (le message d'erreur se choisit plus haut). */
+async function lireGeminiDansArchive(fichier: File, entrees: EntreeZip[]): Promise<Import | null> {
+  const lectures: LectureGemini[] = [];
+  let rang = 0;
+  let total = 0;
+  for (const e of fichiersGemini(entrees)) {
+    const texte = await lireEntree(fichier, e, GEMINI_FICHIER_MAX - total);
+    if (texte === null) throw tropGrand();
+    total += texte.length;
+    let lecture: LectureGemini;
+    if (/\.json$/i.test(e.nom)) {
+      let donnees: unknown;
+      try {
+        donnees = JSON.parse(texte);
+      } catch {
+        continue;
+      }
+      if (!Array.isArray(donnees) || !estJournal(donnees)) continue;
+      lecture = activitesDepuisJson(donnees, rang);
+    } else {
+      lecture = activitesDepuisHtml(texte, rang);
+    }
+    if (!lecture.gemini) continue;
+    rang += lecture.activites.length + lecture.ignorees + 1;
+    lectures.push(lecture);
+    // Un journal JSON de Gemini suffit : le même en HTML ne ferait que le répéter.
+    if (/\.json$/i.test(e.nom) && lecture.activites.length > 0) break;
+  }
+  return lectures.length ? importGemini(lectures) : null;
+}
+
 /* ------------------------------------------------------------------ */
 /* Entrée                                                               */
 /* ------------------------------------------------------------------ */
 
 /**
- * Lit une archive d'export (ou un `conversations.json` seul) et reconnaît sa
- * source à sa forme : un arbre `mapping` pour ChatGPT, des `chat_messages`
- * pour Claude. Lève une erreur au message clair si rien n'est reconnu.
+ * Lit une archive d'export (ou un `conversations.json`, un `MyActivity.json`
+ * ou un `MyActivity.html` seul) et reconnaît sa source à sa forme : un arbre
+ * `mapping` pour ChatGPT, des `chat_messages` pour Claude, un journal
+ * d'activité Google pour Gemini. Lève une erreur au message clair si rien
+ * n'est reconnu.
  */
 export async function lireExport(fichier: File): Promise<Import> {
   let conversations: unknown = null;
   let projets: unknown = null;
+  if (fichier.size === 0) throw new Error(t("Ce fichier est vide."));
+  if (/\.(tgz|tar\.gz|tar)$/i.test(fichier.name)) {
+    throw new Error(t("Les archives .tgz ne sont pas lues : dans Google Takeout, choisissez le type de fichier .zip, puis refaites l'export."));
+  }
+  if (/\.html?$/i.test(fichier.name)) {
+    const lecture = activitesDepuisHtml(await texteBorne(fichier));
+    if (!lecture.journal) {
+      throw new Error(t("Ce fichier HTML n'est pas un journal d'activité de Google Takeout. Choisissez MyActivity.html, dans le dossier de Gemini de l'archive."));
+    }
+    return importGemini([lecture]);
+  }
   if (/\.json$/i.test(fichier.name)) {
-    conversations = JSON.parse(await fichier.text());
+    conversations = lireJson(await fichier.text());
   } else {
     let entrees: EntreeZip[];
     try {
       entrees = await repertoire(fichier);
     } catch {
-      throw new Error(t("Ce fichier n'est pas une archive ZIP lisible. Choisissez l'archive telle que ChatGPT ou Claude l'a envoyée."));
+      throw new Error(t("Ce fichier n'est pas une archive ZIP lisible. Choisissez l'archive telle que ChatGPT, Claude ou Google l'a envoyée."));
     }
     const trouver = (nom: string) => entrees.find((e) => e.nom === nom || e.nom.endsWith(`/${nom}`));
     const conv = trouver("conversations.json");
-    if (!conv) throw new Error(t("Aucun fichier conversations.json dans cette archive : ce n'est pas un export ChatGPT ou Claude."));
-    conversations = JSON.parse(await lireEntree(fichier, conv));
+    if (!conv) {
+      const gemini = await lireGeminiDansArchive(fichier, entrees);
+      if (gemini) return gemini;
+      const takeout = entrees.some((e) => /(^|\/)Takeout\//i.test(e.nom));
+      if (takeout && entrees.some((e) => /(^|\/)Takeout\/(Gemini|Bard)\//i.test(e.nom))) {
+        throw new Error(t("Cette archive Takeout ne contient que vos Gems, pas vos Chats : ils sont dans « Mes activités ». Refaites l'export en cochant « Mes activités », puis « Applications Gemini »."));
+      }
+      if (takeout) {
+        throw new Error(t("Cette archive Google Takeout ne contient pas d'activité Gemini. Refaites l'export en cochant « Mes activités », puis, dans la liste des activités, « Applications Gemini »."));
+      }
+      throw new Error(t("Aucun fichier conversations.json ni activité Gemini dans cette archive : ce n'est pas un export ChatGPT, Claude ou Gemini."));
+    }
+    conversations = lireJson(await lireEntree(fichier, conv));
     const proj = trouver("projects.json");
     if (proj) projets = JSON.parse(await lireEntree(fichier, proj));
   }
   const premier = Array.isArray(conversations) ? (conversations[0] as Record<string, unknown> | undefined) : undefined;
-  if (premier && "mapping" in premier) return lireChatGpt(conversations);
-  if (premier && "chat_messages" in premier) return lireClaude(conversations, projets);
-  if (Array.isArray(conversations) && conversations.length === 0) return { source: "chatgpt", chats: [], projets: [] };
-  throw new Error(t("Format non reconnu : ni ChatGPT, ni Claude."));
+  const objet = typeof premier === "object" && premier !== null;
+  if (objet && "mapping" in premier) return lireChatGpt(conversations);
+  if (objet && "chat_messages" in premier) return lireClaude(conversations, projets);
+  if (Array.isArray(conversations) && estJournal(conversations)) return importGemini([activitesDepuisJson(conversations)]);
+  if (Array.isArray(conversations) && conversations.length === 0) throw new Error(t("Ce fichier ne contient aucune conversation."));
+  throw new Error(t("Format non reconnu : ni ChatGPT, ni Claude, ni Gemini."));
 }

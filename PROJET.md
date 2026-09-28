@@ -3711,6 +3711,56 @@ le vrai `lms get` accepte-t-il l'identifiant, la taille annoncée est-elle la bo
 répond-il à l'essai de santé, avec outils et raisonnement dans le Chat. Relever les modèles
 grisés et leurs chiffres sur le Mac de 16 Go et sur le PC Windows.
 
+**Import des Chats de Gemini (28/09/2026)**, demandé par Medhi : « je veux qu'on puisse
+importer Gemini aussi ». Réglages, « Importer depuis d'autres IA » lit l'export de Google
+Takeout (« Mes activités » > « Applications Gemini »), au format JSON (`MyActivity.json`,
+conseillé : dates ISO exactes) ou HTML (`MyActivity.html`, format par défaut de Takeout ;
+dates écrites dans la langue du compte : essayées en anglais, français, allemand, espagnol,
+chinois et japonais avec leur fuseau ; noms de mois italiens, portugais et néerlandais prévus,
+pas essayés), seul ou dans l'archive
+.zip (chemins traduits compris : on cherche un dossier qui parle de Gemini ou de Bard, puis
+le contenu décide). Code : `src/lib/importGemini.ts` ; `lireExport` (`importChats.ts`) le
+reconnaît à sa forme. Google n'exporte **pas des conversations** mais un journal d'activité :
+une ligne par question, la réponse en HTML quand elle est gardée, la date ; pas de titre. Les
+Chats sont regroupés par le lien `gemini.google.com/app/<id>` que Google range avec chaque
+question (vu dans le pied des cartes HTML, sous « Details »), sinon par proximité dans le temps
+(moins de 30 minutes entre deux questions), et l'écran le dit ; le titre est la première
+question ; images et fichiers joints seulement nommés ; activités qui ne sont pas des messages
+(retour donné, brouillon choisi, Canvas) écartées et comptées ; Gems pas repris (Takeout les
+met à part, dans le produit « Gemini »). Écran : troisième ligne « Gemini » et dépliant « pas à
+pas » (sept étapes, lien vers `takeout.google.com/settings/takeout/custom/myactivity`, format
+JSON, délai, quoi déposer), messages clairs (fichier vide, JSON coupé, Takeout sans Gemini,
+Gems seuls, .tgz, trop gros). **Toutes sources** : un Chat importé retient `importe` (source,
+clé d'origine, nombre de messages) ; déjà importé, il est grisé et ni présélectionné ni
+réimporté ; plus long dans un nouvel export, on peut en ajouter une copie complète à côté,
+jamais par-dessus. Sécurité : SECURITE.md § 60, `npm run securite` section 32. Sources du
+format, lues le 28/09/2026 : aide de Google (support.google.com/gemini/answer/16920332 : ce
+qu'on coche, délai, lien 7 jours), recensement des lecteurs publics du projet panchat
+(docs/formats/gemini.md : clés `header`, `title` et ses préfixes traduits, `time`,
+`safeHtmlItem[].html`, `titleUrl`, `attachedFiles`), archive d'essai publique du projet
+gemini-exporter (structure des cartes HTML, lien de conversation, « 1 generated image. »).
+**Vu marcher** : `node scripts/essai-import-gemini.mjs` (66 contrôles sur des exports fictifs :
+JSON et HTML, seuls et en archive, regroupements, dates, HTML piégé, 17 Mo et 20 000
+activités en moins de 20 s, archive qui ment sur sa taille, double import) ; l'archive d'essai
+publique de gemini-exporter lue par le même script (`--archive`) : 6 Chats, 16 messages, aucune
+balise ; à l'écran (serveur de développement, instance jetable, compte d'essai) : archive JSON,
+5 Chats importés, ouverts dans la barre latérale avec réponse piégée rendue en texte, pièce
+jointe nommée ; même archive redéposée : 5 lignes « déjà importé », « Importer 0 Chat(s) »,
+puis, après un rechargement, « Tous les Chats de cet export sont déjà importés » ; archive HTML
+aux chemins français : 4 Chats ; Takeout sans Gemini : le message ; 375 px sans défilement
+horizontal. **Pas essayé** : aucun **vrai export Gemini** n'a pu être lu (pas de compte Google
+d'essai, pas d'archive de Medhi) ; le JSON réel n'a été vu nulle part, en particulier l'endroit
+où Google y range le lien de conversation (lu dans `titleUrl` et les autres champs hors question
+et réponse ; à défaut, regroupement par le temps) ; les préfixes de question hors anglais,
+japonais, espagnol, grec et chinois (une question au préfixe inconnu garde son préfixe, et une
+question sans réponse au préfixe inconnu est écartée comme activité) ; le lien Takeout
+pré-rempli n'a pas été ouvert connecté (l'étape 2 dit quoi faire s'il ne pré-coche rien) ; les
+libellés de Takeout en français, anglais, chinois et japonais sont ceux relevés dans les guides
+publics, pas vus à l'écran ; l'application de bureau et l'écran en anglais, chinois, japonais
+(catalogues à 100 %). **À faire par Medhi** : exporter son propre Gemini (JSON, puis HTML) et
+lancer `node scripts/essai-import-gemini.mjs --archive <takeout.zip>` : n'affiche que des
+comptes, jamais le texte.
+
 **PC Windows (processeur seul, 16 Go, llmster 0.0.25)**
 1. **Mise à jour** : installer 2026.928.1. Un poste installé avant 2026.927.3 n'a pas la clé
    de l'éditeur dans son application : « Télécharger » une fois encore, puis « Installer

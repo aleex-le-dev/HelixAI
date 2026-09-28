@@ -136,7 +136,7 @@ Windows 上暂不提供：`helix` 命令行。在 Windows 上，“自由”级�
 - **我的用量**：按模型统计的请求和令牌，读取自每个引擎的响应；本地模型没有 API 费用，云端模型按您填写的费率或服务商公布的价格计费，并注明日期。
 - **开发者 API**：个人 API 密钥，用于实例的 OpenAI 兼容 API（`/v1/models`、`/v1/chat/completions`，含知识库），以您的名义使用且仅限于此，可随时撤销。
 - **会议**：录制或导入，在本机转写并生成纪要，支持会议机器人。
-- **导入**来自 ChatGPT、Claude、Claude Code、Codex 和 Cursor 的历史记录。
+- **导入**来自 ChatGPT、Claude、Gemini（Google Takeout）、Claude Code、Codex 和 Cursor 的历史记录。
 - **团队**：账户、群组、共享、双重认证、审计日志、GDPR 导出，数据落盘加密。
 - **白标**：产品名称、标志和颜色都来自同一个配置文件。
 

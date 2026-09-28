@@ -200,7 +200,7 @@ toujours actif au palier « Libre » passent par PowerShell.
   de plus, révocables aussitôt.
 - **Réunions** : enregistrement ou import, transcription et compte rendu sur la machine, bot de
   réunion.
-- **Import** de votre historique depuis ChatGPT, Claude, Claude Code, Codex et Cursor.
+- **Import** de votre historique depuis ChatGPT, Claude, Gemini (Google Takeout), Claude Code, Codex et Cursor.
 - **Équipes** : comptes, groupes, partage, double authentification, journal d'audit, export
   RGPD, données chiffrées sur le disque.
 - **Marque blanche** : nom du produit, logo et couleurs viennent d'un seul fichier de

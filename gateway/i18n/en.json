@@ -832,6 +832,7 @@
   "Moteur introuvable pour {0}.": "No engine found for {0}.",
   "Navigateur (Playwright)": "Browser (Playwright)",
   "ne correspond pas à l'ancre : journal tronqué ou réécrit": "does not match the anchor: log truncated or rewritten",
+  "Node est introuvable sur cette machine : les bibliothèques Node ne peuvent pas être chargées.": "Node cannot be found on this machine: the Node libraries cannot be loaded.",
   "Node s'est installé, mais son npm est introuvable.": "Node was installed, but its npm cannot be found.",
   "Nom d'application manquant.": "Application name missing.",
   "Nom de fichier invalide.": "Invalid file name.",

@@ -832,6 +832,7 @@
   "Moteur introuvable pour {0}.": "未找到 {0} 的引擎。",
   "Navigateur (Playwright)": "浏览器（Playwright）",
   "ne correspond pas à l'ancre : journal tronqué ou réécrit": "与锚点不符：日志被截断或改写",
+  "Node est introuvable sur cette machine : les bibliothèques Node ne peuvent pas être chargées.": "在此机器上找不到 Node：无法加载 Node 库。",
   "Node s'est installé, mais son npm est introuvable.": "Node 已安装，但找不到其 npm。",
   "Nom d'application manquant.": "缺少应用程序名称。",
   "Nom de fichier invalide.": "文件名无效。",

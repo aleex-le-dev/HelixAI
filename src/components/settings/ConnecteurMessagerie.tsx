@@ -70,7 +70,8 @@ function Guide({ id }: { id: IdMessagerie }) {
         <ol className="list-decimal space-y-1 pl-5">
           <li>
             {t("Sur")} <Lien href="https://developers.facebook.com/apps">developers.facebook.com/apps</Lien>
-            {t(", créez une app de type « Entreprise » et ajoutez le produit « WhatsApp ». Reliez-y le compte WhatsApp Business et le numéro de votre organisation.")}
+            {/* Meta ne propose plus de type d'app : un cas d'usage, puis le portefeuille d'entreprise (guide « Get started » de la Cloud API, relu le 28/09/2026). */}
+            {t(", « Créer une app » : choisissez le cas d'usage « Connect with customers through WhatsApp » (communiquer avec vos clients sur WhatsApp), puis le portefeuille d'entreprise de votre organisation. Reliez-y le compte WhatsApp Business et le numéro de votre organisation.")}
           </li>
           <li>{t("WhatsApp, « Configuration de l'API » : recopiez l'identifiant du numéro de téléphone et l'identifiant du compte WhatsApp Business.")}</li>
           <li>

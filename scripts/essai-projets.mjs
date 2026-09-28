@@ -112,7 +112,7 @@ const OUTILS = {
 
 const recues = [];
 /** Ce que chaque test règle : portées rendues par le faux serveur, pièges, pannes. */
-const controle = { scope: {}, piegeTrello: false, piegeBrevo: false, brevo503: false, dcMalveillant: false, scopeBrevo: null };
+const controle = { scope: {}, piegeTrello: false, piegeBrevo: false, brevo503: false, dcMalveillant: false, scopeBrevo: null, brevo401: false, brevoJeton503: false };
 /** Les appels d'outils MCP reçus, par service. */
 const appelsMcp = [];
 const auModele = [];
@@ -256,6 +256,8 @@ const faux = serveurHttp(async (req, res) => {
   if (hote === "oauth.brevo.com") {
     if (p === "/realms/partner/oauth/token") {
       if (f.get("client_id") !== APPS.brevo.id || f.get("client_secret") !== APPS.brevo.secret) return reponse(res, 401, { error: "invalid_client" });
+      // Panne passagère de Brevo pendant le renouvellement : l'accès ne doit pas être perdu pour autant.
+      if (f.get("grant_type") === "refresh_token" && controle.brevoJeton503) return reponse(res, 503, { error: "temporarily_unavailable" });
       if (f.get("grant_type") === "refresh_token") return reponse(res, 200, { access_token: "ACCES-BREVO-2", refresh_token: "ACTU-BREVO-2", expires_in: 3600, token_type: "Bearer", scope: controle.scopeBrevo });
       if (f.get("code") !== "CODE-brevo" || !f.get("code_verifier")) return reponse(res, 400, { error: "invalid_grant" });
       return reponse(res, 200, { access_token: "ACCES-BREVO-1", refresh_token: "ACTU-BREVO-1", expires_in: 3600, refresh_expires_in: 2592000, token_type: "Bearer", scope: controle.scopeBrevo });
@@ -266,7 +268,7 @@ const faux = serveurHttp(async (req, res) => {
     }
   }
   if (hote === "api.brevo.com") {
-    if (!/^Bearer ACCES-BREVO-/.test(auth)) return reponse(res, 401, { code: "unauthorized" });
+    if (controle.brevo401 || !/^Bearer ACCES-BREVO-/.test(auth)) return reponse(res, 401, { code: "unauthorized" });
     if (p === "/v3/account") return reponse(res, 200, { email: "compte@exemple.fr", companyName: "Boutique Essai", plan: [{ type: "free", credits: 300, creditsType: "sendLimit" }] });
     if (p === "/v3/contacts/lists") return reponse(res, 200, { lists: Object.values(LISTES_BREVO), count: 2 });
     const liste = /^\/v3\/contacts\/lists\/(\d+)$/.exec(p);
@@ -685,6 +687,13 @@ sortie.outils = o.toolsForModel().map((x) => x.function.name);
 for (const nom of ["brevo__compte", "brevo__listes", "brevo__campagnes", "mailchimp__compte", "mailchimp__audiences", "mailchimp__campagnes"]) sortie[nom] = await appeler(nom, {});
 sortie.brevoCampagne = await appeler("brevo__campagne", { campagne: 13 });
 sortie.mcCampagne = await appeler("mailchimp__campagne", { campagne: "c0ffee1234" });
+// Jeton refusé (401), et Brevo en panne au moment de le renouveler (503) : dit au modèle, l'accès reste branché.
+const reglerFaux = (x) => fetch("http://127.0.0.1:${PORT_FAUX}/__controle", { method: "POST", body: JSON.stringify(x) });
+await reglerFaux({ brevo401: true, brevoJeton503: true });
+sortie.brevoPanne = await appeler("brevo__listes", {});
+sortie.brevoPanneConnecte = n.connecte("brevo");
+await reglerFaux({ brevo401: false, brevoJeton503: false });
+sortie.brevoApresPanne = await appeler("brevo__listes", {});
 // Écrire : un collègue, personne, puis l'administrateur.
 const brouillon = { nom: "Octobre", objet: "Nos nouveautés d'octobre", expediteur_nom: "Boutique", expediteur_email: "bonjour@exemple.fr", contenu: "Bonjour,\\n\\nVoici <nos> nouveautés.\\n\\nFIN-DU-BROUILLON", listes: [3, 7] };
 sortie.brouillonB = await appeler("brevo__creer_brouillon", brouillon, B);
@@ -775,6 +784,7 @@ process.exit(0);
   }
   verifier("le second processus s'est déroulé jusqu'au bout", Boolean(ligne), `${essai.status} ${essai.signal} ${sortieBrute.slice(-800)}`);
   verifier("Brevo et Mailchimp : lectures, brouillons et envoi proposés (tout a été coché)", ["brevo__compte", "brevo__campagnes", "brevo__creer_brouillon", "brevo__envoyer_campagne", "mailchimp__campagnes", "mailchimp__creer_brouillon", "mailchimp__envoyer_campagne"].every((x) => r.outils?.includes(x)), JSON.stringify(r.outils));
+  verifier("Brevo : une panne (503) pendant le renouvellement est dite au modèle sans débrancher, et la lecture reprend ensuite", r.brevoPanne?.ok === false && /pas pu renouveler/.test(r.brevoPanne?.content ?? "") && r.brevoPanneConnecte === true && r.brevoApresPanne?.ok === true, `${r.brevoPanne?.content} | ${r.brevoPanneConnecte} | ${r.brevoApresPanne?.content}`);
   verifier("lectures : compte, listes (avec leur nombre d'abonnés), campagnes et statistiques, dites comme des données", r.brevo__listes?.ok && /1\s204 abonné/.test(r.brevo__listes.content) && /Ce qui suit est du contenu lu/.test(r.brevo__campagnes?.content ?? "") && /400 ouvertures/.test(r.brevoCampagne?.content ?? "") && /830 destinataire/.test(r.mailchimp__campagnes?.content ?? "") && r.mcCampagne?.ok, `${r.brevo__listes?.content?.slice(0, 120)} | ${r.brevoCampagne?.content?.slice(0, 160)}`);
   verifier("un brouillon par un collègue, ou sans personne : refusé, rien n'est créé", r.brouillonB?.ok === false && /administrateur/.test(r.brouillonB?.content) && r.brouillonPersonne?.ok === false, `${r.brouillonB?.content} | ${r.brouillonPersonne?.content}`);
   const cree = creesBrevo[0];
@@ -802,6 +812,20 @@ process.exit(0);
 
 faux.close();
 for (const d of [DONNEES, AUX, ESPACE]) rmSync(d, { recursive: true, force: true });
+
+/*
+ * Zoom accorde les portées déclarées dans l'application : l'aide de l'écran doit
+ * nommer toutes celles que l'instance demande. Elle en oubliait quatre sur dix
+ * (docs:read:list_file_collaborators, my_notes:read:content, agentic_search:*),
+ * relevé le 28/09/2026.
+ */
+console.log("\nH. L'aide de l'écran nomme les portées que l'instance demande");
+{
+  const { REGLES_MCP } = await import(pathToFileURL(join(RACINE, "gateway", "src", "natifs", "projetsRegles.ts")).href);
+  const ecran = readFileSync(join(RACINE, "src", "components", "settings", "ConnecteurProjets.tsx"), "utf8");
+  const oubliees = [...REGLES_MCP.zoom.lecture, ...REGLES_MCP.zoom.ecriture].filter((p) => !ecran.includes(p));
+  verifier("Zoom : chaque portée demandée (lecture et écriture) figure dans l'aide pour créer l'application", oubliees.length === 0, oubliees.join(", "));
+}
 
 console.log(`\n${reussis} vérification(s) réussie(s), ${echecs.length} échec(s).`);
 if (echecs.length) {

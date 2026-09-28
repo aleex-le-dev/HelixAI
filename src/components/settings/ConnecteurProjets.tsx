@@ -47,7 +47,7 @@ export function AideMcpProjet({ id, nom }: { id: string; nom: string }) {
             {t(", « Develop », « Build App », choisissez « General App », gérée par l'utilisateur (« User-managed »).")}
           </li>
           <li>{t("Dans « OAuth Redirect URL » et dans la liste d'adresses autorisées, indiquez l'adresse de retour que l'instance donne dans le message qui s'affiche après un premier essai de connexion.")}</li>
-          <li>{t("Dans « Scopes », ajoutez les portées de lecture : meeting:read:search, meeting:read:assets, cloud_recording:read:list_user_recordings, cloud_recording:read:content, docs:read:export, hub:read:content. Pour écrire, ajoutez aussi meeting:write:meeting, meeting:update:meeting, docs:write:import et hub:write:content, et cochez l'écriture ici.")}</li>
+          <li>{t("Dans « Scopes », ajoutez les portées de lecture : meeting:read:search, meeting:read:assets, cloud_recording:read:list_user_recordings, cloud_recording:read:content, docs:read:export, docs:read:list_file_collaborators, hub:read:content, my_notes:read:content, agentic_search:read:search, agentic_search:read:ask. Pour écrire, ajoutez aussi meeting:write:meeting, meeting:update:meeting, docs:write:import et hub:write:content, et cochez l'écriture ici.")}</li>
           <li>{t("Recopiez le « Client ID » et le « Client Secret » ci-dessous. Zoom accorde les portées de l'application : si elle a des portées d'écriture et que la case n'est pas cochée, la connexion est refusée.")}</li>
         </ol>
       )}

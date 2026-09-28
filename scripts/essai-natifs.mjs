@@ -29,7 +29,7 @@
  * ses outils dans les sections E, F et G comme les sept autres. Le faux
  * serveur imite https://docs.x.com (pages citées dans oauthNatif.ts).
  */
-import { spawn } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { createHash, createHmac } from "node:crypto";
 import { chmodSync, linkSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { createServer as serveurHttp, request as requeteHttp } from "node:http";
@@ -89,7 +89,7 @@ const G_SCOPES = {
 const IG = "17841400000000000";
 
 const recues = [];
-const controle = { tiktok401: false, uploadAilleurs: false, postPiege: false, deuxPages: false, x401: false, postPiegeX: false };
+const controle = { tiktok401: false, uploadAilleurs: false, postPiege: false, deuxPages: false, x401: false, postPiegeX: false, x402moi: false };
 /** Demandes reçues par le faux modèle (section G). */
 const auModele = [];
 
@@ -290,6 +290,8 @@ const faux = serveurHttp(async (req, res) => {
     }
     if (!/^Bearer ACCES-x-[12]$/.test(auth)) return reponse(res, 401, { title: "Unauthorized", status: 401 });
     if (controle.x401 && auth === "Bearer ACCES-x-1") return reponse(res, 401, { title: "Unauthorized", status: 401 });
+    // Tournée de la 2026.928.3 (§ 43) : plus de crédits. La forme du corps est supposée (X ne décrit pas son 402 dans les pages lues).
+    if (controle.x402moi && p === "/2/users/me") return reponse(res, 402, { title: "Payment Required", status: 402, detail: "Your enrolled account does not have any credits." });
     if (p === "/2/users/me") return reponse(res, 200, { data: { id: X_MOI, name: "Organisation Essai", username: "orga_essai", created_at: "2020-01-01T00:00:00.000Z", description: "Compte d'essai", public_metrics: { followers_count: 1234, following_count: 56, tweet_count: 789, listed_count: 3 } } });
     if (p === `/2/users/${X_MOI}/tweets` && req.method === "GET") {
       // Un post piégé (section G) : un inconnu y a écrit un appel d'outil, que la lecture rend tel quel.
@@ -304,6 +306,9 @@ const faux = serveurHttp(async (req, res) => {
     if (p === "/2/tweets" && req.method === "POST") {
       const j = JSON.parse(corps || "{}");
       if (typeof j.text !== "string") return reponse(res, 400, { title: "Invalid Request", status: 400 });
+      // § 43 : un post sans crédit (402), et un post dont X ne dit pas s'il est parti (503 : il l'est peut-être).
+      if (j.text.startsWith("SANS-CREDIT")) return reponse(res, 402, { title: "Payment Required", status: 402 });
+      if (j.text.startsWith("SANS-REPONSE")) return reponse(res, 503, { title: "Service Unavailable", status: 503 });
       return reponse(res, 201, { data: { id: "1810000000000000001", text: j.text, edit_history_tweet_ids: ["1810000000000000001"] } });
     }
   }
@@ -371,6 +376,18 @@ writeFileSync(join(ESPACE, "faux.jpg"), "NOTES-PRIVEES déguisées en image");
 symlinkSync(join(ESPACE, "notes.txt"), join(ESPACE, "lien-image.jpg"));
 writeFileSync(join(AUX, "hors-dossier.png"), Buffer.concat([PNG.subarray(0, 8), Buffer.from("HORS-DOSSIER image d'un autre dossier")]));
 linkSync(join(AUX, "hors-dossier.png"), join(ESPACE, "lien-dur.png"));
+/*
+ * Tournée de la 2026.928.3 (§ 43) : un tube nommé (FIFO) au nom d'image.
+ * L'ouvrir en lecture attend qu'un écrivain arrive : sans O_NONBLOCK, l'outil
+ * restait bloqué, et avec lui un fil du réservoir de libuv.
+ */
+let tube = false;
+try {
+  execFileSync("mkfifo", [join(ESPACE, "tuyau.png")]);
+  tube = true;
+} catch {
+  /* pas de mkfifo (Windows) : le contrôle le dira */
+}
 
 const PORT = await portLibre();
 const G = `http://127.0.0.1:${PORT}`;
@@ -623,6 +640,19 @@ console.log("\nH. X (ex-Twitter) : PKCE, client public puis confidentiel, porté
     `${r2.statut} ${r2.page.slice(0, 160)}`,
   );
 
+  /*
+   * Tournée de la 2026.928.3 (§ 43) : sans crédit, X refuse jusqu'à la lecture
+   * du compte, qui clôt la connexion. La page de retour disait « X n'a pas
+   * laissé lire le compte avec l'accès accordé (code 402) » : rien sur les
+   * crédits, alors que c'est la seule chose à faire.
+   */
+  await fetch(`http://127.0.0.1:${PORT_FAUX}/__controle?x402moi=1`);
+  const d402 = await depart("x", ["ecriture"]);
+  const r402 = await retour(d402, "CODE-x");
+  await fetch(`http://127.0.0.1:${PORT_FAUX}/__controle?x402moi=0`);
+  const moi402 = recues.filter((r) => r.hote === "api.x.com" && r.chemin.startsWith("/2/users/me")).length;
+  verifier("X sans crédit (402 à la lecture du compte) : connexion refusée, et la page dit d'acheter des crédits dans la console de X", r402.statut === 400 && /crédits|credits/i.test(r402.page) && /console/i.test(r402.page) && moi402 >= 1, `${r402.statut} ${r402.page.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").slice(0, 300)}`);
+
   const conf = await poster("/helix/natifs/application", A, { service: "x", clientId: APPS.x.id, clientSecret: APPS.x.secret });
   const confTexte = await conf.text();
   verifier("X : le secret d'une application confidentielle s'enregistre, et ne ressort pas", conf.status === 200 && !SECRETS.test(confTexte), `${conf.status} ${confTexte.slice(0, 160)}`);
@@ -809,6 +839,18 @@ sortie.xImageDeguisee = await appeler("x__publier", { texte: "Image déguisée",
 sortie.xImageLien = await appeler("x__publier", { texte: "Image par un lien", image: "lien-image.jpg" });
 sortie.xImageLienDur = await appeler("x__publier", { texte: "Image par un lien dur", image: "lien-dur.png" });
 sortie.xImageHors = await appeler("x__publier", { texte: "Image hors du dossier", image: "/etc/hosts" });
+// Tournée de la 2026.928.3 (§ 43).
+// Une adresse suivie de caractères qu'aucune adresse ne contient : ils étaient comptés dans les 23 de l'adresse.
+sortie.xPoidsCjk = await appeler("x__publier", { texte: "https://a.fr/" + "字".repeat(200) });
+sortie.xPoidsBlanc = await appeler("x__publier", { texte: "https://a.fr\\u2800" + "mot\\u2800".repeat(100) });
+sortie.poidsBornes = { ponctuation: o.poidsX("Lien : https://a.fr."), longue: o.poidsX("https://exemple.fr/" + "a".repeat(300)), deux: o.poidsX("https://a.fr https://b.fr") };
+// Un tube nommé au nom d'image : l'ouverture attendait un écrivain, pour toujours.
+sortie.xTube = ${tube} ? await Promise.race([appeler("x__publier", { texte: "Tube nommé", image: "tuyau.png" }), new Promise((r) => setTimeout(() => r({ ok: "bloqué", content: "rien au bout de 3 s" }), 3000))]) : { ok: false, content: "pas de mkfifo" };
+// Plus de crédit : un seul envoi, un message qui le dit.
+sortie.x402 = await appeler("x__publier", { texte: "SANS-CREDIT un post" });
+// X répond 503 : le post est peut-être parti. Le relancer ne doit pas le publier deux fois.
+sortie.x503 = await appeler("x__publier", { texte: "SANS-REPONSE un post" });
+sortie.x503bis = await appeler("x__publier", { texte: "SANS-REPONSE un post" });
 await controle("x401=1");
 sortie.xRenouvele = await appeler("x__profil", {});
 await controle("x401=0");
@@ -1004,7 +1046,15 @@ process.exit(0);
   verifier("X : jeton refusé (401), renouvelé une fois par l'en-tête Basic, l'appel reprend", r.xRenouvele?.ok === true && renouvX.length >= 1 && renouvX[0].entetes.authorization === `Basic ${BASIC_X}` && !/client_secret/.test(renouvX[0].corps), r.xRenouvele?.content);
   const memesX = postsX.filter((p) => p.text === "Même post X en parallèle");
   verifier("X : le même post lancé trois fois en même temps ne part qu'une fois", memesX.length === 1 && (r.xMeme ?? []).filter((x) => x.ok).length === 1, `${memesX.length} publication(s)`);
-  verifier("X : douze posts lancés en même temps ne dépassent pas dix dans l'heure pour l'instance", postsX.length <= 10 && (r.xRafale ?? []).some((x) => x.ok === false && /10 écritures/.test(x.content)), `${postsX.length} post(s) X`);
+  // Tournée de la 2026.928.3 (§ 43).
+  verifier("X : une adresse suivie de caractères qui n'en font pas partie (chinois, blancs du braille) ne cache plus la longueur du texte : refusé, rien n'est envoyé", r.xPoidsCjk?.ok === false && /trop long/i.test(r.xPoidsCjk?.content ?? "") && r.xPoidsBlanc?.ok === false && /trop long/i.test(r.xPoidsBlanc?.content ?? "") && !postsX.some((p) => /字字|mot/.test(p.text ?? "")), `${r.xPoidsCjk?.content} | ${r.xPoidsBlanc?.content}`);
+  verifier("X : poids des adresses comme X (point final hors de l'adresse, adresse longue 23, deux adresses 47)", r.poidsBornes?.ponctuation === 31 && r.poidsBornes?.longue === 23 && r.poidsBornes?.deux === 47, JSON.stringify(r.poidsBornes));
+  verifier("X : un tube nommé au nom d'image est refusé tout de suite (l'outil ne reste pas bloqué)", r.xTube?.ok === false && !/bloqué|mkfifo/.test(r.xTube?.content ?? ""), JSON.stringify(r.xTube));
+  const envois402 = postsX.filter((p) => (p.text ?? "").startsWith("SANS-CREDIT")).length;
+  verifier("X sans crédit (402) : un seul envoi, aucune reprise, et le message dit de racheter des crédits", r.x402?.ok === false && /crédits/.test(r.x402?.content ?? "") && envois402 === 1, `${envois402} envoi(s) : ${r.x402?.content}`);
+  const envois503 = postsX.filter((p) => (p.text ?? "").startsWith("SANS-REPONSE")).length;
+  verifier("X répond 503 (post peut-être parti) : le même post relancé n'est pas renvoyé, et le message dit de vérifier sur X", r.x503?.ok === false && /peut-être/.test(r.x503?.content ?? "") && r.x503bis?.ok === false && envois503 === 1, `${envois503} envoi(s) : ${r.x503?.content} | ${r.x503bis?.content}`);
+  verifier("X : douze posts lancés en même temps ne dépassent pas dix dans l'heure pour l'instance", postsX.filter((p) => !/^SANS-/.test(p.text ?? "")).length <= 10 && (r.xRafale ?? []).some((x) => x.ok === false && /10 écritures/.test(x.content)), `${postsX.length} post(s) X`);
   verifier("X : carte d'accord pour publier même au niveau « Tout approuver » : posée, unique, texte entier et image, et un refus n'envoie rien", r.carteX?.tranche === false && r.carteX?.nombre === 1 && r.carteX?.montreTout === true && r.carteX?.unique === true && r.carteX?.refuse === true && /sur X/.test(r.carteX?.resume ?? ""), JSON.stringify(r.carteX));
   const revX = apres.filter((x) => x.hote === "api.x.com" && x.chemin === "/2/oauth2/revoke");
   verifier("X : débrancher révoque chez X (jeton d'actualisation et jeton d'accès), par l'en-tête Basic", r.oubli_x?.ok === true && /révoqué/.test(r.oubli_x?.message ?? "") && revX.length === 2 && revX.every((x) => x.entetes.authorization === `Basic ${BASIC_X}`), `${r.oubli_x?.message} ${revX.length}`);

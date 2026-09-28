@@ -451,9 +451,12 @@ export function remplacerTransportPourEssais(fn: Transport | null): void {
 
 export class ErreurNatif extends Error {
   categorie: "config" | "acces" | "api" | "quota" | "portee";
-  constructor(categorie: "config" | "acces" | "api" | "quota" | "portee", message: string) {
+  /** Le service n'a pas dit si l'action était faite (5xx) : une écriture a peut-être eu lieu (outilsNatifs.ts, `sousGarde`). */
+  incertaine: boolean;
+  constructor(categorie: "config" | "acces" | "api" | "quota" | "portee", message: string, incertaine = false) {
     super(message);
     this.categorie = categorie;
+    this.incertaine = incertaine;
   }
 }
 
@@ -1179,6 +1182,13 @@ async function identite(id: IdNatif, acces: string, client: { clientId: string; 
     case "x": {
       // https://docs.x.com/x-api/users/get-my-user (`tweet.read`, `users.read`). L'identifiant sert ensuite à lire ses posts.
       const r = await envoyer(id, { methode: "GET", hote: "api.x.com", chemin: "/2/users/me?user.fields=username,name", entetes: bearer });
+      /*
+       * Lire le compte est facturé (0,010 $) : sans crédit, c'est ici que la
+       * connexion échoue. Tournée de la 2026.928.3 (SECURITE.md § 43) : la page
+       * disait « n'a pas laissé lire le compte avec l'accès accordé (code
+       * 402) », sans dire que la seule chose à faire est d'acheter des crédits.
+       */
+      if (r.statut === 402) throw new ErreurNatif("quota", t("X refuse de lire le compte (code 402, paiement requis) : l'application X de l'organisation n'a probablement pas de crédits. Achetez-en dans la console de X (console.x.com), puis reconnectez-vous. Rien n'a été enregistré."));
       const u = (r.json.data ?? {}) as { id?: unknown; username?: unknown; name?: unknown };
       if (r.statut !== 200 || typeof u.id !== "string" || !/^\d{1,19}$/.test(u.id)) throw echec(r);
       const pseudo = texteCourt(u.username, 50);

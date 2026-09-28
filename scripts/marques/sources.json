@@ -1,0 +1,392 @@
+{
+  "_lisezmoi": "Provenance des logos de src/components/ui/marques.ts. Chaque fichier .svg de ce dossier est le fichier officiel tel que publié par la société (octet pour octet, sauf mention contraire dans « retouche »), relevé le 28/09/2026. « clair » sert en thème clair, « sombre » en thème sombre (absent : le même dessin sert aux deux). « cadre » recadre la zone visible (viewBox) sur le dessin, sans toucher au dessin : les kits livrent souvent le logo au milieu d'une grande marge. Les empreintes SHA-256 sont vérifiées par scripts/gen-marques.cjs ; `node scripts/gen-marques.cjs --noter` les réécrit après un nouveau relevé. Les marques de la liste « neutres » gardent une icône neutre, pour la raison dite.",
+  "releve": "2026-09-28",
+  "marques": {
+    "gmail": {
+      "titre": "Gmail",
+      "clair": "gmail.svg",
+      "source": "https://www.gstatic.com/images/branding/productlogos/gmail_2020q4/v11/192px.svg",
+      "page": "https://partnermarketinghub.withgoogle.com/brands/google/use-cases/product-co-branding/",
+      "regle": "Google autorise ses icônes de produit pour montrer une grille de produits compatibles ou une action dans une interface, sans modification, la marque de l'application restant la plus visible.",
+      "empreintes": {
+        "gmail.svg": "4a255e631f5e08a0426ec385148d216eb5fe42c82ffa8097b7e44622c6862a6e"
+      }
+    },
+    "googleAgenda": {
+      "titre": "Google Agenda",
+      "clair": "googleAgenda.svg",
+      "source": "https://www.gstatic.com/images/branding/productlogos/calendar_2020q4/v13/192px.svg",
+      "page": "https://partnermarketinghub.withgoogle.com/brands/google/use-cases/product-co-branding/",
+      "regle": "Même règle que Gmail (icônes de produit Google).",
+      "empreintes": {
+        "googleAgenda.svg": "26e9daec33d3a5859160c465c5e43d3bddef0c994efb1a4643135686eaf1c0cc"
+      }
+    },
+    "googleDrive": {
+      "titre": "Google Drive",
+      "clair": "googleDrive.svg",
+      "source": "https://www.gstatic.com/images/branding/productlogos/drive_2020q4/v10/192px.svg",
+      "page": "https://partnermarketinghub.withgoogle.com/brands/google/use-cases/product-co-branding/",
+      "regle": "Même règle que Gmail (icônes de produit Google).",
+      "empreintes": {
+        "googleDrive.svg": "2897441606067de8560ef21fc1357ce314331f5ac233760b22e3de224cc0bb09"
+      }
+    },
+    "googleSheets": {
+      "titre": "Google Sheets",
+      "clair": "googleSheets.svg",
+      "source": "https://www.gstatic.com/images/branding/productlogos/sheets_2020q4/v11/192px.svg",
+      "page": "https://partnermarketinghub.withgoogle.com/brands/google/use-cases/product-co-branding/",
+      "regle": "Même règle que Gmail (icônes de produit Google).",
+      "empreintes": {
+        "googleSheets.svg": "17a1182e511d50cf45ff2dd0c882725947e21878804a3b11dcdbbf91192b19d5"
+      }
+    },
+    "googleSlides": {
+      "titre": "Google Slides",
+      "clair": "googleSlides.svg",
+      "source": "https://www.gstatic.com/images/branding/productlogos/slides_2020q4/v12/192px.svg",
+      "page": "https://partnermarketinghub.withgoogle.com/brands/google/use-cases/product-co-branding/",
+      "regle": "Même règle que Gmail (icônes de produit Google).",
+      "empreintes": {
+        "googleSlides.svg": "9a4fec75d3fb6967d9dddb432576518a64dd9fc06340acc9340830adb68fa5fe"
+      }
+    },
+    "googleMaps": {
+      "titre": "Google Maps",
+      "clair": "googleMaps.svg",
+      "source": "https://www.gstatic.com/images/branding/productlogos/maps/v7/192px.svg",
+      "page": "https://partnermarketinghub.withgoogle.com/brands/google/use-cases/product-co-branding/",
+      "regle": "Même règle que Gmail (icônes de produit Google).",
+      "empreintes": {
+        "googleMaps.svg": "8cd1a6b63933b799253176a4f9489279672a0c1d223fffaa382fd98accbddead"
+      }
+    },
+    "gemini": {
+      "titre": "Gemini",
+      "clair": "gemini.svg",
+      "source": "https://www.gstatic.com/images/branding/productlogos/gemini/v4/192px.svg",
+      "page": "https://partnermarketinghub.withgoogle.com/brands/google/use-cases/product-co-branding/",
+      "regle": "Même règle que Gmail (icônes de produit Google) ; sert aux modèles Gemini et au fournisseur « Google Gemini ».",
+      "empreintes": {
+        "gemini.svg": "2a60c2610c33938a402dc487286f7ba2b02c9816dd448bb34b58af1099cbc3d5"
+      }
+    },
+    "github": {
+      "titre": "GitHub",
+      "clair": "github.svg",
+      "sombre": "github.sombre.svg",
+      "source": "https://brand.github.com/GitHub_Logos.zip (GitHub_Invertocat_Black.svg, GitHub_Invertocat_White.svg)",
+      "page": "https://brand.github.com/foundations/logo",
+      "regle": "Logo permis pour dire qu'un projet s'intègre à GitHub, sans suggérer de partenariat ; Invertocat en noir ou en blanc, sans modification.",
+      "empreintes": {
+        "github.svg": "693d7abe6f899646cc2e96856723b45e95f71885a54910b2749f6decdf7e1ee1",
+        "github.sombre.svg": "ccd84c89b1056345608fc3489357f8acc7397e49a3cdc2d418b6c8016911d47b"
+      }
+    },
+    "linear": {
+      "titre": "Linear",
+      "clair": "linear.svg",
+      "sombre": "linear.sombre.svg",
+      "source": "https://static.linear.app/design-assets/Linear-Brand-Assets.zip?v=3 (logo-dark.svg, logo-light.svg)",
+      "page": "https://linear.app/brand",
+      "regle": "Logomark prévu pour les mises en page serrées et les grilles de logos ; fichiers non modifiés, sans suggérer d'approbation.",
+      "empreintes": {
+        "linear.svg": "e683e95a5eb9b360ae06360c0350fd1b5fcf3d2222ef9de8e71fa0bc413dccc3",
+        "linear.sombre.svg": "32f9883452188b39787f8242c7bfce723ded255f35f13254e727871d3dae2fd1"
+      }
+    },
+    "figma": {
+      "titre": "Figma",
+      "clair": "figma.svg",
+      "source": "https://static.figma.com/uploads/4fbf4d754dbbc027ba1530205f8747cd97d532e5 (Figma Icon (Full-color).svg)",
+      "page": "https://www.figma.com/using-the-figma-brand/",
+      "regle": "Usage permis pour signaler la compatibilité avec Figma ; la marque de l'application doit rester plus grande et plus visible.",
+      "empreintes": {
+        "figma.svg": "9798b710e015c7f3fa6101779e323568d6a5a022651d427021262ce850467b07"
+      }
+    },
+    "vercel": {
+      "titre": "Vercel",
+      "clair": "vercel.svg",
+      "sombre": "vercel.sombre.svg",
+      "source": "https://k2mkucxia43oc7fa.public.blob.vercel-storage.com/front/press/vercel-assets.zip (icon/light, icon/dark)",
+      "page": "https://vercel.com/geist/brands",
+      "regle": "Symbole seul là où seuls les symboles de plusieurs marques sont affichés ; noir sur fond clair, blanc sur fond sombre ; aucune modification.",
+      "empreintes": {
+        "vercel.svg": "178d63338a92fe0082c9a55623a62367c284aa3376112154abc37d7246a9e13d",
+        "vercel.sombre.svg": "88fb3e9d686b7a165393a2b61e0e6e62c9c86288d01d5bef62955947f54f40fb"
+      }
+    },
+    "x": {
+      "titre": "X",
+      "clair": "x.svg",
+      "sombre": "x.sombre.svg",
+      "source": "https://about.x.com/content/dam/about-twitter/x/brand-toolkit/x-logo.zip (logo.svg)",
+      "page": "https://about.x.com/en/who-we-are/brand-toolkit",
+      "regle": "Logo noir sur fond clair, blanc sur fond sombre (guide https://about.x.com/content/dam/about-twitter/x/brand-toolkit/x-brand-guidelines.pdf).",
+      "retouche": "x.svg est le tracé de logo.svg (livré en blanc) rempli en noir, la couleur que le guide prescrit sur fond clair et que le kit fournit aussi en PNG.",
+      "empreintes": {
+        "x.svg": "8aef57cabe6e3f41076ce1906c403b00ac9309cbb611ce435fd15ea892786781",
+        "x.sombre.svg": "dd46f96b6f47fcd33683b79ddfaf3daca1d4f8aeba3c0f2bde1584c69cc699d4"
+      }
+    },
+    "canva": {
+      "titre": "Canva",
+      "clair": "canva.svg",
+      "source": "https://www.canva.dev/assets/connect/Canva-logos.zip (Canva Icon logo.svg)",
+      "page": "https://www.canva.dev/docs/connect/guidelines/brand/",
+      "regle": "Logo icône pour les surfaces de moins de 50 px, marge d'au moins 8 px, couleurs et forme non modifiées.",
+      "empreintes": {
+        "canva.svg": "fbbd91cfb0dcc0f9e9eeabc7ea5a6393974167bb06902c27df0b5b50c1fe798f"
+      }
+    },
+    "atlassian": {
+      "titre": "Atlassian",
+      "clair": "atlassian.svg",
+      "sombre": "atlassian.sombre.svg",
+      "source": "https://atlassian.design/assets/06c6b5ff60de/logos/atlassian_logo.zip (Atlassian mark brand RGB.svg, Atlassian mark inverse RGB.svg)",
+      "page": "https://www.atlassian.com/legal/trademark",
+      "regle": "Logos d'Atlassian permis pour signaler qu'un produit est compatible, reproduits exactement, sans modification autre que la taille ; sert au connecteur « Jira et Confluence ».",
+      "empreintes": {
+        "atlassian.svg": "4bde9a5f2253655b939847e8df0434bb718bd979922e2f13008a4ffe750c361d",
+        "atlassian.sombre.svg": "bd4503224b66618b57600d6adf3f03e7a1a783a52319de7bee2dd626544a004e"
+      }
+    },
+    "notion": {
+      "titre": "Notion",
+      "clair": "notion.svg",
+      "source": "https://www.notion.so/Media-Kit-205535b1d9c4440497a3d7a2ac096286 (NotionLogoFiles.zip, notion-logo-block-main.svg)",
+      "page": "https://www.notion.so/Media-Kit-205535b1d9c4440497a3d7a2ac096286",
+      "regle": "Kit presse officiel, sans règle d'usage écrite ; le cube blanc cerné de noir se lit sur les deux fonds, il sert aux deux thèmes.",
+      "empreintes": {
+        "notion.svg": "840a6f78e87f39cc4a4b0743a00cc6fd82c07ba5dc51d778d7976b6575bcf4fb"
+      }
+    },
+    "sentry": {
+      "titre": "Sentry",
+      "clair": "sentry.svg",
+      "sombre": "sentry.sombre.svg",
+      "source": "https://sentry.io/branding/ (glyphe, couleurs « Dark » et « Light » de la page)",
+      "page": "https://sentry.io/branding/",
+      "regle": "Glyphe proposé par la page officielle, avec l'option « inverser en mode sombre » ; couleur #181225 en clair, blanc en sombre.",
+      "retouche": "La page dessine le glyphe dans le navigateur au lieu de livrer un fichier : le tracé est recopié de son code source, dans les deux couleurs qu'elle propose.",
+      "empreintes": {
+        "sentry.svg": "3ea0c60d331b98b8b5459d4df4c0564a422c2845665e7e324a74752801e3b44c",
+        "sentry.sombre.svg": "571c19be8e29153eda4420ae6b128da6697de850cd848a4e86c2adcebaa40b74"
+      }
+    },
+    "gitlab": {
+      "titre": "GitLab",
+      "clair": "gitlab.svg",
+      "source": "https://about.gitlab.com/images/press/gitlab-logo-500-rgb.svg",
+      "page": "https://about.gitlab.com/press/press-kit/",
+      "regle": "Logomark en couleur ; ni recoloration, ni transformation, ni effet ; au moins 20 px en numérique (https://design.gitlab.com/brand-logo/core-logo).",
+      "empreintes": {
+        "gitlab.svg": "d8522f9bb83b35bcf0ab6e7fc25a312c26120028af308bec1dd9d20e15c1a615"
+      }
+    },
+    "webflow": {
+      "titre": "Webflow",
+      "clair": "webflow.svg",
+      "source": "https://dhygzobemt712.cloudfront.net/Mark/Mark_Logo_Blue.svg",
+      "page": "https://brand.webflow.com/brand-assets",
+      "regle": "La marque W en bleu, telle que livrée ; la charte recommande de « mener avec le bleu » et interdit de la modifier. Le logo complet reste le premier choix quand la place le permet.",
+      "empreintes": {
+        "webflow.svg": "6535b9c9a2b083f3b9603324b01c745b1af096d25cc36f8288233a415456f9aa"
+      }
+    },
+    "wix": {
+      "titre": "Wix",
+      "clair": "wix.svg",
+      "sombre": "wix.sombre.svg",
+      "source": "https://www.wix.com/about/design-assets (WixLogoNew.zip : « Wix logoW.svg » noir, « Wix logoB.svg » blanc)",
+      "page": "https://www.wix.com/about/design-assets",
+      "regle": "Logo à utiliser tel quel, sans modification ; le logo de Wix est son nom, il n'existe pas de symbole seul.",
+      "empreintes": {
+        "wix.svg": "e9a4e09c0a4a4383c098957cc9d9262aa2b875ce93ea6dc6ac3af213815eb58b",
+        "wix.sombre.svg": "aaba8010180c83b94798a8fee848b01651bb62ce7827bb8df1bb951f3ca0423d"
+      }
+    },
+    "postgresql": {
+      "titre": "PostgreSQL",
+      "clair": "postgresql.svg",
+      "source": "https://wiki.postgresql.org/images/a/a4/PostgreSQL_logo.3colors.svg",
+      "page": "https://www.postgresql.org/about/policies/trademarks/",
+      "regle": "Usage loyal pour dire qu'un logiciel fonctionne avec PostgreSQL, sans suggérer d'affiliation ; mention d'attribution dans THIRD_PARTY_NOTICES.md.",
+      "empreintes": {
+        "postgresql.svg": "51f93e19516081fc7d6fe6ab9bbab07abe5f7819e28016eefacea6dea691bc54"
+      }
+    },
+    "kubernetes": {
+      "titre": "Kubernetes",
+      "clair": "kubernetes.svg",
+      "source": "https://raw.githubusercontent.com/cncf/artwork/main/projects/kubernetes/icon/color/kubernetes-icon-color.svg",
+      "page": "https://www.linuxfoundation.org/legal/trademark-usage",
+      "regle": "Logo officiel du projet (dépôt d'illustrations de la CNCF), sans variation de couleur ; formule « compatible avec ».",
+      "empreintes": {
+        "kubernetes.svg": "ff5427cfeeff39e82834ab1b4fe3ed61fc08596225a17eed56adc04f7cc1f712"
+      }
+    },
+    "brave": {
+      "titre": "Brave",
+      "clair": "brave.svg",
+      "source": "https://brave.com/static-assets/images/brave-logo-sans-text.svg",
+      "page": "https://brave.com/brave-branding-assets/",
+      "regle": "Lion sans texte publié par Brave sur sa page de marque ; la page ne donne pas de règle d'usage écrite.",
+      "empreintes": {
+        "brave.svg": "2530f80fdf2144b62f96953a81c6988c9c31a6cc7c9de72e069079485817cbe7"
+      }
+    },
+    "firecrawl": {
+      "titre": "Firecrawl",
+      "clair": "firecrawl.svg",
+      "source": "https://www.firecrawl.dev/brand/brand-assets.zip (firecrawl-logo.svg)",
+      "page": "https://www.firecrawl.dev/press-brand",
+      "regle": "La flamme sert quand un format carré ou réduit est nécessaire ; ne pas étirer, recolorer ni modifier.",
+      "empreintes": {
+        "firecrawl.svg": "eaae76b7227c4b6a694c7575c0c665bd627e373b408b9d1806e0dc876e664289"
+      }
+    },
+    "exa": {
+      "titre": "Exa",
+      "clair": "exa.svg",
+      "sombre": "exa.sombre.svg",
+      "source": "https://exa.ai/assets/Exa%20Brand%20Assets.zip (Exa Logomark Blue.svg, Exa Logomark White.svg)",
+      "page": "https://exa.ai/brand",
+      "regle": "Logomark en bleu Exa en standard, en blanc sur fond sombre ; couleurs et proportions non modifiées.",
+      "empreintes": {
+        "exa.svg": "3370144d994ce3021db0ce5cf952563b7a198346920b0ce61d5b8af65b3518a3",
+        "exa.sombre.svg": "254712cd4c69ddae2ca5a4fca3935188fed0fc5aa72c74b802074f180f01ebbb"
+      }
+    },
+    "anthropic": {
+      "titre": "Anthropic",
+      "clair": "anthropic.svg",
+      "sombre": "anthropic.sombre.svg",
+      "source": "https://www.anthropic.com/press-kit (Anthropic symbol - Slate.svg, Anthropic symbol - Ivory.svg)",
+      "page": "https://www.anthropic.com/news",
+      "regle": "Kit presse officiel, sans règle d'usage jointe ; symbole ardoise sur fond clair, ivoire sur fond sombre, sans modification.",
+      "empreintes": {
+        "anthropic.svg": "d55918884053460f24c958fca3fba8d10b48fdd86e73ba3cd1237713bc0a03bb",
+        "anthropic.sombre.svg": "38fc06d8e9390654cc4e96aa53691e2e78d929667c0034805b6d1b3891ba22dd"
+      }
+    },
+    "claude": {
+      "titre": "Claude",
+      "clair": "claude.svg",
+      "source": "https://www.anthropic.com/press-kit (Claude Spark - Clay.svg)",
+      "page": "https://www.anthropic.com/news",
+      "regle": "Même kit presse ; l'étincelle de Claude, couleur argile, désigne les modèles Claude.",
+      "empreintes": {
+        "claude.svg": "6d53db4be375e899c937c26cf16684a80d6e869b1928d72b37748bef2560e219"
+      }
+    },
+    "mistral": {
+      "titre": "Mistral AI",
+      "clair": "mistral.svg",
+      "source": "https://mistral.ai/brand/ (symbole M en dégradé de l'en-tête de la page)",
+      "page": "https://mistral.ai/brand/",
+      "regle": "Version en dégradé préférée ; ni recoloration, ni cadre, ni fond coloré.",
+      "retouche": "Le kit (cms.globalaegis.net) est derrière une vérification anti-robot que Helix ne contourne pas : le symbole est recopié de la page de marque elle-même, où Mistral l'affiche en SVG.",
+      "empreintes": {
+        "mistral.svg": "218fc7f6a83a14a75ab6db1182428135a21029063b839b16609bebba75d5d84a"
+      }
+    },
+    "perplexity": {
+      "titre": "Perplexity",
+      "clair": "perplexity.svg",
+      "sombre": "perplexity.sombre.svg",
+      "source": "https://live.standards.site/perplexity/logo (Perplexity_AllLogos_Final.zip, perplexity-icon-dark.svg, perplexity-icon-light.svg)",
+      "page": "https://live.standards.site/perplexity/logo",
+      "regle": "Le symbole s'emploie seul là où le logo complet ne tient pas ; ne pas le remplir ni le tourner ; teinte claire sur fond sombre, sombre sur fond clair.",
+      "empreintes": {
+        "perplexity.svg": "7c5ed66e200d061818e089abf54880946379aefd836df14173d8f87649c12732",
+        "perplexity.sombre.svg": "575f3c7ca1d9f6c075903ca11f07de3ba51a6a76bb948562d156434608935bed"
+      }
+    },
+    "grok": {
+      "titre": "Grok",
+      "clair": "grok.svg",
+      "sombre": "grok.sombre.svg",
+      "source": "https://data.x.ai/logos/SpaceXAI_Grok_Assets.zip (Grok_Logomark_Dark.svg, Grok_Logomark_Light.svg)",
+      "page": "https://x.ai/legal/brand-guidelines",
+      "regle": "Logos exactement tels que fournis, seulement pour désigner SpaceXAI et ses services.",
+      "empreintes": {
+        "grok.svg": "a127a7cd42b0450f7d3827a331b0730aab49fd99c3fe920d172475b9ffc83992",
+        "grok.sombre.svg": "b20648e2f111d7fbc91f58b22d1e76e9885b68a163cb5a1010f7f11bf5840491"
+      }
+    },
+    "xai": {
+      "titre": "xAI",
+      "clair": "xai.svg",
+      "sombre": "xai.sombre.svg",
+      "source": "https://data.x.ai/logos/SpaceXAI_Grok_Assets.zip (spacexai - symbol - black - transparent.svg, spacexai - symbol - white - transparent.svg)",
+      "page": "https://x.ai/legal/brand-guidelines",
+      "regle": "Même charte que Grok ; symbole de SpaceXAI pour le fournisseur « xAI ».",
+      "empreintes": {
+        "xai.svg": "435f412250a243399c6af46c83dbbc720d55e29dc4570fc046d9bec254d998a2",
+        "xai.sombre.svg": "ce4ba444ff916e1f51cde773e69519bd9e5c7477b883a4bc1b7d39306075852f"
+      }
+    },
+    "openrouter": {
+      "titre": "OpenRouter",
+      "clair": "openrouter.svg",
+      "sombre": "openrouter.sombre.svg",
+      "source": "https://openrouter.ai/brand/logos/transparent/glyph/svg/glyph-grape.svg, https://openrouter.ai/brand/logos/transparent/glyph/svg/glyph-volt.svg",
+      "page": "https://openrouter.ai/brand",
+      "regle": "Glyphe pour les petites tailles ; Grape sur fond clair, Volt sur fond sombre ; ne pas étirer, recolorer ni remanier.",
+      "empreintes": {
+        "openrouter.svg": "5b49593d44e6aa41011be377e182cd89e57473f1948e0dfb128f99a92adfc68d",
+        "openrouter.sombre.svg": "0d22462e4f2835a5a5b9000af0a55fc9238e39996100f54706e41ec45b9d1727"
+      }
+    },
+    "kimi": {
+      "titre": "Kimi",
+      "clair": "kimi.svg",
+      "sombre": "kimi.sombre.svg",
+      "source": "https://moonshotai.github.io/Branding-Guide/scenarios/04-k-only/k-only-light.svg, https://moonshotai.github.io/Branding-Guide/scenarios/04-k-only/k-only-dark.svg",
+      "page": "https://moonshotai.github.io/Branding-Guide/",
+      "regle": "Le « K seul » de Moonshot AI, version fond clair et version fond sombre, telles que livrées.",
+      "empreintes": {
+        "kimi.svg": "937616746780d0c7c4bda92820db39f503f6a3e9b7cfebe438a5fb61b62d3991",
+        "kimi.sombre.svg": "3821ae593eebce6940992f56e2fee3f55a08bbbba78713303c23ea714d44c5f9"
+      }
+    },
+    "together": {
+      "titre": "Together AI",
+      "clair": "together.svg",
+      "source": "https://cdn.prod.website-files.com/69654e88dce9154b5f1206dd/69a6dad66e8b98c718262888_together-ai-logo-suite.zip (Color+Black/TogetherAI_Logo_021026_Logo.svg)",
+      "page": "https://www.together.ai/brand",
+      "regle": "Logo en couleur ; le kit livre le même dessin pour fond clair et fond sombre.",
+      "empreintes": {
+        "together.svg": "edf757b7bc10f86da65ba32ee2d02193cf952414aeb7bbbb69daaf9c2c927f80"
+      }
+    }
+  },
+  "neutres": {
+    "slack": "https://slack.com/terms-of-service/slack-brand : la plupart des usages demandent une licence écrite, et la charte interdit de « distribuer ou mettre à disposition » ses logos, ce que ferait un dépôt public.",
+    "openai": "https://openai.com/brand/ : ne pas utiliser le logo sans l'autorisation d'OpenAI (demande à partnercomms@openai.com).",
+    "linkedin": "https://brand.linkedin.com/in-logo : un développeur ne peut employer le logo [in] que comme bouton « Share » ou widget « Follow ».",
+    "facebook": "https://www.meta.com/brand/resources/facebook/logo/ : le téléchargement passe par une case « j'accepte les conditions » qu'il revient à Medhi de cocher ; et https://developers.facebook.com/docs/app-review/resources/logos/ réserve les marques aux usages autorisés par Meta.",
+    "instagram": "Même situation que Facebook (Meta Brand Resource Center).",
+    "meta": "Modèles Llama : le logo de Meta est dans le même centre de marque, derrière la même acceptation de conditions.",
+    "tiktok": "https://developers.tiktok.com/doc/getting-started-design-guidelines : pas de logo TikTok sans autorisation écrite préalable.",
+    "youtube": "https://brand.youtube/youtube-icon/ : hauteur minimale de 100 px en numérique, incompatible avec une ligne de liste de 22 px.",
+    "hubspot": "https://www.hubspot.com/partners/app/branding-guidelines : le logo et le sprocket demandent une approbation préalable.",
+    "intercom": "https://www.intercom.com/legal/trademark-usage : le logo n'est utilisable que dans le cadre d'un programme partenaire.",
+    "asana": "https://asana.com/brand : le symbole ne s'emploie jamais seul, et le logo complet est illisible à 22 px.",
+    "airtable": "https://www.airtable.com/company/trademark-guidelines : seuls deux assemblages icône et nom sont approuvés ; l'icône seule n'en fait pas partie.",
+    "box": "https://www.box.com/legal/trademark : sans accord écrit, un tiers ne peut utiliser aucun logo de Box.",
+    "paypal": "https://newsroom.paypal-corp.com/media-resources : fichiers destinés à la presse ; un développeur doit demander l'accord de developer@paypal.com.",
+    "square": "https://developer.squareup.com/docs/brand-guidelines : seul un assemblage logo et nom en PNG est fourni aux développeurs, illisible à 22 px.",
+    "tavily": "Aucune page de marque officielle trouvée.",
+    "deepseek": "Aucune page de marque ; le seul fichier officiel (https://github.com/deepseek-ai/DeepSeek-V2/blob/main/figures/logo.svg) est l'assemblage baleine et nom, illisible à 22 px.",
+    "qwen": "Aucune page de marque ; le dépôt QwenLM ne publie qu'une image PNG de Qwen-Image.",
+    "gemma": "Logo propre aux modèles Gemma non relevé ; l'icône de Gemini, un autre produit, n'est plus prêtée à Gemma.",
+    "groq": "Aucune page de marque officielle trouvée.",
+    "scaleway": "Aucune page de marque officielle trouvée.",
+    "ovhcloud": "https://www.ovhcloud.com/sites/default/files/external_files/trademark_usage_guidelines_for_contracting-parties-30122024-english.pdf : marques réservées aux parties ayant signé un contrat avec OVHcloud.",
+    "ionos": "https://www.ionos.com/newsroom/download/ : pas de symbole téléchargeable, seulement le nom."
+  }
+}

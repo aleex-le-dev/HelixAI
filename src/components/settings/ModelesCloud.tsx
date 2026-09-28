@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Cloud, ExternalLink, KeyRound, Loader2, Plus, Trash2, TriangleAlert, Users, User } from "lucide-react";
 import { Card } from "@/components/settings/SettingsShell";
+import { LogoMarque } from "@/components/settings/TuileService";
+import { MARQUE_DU_FOURNISSEUR } from "@/components/settings/marquesConnecteurs";
 import { Button } from "@/components/ui/Button";
 import { Field, Input } from "@/components/ui/Field";
 import { InfoBox } from "@/components/ui/InfoBox";
@@ -133,7 +135,7 @@ function LigneCle({ cle, onChange }: { cle: CleModele; onChange: () => void }) {
   return (
     <li className="rounded-2xl border border-border bg-card p-4">
       <div className="flex flex-wrap items-center gap-2">
-        <KeyRound size={16} strokeWidth={1.75} className="text-muted-foreground" />
+        <LogoMarque marque={MARQUE_DU_FOURNISSEUR[cle.fournisseur]} icone={KeyRound} taille={18} />
         <span className="font-medium text-foreground">{cle.nom}</span>
         <Pays pays={cle.pays} />
         <span className="text-xs text-muted-foreground">•••• {cle.fin}</span>
@@ -243,10 +245,13 @@ function AjoutCle({ catalogue, onFini }: { catalogue: Fournisseur[]; onFini: () 
               key={f.id}
               type="button"
               onClick={() => setChoix(f)}
-              className="flex flex-col items-start gap-1 rounded-xl border border-border px-3 py-2.5 text-left transition-colors hover:bg-muted"
+              className="flex items-center gap-3 rounded-xl border border-border px-3 py-2.5 text-left transition-colors hover:bg-muted"
             >
-              <span className="text-sm font-medium text-foreground">{f.nom}</span>
-              {!f.adresseLibre && <Pays pays={f.pays} />}
+              <LogoMarque marque={MARQUE_DU_FOURNISSEUR[f.id]} icone={KeyRound} taille={22} />
+              <span className="flex min-w-0 flex-col items-start gap-1">
+                <span className="text-sm font-medium text-foreground">{f.nom}</span>
+                {!f.adresseLibre && <Pays pays={f.pays} />}
+              </span>
             </button>
           ))}
         </div>
@@ -264,6 +269,7 @@ function AjoutCle({ catalogue, onFini }: { catalogue: Fournisseur[]; onFini: () 
   return (
     <div className="mt-4 space-y-4 border-t border-border pt-4">
       <div className="flex flex-wrap items-center gap-2">
+        <LogoMarque marque={MARQUE_DU_FOURNISSEUR[choix.id]} icone={KeyRound} taille={18} />
         <span className="font-medium text-foreground">{choix.nom}</span>
         {!choix.adresseLibre && <Pays pays={choix.pays} />}
         {choix.cles && (

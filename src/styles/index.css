@@ -205,6 +205,22 @@
     mix-blend-mode: screen;
   }
 
+  /*
+   * Logos des services et des fournisseurs (LogoMarque) : la société livre
+   * souvent un dessin pour fond clair et un autre pour fond sombre (GitHub,
+   * X, Vercel en blanc). Les deux sont posés, le thème en montre un. Pas de
+   * filtre ni d'inversion ici : les chartes interdisent de recolorer un logo.
+   */
+  .marque-sombre {
+    display: none;
+  }
+  :root[data-theme="sombre"] .marque-claire {
+    display: none;
+  }
+  :root[data-theme="sombre"] .marque-sombre {
+    display: block;
+  }
+
   /* Fond en pointillés (ecrans Cowork / Code). */
   .bg-dotted {
     background-image: radial-gradient(

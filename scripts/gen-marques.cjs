@@ -1,120 +1,286 @@
 /*
- * Engendre `src/components/ui/marques.ts` depuis la collection Simple Icons.
+ * Engendre `src/components/ui/marques.ts` depuis les logos officiels rangés
+ * dans `scripts/marques/`.
  *
- *   npm i --no-save simple-icons && node scripts/gen-marques.cjs
+ *   node scripts/gen-marques.cjs           vérifie les empreintes, puis engendre
+ *   node scripts/gen-marques.cjs --noter   réécrit les empreintes (après un relevé)
  *
- * Pourquoi engendrer plutôt que dépendre : la collection pèse une quinzaine de
- * mégaoctets pour trois mille dessins, dont on en utilise quarante. Les tracés
- * sont donc recopiés une fois dans le source, et ce script sert à recommencer
- * proprement quand la liste change.
+ * D'où viennent les fichiers : `scripts/marques/sources.json` donne, pour
+ * chaque marque, l'adresse du fichier officiel, la page de marque de la
+ * société et la règle d'usage retenue. Refaire un relevé, c'est retélécharger
+ * ces fichiers aux mêmes adresses, les poser à la place des anciens, lancer
+ * `--noter`, puis relire le changement à l'écran.
  *
- * Simple Icons est publiée en CC0. Deux marques manquent volontairement à la
- * collection — Slack et OpenAI ont demandé le retrait de leur logo — et
- * quelques autres n'y ont jamais figuré : elles reçoivent une icône neutre,
- * ce qui est aussi plus prudent juridiquement qu'un dessin approximatif.
+ * Jusqu'au 28/09/2026, ce script recopiait les tracés de Simple Icons : une
+ * seule couleur par marque, Gmail et Drive ramenés à un aplat, et rien pour
+ * les sociétés absentes de la collection. On part désormais du fichier que la
+ * société publie, en couleur, et de sa version pour fond sombre quand elle en
+ * livre une.
+ *
+ * Pourquoi un arbre de données plutôt que le SVG brut : un SVG est un document
+ * qui peut porter du script, des liens, des feuilles de style. Injecter le
+ * fichier tel quel (`dangerouslySetInnerHTML`) ferait confiance à chaque kit de
+ * marque. On n'en garde que les éléments de dessin d'une liste fermée, et
+ * les attributs de présentation d'une autre ; le reste fait échouer le script,
+ * pour qu'un kit qui change se voie.
  */
-const { writeFileSync } = require("node:fs");
+const { readFileSync, writeFileSync } = require("node:fs");
+const { createHash } = require("node:crypto");
 const { join } = require("node:path");
 
-let si;
-try {
-  si = require("simple-icons");
-} catch {
-  console.error("simple-icons est absent : `npm i --no-save simple-icons` avant de lancer ce script.");
+const DOSSIER = join(__dirname, "marques");
+const SORTIE = join(__dirname, "..", "src", "components", "ui", "marques.ts");
+const NOTER = process.argv.includes("--noter");
+
+const sources = JSON.parse(readFileSync(join(DOSSIER, "sources.json"), "utf8"));
+
+/* --- Lecture d'un SVG ------------------------------------------------------ */
+
+/** Éléments de dessin admis. Tout autre élément arrête le script. */
+const ELEMENTS = new Set([
+  "svg", "g", "path", "rect", "circle", "ellipse", "polygon", "polyline", "line",
+  "defs", "linearGradient", "radialGradient", "stop", "clipPath", "mask",
+]);
+/** Éléments sans dessin, ignorés avec leur contenu. */
+const IGNORES = new Set(["title", "desc", "metadata"]);
+
+/** Attributs admis, avec leur nom React. */
+const ATTRIBUTS = {
+  d: "d", x: "x", y: "y", x1: "x1", y1: "y1", x2: "x2", y2: "y2", cx: "cx", cy: "cy",
+  r: "r", rx: "rx", ry: "ry", fx: "fx", fy: "fy", width: "width", height: "height",
+  points: "points", transform: "transform", offset: "offset", id: "id",
+  fill: "fill", stroke: "stroke", opacity: "opacity",
+  "fill-rule": "fillRule", "clip-rule": "clipRule", "fill-opacity": "fillOpacity",
+  "stroke-width": "strokeWidth", "stroke-linecap": "strokeLinecap",
+  "stroke-linejoin": "strokeLinejoin", "stroke-miterlimit": "strokeMiterlimit",
+  "stroke-opacity": "strokeOpacity", "stop-color": "stopColor", "stop-opacity": "stopOpacity",
+  "clip-path": "clipPath", mask: "mask",
+  gradientUnits: "gradientUnits", gradientTransform: "gradientTransform",
+  clipPathUnits: "clipPathUnits", maskUnits: "maskUnits",
+};
+/** Attributs sans effet sur le dessin, ignorés. */
+const SANS_EFFET = /^(xmlns(:.*)?|version|xml:space|data-.*|enable-background|role|aria-.*|style|class|xmlns:xlink|preserveAspectRatio|viewBox)$/;
+
+function attributsBruts(texte) {
+  const a = {};
+  for (const m of texte.matchAll(/([A-Za-z_:][-A-Za-z0-9_:.]*)\s*=\s*("([^"]*)"|'([^']*)')/g)) {
+    a[m[1]] = m[3] ?? m[4];
+  }
+  return a;
+}
+
+/** `fill:#fff; stroke-width:2` → { fill: "#fff", "stroke-width": "2" } */
+function declarations(texte) {
+  const d = {};
+  for (const morceau of texte.split(";")) {
+    const i = morceau.indexOf(":");
+    if (i < 0) continue;
+    const nom = morceau.slice(0, i).trim();
+    const valeur = morceau.slice(i + 1).trim();
+    if (nom) d[nom] = valeur;
+  }
+  return d;
+}
+
+/** Règles `.cls-1 { fill: … }` d'une balise <style>, sélecteurs de classe seulement. */
+function reglesDeStyle(css, fichier) {
+  const regles = {};
+  const propre = css.replace(/\/\*[\s\S]*?\*\//g, "");
+  for (const m of propre.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+    const decl = declarations(m[2]);
+    for (const sel of m[1].split(",").map((s) => s.trim()).filter(Boolean)) {
+      if (!/^\.[-A-Za-z0-9_]+$/.test(sel)) throw new Error(`${fichier} : sélecteur CSS non géré « ${sel} »`);
+      regles[sel.slice(1)] = { ...(regles[sel.slice(1)] ?? {}), ...decl };
+    }
+  }
+  return regles;
+}
+
+/** Lit un SVG en arbre `[balise, attributs, enfants]`. */
+function lireSvg(fichier) {
+  const texte = readFileSync(join(DOSSIER, fichier), "utf8")
+    .replace(/<\?xml[\s\S]*?\?>/g, "")
+    .replace(/<!DOCTYPE[\s\S]*?>/gi, "")
+    .replace(/<!--[\s\S]*?-->/g, "");
+
+  // Feuilles de style d'abord : elles s'appliquent partout dans le document.
+  let classes = {};
+  const sansStyle = texte.replace(/<style[^>]*>([\s\S]*?)<\/style>/g, (_, css) => {
+    classes = { ...classes, ...reglesDeStyle(css, fichier) };
+    return "";
+  });
+
+  const racine = { balise: "#", attributs: {}, enfants: [] };
+  const pile = [racine];
+  let ignorer = 0;
+  for (const m of sansStyle.matchAll(/<(\/?)([A-Za-z][-A-Za-z0-9:]*)([^>]*?)(\/?)>/g)) {
+    const [, fermante, balise, reste, auto] = m;
+    if (IGNORES.has(balise)) {
+      if (fermante) ignorer--;
+      else if (!auto) ignorer++;
+      continue;
+    }
+    if (ignorer) continue;
+    if (fermante) {
+      const haut = pile.pop();
+      if (haut.balise !== balise) throw new Error(`${fichier} : </${balise}> ferme <${haut.balise}>`);
+      continue;
+    }
+    if (!ELEMENTS.has(balise)) throw new Error(`${fichier} : élément non admis <${balise}>`);
+    const brut = attributsBruts(reste);
+    // Ordre de priorité du SVG : attribut, puis classe, puis style en ligne.
+    const fusion = { ...brut };
+    for (const c of (brut.class ?? "").split(/\s+/).filter(Boolean)) Object.assign(fusion, classes[c] ?? {});
+    if (brut.style) Object.assign(fusion, declarations(brut.style));
+    const attributs = {};
+    for (const [nom, valeur] of Object.entries(fusion)) {
+      if (nom === "viewBox" && balise === "svg") attributs.viewBox = valeur;
+      else if ((nom === "width" || nom === "height") && balise === "svg") attributs[nom] = valeur;
+      else if (ATTRIBUTS[nom]) attributs[ATTRIBUTS[nom]] = valeur;
+      else if (nom === "href" || nom === "xlink:href") throw new Error(`${fichier} : lien non géré (${nom})`);
+      else if (!SANS_EFFET.test(nom)) throw new Error(`${fichier} : attribut non admis « ${nom} » sur <${balise}>`);
+    }
+    for (const v of Object.values(attributs)) {
+      if (/url\(\s*['"]?(?!#)/.test(v) || /javascript:/i.test(v)) throw new Error(`${fichier} : référence externe « ${v} »`);
+    }
+    const noeud = { balise, attributs, enfants: [] };
+    pile[pile.length - 1].enfants.push(noeud);
+    if (!auto) pile.push(noeud);
+  }
+  if (pile.length !== 1) throw new Error(`${fichier} : balises non refermées`);
+  const svg = racine.enfants[0];
+  if (!svg || svg.balise !== "svg") throw new Error(`${fichier} : pas de <svg> à la racine`);
+  return svg;
+}
+
+/**
+ * Identifiants courts (a, b, c…) : le rendu les préfixe à chaque dessin pour
+ * que deux logos sur la même page ne se volent pas leurs dégradés.
+ */
+function renommerIds(svg) {
+  const table = new Map();
+  const noter = (n) => {
+    if (n.attributs.id) {
+      if (!table.has(n.attributs.id)) table.set(n.attributs.id, String.fromCharCode(97 + table.size));
+      n.attributs.id = table.get(n.attributs.id);
+    }
+    n.enfants.forEach(noter);
+  };
+  const remplacer = (n) => {
+    for (const [k, v] of Object.entries(n.attributs)) {
+      if (k === "id") continue;
+      n.attributs[k] = v.replace(/url\(\s*['"]?#([^'")\s]+)['"]?\s*\)/g, (tout, id) => {
+        if (!table.has(id)) throw new Error(`référence à un identifiant absent : #${id}`);
+        return `url(#${table.get(id)})`;
+      });
+    }
+    n.enfants.forEach(remplacer);
+  };
+  svg.enfants.forEach(noter);
+  svg.enfants.forEach(remplacer);
+  return table.size > 0;
+}
+
+/** Arbre compact : [balise, attributs] ou [balise, attributs, enfants]. */
+function compacter(n) {
+  const a = { ...n.attributs };
+  return n.enfants.length ? [n.balise, a, n.enfants.map(compacter)] : [n.balise, a];
+}
+
+function dessin(fichier, cadre) {
+  const svg = lireSvg(fichier);
+  const viewBox = cadre ?? svg.attributs.viewBox ?? `0 0 ${parseFloat(svg.attributs.width)} ${parseFloat(svg.attributs.height)}`;
+  if (!/^-?[\d.]+(\s+-?[\d.]+){3}$/.test(viewBox.trim())) throw new Error(`${fichier} : viewBox illisible « ${viewBox} »`);
+  // Les attributs du <svg> racine (fill="none", par exemple) passent à un <g>
+  // qui enveloppe le dessin : le rendu pose son propre <svg>.
+  const { viewBox: _v, width: _w, height: _h, ...heritage } = svg.attributs;
+  const ids = renommerIds(svg);
+  const enfants = svg.enfants.map(compacter);
+  const corps = Object.keys(heritage).length ? [["g", heritage, enfants]] : enfants;
+  return { viewBox: viewBox.trim().split(/\s+/).map(Number).join(" "), ids, corps };
+}
+
+/* --- Empreintes ------------------------------------------------------------ */
+
+const empreinte = (f) => createHash("sha256").update(readFileSync(join(DOSSIER, f))).digest("hex");
+let ecarts = 0;
+for (const [cle, m] of Object.entries(sources.marques)) {
+  m.empreintes ??= {};
+  for (const f of [m.clair, m.sombre].filter(Boolean)) {
+    const e = empreinte(f);
+    if (NOTER) m.empreintes[f] = e;
+    else if (m.empreintes[f] !== e) {
+      console.error(`${cle} : ${f} ne correspond plus à l'empreinte notée (${m.empreintes[f] ?? "aucune"}).`);
+      ecarts++;
+    }
+  }
+}
+if (NOTER) {
+  writeFileSync(join(DOSSIER, "sources.json"), JSON.stringify(sources, null, 2) + "\n", "utf8");
+  console.log("Empreintes réécrites dans scripts/marques/sources.json.");
+} else if (ecarts) {
+  console.error("Un fichier officiel a changé : relire le changement, puis relancer avec --noter.");
   process.exit(1);
 }
 
-/** clé Helix → identifiant Simple Icons (sans le préfixe « si »). */
-const MARQUES = {
-  // Services branchés
-  gmail: "gmail",
-  googleAgenda: "googlecalendar",
-  googleDrive: "googledrive",
-  notion: "notion",
-  icloud: "icloud",
-  nextcloud: "nextcloud",
-  proton: "protonmail",
-  ovh: "ovh",
-  infomaniak: "infomaniak",
-  gandi: "gandi",
-  linear: "linear",
-  jira: "jira",
-  asana: "asana",
-  sentry: "sentry",
-  intercom: "intercom",
-  figma: "figma",
-  webflow: "webflow",
-  wix: "wix",
-  vercel: "vercel",
-  square: "square",
-  paypal: "paypal",
-  github: "github",
-  gitlab: "gitlab",
-  box: "box",
-  airtable: "airtable",
-  postgresql: "postgresql",
-  hubspot: "hubspot",
-  brave: "brave",
-  kubernetes: "kubernetes",
-  googleMaps: "googlemaps",
-  // Fournisseurs de modèles
-  anthropic: "anthropic",
-  mistral: "mistralai",
-  deepseek: "deepseek",
-  qwen: "qwen",
-  meta: "meta",
-  gemini: "googlegemini",
-  huggingface: "huggingface",
-  ollama: "ollama",
-  perplexity: "perplexity",
-  moonshot: "moonshotai",
-};
+/* --- Écriture de marques.ts ------------------------------------------------ */
 
 const entrees = [];
-const absents = [];
-for (const [cle, id] of Object.entries(MARQUES)) {
-  // Les clés de Simple Icons sont « siNotion », « siPostgresql » : première
-  // lettre en capitale, le reste tel quel.
-  const nu = id.replace(/[^a-z0-9]/gi, "");
-  const icone = si["si" + nu.charAt(0).toUpperCase() + nu.slice(1)];
-  if (!icone) {
-    absents.push(`${cle} (${id})`);
-    continue;
-  }
-  entrees.push(
-    `  ${cle}: {\n    titre: t(${JSON.stringify(icone.title)}),\n` +
-      `    couleur: "#${icone.hex}",\n    chemin: ${JSON.stringify(icone.path)},\n  },`,
-  );
+for (const [cle, m] of Object.entries(sources.marques)) {
+  const clair = dessin(m.clair, m.cadre);
+  const sombre = m.sombre ? dessin(m.sombre, m.cadreSombre ?? m.cadre) : null;
+  const champs = [
+    `    titre: ${JSON.stringify(m.titre)},`,
+    `    clair: ${JSON.stringify(clair)},`,
+  ];
+  if (sombre) champs.push(`    sombre: ${JSON.stringify(sombre)},`);
+  entrees.push(`  ${cle}: {\n${champs.join("\n")}\n  },`);
 }
 
-const entete = `import { t } from "@/lib/i18n";
-/**
- * Marques des services et des fournisseurs de modèles que Helix sait nommer.
+const neutres = Object.keys(sources.neutres).join(", ");
+
+const entete = `/**
+ * Logos des services et des fournisseurs de modèles, en couleur, tels que les
+ * sociétés les publient.
  *
- * Les tracés viennent de la collection Simple Icons, publiée en CC0 : ils sont
- * recopiés ici une fois pour toutes plutôt qu'importés, pour ne pas embarquer
- * quinze mégaoctets de dépendance au profit de quarante dessins.
+ * D'où ils viennent : chaque dessin est tiré du fichier officiel rangé dans
+ * scripts/marques/, relevé le ${sources.releve.split("-").reverse().join("/")} sur le kit ou la page de marque de la
+ * société (adresse, date et règle d'usage dans scripts/marques/sources.json,
+ * et résumé dans THIRD_PARTY_NOTICES.md, « Marques et logos »). Les logos
+ * appartiennent à leurs sociétés ; Helix ne les montre que pour désigner le
+ * service qu'on branche ou le modèle qu'on choisit.
  *
  * EXCEPTION ASSUMÉE À LA RÈGLE DES TOKENS : ces couleurs sont en hexadécimal.
  * Ce ne sont pas des couleurs d'interface mais des données, celles que ces
- * sociétés imposent pour leur marque. Les rendre aux couleurs de Helix les
- * rendrait méconnaissables, ce qui est le contraire du but.
+ * sociétés imposent pour leur marque, et leurs chartes interdisent de les
+ * changer. Les rendre aux couleurs de Helix les rendrait méconnaissables, et
+ * fautives.
  *
- * Slack et OpenAI sont absents : ces deux sociétés ont demandé le retrait de
- * leur logo des bibliothèques d'icônes. Canva, Firecrawl, Tavily et Exa n'y
- * ont jamais figuré. Tous reçoivent une icône neutre plutôt qu'un dessin
- * approximatif, ce qui est aussi plus prudent juridiquement.
+ * Chaque marque a un dessin « clair » et, quand la société en livre un, un
+ * dessin « sombre » (logo blanc de GitHub, X, Vercel…) : LogoMarque montre
+ * l'un ou l'autre selon le thème. Sans dessin sombre, le même sert aux deux.
  *
- * Un logo sert ici à indiquer une compatibilité, usage courant. Avant une
- * diffusion commerciale large, les chartes de marque méritent d'être relues.
+ * Gardent une icône neutre, parce que leur charte l'exige ou faute de source
+ * officielle : ${neutres}.
+ * Les raisons sont dans scripts/marques/sources.json.
  *
  * Fichier engendré par scripts/gen-marques.cjs, à ne pas modifier à la main.
  */
 
+/** Un nœud de dessin : balise, attributs de présentation, enfants. */
+export type NoeudMarque = [string, Record<string, string>] | [string, Record<string, string>, NoeudMarque[]];
+
+export interface DessinMarque {
+  viewBox: string;
+  /** Le dessin porte des identifiants (dégradés, découpes) à rendre uniques. */
+  ids: boolean;
+  corps: NoeudMarque[];
+}
+
 export interface Marque {
   titre: string;
-  couleur: string;
-  chemin: string;
+  clair: DessinMarque;
+  sombre?: DessinMarque;
 }
 
 export const MARQUES = {
@@ -125,10 +291,5 @@ const pied = `} satisfies Record<string, Marque>;
 export type CleMarque = keyof typeof MARQUES;
 `;
 
-writeFileSync(
-  join(__dirname, "..", "src", "components", "ui", "marques.ts"),
-  entete + entrees.join("\n") + "\n" + pied,
-  "utf8",
-);
-console.log(`marques.ts engendré : ${entrees.length} marques.`);
-if (absents.length) console.log("absents de Simple Icons :", absents.join(", "));
+writeFileSync(SORTIE, entete + entrees.join("\n") + "\n" + pied, "utf8");
+console.log(`marques.ts engendré : ${entrees.length} marques, ${Object.keys(sources.neutres).length} laissées neutres.`);

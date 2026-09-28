@@ -36,6 +36,8 @@ import {
 import { auth } from "@modelcontextprotocol/sdk/client/auth.js";
 import { definirEcriture, estMcpProjet, porteesDemandees, porteesEnTrop } from "./natifs/projetsRegles.ts";
 import { t, tf } from "./langue.ts";
+import { refusLisible } from "./refusOauth.ts";
+import { sansLocalhost } from "./oauthNatif.ts";
 import { definirNomsConnecteurs } from "./approbation.ts";
 
 /**
@@ -100,6 +102,13 @@ export interface EntreeCatalogue {
   oauth?: "auto" | "appli";
   /** Où créer l'application, quand `oauth` vaut « appli ». */
   console?: string;
+  /**
+   * Le service refuse « localhost » dans l'adresse de retour : elle part avec
+   * l'adresse de boucle où la passerelle écoute (127.0.0.1). Zoom : « Do not
+   * use localhost. Register and send numeric loopback literals »
+   * (https://developers.zoom.us/docs/integrations/oauth/, lu le 28/09/2026).
+   */
+  retourSansLocalhost?: true;
   /**
    * Lecture seule par défaut, l'écriture se coche à la connexion, et elle est
    * réservée à l'administrateur (Trello, Monday, ClickUp, Todoist, Calendly,
@@ -430,6 +439,7 @@ export const CATALOGUE: EntreeCatalogue[] = [
     oauth: "appli",
     ecritureAuChoix: true,
     console: "https://marketplace.zoom.us/develop/create",
+    retourSansLocalhost: true,
     documentation: "https://developers.zoom.us/docs/mcp/servers/connect-to-zoom-mcp-servers/",
     secrets: [],
   },
@@ -440,7 +450,8 @@ export const CATALOGUE: EntreeCatalogue[] = [
     categorie: "Développement",
     url: "https://api.githubcopilot.com/mcp/",
     oauth: "appli",
-    console: "https://github.com/settings/developers",
+    // La page exacte de création d'une OAuth App (https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/creating-an-oauth-app, lu le 28/09/2026).
+    console: "https://github.com/settings/applications/new",
     documentation: "https://docs.github.com/apps/oauth-apps",
     secrets: [],
   },
@@ -451,7 +462,7 @@ export const CATALOGUE: EntreeCatalogue[] = [
     categorie: "Travail en équipe",
     url: "https://mcp.slack.com/mcp",
     oauth: "appli",
-    console: "https://api.slack.com/apps",
+    console: "https://api.slack.com/apps?new_app=1",
     // Une application interne à l'espace de travail, ou publiée dans l'annuaire de Slack : les autres n'ont pas droit au serveur MCP.
     documentation: "https://docs.slack.dev/ai/slack-mcp-server/",
     secrets: [],
@@ -1032,7 +1043,22 @@ export interface EtatConnecteurs {
   commandeLibre: boolean;
   /** Issue du dernier retour d'autorisation, par connecteur (`issuesRetour`). */
   issues: Record<string, { ok: boolean; message: string; quand: string }>;
+  /**
+   * L'adresse de retour que « Se connecter » enverra au service, calculée comme
+   * dans `connecter` à partir de l'adresse par laquelle ce navigateur atteint
+   * l'instance (28/09/2026). Jusqu'ici, un service à application déclarée
+   * (GitHub, Asana, Zoom, Slack, Box) ne la donnait que dans le message d'un
+   * premier essai manqué : impossible de créer l'application avant d'avoir
+   * échoué une fois.
+   */
+  retour?: string;
+  /** La même, par service qui la réécrit (Zoom : 127.0.0.1 plutôt que « localhost »). */
+  retours?: Record<string, string>;
 }
+
+/** L'adresse de retour des services distants : la route publique de l'instance, telle que le navigateur l'atteint. */
+export const adresseDeRetour = (base: string, entree?: EntreeCatalogue): string =>
+  `${entree?.retourSansLocalhost ? sansLocalhost(base) : base.replace(/\/+$/, "")}/helix/oauth/retour`;
 
 /**
  * Le catalogue dans la langue de qui le lit.
@@ -1057,7 +1083,7 @@ function catalogueTraduit(): EntreeCatalogue[] {
 }
 
 /** Ce que l'interface affiche. Aucun secret n'y figure, sous aucune forme. */
-export async function etat(): Promise<EtatConnecteurs> {
+export async function etat(base?: string): Promise<EtatConnecteurs> {
   await charger();
   const serveurs = mcpStatus();
 
@@ -1084,6 +1110,12 @@ export async function etat(): Promise<EtatConnecteurs> {
     chiffrementDonnees: chiffrementActif(),
     commandeLibre: commandeLibreAutorisee(),
     issues: Object.fromEntries(issuesRetour),
+    ...(base
+      ? {
+          retour: adresseDeRetour(base),
+          retours: Object.fromEntries(CATALOGUE.filter((e) => e.retourSansLocalhost).map((e) => [e.id, adresseDeRetour(base, e)])),
+        }
+      : {}),
   };
 }
 
@@ -1476,7 +1508,7 @@ export async function connecter(
     };
   }
 
-  const retour = `${base.replace(/\/+$/, "")}/helix/oauth/retour`;
+  const retour = adresseDeRetour(base, entree);
   // Une nouvelle demande : l'issue de la précédente ne vaut plus pour elle.
   issuesRetour.delete(id);
   memoriserRetour(id, retour);
@@ -1587,12 +1619,18 @@ function noterIssue(id: string, r: { ok: boolean; message: string }): void {
 /**
  * Le service a renvoyé une erreur au lieu d'un code (`error=access_denied`…).
  * Un `state` qui n'attend rien ne touche à rien. Le message est celui que la
- * page de retour montre (index.ts), fixe, sans le texte du service.
+ * page de retour montre (index.ts), sans le texte du service : la cause
+ * probable et le remède, lus au seul code du protocole (refusOauth.ts,
+ * 28/09/2026). Rend `null` pour un `state` inconnu.
  */
-export async function refuserAutorisation(etat: string, message: string): Promise<void> {
-  if (!etat) return;
+export async function refuserAutorisation(etat: string, code: string): Promise<string | null> {
+  if (!etat) return null;
   const attendu = await connecteurDuRetour(etat).catch(() => null);
-  if (attendu) noterIssue(attendu.id, { ok: false, message });
+  if (!attendu) return null;
+  const nom = t(entreeCatalogue(attendu.id)?.label ?? attendu.id);
+  const message = refusLisible(code, nom);
+  noterIssue(attendu.id, { ok: false, message });
+  return message;
 }
 
 async function achever(

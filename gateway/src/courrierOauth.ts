@@ -1,6 +1,8 @@
+import http from "node:http";
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
-import { t, tf } from "./langue.ts";
+import { dansLaLangue, langue, t, tf } from "./langue.ts";
 import { requeteHttps } from "./clientHttps.ts";
+import { refusLisible } from "./refusOauth.ts";
 
 /**
  * Brancher une boîte Google ou Microsoft en cliquant, plutôt qu'en remplissant
@@ -208,6 +210,194 @@ export function demarrer(
   });
 
   return { url: `${def.autorisation(tenantDe(reglage))}?${champs.toString()}`, etat };
+}
+
+/**
+ * Le fournisseur a renvoyé une erreur au lieu d'un code (`error=access_denied`…).
+ * L'attente est consommée, et le message dit la cause probable et le remède
+ * (refusOauth.ts, 28/09/2026). `null` pour un `state` inconnu : il ne touche à rien.
+ */
+/** Ce `state` est-il celui d'une autorisation en cours ? Un autre ne doit rien interrompre (retour par la boucle). */
+export function courrierEnAttente(etat: string): boolean {
+  menage();
+  return [...enAttente.keys()].some((k) => memeEtat(k, etat));
+}
+
+export function refuserCourrier(etat: string, code: string): string | null {
+  menage();
+  const cle = [...enAttente.keys()].find((k) => memeEtat(k, etat));
+  const attente = cle ? enAttente.get(cle) : undefined;
+  if (!cle || !attente) return null;
+  enAttente.delete(cle);
+  return refusLisible(code, DEFINITIONS[attente.reglage.fournisseur].nom, { google: attente.reglage.fournisseur === "google" });
+}
+
+/* ------------------------------------------------------------------ */
+/* Adresse de retour, et retour par la boucle locale (Gmail)            */
+/* ------------------------------------------------------------------ */
+
+const BOUCLE = /^(https?:\/\/)(localhost|127\.0\.0\.1|\[::1\])(:\d{1,5})?$/i;
+
+/**
+ * L'adresse de retour envoyée au fournisseur par la route publique de
+ * l'instance (Outlook, et Gmail avec une application « Web », 28/09/2026).
+ *
+ * Microsoft : « the port component is ignored for the purposes of matching a
+ * localhost redirect URI », mais le portail Entra refuse `http://127.0.0.1`
+ * dans la liste des adresses (il faut éditer le manifeste :
+ * https://learn.microsoft.com/en-us/entra/identity-platform/reply-url, lu le
+ * 28/09/2026). Sur la boucle locale, l'adresse part donc sous le nom
+ * « localhost », celui que l'application ouvre (src/lib/instance.ts) : une
+ * page atteinte par 127.0.0.1 (le serveur de développement) demandait sinon
+ * une adresse que l'administrateur ne pouvait pas déclarer.
+ */
+export function retourEnvoye(fournisseur: FournisseurCourrier, base: string): string {
+  const racine = base.replace(/\/+$/, "");
+  const nom = fournisseur === "microsoft" ? racine.replace(BOUCLE, (_t: string, schema: string, _h: string, port?: string) => `${schema}localhost${port ?? ""}`) : racine;
+  return `${nom}/helix/oauth/retour`;
+}
+
+/**
+ * L'adresse à déclarer chez le fournisseur, telle que l'écran la montre.
+ * Microsoft, sur la boucle locale : sans le port, qu'il ignore pour
+ * « localhost » ; une seule ligne vaut alors quel que soit le port de l'instance.
+ */
+export function retourADeclarer(fournisseur: FournisseurCourrier, base: string): string {
+  const envoye = retourEnvoye(fournisseur, base);
+  return fournisseur === "microsoft" ? envoye.replace(/^(http:\/\/localhost):\d{1,5}(?=\/)/i, "$1") : envoye;
+}
+
+/** L'adresse vue par le navigateur est-elle celle de la boucle locale ? */
+export const surLaBoucle = (base: string): boolean => BOUCLE.test(base.replace(/\/+$/, ""));
+
+/**
+ * Gmail par l'application Google de l'instance (28/09/2026).
+ *
+ * Demandé par Medhi (« quand je veux connecter Gmail, il n'y a pas la
+ * redirection vers où je dois aller pour créer l'appli ») : l'écran de Gmail
+ * demandait un identifiant d'application à part, sans dire où le créer, et
+ * une adresse de retour à déclarer. Or l'instance a déjà son application
+ * Google, de type « Application de bureau », celle de Drive et d'Agenda
+ * (clientGoogle.ts). Google n'y demande aucune adresse à déclarer : une
+ * « Desktop app » accepte la boucle locale sur un port quelconque
+ * (https://developers.google.com/identity/protocols/oauth2/native-app et
+ * https://support.google.com/cloud/answer/15549257, lus le 28/09/2026). Gmail
+ * la reprend donc, et revient comme Agenda (agendaGoogle.ts, essayé avec le
+ * compte de Medhi le 26/09/2026) : `http://127.0.0.1:<port>/`, un port ouvert
+ * le temps de l'accord, sur 127.0.0.1 seulement. Une instance sur une autre
+ * machine : on colle l'adresse affichée après l'accord.
+ *
+ * Seule la dernière demande compte : en ouvrir une autre ferme la précédente.
+ * Le `state` et le vérificateur PKCE restent ceux de `demarrer`, en mémoire.
+ */
+export type TraitementRetour = (parametres: URLSearchParams) => Promise<{ ok: boolean; message: string; ignore?: boolean }>;
+
+interface Boucle {
+  serveur: http.Server;
+  minuterie: ReturnType<typeof setTimeout>;
+  traiter: TraitementRetour;
+}
+let boucle: Boucle | null = null;
+let issueBoucle: { ok: boolean; message: string; quand: string } | null = null;
+
+export function fermerBoucle(): void {
+  const b = boucle;
+  if (!b) return;
+  boucle = null;
+  clearTimeout(b.minuterie);
+  b.serveur.close();
+  b.serveur.closeIdleConnections?.();
+  // Plus tard : la réponse qui conclut passe par l'une de ces connexions (mesuré sur Drive).
+  setTimeout(() => b.serveur.closeAllConnections?.(), 2000).unref?.();
+}
+
+/** Une connexion Gmail attend-elle son retour par la boucle ? */
+export const boucleOuverte = (): boolean => boucle !== null;
+
+/** L'issue du dernier retour par la boucle, pour l'écran qui attend (CourrierOauth.tsx). */
+export const issueCourrier = (): { ok: boolean; message: string; quand: string } | null => issueBoucle;
+
+const echapper = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+
+async function traiterRetour(b: Boucle, parametres: URLSearchParams): Promise<{ ok: boolean; message: string }> {
+  const r = await b.traiter(parametres).catch(() => ({ ok: false, message: t("Erreur inattendue."), ignore: false }));
+  // Un `state` inconnu n'annule rien : tout processus du poste pourrait sinon interrompre la demande.
+  if (r.ignore) return r;
+  issueBoucle = { ok: r.ok, message: r.message, quand: new Date().toISOString() };
+  if (boucle === b) fermerBoucle();
+  return r;
+}
+
+/** Ouvre le port de retour sur 127.0.0.1 et rend l'adresse à donner à Google. */
+export async function ouvrirBoucle(traiter: TraitementRetour): Promise<{ ok: true; redirection: string } | { ok: false; message: string }> {
+  fermerBoucle();
+  issueBoucle = null;
+  const langueDemande = langue();
+  let b: Boucle | null = null;
+  const serveur = http.createServer((req, res) => {
+    const adresse = new URL(req.url ?? "/", "http://127.0.0.1");
+    const courant = b;
+    if (req.method !== "GET" || adresse.pathname !== "/" || !courant) {
+      res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" }).end("Introuvable.");
+      return;
+    }
+    // Hors de toute requête de l'application : dans la langue de la demande (langue.ts, `dansLaLangue`).
+    dansLaLangue(langueDemande, () => {
+      void traiterRetour(courant, adresse.searchParams).then((r) => {
+        const titre = r.ok ? t("Votre boîte est branchée") : t("La connexion n'a pas abouti");
+        res.writeHead(r.ok ? 200 : 400, {
+          "Content-Type": "text/html; charset=utf-8",
+          "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'",
+          "Referrer-Policy": "no-referrer",
+          "Cache-Control": "no-store",
+          "X-Content-Type-Options": "nosniff",
+          "X-Frame-Options": "DENY",
+        });
+        res.end(
+          `<!doctype html><html lang="${langue()}"><head><meta charset="utf-8"><title>${echapper(titre)}</title></head>` +
+            '<body style="font-family:system-ui,sans-serif;max-width:34rem;margin:4rem auto;padding:0 1rem;line-height:1.5">' +
+            `<h1 style="font-size:1.25rem">${echapper(titre)}</h1><p>${echapper(r.ok ? `${r.message} ${t("Vous pouvez fermer cet onglet.")}` : r.message)}</p></body></html>`,
+        );
+      });
+    });
+  });
+  serveur.keepAliveTimeout = 1000;
+  const port = await new Promise<number>((ok, ko) => {
+    serveur.once("error", ko);
+    serveur.listen(0, "127.0.0.1", () => {
+      const a = serveur.address();
+      ok(typeof a === "object" && a ? a.port : 0);
+    });
+  }).catch(() => 0);
+  if (!port) {
+    serveur.close();
+    return { ok: false, message: t("Impossible d'ouvrir un port sur la boucle locale pour recevoir la réponse de Google.") };
+  }
+  b = { serveur, traiter, minuterie: setTimeout(() => fermerBoucle(), DUREE_MS) };
+  b.minuterie.unref?.();
+  boucle = b;
+  return { ok: true, redirection: `http://127.0.0.1:${port}/` };
+}
+
+/**
+ * L'instance est sur une autre machine : le navigateur de la personne n'a pas
+ * pu joindre son port de retour, et affiche une erreur à une adresse en
+ * http://127.0.0.1. Elle la colle à l'écran, et l'échange se fait comme si
+ * la page était revenue.
+ */
+export async function collerRetourCourrier(brut: unknown): Promise<{ ok: boolean; message: string }> {
+  const texte = typeof brut === "string" ? brut.trim() : "";
+  if (!boucle) return { ok: false, message: t("Aucune connexion Google n'est en cours pour la boîte. Relancez-la.") };
+  if (!texte || texte.length > 4096) return { ok: false, message: t("Collez l'adresse complète affichée par le navigateur après votre accord.") };
+  let parametres: URLSearchParams;
+  try {
+    const a = new URL(texte);
+    if (a.hostname !== "127.0.0.1" && a.hostname !== "localhost") throw new Error("hôte");
+    parametres = a.searchParams;
+  } catch {
+    return { ok: false, message: t("Cette adresse n'est pas celle du retour de Google : elle commence par http://127.0.0.1.") };
+  }
+  return traiterRetour(boucle, parametres);
 }
 
 /** Comparaison à durée constante de deux `state`. */

@@ -57,8 +57,9 @@
 - **Nothing leaves without a key you plug in.** A conversation goes to a cloud provider only if
   you add that provider's API key and pick one of its models; the model picker says where each
   model runs. Apart from the services you connect yourself (a cloud key, a mailbox, Drive,
-  Slack…), the app goes online only to download what it installs (engine, models, tools) and to
-  look up new versions (of Helix AI on GitHub, of OpenClaw on npm).
+  Slack…) and the Chat's web search when you turn it on (your questions then go to DuckDuckGo),
+  the app goes online only to download what it installs (engine, models, tools) and to look up
+  new versions (of Helix AI on GitHub, of OpenClaw on npm).
 - **Open source, nothing to buy.** AGPL-3.0, no account with us, no telemetry. Each
   organisation installs and runs its own instance.
 - **macOS, Windows and Linux.** One app for the three systems, in English, French, Chinese and Japanese.
@@ -153,6 +154,10 @@ line.
   FLUX.2 klein) and short videos (Wan 2.1 and 2.2), also on the machine.
 - **Compare the models**: every model you can use, placed by capability score against the price
   its publisher charges, so a local model and a cloud one can be weighed on one chart.
+- **Web search in the Chat**: turn it on from the « + » menu and it stays as a chip until you
+  remove it. Questions go to DuckDuckGo, your instance opens the pages found, and the answer
+  lists its sources as links. Pages are read as data, never as instructions; an administrator
+  can switch it off for the whole instance.
 - **Knowledge bases (RAG)**: gather documents, the instance indexes them on the machine, and
   answers cite the passages they use. Everyone only finds the documents they are allowed to see.
 - **Cowork**: an agent that works on your files and, with your approval, on a virtual desktop

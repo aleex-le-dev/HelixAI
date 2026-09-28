@@ -58,9 +58,10 @@
 - **Rien ne sort sans une clé que vous branchez.** Une conversation ne part chez un fournisseur
   cloud que si vous ajoutez sa clé d'API et choisissez l'un de ses modèles ; le sélecteur dit où
   tourne chaque modèle. En dehors des services que vous connectez vous-même (une clé cloud, une
-  boîte mail, Drive, Slack…), l'application ne va sur le réseau que pour télécharger ce qu'elle
-  installe (moteur, modèles, outils) et chercher les nouvelles versions (de Helix AI sur GitHub,
-  d'OpenClaw sur npm).
+  boîte mail, Drive, Slack…) et de la recherche sur le web du Chat quand vous l'activez (vos
+  questions partent alors à DuckDuckGo), l'application ne va sur le réseau que pour télécharger
+  ce qu'elle installe (moteur, modèles, outils) et chercher les nouvelles versions (de Helix AI
+  sur GitHub, d'OpenClaw sur npm).
 - **Open source, rien à acheter.** AGPL-3.0, aucun compte chez nous, aucune télémétrie. Chaque
   organisation installe et fait tourner sa propre instance.
 - **macOS, Windows et Linux.** Une même application pour les trois systèmes, en anglais, en
@@ -164,6 +165,10 @@ commande `helix`.
 - **Comparer les modèles** : chaque modèle que vous pouvez utiliser, placé selon sa note de
   capacités face au prix que demande son éditeur, pour peser sur un même graphique un modèle
   local et un modèle cloud.
+- **Recherche sur le web dans le Chat** : activée depuis le menu « + », elle reste en puce tant
+  que vous ne la retirez pas. Les questions partent à DuckDuckGo, votre instance ouvre les pages
+  trouvées, et la réponse donne ses sources en liens. Une page est lue comme une donnée, jamais
+  comme une consigne ; l'administrateur peut la couper pour toute l'instance.
 - **Bases de connaissances (RAG)** : rassemblez des documents, l'instance les indexe sur la
   machine, et les réponses citent les passages utilisés. Chacun n'y retrouve que les documents
   qu'il a le droit de voir.

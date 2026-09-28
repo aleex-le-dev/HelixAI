@@ -60,6 +60,9 @@
   "_chiffrement": "Ou vit la cle de chiffrement des donnees. trousseau (defaut macOS) = hors du disque de donnees, un disque copie ne suffit pas. fichier = a cote des donnees en -rw-------, plus faible mais seule option sur Linux. false = pas de chiffrement.",
   "chiffrement": "trousseau",
 
+  "_rechercheWeb": "Recherche sur le web du Chat (menu +). Absent ou true : chacun peut l'activer, question par question ; les questions partent alors a DuckDuckGo et l'instance ouvre les pages trouvees. false : l'entree reste visible mais grisee, l'ecran dit que ce profil l'interdit, et l'instance refuse toute demande qui la reclamerait. Ne touche ni aux employes OpenClaw ni a Helix Code.",
+  "rechercheWeb": true,
+
   "_journalCopie": "Second emplacement ou recopier le journal d'audit, ligne a ligne. Le chainage detecte une falsification mais n'empeche pas la suppression du fichier : cette copie est ce qui rend le journal opposable. A configurer pour tout client soumis a un audit.",
   "journalCopie": "/Volumes/Sauvegarde/helix-audit",
   "_journalConservationJours": "Duree de conservation du journal d'audit sur l'instance, en jours (90 par defaut, de 30 a 3650). Au-dela, les journees sont effacees ; la copie journalCopie n'est jamais purgee.",

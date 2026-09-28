@@ -423,7 +423,14 @@ try {
   verifier("le petit modèle, qui n'appelle aucun outil, répond en citant la source que l'instance lui a donnée", Boolean(sourcePetit) && sourcePetit.lue === true && pm.texte.includes(`[${sourcePetit.n}]`), `${pm.texte} ${JSON.stringify(pm.sources)}`);
   verifier("l'écran voit la recherche faite par l'instance comme une étape, avec sa requête", pm.evenements.some((e) => e.type === "tool_start" && e.name === "web__chercher" && e.args?.requete) && pm.evenements.some((e) => e.type === "tool_end" && e.name === "web__chercher" && e.ok), JSON.stringify(pm.evenements.filter((e) => /tool_/.test(e.type))));
 
-  verifier("aucune autre sortie n'a été tentée pendant l'essai (aucun appel au vrai web, aucune résolution de nom hors de l'essai)", tentatives().length === 0, tentatives().join(" "));
+  /*
+   * La relève de la dernière version d'OpenClaw (installationOpenClaw.ts, `versionParue`) part
+   * parfois pendant l'essai, selon ce que l'instance fait au démarrage : elle n'a rien à voir avec
+   * la recherche, et le module préalable l'a arrêtée comme le reste. Toute autre tentative est
+   * une faute de l'essai ou de la recherche.
+   */
+  const autres = tentatives().filter((x) => !/^(https:\/\/registry\.npmjs\.org\/openclaw\/latest|dns:registry\.npmjs\.org)$/.test(x));
+  verifier("la recherche sur le web n'a tenté aucune autre sortie (aucun appel au vrai web, aucune résolution de nom hors de l'essai)", autres.length === 0, autres.join(" "));
 } finally {
   principale.processus.kill();
 }

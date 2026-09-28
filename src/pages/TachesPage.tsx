@@ -35,6 +35,8 @@ import {
   Link2,
   Hourglass,
   CalendarClock,
+  PanelLeftClose,
+  PanelLeftOpen,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { IconButton } from "@/components/ui/IconButton";
@@ -686,6 +688,9 @@ const basculer = <T,>(liste: T[], valeur: T): T[] =>
 /* Panneau de gauche                                                           */
 /* ========================================================================== */
 
+/** Colonne des rubriques réduite à ses icônes, sur ce poste. */
+const CLE_COLONNE_REDUITE = "helix.taches.colonneReduite";
+
 function ProjectsPanel({
   rubrique,
   onRubrique,
@@ -699,13 +704,37 @@ function ProjectsPanel({
   compteurs: Map<string, number>;
   onNouveauProjet: () => void;
 }) {
+  /*
+   * Colonne réduite à ses icônes, pour donner la largeur au tableau et au
+   * Kanban (demandé par Medhi le 28/09/2026). Retenue sur ce poste seulement :
+   * un confort d'affichage, pas une donnée.
+   */
+  const [reduite, setReduite] = useState(() => {
+    try {
+      return localStorage.getItem(CLE_COLONNE_REDUITE) === "1";
+    } catch {
+      return false;
+    }
+  });
+  const basculerColonne = () =>
+    setReduite((r) => {
+      try {
+        localStorage.setItem(CLE_COLONNE_REDUITE, r ? "0" : "1");
+      } catch {
+        /* sans stockage, le choix vaut pour cette visite */
+      }
+      return !r;
+    });
   const entree = (actif: boolean) =>
     cn(
       "flex shrink-0 items-center gap-2.5 whitespace-nowrap rounded-lg px-2.5 py-2 text-sm transition-colors md:w-full",
+      reduite && "md:justify-center md:px-0",
       actif
         ? "bg-muted font-medium text-foreground"
         : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
     );
+  /** Le libellé et le compteur disparaissent en colonne réduite (écran large seulement). */
+  const cache = reduite ? "md:hidden" : "";
 
   return (
     /*
@@ -714,8 +743,22 @@ function ProjectsPanel({
      * laissait que 62 pixels au tableau, et « Aucune tâche » s'écrivait une
      * lettre par ligne.
      */
-    <aside className="flex shrink-0 gap-1 overflow-x-auto border-b border-border px-2 py-2 md:w-[236px] md:flex-col md:overflow-y-auto md:overflow-x-hidden md:border-b-0 md:border-r md:p-0">
-      <nav className="flex gap-1 md:block md:space-y-0.5 md:px-2 md:pt-5">
+    <aside
+      className={cn(
+        "flex shrink-0 gap-1 overflow-x-auto border-b border-border px-2 py-2 md:flex-col md:overflow-y-auto md:overflow-x-hidden md:border-b-0 md:border-r md:p-0 md:transition-[width]",
+        reduite ? "md:w-[56px]" : "md:w-[236px]",
+      )}
+    >
+      <div className={cn("hidden md:flex md:px-2 md:pt-3", reduite ? "md:justify-center" : "md:justify-end")}>
+        <IconButton
+          icon={reduite ? PanelLeftOpen : PanelLeftClose}
+          label={reduite ? t("Déplier la colonne") : t("Réduire la colonne")}
+          size={28}
+          iconSize={16}
+          onClick={basculerColonne}
+        />
+      </div>
+      <nav className="flex gap-1 md:block md:space-y-0.5 md:px-2 md:pt-1">
         {RUBRIQUES.map((r) => {
           const Icon = r.icon;
           const n = compteurs.get(r.id) ?? 0;
@@ -726,10 +769,11 @@ function ProjectsPanel({
               aria-current={rubrique === r.id ? "page" : undefined}
               onClick={() => onRubrique(r.id)}
               className={entree(rubrique === r.id)}
+              title={reduite ? r.label : undefined}
             >
-              <Icon size={16} strokeWidth={1.75} />
-              <span className="min-w-0 flex-1 truncate text-left">{r.label}</span>
-              {n > 0 && <span className="text-xs text-muted-foreground">{n}</span>}
+              <Icon size={16} strokeWidth={1.75} className="shrink-0" />
+              <span className={cn("min-w-0 flex-1 truncate text-left", cache)}>{r.label}</span>
+              {n > 0 && <span className={cn("text-xs text-muted-foreground", cache)}>{n}</span>}
             </button>
           );
         })}
@@ -738,16 +782,17 @@ function ProjectsPanel({
           aria-current={rubrique === RUBRIQUE_PROGRAMMEES ? "page" : undefined}
           onClick={() => onRubrique(RUBRIQUE_PROGRAMMEES)}
           className={entree(rubrique === RUBRIQUE_PROGRAMMEES)}
+          title={reduite ? t("Programmées") : undefined}
         >
-          <CalendarClock size={16} strokeWidth={1.75} />
-          <span className="min-w-0 flex-1 truncate text-left">{t("Programmées")}</span>
+          <CalendarClock size={16} strokeWidth={1.75} className="shrink-0" />
+          <span className={cn("min-w-0 flex-1 truncate text-left", cache)}>{t("Programmées")}</span>
         </button>
       </nav>
 
       {features.projets && (
         <>
-          <div className="flex shrink-0 items-center md:justify-between md:px-4 md:pb-2 md:pt-6">
-            <span className="hidden text-sm font-semibold text-foreground md:inline">{t("Projets")}</span>
+          <div className={cn("flex shrink-0 items-center md:pb-2 md:pt-6", reduite ? "md:justify-center" : "md:justify-between md:px-4")}>
+            <span className={cn("hidden text-sm font-semibold text-foreground", !reduite && "md:inline")}>{t("Projets")}</span>
             <IconButton
               icon={Plus}
               label={t("Nouveau projet")}
@@ -757,7 +802,7 @@ function ProjectsPanel({
             />
           </div>
           {projets.length === 0 ? (
-            <div className="mt-2 hidden flex-col items-center gap-3 px-4 text-center md:flex">
+            <div className={cn("mt-2 hidden flex-col items-center gap-3 px-4 text-center", !reduite && "md:flex")}>
               <Folder size={26} strokeWidth={1.25} className="text-muted-foreground" />
               <p className="text-xs text-muted-foreground">
                 {t("Créez un projet pour organiser vos tâches")}
@@ -778,10 +823,11 @@ function ProjectsPanel({
                     aria-current={rubrique === id ? "page" : undefined}
                     onClick={() => onRubrique(id)}
                     className={entree(rubrique === id)}
+                    title={reduite ? p.name : undefined}
                   >
                     <Folder size={16} strokeWidth={1.75} className="shrink-0" />
-                    <span className="min-w-0 flex-1 truncate text-left">{p.name}</span>
-                    {n > 0 && <span className="text-xs text-muted-foreground">{n}</span>}
+                    <span className={cn("min-w-0 flex-1 truncate text-left", cache)}>{p.name}</span>
+                    {n > 0 && <span className={cn("text-xs text-muted-foreground", cache)}>{n}</span>}
                   </button>
                 );
               })}
@@ -791,7 +837,7 @@ function ProjectsPanel({
             Dit ce que le classement fait et ne fait pas : un projet partagé
             laisse croire que tout ce qu'on y range se partage avec lui.
           */}
-          <p className="mt-auto hidden px-4 pb-4 pt-6 text-[11px] leading-relaxed text-muted-foreground md:block">
+          <p className={cn("mt-auto hidden px-4 pb-4 pt-6 text-[11px] leading-relaxed text-muted-foreground", !reduite && "md:block")}>
             {t("Vos tâches restent personnelles, même rangées dans un projet partagé.")}
           </p>
         </>
@@ -1076,7 +1122,7 @@ function TableView({
                   onClick={() => onOpen(tache)}
                   className="cursor-pointer border-b border-border/60 last:border-0 hover:bg-muted/30"
                 >
-                  <td className="px-4 py-2.5 font-medium text-foreground">
+                  <td className="min-w-[14rem] px-4 py-2.5 font-medium text-foreground">
                     {tache.title}
                     {tache.status === "a-faire" && attenteDe(etatPrerequis(tache, toutes)) && (
                       <span className="mt-0.5 flex items-center gap-1 text-[11px] font-normal text-muted-foreground">
@@ -1101,10 +1147,10 @@ function TableView({
                   <td className="whitespace-nowrap px-4 py-2.5 text-muted-foreground">
                     {echeanceDe(tache) ? <Echeance task={tache} /> : t("Aucune")}
                   </td>
-                  <td className="px-4 py-2.5 text-muted-foreground">
+                  <td className="whitespace-nowrap px-4 py-2.5 text-muted-foreground">
                     {projectName(tache.projectId) ?? t("Sans projet")}
                   </td>
-                  <td className="px-4 py-2.5 text-muted-foreground">{agentName(tache.agentId)}</td>
+                  <td className="whitespace-nowrap px-4 py-2.5 text-muted-foreground">{agentName(tache.agentId)}</td>
                   <td className="px-4 py-2.5 text-muted-foreground">{tache.toolLog?.length ?? 0}</td>
                   <td className="whitespace-nowrap px-4 py-2.5 text-muted-foreground">
                     {dateHeure(tache.updatedAt)}

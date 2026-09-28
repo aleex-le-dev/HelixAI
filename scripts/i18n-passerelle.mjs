@@ -17,7 +17,7 @@ import { fileURLToPath } from "node:url";
 
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), "..");
 const ECRIRE = process.argv.includes("--ecrire");
-const LANGUES = ["en", "zh"];
+const LANGUES = ["en", "zh", "ja"];
 
 const fichiers = execSync(`find "${RACINE}/gateway/src" -name '*.ts'`, { encoding: "utf8" })
   .trim()

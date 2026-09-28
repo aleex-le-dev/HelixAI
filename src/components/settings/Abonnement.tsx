@@ -11,7 +11,7 @@ import {
   pagesPour,
   type Formule,
 } from "@/config/offre";
-import { t, tf } from "@/lib/i18n";
+import { locale, t, tf } from "@/lib/i18n";
 
 /**
  * L'offre d'abonnement.
@@ -119,7 +119,7 @@ function CarteFormule({ formule }: { formule: Formule }) {
   const expert = MODELES_INCLUS.find((m) => m.role === "expert");
   const millionsRapide = rapide ? jetonsInclus(formule, rapide) : 0;
   const millionsExpert = expert ? jetonsInclus(formule, expert) : 0;
-  const nombre = (n: number) => n.toLocaleString("fr-FR");
+  const nombre = (n: number) => n.toLocaleString(locale());
 
   return (
     <div className="flex flex-col rounded-xl border border-border p-4">

@@ -514,7 +514,7 @@ app.on("second-instance", (_evenement, argv) => {
 ipcMain.on("helix:langue", (evenement, code) => {
   // Comme les autres canaux : la fenêtre principale seulement, pas celle d'un bot de réunion qui partage le monde de Google Meet (28/09/2026).
   if (!depuisLaFenetre(evenement)) return;
-  if (!["fr", "en", "zh"].includes(code)) return;
+  if (!["fr", "en", "zh", "ja"].includes(code)) return;
   langueEcran = code;
   zone?.changerLangue(code);
   changerLangueMaj(code);
@@ -1216,7 +1216,7 @@ app.whenReady().then(async () => {
   if (etapeTrousseau && transfererCle(app, safeStorage, etapeTrousseau, { dossier: DONNEES_POSTE })) return;
   {
     const l = app.getLocale().slice(0, 2);
-    if (["fr", "en", "zh"].includes(l) && langueEcran === "en") langueEcran = l;
+    if (["fr", "en", "zh", "ja"].includes(l) && langueEcran === "en") langueEcran = l;
     changerLangueMaj(langueEcran);
   }
   /*

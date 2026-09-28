@@ -109,6 +109,20 @@
   color-scheme: light;
 }
 
+/*
+ * Japonais (28/09/2026) : Satoshi n'a que l'alphabet latin, et les
+ * ideogrammes sont communs au chinois et au japonais. Laisses au repli du
+ * systeme, ils pouvaient prendre une police chinoise, aux formes chinoises.
+ * On nomme donc les polices japonaises de chaque systeme : Hiragino (macOS),
+ * Yu Gothic et Meiryo (Windows), Noto Sans JP (Linux, ou installee a part).
+ * Le latin reste en Satoshi. Seulement quand la page est en japonais
+ * (`lang="ja"`, pose par src/lib/i18n.ts) : le chinois garde sa pile.
+ */
+:root:lang(ja) {
+  --font-body: "Satoshi", "Satoshi Fallback", "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic UI", "Yu Gothic", YuGothic, Meiryo, "Noto Sans JP", "Noto Sans CJK JP", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Satoshi", "Satoshi Fallback", "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic UI", "Yu Gothic", YuGothic, Meiryo, "Noto Sans JP", "Noto Sans CJK JP", ui-sans-serif, system-ui, sans-serif;
+}
+
 /* =============================================================================
  * THEME SOMBRE
  * Aucune couleur n'est ecrite ailleurs que dans ce fichier : basculer le theme

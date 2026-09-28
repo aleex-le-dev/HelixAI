@@ -1333,6 +1333,46 @@ illisibles, rien n'est écrit par-dessus, et l'écran le dit.
 au graphique et son coût dans Mon usage avec la mention du prix publié ; les identifiants que
 chaque fournisseur rend vraiment (seuls ceux de la documentation ont été vus).
 
+### 3.16 Ce qui n'a pas été essayé se dit ici, plus à l'écran ni sur GitHub (28/09/2026)
+
+**Décision de Medhi, 28/09/2026**, à propos de l'encadré des connecteurs natifs (« Pas encore
+essayé avec un vrai compte Google Sheets : ce branchement a été vérifié contre de faux
+serveurs, d'après la documentation du fournisseur. Dites-nous ce qui ne marche pas. ») :
+« Ne précise pas, ça fait amateur qui ne teste pas. On le sait dans la doc du projet ici, mais
+sur GitHub, dans la doc du logiciel et sur le logiciel : pas de truc comme ça. »
+
+La règle, qui remplace la pratique suivie depuis la 0.22.0 :
+
+- **Ce qui n'a pas été essayé se dit dans la documentation interne** : ce fichier (§ 5,
+  « Ce qui reste à essayer sur les postes de Medhi »), SECURITE.md, ARCHITECTURE.md,
+  SCREENS.md et les commentaires du code.
+- **Plus à l'écran, ni dans ce que le public lit** : README (en, fr, zh, ja), notes de
+  version, aide intégrée, parties de docs/GUIDE.md qui s'adressent à l'utilisateur.
+- **L'écran ne promet toujours rien de faux** : on retire la mention, on n'écrit jamais
+  « vérifié » ou « testé » à la place. Ce qui n'a pas été essayé n'est pas présenté comme
+  éprouvé.
+- **Un conseil utile reste**, sans le « pas encore essayé » : « s'il ne se charge pas, un
+  autre modèle adapté à la machine prend le relais ».
+- Les constats restent : « essayé : refusé » pour Google Agenda, les « réessayez », la version
+  d'OpenClaw « éprouvée avec » l'application (elle l'a été).
+
+Retiré ou reformulé le 28/09/2026 : l'encadré des connecteurs natifs ; « Pas encore essayé
+avec {0} » à l'accueil (reste le conseil) ; la mise en garde de l'entraînement (« Ce réglage
+n'a pas encore été essayé de bout en bout… sans garantie ») ; « Pas encore éprouvé(e) de bout
+en bout » du Mac virtuel (reste « si elle ne démarre pas, le message dira où… ») ; le badge
+« pas encore vérifié avec Helix » des modèles d'images et du sélecteur ; la dernière phrase
+de la carte NVIDIA (« Ce chemin n'a pas encore été essayé sur une vraie machine ») ; dans les
+README, la section « ce qui marche / pas encore essayé » et la note sur les captures et
+l'animation simulées ; dans docs/GUIDE.md, les mentions de ce genre côté utilisateur (restent
+les notes de fabrication, comme les fusibles d'Electron à relire) ; CONTRIBUTING.md suit la
+nouvelle règle. Les notes des publications v2026.928.1 et v2026.928.2 ont été préparées sans
+les lignes « Not yet tried » ni la relecture du japonais par un locuteur natif (à éditer sur
+GitHub par Medhi) : ce qui reste à essayer est au § 5. Le
+champ `verifie` des catalogues (modèles, images, entraînement) reste dans la passerelle (les
+replis de l'installation s'en servent) ; il n'est plus affiché, sauf pour choisir de montrer le
+conseil de l'accueil. `npm run securite` (§ 15 quinquies) vérifie qu'aucune phrase des
+catalogues, en français comme dans ses traductions, ne dit plus « pas encore essayé ».
+
 ---
 
 ## 4. Sécurité
@@ -2916,6 +2956,13 @@ Fedora) ; une tâche programmée partie seule à l'heure dite ; la dictée au mi
 l'application ; la vidéo Wan 2.2 sur 32 Go, et la vidéo sous Windows et Linux ; le bot dans
 une vraie réunion ; une mise à jour d'un clic signée entre deux versions sur un poste
 rattaché ; `lms get` sans terminal sur un réseau lent.
+
+**Plus dits à l'écran depuis le 28/09/2026 (§ 3.16), donc tenus ici** : les connecteurs natifs
+avec de vrais comptes (Google Sheets, Slides, YouTube, LinkedIn, Facebook, Instagram, TikTok,
+vérifiés contre de faux serveurs, SECURITE.md § 41) et Google Drive et Slack ; l'entraînement
+sur une vraie carte NVIDIA (Unsloth) ; le Mac virtuel (Lume) de bout en bout ; les modèles
+d'images et de vidéo marqués `verifie: false` (`images.ts`) et les modèles de conversation
+conseillés sans avoir été essayés (`provision.ts`) ; le japonais relu par un locuteur natif.
 
 ### Ce qui reste à faire
 

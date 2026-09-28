@@ -1,6 +1,6 @@
 import { adresseSortanteSure } from "./sortieReseau.ts";
 import { t, tf } from "./langue.ts";
-import { sansBalises } from "./texteBrut.ts";
+import { parcourirBalises, sansBalises } from "./texteBrut.ts";
 
 /**
  * Le web des employés, gardé contre l'injection de consignes.
@@ -191,24 +191,45 @@ const decoder = (s: string) =>
     .replace(/&#x([0-9a-f]+);/gi, (_, n) => String.fromCodePoint(parseInt(n, 16)))
     .replace(/&([a-z#0-9]+);/gi, (m, n) => ENTITES[n.toLowerCase()] ?? m);
 
-/** Le texte lisible d'une page HTML, et ses liens (absolus). */
+const BLOCS_IGNORES = new Set(["script", "style", "noscript", "svg", "template"]);
+const RETOURS = new Set(["br", "/p", "/div", "/li", "/h1", "/h2", "/h3", "/h4", "/h5", "/h6", "/tr", "/section", "/article"]);
+
+/**
+ * Le texte lisible d'une page HTML, et ses liens (absolus).
+ *
+ * En temps linéaire (texteBrut.ts, `parcourirBalises`) depuis la tournée finale
+ * de la 2026.928.6 (SECURITE.md § 53) : les expressions régulières d'avant
+ * coûtaient le carré de la taille sur une page faite de `<` sans `>`, et une
+ * page de 2 Mo arrêtait la passerelle une demi-heure. La page vient de
+ * n'importe qui (une recherche, une adresse collée) : c'était un arrêt de
+ * l'instance à la portée de tout site web.
+ */
 function lirePage(html: string, base: string): { titre: string; texte: string; liens: string[] } {
-  const titre = decoder(/<title[^>]*>([\s\S]*?)<\/title>/i.exec(html)?.[1] ?? "").replace(/\s+/g, " ").trim();
+  const bas = html.replace(/[A-Z]+/g, (m) => m.toLowerCase());
+  const debutTitre = bas.indexOf("<title");
+  const ouvertureTitre = debutTitre < 0 ? -1 : bas.indexOf(">", debutTitre);
+  const finTitre = ouvertureTitre < 0 ? -1 : bas.indexOf("</title>", ouvertureTitre);
+  const titre = finTitre < 0 ? "" : decoder(html.slice(ouvertureTitre + 1, finTitre)).replace(/\s+/g, " ").trim();
   const liens: string[] = [];
-  for (const m of html.matchAll(/<a\b[^>]*href\s*=\s*["']([^"'#][^"']*)["']/gi)) {
-    try {
-      const n = normaliser(new URL(decoder(m[1]!), base).toString());
-      if (n && !liens.includes(n)) liens.push(n);
-    } catch {
-      /* lien illisible : ignoré */
-    }
-    if (liens.length >= 200) break;
-  }
   const texte = decoder(
-    html
-      .replace(/<(script|style|noscript|svg|template)\b[\s\S]*?<\/\1>/gi, " ")
-      .replace(/<(br|\/p|\/div|\/li|\/h[1-6]|\/tr|\/section|\/article)\b[^>]*>/gi, "\n")
-      .replace(/<[^>]+>/g, " "),
+    parcourirBalises(
+      html,
+      (nom, interieur) => {
+        if (nom === "a" && liens.length < 200) {
+          const href = /(?:^|\s)href\s*=\s*["']([^"'#][^"']*)["']/i.exec(interieur)?.[1];
+          if (href) {
+            try {
+              const n = normaliser(new URL(decoder(href), base).toString());
+              if (n && !liens.includes(n)) liens.push(n);
+            } catch {
+              /* lien illisible : ignoré */
+            }
+          }
+        }
+        return RETOURS.has(nom) ? "\n" : " ";
+      },
+      { ignores: BLOCS_IGNORES },
+    ),
   )
     .replace(/[ \t\f\v]+/g, " ")
     .replace(/\n\s*\n+/g, "\n\n")

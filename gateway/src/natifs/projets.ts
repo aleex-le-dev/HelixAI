@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { aChoisi, appelerApi, connecte, ErreurNatif, idsDe, type IdNatif, type ReponseApi } from "../oauthNatif.ts";
 import { definirApercuNatif } from "../approbation.ts";
 import { borner, critereSur, dateFrancaise } from "../clientHttps.ts";
+import { parcourirBalises } from "../texteBrut.ts";
 import { HOTE_MAILCHIMP } from "./projetsRegles.ts";
 
 /**
@@ -161,13 +162,15 @@ const idMailchimp = (v: unknown): string | null => (typeof v === "string" && /^[
 /* ---- Texte d'un message HTML, pour le modèle et pour la carte ---- */
 
 const ENTITES: Record<string, string> = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " " };
+const BLOCS_IGNORES = new Set(["script", "style", "head"]);
+const RETOURS = new Set(["br", "/p", "/div", "/h1", "/h2", "/h3", "/h4", "/h5", "/h6", "/li", "/tr", "/table", "/blockquote"]);
+/*
+ * Balises retirées en temps linéaire (texteBrut.ts, `parcourirBalises`,
+ * SECURITE.md § 53) : les expressions d'avant coûtaient le carré de la taille
+ * d'un contenu fait de `<` sans `>`, et la passerelle n'a qu'un fil.
+ */
 function texteDuHtml(html: string): string {
-  return html
-    .replace(/<(script|style|head)[\s\S]*?<\/\1\s*>/gi, "")
-    .replace(/<!--[\s\S]*?-->/g, "")
-    .replace(/<br\s*\/?>/gi, "\n")
-    .replace(/<\/(p|div|h[1-6]|li|tr|table|blockquote)\s*>/gi, "\n")
-    .replace(/<[^>]*>/g, "")
+  return parcourirBalises(html, (nom) => (RETOURS.has(nom) ? "\n" : ""), { ignores: BLOCS_IGNORES })
     .replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (m, e: string) => {
       if (e[0] === "#") {
         const n = e[1]?.toLowerCase() === "x" ? parseInt(e.slice(2), 16) : Number(e.slice(1));

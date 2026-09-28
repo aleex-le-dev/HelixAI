@@ -572,6 +572,9 @@ class Approbations {
       if (typeof detail.arguments === "string" && typeof detail.commande !== "string" && !(envoi && typeof envoi === "object")) {
         ligne(`  ${T.approbationContenu} :\n${detail.arguments.replace(/^/gm, "    ")}`);
       }
+      // Messageries : comme la carte de l'application, le destinataire et le texte final d'un modèle WhatsApp.
+      if (typeof detail.texteFinal === "string") ligne(`  ${T.approbationTexteFinal} :\n${detail.texteFinal.replace(/^/gm, "    ")}`);
+      if (typeof detail.destinataire === "string") ligne(`  ${T.approbationDestinataire} : ${detail.destinataire}`);
       if (!interactif) {
         ligne(jaune(T.approbationSansTerminal(demande.resume ?? "")));
         return;

@@ -206,6 +206,10 @@ export interface DemandeApprobation {
     arguments?: string;
     /** La tâche programmée qui demande, quand ce n'est pas le Chat ouvert. */
     tache?: string;
+    /** Messageries : à qui part le message, tel que l'instance le connaît (conversation, salon, numéro). */
+    destinataire?: string;
+    /** Modèle WhatsApp : le texte final, rempli, tel qu'il partira. */
+    texteFinal?: string;
   };
   createdAt: number;
 }

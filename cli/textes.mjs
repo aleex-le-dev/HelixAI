@@ -140,6 +140,9 @@ Les actions qui demandent votre accord s'affichent ici et attendent votre répon
   approbationSurface: { chat: "Chat", code: `${NOM} Code`, employe: "employé" },
   approbationCommande: "Commande",
   approbationContenu: "Ce qui partira, en entier",
+  // Messageries (28/09/2026) : le destinataire résolu par l'instance, et le texte final d'un modèle WhatsApp.
+  approbationDestinataire: "Destinataire",
+  approbationTexteFinal: "Texte qui sera envoyé",
   approbationDroits: "Elle s'exécutera sur la machine de l'instance, avec les droits de son compte. Un accord ne vaut que pour cette commande.",
   approbationVeut: (resume) => `L'agent veut ${resume}.`,
   approbationEmploye: (nom) => `(demandé par ${nom})`,

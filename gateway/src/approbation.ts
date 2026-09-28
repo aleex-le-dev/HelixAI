@@ -4,6 +4,8 @@ import { homedir } from "node:os";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { journaliser } from "./audit.ts";
 import { apercuEnvoi, envoiSansAccord, presenterMessage } from "./courrier.ts";
+// Microsoft 365 (28/09/2026) : noms et phrases des cartes, dans un fichier sans autre dépendance que langue.ts.
+import { ECRITURES_MICROSOFT, LECTURES_MICROSOFT, resumeMicrosoft } from "./natifs/microsoftBase.ts";
 
 /**
  * Approbation des actions de l'agent.
@@ -224,6 +226,8 @@ export const LECTURES_NATIVES = new Set([
   // X (ex-Twitter), ajouté le 28/09/2026 sur le même modèle (SECURITE.md § 42).
   "x__profil",
   "x__publications",
+  // Microsoft 365 (Outlook, OneDrive, SharePoint, Excel, Word, Teams), 28/09/2026 (SECURITE.md § 44).
+  ...LECTURES_MICROSOFT,
 ]);
 export const ECRITURES_NATIVES = new Set([
   "sheets__ecrire",
@@ -233,6 +237,8 @@ export const ECRITURES_NATIVES = new Set([
   "instagram__publier",
   "tiktok__publier_video",
   "x__publier",
+  // Brouillon et envoi Outlook, événement, plage Excel, message Teams : une carte à chaque fois, même au niveau « Tout approuver ».
+  ...ECRITURES_MICROSOFT,
 ]);
 
 const TOUJOURS_CONFIRMER = new Set(["agenda__supprimer", "taches__programmer", ...ECRITURES_NATIVES]);
@@ -510,6 +516,8 @@ export function resumerOutil(outil: string, args: Record<string, unknown>): stri
  * le début, la carte le montre tel qu'il sera publié.
  */
 function resumeNatif(outil: string, args: Record<string, unknown>): string | null {
+  const microsoft = resumeMicrosoft(outil, args);
+  if (microsoft) return microsoft;
   const extrait = (v: unknown, n = 120) => {
     const s = typeof v === "string" ? v.trim().replace(/\s+/g, " ") : "";
     return s ? ` « ${s.slice(0, n)}${s.length > n ? " …" : ""} »` : "";

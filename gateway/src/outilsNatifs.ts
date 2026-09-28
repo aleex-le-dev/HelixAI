@@ -22,6 +22,9 @@ import {
   type IdNatif,
   type ReponseApi,
 } from "./oauthNatif.ts";
+// Microsoft 365 (28/09/2026) : ses outils dans leur fichier ; ce module lui passe ses gardes (`sousGarde`, `fichierDuDossier`).
+import { executerMicrosoft, outilsMicrosoft } from "./natifs/microsoft.ts";
+import { SERVICES_MICROSOFT, serviceMicrosoft } from "./natifs/microsoftBase.ts";
 
 /**
  * Les outils de l'agent pour Google Sheets, Google Slides, YouTube, LinkedIn,
@@ -67,6 +70,8 @@ const PREFIXES: Record<string, IdNatif> = {
   instagram__: "instagram",
   tiktok__: "tiktok",
   x__: "x",
+  // Microsoft 365 : six préfixes, une seule connexion (natifs/microsoftBase.ts).
+  ...Object.fromEntries(SERVICES_MICROSOFT.map((s) => [`${s}__`, "microsoft" as const])),
 };
 
 /** Préfixes réservés : aucun connecteur ajouté ne peut les prendre (connecteurs.ts, `IDS_RESERVES`). */
@@ -215,6 +220,7 @@ export function toolsForModel(): Outil[] {
       );
     }
   }
+  outils.push(...outilsMicrosoft());
   return outils;
 }
 
@@ -372,6 +378,7 @@ async function executer(nom: string, args: Record<string, unknown>): Promise<Res
     case "x__publier":
       return xPublier(args);
   }
+  if (serviceMicrosoft(nom)) return executerMicrosoft(nom, args, { sousGarde, fichierDuDossier });
   return refus(`Outil inconnu : ${nom}.`);
 }
 
@@ -856,7 +863,7 @@ async function tiktokVideos(args: Record<string, unknown>): Promise<Resultat> {
  * signature : une image se reconnaît à ses premiers octets, et un fichier
  * renommé en « .jpg » ne part pas.
  */
-interface Genre {
+export interface Genre {
   cle: string;
   service: string;
   /** « la vidéo », « l'image » : dans les messages. */

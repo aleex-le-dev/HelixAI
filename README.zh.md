@@ -24,7 +24,7 @@
   <a href="LICENSE"><img alt="许可证：AGPL-3.0" src="https://img.shields.io/badge/license-AGPL--3.0-blue" /></a>
   <a href="https://github.com/medhiclb/HelixAI/releases/latest"><img alt="最新版本" src="https://img.shields.io/github/v/release/medhiclb/HelixAI?label=release" /></a>
   <img alt="平台：macOS、Windows、Linux" src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey" />
-  <img alt="界面：英语、法语、中文" src="https://img.shields.io/badge/interface-EN%20%C2%B7%20FR%20%C2%B7%20ZH-success" />
+  <img alt="界面：英语、法语、中文、日语" src="https://img.shields.io/badge/interface-EN%20%C2%B7%20FR%20%C2%B7%20ZH%20%C2%B7%20JA-success" />
   <a href="https://github.com/medhiclb/HelixAI/discussions"><img alt="讨论区" src="https://img.shields.io/badge/discussions-welcome-8a63d2" /></a>
 </p>
 
@@ -55,7 +55,7 @@
 - **默认在本地运行。** 模型通过 [LM Studio](https://lmstudio.ai) 的引擎在您的电脑或组织的服务器上运行，Helix AI 会一并安装与机器内存相匹配的模型。系统绝不会替您选择云端模型。
 - **不接入密钥，就不会外传。** 只有当您添加某个云端服务商的 API 密钥并选择其模型时，对话才会发送给该服务商；模型选择器会标明每个模型的运行位置。除您自行连接的服务（云端密钥、邮箱、Drive、Slack 等）之外，应用联网只为下载它要安装的内容（引擎、模型、工具）以及查询新版本（在 GitHub 上查询 Helix AI，在 npm 上查询 OpenClaw）。
 - **开源，无需购买。** AGPL-3.0，无需在我们这里注册账户，无遥测。每个组织自行安装并运行自己的实例。
-- **macOS、Windows 和 Linux。** 三个系统使用同一个应用，界面提供英语、法语和中文。它每天在 macOS 上构建和使用；Windows 和 Linux 安装包刚推出，试用得少得多（见[下文](#已验证的部分与尚未尝试的部分)）。
+- **macOS、Windows 和 Linux。** 三个系统使用同一个应用，界面提供英语、法语、中文和日语。它每天在 macOS 上构建和使用；Windows 和 Linux 安装包刚推出，试用得少得多（见[下文](#已验证的部分与尚未尝试的部分)）。
 - **持续工作的智能体。** 智能体拥有各自的知识库和定时任务，窗口关闭后照常运行，每次运行都会留下报告；任何会修改内容的操作都要等待人工批准，除非您另作决定。
 - **在应用中微调模型。** 用问答示例让小型开源模型学习贵公司的信息，与原始模型对比，然后在 Chat 中使用（Apple 芯片上使用 MLX）。
 - **为团队设计。** 账户、群组、按群组共享的知识库、双重认证、审计日志，数据落盘加密。

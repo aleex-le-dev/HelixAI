@@ -25,7 +25,7 @@
   <a href="LICENSE"><img alt="Licence : AGPL-3.0" src="https://img.shields.io/badge/licence-AGPL--3.0-blue" /></a>
   <a href="https://github.com/medhiclb/HelixAI/releases/latest"><img alt="Dernière version" src="https://img.shields.io/github/v/release/medhiclb/HelixAI?label=version" /></a>
   <img alt="Systèmes : macOS, Windows, Linux" src="https://img.shields.io/badge/syst%C3%A8mes-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey" />
-  <img alt="Interface : anglais, français, chinois" src="https://img.shields.io/badge/interface-EN%20%C2%B7%20FR%20%C2%B7%20ZH-success" />
+  <img alt="Interface : anglais, français, chinois, japonais" src="https://img.shields.io/badge/interface-EN%20%C2%B7%20FR%20%C2%B7%20ZH%20%C2%B7%20JA-success" />
   <a href="https://github.com/medhiclb/HelixAI/discussions"><img alt="Discussions" src="https://img.shields.io/badge/discussions-bienvenue-8a63d2" /></a>
 </p>
 
@@ -65,7 +65,7 @@
 - **Open source, rien à acheter.** AGPL-3.0, aucun compte chez nous, aucune télémétrie. Chaque
   organisation installe et fait tourner sa propre instance.
 - **macOS, Windows et Linux.** Une même application pour les trois systèmes, en anglais, en
-  français et en chinois. Elle est construite et utilisée chaque jour sur macOS ; les paquets
+  français, en chinois et en japonais. Elle est construite et utilisée chaque jour sur macOS ; les paquets
   Windows et Linux sont récents et bien moins éprouvés (voir [plus bas](#ce-qui-marche-et-ce-qui-nest-pas-encore-essayé)).
 - **Des agents qui continuent de travailler.** Des agents avec leurs propres bases de
   connaissances et des missions programmées tournent fenêtre fermée et laissent un compte rendu

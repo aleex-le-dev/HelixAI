@@ -24,7 +24,7 @@
   <a href="LICENSE"><img alt="License: AGPL-3.0" src="https://img.shields.io/badge/license-AGPL--3.0-blue" /></a>
   <a href="https://github.com/medhiclb/HelixAI/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/medhiclb/HelixAI?label=release" /></a>
   <img alt="Platforms: macOS, Windows, Linux" src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey" />
-  <img alt="Interface: English, French, Chinese" src="https://img.shields.io/badge/interface-EN%20%C2%B7%20FR%20%C2%B7%20ZH-success" />
+  <img alt="Interface: English, French, Chinese, Japanese" src="https://img.shields.io/badge/interface-EN%20%C2%B7%20FR%20%C2%B7%20ZH%20%C2%B7%20JA-success" />
   <a href="https://github.com/medhiclb/HelixAI/discussions"><img alt="Discussions" src="https://img.shields.io/badge/discussions-welcome-8a63d2" /></a>
 </p>
 
@@ -62,7 +62,7 @@
   look up new versions (of Helix AI on GitHub, of OpenClaw on npm).
 - **Open source, nothing to buy.** AGPL-3.0, no account with us, no telemetry. Each
   organisation installs and runs its own instance.
-- **macOS, Windows and Linux.** One app for the three systems, in English, French and Chinese.
+- **macOS, Windows and Linux.** One app for the three systems, in English, French, Chinese and Japanese.
   It is built and used every day on macOS; the Windows and Linux packages are new and much less
   tried (see [below](#what-works-and-what-has-not-been-tried-yet)).
 - **Agents that keep working.** Agents with their own knowledge bases and scheduled missions

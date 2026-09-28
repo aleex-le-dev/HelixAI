@@ -1,7 +1,16 @@
-# Helix AI：自分のマシンで動く、自分だけの AI ワークスペース
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/images/logo-dark.png" />
+    <img src="docs/images/logo-light.png" alt="Helix AI のロゴ" height="120" />
+  </picture>
+</p>
+
+<h1 align="center">Helix AI</h1>
 
 <p align="center">
-  <img src="src/assets/helix-logo.png" alt="Helix AI" width="360" />
+  <strong>自分のマシンで動く、自分たちだけの AI ワークスペース。</strong><br />
+  チャット、エージェント、コーディング、ナレッジベース、ファインチューニングを 1 つのオープンソースのデスクトップアプリに。
+  文書と会話を手元に置いておきたいチームと組織のためのアプリです。
 </p>
 
 <p align="center">
@@ -12,63 +21,148 @@
 </p>
 
 <p align="center">
-  <img alt="License: AGPL-3.0" src="https://img.shields.io/badge/license-AGPL--3.0-blue" />
+  <a href="LICENSE"><img alt="License: AGPL-3.0" src="https://img.shields.io/badge/license-AGPL--3.0-blue" /></a>
   <a href="https://github.com/medhiclb/HelixAI/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/medhiclb/HelixAI?label=release" /></a>
   <img alt="Platforms: macOS, Windows, Linux" src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey" />
-  <img alt="Interface: English, French, Chinese, Japanese" src="https://img.shields.io/badge/interface-EN%20%C2%B7%20FR%20%C2%B7%20ZH%20%C2%B7%20JA-success" />
+  <img alt="インターフェース：英語、フランス語、中国語、日本語" src="https://img.shields.io/badge/interface-EN%20%C2%B7%20FR%20%C2%B7%20ZH%20%C2%B7%20JA-success" />
+  <a href="https://github.com/medhiclb/HelixAI/discussions"><img alt="Discussions" src="https://img.shields.io/badge/discussions-welcome-8a63d2" /></a>
+</p>
+
+<p align="center">
+  <a href="https://github.com/medhiclb/HelixAI/releases/download/v2026.928.2/Helix-2026.928.2-arm64.dmg"><img alt="macOS（Apple シリコン）版をダウンロード" src="https://img.shields.io/badge/macOS-Apple%20Silicon-111111?style=for-the-badge&logo=apple&logoColor=white" /></a>
+  <a href="https://github.com/medhiclb/HelixAI/releases/download/v2026.928.2/Helix-Setup-2026.928.2-x64.exe"><img alt="Windows（x64）版をダウンロード" src="https://img.shields.io/badge/Windows-x64-0a5fb4?style=for-the-badge&logo=windows&logoColor=white" /></a>
+  <a href="https://github.com/medhiclb/HelixAI/releases/download/v2026.928.2/helix-plateforme_2026.928.2_amd64.deb"><img alt="Ubuntu、Debian 版（.deb）をダウンロード" src="https://img.shields.io/badge/Ubuntu%20%2F%20Debian-.deb-c2410c?style=for-the-badge&logo=ubuntu&logoColor=white" /></a>
+  <a href="https://github.com/medhiclb/HelixAI/releases/download/v2026.928.2/Helix-2026.928.2.AppImage"><img alt="Linux 版（AppImage）をダウンロード" src="https://img.shields.io/badge/Linux-AppImage-3f3f46?style=for-the-badge&logo=linux&logoColor=white" /></a>
 </p>
 
 <p align="center">
   <a href="#インストール">インストール</a>
+  · <a href="#スクリーンショット">スクリーンショット</a>
+  · <a href="#確認済みのことまだ試していないこと">確認済みのこと</a>
   · <a href="#機能">機能</a>
   · <a href="#ソースからビルド">ソースからビルド</a>
-  · <a href="#ドキュメント">ドキュメント</a>
   · <a href="#コントリビューション">コントリビューション</a>
 </p>
 
-Helix AI は、チャット、エージェント、コーディング、ナレッジベース、ファインチューニングを、
-**お使いのハードウェアで動く** 1 つのデスクトップアプリにまとめたものです。各組織が自分の
-インスタンスをインストールします。会話、文書、モデルは組織のマシンに残り、販売や貸し出しは
-一切ありません。
-
 <p align="center">
-  <img src="docs/images/chat.png" alt="ナレッジベースをもとに回答し、回答の下に出典を示すチャット" width="900" />
+  <img src="docs/images/demo.gif" alt="仕入先の見積書を添付したチャットでの質問。回答には、引用した社内ハンドブックの箇所が添えられています" width="900" />
 </p>
 
-### Helix AI を選ぶ理由
+<p align="center"><sub>添付した仕入先の見積書についての質問に、会社のナレッジベースをもとに出典付きで回答しています。</sub></p>
 
-- **データは手元に残ります。** モデルはお使いのマシンまたは組織のサーバーで動作します。
-  会話がクラウドの AI プロバイダーに届くのは、ご自身でそのプロバイダーの API キーを追加した場合だけです。
-- **設定は不要です。** アプリをインストールすれば、残りはアプリがインストールします。モデルエンジン、
-  ハードウェアに合ったモデル、必要に応じて Python と Node です。エンジン、Python、Node、OpenCode、
-  文書と音声入力のライブラリ、画像・動画・トレーニングのモデルは、バージョンを固定し、チェックサムを
-  検証しています。チャットモデルは LM Studio のカタログから、LM Studio が提供するバージョンで取得し、
-  NVIDIA 向けのトレーニング環境はバージョンのみを固定しています。
-- **1 つのアプリで多くの仕事を。** チャット、ファイルやツールを操作するエージェント、コードエージェント、
-  出典を示すナレッジベース、議事録、独自モデルのファインチューニング。
-- **チームのために。** 同僚をインスタンスに招待し、ナレッジベースをグループごとに共有し、
-  何かを変更する操作はすべて承認し、監査ログを残せます。
-- **オープンソースで、サブスクリプションなし。** AGPL-3.0。私たちのアカウントは不要で、テレメトリーもありません。
+## Helix AI を選ぶ理由
+
+- **既定でローカル。** モデルは [LM Studio](https://lmstudio.ai) のエンジンを通じて、お使いのマシンまたは
+  組織のサーバーで動作します。Helix AI はこのエンジンを、マシンのメモリに合ったモデルとともにインストールします。
+  クラウドのモデルが勝手に選ばれることはありません。
+- **キーを登録しない限り、何も外に出ません。** 会話がクラウドのプロバイダーに送られるのは、そのプロバイダーの
+  API キーを追加し、そのモデルのいずれかを選んだ場合だけです。モデルの選択画面には、各モデルがどこで動作するかが
+  表示されます。ご自身で接続したサービス（クラウドのキー、メールボックス、Drive、Slack など）を除けば、
+  アプリがインターネットに接続するのは、インストールするもの（エンジン、モデル、ツール）のダウンロードと、
+  新しいバージョンの確認（Helix AI は GitHub、OpenClaw は npm）のときだけです。
+- **オープンソースで、購入するものはありません。** AGPL-3.0。私たちのアカウントは不要で、テレメトリーも
+  ありません。各組織が自分のインスタンスをインストールして運用します。
+- **macOS、Windows、Linux。** 3 つのシステムで同じ 1 つのアプリが動き、英語、フランス語、中国語、日本語に
+  対応しています。毎日 macOS でビルドし、使っています。Windows と Linux のパッケージは新しく、試用はずっと
+  少ない状態です（[下記](#確認済みのことまだ試していないこと)を参照）。
+- **働き続けるエージェント。** 独自のナレッジベースとスケジュールされたミッションを持つエージェントは、
+  ウィンドウを閉じていても動作し、実行ごとにレポートを残します。何かを変更する操作は、別の設定にしない限り、
+  人の承認を待ちます。
+- **アプリからファインチューニング。** 質問と回答の例をもとに小さなオープンモデルに会社の事実を学習させ、
+  元のモデルと比較してから、チャットで使えます（Apple シリコンでは MLX）。
+- **チームのために。** アカウント、グループ、グループごとに共有するナレッジベース、2 要素認証、監査ログ、
+  保存データの暗号化。
+
+## スクリーンショット
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/images/chat.png" alt="ナレッジベースをもとに回答するチャット。PDF が添付され、回答の下に引用元が表示されています" /></td>
+    <td width="50%"><img src="docs/images/home.png" alt="ホーム画面。最近のチャットと、マシン上のモデルが表示されています" /></td>
+  </tr>
+  <tr>
+    <td align="center">ナレッジベースと添付ファイルを使ったチャットと、その出典</td>
+    <td align="center">ホーム</td>
+  </tr>
+  <tr>
+    <td><img src="docs/images/code.png" alt="作業中の Helix Code：タスクリスト、ファイルの読み取りと編集、実行中のテストコマンド" /></td>
+    <td><img src="docs/images/agents.png" alt="常時稼働のエージェントと、スケジュールされたミッションのレポート" /></td>
+  </tr>
+  <tr>
+    <td align="center">作業中の Helix Code</td>
+    <td align="center">常時稼働のエージェントとミッションのレポート</td>
+  </tr>
+  <tr>
+    <td><img src="docs/images/compare.png" alt="モデルを比較：Epoch AI の能力スコアと発行元の価格" /></td>
+    <td><img src="docs/images/usage.png" alt="自分の使用量：モデルごとのリクエスト、トークン、費用。ローカルモデルには API 料金がかかりません" /></td>
+  </tr>
+  <tr>
+    <td align="center">モデルを比較（スコアと価格）</td>
+    <td align="center">自分の使用量</td>
+  </tr>
+  <tr>
+    <td><img src="docs/images/knowledge.png" alt="ナレッジベースと、インデックス化された文書" /></td>
+    <td><img src="docs/images/training.png" alt="モデルをトレーニング：質問と回答の例" /></td>
+  </tr>
+  <tr>
+    <td align="center">ナレッジベース</td>
+    <td align="center">モデルをトレーニング</td>
+  </tr>
+</table>
+
+<sub>スクリーンショットとアニメーションは、2026 年 9 月 28 日に使い捨てのデモ用インスタンスで撮影しました。
+会社（パン屋の Maple & Rye）、その人物と文書は架空のもので、モデルエンジンと Mistral のキーは模擬のもの、
+モデルの回答とミッションのレポートは事前に用意したものです。インターフェースはアプリの現在のものです。
+Qwen3.5 9B は Helix AI がインストールするモデルの 1 つで、「モデルを比較」のスコアと価格は実際に公表されている
+ものです。</sub>
+
+## 確認済みのこと、まだ試していないこと
+
+Helix AI は、検証したことを画面に表示します。このページも同じ方針です。日付入りの完全な一覧は
+[PROJET.md](PROJET.md)（フランス語）にあります。
+
+**試して、測定したこと**
+
+- **Apple シリコン搭載の macOS** は、Helix AI を開発し、試している環境です。ローカルモデルでのチャット、
+  出典を示すナレッジベース、添付ファイル、Helix Code、会議は、すべてこの環境で動かしています。
+- **常時稼働のエージェント**（[OpenClaw](https://github.com/openclaw/openclaw) 2026.9.4 上）を最初から最後まで：
+  デプロイ、人ごとに分けられた会話、スケジュールされたミッション、エージェント名を示す承認依頼、レポート、削除。
+- **会議**：29 秒の録音をインポートし、18〜36 秒で文字起こしと要約ができました。
+- **自分の使用量**：トークン数はエンジンが報告する値と一致しています。
+- **Mac でのファインチューニング**（MLX）：測定した実行では、Qwen3 1.7B が 15 個中 15 個の事実を学習しました。
+- **セキュリティ**：`npm run securite` は、バージョンごとに、使い捨てのインスタンスを外部から 400 を超える
+  チェックで攻撃します（[SECURITE.md](SECURITE.md)）。
+- **Linux**：Ubuntu 24.04 のコンテナで `.deb` をインストールし、使用しました（エンジン、モデル、チャット）。
+
+**まだ試していないこと**
+
+- **Windows**：インストーラーはまだ実際の PC で実行していません（インストール、SmartScreen、初回起動、
+  エンジン、チャット）。Windows でのワンクリック更新は、書かれていますが試していません。
+- **実機の Linux**（これまではコンテナのみ）、AppImage、GNOME でのトレイアイコン。
+- **NVIDIA カードでのファインチューニング**（Unsloth、PyTorch CUDA）：ドキュメントをもとに書かれていますが、
+  一度も実行していません。
+- **実際のキーでのクラウドプロバイダー**：7 つのプロバイダーの API を模したものに対して最初から最後まで
+  テストしましたが、それぞれの実際のキーではまだ試していません。
+- **実際のアカウント**：実際の Google Meet での会議ボット、実際のメールやメッセージングアプリ（Telegram、
+  WhatsApp、Discord、Slack）に返信するエージェント、インスタンスに接続したマシンでの 2 つのバージョン間の
+  ワンクリック更新。
+- **署名**：アプリはまだ Apple や Microsoft の署名を受けていません（[SIGNATURE.md](SIGNATURE.md)）。
+
+Windows では提供していないもの：常時稼働のエージェント（Windows では OpenClaw に WSL が必要です）と、
+`helix` コマンドライン。
 
 ## インストール
 
-お使いのシステム用のパッケージを [最新リリース](https://github.com/medhiclb/HelixAI/releases/tag/v2026.928.2) からダウンロードしてください。
+お使いのシステム用のパッケージを
+[v2026.928.2 リリース](https://github.com/medhiclb/HelixAI/releases/tag/v2026.928.2)からダウンロードしてください。
 SHA-256 チェックサム：[`SHA256SUMS.txt`](https://github.com/medhiclb/HelixAI/releases/download/v2026.928.2/SHA256SUMS.txt)。
 
 | プラットフォーム | ダウンロード | インストール方法 |
 |---|---|---|
 | **macOS**（Apple シリコン） | [Helix-2026.928.2-arm64.dmg](https://github.com/medhiclb/HelixAI/releases/download/v2026.928.2/Helix-2026.928.2-arm64.dmg) | ディスクイメージを開き、Helix をアプリケーションフォルダーにドラッグします。初回起動時：「システム設定」›「プライバシーとセキュリティ」›「このまま開く」 |
-| **Windows 10/11**（x64） | [Helix-Setup-2026.928.2-x64.exe](https://github.com/medhiclb/HelixAI/releases/download/v2026.928.2/Helix-Setup-2026.928.2-x64.exe) | インストーラーを実行します（管理者権限は不要）。SmartScreen が表示された場合：「詳細情報」›「実行」 |
+| **Windows 10/11**（x64） | [Helix-Setup-2026.928.2-x64.exe](https://github.com/medhiclb/HelixAI/releases/download/v2026.928.2/Helix-Setup-2026.928.2-x64.exe) | インストーラーを実行します（管理者権限は不要です）。SmartScreen が表示された場合：「詳細情報」›「実行」 |
 | **Ubuntu、Debian**（x64） | [helix-plateforme_2026.928.2_amd64.deb](https://github.com/medhiclb/HelixAI/releases/download/v2026.928.2/helix-plateforme_2026.928.2_amd64.deb) | `sudo apt install ./helix-plateforme_2026.928.2_amd64.deb` |
 | **その他の Linux**（x64） | [Helix-2026.928.2.AppImage](https://github.com/medhiclb/HelixAI/releases/download/v2026.928.2/Helix-2026.928.2.AppImage) | `chmod +x Helix-2026.928.2.AppImage` の後、実行します。Ubuntu 24.04 では `.deb` をおすすめします |
-
-初回起動時に、Helix AI は必要なものをすべて準備します。[LM Studio](https://lmstudio.ai) の
-ヘッドレスエンジン（固定バージョン、チェックサム検証済み）、またはマシンですでに使われている場合は
-LM Studio アプリ、そしてマシンに最も適したモデルです。Python、Node、および Helix Code 用の
-[OpenCode](https://github.com/anomalyco/opencode) は、ない場合にワンクリックでインストールされます
-（固定バージョン、チェックサム検証済み）。新しいバージョンはアプリ内でお知らせします。macOS では
-ワンクリックで、Windows と Linux では新しいパッケージが提示され、以前のものの上にインストールされます。
-データはそのまま残ります。
 
 **macOS ではコマンド 1 つで**（推奨）：ディスクイメージを `SHA256SUMS.txt` とコード署名で確認したうえで、
 Gatekeeper の確認なしにアプリがインストールされます。
@@ -77,14 +171,18 @@ Gatekeeper の確認なしにアプリがインストールされます。
 curl -fsSL https://raw.githubusercontent.com/medhiclb/HelixAI/main/scripts/installer-macos.sh | sh
 ```
 
-アプリはまだ Apple や Microsoft の署名を受けていません。macOS では、アプリが公証されるまで、
-新しいバージョンのたびに一度、Helix がキーチェーンの項目（「Helix Safe Storage」）にアクセスする許可を
-求められます。「常に許可」を選んでください。Windows 11 では、スマート アプリ コントロールが有効な場合、
-署名のないアプリはブロックされ、そのまま実行する選択肢も表示されません。
+初回起動時に、Helix AI は必要なものを準備します。LM Studio のヘッドレスエンジン（固定バージョン、
+チェックサム検証済み）、またはマシンですでに使われている場合は LM Studio アプリ、そしてマシンに最も適した
+モデルです。メモリは 16 GB を推奨します。それより小さいマシンでは、より軽いモデルが選ばれます。Python、Node、
+および Helix Code 用の [OpenCode](https://github.com/anomalyco/opencode) は、ない場合にワンクリックで
+インストールされます（固定バージョン、チェックサム検証済み）。チャットモデルは LM Studio のカタログから、
+LM Studio が提供するバージョンで取得します。
 
-ソースからビルドするには：`npm install`、`npm run build` の後、`npm run package`（macOS）、
-`npx electron-builder --win nsis --x64`（Windows）、または
-`npx electron-builder --linux AppImage deb --x64`（Linux）。
+新しいバージョンはアプリ内でお知らせします。macOS ではワンクリックで更新できます。Windows と Linux では
+新しいパッケージが提示され、以前のものの上にインストールされます。データはそのまま残ります。アプリが公証される
+までは、新しいバージョンのたびに一度、macOS が Helix にキーチェーンの項目（「Helix Safe Storage」）への
+アクセスを許可するか確認します。「常に許可」を選んでください。Windows 11 では、スマート アプリ コントロールが
+有効な場合、署名のないアプリはブロックされ、そのまま実行する選択肢も表示されません。
 
 ## 機能
 
@@ -92,69 +190,41 @@ curl -fsSL https://raw.githubusercontent.com/medhiclb/HelixAI/main/scripts/insta
   ワークステーションまで、メモリに収まる最も評価の高いオープンモデル（Apache 2.0 または MIT）を
   インストールし、動かせるほかのモデルも提案します。カタログには Qwen、Mistral（Magistral、Ministral）、
   OpenAI gpt-oss、Z.ai GLM、IBM Granite、Ai2 OLMo、Meta、DeepSeek が含まれます。クラウドモデルは
-  ご自身の API キーで使えます。
-  添付ファイル、音声入力（Whisper、マシン上）、画像生成（Z-Image Turbo、FLUX.2 klein）、短い
-  **動画**（Wan 2.1 と 2.2）も、すべてマシン上で動作します。
-- **ナレッジベース（RAG）**：文書をまとめると、インスタンスがマシン上でインデックス化し、回答では
-  使った箇所が引用されます。各人が見つけられるのは、閲覧が許可された文書だけです。
+  ご自身の API キーで使えます。添付ファイル、音声入力（Whisper、マシン上）、画像生成（Z-Image Turbo、
+  FLUX.2 klein）、短い動画（Wan 2.1 と 2.2）も、マシン上で動作します。
+- **モデルを比較**：使えるすべてのモデルを、能力スコアと発行元の価格で配置します。ローカルモデルとクラウドの
+  モデルを 1 つのグラフで比べられます。
+- **ナレッジベース（RAG）**：文書をまとめると、インスタンスがマシン上でインデックス化し、回答では使った箇所が
+  引用されます。各人が見つけられるのは、閲覧が許可された文書だけです。
 - **Cowork**：ファイルに対して、またあなたの承認のもとで仮想デスクトップ（LibreOffice、ブラウザー）上で
   作業し、Word、Excel、PowerPoint、PDF の文書を作成するエージェント。
-- **Helix Code**：プロジェクトフォルダーで動くコードエージェント（OpenCode ベース）。**VS Code**
-  （拡張機能を同梱）でも、**`helix` コマンドライン**でターミナルからも使えます。
+- **Helix Code**：プロジェクトフォルダーで動くコードエージェント（OpenCode ベース）。タスク、コマンド、
+  編集したファイルをリアルタイムで表示するパネル付きです。**VS Code**（拡張機能を同梱）でも、
+  **`helix` コマンドライン**でターミナルからも使えます。
 - **コネクタ**：メール、Google カレンダー（読み書き）、Google ドライブ、Slack、Notion、MCP サーバー。
   すべて**承認の仕組み**を経由し、何かを変更する操作はあなたの了承なしには行われません。
 - **スケジュールタスク**：指示と頻度（毎日、月曜日から金曜日、週または月の特定の日）を設定すると、
-  ウィンドウを閉じていても、選んだエージェントがあなたのツールで実行します。「タスク」で作成するか、
-  チャットで依頼して作成できます。
-- **常時稼働のエージェント**：スケジュールされたミッション、受信メールやメッセージングへの返信を、
-  それぞれのナレッジベースと写真とともに。受信したメールは権限を減らして処理され、Web では
+  ウィンドウを閉じていても、選んだエージェントがあなたのツールで実行します。
+- **常時稼働のエージェント**：スケジュールされたミッション、受信メールやメッセージングアプリへの返信を、
+  それぞれのナレッジベースと写真とともに。受信したメールは権限を減らして処理され、Web では、エージェントは
   すでに見たアドレスしか開きません。
-- **モデルのトレーニング**：例をもとに、小さなオープンモデルに会社の事実を学習させ、元のモデルと比較してから
-  LM Studio にインストールします（Apple シリコンでは MLX、NVIDIA カードでは Unsloth）。
+- **モデルをトレーニング**：例、トレーニング、元のモデルとの比較、そして LM Studio へのインストール
+  （Apple シリコンでは MLX、NVIDIA カードでは Unsloth。後者はまだ試していません）。
+- **自分の使用量**：モデルごとのリクエストとトークンを、各エンジンの応答から読み取ります。ローカルモデルには
+  API 料金がかからず、クラウドのモデルは、ご自身の料金またはプロバイダーが公表している日付入りの価格で
+  計算されます。
 - **開発者 API**：インスタンスの OpenAI 互換 API（`/v1/models`、`/v1/chat/completions`、ナレッジベースを含む）
-  のための個人用 API キー。あなたの名前で動作し、それ以上のことはできません。ほかのルートも、
-  インスタンスが実行するツールも使えず、いつでもすぐに取り消せます。
+  のための個人用 API キー。あなたの名前で動作し、それ以上のことはできず、いつでもすぐに取り消せます。
 - **会議**：録音またはインポート、マシン上での文字起こしと議事録、会議ボット。
 - **インポート**：ChatGPT、Claude、Claude Code、Codex、Cursor の履歴を引き継ぎます。
 - **チーム**：アカウント、グループ、共有、2 要素認証、監査ログ、GDPR エクスポート、保存データの暗号化。
-  新しいバージョンはアプリ内でお知らせします。macOS ではワンクリックで、発行元の署名がある場合だけ
-  インストールされます。Windows と Linux では新しいパッケージが提示されます。
 - **ホワイトラベル**：製品名、ロゴ、色は 1 つの設定ファイルで決まります。
-
-<table>
-  <tr>
-    <td><img src="docs/images/knowledge.png" alt="「ファイル」のナレッジベース" /></td>
-    <td><img src="docs/images/training.png" alt="モデルのトレーニング：例" /></td>
-  </tr>
-  <tr>
-    <td align="center">ナレッジベース</td>
-    <td align="center">モデルのトレーニング</td>
-  </tr>
-  <tr>
-    <td><img src="docs/images/home.png" alt="ホーム画面" /></td>
-    <td><img src="docs/images/code.png" alt="Helix Code" /></td>
-  </tr>
-  <tr>
-    <td align="center">ホーム</td>
-    <td align="center">Helix Code</td>
-  </tr>
-</table>
 
 ## ソースからビルド
 
-### 前提条件
-
-- macOS（Apple シリコン）、Windows 10/11、または Linux（x64）の開発用マシン。Windows と Linux の
-  パッケージは Mac からもビルドできます
-- Node.js 22.18 以降と npm（ビルドと開発にのみ必要です。ゲートウェイは TypeScript を直接実行し、
-  インストールされたアプリには Node も Python も不要です）
-
-事前にインストールしておくものはほかにありません。初回起動時に、Helix AI は
-[LM Studio](https://lmstudio.ai) のヘッドレスエンジン（またはすでに使われている場合は LM Studio アプリ）と、
-マシンに合ったモデルをインストールします。メモリは 16 GB を推奨します。それより小さいマシンでは、
-Helix AI がより軽いモデルを選びます。
-
-### 実行
+前提条件：macOS（Apple シリコン）、Windows 10/11、または Linux（x64）、Node.js 22.18 以降と npm。
+Node が必要なのはビルドと開発のときだけです。ゲートウェイは TypeScript を直接実行し、インストールされた
+アプリには Node も Python も不要です。
 
 ```bash
 git clone https://github.com/medhiclb/HelixAI
@@ -167,8 +237,6 @@ npm run app
 ゲートウェイを起動します。Web インターフェースだけを使う場合は、2 つのターミナルで `npm run gateway` と
 `npm run dev` を実行します。
 
-### パッケージ化と確認
-
 ```bash
 npm run package      # macOS：release/ に .dmg と .zip
 npx electron-builder --win nsis --x64            # Windows インストーラー（npm run build の後）
@@ -177,13 +245,12 @@ npm run typecheck    # インターフェースとゲートウェイ
 npm run securite     # 使い捨てのインスタンスに対するセキュリティチェック
 ```
 
-署名と公証の準備はできており、Apple の証明書を待つだけです：
-[SIGNATURE.md](SIGNATURE.md) を参照してください。
+署名と公証の準備はできており、Apple の証明書を待つだけです。[SIGNATURE.md](SIGNATURE.md) を参照してください。
 
-## コマンドライン
+### コマンドライン
 
-デスクトップアプリには `helix` コマンドが付属しています。**「設定」>「アプリのインストール」> CLI**
-で設定してから、次のように使います：
+デスクトップアプリには `helix` コマンドが付属しています。**「設定」›「アプリのインストール」› CLI** で
+設定してから、次のように使います。
 
 ```bash
 helix connexion          # インスタンスのアカウントで一度ログイン
@@ -192,29 +259,24 @@ helix chat --outils      # コネクタ付きで、承認の仕組みを経由�
 helix code               # 現在のフォルダーでコードエージェント
 ```
 
-## ドキュメント
+### ドキュメント
 
-技術ドキュメントはフランス語で書かれています。
-
-- [docs/GUIDE.md](docs/GUIDE.md)：技術ガイド全体（ゲートウェイ、ルート、コネクタ、デプロイ、リブランディング）
-- [ARCHITECTURE.md](ARCHITECTURE.md)：アーキテクチャと設計判断の記録
-- [SECURITE.md](SECURITE.md)：セキュリティモデルとすべてのチェック
-- [SCREENS.md](SCREENS.md)：すべての画面と、それぞれが実際に行うこと
-- [PROJET.md](PROJET.md)：意図、決定事項、現在の状態、残っている作業
-
-## コミュニティ
-
-- 質問やアイデア：[Discussions](https://github.com/medhiclb/HelixAI/discussions)
-- バグや機能の要望：[Issues](https://github.com/medhiclb/HelixAI/issues)
-- アプリからバグを報告：「設定」›「問題を報告」（または「ヘルプ」）。入力済みの Issue またはメールが開くので、
-  ご自身で確認して送信してください
-- セキュリティ上の脆弱性：非公開で報告してください。[SECURITY.md](SECURITY.md) を参照してください
-- [行動規範](CODE_OF_CONDUCT.md)
+技術ドキュメントはフランス語で書かれています。[docs/GUIDE.md](docs/GUIDE.md)（ゲートウェイ、ルート、
+コネクタ、デプロイ、リブランディング）、[ARCHITECTURE.md](ARCHITECTURE.md)、[SECURITE.md](SECURITE.md)、
+[SCREENS.md](SCREENS.md)（すべての画面と、それぞれが実際に行うこと）、[PROJET.md](PROJET.md)（意図、
+決定事項、現在の状態）。
 
 ## コントリビューション
 
-コントリビューションを歓迎します。最初のプルリクエストの前に、[CONTRIBUTING.md](CONTRIBUTING.md) を読み、
-[CLA](CLA.md) に署名してください。
+誤字の修正から新しいコネクタまで、コントリビューションを歓迎します。
+
+- [CONTRIBUTING.md](CONTRIBUTING.md) をお読みいただき、最初のプルリクエストの前に [CLA](CLA.md) に署名して
+  ください。
+- 質問やアイデア：[Discussions](https://github.com/medhiclb/HelixAI/discussions)。
+- バグや機能の要望：[Issues](https://github.com/medhiclb/HelixAI/issues)、またはアプリの「設定」›「問題を報告」から。
+  Issue またはメールが用意されるので、ご自身で確認して送信してください。
+- セキュリティ上の脆弱性：非公開で報告してください。[SECURITY.md](SECURITY.md) を参照してください。
+- [行動規範](CODE_OF_CONDUCT.md)。
 
 ## ライセンス
 
@@ -227,6 +289,11 @@ helix code               # 現在のフォルダーでコードエージェン�
 ホストする前に、[PROJET.md § 3.9](PROJET.md) をお読みください。
 
 ## 謝辞
+
+「モデルを比較」のモデルのスコアは **Epoch AI** の
+[Capabilities & benchmarking](https://epoch.ai/benchmarks/use-this-data)（Epoch Capabilities Index）によるもので、
+[CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) の下で提供され、2026 年 9 月 27 日に取得しました。
+価格は各発行元の料金ページから、同じ日に記録したものです。
 
 多くのオープンソースの成果をもとに作られています。その一部：
 [OpenCode](https://github.com/anomalyco/opencode)、

@@ -371,6 +371,8 @@ const ROUTES = [
   ["GET", "/helix/codex"], ["POST", "/helix/codex/connexion"], ["POST", "/helix/codex/tache"], ["POST", "/helix/codex/arreter"],
   // Ajoutées le 28/09/2026 : Sheets, Slides, YouTube et réseaux sociaux (oauthNatif.ts, section 15 bis).
   ["GET", "/helix/natifs"], ["POST", "/helix/natifs/application"], ["POST", "/helix/natifs/connecter"], ["POST", "/helix/natifs/code"], ["POST", "/helix/natifs/oublier"],
+  // Ajoutées le 28/09/2026 : commerce et relation client (natifs/commerce.ts, section 16 quinquies).
+  ["GET", "/helix/commerce"], ["POST", "/helix/commerce/enregistrer"], ["POST", "/helix/commerce/connecter"], ["POST", "/helix/commerce/oublier"],
 ];
 for (const [methode, chemin] of ROUTES) {
   const r = await appel(chemin, { method: methode, headers: { "Content-Type": "application/json" }, body: methode === "POST" ? "{}" : undefined });
@@ -6102,6 +6104,86 @@ console.log("\n15 septies. Tournée de la 2026.928.3 : logos, mentions, X");
   const comparer = readFileSync(join(RACINE, "src", "components", "chat", "ComparerModeles.tsx"), "utf8");
   const bande = comparer.slice(comparer.indexOf("const pointDeBande"), comparer.indexOf("</circle>", comparer.indexOf("const pointDeBande")));
   verifier("Comparer les modèles : dans les colonnes « Sur votre machine » et « Cloud, prix non relevé », les noms s'écrivent à droite des points (centrés au-dessus, un nom descendu tombait sur le point suivant)", /x=\{cx \+ 12\}/.test(bande) && /textAnchor="start"/.test(bande) && /Math\.max\(py \+ 4, precedent \+ 14\)/.test(comparer), "noms centrés sur les points");
+}
+
+/*
+ * Commerce et relation client, 28/09/2026 (SECURITE.md § 47) : Stripe,
+ * Shopify, WooCommerce, Salesforce, Pipedrive, Zendesk
+ * (gateway/src/natifs/commerce.ts). Les pièces seules d'abord : la barrière,
+ * les portées, ce que le transport laisse partir (Stripe : GET seulement),
+ * les adresses rendues ou saisies, l'échappement SOQL, le journal ; aucune ne
+ * lit ni n'écrit le magasin. Puis, de bout en bout, scripts/essai-commerce.mjs
+ * (faux services, passerelle jetable), repris sous « commerce : ».
+ */
+console.log("\n16 quinquies. Commerce et relation client");
+{
+  const { pathToFileURL: versUrl } = await import("node:url");
+  const c = await import(versUrl(join(RACINE, "gateway", "src", "natifs", "commerce.ts")).href);
+  const ap = await import(versUrl(join(RACINE, "gateway", "src", "approbation.ts")).href);
+  verifier("commerce : lire ne demande rien au niveau « Demander avant de modifier »", c.LECTURES_COMMERCE.length === 15 && c.LECTURES_COMMERCE.every((o) => !ap.modifie(o) && !ap.demandeToujours(o)), c.LECTURES_COMMERCE.filter((o) => ap.modifie(o)).join(", "));
+  verifier("commerce : une note Salesforce ou Pipedrive, une réponse Zendesk demandent une carte à chaque fois, à tout niveau", JSON.stringify(c.ECRITURES_COMMERCE) === JSON.stringify(["salesforce__noter", "pipedrive__noter", "zendesk__repondre"]) && c.ECRITURES_COMMERCE.every((o) => ap.modifie(o) && ap.demandeToujours(o)), c.ECRITURES_COMMERCE.join(", "));
+  verifier("commerce : aucun outil de Stripe, Shopify ni WooCommerce n'écrit ; un outil inconnu de ces préfixes est une modification", !c.ECRITURES_COMMERCE.some((o) => /^(stripe|shopify|woocommerce)__/.test(o)) && ["stripe__rembourser", "stripe__payer", "shopify__annuler", "zendesk__supprimer"].every((o) => ap.modifie(o)), "laissez-passer");
+  const carte = ap.resumerOutil("zendesk__repondre", { ticket: 42, texte: "Nous renvoyons le colis.", publique: true });
+  const note = ap.resumerOutil("salesforce__noter", { fiche: "003000000000001AAA", titre: "Appel", texte: "Rappeler lundi" });
+  verifier("commerce : la carte dit où et quoi, qu'une réponse publique part au client, et qu'elle ne se reprend pas", /ticket Zendesk n° 42/.test(carte) && /réponse publique/.test(carte) && /Nous renvoyons le colis/.test(carte) && /ne se reprend pas/.test(carte) && /003000000000001AAA/.test(note) && /Rappeler lundi/.test(note), `${carte} | ${note}`);
+  const d = c.DEFINITIONS;
+  verifier("commerce : portées au plus juste (Shopify read_* ; Zendesk tickets:read users:read, et tickets:write seulement si coché ; Salesforce api refresh_token ; Pipedrive read, full seulement si coché)", JSON.stringify(d.shopify.lecture) === JSON.stringify(["read_orders", "read_products", "read_inventory"]) && d.shopify.ecriture === null && JSON.stringify(d.zendesk.lecture) === JSON.stringify(["tickets:read", "users:read"]) && JSON.stringify(d.zendesk.ecriture) === JSON.stringify(["tickets:write"]) && JSON.stringify(d.salesforce.lecture) === JSON.stringify(["api", "refresh_token"]) && JSON.stringify(d.pipedrive.lecture) === JSON.stringify(["base", "deals:read", "contacts:read"]) && d.stripe.ecriture === null && d.woocommerce.ecriture === null, JSON.stringify(Object.values(d).map((x) => [x.id, x.lecture, x.ecriture])));
+  verifier("commerce : PKCE pour Salesforce et Zendesk", d.salesforce.pkce && d.zendesk.pkce, "sans PKCE");
+  // Ce que le transport laisse partir : vérifié avant toute connexion, donc sans réseau ici.
+  const refusAvantEnvoi = async (id, demande) => {
+    try {
+      await c.envoyer(id, demande);
+      return "parti";
+    } catch (e) {
+      return /non permise|non autorisé/.test(e.message) ? "refusé" : `autre : ${e.message}`;
+    }
+  };
+  const stripe = await Promise.all(
+    [["POST", "/v1/refunds"], ["POST", "/v1/payouts"], ["POST", "/v1/transfers"], ["POST", "/v1/payment_intents/pi_1/capture"], ["DELETE", "/v1/subscriptions/sub_1"], ["PATCH", "/v1/customers/cus_1"], ["GET", "/v1/refunds"], ["GET", "/v1/balance"]].map(([methode, chemin]) => refusAvantEnvoi("stripe", { methode, hote: "api.stripe.com", chemin })),
+  );
+  verifier("Stripe : remboursement, virement, transfert, capture, résiliation, modification, et lectures hors des quatre ressources : refusés avant toute connexion", stripe.every((x) => x === "refusé"), stripe.join(","));
+  verifier("Stripe : le transport n'a que des lignes GET", c.pourEssais.PERMIS.stripe.every(([m]) => m === "GET"), JSON.stringify(c.pourEssais.PERMIS.stripe));
+  verifier("Shopify : les requêtes GraphQL permises sont des lectures (aucune « mutation »)", [...c.pourEssais.REQUETES_SHOPIFY].every((q) => !/mutation/i.test(q)) && c.pourEssais.REQUETES_SHOPIFY.size === 4, [...c.pourEssais.REQUETES_SHOPIFY].join(" | ").slice(0, 200));
+  const hoteEtranger = await refusAvantEnvoi("stripe", { methode: "GET", hote: "api.exemple-malveillant.test", chemin: "/v1/customers" });
+  verifier("commerce : un hôte hors de la liste du service est refusé avant toute connexion", hoteEtranger === "refusé", hoteEtranger);
+  // Les adresses saisies ou rendues.
+  verifier("Shopify : seul un nom de boutique en .myshopify.com est accepté", c.boutiqueShopify("ma-boutique") === "ma-boutique.myshopify.com" && c.boutiqueShopify("https://ma-boutique.myshopify.com/") === "ma-boutique.myshopify.com" && c.boutiqueShopify("evil.com/x") === null && c.boutiqueShopify("a.b.myshopify.com") === null, c.boutiqueShopify("evil.com/x"));
+  verifier("Zendesk : seul un sous-domaine de zendesk.com est accepté", c.hoteZendesk("societe") === "societe.zendesk.com" && c.hoteZendesk("societe.zendesk.com.evil.test") === null && c.hoteZendesk("x/../y") === null, c.hoteZendesk("societe.zendesk.com.evil.test"));
+  verifier("Salesforce et Pipedrive : l'adresse rendue n'est suivie que si c'est un domaine du service", c.pourEssais.INSTANCE_SALESFORCE.test("orga.my.salesforce.com") && c.pourEssais.INSTANCE_SALESFORCE.test("orga--dev.sandbox.my.salesforce.com") && !c.pourEssais.INSTANCE_SALESFORCE.test("orga.my.salesforce.com.evil.test") && !c.pourEssais.INSTANCE_SALESFORCE.test("evil.test") && c.pourEssais.DOMAINE_PIPEDRIVE.test("societe.pipedrive.com") && !c.pourEssais.DOMAINE_PIPEDRIVE.test("pipedrive.com.evil.test"), "domaine étranger suivi");
+  c.remplacerTransportPourEssais(null, async (nom) => ({ "public.exemple.fr": ["203.0.113.7"], "interne.exemple.fr": ["192.168.1.5"] })[nom] ?? []);
+  const woo = await Promise.all(["http://public.exemple.fr", "https://192.168.1.5", "https://interne.exemple.fr", "https://boutique.local", "https://public.exemple.fr:8443", "https://public.exemple.fr/a;b", "https://public.exemple.fr/shop"].map((a) => c.siteWoo(a)));
+  c.remplacerTransportPourEssais(null, null);
+  verifier("WooCommerce : http, IP, réseau interne, « .local », autre port, chemin illisible refusés ; https et un sous-dossier acceptés", woo.slice(0, 6).every((x) => "erreur" in x) && woo[6].hote === "public.exemple.fr" && woo[6].base === "/shop", JSON.stringify(woo.map((x) => x.erreur ? "refusé" : x)));
+  verifier("Salesforce : le mot cherché est échappé pour SOQL (apostrophe, jokers) et tout autre caractère est refusé", c.motSoql("O'Brien") === "O\\'Brien" && c.motSoql("a_b") === "a\\_b" && c.motSoql("x' OR Name != '") === null && c.motSoql("a%") === null && c.motSoql("\\") === null, `${c.motSoql("O'Brien")} ${c.motSoql("x' OR Name != '")}`);
+  const reserves = readFileSync(join(RACINE, "gateway", "src", "connecteurs.ts"), "utf8").match(/const IDS_RESERVES = new Set\(\[([^\]]*)\]\)/)?.[1] ?? "";
+  const familles = readFileSync(join(RACINE, "gateway", "src", "outils.ts"), "utf8").match(/export const FAMILLES: Famille\[\] = \[([^\]]*)\]/)?.[1] ?? "";
+  verifier("commerce : les six préfixes sont réservés, et hors des familles des employés OpenClaw", c.IDS_COMMERCE.every((p) => reserves.includes(`"${p}"`)) && !/stripe|shopify|woocommerce|salesforce|pipedrive|zendesk/.test(familles), `${reserves} | ${familles}`);
+  const source = readFileSync(join(RACINE, "gateway", "src", "natifs", "commerce.ts"), "utf8");
+  const detailsJournal = [...source.matchAll(/journaliser\("[^"]+", [^,]+, \{([^}]*)\}\)/g)].map((m) => m[1]);
+  verifier("commerce : le journal ne reçoit que le service, les cases, l'outil et l'issue (ni clé, ni jeton, ni texte)", detailsJournal.length >= 5 && detailsJournal.every((x) => !/jeton|acces|actualisation|secret|cle|verificateur|code|texte|Authorization/i.test(x)), detailsJournal.join(" | "));
+  verifier("commerce : une clé secrète Stripe (sk_) est refusée, seule une clé restreinte (rk_) est prise", /\^sk_\(live\|test\)_/.test(source) && /\^rk_\(live\|test\)_/.test(source), "règle absente");
+
+  const { spawn: lancer } = await import("node:child_process");
+  const essai = await new Promise((fin) => {
+    const e = lancer(process.execPath, [join(RACINE, "scripts", "essai-commerce.mjs")], { stdio: ["ignore", "pipe", "pipe"] });
+    let sortie = "";
+    e.stdout.on("data", (b) => (sortie += b));
+    e.stderr.on("data", (b) => (sortie += b));
+    const minuterie = setTimeout(() => e.kill(), 5 * 60_000);
+    e.on("close", (status) => {
+      clearTimeout(minuterie);
+      fin({ status, sortie });
+    });
+  });
+  const lignes = essai.sortie.split("\n");
+  for (const ligne of lignes) {
+    const ok = /^\s+✓ (.*)$/.exec(ligne);
+    const ko = /^\s+✗ (.*?)(?:  —  obtenu : .*)?$/.exec(ligne);
+    if (ok) verifier(`commerce : ${ok[1]}`, true, "");
+    else if (ko) verifier(`commerce : ${ko[1]}`, false, ligne.split("  —  obtenu : ")[1] ?? "");
+    else if (/^[A-G]\. /.test(ligne)) console.log(`  ${ligne}`);
+  }
+  verifier("commerce : l'essai contre les faux services s'est déroulé jusqu'au bout", essai.status === 0 || lignes.some((l) => /vérification\(s\) réussie\(s\)/.test(l)), `${essai.status} ${lignes.slice(-6).join(" ")}`);
 }
 
 console.log(`\n${reussis} vérification(s) réussie(s), ${echecs.length} échec(s).`);

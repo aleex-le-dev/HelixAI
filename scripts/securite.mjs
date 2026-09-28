@@ -7120,6 +7120,24 @@ console.log("\n17. Recherche sur le web du Chat : rien sans la bascule, sources 
   verifier("recherche web : l'essai contre le faux web s'est déroulé jusqu'au bout", essai.status === 0, `${essai.status} ${lignes.slice(-6).join(" ")}`);
 }
 
+/*
+ * Tournée finale des écrans avant publication (28/09/2026), sur les neuf branches fusionnées
+ * depuis la 2026.928.5 : ce qui s'y est vu à l'écran et se vérifie sans navigateur.
+ */
+console.log("\n18 bis. Tournée finale des écrans : aide, rubriques des connecteurs, textes (28/09/2026)");
+{
+  const sourceAide = readFileSync(join(RACINE, "src", "lib", "aide.ts"), "utf8");
+  const idsAide = [...sourceAide.slice(sourceAide.indexOf("const ARTICLES")).matchAll(/^\s+id: "([^"]+)"/gm)].map((m) => m[1]);
+  const doublons = idsAide.filter((id, i) => idsAide.indexOf(id) !== i);
+  verifier("aide : chaque article a son identifiant (l'aide ouvre un article par lui : « Connecter Google Docs… » ouvrait « Fichiers et documents »)", idsAide.length > 20 && doublons.length === 0, doublons.join(", "));
+  const menuReglages = readFileSync(join(RACINE, "src", "components", "settings", "SettingsShell.tsx"), "utf8");
+  verifier(
+    "aide : le chemin donné aux connecteurs est le nom du menu (« Réglages, Connecteurs »), pas « Outils et connecteurs », qui n'existe pas",
+    !/Outils et connecteurs/.test(sourceAide) && !/Outils et connecteurs/.test(menuReglages) && /label: t\("Connecteurs"\), path: "\/parametres\/mcp"/.test(menuReglages),
+    (sourceAide.match(/.{30}Outils et connecteurs/) ?? [""])[0],
+  );
+}
+
 console.log(`\n${reussis} vérification(s) réussie(s), ${echecs.length} échec(s).`);
 if (echecs.length) {
   console.log("Échecs :");

@@ -2,6 +2,11 @@ import {
   Blocks,
   BookOpen,
   Brain,
+  CalendarClock,
+  LayoutGrid,
+  ListTodo,
+  SquareCheckBig,
+  SquareKanban,
   Compass,
   CreditCard,
   FileText,
@@ -97,6 +102,13 @@ export const ICONE_DU_CONNECTEUR: Record<string, LucideIcon> = {
   square: CreditCard,
   courrierIMAP: Mail,
   autre: Compass,
+  // Projets et rendez-vous (28/09/2026) : icônes neutres, les logos sont l'affaire d'un autre travail.
+  trello: SquareKanban,
+  monday: LayoutGrid,
+  clickup: SquareCheckBig,
+  todoist: ListTodo,
+  calendly: CalendarClock,
+  zoom: Video,
 };
 
 /** Le carré générique, quand ni marque ni icône ne sont connues. */

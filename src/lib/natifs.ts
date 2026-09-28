@@ -8,8 +8,9 @@ import { t, tf } from "@/lib/i18n";
  * l'instance le garde chiffré.
  */
 
-export type IdNatif = "sheets" | "slides" | "youtube" | "linkedin" | "facebook" | "instagram" | "tiktok" | "x";
-export type IdChoix = "ecriture" | "page";
+// Brevo et Mailchimp : 28/09/2026 (gateway/src/natifs/projetsRegles.ts). `envoi` : envoyer une campagne.
+export type IdNatif = "sheets" | "slides" | "youtube" | "linkedin" | "facebook" | "instagram" | "tiktok" | "x" | "brevo" | "mailchimp";
+export type IdChoix = "ecriture" | "page" | "envoi";
 
 export interface EtatNatif {
   id: IdNatif;

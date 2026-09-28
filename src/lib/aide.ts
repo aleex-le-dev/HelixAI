@@ -156,6 +156,24 @@ const ARTICLES: Article[] = [
     corps: t("X se branche dans Réglages, Outils et connecteurs, avec l'application que votre organisation crée elle-même sur console.x.com. L'écran dit comment, en quelques étapes. Seul l'administrateur de l'instance branche X, et seul lui peut publier.\n\n- Lecture, sans rien cocher : le compte (abonnés, nombre de posts) et ses derniers posts, avec leurs vues, j'aime, reposts et réponses.\n- Publier, si la case est cochée à la connexion : un post de 280 caractères au plus, avec une image du dossier de travail si vous le demandez. Chaque post vous est montré en entier et ne part qu'après votre accord, à chaque fois, quel que soit le niveau d'approbation.\n\nL'API de X est payante : X n'a plus d'offre gratuite pour les nouveaux développeurs depuis février 2026. On lui achète des crédits, et chaque lecture ou publication est décomptée ; un post qui contient une adresse web coûte plus cher. Les tarifs publiés par X sont rappelés sur l'écran de connexion.\n\nPar prudence, dix publications par heure au plus pour toute l'instance, et le même post n'est pas publié deux fois de suite."),
   },
   {
+    // Projets et rendez-vous, 28/09/2026 : gateway/src/natifs/projetsRegles.ts, SECURITE.md § 48.
+    id: "projets",
+    titre: t("Connecter Trello, Monday, ClickUp, Todoist, Calendly ou Zoom"),
+    resume: t("Lire vos tâches, tableaux et rendez-vous ; écrire après accord si l'administrateur l'a permis."),
+    motsCles: ["trello", "monday", "clickup", "todoist", "calendly", "zoom", "tache", "projet", "tableau", "rendez-vous", "reunion"],
+    lien: "/parametres/mcp",
+    corps: t("Ces six services se branchent dans Réglages, Outils et connecteurs, par le serveur que leur éditeur publie : rien ne s'installe sur la machine, et l'accord se donne dans la page du service. Zoom demande en plus une application, créée une fois sur le Zoom App Marketplace : l'écran dit comment.\n\n- Seul l'administrateur de l'instance branche ces services : un compte branché vaut pour toute l'organisation.\n- Sans rien cocher, vos agents lisent seulement : tâches, tableaux, projets, disponibilités, réunions et leurs résumés.\n- Si l'administrateur coche l'écriture à la connexion, les agents peuvent proposer de créer ou de modifier. Chaque écriture est montrée en entier et n'a lieu qu'après votre accord, à chaque fois, quel que soit le niveau d'approbation, et seul l'administrateur peut l'accepter.\n- Les employés et l'agent de code lisent, mais n'écrivent jamais dans ces services.\n\nSi le service accorde plus que ce qui a été demandé (l'écriture sans que la case soit cochée, par exemple), rien n'est enregistré."),
+  },
+  {
+    // Brevo et Mailchimp, 28/09/2026 : gateway/src/natifs/projets.ts, SECURITE.md § 48.
+    id: "campagnes",
+    titre: t("Connecter Brevo ou Mailchimp"),
+    resume: t("Lire vos campagnes e-mail et leurs statistiques ; préparer un brouillon ou envoyer après accord."),
+    motsCles: ["brevo", "sendinblue", "mailchimp", "campagne", "emailing", "newsletter", "liste", "audience", "envoyer"],
+    lien: "/parametres/mcp",
+    corps: t("Brevo et Mailchimp se branchent dans Réglages, Outils et connecteurs, avec l'application que votre organisation crée elle-même chez le service. L'écran dit comment, en quelques étapes. Seul l'administrateur de l'instance les branche.\n\n- Sans rien cocher : le compte, les listes ou audiences, les campagnes et leurs statistiques (envois, ouvertures, clics, désinscriptions).\n- Préparer des brouillons, si la case est cochée : rien ne part ; la carte d'accord montre le brouillon entier et le nombre de destinataires.\n- Envoyer, si la seconde case est cochée : la carte montre la campagne telle que le service l'enverra, relue chez lui, avec son objet, son expéditeur, son texte, ses liens et le nombre de destinataires. Si la campagne change entre la carte et l'envoi, rien ne part. Seul l'administrateur peut accepter un envoi.\n\nChez Brevo, seules les campagnes adressées à des listes s'envoient d'ici : le nombre de destinataires d'un segment n'est pas connu d'avance. Mailchimp n'a pas d'accès en lecture seule : c'est le logiciel qui s'en tient à la lecture tant que rien n'est coché.\n\nPar prudence, dix brouillons ou envois par heure au plus pour toute l'instance, et la même campagne n'est pas envoyée deux fois."),
+  },
+  {
     id: "reunions",
     titre: t("Réunions et transcription"),
     resume: t("Enregistrer, transcrire, résumer une réunion."),

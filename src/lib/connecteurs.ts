@@ -40,6 +40,8 @@ export interface EntreeCatalogue {
   oauth?: "auto" | "appli";
   /** Où créer cette application, quand `oauth` vaut « appli ». */
   console?: string;
+  /** Lecture seule par défaut, l'écriture se coche à la connexion (Trello, Monday… : ConnecteurProjets.tsx). */
+  ecritureAuChoix?: true;
   /** Livré avec Helix : déjà là, ne s'ajoute ni ne se retire. */
   integre?: true;
 }
@@ -174,10 +176,13 @@ export async function ajouter(
 export async function connecter(
   id: string,
   identifiants?: { clientId?: string; clientSecret?: string },
+  /** L'écriture cochée, pour un service qui la propose (`ecritureAuChoix`). */
+  ecriture?: boolean,
 ): Promise<Resultat & { adresse?: string; pret?: boolean }> {
   const resultat = (await poster("/helix/connecteurs/connecter", {
     id,
     ...identifiants,
+    ...(ecriture ? { ecriture: true } : {}),
   })) as Resultat & { adresse?: string; pret?: boolean };
   if (resultat.pret) signalerChangement();
   return resultat;

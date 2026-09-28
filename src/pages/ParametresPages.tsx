@@ -21,6 +21,8 @@ import {
   PlaySquare,
   Briefcase,
   Music2,
+  Send,
+  Megaphone,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { CleMarquePetite } from "@/components/ui/marques";
@@ -1045,6 +1047,9 @@ export function McpSettings() {
       ["tiktok", "TikTok", t("Vidéos, statistiques, publier après accord"), Music2, t("Réseaux sociaux")],
       // X : son logo officiel (kit de marque de X, noir sur fond clair, blanc sur fond sombre ; marques.ts).
       ["x", "X", t("Ex-Twitter : posts, statistiques, publier après accord"), "x", t("Réseaux sociaux")],
+      // Brevo et Mailchimp (28/09/2026, ConnecteurProjets.tsx) : icônes neutres, les logos viendront d'un autre travail.
+      ["brevo", "Brevo", t("Campagnes e-mail et listes : lire, brouillons et envoi après accord"), Send, t("Campagnes e-mail")],
+      ["mailchimp", "Mailchimp", t("Campagnes e-mail et audiences : lire, brouillons et envoi après accord"), Megaphone, t("Campagnes e-mail")],
     ] as [IdNatif, string, string, LucideIcon | CleMarquePetite, string][]).map(([id, label, description, dessin, categorie]): ServiceMaison => {
       const e = natifs.find((s) => s.id === id);
       return {

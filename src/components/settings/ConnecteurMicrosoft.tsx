@@ -84,7 +84,7 @@ function capacite(s: ServiceMicrosoft): string {
 
 function Lien({ href, children }: { href: string; children: ReactNode }) {
   return (
-    <a className="underline" href={href} target="_blank" rel="noreferrer noopener">
+    <a className="break-all underline" href={href} target="_blank" rel="noreferrer noopener">
       {children} <ExternalLink size={11} className="inline" />
     </a>
   );
@@ -210,9 +210,9 @@ export function ConnecteurMicrosoft({ service, onChange }: { service: ServiceMic
     const coches = SERVICES.filter((s) => etat.accordes?.includes(s));
     return (
       <div className="space-y-3">
-        <Card className="flex items-start gap-3">
-          <div className="min-w-0 flex-1">
-            <p className="truncate font-medium text-foreground">{etat.compte}</p>
+        <Card className="flex flex-wrap-reverse items-start gap-3 max-sm:p-3">
+          <div className="min-w-[9rem] flex-1">
+            <p className="break-all font-medium text-foreground">{etat.compte}</p>
             <p className="text-sm text-muted-foreground">
               {coches.map((s) => NOMS[s]).join(", ")}
               {ecrit ? t(" ; lecture et écriture") : t(" ; lecture seule")}
@@ -266,7 +266,7 @@ export function ConnecteurMicrosoft({ service, onChange }: { service: ServiceMic
     );
 
   return (
-    <Card className="space-y-3">
+    <Card className="space-y-3 break-words max-sm:p-3">
       <div>
         <p className="font-medium text-foreground">{t("Microsoft 365 : se connecter")}</p>
         <p className="text-sm text-muted-foreground">
@@ -279,10 +279,10 @@ export function ConnecteurMicrosoft({ service, onChange }: { service: ServiceMic
         </InfoBox>
       )}
 
-      <InfoBox leading={<KeyRound size={15} strokeWidth={1.75} />}>
+      <InfoBox className="max-sm:px-2" leading={<KeyRound size={15} strokeWidth={1.75} />}>
         <div className="space-y-2">
           <p className="font-medium">{t("Préparer l'application, une fois pour toute l'instance")}</p>
-          <ol className="list-decimal space-y-1 pl-5">
+          <ol className="list-decimal space-y-1 pl-4 sm:pl-5">
             <li>
               {t("Sur")} <Lien href="https://entra.microsoft.com">entra.microsoft.com</Lien>
               {t(", avec un compte qui peut créer des applications : « Applications », « Inscriptions d'applications », « Nouvelle inscription ». Un nom au choix ; « Comptes dans cet annuaire d'organisation uniquement ».")}

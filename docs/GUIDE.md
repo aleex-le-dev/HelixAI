@@ -491,8 +491,10 @@ Il permet de fixer, par client :
   et la base est chiffrée comme les fichiers.
 - `openclaw` pour les **agents toujours actifs** : Helix installe OpenClaw lui-même à
   la première mise en service et propose ses mises à jour ; `version` et `node` fixent
-  les versions installées, `chemin` impose un exécutable OpenClaw déjà présent, `port`
-  déplace l'instance dédiée (18800 par défaut) ;
+  les versions installées, `chemin` impose un exécutable OpenClaw déjà présent (sous
+  Windows, le `openclaw.cmd` posé par npm ou le script `openclaw.mjs` : Helix lance
+  Node sur ce script, jamais le `.cmd`), `port` déplace l'instance dédiée (18800 par
+  défaut) ;
 - `journalConservationJours` : durée de conservation du **journal d'audit** (90 jours
   par défaut, de 30 à 3650) ; `journalCopie` en recopie chaque ligne ailleurs.
 
@@ -532,7 +534,7 @@ C'est le cœur de la promesse Helix, et il vaut mieux le dire exactement.
 | `pypi.org` et `registry.npmjs.org` | Bouton « Préparer l'atelier » de Cowork | Télécharger les bibliothèques bureautiques (Word, Excel, PowerPoint, PDF). La liste des paquets est figée dans le code de la passerelle, l'utilisateur la voit avant d'accepter |
 | `pypi.org` et `huggingface.co` | Installation de la dictée ou de la transcription des réunions, sur demande | Le moteur de transcription, puis le modèle Whisper adapté à la machine, à une révision figée. Ensuite, la transcription tourne hors ligne |
 | `registry.npmjs.org` | Page Agents, au plus deux fois par jour | Lire le numéro de la dernière version publiée d'OpenClaw, pour la dire à l'écran. Rien n'est envoyé |
-| `nodejs.org`, puis `registry.npmjs.org` | Bouton « Installer OpenClaw », ou premier déploiement d'un employé | Un Node.js officiel (archive vérifiée par son empreinte SHA-256), puis OpenClaw à la version éprouvée, dans `<données>/openclaw-moteur` |
+| `nodejs.org`, puis `registry.npmjs.org` | Bouton « Installer OpenClaw », ou premier déploiement d'un employé | Un Node.js officiel (archive vérifiée par son empreinte SHA-256 ; `.zip` sous Windows, x64 ou arm64), puis OpenClaw à la version éprouvée, dans `<données>/openclaw-moteur`. Sous Windows, Helix pose et lance OpenClaw en natif, sans WSL ni tâche planifiée (`node.exe openclaw.mjs`) ; les commandes d'un employé, au palier Libre, passent par PowerShell |
 | `registry.npmjs.org` | Premier employé au palier Étendu, premier branchement de WhatsApp, Discord, Slack ou Mattermost | Extensions officielles d'OpenClaw (recherche web DuckDuckGo, messageries), installées dans le dossier de l'instance |
 | Le serveur de mise à jour **de l'agence** | Au lancement puis toutes les six heures, si une adresse est inscrite dans le paquet | Savoir si une version plus récente existe, et la télécharger si l'application est signée. Rien d'autre n'est envoyé que la requête du fichier `latest-mac.yml` (SIGNATURE.md § 4) |
 

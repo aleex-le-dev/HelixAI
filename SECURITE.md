@@ -5955,3 +5955,75 @@ toutes). **PayPal** : l'adresse documentée, `https://mcp.paypal.com/http`, rép
 (POST et GET) alors que `/mcp` et `/sse` répondent 401 avec leurs métadonnées ; non tranché sans
 compte. Intercom ne publie pas de métadonnées de ressource (le SDK se replie sur celles du serveur
 d'autorisation, présentes). Windows (arrêt de l'arbre par `taskkill`, non essayé ici). Un vrai modèle.
+
+## 57. OpenClaw natif sous Windows (28 septembre 2026)
+
+Décision et contexte : PROJET.md § 3.4 (« Windows : OpenClaw natif, sans WSL »). Sous Windows,
+Helix refusait les employés (« OpenClaw demande WSL ») ; il y pose désormais OpenClaw en natif,
+comme sur macOS et Linux. Code propre au système : `gateway/src/plateformeOpenClaw.ts`. Essai :
+`scripts/essai-openclaw-windows.mjs`, repris par `npm run securite`, section 21.
+
+### 57.1 Ce qui garde la même barrière qu'ailleurs
+
+- **Aucun interpréteur de commandes entre Helix et OpenClaw.** Ni `openclaw.cmd` ni `npm.cmd` :
+  Node refuse de lancer un `.cmd` sans `shell` (CVE-2024-27980), et `cmd.exe` réinterprète
+  `&`, `^`, `%` et les guillemets d'un chemin. Helix lance `node.exe npm-cli.js …` et
+  `node.exe openclaw.mjs …` par `execFile`/`spawn`, arguments en tableau. Seul le script
+  d'installation d'OpenClaw passe par `cmd.exe`, lancé par npm, et seulement pour le paquet
+  `openclaw` (`--allow-scripts=openclaw`), comme sur macOS.
+- **Ni tâche planifiée, ni service, ni droits d'administrateur.** Helix ne lance jamais
+  `openclaw gateway install` : l'instance est un processus enfant de la passerelle, sur la
+  boucle locale et son jeton, dans `<données>\openclaw`. L'OpenClaw personnel
+  (`%USERPROFILE%\.openclaw`, port 18789, sa tâche « OpenClaw Gateway ») n'est ni lu ni touché.
+- **Environnement fermé, sans tenir compte de la casse.** Les variables transmises à OpenClaw
+  (liste fermée depuis le test d'intrusion du 27/09/2026) sont comparées sans la casse sous Windows ;
+  ajoutées : où sont les programmes et PowerShell (`ProgramFiles`, `ProgramW6432`, `ProgramData`,
+  `PSModulePath`…), le compte et le poste (`USERNAME`, `COMPUTERNAME`, `HOMEDRIVE`, `HOMEPATH`).
+  Aucune ne porte de secret. Un seul `PATH` : `{ ...process.env, PATH }` gardait aussi `Path`.
+  L'installation retire `npm_*` quelle que soit la casse (`NPM_CONFIG_PREFIX`, un registre
+  imposé), et écrit le préfixe global en toutes lettres (`--prefix`).
+- **On n'arrête que ce qu'on a lancé.** Un orphelin (passerelle tuée net) est reconnu par son
+  numéro, noté au lancement, et par sa ligne de commande (`node.exe …openclaw.mjs gateway …`),
+  lue par PowerShell (`Get-CimInstance Win32_Process`, script passé en `-EncodedCommand` : il ne
+  porte qu'un entier, vérifié avant). Ligne illisible : rien n'est arrêté, et l'écran dit que le
+  port est pris. L'arrêt vise le numéro (`taskkill /PID <n> /T /F`), jamais un nom (`/IM
+  node.exe` arrêterait l'OpenClaw personnel et tout autre Node). `taskkill.exe`, `tar.exe` et
+  `powershell.exe` sont pris dans System32 (lu dans `SystemRoot`), pas par le PATH.
+- **Mémoire restaurée** : un nom de fichier de la copie qui porte `\` ou `:` est écarté (sous
+  Windows, `join` en ferait un chemin hors de l'espace de l'employé, ou sur un autre disque).
+- **Messages de npm** : les chemins de la machine sont retirés aussi sous leur forme Windows
+  (`C:\Users\…`, `\\serveur\partage`) avant d'arriver à l'écran.
+
+### 57.2 Ce qui diffère, et se dit
+
+- **Droits des fichiers.** `mode: 0o600` et `0o700` n'ont pas d'effet sous Windows : le jeton de
+  l'instance (`.jeton`), la clé des employés (`.cle`) et `openclaw.json` sont protégés par les
+  droits du dossier personnel (`C:\Users\<compte>`, ouvert au seul compte, à SYSTEM et aux
+  administrateurs), comme le reste des données de Helix sous Windows. Un dossier de données
+  placé ailleurs (`HELIX_DATA_DIR`) garde les droits de cet endroit.
+- **Arrêt net.** Une application console sans fenêtre n'a pas d'arrêt doux sous Windows :
+  `taskkill /F`, comme OpenClaw lui-même quand on arrête sa tâche. SQLite (WAL) reprend une base
+  arrêtée net ; une conversation en cours d'écriture peut perdre sa dernière ligne.
+- **Commandes du palier Libre** : PowerShell, pas un shell Unix. Le palier reste sous mot de
+  passe ; l'écran et la fiche de poste le disent. Rien de ce que Helix coupe ailleurs n'est
+  rouvert sous Windows (nœuds, écran, `system.run` du compagnon Windows Hub, qu'Helix n'installe pas).
+
+### 57.3 Vu tenir (sur le Mac, 28/09/2026)
+
+Les fonctions de `plateformeOpenClaw.ts` avec `win32` et `path.win32` : archive `.zip` x64 et arm64
+aux empreintes écrites, disposition du Node (`node.exe`, `npm-cli.js`, `openclaw.cmd`), lancement par
+`node.exe openclaw.mjs` (Node à côté du lanceur, sinon celui du PATH hors alias du Store, rien sinon),
+candidats (`openclaw.cmd` du PATH, `%APPDATA%\npm`), environnement (casse, un seul PATH, `npm_*`
+retirés), PowerShell encodé, taskkill par numéro ; l'arrêt réel de `processus.ts` dans un Node où
+`process.platform` vaut `win32` (taskkill de System32 intercepté, jamais `kill()`, rien pour un
+processus déjà terminé). Et sur ce Mac, une vraie installation jetable par le chemin commun (Node
+épinglé, `npm-cli.js`, `--prefix`, `openclaw@2026.9.4`), puis une passerelle OpenClaw jetable qui
+ouvre son port libre (jamais 18789 ni 18800).
+
+### 57.4 Pas essayé
+
+Tout sur un vrai Windows : l'extraction par `tar.exe` et la jonction, npm et le `postinstall`
+d'OpenClaw par `cmd.exe`, OpenClaw qui démarre, ses modules natifs (koffi, node-pty : paquets win32
+x64 et arm64 publiés, pas chargés), ses messageries, PowerShell qui lit une ligne de commande,
+`taskkill`, l'antivirus (Defender) pendant l'installation, un nom de compte avec espace ou accent,
+les chemins de plus de 260 caractères.

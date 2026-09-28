@@ -152,8 +152,8 @@ nouvelle version l'accès de Helix à sa clé du trousseau (« Helix Safe Storag
 Control), quand il est actif, bloque les applications non signées sans proposer de les lancer
 quand même.
 
-Non proposés sous Windows : les agents toujours actifs (OpenClaw y demande WSL) et la ligne de
-commande `helix`.
+Non proposée sous Windows : la ligne de commande `helix`. Sous Windows, les commandes d'un agent
+toujours actif au palier « Libre » passent par PowerShell.
 
 ## Fonctions
 

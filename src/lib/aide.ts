@@ -156,6 +156,15 @@ const ARTICLES: Article[] = [
     corps: t("X se branche dans Réglages, Outils et connecteurs, avec l'application que votre organisation crée elle-même sur console.x.com. L'écran dit comment, en quelques étapes. Seul l'administrateur de l'instance branche X, et seul lui peut publier.\n\n- Lecture, sans rien cocher : le compte (abonnés, nombre de posts) et ses derniers posts, avec leurs vues, j'aime, reposts et réponses.\n- Publier, si la case est cochée à la connexion : un post de 280 caractères au plus, avec une image du dossier de travail si vous le demandez. Chaque post vous est montré en entier et ne part qu'après votre accord, à chaque fois, quel que soit le niveau d'approbation.\n\nL'API de X est payante : X n'a plus d'offre gratuite pour les nouveaux développeurs depuis février 2026. On lui achète des crédits, et chaque lecture ou publication est décomptée ; un post qui contient une adresse web coûte plus cher. Les tarifs publiés par X sont rappelés sur l'écran de connexion.\n\nPar prudence, dix publications par heure au plus pour toute l'instance, et le même post n'est pas publié deux fois de suite."),
   },
   {
+    // Commerce et relation client, 28/09/2026 : gateway/src/natifs/commerce.ts, SECURITE.md § 47.
+    id: "commerce",
+    titre: t("Commerce et relation client"),
+    resume: t("Stripe, Shopify, WooCommerce, Salesforce, Pipedrive, Zendesk."),
+    motsCles: ["stripe", "shopify", "woocommerce", "salesforce", "pipedrive", "zendesk", "commande", "facture", "paiement", "crm", "ticket", "boutique"],
+    lien: "/parametres/mcp",
+    corps: t("Ces six services se branchent dans Réglages, Outils et connecteurs, rubrique « Commerce et relation client ». Seul l'administrateur de l'instance les branche, et l'écran dit comment créer la clé ou l'application chez chacun.\n\n- Stripe : une clé restreinte en lecture. Vos agents lisent paiements, clients, factures et abonnements ; rien ne peut être remboursé, encaissé ni viré par ce connecteur. Une clé secrète, qui ouvre tout le compte, est refusée.\n- Shopify : une application de votre organisation, installée sur la boutique. Commandes, produits et stocks, en lecture.\n- WooCommerce : une clé d'API REST en « Lecture ». Commandes et produits.\n- Salesforce et Pipedrive : l'application que vous déclarez chez eux, puis votre accord dans le navigateur. Contacts et affaires ; ajouter une note si la case est cochée.\n- Zendesk : un client OAuth de votre compte. Tickets et échanges ; répondre si la case est cochée, par une réponse publique ou une note interne.\n\nChaque note et chaque réponse vous est montrée en entier et ne part qu'après votre accord, à chaque fois, quel que soit le niveau d'approbation ; seul l'administrateur peut écrire. Par prudence, dix écritures par heure et par service au plus pour toute l'instance, et la même n'est pas faite deux fois de suite. Les clés et les accès sont gardés chiffrés sur l'instance et n'en ressortent jamais."),
+  },
+  {
     id: "reunions",
     titre: t("Réunions et transcription"),
     resume: t("Enregistrer, transcrire, résumer une réunion."),

@@ -52,6 +52,7 @@ import { CourrierIMAP } from "@/components/settings/CourrierIMAP";
 import { DriveGoogle } from "@/components/settings/DriveGoogle";
 import { SlackConnecteur } from "@/components/settings/SlackConnecteur";
 import { ConnecteurNatif } from "@/components/settings/ConnecteurNatif";
+import { useServicesCommerce } from "@/components/settings/ConnecteurCommerce";
 import { etatNatifs, type EtatNatif, type IdNatif } from "@/lib/natifs";
 import { etat as etatDrive, type EtatDrive } from "@/lib/drive";
 import { etat as etatSlack, type EtatSlack } from "@/lib/slack";
@@ -968,6 +969,8 @@ export function McpSettings() {
   useEffect(relire, [relire]);
 
   const basculer = (cle: string) => setOuvert((o) => (o === cle ? null : cle));
+  // Stripe, Shopify, WooCommerce, Salesforce, Pipedrive, Zendesk (28/09/2026, ConnecteurCommerce.tsx).
+  const commerce = useServicesCommerce(ouvert, basculer);
 
   const CATEGORIE = t("Courrier, agenda et fichiers");
 
@@ -1059,6 +1062,7 @@ export function McpSettings() {
         panneau: <ConnecteurNatif id={id} onChange={relire} />,
       };
     }),
+    ...commerce,
   ];
 
   return (

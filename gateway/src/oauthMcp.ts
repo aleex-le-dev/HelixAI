@@ -258,16 +258,31 @@ const memeEtat = (a: string, b: string) => {
   return x.length === y.length && timingSafeEqual(x, y);
 };
 
-/** Retrouve le connecteur dont l'autorisation attend ce `state`. */
+/**
+ * Retrouve le connecteur dont l'autorisation attend ce `state`, et consomme
+ * ce `state` : il ne sert qu'une fois.
+ *
+ * Tournée des connecteurs du 28/09/2026 : il n'était effacé qu'après un
+ * échange réussi. Après un échec (code refusé, service injoignable), la même
+ * adresse d'autorisation, retrouvée dans l'historique du navigateur, restait
+ * utilisable pendant dix minutes par quelqu'un d'autre, avec son propre
+ * compte. Effacé ici, avant toute attente, de façon qu'un second retour
+ * simultané ne le trouve plus ; le vérificateur PKCE, lui, reste le temps de
+ * l'échange (le SDK le relit).
+ */
 export async function connecteurDuRetour(etat: string): Promise<{ id: string; url: string; retour: string; pour?: string } | null> {
-  const a = (await lire()).find((x) => x.etat && memeEtat(x.etat, etat));
+  const liste = await lire();
+  const a = liste.find((x) => x.etat && memeEtat(x.etat, etat));
   if (!a) return null;
   // Un `state` sans date vient d'avant cette règle : trop vieux, par prudence.
   const depuis = a.etatLe ? Date.parse(a.etatLe) : Number.NaN;
+  a.etat = undefined;
+  a.etatLe = undefined;
   if (!Number.isFinite(depuis) || Date.now() - depuis > DUREE_AUTORISATION_MS) {
     await majeur(a.id, { etat: undefined, etatLe: undefined, verificateur: undefined });
     return null;
   }
+  await ecrire(liste);
   return { id: a.id, url: a.url, retour: a.retour ?? "", pour: a.pour };
 }
 

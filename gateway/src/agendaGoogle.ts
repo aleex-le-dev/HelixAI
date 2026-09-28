@@ -248,6 +248,16 @@ async function api(
       jetonAcces = null;
       continue;
     }
+    /*
+     * Un second refus, avec un jeton tout juste renouvelé : l'accès est mort
+     * chez Google. Il était rendu comme une erreur ordinaire (« a refusé la
+     * requête (code 401) ») et l'agenda restait « Connecté » ; comme pour
+     * Drive, il passe « à reconnecter » (tournée des connecteurs du 28/09/2026).
+     */
+    if (r.statut === 401 && !jetonForce) {
+      await marquerPerdu();
+      break;
+    }
     // 204 : une suppression réussie ne rend rien.
     if (r.statut === 204) return {};
     if (r.statut !== 200) throw erreurApi(r.statut, lireJson(r));

@@ -762,15 +762,34 @@ export function idsDe(id: IdNatif): Record<string, string> {
   return { ...(magasin?.comptes[id]?.ids ?? {}) };
 }
 
-async function marquerPerdu(id: IdNatif): Promise<void> {
+/**
+ * `lequel` : le compte dont l'accès vient d'être refusé. Un compte rebranché
+ * pendant l'appel (l'administrateur reconnecte le service pendant qu'un Chat
+ * s'en sert) n'est pas marqué perdu à sa place (tournée des connecteurs du
+ * 28/09/2026).
+ */
+async function marquerPerdu(id: IdNatif, lequel?: CompteEnregistre): Promise<void> {
   const c = magasin?.comptes[id];
   if (!c || c.perdu) return;
+  if (lequel && c !== lequel) return;
   c.perdu = new Date().toISOString();
   await ecrire().catch(() => {});
   journaliser("natif.acces_perdu", "agent", { service: id });
 }
 
 const enCoursActualisation = new Map<IdNatif, Promise<string>>();
+
+/*
+ * Instagram : le jeton de 60 jours se renouvelle « après 24 heures et avant
+ * expiration », et il n'a pas de jeton d'actualisation. Il n'était renouvelé
+ * que dans la dernière minute de sa vie : en pratique jamais, et le compte se
+ * débranchait au bout de 60 jours même utilisé chaque jour (tournée des
+ * connecteurs du 28/09/2026). Il l'est désormais dès qu'il lui reste moins de
+ * 50 jours (il a donc plus de dix jours), une fois par heure au plus ; un
+ * échec ne coupe rien tant que le jeton en cours est valable.
+ */
+const RENOUVELER_INSTAGRAM_MS = 50 * 24 * 3600_000;
+let essaiInstagram = 0;
 
 /** Le secret de l'application, pour Meta (`appsecret_proof`). Jamais rendu hors de la passerelle. */
 export function secretApplication(id: IdNatif): string {
@@ -785,13 +804,33 @@ export async function accesValide(id: IdNatif, forcer = false): Promise<string> 
   if (!c) throw new ErreurNatif("acces", magasin?.comptes[id] ? `L'accès à ${DEFINITIONS[id].nom} a été perdu : il faut le reconnecter dans Paramètres, Connecteurs.` : `${DEFINITIONS[id].nom} n'est pas connecté.`);
   const j = jetonsDe(id, c);
   if (!j) throw new ErreurNatif("acces", `Le jeton enregistré pour ${DEFINITIONS[id].nom} est illisible : il faut le reconnecter dans Paramètres, Connecteurs.`);
-  if (!forcer && (!j.expire || j.expire - 60_000 > Date.now())) return j.acces;
+  const valable = Boolean(j.expire) && j.expire! - 60_000 > Date.now();
+  const anticipe = !forcer && id === "instagram" && valable && j.expire! - Date.now() < RENOUVELER_INSTAGRAM_MS && Date.now() - essaiInstagram > 3600_000;
+  if (!forcer && !anticipe && (!j.expire || valable)) return j.acces;
   const deja = enCoursActualisation.get(id);
   if (deja) return deja;
   const p = (async () => {
-    const neufs = await rafraichir(id, j);
+    if (anticipe) {
+      essaiInstagram = Date.now();
+      const neufs = await rafraichir(id, j).catch(() => null);
+      // Refusé ou injoignable : le jeton en cours vaut encore, on s'en sert et on réessaiera.
+      if (!neufs) return j.acces;
+      c.jetons = chiffrer(neufs, placeJetons(id));
+      await ecrire().catch(() => {});
+      return neufs.acces;
+    }
+    /*
+     * Une coupure pendant le renouvellement n'a rien laissé partir : dite
+     * comme une erreur ordinaire, pas comme un transport qui aurait peut-être
+     * écrit. Sinon `sousGarde` (outilsNatifs.ts) annonçait « c'est peut-être
+     * déjà publié » et bloquait le même contenu une demi-heure, alors que rien
+     * n'était parti (tournée des connecteurs du 28/09/2026).
+     */
+    const neufs = await rafraichir(id, j).catch((err: unknown) => {
+      throw err instanceof ErreurTransport ? new ErreurNatif("api", err.message) : err;
+    });
     if (!neufs) {
-      await marquerPerdu(id);
+      await marquerPerdu(id, c);
       /*
        * `forcer` : le service vient de refuser l'accès (401). Un jeton qui
        * n'expire pas (Mailchimp) et qu'on a révoqué était dit « expiré » au
@@ -834,6 +873,8 @@ async function rafraichir(id: IdNatif, j: JetonsClairs): Promise<JetonsClairs | 
   if (id === "instagram") {
     // Renouvelable après 24 heures et avant expiration (documentation de la connexion Instagram).
     const r = await envoyer(id, { methode: "GET", hote: "graph.instagram.com", chemin: `/refresh_access_token?${formulaire({ grant_type: "ig_refresh_token", access_token: j.acces })}`, octets: LIMITES.jetons });
+    // Comme pour les autres : une panne passagère n'est pas un accès perdu.
+    if (r.statut === 429 || r.statut >= 500) throw new ErreurNatif("quota", `${DEFINITIONS[id].nom} n'a pas pu renouveler l'accès pour l'instant (code ${r.statut}). Réessaie dans quelques minutes, et dis-le à l'utilisateur ; l'accès reste branché.`);
     return r.statut === 200 && typeof r.json.access_token === "string" ? { acces: r.json.access_token, expire: Date.now() + (Number(r.json.expires_in) || 5_184_000) * 1000 } : null;
   }
   // Facebook : pas de jeton d'actualisation ; LinkedIn : seulement pour certains partenaires.
@@ -864,12 +905,14 @@ async function rafraichir(id: IdNatif, j: JetonsClairs): Promise<JetonsClairs | 
  * reprise ; un second 401 débranche le service (jeton révoqué chez lui).
  */
 export async function appelerApi(id: IdNatif, construire: (acces: string) => Parameters<typeof envoyer>[1]): Promise<ReponseApi> {
+  await charger();
+  const compte = magasin?.comptes[id];
   for (let essai = 0; essai < 2; essai++) {
     const acces = await accesValide(id, essai > 0);
     const r = await envoyer(id, construire(acces));
     if (r.statut === 401 && essai === 0) continue;
     if (r.statut === 401) {
-      await marquerPerdu(id);
+      await marquerPerdu(id, compte);
       throw new ErreurNatif("acces", `${DEFINITIONS[id].nom} n'accepte plus l'accès enregistré : il faut le reconnecter dans Paramètres, Connecteurs.`);
     }
     return r;
@@ -1127,6 +1170,13 @@ export async function recevoir(parametres: URLSearchParams, quiCollage: string |
 
 async function recevoirFlux(f: Flux, parametres: URLSearchParams, quiCollage: string | null): Promise<{ ok: boolean; message: string; nom?: string }> {
   const def = DEFINITIONS[f.id];
+  /*
+   * D'abord : un échange en cours n'est interrompu par rien. Un second retour
+   * (même `state`, `error=…`) fermait la demande pendant l'échange, qui
+   * enregistrait pourtant le compte ensuite (tournée des connecteurs du
+   * 28/09/2026).
+   */
+  if (f.echangeEnCours) return { ok: false, message: t("La connexion est déjà en train d'aboutir.") };
   const erreur = parametres.get("error");
   if (erreur) {
     // Microsoft 365 : un code AADSTS dit ce qui manque (consentement de l'administrateur, adresse de retour) ; rien de la réponse n'est recopié.
@@ -1135,7 +1185,6 @@ async function recevoirFlux(f: Flux, parametres: URLSearchParams, quiCollage: st
   }
   const code = (parametres.get("code") ?? "").replace(/#_$/, "");
   if (!code || code.length > 2048) return { ...conclure(f.id, false, t("La réponse ne contient pas de code d'autorisation. Recommencez.")), nom: def.nom };
-  if (f.echangeEnCours) return { ok: false, message: t("La connexion est déjà en train d'aboutir.") };
   f.echangeEnCours = true;
   try {
     return { ...conclure(f.id, true, await echanger(f, code, quiCollage ?? f.qui)), nom: def.nom };

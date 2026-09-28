@@ -273,7 +273,6 @@ function erreurSlack(json: Record<string, unknown>): ErreurSlack {
     case "token_revoked":
     case "token_expired":
     case "account_inactive":
-    case "no_permission":
       return new ErreurSlack(
         "acces",
         "Slack refuse le jeton : il a été révoqué ou régénéré, ou l'application a été désinstallée de l'espace.",
@@ -286,6 +285,15 @@ function erreurSlack(json: Record<string, unknown>): ErreurSlack {
           "api.slack.com/apps, rubrique « OAuth & Permissions », réinstallez l'application, puis reconnectez Slack.",
       );
     }
+    /*
+     * `no_permission` vise une ressource (un salon, un utilisateur que la
+     * politique de l'espace cache), pas le jeton : il débranchait Slack entier,
+     * qui passait « à reconnecter » alors que le jeton restait bon (tournée des
+     * connecteurs du 28/09/2026). Le jeton mort se dit `invalid_auth`,
+     * `token_revoked`, `account_inactive`.
+     */
+    case "no_permission":
+      return new ErreurSlack("salon", "Slack refuse à l'application l'accès à cet élément (règle de l'espace de travail). Le reste reste lisible.");
     case "not_in_channel":
       return new ErreurSlack(
         "salon",

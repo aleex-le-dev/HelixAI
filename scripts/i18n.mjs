@@ -106,7 +106,8 @@ for (const langue of LANGUES) {
   manquantesTotal += manquantes.length;
 
   const traduites = cles.length - manquantes.length;
-  const part = cles.length ? Math.round((traduites / cles.length) * 100) : 100;
+  // Arrondi vers le bas : 1052 sur 1056 s'affichait « 100 % » (vu le 28/09/2026).
+  const part = cles.length ? Math.floor((traduites / cles.length) * 100) : 100;
   console.log(
     `  ${langue} : ${traduites}/${cles.length} traduites (${part} %)` +
       (orphelines.length ? `, ${orphelines.length} devenues inutiles` : ""),

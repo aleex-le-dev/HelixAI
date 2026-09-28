@@ -23,7 +23,6 @@ import {
   Users,
   Camera,
   Music2,
-  AtSign,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { CleMarque } from "@/components/ui/marques";
@@ -1042,8 +1041,8 @@ export function McpSettings() {
       ["facebook", "Facebook", t("Pages : publications, réactions, publier après accord"), Users, t("Réseaux sociaux")],
       ["instagram", "Instagram", t("Compte professionnel : publications, statistiques, publier après accord"), Camera, t("Réseaux sociaux")],
       ["tiktok", "TikTok", t("Vidéos, statistiques, publier après accord"), Music2, t("Réseaux sociaux")],
-      // X (28/09/2026) : icône neutre en attendant son logo ; la clé de marque sera « x » (marques.ts).
-      ["x", "X", t("Ex-Twitter : posts, statistiques, publier après accord"), AtSign, t("Réseaux sociaux")],
+      // X : son logo officiel (kit de marque de X, noir sur fond clair, blanc sur fond sombre ; marques.ts).
+      ["x", "X", t("Ex-Twitter : posts, statistiques, publier après accord"), "x", t("Réseaux sociaux")],
     ] as [IdNatif, string, string, LucideIcon | CleMarque, string][]).map(([id, label, description, dessin, categorie]): ServiceMaison => {
       const e = natifs.find((s) => s.id === id);
       return {

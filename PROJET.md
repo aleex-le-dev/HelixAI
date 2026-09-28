@@ -771,6 +771,19 @@ clair et sombre, 1440 et 375 px, sans débordement horizontal. Logos : icônes n
 `stripe`, `shopify`, `woocommerce`, `salesforce`, `pipedrive`, `zendesk` à poser dans la liste de
 `ConnecteurCommerce.tsx` (une ligne « maison » ne lit pas `MARQUE_DU_CONNECTEUR`). Rien n'a été
 essayé contre les vrais services : ce qui reste à essayer est au § 5.
+
+**Tournée des connecteurs, 28/09/2026 (soir).** Commerce, projets, messageries et catalogue MCP
+repris service par service contre la documentation du jour et les métadonnées OAuth publiques
+(lues sans compte) ; parcours complet sur un banc (passerelle jetable, faux fournisseurs, écran
+dans une fenêtre Electron cachée) : configuration, connexion, lecture par un vrai Chat, écriture
+derrière la carte, erreurs 401, 403, 404, 429 et 5xx. Corrigé : une panne passagère (429, 5xx)
+au renouvellement d'un jeton débranchait le service (Zendesk renouvelle toutes les 30 minutes,
+Pipedrive et Brevo toutes les heures) ; des identifiants Shopify refusés laissaient l'écran sur
+« Connecté » ; la limite de débit de GraphQL de Shopify (rendue en 200) était dite « accès
+refusé » ; l'aide de Zoom oubliait quatre des dix portées demandées. Toujours pas essayé avec
+les vrais services. Points incertains relevés : `SELECT Name FROM Organization` lisible par
+tout utilisateur Salesforce (sinon l'essai de connexion échoue) ; adresses de retour en
+`http://127.0.0.1` acceptées par Salesforce, Pipedrive et Zendesk.
 **Fait le 28/09/2026 : projets et rendez-vous, branche `connecteurs-projets`.** Demandé par
 Medhi : Trello, Monday, ClickUp, Todoist, Calendly, Zoom, Brevo, Mailchimp, avec un ordre de choix
 imposé : un serveur MCP officiel distant avec OAuth d'abord (catalogue de `connecteurs.ts`, comme

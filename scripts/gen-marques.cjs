@@ -237,8 +237,16 @@ for (const [cle, m] of Object.entries(sources.marques)) {
     `    clair: ${JSON.stringify(clair)},`,
   ];
   if (sombre) champs.push(`    sombre: ${JSON.stringify(sombre)},`);
+  if (m.grand) {
+    // Hauteur minimale imposée par la charte (YouTube : 100 px) : voir `CleMarqueGrande`.
+    const { hauteurMin, hauteurLogo } = m.grand;
+    const hauteurCadre = Number(clair.viewBox.split(" ")[3]);
+    if (!(hauteurMin > 0 && hauteurLogo > 0 && hauteurLogo <= hauteurCadre)) throw new Error(`${cle} : « grand » illisible`);
+    champs.push(`    grand: ${JSON.stringify({ hauteurMin, hauteurLogo })},`);
+  }
   entrees.push(`  ${cle}: {\n${champs.join("\n")}\n  },`);
 }
+const grandes = Object.entries(sources.marques).filter(([, m]) => m.grand).map(([cle]) => JSON.stringify(cle));
 
 const neutres = Object.keys(sources.neutres).join(", ");
 
@@ -267,6 +275,11 @@ const entete = `/**
  * officielle : ${neutres}.
  * Les raisons sont dans scripts/marques/sources.json.
  *
+ * Marques « grandes » (\`grand\`) : leur charte fixe une hauteur minimale que
+ * les lignes de liste n'atteignent pas (YouTube : 100 px de logo). Elles ne
+ * passent que par LogoMarqueGrand, jamais par LogoMarque, dont le type
+ * (CleMarquePetite) les exclut : les montrer en petit ne compile pas.
+ *
  * Fichier engendré par scripts/gen-marques.cjs, à ne pas modifier à la main.
  */
 
@@ -284,6 +297,11 @@ export interface Marque {
   titre: string;
   clair: DessinMarque;
   sombre?: DessinMarque;
+  /**
+   * Hauteur minimale du logo imposée par la charte, en pixels, et hauteur du
+   * logo lui-même dans le cadre (viewBox), marge de protection du kit exclue.
+   */
+  grand?: { hauteurMin: number; hauteurLogo: number };
 }
 
 export const MARQUES = {
@@ -292,6 +310,12 @@ export const MARQUES = {
 const pied = `} satisfies Record<string, Marque>;
 
 export type CleMarque = keyof typeof MARQUES;
+
+/** Marques à hauteur minimale (\`grand\`) : seulement par LogoMarqueGrand. */
+export type CleMarqueGrande = ${grandes.join(" | ") || "never"};
+
+/** Marques qu'on peut montrer à la taille d'une ligne de liste. */
+export type CleMarquePetite = Exclude<CleMarque, CleMarqueGrande>;
 `;
 
 const contenu = entete + entrees.join("\n") + "\n" + pied;

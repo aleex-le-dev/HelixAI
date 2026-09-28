@@ -366,6 +366,23 @@
       "empreintes": {
         "together.svg": "edf757b7bc10f86da65ba32ee2d02193cf952414aeb7bbbb69daaf9c2c927f80"
       }
+    },
+    "youtube": {
+      "titre": "YouTube",
+      "clair": "youtube.svg",
+      "sombre": "youtube.sombre.svg",
+      "grand": {
+        "hauteurMin": 100,
+        "hauteurLogo": 138.1
+      },
+      "source": "https://www.gstatic.com/marketing-cms/52/7d/637fef5a4788a97747e6feabc4aa/youtube-logo.zip (Digital/01 Full Color : yt_logo_fullcolor_almostblack_digital.ai, yt_logo_fullcolor_white_digital.ai)",
+      "page": "https://brand.youtube/youtube-logo/",
+      "regle": "Pour une fonction d'une application qui se sert de l'API de YouTube, c'est le logo complet que prévoit la charte des développeurs (https://developers.google.com/youtube/terms/branding-guidelines), l'icône seule étant réservée aux rangées de réseaux sociaux et aux contenus de sources mêlées. Hauteur du logo jamais sous 100 px en numérique ; zone de protection autour du logo égale au triangle de l'icône ; texte presque noir (#212121) sur fond clair, blanc sur fond sombre, triangle toujours blanc ; ni contour, ni ombre, ni recoloration, ni rotation, ni déformation ; un fond uni ; placé à côté de la fonction qui utilise YouTube, cliquable vers YouTube, jamais l'élément le plus en vue de la page. N'apparaît qu'en tête du panneau YouTube des connecteurs, à 100 px de haut ; la liste garde une icône neutre.",
+      "retouche": "Le kit ne livre pas de SVG (PNG, AI, EPS, PDF) : youtube.svg et youtube.sombre.svg sont la sortie, non retouchée, de `pdftocairo -svg` (Poppler 26.06.0) sur les deux fichiers .ai du kit, qui sont au format PDF (SHA-256 f0dd67577c524eadc64e6cfb1721fbaa87c115ab6b4ea5b3cc9bdb10a72d2e32 et 0afd024f677ab527c53f9aedf08705aaf6645568a646254980c7017fd4f39b75). Mêmes tracés et même plan de travail, marge du kit comprise ; les couleurs y sont notées en pourcentages (rgb(100%, 0%, 20%) pour #FF0033, 12,9 % pour #212121).",
+      "empreintes": {
+        "youtube.svg": "553f3c308ef0431315e6cd5c9d3157f5c13898471fa69f47bc4cd1a81b47bd53",
+        "youtube.sombre.svg": "1b30923d89c10c3fd6b134d76bac1a53321215921630bf4e261e5658eaa54ac6"
+      }
     }
   },
   "neutres": {
@@ -376,7 +393,7 @@
     "instagram": "Même situation que Facebook (Meta Brand Resource Center).",
     "meta": "Modèles Llama : le logo de Meta est dans le même centre de marque, derrière la même acceptation de conditions.",
     "tiktok": "https://developers.tiktok.com/doc/getting-started-design-guidelines : pas de logo TikTok sans autorisation écrite préalable.",
-    "youtube": "https://brand.youtube/youtube-icon/ : hauteur minimale de 100 px en numérique, incompatible avec une ligne de liste de 22 px.",
+    "youtube": "https://brand.youtube/youtube-icon/ : hauteur minimale de 100 px en numérique, incompatible avec une ligne de liste de 22 px. Icône neutre dans la liste seulement : le logo officiel s'affiche en grand dans le panneau YouTube (voir « youtube » dans les marques).",
     "hubspot": "https://www.hubspot.com/partners/app/branding-guidelines : le logo et le sprocket demandent une approbation préalable.",
     "intercom": "https://www.intercom.com/legal/trademark-usage : le logo n'est utilisable que dans le cadre d'un programme partenaire.",
     "asana": "https://asana.com/brand : le symbole ne s'emploie jamais seul, et le logo complet est illisible à 22 px.",

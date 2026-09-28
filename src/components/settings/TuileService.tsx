@@ -2,7 +2,8 @@ import { createElement, useId, type ReactNode } from "react";
 import type { LucideIcon } from "lucide-react";
 import {
   MARQUES,
-  type CleMarque,
+  type CleMarqueGrande,
+  type CleMarquePetite,
   type DessinMarque,
   type Marque,
   type NoeudMarque,
@@ -23,8 +24,8 @@ import { t } from "@/lib/i18n";
  */
 
 export interface TuileServiceProps {
-  /** Marque officielle, quand elle existe. */
-  marque?: CleMarque;
+  /** Marque officielle, quand elle existe (jamais une marque « grande »). */
+  marque?: CleMarquePetite;
   /** Icône neutre, pour les services sans marque utilisable. */
   icone?: LucideIcon;
   nom: string;
@@ -56,10 +57,13 @@ function rendreNoeud(noeud: NoeudMarque, prefixe: string, cle: number): ReactNod
 function Dessin({
   dessin,
   taille,
+  largeur = taille,
   classe,
 }: {
   dessin: DessinMarque;
+  /** Hauteur, et largeur quand elle n'est pas donnée (logos carrés des listes). */
   taille: number;
+  largeur?: number;
   classe?: string;
 }) {
   // useId donne « :r1: » : les deux-points sont valides dans un id mais pas
@@ -68,7 +72,7 @@ function Dessin({
   return (
     <svg
       viewBox={dessin.viewBox}
-      width={taille}
+      width={largeur}
       height={taille}
       aria-hidden="true"
       focusable="false"
@@ -97,7 +101,8 @@ export function LogoMarque({
   icone: Icone,
   taille = 22,
 }: {
-  marque?: CleMarque;
+  /** Jamais une marque « grande » (YouTube) : sa charte interdit la taille d'une ligne. */
+  marque?: CleMarquePetite;
   icone?: LucideIcon;
   taille?: number;
 }) {
@@ -115,6 +120,33 @@ export function LogoMarque({
     return <Icone size={taille} strokeWidth={1.75} className="shrink-0 text-muted-foreground" />;
   }
   return null;
+}
+
+/**
+ * Logo d'une marque dont la charte fixe une hauteur minimale, trop grande pour
+ * une ligne de liste (28/09/2026) : YouTube, jamais sous 100 px en numérique
+ * (https://brand.youtube/youtube-logo/). La liste des connecteurs garde donc
+ * une icône neutre, et le logo ne paraît qu'ici, en grand.
+ *
+ * `hauteur` est celle du logo lui-même. Le dessin garde tout le plan de
+ * travail du kit : la marge vide que YouTube livre autour du logo est plus
+ * large que la zone de protection de sa charte (la taille du triangle), elle
+ * vient donc avec le dessin, sans dépendre des marges de l'écran. Une hauteur
+ * sous le minimum de la charte est ramenée au minimum ; `shrink-0` empêche la
+ * mise en page de la réduire.
+ */
+export function LogoMarqueGrand({ marque, hauteur = 0 }: { marque: CleMarqueGrande; hauteur?: number }) {
+  const m = MARQUES[marque];
+  const [, , largeurCadre, hauteurCadre] = m.clair.viewBox.split(" ").map(Number);
+  const logo = Math.max(hauteur, m.grand.hauteurMin);
+  const h = Math.ceil((logo * hauteurCadre) / m.grand.hauteurLogo);
+  const l = Math.ceil((h * largeurCadre) / hauteurCadre);
+  return (
+    <>
+      <Dessin dessin={m.clair} taille={h} largeur={l} classe="marque-claire" />
+      <Dessin dessin={m.sombre} taille={h} largeur={l} classe="marque-sombre" />
+    </>
+  );
 }
 
 const PASTILLE: Record<TuileServiceProps["etat"], { texte: string; classe: string }> = {

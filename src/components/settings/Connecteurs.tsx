@@ -35,7 +35,7 @@ import {
   ICONE_DU_CONNECTEUR,
   ICONE_PAR_DEFAUT,
 } from "@/components/settings/marquesConnecteurs";
-import type { CleMarque } from "@/components/ui/marques";
+import type { CleMarquePetite } from "@/components/ui/marques";
 import { branding } from "@/config/branding";
 import { cn } from "@/lib/cn";
 import { formaterDate } from "@/lib/formats";
@@ -84,7 +84,7 @@ export interface ServiceMaison {
   label: string;
   description: string;
   categorie: string;
-  marque?: CleMarque;
+  marque?: CleMarquePetite;
   icone?: LucideIcon;
   connecte: boolean;
   ouvert: boolean;
@@ -109,7 +109,7 @@ function Pastille({
 }: {
   id?: string;
   etat: "actif" | "attention" | "eteint";
-  marque?: CleMarque;
+  marque?: CleMarquePetite;
   icone?: LucideIcon;
 }) {
   const marqueRetenue = marque ?? (id ? MARQUE_DU_CONNECTEUR[id] : undefined);

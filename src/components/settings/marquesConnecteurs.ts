@@ -19,7 +19,7 @@ import {
   Video,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import type { CleMarque } from "@/components/ui/marques";
+import type { CleMarquePetite } from "@/components/ui/marques";
 
 /**
  * Le dessin qui va devant chaque service de la liste.
@@ -33,7 +33,7 @@ import type { CleMarque } from "@/components/ui/marques";
  * ci-dessous, puis sur un carré générique. Un service sans logo reste
  * branchable.
  */
-export const MARQUE_DU_CONNECTEUR: Record<string, CleMarque> = {
+export const MARQUE_DU_CONNECTEUR: Record<string, CleMarquePetite> = {
   courrier: "gmail",
   agenda: "googleAgenda",
   drive: "googleDrive",
@@ -68,7 +68,10 @@ export const MARQUE_DU_CONNECTEUR: Record<string, CleMarque> = {
  * TikTok, YouTube, HubSpot, Intercom, Asana, Airtable, Box, PayPal, Square),
  * ceux dont on n'a trouvé aucune source officielle (Tavily), et les serveurs
  * livrés avec le produit, qui ne sont la marque de personne. Raisons datées
- * dans scripts/marques/sources.json.
+ * dans scripts/marques/sources.json. YouTube n'a d'icône neutre que dans la
+ * liste : sa charte fixe 100 px au moins, son logo est en grand dans son
+ * panneau (ConnecteurNatif.tsx), et CleMarquePetite l'écarte des tables
+ * ci-dessus.
  */
 export const ICONE_DU_CONNECTEUR: Record<string, LucideIcon> = {
   fichiers: Folder,
@@ -120,7 +123,7 @@ export const ICONE_PAR_DEFAUT: LucideIcon = Blocks;
  * autorisation. Gemma n'emprunte plus l'icône de Gemini, un autre produit.
  * Partagé par le sélecteur de modèles et la comparaison des modèles.
  */
-const MARQUE_DU_MODELE: [RegExp, CleMarque][] = [
+const MARQUE_DU_MODELE: [RegExp, CleMarquePetite][] = [
   [/claude|anthropic/i, "claude"],
   [/mistral|magistral|devstral|codestral|ministral|pixtral|voxtral/i, "mistral"],
   [/gemini/i, "gemini"],
@@ -129,11 +132,11 @@ const MARQUE_DU_MODELE: [RegExp, CleMarque][] = [
   [/grok/i, "grok"],
 ];
 
-export function marqueDuModele(id: string): CleMarque | undefined {
+export function marqueDuModele(id: string): CleMarquePetite | undefined {
   return MARQUE_DU_MODELE.find(([re]) => re.test(id))?.[1];
 }
 
-export const MARQUE_DU_FOURNISSEUR: Record<string, CleMarque> = {
+export const MARQUE_DU_FOURNISSEUR: Record<string, CleMarquePetite> = {
   mistral: "mistral",
   anthropic: "anthropic",
   google: "gemini",

@@ -19,6 +19,7 @@ import { Button } from "@/components/ui/Button";
 import { Field, Input } from "@/components/ui/Field";
 import { InfoBox } from "@/components/ui/InfoBox";
 import { ACopier } from "@/components/ui/ACopier";
+import { LogoMarqueGrand } from "@/components/settings/TuileService";
 import { formaterDate } from "@/lib/formats";
 import { t, tf } from "@/lib/i18n";
 
@@ -40,6 +41,35 @@ function Lien({ href, children }: { href: string; children: ReactNode }) {
   return (
     <a className="underline" href={href} target="_blank" rel="noreferrer noopener">
       {children} <ExternalLink size={11} className="inline" />
+    </a>
+  );
+}
+
+/**
+ * Le logo de YouTube, en tête de son panneau (décision de Medhi, 28/09/2026).
+ *
+ * La liste des connecteurs le montrerait à 22 px, sous les 100 px que la
+ * charte impose (https://brand.youtube/youtube-logo/) : elle garde une icône
+ * neutre, et le logo officiel ne paraît qu'ici, en grand. La charte des
+ * développeurs (https://developers.google.com/youtube/terms/branding-guidelines)
+ * prévoit, pour une fonction qui se sert de l'API, le logo complet plutôt que
+ * l'icône, placé à côté de cette fonction, sur un fond uni, et cliquable vers
+ * YouTube : d'où le lien vers la page d'accueil de YouTube, qu'elle cite en
+ * exemple. Elle demande aussi qu'il ne soit pas l'élément le plus en vue de la
+ * page : il n'est que dans le panneau déplié, sous le titre de l'écran et la
+ * ligne YouTube de la liste.
+ */
+function LogoYouTube({ nom }: { nom: string }) {
+  return (
+    <a
+      href="https://www.youtube.com/"
+      target="_blank"
+      rel="noreferrer noopener"
+      aria-label={tf("Ouvrir {0}", nom)}
+      title={tf("Ouvrir {0}", nom)}
+      className="flex w-fit max-w-full overflow-x-auto rounded-lg"
+    >
+      <LogoMarqueGrand marque="youtube" hauteur={100} />
     </a>
   );
 }
@@ -213,6 +243,7 @@ export function ConnecteurNatif({ id, onChange }: { id: IdNatif; onChange?: () =
   }
   if (!etats || !etat) return null;
   const admin = etats.administrateur;
+  const logo = id === "youtube" ? <LogoYouTube nom={etat.nom} /> : null;
 
   const messages = (
     <>
@@ -231,6 +262,7 @@ export function ConnecteurNatif({ id, onChange }: { id: IdNatif; onChange?: () =
     const ecrit = etat.accordes?.includes("ecriture");
     return (
       <div className="space-y-3">
+        {logo}
         <Card className="flex items-start gap-3">
           <div className="min-w-0 flex-1">
             <p className="truncate font-medium text-foreground">{etat.compte}</p>
@@ -277,7 +309,7 @@ export function ConnecteurNatif({ id, onChange }: { id: IdNatif; onChange?: () =
   // X accepte une application « publique », sans secret (oauthNatif.ts, `secretFacultatif`).
   const secretFacultatif = id === "x";
 
-  return (
+  const panneau = (
     <Card className="space-y-3">
       <div>
         <p className="font-medium text-foreground">{tf("{0} : se connecter", etat.nom)}</p>
@@ -397,5 +429,12 @@ export function ConnecteurNatif({ id, onChange }: { id: IdNatif; onChange?: () =
       )}
       {messages}
     </Card>
+  );
+  if (!logo) return panneau;
+  return (
+    <div className="space-y-3">
+      {logo}
+      {panneau}
+    </div>
   );
 }

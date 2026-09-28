@@ -57,21 +57,11 @@ function Lien({ href, children }: { href: string; children: ReactNode }) {
  * YouTube : d'où le lien vers la page d'accueil de YouTube, qu'elle cite en
  * exemple. Elle demande aussi qu'il ne soit pas l'élément le plus en vue de la
  * page : il n'est que dans le panneau déplié, sous le titre de l'écran et la
- * ligne YouTube de la liste.
+ * ligne YouTube de la liste. Dans une fenêtre trop étroite pour le montrer
+ * entier à 100 px, il ne paraît pas (LogoMarqueGrand).
  */
 function LogoYouTube({ nom }: { nom: string }) {
-  return (
-    <a
-      href="https://www.youtube.com/"
-      target="_blank"
-      rel="noreferrer noopener"
-      aria-label={tf("Ouvrir {0}", nom)}
-      title={tf("Ouvrir {0}", nom)}
-      className="flex w-fit max-w-full overflow-x-auto rounded-lg"
-    >
-      <LogoMarqueGrand marque="youtube" hauteur={100} />
-    </a>
-  );
+  return <LogoMarqueGrand marque="youtube" hauteur={100} lien="https://www.youtube.com/" libelle={tf("Ouvrir {0}", nom)} />;
 }
 
 /** Comment créer l'application, service par service. */

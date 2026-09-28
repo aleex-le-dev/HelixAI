@@ -1,4 +1,4 @@
-import { createElement, useId, type ReactNode } from "react";
+import { createElement, useId, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import type { LucideIcon } from "lucide-react";
 import {
   MARQUES,
@@ -134,18 +134,56 @@ export function LogoMarque({
  * vient donc avec le dessin, sans dépendre des marges de l'écran. Une hauteur
  * sous le minimum de la charte est ramenée au minimum ; `shrink-0` empêche la
  * mise en page de la réduire.
+ *
+ * Sans la place, rien : la charte veut le logo entier et jamais couvert. Dans
+ * une fenêtre étroite (820 px, vu à l'écran le 28/09/2026), le panneau n'a que
+ * 350 px pour un dessin de 595 : le logo sortait coupé après « You ». On mesure
+ * donc la largeur offerte, et le logo ne paraît que s'il y tient en entier.
  */
-export function LogoMarqueGrand({ marque, hauteur = 0 }: { marque: CleMarqueGrande; hauteur?: number }) {
+export function LogoMarqueGrand({
+  marque,
+  hauteur = 0,
+  lien,
+  libelle,
+}: {
+  marque: CleMarqueGrande;
+  hauteur?: number;
+  /** Adresse où mène le logo (YouTube demande qu'il soit cliquable). */
+  lien?: string;
+  libelle?: string;
+}) {
   const m = MARQUES[marque];
   const [, , largeurCadre, hauteurCadre] = m.clair.viewBox.split(" ").map(Number);
   const logo = Math.max(hauteur, m.grand.hauteurMin);
   const h = Math.ceil((logo * hauteurCadre) / m.grand.hauteurLogo);
   const l = Math.ceil((h * largeurCadre) / hauteurCadre);
-  return (
+  const cadre = useRef<HTMLDivElement>(null);
+  const [place, setPlace] = useState<number | null>(null);
+  useLayoutEffect(() => {
+    const el = cadre.current;
+    if (!el) return;
+    setPlace(el.clientWidth);
+    const o = new ResizeObserver(() => setPlace(el.clientWidth));
+    o.observe(el);
+    return () => o.disconnect();
+  }, []);
+  const dessins = (
     <>
       <Dessin dessin={m.clair} taille={h} largeur={l} classe="marque-claire" />
       <Dessin dessin={m.sombre} taille={h} largeur={l} classe="marque-sombre" />
     </>
+  );
+  return (
+    <div ref={cadre} className="w-full">
+      {place !== null && place >= l &&
+        (lien ? (
+          <a href={lien} target="_blank" rel="noreferrer noopener" aria-label={libelle} title={libelle} className="flex w-fit rounded-lg">
+            {dessins}
+          </a>
+        ) : (
+          <div className="flex w-fit">{dessins}</div>
+        ))}
+    </div>
   );
 }
 

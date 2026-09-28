@@ -3825,7 +3825,8 @@ async function handleInvitations(
   if (!qui) return send(res, 401, sansSeance());
   // Chacun ne voit et n'annule que les siennes : la liste de toutes désignait qui viser (revue du 26/09/2026).
   const admin = await estAdministrateur(qui.userId);
-  if (req.method === "GET") return send(res, 200, { invitations: await invitations.enAttente(qui.userId, admin) });
+  // `administrateur` : l'écran des collègues montre « Créer un compte sur ce poste » à lui seul (CreerCompte.tsx, 28/09/2026).
+  if (req.method === "GET") return send(res, 200, { invitations: await invitations.enAttente(qui.userId, admin), administrateur: admin });
 
   const body = (await readJson(req).catch(() => ({}))) as { email?: unknown };
   const r = await invitations.annuler(body.email, qui.userId, admin);

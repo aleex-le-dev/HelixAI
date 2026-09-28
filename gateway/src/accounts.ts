@@ -111,11 +111,11 @@ const MOT_DE_PASSE_MAX = 1024;
 
 /** Raison du refus, ou `null` si le mot de passe convient. */
 export function motDePasseRefuse(valeur: unknown): string | null {
-  if (typeof valeur !== "string" || valeur.trim() === "") return "Un mot de passe est requis.";
+  if (typeof valeur !== "string" || valeur.trim() === "") return t("Un mot de passe est requis.");
   if (valeur.length < MOT_DE_PASSE_MIN) {
-    return `Le mot de passe doit compter au moins ${MOT_DE_PASSE_MIN} caractères.`;
+    return tf("Le mot de passe doit compter au moins {0} caractères.", MOT_DE_PASSE_MIN);
   }
-  if (valeur.length > MOT_DE_PASSE_MAX) return "Ce mot de passe est trop long.";
+  if (valeur.length > MOT_DE_PASSE_MAX) return t("Ce mot de passe est trop long.");
   return null;
 }
 
@@ -286,7 +286,7 @@ async function creerCompte(input: {
   const fullName = (input.fullName ?? "").trim();
   const email = normalise(input.email ?? "");
 
-  if (!fullName || !email) return { ok: false, reason: "Nom et adresse email requis." };
+  if (!fullName || !email) return { ok: false, reason: t("Nom et adresse email requis.") };
   /*
    * Plus de compte sans mot de passe, pas même le premier. Un compte qu'on
    * ouvre par simple sélection est une porte ouverte dès que l'instance est
@@ -296,16 +296,16 @@ async function creerCompte(input: {
   const refus = motDePasseRefuse(input.password);
   if (refus) return { ok: false, reason: refus };
   if (!FORME_EMAIL.test(email)) {
-    return { ok: false, reason: "Adresse email invalide." };
+    return { ok: false, reason: t("Adresse email invalide.") };
   }
 
   const accounts = await load();
   const reservee = adresseReservee(accounts, email);
   if (reservee === "actuelle") {
-    return { ok: false, reason: "Un compte existe déjà avec cette adresse." };
+    return { ok: false, reason: t("Un compte existe déjà avec cette adresse.") };
   }
   if (reservee === "ancienne") {
-    return { ok: false, reason: "Cette adresse a déjà servi à un compte de l'instance." };
+    return { ok: false, reason: t("Cette adresse a déjà servi à un compte de l'instance.") };
   }
 
   const salt = randomBytes(16).toString("hex");
@@ -415,9 +415,9 @@ export function definirPremierMotDePasse(
 
     const accounts = await load();
     const compte = accounts.find((a) => a.id === accountId);
-    if (!compte) return { ok: false, reason: "Compte introuvable.", statut: 404 };
+    if (!compte) return { ok: false, reason: t("Compte introuvable."), statut: 404 };
     if (compte.passwordHash && compte.salt) {
-      return { ok: false, reason: "Ce compte a déjà un mot de passe.", statut: 409 };
+      return { ok: false, reason: t("Ce compte a déjà un mot de passe."), statut: 409 };
     }
 
     const salt = randomBytes(16).toString("hex");
@@ -498,12 +498,12 @@ export async function verifyAccount(
     journaliser("connexion.bloquee", accountId, { secondesRestantes: secondes });
     return {
       ok: false,
-      reason: `Trop de tentatives. Réessayez dans ${secondes} seconde${secondes > 1 ? "s" : ""}.`,
+      reason: secondes > 1 ? tf("Trop de tentatives. Réessayez dans {0} secondes.", secondes) : t("Trop de tentatives. Réessayez dans une seconde."),
     };
   }
 
   const account = (await load()).find((a) => a.id === accountId);
-  if (!account) return { ok: false, reason: "Compte introuvable." };
+  if (!account) return { ok: false, reason: t("Compte introuvable.") };
 
   /*
    * Compte créé sans mot de passe, avant que la règle ne change : il ne
@@ -512,11 +512,11 @@ export async function verifyAccount(
    * autres.
    */
   if (!account.passwordHash || !account.salt) {
-    return { ok: false, reason: "Ce compte n'a pas encore de mot de passe : définissez-en un.", aDefinir: true };
+    return { ok: false, reason: t("Ce compte n'a pas encore de mot de passe : définissez-en un."), aDefinir: true };
   }
   if (!password) {
     noterEchec(accountId);
-    return { ok: false, reason: "Mot de passe requis." };
+    return { ok: false, reason: t("Mot de passe requis.") };
   }
 
   const valid = motDePasseJuste(account, password);
@@ -524,7 +524,7 @@ export async function verifyAccount(
   if (!valid) {
     noterEchec(accountId);
     journaliser("connexion.refusee", accountId, { motif: "mot de passe incorrect" });
-    return { ok: false, reason: "Mot de passe incorrect." };
+    return { ok: false, reason: t("Mot de passe incorrect.") };
   }
   // Empreinte d'avant les 600 000 itérations : refaite maintenant que le mot de passe est connu.
   if ((account.iterations ?? ITERATIONS_ANCIENNES) < ITERATIONS) void renforcerEmpreinte(accountId, account.passwordHash, password);
@@ -550,7 +550,7 @@ export async function verifyAccount(
     journaliser("connexion.second_facteur_demande", accountId, {});
     return {
       ok: false,
-      reason: "Saisissez le code affiché par votre application d'authentification.",
+      reason: t("Saisissez le code affiché par votre application d'authentification."),
       defi: nouveauDefi(accountId),
     };
   }
@@ -567,7 +567,7 @@ export async function verifyAccount(
     journaliser("connexion.second_facteur_a_activer", accountId, {});
     return {
       ok: false,
-      reason: "Votre instance exige la double authentification : activez-la pour vous connecter.",
+      reason: t("Votre instance exige la double authentification : activez-la pour vous connecter."),
       inscription: nouveauDefi(accountId, "inscription"),
     };
   }
@@ -662,7 +662,7 @@ async function appliquerProfil(
 ): Promise<ResultatProfil> {
   const accounts = await load();
   const compte = accounts.find((a) => a.id === accountId);
-  if (!compte) return { ok: false, statut: 404, reason: "Compte introuvable." };
+  if (!compte) return { ok: false, statut: 404, reason: t("Compte introuvable.") };
 
   /* ---- Photo : une image valide, ou `null` pour la retirer ---- */
   if (changements.photo !== undefined) {
@@ -675,7 +675,7 @@ async function appliquerProfil(
       return { ok: true, account: toPublic(compte) };
     }
     if (typeof changements.photo !== "string" || !photoValide(changements.photo)) {
-      return { ok: false, statut: 400, reason: "Photo refusée : une image JPEG, PNG ou WebP de 80 Ko au plus." };
+      return { ok: false, statut: 400, reason: t("Photo refusée : une image JPEG, PNG ou WebP de 80 Ko au plus.") };
     }
     compte.photo = changements.photo;
     await save(accounts);
@@ -690,7 +690,7 @@ async function appliquerProfil(
   for (const champ of ["fullName", "email", "password"] as const) {
     const valeur = changements[champ];
     if (valeur !== undefined && typeof valeur !== "string") {
-      return { ok: false, statut: 400, reason: `Le champ « ${champ} » doit être du texte.` };
+      return { ok: false, statut: 400, reason: tf("Le champ « {0} » doit être du texte.", champ) };
     }
   }
   const nomDemande = changements.fullName as string | undefined;
@@ -701,12 +701,12 @@ async function appliquerProfil(
   let nouveauNom: string | null = null;
   if (nomDemande !== undefined) {
     if (NON_AFFICHABLE.test(nomDemande.replace(/[\t\n\r]/g, " "))) {
-      return { ok: false, statut: 400, reason: "Le nom contient des caractères non affichables." };
+      return { ok: false, statut: 400, reason: t("Le nom contient des caractères non affichables.") };
     }
     const nom = nomDemande.trim().replace(/\s+/g, " ");
-    if (!nom) return { ok: false, statut: 400, reason: "Le nom ne peut pas être vide." };
+    if (!nom) return { ok: false, statut: 400, reason: t("Le nom ne peut pas être vide.") };
     if (nom.length > NOM_MAX) {
-      return { ok: false, statut: 400, reason: `Le nom dépasse ${NOM_MAX} caractères.` };
+      return { ok: false, statut: 400, reason: tf("Le nom dépasse {0} caractères.", NOM_MAX) };
     }
     if (nom !== compte.fullName) nouveauNom = nom;
   }
@@ -717,7 +717,7 @@ async function appliquerProfil(
     const adresse = normalise(adresseDemandee);
     if (adresse !== normalise(compte.email)) {
       if (!FORME_EMAIL.test(adresse) || adresse.length > ADRESSE_MAX) {
-        return { ok: false, statut: 400, reason: "Adresse email invalide." };
+        return { ok: false, statut: 400, reason: t("Adresse email invalide.") };
       }
 
       /*
@@ -732,34 +732,34 @@ async function appliquerProfil(
           return {
             ok: false,
             statut: 429,
-            reason: `Trop de tentatives. Réessayez dans ${secondes} seconde${secondes > 1 ? "s" : ""}.`,
+            reason: secondes > 1 ? tf("Trop de tentatives. Réessayez dans {0} secondes.", secondes) : t("Trop de tentatives. Réessayez dans une seconde."),
           };
         }
         if (!motDePasse) {
           return {
             ok: false,
             statut: 400,
-            reason: "Votre mot de passe actuel est requis pour changer d'adresse.",
+            reason: t("Votre mot de passe actuel est requis pour changer d'adresse."),
           };
         }
         if (!motDePasseJuste(compte, motDePasse)) {
           noterEchec(accountId);
           // Le mot de passe essayé ne figure évidemment pas dans la trace.
           journaliser("compte.adresse_refusee", accountId, { motif: "mot de passe incorrect" });
-          return { ok: false, statut: 403, reason: "Mot de passe incorrect." };
+          return { ok: false, statut: 403, reason: t("Mot de passe incorrect.") };
         }
         echecs.delete(accountId);
       }
 
       const reservee = adresseReservee(accounts, adresse, accountId);
       if (reservee === "actuelle") {
-        return { ok: false, statut: 409, reason: "Un compte existe déjà avec cette adresse." };
+        return { ok: false, statut: 409, reason: t("Un compte existe déjà avec cette adresse.") };
       }
       if (reservee === "ancienne") {
         return {
           ok: false,
           statut: 409,
-          reason: "Cette adresse a déjà servi à un compte de l'instance.",
+          reason: t("Cette adresse a déjà servi à un compte de l'instance."),
         };
       }
       nouvelleAdresse = adresse;
@@ -862,7 +862,7 @@ function refusBlocage(accountId: string): Refus | null {
   return {
     ok: false,
     statut: 429,
-    reason: `Trop de tentatives. Réessayez dans ${secondes} seconde${secondes > 1 ? "s" : ""}.`,
+    reason: secondes > 1 ? tf("Trop de tentatives. Réessayez dans {0} secondes.", secondes) : t("Trop de tentatives. Réessayez dans une seconde."),
   };
 }
 
@@ -875,15 +875,15 @@ function controlerMotDePasse(compte: StoredAccount, motDePasse: unknown): Refus 
   const blocage = refusBlocage(compte.id);
   if (blocage) return blocage;
   if (!compte.passwordHash || !compte.salt) {
-    return { ok: false, statut: 409, reason: "Définissez d'abord un mot de passe." };
+    return { ok: false, statut: 409, reason: t("Définissez d'abord un mot de passe.") };
   }
   if (typeof motDePasse !== "string" || !motDePasse) {
-    return { ok: false, statut: 400, reason: "Votre mot de passe est requis." };
+    return { ok: false, statut: 400, reason: t("Votre mot de passe est requis.") };
   }
   if (!motDePasseJuste(compte, motDePasse)) {
     noterEchec(compte.id);
     journaliser("connexion.refusee", compte.id, { motif: "mot de passe incorrect", pour: "second facteur" });
-    return { ok: false, statut: 403, reason: "Mot de passe incorrect." };
+    return { ok: false, statut: 403, reason: t("Mot de passe incorrect.") };
   }
   return null;
 }
@@ -923,7 +923,7 @@ export function validerSecondFacteur(
         ok: false,
         statut: 401,
         expire: true,
-        reason: "Délai dépassé : saisissez de nouveau votre mot de passe.",
+        reason: t("Délai dépassé : saisissez de nouveau votre mot de passe."),
       };
     }
 
@@ -934,7 +934,7 @@ export function validerSecondFacteur(
     const compte = accounts.find((a) => a.id === d.accountId);
     if (!compte?.deuxFacteurs) {
       defis.delete(defi as string);
-      return { ok: false, statut: 401, expire: true, reason: "Saisissez de nouveau votre mot de passe." };
+      return { ok: false, statut: 401, expire: true, reason: t("Saisissez de nouveau votre mot de passe.") };
     }
 
     const reconnu = consommerCode(compte.deuxFacteurs, code);
@@ -948,13 +948,13 @@ export function validerSecondFacteur(
           ok: false,
           statut: 401,
           expire: true,
-          reason: "Trop de codes erronés : saisissez de nouveau votre mot de passe.",
+          reason: t("Trop de codes erronés : saisissez de nouveau votre mot de passe."),
         };
       }
       return {
         ok: false,
         statut: 401,
-        reason: "Code incorrect. Vérifiez aussi que l'heure du téléphone est juste.",
+        reason: t("Code incorrect. Vérifiez aussi que l'heure du téléphone est juste."),
       };
     }
 
@@ -1003,9 +1003,9 @@ export function preparerDeuxFacteurs(
   return enFile(async () => {
     const accounts = await load();
     const compte = accounts.find((a) => a.id === accountId);
-    if (!compte) return { ok: false, statut: 404, reason: "Compte introuvable." };
+    if (!compte) return { ok: false, statut: 404, reason: t("Compte introuvable.") };
     if (compte.deuxFacteurs) {
-      return { ok: false, statut: 409, reason: "La vérification en deux étapes est déjà active." };
+      return { ok: false, statut: 409, reason: t("La vérification en deux étapes est déjà active.") };
     }
     const refus = controlerMotDePasse(compte, motDePasse);
     if (refus) return refus;
@@ -1029,16 +1029,16 @@ export function activerDeuxFacteurs(
   return enFile(async () => {
     const accounts = await load();
     const compte = accounts.find((a) => a.id === accountId);
-    if (!compte) return { ok: false, statut: 404, reason: "Compte introuvable." };
+    if (!compte) return { ok: false, statut: 404, reason: t("Compte introuvable.") };
     if (compte.deuxFacteurs) {
-      return { ok: false, statut: 409, reason: "La vérification en deux étapes est déjà active." };
+      return { ok: false, statut: 409, reason: t("La vérification en deux étapes est déjà active.") };
     }
     const attente = compte.deuxFacteursEnAttente;
     if (!attente || Date.now() - Date.parse(attente.creeLe) > DUREE_ATTENTE_MS) {
       return {
         ok: false,
         statut: 409,
-        reason: "Le code à scanner a expiré. Recommencez l'activation.",
+        reason: t("Le code à scanner a expiré. Recommencez l'activation."),
       };
     }
     const pas = typeof code === "string" ? verifierCode(attente.secret, code, undefined) : null;
@@ -1046,7 +1046,7 @@ export function activerDeuxFacteurs(
       return {
         ok: false,
         statut: 400,
-        reason: "Code incorrect. Vérifiez que l'heure du téléphone est juste, puis saisissez le code affiché.",
+        reason: t("Code incorrect. Vérifiez que l'heure du téléphone est juste, puis saisissez le code affiché."),
       };
     }
 
@@ -1079,7 +1079,7 @@ export function preparerInscription(
         ok: false,
         statut: 401,
         expire: true,
-        reason: "Délai dépassé : saisissez de nouveau votre mot de passe.",
+        reason: t("Délai dépassé : saisissez de nouveau votre mot de passe."),
       };
     }
     // Un même défi garde son secret : recharger l'écran ne change pas le QR code.
@@ -1103,7 +1103,7 @@ export function activerInscription(
         ok: false,
         statut: 401,
         expire: true,
-        reason: "Délai dépassé : saisissez de nouveau votre mot de passe.",
+        reason: t("Délai dépassé : saisissez de nouveau votre mot de passe."),
       };
     }
     const pas = typeof code === "string" ? verifierCode(d.secret, code, undefined) : null;
@@ -1115,19 +1115,19 @@ export function activerInscription(
           ok: false,
           statut: 401,
           expire: true,
-          reason: "Trop de codes erronés : saisissez de nouveau votre mot de passe.",
+          reason: t("Trop de codes erronés : saisissez de nouveau votre mot de passe."),
         };
       }
       return {
         ok: false,
         statut: 400,
-        reason: "Code incorrect. Vérifiez que l'heure du téléphone est juste, puis saisissez le code affiché.",
+        reason: t("Code incorrect. Vérifiez que l'heure du téléphone est juste, puis saisissez le code affiché."),
       };
     }
 
     const accounts = await load();
     const compte = accounts.find((a) => a.id === d.accountId);
-    if (!compte) return { ok: false, statut: 404, reason: "Compte introuvable." };
+    if (!compte) return { ok: false, statut: 404, reason: t("Compte introuvable.") };
     const secours = nouveauxCodesDeSecours();
     compte.deuxFacteurs = {
       secret: d.secret,
@@ -1162,22 +1162,22 @@ export function desactiverDeuxFacteurs(
   return enFile(async () => {
     const accounts = await load();
     const compte = accounts.find((a) => a.id === accountId);
-    if (!compte) return { ok: false, statut: 404, reason: "Compte introuvable." };
+    if (!compte) return { ok: false, statut: 404, reason: t("Compte introuvable.") };
     if (!compte.deuxFacteurs) {
-      return { ok: false, statut: 409, reason: "La vérification en deux étapes n'est pas active." };
+      return { ok: false, statut: 409, reason: t("La vérification en deux étapes n'est pas active.") };
     }
     if (deuxFacteursObligatoire()) {
       return {
         ok: false,
         statut: 403,
-        reason: "Votre instance impose la double authentification : elle ne peut pas être retirée.",
+        reason: t("Votre instance impose la double authentification : elle ne peut pas être retirée."),
       };
     }
     const refus = controlerMotDePasse(compte, motDePasse);
     if (refus) return refus;
     if (!consommerCode(compte.deuxFacteurs, code)) {
       noterEchec(accountId);
-      return { ok: false, statut: 403, reason: "Code incorrect." };
+      return { ok: false, statut: 403, reason: t("Code incorrect.") };
     }
     delete compte.deuxFacteurs;
     await save(accounts);
@@ -1196,15 +1196,15 @@ export function regenererCodesDeSecours(
   return enFile(async () => {
     const accounts = await load();
     const compte = accounts.find((a) => a.id === accountId);
-    if (!compte) return { ok: false, statut: 404, reason: "Compte introuvable." };
+    if (!compte) return { ok: false, statut: 404, reason: t("Compte introuvable.") };
     if (!compte.deuxFacteurs) {
-      return { ok: false, statut: 409, reason: "La vérification en deux étapes n'est pas active." };
+      return { ok: false, statut: 409, reason: t("La vérification en deux étapes n'est pas active.") };
     }
     const refus = controlerMotDePasse(compte, motDePasse);
     if (refus) return refus;
     if (!consommerCode(compte.deuxFacteurs, code)) {
       noterEchec(accountId);
-      return { ok: false, statut: 403, reason: "Code incorrect." };
+      return { ok: false, statut: 403, reason: t("Code incorrect.") };
     }
     const secours = nouveauxCodesDeSecours();
     compte.deuxFacteurs.secours = secours.empreintes;
@@ -1256,7 +1256,7 @@ export function confirmerIdentite(
   return enFile(async () => {
     const accounts = await load();
     const compte = accounts.find((a) => a.id === accountId);
-    if (!compte) return { ok: false, statut: 404, reason: "Compte introuvable." };
+    if (!compte) return { ok: false, statut: 404, reason: t("Compte introuvable.") };
     const refus = controlerMotDePasse(compte, motDePasse);
     if (refus) return refus;
     if (compte.deuxFacteurs) {
@@ -1265,7 +1265,7 @@ export function confirmerIdentite(
         return {
           ok: false,
           statut: 403,
-          reason: "Code de vérification incorrect (celui de l'application, ou un code de secours).",
+          reason: t("Code de vérification incorrect (celui de l'application, ou un code de secours)."),
         };
       }
       await save(accounts);

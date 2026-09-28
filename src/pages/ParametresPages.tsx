@@ -33,6 +33,7 @@ import { secretsEcrits } from "@/lib/coffre";
 import { InviterCollegue } from "@/components/settings/InviterCollegue";
 import { Abonnement } from "@/components/settings/Abonnement";
 import { OuvrirInstance } from "@/components/settings/OuvrirInstance";
+import { CreerCompte } from "@/components/settings/CreerCompte";
 import { useMcp } from "@/hooks/useMcp";
 import { SettingsPage, SettingsRow, Card } from "@/components/settings/SettingsShell";
 import { SeancesEtJournal } from "@/components/settings/SeancesEtJournal";
@@ -318,6 +319,9 @@ export function ProfilSettings() {
         <OuvrirInstance />
         <div className="mt-4">
           <InviterCollegue />
+        </div>
+        <div className="mt-4">
+          <CreerCompte />
         </div>
       </SettingsRow>
 

@@ -145,6 +145,17 @@ export async function invitationsEnAttente(): Promise<Invitation[]> {
   }
 }
 
+/** Le compte connecté est-il l'administrateur de l'instance ? `false` si l'instance ne répond pas. */
+export async function suisAdministrateur(): Promise<boolean> {
+  try {
+    const res = await apiFetch("/helix/invitations");
+    if (!res.ok) return false;
+    return ((await res.json()) as { administrateur?: boolean }).administrateur === true;
+  } catch {
+    return false;
+  }
+}
+
 export async function annulerInvitation(email: string): Promise<boolean> {
   try {
     const res = await apiFetch("/helix/invitations", {

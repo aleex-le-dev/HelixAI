@@ -7559,6 +7559,15 @@ console.log("\n21. Chat : un service branché, outils éteints, le Chat le dit (
   );
 }
 
+console.log("\n22. Créer un compte sur ce poste (administrateur) et erreurs de compte traduites (28/09/2026)");
+{
+  const carte = readFileSync(join(RACINE, "src", "components", "settings", "CreerCompte.tsx"), "utf8");
+  const comptes = readFileSync(join(RACINE, "gateway", "src", "accounts.ts"), "utf8");
+  verifier("la carte ne s'affiche qu'à l'administrateur, et passe par la création de compte de l'instance (mot de passe provisoire)", /if \(!admin\) return null;/.test(carte) && /createAccount\(\{ fullName: nom\.trim\(\), email: email\.trim\(\), password: provisoire \}\)/.test(carte), "CreerCompte.tsx");
+  verifier("le mot de passe provisoire est tiré par le navigateur (crypto.getRandomValues), seize caractères", /crypto\.getRandomValues\(tirage\)/.test(carte) && /new Uint32Array\(16\)/.test(carte), "CreerCompte.tsx");
+  verifier("les erreurs de compte et de connexion passent toutes par la traduction (plus de « Mot de passe incorrect. » en français dans une interface anglaise)", !/reason: "/.test(comptes) && !/reason: `/.test(comptes), "accounts.ts");
+}
+
 console.log(`\n${reussis} vérification(s) réussie(s), ${echecs.length} échec(s).`);
 if (echecs.length) {
   console.log("Échecs :");

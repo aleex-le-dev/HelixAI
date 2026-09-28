@@ -1199,7 +1199,7 @@ laisser l'interface le choisir serait offrir l'exécution de code à distance.
 
 **Catalogue (0.22.0).** 33 entrées, rangées en sept rubriques et cherchables. Douze
 services acceptent l'enregistrement dynamique (Notion, Linear, Jira/Confluence,
-Asana, Sentry, Intercom, Canva, Figma, Webflow, Wix, Vercel, Square, PayPal) ;
+Sentry, Intercom, Canva, Webflow, Wix, Square, PayPal ; Figma et Vercel retirés, Asana passé en application déclarée le 28/09/2026, SECURITE.md § 49) ;
 quatre veulent une application déclarée chez eux, créée une seule fois (GitHub,
 Slack, Box, Airtable) ; les autres restent branchés par jeton. Chaque adresse et
 chaque nom de paquet npm ont été vérifiés le 18/09/2026.

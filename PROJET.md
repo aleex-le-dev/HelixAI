@@ -510,7 +510,8 @@ Douze services sont branchés ainsi, vérifiés un à un le 18/09/2026 (leur ser
 répond, publie ses métadonnées et accepte l'enregistrement dynamique) : Notion,
 Linear, Jira et Confluence, Asana, Sentry, Intercom, Canva, Figma, Webflow, Wix,
 Vercel, Square, PayPal. Quatre autres publient un serveur mais veulent une
-application déclarée chez eux : GitHub, Slack, Box, Airtable. Une personne la crée
+application déclarée chez eux : GitHub, Slack, Box, Airtable. (Revérifié le 28/09/2026 : Figma et Vercel retirés, Asana
+passé en application déclarée, Airtable en un clic ; voir plus bas.) Une personne la crée
 une seule fois, colle son identifiant, et le bouton « Se connecter » suffit ensuite à
 tout le monde. Les autres restent branchés par jeton, avec un serveur exécuté sur la
 machine de l'instance (GitLab, PostgreSQL, HubSpot, Firecrawl, Tavily, Exa, Brave,
@@ -607,6 +608,37 @@ la réponse de jetons contient-elle `scope` (sinon la connexion est refusée, et
 à revoir pour X) ; X fait-il tourner le jeton d'actualisation ; quel code rend une requête sans
 crédit (l'outil suppose 402) ; X exige-t-il les droits « Read and write » de l'application en
 plus de `tweet.write`.
+
+**Revérifié le 28/09/2026 : les connecteurs déjà livrés (branche `verif-connecteurs`).** Demandé
+par Medhi : « vérifier que les connecteurs actuels vont bien fonctionner ». Sans compte : la
+documentation officielle du jour, les métadonnées d'autorisation publiques de chaque serveur MCP
+distant (lues sans identifiant ni inscription), le registre npm ; puis un parcours complet contre de
+faux serveurs (`scripts/essai-connecteurs.mjs`, section 16 septies de `npm run securite`) et l'écran
+dans une fenêtre Electron cachée. Détail, tableau par connecteur et ce qui n'a pas été essayé :
+SECURITE.md § 49. Ce qu'il faut retenir :
+
+- **Cinq adresses MCP étaient périmées**, dont trois en panne franche : Jira et Confluence
+  (`/v1/sse` sans métadonnées, désormais `/v2/mcp`), Asana (V1 arrêté le 11/05/2026 ; le V2 veut une
+  « MCP app » déclarée, il passe donc en « application déclarée »), Wix et Square (`/mcp`), PayPal
+  (`/http`). Un connecteur branché avant est réaligné sur la nouvelle adresse, et la personne se
+  reconnecte : l'autorisation d'une adresse ne sert jamais à une autre.
+- **Webflow** ne documente que l'ancien transport SSE, que Helix ne parlait pas : `mcp.ts` se replie
+  désormais sur SSE quand le transport « streamable » est refusé (spécification MCP).
+- **Figma et Vercel sont retirés du catalogue** : leur documentation réserve leur serveur aux clients
+  qu'ils ont approuvés. Décision prise ici, réversible si l'un d'eux ouvre l'accès (liste d'attente
+  chez Figma) ; à confirmer par Medhi.
+- Écran : pour GitHub, Slack, Box et Asana, l'adresse de retour à déclarer s'effaçait aussitôt
+  affichée ; elle reste. Panneaux Facebook et Instagram : Meta ne fait plus choisir un type d'app
+  mais des cas d'usage. La page de retour d'autorisation suit la langue du navigateur.
+- À surveiller : Notion déclare son serveur local (« Notion (par jeton) ») plus maintenu ; HubSpot
+  met en avant son serveur distant ; Canva dit l'inscription automatique « dépréciée, toujours
+  disponible » ; la version LinkedIn (`202609`) et la version Graph de Meta (`v25.0`, fin le
+  29/07/2028) sont désormais contrôlées par `npm run securite`, qui échouera quand il faudra les
+  relever.
+
+À essayer sur le poste, avec de vrais comptes : « Se connecter » sur Jira et Confluence, Webflow,
+Wix, Square, PayPal (adresse de retour `http://127.0.0.1:8787/helix/oauth/retour` acceptée ?) ;
+Asana avec une « MCP app » ; puis un outil de lecture sur chacun.
 
 ### 3.6 Découpage des tâches lourdes
 

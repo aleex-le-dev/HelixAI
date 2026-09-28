@@ -7446,6 +7446,37 @@ console.log("\n19. Moteur ouvert llama.cpp (Mac Intel) : épinglé, local, sous 
   );
 }
 
+/*
+ * Serveurs MCP et outils intégrés (tournée du 28/09/2026, SECURITE.md § 56) :
+ * scripts/essai-mcp.mjs, repris sous « mcp : ». Faux serveurs stdio pour les
+ * cas limites, serveurs de référence tirés par npx (stdio, HTTP, SSE), OAuth
+ * contre un faux serveur d'autorisation, MCP personnalisé dans un Chat avec
+ * carte d'approbation, connecteurs intégrés sans compte, arrêt sans orphelin.
+ */
+console.log("\n20. Serveurs MCP : protocole, transports, OAuth, MCP personnalisé dans un Chat, espace, arrêt sans orphelin");
+{
+  const essai = await new Promise((fin) => {
+    const e = spawn(process.execPath, [join(RACINE, "scripts", "essai-mcp.mjs")], { stdio: ["ignore", "pipe", "pipe"] });
+    let sortie = "";
+    e.stdout.on("data", (b) => (sortie += b));
+    e.stderr.on("data", (b) => (sortie += b));
+    const minuterie = setTimeout(() => e.kill(), 10 * 60_000);
+    e.on("close", (status) => {
+      clearTimeout(minuterie);
+      fin({ status, sortie });
+    });
+  });
+  const lignes = essai.sortie.split("\n");
+  for (const ligne of lignes) {
+    const ok = /^\s+✓ (.*)$/.exec(ligne);
+    const ko = /^\s+✗ (.*?)(?:  —  obtenu : .*)?$/.exec(ligne);
+    if (ok) verifier(`mcp : ${ok[1]}`, true, "");
+    else if (ko) verifier(`mcp : ${ko[1]}`, false, ligne.split("  —  obtenu : ")[1] ?? "");
+    else if (/^[A-F]\. /.test(ligne)) console.log(`  ${ligne}`);
+  }
+  verifier("mcp : l'essai s'est déroulé jusqu'au bout", essai.status === 0, `${essai.status} ${lignes.slice(-6).join(" ")}`);
+}
+
 console.log(`\n${reussis} vérification(s) réussie(s), ${echecs.length} échec(s).`);
 if (echecs.length) {
   console.log("Échecs :");

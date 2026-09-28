@@ -936,6 +936,22 @@ bout, les outils proposés au modèle quand le service est branché et plus apr�
 JSON, LinkedIn et Microsoft 365 branchés depuis l'écran puis débranchés. Pas essayé : les vrais
 services (aucun compte, aucune application de développeur).
 
+**Tournée des serveurs MCP et outils intégrés, 28/09/2026 (soir).** Même demande. Treize défauts
+corrigés dans `mcp.ts` et `connecteurs.ts`, dont : un serveur tombé restait « en marche » et tous
+ses appels échouaient jusqu'au redémarrage de la passerelle (il est relancé, trois fois au plus en
+dix minutes) ; un serveur distant redémarré qui avait oublié la session ne répondait plus ; les
+processus lancés par un serveur (le `node` derrière `npx`) survivaient à son retrait et à la
+fermeture de l'application ; la liste d'outils n'était lue qu'à sa première page ; des noms d'outils
+(points, espaces, plus de 64 caractères, doublons entre deux serveurs) faisaient refuser toute la
+demande par un fournisseur compatible OpenAI ; le carnet « Mémoire de travail » vivait dans le cache
+de npx (perdu à chaque mise à jour) et vit désormais dans les données de l'instance. Essai de bout en
+bout `scripts/essai-mcp.mjs` (83 vérifications, repris par `npm run securite`, section 20) : trois
+transports avec les serveurs de référence, OAuth contre un faux serveur d'autorisation, MCP
+personnalisé utilisé dans un Chat avec sa carte d'approbation. **Pas essayé** : les vrais services,
+un vrai modèle, Windows (arrêt de l'arbre des processus). PayPal : l'adresse documentée
+(`/http`) répond 404, `/mcp` répond 401 ; laissée telle que documentée, à trancher avec un compte.
+SECURITE.md § 56.
+
 ### 3.6 Découpage des tâches lourdes
 
 Ajouté en septembre 2026, après mesure. Un modèle de 8 milliards de paramètres perd le

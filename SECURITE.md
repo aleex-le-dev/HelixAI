@@ -5896,3 +5896,62 @@ réel ; l'application Intel empaquetée ; Qwen3 4B, 8B et 30B A3B sous llama.cpp
 téléchargé et chargé ; les empreintes des autres sont celles de Hugging Face, pas recalculées) ; la
 vitesse au processeur d'un Mac Intel ; la mise en veille du modèle après vingt minutes
 (`sleep-idle-seconds`).
+
+## 56. Serveurs MCP et outils intégrés : tournée du 28 septembre 2026
+
+Essai de bout en bout : `scripts/essai-mcp.mjs` (83 vérifications), repris par `npm run securite`,
+section 20. Faux serveurs stdio pour les cas limites ; serveurs de référence
+`@modelcontextprotocol/server-everything` et `server-memory` (2026.8.31, tirés par npx) en stdio,
+HTTP « streamable » et SSE ; faux serveur d'autorisation et faux MCP protégé pour OAuth ; passerelle
+jetable avec un faux modèle compatible OpenAI ; parcours vu à l'écran (serveur de dev de l'interface).
+
+### 56.1 Défauts corrigés (gateway/src/mcp.ts sauf mention)
+
+- **Serveur planté, toujours « en marche ».** Rien n'écoutait la fin du processus : l'écran le disait
+  allumé, ses outils restaient proposés, chaque appel répondait « Not connected » jusqu'au redémarrage
+  de la passerelle. Il est dit arrêté, relancé une seconde plus tard (trois fois en dix minutes au
+  plus), et l'appel suivant d'un de ses outils le relance.
+- **Serveur distant redémarré.** Sa session perdue (« No valid session ID », 404), plus aucun appel ne
+  passait. La connexion est rouverte ; l'appel n'est refait que s'il est sûr que le serveur ne l'a
+  pas exécuté (refusé avant, connexion refusée). Sinon l'échec dit qu'il a pu être exécuté.
+- **Orphelins.** Ce qu'un serveur avait lancé (le `node` que lance `npx`, un navigateur) lui
+  survivait au retrait ; un serveur qui ignore SIGTERM restait après la fermeture de la passerelle
+  (`arreterProprement` ne s'occupait pas des serveurs MCP). L'arbre est relevé avant la fermeture et
+  arrêté ; à la sortie, SIGTERM puis SIGKILL après une demi-seconde. Un serveur mort en listant ses
+  outils restait aussi en mémoire ; deux démarrages simultanés lançaient deux processus.
+- **Noms d'outils.** Passés tels quels au modèle : un point, un espace ou plus de 64 caractères font
+  refuser la demande entière par un fournisseur compatible OpenAI. Deux serveurs pouvaient produire
+  le même nom (« a_ » + « x », « a » + « _x ») et l'appel partait chez le premier. Noms ramenés à
+  `^[A-Za-z0-9_-]{1,64}$`, uniques sur l'instance ; un identifiant de connecteur ne contient plus
+  `__` ni ne finit par `_` (connecteurs.ts : `fichiers_` aurait produit des `fichiers___…`, que la
+  barrière lit comme le serveur de fichiers).
+- **Protocole.** `tools/list` n'était lu qu'en première page ; `notifications/tools/list_changed`
+  ignoré ; le texte d'une ressource, l'adresse d'un lien et un résultat seulement structuré
+  arrivaient vides au modèle ; l'explication du dossier de travail s'ajoutait à tout refus
+  « not allowed », même venu de Notion.
+- **Délais.** Un outil qui annonce sa progression était coupé à 60 s ; il ne l'est plus avant dix
+  minutes. Le démarrage par `npx` (premier téléchargement) a cinq minutes au lieu de soixante secondes.
+- **Mémoire de travail** (connecteurs.ts). Son carnet était rangé dans le cache de npx : perdu à
+  chaque changement de version épinglée ou nettoyage du cache, partagé entre deux instances du même
+  compte. Il est dans le dossier de données de l'instance (`MEMORY_FILE_PATH`), l'ancien recopié une fois.
+- **Écran** (Connecteurs.tsx). Un serveur éteint par sa bascule restait affiché allumé dans la liste
+  des connecteurs du même écran.
+
+### 56.2 Vu tenir
+
+L'environnement d'un serveur MCP ne porte ni les clés de la passerelle (`OPENAI_API_KEY`,
+`AWS_SECRET_ACCESS_KEY`) ni ses réglages `HELIX_*` ; un jeton recopié par un serveur sur sa sortie
+d'erreur est masqué ; le serveur de fichiers refuse `..`, un chemin absolu dehors, un lien
+symbolique qui mène dehors et les données de l'instance placées dans l'espace ; OAuth : découverte
+(RFC 9728, RFC 8414), inscription, PKCE S256, `state` faux refusé, jeton expiré renouvelé, y compris
+après redémarrage, accès révoqué dit « à reconnecter » ; carte d'approbation pour tout outil MCP
+hors lectures reconnues (serveur de fichiers, projets), refus non exécuté.
+
+### 56.3 Pas essayé
+
+Les vrais services distants avec un compte (Notion, Linear, Sentry, GitHub, Slack, Airtable, Canva…) :
+seules leurs adresses ont été interrogées sans jeton le 28/09/2026 (401 et métadonnées publiques pour
+toutes). **PayPal** : l'adresse documentée, `https://mcp.paypal.com/http`, répond 404 sans jeton
+(POST et GET) alors que `/mcp` et `/sse` répondent 401 avec leurs métadonnées ; non tranché sans
+compte. Intercom ne publie pas de métadonnées de ressource (le SDK se replie sur celles du serveur
+d'autorisation, présentes). Windows (arrêt de l'arbre par `taskkill`, non essayé ici). Un vrai modèle.

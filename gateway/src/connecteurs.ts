@@ -1,4 +1,4 @@
-import { chmodSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { chmodSync, copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { chiffrer, dechiffrer, chiffrementActif } from "./secret.ts";
@@ -872,6 +872,38 @@ export function aligner(c: ConnecteurEnregistre): ConnecteurEnregistre {
   return { ...c, args };
 }
 
+/**
+ * Réglages non secrets d'un serveur du catalogue, passés par l'environnement.
+ *
+ * La mémoire de travail (`@modelcontextprotocol/server-memory`) range son
+ * carnet, sans réglage, **à côté de son propre code**, c'est-à-dire dans le
+ * cache de `npx` (`~/.npm/_npx/<empreinte>/…/dist/memory.jsonl`). Relevé le
+ * 28/09/2026 : changer la version épinglée change l'empreinte, et le carnet
+ * repartait vide sans rien dire ; vider le cache de npm l'effaçait ; et deux
+ * instances du même compte partageaient le même carnet. Il est maintenant dans
+ * le dossier de données de l'instance, et un carnet laissé dans le cache par
+ * une version précédente y est recopié une fois.
+ */
+function envPublic(id: string): { envPublic?: Record<string, string> } {
+  if (id !== "memoire") return {};
+  const dossier = process.env.HELIX_DATA_DIR ?? join(homedir(), ".helix", "data");
+  const carnet = join(dossier, "memoire.jsonl");
+  try {
+    mkdirSync(dossier, { recursive: true });
+    if (!existsSync(carnet)) {
+      const cache = join(homedir(), ".npm", "_npx");
+      const anciens = (existsSync(cache) ? readdirSync(cache) : [])
+        .map((d) => join(cache, d, "node_modules", "@modelcontextprotocol", "server-memory", "dist", "memory.jsonl"))
+        .filter((f) => existsSync(f))
+        .sort((a, b) => statSync(b).mtimeMs - statSync(a).mtimeMs);
+      if (anciens[0]) copyFileSync(anciens[0], carnet);
+    }
+  } catch (err) {
+    console.error("[connecteurs] carnet de la mémoire de travail :", err instanceof Error ? err.message : err);
+  }
+  return { envPublic: { MEMORY_FILE_PATH: carnet } };
+}
+
 const versConfig = (brut: ConnecteurEnregistre): McpServerConfig => {
   const c = aligner(brut);
   return c.url
@@ -892,6 +924,7 @@ const versConfig = (brut: ConnecteurEnregistre): McpServerConfig => {
         env: environnement(c),
         autoStart: true,
         ...(c.libre === true ? { libre: true } : {}),
+        ...envPublic(c.id),
       };
 };
 
@@ -1095,7 +1128,12 @@ function resoudreCommande(
   | { ok: true; id: string; label: string; description: string; command: string; args: string[]; libre: boolean; attendus: ChampSecret[] }
   | { ok: false; message: string } {
   const id = typeof brut.id === "string" ? brut.id.trim().toLowerCase() : "";
-  if (!ID_VALIDE.test(id)) {
+  /*
+   * Ni `__` ni souligné final (28/09/2026) : `__` sépare le serveur de l'outil
+   * dans le nom donné au modèle. Un serveur « fichiers_ » aurait produit des
+   * `fichiers___…`, que la barrière lit comme des outils du serveur de fichiers.
+   */
+  if (!ID_VALIDE.test(id) || id.includes("__") || id.endsWith("_")) {
     return {
       ok: false,
       message: t("Identifiant de connecteur invalide : lettres minuscules, chiffres, tiret et souligné, 32 caractères au plus."),
@@ -1281,6 +1319,7 @@ export async function ajouter(brut: unknown, qui: string): Promise<Resultat> {
     env: recolte.secrets,
     autoStart: true,
     ...(verdict.libre ? { libre: true } : {}),
+    ...envPublic(verdict.id),
   };
 
   declarer(config);
@@ -1341,7 +1380,11 @@ export async function ajouter(brut: unknown, qui: string): Promise<Resultat> {
   const outils = mcpStatus().find((s) => s.id === verdict.id)?.toolCount ?? 0;
   return {
     ok: true,
-    message: tf("« {0} » est connecté : {1} outil(s) disponibles pour vos agents.", verdict.label, outils),
+    // Une phrase par nombre, comme pour les services distants (28/09/2026) : « outil(s) » restait tel quel en chinois et en japonais.
+    message:
+      outils > 1
+        ? tf("« {0} » est connecté : {1} outils disponibles pour vos agents.", t(verdict.label), outils)
+        : tf("« {0} » est connecté : {1} outil disponible pour vos agents.", t(verdict.label), outils),
   };
 }
 

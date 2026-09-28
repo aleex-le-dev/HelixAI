@@ -1899,8 +1899,13 @@ export async function handleChatRequest(
         if (recherche) {
           // Les sources à jour sous la réponse, au fil des recherches et des pages lues.
           if (rechercheWeb.estOutilWeb(call.name)) emitHelix(res, { type: "sources_web", sources: recherche.liste(), moteur: rechercheWeb.MOTEUR });
-          // Une adresse rendue par un autre outil (un fichier, un mail) devient ouvrable ; pas celles que le modèle a écrites.
-          else if (outcome.ok) recherche.noter(outcome.content, call.canonique);
+          /*
+           * Une adresse rendue par un autre outil (un fichier, un mail) devient
+           * ouvrable ; jamais celles que le modèle a écrites, et plus aucune
+           * après qu'il a fait écrire quoi que ce soit (rechercheWeb.ts,
+           * `resultatOutil`, SECURITE.md § 53).
+           */
+          else recherche.resultatOutil(approbation.modifie(call.name), outcome.ok ? outcome.content : null, call.canonique);
         }
 
         /*

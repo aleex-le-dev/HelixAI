@@ -288,7 +288,13 @@ export function Composer({
               autoGrow(e.target);
             }}
             onKeyDown={onKeyDown}
-            className="block max-h-52 w-full resize-none bg-transparent px-4 pb-2 pt-3.5 text-[15px] leading-relaxed text-foreground placeholder:text-muted-foreground focus:outline-none"
+            /*
+             * L'invite sur une ligne, en points de suspension (tournée finale du 28/09/2026) : à
+             * 375 px, elle passait sur deux lignes dans un champ d'une ligne, et le haut de la
+             * seconde restait visible sous la première (« Posez votre question... @ », puis un
+             * bout de lettre coupé). Le texte tapé, lui, passe toujours à la ligne.
+             */
+            className="block max-h-52 w-full resize-none bg-transparent px-4 pb-2 pt-3.5 text-[15px] leading-relaxed text-foreground placeholder:overflow-hidden placeholder:text-ellipsis placeholder:whitespace-nowrap placeholder:text-muted-foreground focus:outline-none"
           />
           {/*
             Relevé le 27/09/2026 (Code et Cowork, en français) : le libellé du

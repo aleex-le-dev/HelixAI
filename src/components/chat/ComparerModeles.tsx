@@ -334,15 +334,26 @@ export function ComparerModeles({
       </div>
       <p className="mt-1 text-sm text-muted-foreground">
         {t("Note face au prix. Plus haut et plus à gauche : plus capable pour moins cher.")}{" "}
+        {/*
+          Tournée finale du 28/09/2026 : avec deux modèles sans note, l'écran disait « Vos 2 modèles
+          y figurent, dont 2 sans note publiée », alors qu'aucun n'était sur le graphique ; avec un
+          seul, « Vos 1 modèles ».
+        */}
         {siens.length === 0
           ? t("Aucun modèle n'est servi par votre instance pour l'instant.")
-          : sansNote.length === 0
-            ? tf("Vos {0} modèles y figurent.", siens.length)
-            : tf(
-                "Vos {0} modèles y figurent, dont {1} sans note publiée : ils sont listés sous le graphique, sans position sur l'axe.",
-                siens.length,
-                sansNote.length,
-              )}
+          : sansNote.length === siens.length
+            ? siens.length === 1
+              ? t("Votre modèle n'a pas de note publiée : il est listé sous le graphique, sans position sur l'axe.")
+              : tf("Aucun de vos {0} modèles n'a de note publiée : ils sont listés sous le graphique, sans position sur l'axe.", siens.length)
+            : sansNote.length === 0
+              ? siens.length === 1
+                ? t("Votre modèle y figure.")
+                : tf("Vos {0} modèles y figurent.", siens.length)
+              : tf(
+                  "Vos {0} modèles y figurent, dont {1} sans note publiée : ils sont listés sous le graphique, sans position sur l'axe.",
+                  siens.length,
+                  sansNote.length,
+                )}
       </p>
 
       {vue === "nuage" ? (

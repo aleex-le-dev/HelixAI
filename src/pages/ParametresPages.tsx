@@ -1008,18 +1008,6 @@ export function McpSettings() {
       onBasculer: () => basculer("drive"),
       panneau: <DriveGoogle onChange={relire} />,
     },
-    {
-      id: "slack",
-      label: "Slack",
-      // Son logo depuis la troisième tournée des logos (28/09/2026, décision de Medhi ; scripts/marques/sources.json).
-      description: resumeSlack(slack),
-      categorie: CATEGORIE,
-      marque: "slack",
-      connecte: Boolean(slack?.configure),
-      ouvert: ouvert === "slack",
-      onBasculer: () => basculer("slack"),
-      panneau: <SlackConnecteur onChange={relire} />,
-    },
     /*
      * Sheets, Slides, Docs, Forms, Dropbox, YouTube, réseaux sociaux et
      * campagnes e-mail (28/09/2026, ConnecteurNatif.tsx). Chaque ligne porte le
@@ -1079,6 +1067,26 @@ export function McpSettings() {
     ...commerce,
     // Microsoft 365 (28/09/2026) : six lignes, une seule connexion (ConnecteurMicrosoft.tsx).
     ...lignesMicrosoft(natifs.find((s) => s.id === "microsoft"), ouvert, basculer, relire),
+    {
+      id: "slack",
+      /*
+       * « Slack (par jeton) », sous « Travail en équipe » (tournée finale du
+       * 28/09/2026) : il y avait deux lignes « Slack », celle-ci sous
+       * « Courrier, agenda et fichiers » et celle du serveur de Slack (catalogue)
+       * sous « Travail en équipe ». Elles sont désormais côte à côte, et se
+       * distinguent comme Notion et « Notion (par jeton) » : ici, le jeton d'un
+       * bot, qui lit les salons où on l'invite.
+       */
+      label: t("Slack (par jeton)"),
+      // Son logo depuis la troisième tournée des logos (28/09/2026, décision de Medhi ; scripts/marques/sources.json).
+      description: resumeSlack(slack),
+      categorie: t("Travail en équipe"),
+      marque: "slack",
+      connecte: Boolean(slack?.configure),
+      ouvert: ouvert === "slack",
+      onBasculer: () => basculer("slack"),
+      panneau: <SlackConnecteur onChange={relire} />,
+    },
   ];
 
   return (

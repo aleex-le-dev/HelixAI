@@ -8,17 +8,28 @@ interface ChipProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   /** Affiche un chevron de fin. */
   chevron?: boolean;
   active?: boolean;
+  /**
+   * Sur un écran étroit (moins de 640 px), l'icône seule : le libellé reste lu
+   * par les lecteurs d'écran et s'affiche au survol, et la puce ne rétrécit plus.
+   * Pour une puce dont l'icône suffit à se reconnaître, qui laisse ainsi sa place
+   * aux libellés qui changent (tournée finale du 28/09/2026 : à 375 px, l'écran
+   * Code avait trois puces, dossier, moteur et RTK, et le nom du dossier se
+   * réduisait à « … »).
+   */
+  compacte?: boolean;
 }
 
 /** Petit selecteur pilule (barre de contexte, ligne d'outils du composer). */
 export const Chip = forwardRef<HTMLButtonElement, ChipProps>(function Chip(
-  { leading, chevron = true, active, className, children, ...props },
+  { leading, chevron = true, active, compacte = false, className, children, ...props },
   ref,
 ) {
+  const libelle = typeof children === "string" ? children : undefined;
   return (
     <button
       ref={ref}
       type="button"
+      title={compacte ? libelle : undefined}
       className={cn(
         // `min-w-0` et le libellé tronqué : dans une barre trop étroite, la puce raccourcit au lieu de passer à la ligne.
         "inline-flex min-w-0 max-w-full items-center gap-1.5 rounded-full px-2.5 py-1.5 text-sm font-medium transition-colors",
@@ -27,13 +38,14 @@ export const Chip = forwardRef<HTMLButtonElement, ChipProps>(function Chip(
         // s'allume au survol et laisse croire qu'elle ouvre quelque chose.
         "disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:bg-transparent",
         active && "bg-muted text-foreground",
+        compacte && "max-sm:shrink-0",
         className,
       )}
       {...props}
     >
       {leading && <span className="inline-flex shrink-0">{leading}</span>}
       {children && (
-        <span className="min-w-0 truncate whitespace-nowrap" title={typeof children === "string" ? children : undefined}>
+        <span className={cn("min-w-0 truncate whitespace-nowrap", compacte && "max-sm:sr-only")} title={libelle}>
           {children}
         </span>
       )}

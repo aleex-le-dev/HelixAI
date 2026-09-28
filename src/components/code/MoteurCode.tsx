@@ -76,6 +76,8 @@ export function MoteurCode({
       trigger={(p) => (
         <Chip
           leading={moteur === "codex" ? <Globe size={15} strokeWidth={1.75} /> : <Cpu size={15} strokeWidth={1.75} />}
+          // À 375 px, l'icône seule : le nom du dossier, à côté, garde la place (Chip.tsx).
+          compacte
           onClick={p.onClick}
           active={open}
           aria-expanded={p["aria-expanded"]}

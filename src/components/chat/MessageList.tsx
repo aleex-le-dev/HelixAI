@@ -438,7 +438,8 @@ function SourcesWeb({ message }: { message: Message }) {
             type="button"
             aria-expanded={autres}
             onClick={() => setAutres((a) => !a)}
-            className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+            // À gauche : à 375 px, la phrase passe sur deux lignes, centrées par défaut dans un bouton (28/09/2026).
+            className="inline-flex items-center gap-1 text-left text-xs text-muted-foreground hover:text-foreground"
           >
             {enAvant.length > 0
               ? tf("{0} autre(s) résultat(s) de recherche, non cité(s)", reste.length)

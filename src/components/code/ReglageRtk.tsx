@@ -68,7 +68,8 @@ export function ReglageRtkCode({
       coteFixe
       width={360}
       trigger={(p) => (
-        <Chip leading={<Gauge size={15} strokeWidth={1.75} />} onClick={p.onClick} active={open} aria-expanded={p["aria-expanded"]}>
+        // À 375 px, l'icône seule : le nom du dossier, à côté, garde la place (Chip.tsx).
+        <Chip leading={<Gauge size={15} strokeWidth={1.75} />} compacte onClick={p.onClick} active={open} aria-expanded={p["aria-expanded"]}>
           {t("RTK")}
         </Chip>
       )}

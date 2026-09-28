@@ -217,6 +217,25 @@ export function Connecteurs({ maison = [] }: { maison?: ServiceMaison[] } = {}) 
    */
   const livrees = parCategorie.filter((g) => g.entrees.some((e) => e.integre));
   const aBrancher = parCategorie.filter((g) => !g.entrees.some((e) => e.integre));
+  /*
+   * Une rubrique, un titre (tournée finale du 28/09/2026). Les services à panneau
+   * et ceux du catalogue étaient groupés chacun de leur côté : une même rubrique
+   * pouvait donc s'afficher deux fois, et le commerce était réparti sous trois
+   * titres (Stripe d'un côté, HubSpot et PayPal de l'autre). Les entrées du
+   * catalogue rejoignent la rubrique de même nom des services à panneau, sous
+   * eux ; le titre est le texte traduit, le même des deux côtés (contrôlé par
+   * npm run securite, 18 bis).
+   */
+  const rubriques = [
+    ...maisonParCategorie.map(({ cat, services }) => ({
+      cat,
+      services,
+      entrees: aBrancher.find((g) => g.cat === cat)?.entrees ?? [],
+    })),
+    ...aBrancher
+      .filter((g) => !maisonParCategorie.some((m) => m.cat === g.cat))
+      .map(({ cat, entrees }) => ({ cat, services: [] as ServiceMaison[], entrees })),
+  ];
 
   if (etat === undefined) {
     return (
@@ -575,7 +594,16 @@ export function Connecteurs({ maison = [] }: { maison?: ServiceMaison[] } = {}) 
                   className="inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
                 >
                   <ExternalLink size={14} strokeWidth={1.75} />
-                  {entree.oauth === "appli" ? t("Créer l'application") : entree.ecritureAuChoix ? t("Documentation du service") : t("Où trouver mon jeton")}
+                  {/*
+                    Un service qui ne demande rien (Mémoire, Réflexion, Navigateur, Documentation des
+                    bibliothèques) n'a pas de jeton à trouver : son lien mène à sa documentation
+                    (tournée finale du 28/09/2026 ; « Où trouver mon jeton » y menait vers modelcontextprotocol.io).
+                  */}
+                  {entree.oauth === "appli"
+                    ? t("Créer l'application")
+                    : entree.ecritureAuChoix || entree.secrets.length === 0
+                      ? t("Documentation du service")
+                      : t("Où trouver mon jeton")}
                 </a>
               )}
             </div>
@@ -648,24 +676,19 @@ export function Connecteurs({ maison = [] }: { maison?: ServiceMaison[] } = {}) 
         ))}
 
         {/*
-         * Puis les services à panneau : ce sont ceux que presque tout le monde
-         * branche, et ceux qu'on vient chercher en arrivant.
+         * Puis les services à panneau, avec les entrées du catalogue de leur
+         * rubrique : ce sont ceux que presque tout le monde branche, et ceux
+         * qu'on vient chercher en arrivant. Enfin, le reste du catalogue.
          */}
-        {maisonParCategorie.map(({ cat, services }) => (
+        {rubriques.map(({ cat, services, entrees }) => (
           <div key={cat} className="mt-5">
             <p className="px-1 pb-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
               {cat}
             </p>
-            <div className="space-y-2">{services.map(ligneMaison)}</div>
-          </div>
-        ))}
-
-        {aBrancher.map(({ cat, entrees }) => (
-          <div key={cat} className="mt-5">
-            <p className="px-1 pb-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-              {cat}
-            </p>
-            <div className="space-y-2">{entrees.map(ligne)}</div>
+            <div className="space-y-2">
+              {services.map(ligneMaison)}
+              {entrees.map(ligne)}
+            </div>
           </div>
         ))}
 

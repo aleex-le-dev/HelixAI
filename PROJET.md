@@ -4889,6 +4889,51 @@ d'avant). **Pas essayé** : l'application empaquetée elle-même ; la cause exac
 l'instance sur le poste de Medhi ce jour-là n'est pas connue (redémarrage de la passerelle ou
 démarrage lent sont les deux chemins reproduits).
 
+**Fait le 28/09/2026 : tournée finale des écrans avant publication (branche `tournee-finale-ecrans`).**
+Sur `main` après les neuf fusions depuis la 2026.928.5 (connecteurs, RTK, recherche web, RunAsNode,
+commande `helix`), contre une instance jetable (clé des données en fichier, dossiers de données et
+personnel jetables, faux `security`, LM Studio et exo coupés, faux fournisseur OpenAI, faux
+DuckDuckGo, faux OpenCode, faux RTK, faux `codex`, aucune sortie réseau), l'écran sous Vite, dans le
+navigateur intégré et dans une fenêtre Electron cachée à profil jetable (presse-papiers neutralisé),
+en fr, en, zh et ja, clair et sombre, 1 280 et 375 pixels. Trouvé et corrigé :
+- 28/09/2026 : **aide, mauvais article ouvert** : « Connecter Google Docs, Google Forms et Dropbox »
+  portait l'identifiant de « Fichiers et documents » ; l'aide ouvrant un article par son identifiant,
+  un clic ouvrait l'autre (et React le signalait en console). Identifiant à part (aide.ts).
+- 28/09/2026 : **aide, chemin inexistant** : huit articles de connecteurs envoyaient dans « Réglages,
+  Outils et connecteurs » ; le menu s'appelle « Connecteurs » (fr, en, zh, ja).
+- 28/09/2026 : **connecteurs, rubriques en double** : le commerce était sous trois titres
+  (« Commerce et relation client » pour Stripe et Salesforce, « Vente et relation client » pour
+  HubSpot et Intercom, « Paiement et gestion » pour Square et PayPal) ; deux lignes « Slack », l'une
+  sous « Courrier, agenda et fichiers » ; Box seul parmi Canva et Figma, Dropbox avec Drive. Une
+  rubrique commerce, Box avec Drive et Dropbox, « Slack (par jeton) » à côté du Slack du catalogue,
+  et l'écran range sous un même titre les services à panneau et le catalogue (connecteurs.ts,
+  Connecteurs.tsx, ParametresPages.tsx ; traductions de rubrique identiques des deux côtés).
+- 28/09/2026 : **connecteurs sans identifiant** (Mémoire, Réflexion, Navigateur, Documentation des
+  bibliothèques) : leur lien disait « Où trouver mon jeton » ; il dit « Documentation du service ».
+- 28/09/2026 : **Code sans modèle de code** : « Aucun modèle disponible pour l'écran Code. Aucun modèle
+  disponible pour le rôle « code ». », en français dans toutes les langues ; le message dit
+  maintenant de choisir un modèle dans le sélecteur ou d'installer un modèle de code (index.ts).
+- 28/09/2026 : **Code à 375 pixels** : avec la puce RTK, dossier, moteur et RTK ne tenaient plus sur
+  la ligne et le nom du dossier se réduisait à « … ». Moteur et RTK passent à l'icône seule sous
+  640 pixels (libellé au survol et pour les lecteurs d'écran), la ligne reste une (Chip.tsx).
+- 28/09/2026 : **zone de saisie à 375 pixels** : l'invite passait sur deux lignes dans un champ
+  d'une ligne, le haut de la seconde visible (Chat, Cowork, Code) ; elle tient sur une ligne.
+- 28/09/2026 : **Comparer les modèles** : « Vos 2 modèles y figurent, dont 2 sans note publiée »
+  quand aucun n'était sur le graphique, et « Vos 1 modèles » ; phrases justes pour ces cas.
+- 28/09/2026 : **Microsoft 365** : l'étape des permissions renvoyait à une liste « plus bas » qui
+  n'apparaît qu'une fois l'application enregistrée ; la phrase le dit.
+- 28/09/2026 : **commande `helix`** : la raison de repli « inconnue » (electron/ligneDeCommande.cjs)
+  s'affichait telle quelle, en français ; traduite. **Sources du web** à 375 pixels : « 1 autre(s)
+  résultat(s)… » centré sur deux lignes, aligné à gauche.
+**Vérifié** : `npm run typecheck`, i18n à 100 % des deux côtés, `npm run securite` (section 18 bis).
+Aucune erreur de console ni requête en échec sur 21 écrans × 4 langues dans la fenêtre Electron
+(hors avertissement de CSP propre à Vite et flux d'approbation coupés à chaque changement de page).
+**Relevé, pas corrigé** : à 375 pixels, le nom du modèle se réduit à son icône dans la barre du bas
+(Chat comme Code), comme voulu depuis la décision « c'est le nom du modèle qui se raccourcit » ;
+dans Code, « Rapide » et « Approfondi » du sélecteur nomment un modèle de Chat que le mode Auto ne
+prend pas pour le code. **Pas essayé** : l'application empaquetée (ni fenêtre de bureau réelle, ni
+trousseau, ni `helix://`), un vrai OpenCode, un vrai RTK, de vrais services connectés.
+
 **Fait le 27/09/2026 : Codex dans l'écran Code, avec le compte ChatGPT du propriétaire du
 poste.** Décidé par Medhi (« ajoute »). Le détail, les sources et ce qui reste à essayer sont
 au § 3.14 (« Fait ») ; les barrières au § 30 de SECURITE.md. En bref : second moteur au choix

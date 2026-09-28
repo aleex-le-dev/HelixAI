@@ -42,7 +42,10 @@ const raisonNode = (erreur: string): string =>
     ? t("la passerelle de cet ordinateur ne répond pas (poste rattaché à une autre instance, ou passerelle arrêtée)")
     : erreur === "délai"
       ? t("le téléchargement n'a pas abouti à temps")
-      : erreur;
+      : // Le code de repli d'electron/ligneDeCommande.cjs, qui s'affichait tel quel, en français (28/09/2026).
+        erreur === "inconnue"
+        ? t("raison inconnue")
+        : erreur;
 
 interface PontCli {
   etat: () => Promise<EtatCli>;

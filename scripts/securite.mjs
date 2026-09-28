@@ -7168,6 +7168,97 @@ console.log("\n17. Recherche sur le web du Chat : rien sans la bascule, sources 
   verifier("recherche web : l'essai contre le faux web s'est déroulé jusqu'au bout", essai.status === 0, `${essai.status} ${lignes.slice(-6).join(" ")}`);
 }
 
+/*
+ * Tournée finale des écrans avant publication (28/09/2026), sur les neuf branches fusionnées
+ * depuis la 2026.928.5 : ce qui s'y est vu à l'écran et se vérifie sans navigateur.
+ */
+console.log("\n18 bis. Tournée finale des écrans : aide, rubriques des connecteurs, textes (28/09/2026)");
+{
+  const sourceAide = readFileSync(join(RACINE, "src", "lib", "aide.ts"), "utf8");
+  const idsAide = [...sourceAide.slice(sourceAide.indexOf("const ARTICLES")).matchAll(/^\s+id: "([^"]+)"/gm)].map((m) => m[1]);
+  const doublons = idsAide.filter((id, i) => idsAide.indexOf(id) !== i);
+  verifier("aide : chaque article a son identifiant (l'aide ouvre un article par lui : « Connecter Google Docs… » ouvrait « Fichiers et documents »)", idsAide.length > 20 && doublons.length === 0, doublons.join(", "));
+  const menuReglages = readFileSync(join(RACINE, "src", "components", "settings", "SettingsShell.tsx"), "utf8");
+  verifier(
+    "aide : le chemin donné aux connecteurs est le nom du menu (« Réglages, Connecteurs »), pas « Outils et connecteurs », qui n'existe pas",
+    !/Outils et connecteurs/.test(sourceAide) && !/Outils et connecteurs/.test(menuReglages) && /label: t\("Connecteurs"\), path: "\/parametres\/mcp"/.test(menuReglages),
+    (sourceAide.match(/.{30}Outils et connecteurs/) ?? [""])[0],
+  );
+
+  // Connecteurs : une rubrique, un titre.
+  const sourceCatalogue = readFileSync(join(RACINE, "gateway", "src", "connecteurs.ts"), "utf8");
+  const rubriquesCatalogue = [...(/export const CATEGORIES: Categorie\[\] = \[([\s\S]*?)\];/.exec(sourceCatalogue)?.[1] ?? "").matchAll(/"([^"]+)"/g)].map((m) => m[1]);
+  verifier(
+    "connecteurs : le commerce sous une seule rubrique (plus de « Vente et relation client » ni de « Paiement et gestion » à côté de « Commerce et relation client »)",
+    rubriquesCatalogue.includes("Commerce et relation client") && !/Vente et relation client"|Paiement et gestion"/.test(sourceCatalogue),
+    rubriquesCatalogue.join(", "),
+  );
+  const categorieDe = (id) => new RegExp(`id: "${id}",[\\s\\S]*?categorie: "([^"]+)"`).exec(sourceCatalogue)?.[1];
+  verifier(
+    "connecteurs : HubSpot, Intercom, Square et PayPal rejoignent Stripe et Salesforce ; Box rejoint Drive et Dropbox",
+    ["hubspot", "intercom", "square", "paypal"].every((id) => categorieDe(id) === "Commerce et relation client") && categorieDe("box") === "Courrier, agenda et fichiers",
+    ["hubspot", "intercom", "square", "paypal", "box"].map((id) => `${id}=${categorieDe(id)}`).join(" "),
+  );
+  const ecartsTraduction = [];
+  for (const langue of ["en", "zh", "ja"]) {
+    const passerelle = JSON.parse(readFileSync(join(RACINE, "gateway", "i18n", `${langue}.json`), "utf8"));
+    const ecran = JSON.parse(readFileSync(join(RACINE, "src", "i18n", `${langue}.json`), "utf8"));
+    for (const r of rubriquesCatalogue) if (r in ecran && ecran[r] !== passerelle[r]) ecartsTraduction.push(`${langue} « ${r} » : ${passerelle[r]} / ${ecran[r]}`);
+  }
+  verifier(
+    "connecteurs : une rubrique du catalogue qui porte le nom d'une rubrique de l'écran est traduite pareil des deux côtés (sinon deux titres pour la même rubrique)",
+    ecartsTraduction.length === 0 && ["Commerce et relation client", "Courrier, agenda et fichiers", "Travail en équipe"].every((r) => rubriquesCatalogue.includes(r)),
+    ecartsTraduction.join(" | "),
+  );
+  const sourceConnecteursEcran = readFileSync(join(RACINE, "src", "components", "settings", "Connecteurs.tsx"), "utf8");
+  const sourceParametres = readFileSync(join(RACINE, "src", "pages", "ParametresPages.tsx"), "utf8");
+  verifier(
+    "connecteurs : l'écran range les entrées du catalogue sous la rubrique de même nom des services à panneau, et les deux Slack se distinguent (« Slack (par jeton) », avec l'autre)",
+    /entrees: aBrancher\.find\(\(g\) => g\.cat === cat\)\?\.entrees/.test(sourceConnecteursEcran) &&
+      /label: t\("Slack \(par jeton\)"\)[\s\S]{0,400}categorie: t\("Travail en équipe"\)/.test(sourceParametres) &&
+      /id: "slack-mcp",\s*label: "Slack",[\s\S]{0,200}categorie: "Travail en équipe"/.test(sourceCatalogue),
+    "Connecteurs.tsx / ParametresPages.tsx",
+  );
+  verifier(
+    "connecteurs : un service qui ne demande aucun identifiant n'offre pas « Où trouver mon jeton », mais sa documentation",
+    /entree\.ecritureAuChoix \|\| entree\.secrets\.length === 0\s*\?\s*t\("Documentation du service"\)/.test(sourceConnecteursEcran),
+    "Connecteurs.tsx",
+  );
+
+  // Textes vus à l'écran.
+  const sourceIndex = readFileSync(join(RACINE, "gateway", "src", "index.ts"), "utf8");
+  verifier(
+    "Code sans modèle de code : plus de phrase française en dur, redoublée (« Aucun modèle disponible pour l'écran Code. Aucun modèle… ») ; l'écran dit quoi faire, dans la langue choisie",
+    !/"Aucun modèle disponible pour l'écran Code\. " \+/.test(sourceIndex) && /t\("Le mode Auto ne trouve aucun modèle de code sur cette instance\./.test(sourceIndex),
+    "index.ts, reglageCode",
+  );
+  const sourceComparer = readFileSync(join(RACINE, "src", "components", "chat", "ComparerModeles.tsx"), "utf8");
+  verifier(
+    "Comparer les modèles : « Vos 2 modèles y figurent, dont 2 sans note » quand aucun n'y figure, et « Vos 1 modèles », ne s'écrivent plus",
+    /sansNote\.length === siens\.length/.test(sourceComparer) && /t\("Votre modèle y figure\."\)/.test(sourceComparer),
+    "ComparerModeles.tsx",
+  );
+  const sourceCli = readFileSync(join(RACINE, "src", "components", "settings", "LigneDeCommande.tsx"), "utf8");
+  verifier("Réglages, commande helix : la raison « inconnue » venue de l'application est traduite, pas affichée telle quelle", /erreur === "inconnue"\s*\?\s*t\("raison inconnue"\)/.test(sourceCli), "LigneDeCommande.tsx");
+  const sourceMicrosoft = readFileSync(join(RACINE, "src", "components", "settings", "ConnecteurMicrosoft.tsx"), "utf8");
+  verifier("Microsoft 365 : l'étape des permissions ne renvoie plus à une liste « plus bas » absente avant l'enregistrement de l'application", !/listées plus bas/.test(sourceMicrosoft), "ConnecteurMicrosoft.tsx");
+  const sourceMessages = readFileSync(join(RACINE, "src", "components", "chat", "MessageList.tsx"), "utf8");
+  const sourceChip = readFileSync(join(RACINE, "src", "components", "ui", "Chip.tsx"), "utf8");
+  const puceCompacte = (fichier) => /<Chip[\s\S]{0,300}\bcompacte\b/.test(readFileSync(join(RACINE, "src", "components", "code", fichier), "utf8"));
+  verifier(
+    "Code à 375 px : les puces du moteur et de RTK passent à l'icône seule, le nom du dossier garde la place (il se réduisait à « … »)",
+    /compacte && "max-sm:sr-only"/.test(sourceChip) && /compacte && "max-sm:shrink-0"/.test(sourceChip) && puceCompacte("MoteurCode.tsx") && puceCompacte("ReglageRtk.tsx"),
+    "Chip.tsx, MoteurCode.tsx, ReglageRtk.tsx",
+  );
+  const sourceComposer = readFileSync(join(RACINE, "src", "components", "chat", "Composer.tsx"), "utf8");
+  verifier(
+    "zone de saisie à 375 px : l'invite tient sur une ligne (elle passait sur deux dans un champ d'une ligne, le haut de la seconde visible)",
+    /<textarea[\s\S]{0,900}placeholder:whitespace-nowrap/.test(sourceComposer),
+    "Composer.tsx",
+  );
+  verifier("Chat, sources du web : « N autre(s) résultat(s)… » aligné à gauche quand il passe sur deux lignes", /className="inline-flex items-center gap-1 text-left text-xs text-muted-foreground hover:text-foreground"/.test(sourceMessages), "MessageList.tsx");
+}
+
 console.log(`\n${reussis} vérification(s) réussie(s), ${echecs.length} échec(s).`);
 if (echecs.length) {
   console.log("Échecs :");

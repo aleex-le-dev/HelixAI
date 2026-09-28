@@ -640,9 +640,14 @@ cadre qui défile, « Envoyer » ou « Ne pas envoyer », et « Sans réponse, l
 partira pas ».
 
 **Tous les services (0.22.0).** Sous la tuile, la liste complète : un champ de
-recherche, puis sept rubriques (Livré avec le produit, Travail en équipe,
-Développement, Documents et données, Vente et relation client, Web et recherche,
-Paiement et gestion). Chaque ligne porte une pastille d'état, le nom, une icône qui
+recherche, puis les rubriques : Livré avec le produit ; celles des services à panneau
+(Courrier, agenda et fichiers, Réseaux sociaux, Campagnes e-mail, Messageries, Commerce et
+relation client, Microsoft 365, Travail en équipe), où les entrées du catalogue de même
+rubrique rejoignent les services à panneau ; enfin Développement, Documents et données, Web et
+recherche. Une rubrique n'a qu'un titre depuis la tournée finale du 28/09/2026 : « Vente et
+relation client » et « Paiement et gestion » sont fondues dans « Commerce et relation client »,
+Box est rangé avec Drive et Dropbox, et le Slack par jeton de bot s'appelle « Slack (par
+jeton) », à côté du Slack du catalogue. Chaque ligne porte une pastille d'état, le nom, une icône qui
 dit d'où le service tourne (un globe : chez lui, rien ne s'installe ici ; un
 terminal : un serveur sur la machine de l'instance), sa description, et le nombre
 d'outils une fois branché.
@@ -651,7 +656,8 @@ Deux boutons, et l'écran dit lequel s'applique avant qu'on clique :
 
 - **« Se connecter »** pour les douze services qui publient leur serveur et acceptent
   l'enregistrement dynamique — Notion, Linear, Jira/Confluence, Asana, Sentry,
-  Intercom, Canva, Webflow, Wix, Square, PayPal (Figma et Vercel retirés le 28/09/2026, SECURITE.md § 49). La page
+  Intercom, Canva, Figma, Webflow, Wix, Vercel, Square, PayPal (Figma et Vercel retirés le 28/09/2026,
+  SECURITE.md § 49, puis remis le même jour : Vercel accepte Helix, vu par Medhi). La page
   d'autorisation qui s'ouvre est celle du service, dans le navigateur du système :
   Helix ne voit jamais le mot de passe. Pendant ce temps, le bouton devient « En
   attente de votre accord… » et l'écran relit l'état tout seul, jusqu'à afficher le

@@ -7997,6 +7997,168 @@ console.log("\n31. Windows et mise en route : moteur de LM Studio installé en e
   verifier("l'écran de mise en route propose seulement les modèles qui tiennent, et montre celui qui s'installe", /possibles: modelesQuiTiennent\(hardware\)/.test(readFileSync(join(RACINE, "gateway", "src", "index.ts"), "utf8")) && /const affiche = enCours \?\? choisi;/.test(ecran), "index.ts, FirstRun.tsx");
 }
 
+/*
+ * 32. Créer l'application chez le fournisseur, pour chaque connecteur
+ * (28/09/2026). Demandé par Medhi : « quand je veux connecter Gmail, il n'y a
+ * pas la redirection vers où je dois aller pour créer l'appli ; tout doit être
+ * simple, pour tout ». Chaque service qui veut une application déclarée chez
+ * lui a son guide (src/lib/guidesApplications.ts) : un bouton vers la page
+ * exacte de la console, des étapes, l'adresse de retour copiable dans l'étape
+ * où on la colle, et l'adresse montrée est celle que la passerelle envoie.
+ */
+console.log("\n32. Connecteurs à application : lien de console, adresse de retour copiable et exacte, Gmail par l'application Google de l'instance, refus expliqués (28/09/2026)");
+{
+  const { pathToFileURL: versUrl } = await import("node:url");
+  const src = (...p) => readFileSync(join(RACINE, ...p), "utf8");
+  const guides = src("src", "lib", "guidesApplications.ts");
+  const liste = (nom) => (guides.match(new RegExp(`export const ${nom} = \\[([\\s\\S]*?)\\] as const`))?.[1] ?? "").match(/"([a-z-]+)"/g)?.map((x) => x.slice(1, -1)) ?? [];
+  const avecRetour = liste("GUIDES_AVEC_RETOUR");
+  const sansRetour = liste("GUIDES_SANS_RETOUR");
+  // Le corps de la fonction de chaque guide, retrouvée par la table GUIDES.
+  const table = guides.slice(guides.indexOf("const GUIDES: Record<IdGuide"));
+  const corpsDe = (id) => {
+    const fn = table.match(new RegExp(`(?:"${id}"|\\b${id}): (?:\\(c\\) => )?(guide[A-Za-z]+)`))?.[1];
+    if (!fn) return "";
+    const debut = guides.indexOf(`function ${fn}(`);
+    if (debut < 0) return "";
+    const suite = guides.slice(debut + 1).search(/\n(?:export )?(?:function|const) /);
+    return guides.slice(debut, suite < 0 ? undefined : debut + 1 + suite);
+  };
+  const sansConsole = [...avecRetour, ...sansRetour].filter((id) => !/url: [`"]https:\/\//.test(corpsDe(id)));
+  const sansEtapeRetour = avecRetour.filter((id) => !/retour: true/.test(corpsDe(id)));
+  verifier(
+    "chaque service à application a son guide, avec au moins un bouton vers sa console en https",
+    avecRetour.length >= 16 && sansRetour.length >= 7 && sansConsole.length === 0,
+    sansConsole.join(", ") || `${avecRetour.length} + ${sansRetour.length} guides`,
+  );
+  verifier("chaque service qui déclare une adresse de retour la porte dans l'étape où on la colle", sansEtapeRetour.length === 0, sansEtapeRetour.join(", "));
+
+  // Les services réels qui veulent une application ont bien un guide.
+  const catalogue = src("gateway", "src", "connecteurs.ts");
+  // Entrée par entrée : une recherche à cheval sur deux entrées prêterait « appli » à la précédente.
+  const mcpAppli = catalogue
+    .split(/\n  \{\n    id: "/)
+    .slice(1)
+    .filter((b) => /\n    oauth: "appli"/.test(b.split("\n  },")[0]))
+    .map((b) => b.slice(0, b.indexOf('"')));
+  const natifs = ["linkedin", "facebook", "instagram", "tiktok", "x", "dropbox", "brevo", "mailchimp"];
+  const commerceOauth = ["salesforce", "pipedrive", "zendesk"];
+  const oublies = [...mcpAppli, ...natifs, ...commerceOauth].filter((id) => !avecRetour.includes(id));
+  verifier(
+    "MCP à application (GitHub, Asana, Zoom, Slack, Box), connexions natives et commerce par OAuth : chacun a son guide avec adresse de retour",
+    mcpAppli.length >= 5 && oublies.length === 0,
+    oublies.join(", ") || mcpAppli.join(", "),
+  );
+  const pasDeepLink = [...catalogue.matchAll(/console: "([^"]+)"/g)].map((m) => m[1]).filter((u) => !/^https:\/\//.test(u) || u === "https://github.com/settings/developers");
+  verifier("les consoles du catalogue mènent à la page de création (GitHub : settings/applications/new)", pasDeepLink.length === 0 && /console: "https:\/\/github\.com\/settings\/applications\/new"/.test(catalogue), pasDeepLink.join(", "));
+
+  // Le composant affiche l'adresse copiable dans l'étape ; les panneaux lui passent celle de l'instance.
+  const composant = src("src", "components", "settings", "GuideApplication.tsx");
+  verifier("l'adresse de retour s'affiche avec « Copier » dans l'étape qui la porte (ACopier)", /e\.retour && retour && \(\s*<ACopier valeur=\{retour\}/.test(composant) && /tf\("Ouvrir \{0\}", c\.libelle\)/.test(composant), "GuideApplication.tsx");
+  const panneaux = [
+    ["ConnecteurNatif.tsx", /<GuideApplication[\s\S]{0,80}retour=\{etat\.retour\}/],
+    ["Connecteurs.tsx", /retour=\{etat\.retours\?\.\[entree\.id\] \?\? etat\.retour\}/],
+    ["ConnecteurCommerce.tsx", /retour=\{oauth \? etat\.retour : undefined\}/],
+    ["ConnecteurMicrosoft.tsx", /retour=\{etat\.retour\}/],
+    ["CourrierOauth.tsx", /guideCourrierMicrosoft\(retourMicrosoft/],
+    ["ClientGoogle.tsx", /<GuideApplication guide=\{guide\}/],
+  ].filter(([f, re]) => !re.test(src("src", "components", "settings", f)));
+  verifier("chaque panneau à application affiche le guide, avec l'adresse de retour que l'instance donne", panneaux.length === 0, panneaux.map(([f]) => f).join(", "));
+
+  // L'adresse montrée est celle que la passerelle envoie (même fonction des deux côtés).
+  const natif = await import(versUrl(join(RACINE, "gateway", "src", "oauthNatif.ts")).href);
+  natif.noterEcoute("127.0.0.1");
+  const { adresseDeRetour } = await import(versUrl(join(RACINE, "gateway", "src", "connecteurs.ts")).href);
+  verifier(
+    "MCP : l'adresse montrée par l'état et celle envoyée par « Se connecter » viennent de la même fonction ; Zoom reçoit 127.0.0.1 (il refuse « localhost »)",
+    /retour: adresseDeRetour\(base\),/.test(catalogue) && /const retour = adresseDeRetour\(base, entree\);/.test(catalogue) &&
+      adresseDeRetour("http://localhost:8787") === "http://localhost:8787/helix/oauth/retour" &&
+      adresseDeRetour("http://localhost:8787", { retourSansLocalhost: true }) === "http://127.0.0.1:8787/helix/oauth/retour" &&
+      adresseDeRetour("https://helix.exemple.fr:8787/", { retourSansLocalhost: true }) === "https://helix.exemple.fr:8787/helix/oauth/retour",
+    adresseDeRetour("http://localhost:8787", { retourSansLocalhost: true }),
+  );
+  const co = await import(versUrl(join(RACINE, "gateway", "src", "courrierOauth.ts")).href);
+  verifier(
+    "Outlook par IMAP : envoyée sous « localhost » (le portail Entra refuse 127.0.0.1 en http), déclarée sans le port qu'il ignore ; une instance nommée garde son adresse exacte",
+    co.retourEnvoye("microsoft", "http://127.0.0.1:8787") === "http://localhost:8787/helix/oauth/retour" &&
+      co.retourADeclarer("microsoft", "http://localhost:8787") === "http://localhost/helix/oauth/retour" &&
+      co.retourADeclarer("microsoft", "https://helix.exemple.fr:8787") === "https://helix.exemple.fr:8787/helix/oauth/retour" &&
+      co.retourEnvoye("google", "http://localhost:8787") === "http://localhost:8787/helix/oauth/retour",
+    `${co.retourEnvoye("microsoft", "http://127.0.0.1:8787")} | ${co.retourADeclarer("microsoft", "http://localhost:8787")}`,
+  );
+
+  // Gmail : l'application Google de l'instance, retour par la boucle locale (comme Agenda), rien à déclarer.
+  const index = src("gateway", "src", "index.ts");
+  verifier(
+    "Gmail reprend l'application Google de l'instance (clientGoogle) et revient par la boucle locale ; le secret ne vient jamais de l'écran",
+    /demande\.application === "instance" && demande\.fournisseur === "google"/.test(index) && /const g = clientGoogle\(\);/.test(index) && /ouvrirBoucleCourrier\(retourCourrierParLaBoucle\)/.test(index) && /\/helix\/courrier\/oauth\/coller/.test(index),
+    "index.ts, handleCourrierOauth",
+  );
+  const { url: urlGmail } = co.demarrer({ fournisseur: "google", clientId: "123456789012-essai.apps.googleusercontent.com" }, "essai@exemple.test", "http://127.0.0.1:1/");
+  const etatGmail = new URL(urlGmail).searchParams.get("state");
+  const vus = [];
+  const boucle = await co.ouvrirBoucle(async (p) => {
+    const e = p.get("error");
+    if (e) {
+      const m = co.refuserCourrier(p.get("state") ?? "", e);
+      return m ? { ok: false, message: m } : { ok: false, message: "ignorée", ignore: true };
+    }
+    vus.push(p.get("code"));
+    return co.courrierEnAttente(p.get("state") ?? "") ? { ok: true, message: "ok" } : { ok: false, message: "ignorée", ignore: true };
+  });
+  verifier("Gmail : le port de retour s'ouvre sur 127.0.0.1, adresse « http://127.0.0.1:<port>/ »", boucle.ok && /^http:\/\/127\.0\.0\.1:\d+\/$/.test(boucle.redirection), JSON.stringify(boucle));
+  if (boucle.ok) {
+    const faux = await fetch(`${boucle.redirection}?state=courriel.faux&code=abc`).then((r) => r.status).catch(() => 0);
+    const autreChemin = await fetch(`${boucle.redirection}autre?state=${etatGmail}&code=abc`).then((r) => r.status).catch(() => 0);
+    verifier("Gmail : un « state » inconnu ou un autre chemin ne ferment pas l'attente", faux === 400 && autreChemin === 404 && co.boucleOuverte(), `${faux} ${autreChemin} ${co.boucleOuverte()}`);
+    const refus = await fetch(`${boucle.redirection}?state=${encodeURIComponent(etatGmail)}&error=access_denied`).then((r) => r.text()).catch(() => "");
+    verifier(
+      "Gmail : « access_denied » est expliqué (utilisateurs de test, « Audience », application « Interne »), l'attente se ferme et l'issue est gardée pour l'écran",
+      /Audience/.test(refus) && !co.boucleOuverte() && co.issueCourrier()?.ok === false && /Audience/.test(co.issueCourrier()?.message ?? ""),
+      refus.replace(/<[^>]+>/g, " ").slice(0, 160),
+    );
+  }
+  const colle = await co.collerRetourCourrier("http://127.0.0.1:1/?state=x&code=y");
+  verifier("Gmail : coller une adresse sans connexion en cours ne fait rien", colle.ok === false, colle.message);
+
+  // Les refus renvoyés par un fournisseur disent la cause et le remède, sans recopier son texte.
+  const { refusLisible } = await import(versUrl(join(RACINE, "gateway", "src", "refusOauth.ts")).href);
+  const { dansLaLangue } = await import(versUrl(join(RACINE, "gateway", "src", "langue.ts")).href);
+  // En français : ce sont les phrases du code, et la langue d'un processus d'essai n'est pas fixée.
+  const [r1, r1g, r3, r4, r2] = dansLaLangue("fr", () => [
+    refusLisible("access_denied", "LinkedIn"),
+    refusLisible("access_denied", "Google", { google: true }),
+    refusLisible("invalid_scope", "Dropbox"),
+    refusLisible("redirect_uri_mismatch", "X"),
+    refusLisible("<script>alert(1)</script>", "Zoom", { description: "texte du fournisseur à ne pas recopier" }),
+  ]);
+  verifier(
+    "refus : access_denied, invalid_scope, redirect_uri_mismatch ont chacun leur remède ; un code inconnu est borné, le texte du fournisseur n'est pas recopié",
+    /rôle dans l'application/.test(r1) && /Audience/.test(r1g) && /permissions demandées/.test(r3) && /adresse de retour/.test(r4) && !/[<>]/.test(r2) && !/ne pas recopier/.test(r2),
+    `${r1.slice(0, 80)} | ${r2.slice(0, 80)}`,
+  );
+  verifier(
+    "refus : la route publique de retour, la boucle de Gmail, les connexions natives et le commerce passent par refusLisible",
+    /refuserCourrier\(etatRefus, erreur\) : await connecteurs\.refuserAutorisation\(etatRefus, erreur\)/.test(index) &&
+      /refusLisible\(erreur, def\.nom, \{ google: def\.google \}\)/.test(src("gateway", "src", "oauthNatif.ts")) &&
+      /refusLisible\(erreur, def\.nom\)/.test(src("gateway", "src", "natifs", "commerce.ts")),
+    "index.ts, oauthNatif.ts, natifs/commerce.ts",
+  );
+
+  // Une seule application Google : les écrans le disent, et le bouton active toutes les API d'un coup.
+  verifier(
+    "Google : une seule application pour Gmail, Agenda, Drive, Sheets, Slides, Docs, Forms et YouTube, et un bouton qui active leurs huit API d'un coup",
+    /flows\/enableapi\?apiid=\$\{services\.map/.test(guides) && ["gmail", "calendar-json", "drive", "sheets", "slides", "docs", "forms", "youtube"].every((s) => guides.includes(`"${s}.googleapis.com"`)) &&
+      /L'application Google de l'instance sert aussi ici/.test(src("src", "components", "settings", "ConnecteurNatif.tsx")) &&
+      /L'application Google de l'instance sert aussi pour Gmail/.test(src("src", "components", "settings", "CourrierOauth.tsx")),
+    "guidesApplications.ts, ConnecteurNatif.tsx, CourrierOauth.tsx",
+  );
+  const aide = src("src", "lib", "aide.ts");
+  verifier("aide intégrée : « Brancher Gmail pas à pas » et « Créer l'application d'un service, pas à pas »", /id: "gmail",\s*titre: t\("Brancher Gmail pas à pas"\)/.test(aide) && /id: "applications",\s*titre: t\("Créer l'application d'un service, pas à pas"\)/.test(aide), "aide.ts");
+  // Aucun nom de produit en dur dans les guides (branding.name).
+  verifier("guides : aucun nom de produit en dur dans un texte affiché", !/t\("[^"]*Helix[^"]*"\)/.test(guides) && !/--name "Helix"/.test(guides), "guidesApplications.ts");
+}
+
 console.log(`\n${reussis} vérification(s) réussie(s), ${echecs.length} échec(s).`);
 if (echecs.length) {
   console.log("Échecs :");

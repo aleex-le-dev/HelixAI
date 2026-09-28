@@ -104,6 +104,8 @@ function fauxModele(req, res, demande) {
   let delta;
   if (dernierOutil) delta = { role: "assistant", content: `Voici ce que dit la page : ${String(dernierOutil.content)}` };
   // Témoin : un petit modèle qui écrit lui-même son appel au lieu de le faire (rien de lu ne le contient).
+  // Un post plus long que le résumé d'une carte (120 caractères), pour la ligne de commande.
+  else if (/PUBLIE-LONG/.test(texteQuestion)) delta = { role: "assistant", tool_calls: [{ index: 0, id: "appel-2", type: "function", function: { name: "facebook__publier", arguments: JSON.stringify({ page: "Page Essai", message: "Premier paragraphe du post, sans surprise. ".repeat(12) + "FIN-DU-POST-CLI" }) } }] };
   else if (/ECRIT-APPEL/.test(texteQuestion)) delta = { role: "assistant", content: 'Je regarde. <tool_call>{"name":"facebook__pages","arguments":{}}</tool_call>' };
   else if (/RESUME-PAGE/.test(texteQuestion)) delta = { role: "assistant", tool_calls: [{ index: 0, id: "appel-1", type: "function", function: { name: "facebook__publications", arguments: JSON.stringify({ page: "Page Essai" }) } }] };
   else delta = { role: "assistant", content: "Rien à faire." };
@@ -552,6 +554,36 @@ console.log("\nG. Un appel recopié d'une publication lue n'est pas un appel du 
   const avantT = recues.length;
   await chat("ECRIT-APPEL : quelles pages gère-t-on ?");
   verifier("témoin : un appel que le modèle écrit lui-même dans le texte est toujours lancé", recues.slice(avantT).some((x) => x.chemin?.startsWith("/v25.0/me/accounts")), recues.slice(avantT).map((x) => x.chemin).join(" "));
+
+  /*
+   * La commande `helix` (cli/helix.mjs) : la carte d'un post n'y montrait que
+   * le résumé (120 caractères du texte). Lancée ici sans terminal, elle écrit
+   * ce qu'elle aurait montré avant de poser la question ; on refuse ensuite
+   * la carte depuis l'instance.
+   */
+  const seanceCli = join(AUX, "cli-seance");
+  writeFileSync(seanceCli, JSON.stringify({ instances: { [G]: { seance: premier.session?.token } } }), { mode: 0o600 });
+  const cli = spawn(process.execPath, [join(RACINE, "cli", "helix.mjs"), "chat", "--outils", "--modele", "essai-injection", "PUBLIE-LONG sur la page"], {
+    env: { ...ENV, HELIX_ADRESSE: G, HELIX_JETON: JETON, HELIX_CLI_SEANCE: seanceCli, NO_COLOR: "1" },
+    stdio: ["pipe", "pipe", "pipe"],
+  });
+  let sortieCli = "";
+  cli.stdout.on("data", (b) => (sortieCli += b));
+  cli.stderr.on("data", (b) => (sortieCli += b));
+  cli.stdin.end();
+  const finCli = new Promise((ok) => cli.on("close", ok));
+  let carteCli;
+  for (let t = 0; t < 8000 && !carteCli; t += 200) {
+    const e = await (await appel("/helix/approbation", { headers: A })).json().catch(() => ({}));
+    carteCli = (e.enAttente ?? []).find((d) => d.detail?.outil === "facebook__publier");
+    if (!carteCli) await attendre(200);
+  }
+  await attendre(800);
+  const vuDansLeTerminal = sortieCli;
+  if (carteCli) await poster("/helix/approbation/repondre", A, { id: carteCli.id, accord: false });
+  await Promise.race([finCli, attendre(10_000)]);
+  cli.kill();
+  verifier("ligne de commande : la carte d'un post montre le texte entier, pas seulement son début", Boolean(carteCli) && /FIN-DU-POST-CLI/.test(vuDansLeTerminal), `${carteCli ? "carte posée" : "aucune carte"} ; terminal : ${vuDansLeTerminal.slice(-400)}`);
 }
 
 passerelle.kill();

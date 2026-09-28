@@ -224,6 +224,14 @@ export const LECTURES_NATIVES = new Set([
   // X (ex-Twitter), ajouté le 28/09/2026 sur le même modèle (SECURITE.md § 42).
   "x__profil",
   "x__publications",
+  // Messageries (natifs/messageries.ts, 28/09/2026, SECURITE.md § 46) : lire une conversation.
+  "telegram__conversations",
+  "telegram__messages",
+  "discord__salons",
+  "discord__messages",
+  "whatsapp__conversations",
+  "whatsapp__messages",
+  "whatsapp__modeles",
 ]);
 export const ECRITURES_NATIVES = new Set([
   "sheets__ecrire",
@@ -233,7 +241,24 @@ export const ECRITURES_NATIVES = new Set([
   "instagram__publier",
   "tiktok__publier_video",
   "x__publier",
+  // Un message envoyé ne se reprend pas, et part au nom de l'organisation (SECURITE.md § 46).
+  "telegram__envoyer",
+  "discord__envoyer",
+  "whatsapp__envoyer",
+  "whatsapp__envoyer_modele",
 ]);
+
+/**
+ * Messageries (natifs/messageries.ts) : à qui part un envoi, tel que
+ * l'instance le connaît (nom de la conversation, du salon, du numéro), et le
+ * texte final d'un modèle WhatsApp. La barrière se charge sans ce module
+ * (batterie de sécurité) : sans lui, la carte dit l'identifiant brut.
+ */
+type ApercuMessagerie = (outil: string, args: Record<string, unknown>) => { destinataire: string; texteFinal?: string; fenetre?: string } | null;
+let apercuMessagerie: ApercuMessagerie | null = null;
+export function definirApercuMessagerie(fn: ApercuMessagerie): void {
+  apercuMessagerie = fn;
+}
 
 const TOUJOURS_CONFIRMER = new Set(["agenda__supprimer", "taches__programmer", ...ECRITURES_NATIVES]);
 
@@ -557,6 +582,27 @@ function resumeNatif(outil: string, args: Record<string, unknown>): string | nul
     case "x__profil":
     case "x__publications":
       return "consulter le compte X";
+    case "telegram__conversations":
+    case "telegram__messages":
+      return "lire les messages reçus par le bot Telegram";
+    case "discord__salons":
+    case "discord__messages":
+      return "lire les messages d'un salon Discord";
+    case "whatsapp__conversations":
+    case "whatsapp__messages":
+    case "whatsapp__modeles":
+      return "consulter les messages et modèles WhatsApp";
+    case "telegram__envoyer":
+    case "discord__envoyer":
+    case "whatsapp__envoyer":
+    case "whatsapp__envoyer_modele": {
+      const a = apercuMessagerie?.(outil, args);
+      const vers = a?.destinataire ?? String(args.conversation ?? args.salon ?? args.numero ?? "?").slice(0, 60);
+      if (outil === "whatsapp__envoyer_modele") {
+        return `envoyer sur WhatsApp à ${vers} le modèle « ${String(args.modele ?? "?").slice(0, 80)} » (${a?.fenetre ?? "fenêtre de 24 h inconnue"} ; Meta facture chaque modèle délivré) : « ${(a?.texteFinal ?? "?").replace(/\s+/g, " ").slice(0, 120)} » (un message envoyé ne se reprend pas)`;
+      }
+      return `envoyer à ${vers}${a?.fenetre ? ` (${a.fenetre})` : ""} le message${extrait(args.texte)} (un message envoyé ne se reprend pas)`;
+    }
     case "x__publier": {
       // Une adresse dans le post : X le facture plus cher (0,20 $ au lieu de 0,015 $, tarifs du 20/04/2026) ; la carte le dit.
       const lien = typeof args.texte === "string" && /https?:\/\/|www\./i.test(args.texte);
@@ -1078,6 +1124,11 @@ export async function verifierOutil(
          * un événement, une tâche) : le nom de l'outil ne dit pas ce qui part.
          */
         ...(!porteeParDossier(outil) && !outil.startsWith("code__") ? { arguments: argumentsLisibles(args, native ? CARTE_NATIVE_MAX : undefined) } : {}),
+        // Messageries : le destinataire résolu, et le texte final d'un modèle WhatsApp, dans toutes les langues de l'écran.
+        ...(() => {
+          const a = native ? apercuMessagerie?.(outil, args) : null;
+          return a ? { destinataire: a.destinataire, ...(a.texteFinal ? { texteFinal: a.texteFinal } : {}) } : {};
+        })(),
         ...(tacheEnCours ? { tache: tacheEnCours } : {}),
       },
     },

@@ -8,6 +8,7 @@ import * as tachesProgrammees from "./tachesProgrammees.ts";
 import * as drive from "./drive.ts";
 import * as slack from "./slack.ts";
 import * as natifs from "./outilsNatifs.ts";
+import * as messageries from "./natifs/messageries.ts";
 import * as bibliotheque from "./bibliotheque.ts";
 import * as controleWeb from "./controleWeb.ts";
 import { definirEspaceDeTravail } from "./approbation.ts";
@@ -102,6 +103,8 @@ export async function executerOutil(
    * employé OpenClaw ne les voit pas (serveurOutils.ts ne sert que sa famille).
    */
   if (natifs.serviceDe(nom)) return natifs.callTool(nom, args, pour);
+  // Telegram, Discord, WhatsApp (natifs/messageries.ts) : même règle, hors des familles des employés.
+  if (messageries.serviceDe(nom)) return messageries.callTool(nom, args, pour);
   switch (familleDe(nom)) {
     case "bibliotheque":
       return bibliotheque.callTool(nom, args, pour ?? { userId: "", groupes: [] });

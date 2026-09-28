@@ -159,6 +159,7 @@ import * as connecteurs from "./connecteurs.ts";
 import * as drive from "./drive.ts";
 import * as agendaGoogle from "./agendaGoogle.ts";
 import * as natifs from "./oauthNatif.ts";
+import * as messageries from "./natifs/messageries.ts";
 import * as tachesProgrammees from "./tachesProgrammees.ts";
 import { chargerClientGoogle, effacerClientGoogle, enregistrerClientGoogle, etatClientGoogle } from "./clientGoogle.ts";
 import * as slack from "./slack.ts";
@@ -1325,6 +1326,24 @@ async function handleNatifs(req: http.IncomingMessage, res: http.ServerResponse,
   send(res, r.ok ? 200 : 400, { ...r, ...(await etatComplet()) });
 }
 
+/*
+ * Messageries (natifs/messageries.ts, 28/09/2026) : Telegram, Discord,
+ * WhatsApp. Même règle que les connexions natives : l'état pour toute séance,
+ * sans aucun jeton ; brancher, ouvrir l'envoi, débrancher : l'administrateur.
+ */
+async function handleMessageries(req: http.IncomingMessage, res: http.ServerResponse, url: URL, suite: string): Promise<void> {
+  const qui = await demandeur(req, url);
+  if (!qui) return send(res, 401, sansSeance());
+  const admin = await estAdministrateur(qui.userId);
+  const etatComplet = async () => ({ services: await messageries.etat(adresseVue(req) ?? "", admin), administrateur: admin, chiffrement: messageries.chiffrementDisponible() });
+  if (req.method === "GET" && suite === "") return send(res, 200, await etatComplet());
+  if (req.method !== "POST") return send(res, 404, { error: { message: t("Introuvable.") } });
+  if (await reserveeALAdministration(res, qui, t("Seul l'administrateur de l'instance peut brancher, régler ou débrancher une messagerie : elle parle au nom de toute l'organisation."))) return;
+  const r = await messageries.traiterRoute(suite, (await readJson(req, 64 * 1024).catch(() => ({}))) as Record<string, unknown>, qui.userId);
+  if (!r) return send(res, 404, { error: { message: t("Introuvable.") } });
+  send(res, r.ok ? 200 : 400, { ...r, ...(await etatComplet()) });
+}
+
 async function handleAgendaGoogleEtat(req: http.IncomingMessage, res: http.ServerResponse, url: URL): Promise<void> {
   const qui = await demandeur(req, url);
   if (!qui) return send(res, 401, sansSeance());
@@ -1637,6 +1656,11 @@ const EXECUTION: { methode: string; chemin: string }[] = [
   { methode: "POST", chemin: "/helix/natifs/connecter" },
   { methode: "POST", chemin: "/helix/natifs/code" },
   { methode: "POST", chemin: "/helix/natifs/oublier" },
+  // Telegram, Discord, WhatsApp (natifs/messageries.ts) : réservés en plus à l'administrateur (`handleMessageries`).
+  { methode: "GET", chemin: "/helix/messageries" },
+  { methode: "POST", chemin: "/helix/messageries/connecter" },
+  { methode: "POST", chemin: "/helix/messageries/envoi" },
+  { methode: "POST", chemin: "/helix/messageries/oublier" },
   /*
    * Ajouter un connecteur lance un programme de plus sur la machine, et lui
    * confie un jeton d'accès à un service de l'entreprise ; le retirer coupe cet
@@ -5602,6 +5626,9 @@ const traiter = (
     if (req.method === "POST" && path === "/helix/agenda/google/oublier") return handleAgendaGoogleOublier(req, res, url);
     // Sheets, Slides, YouTube, LinkedIn, Facebook, Instagram, TikTok (oauthNatif.ts, 28/09/2026).
     if (path === "/helix/natifs" || path.startsWith("/helix/natifs/")) return handleNatifs(req, res, url, path.slice("/helix/natifs".length));
+    // Telegram, Discord, WhatsApp (natifs/messageries.ts). Le webhook de WhatsApp est public (auth.ts) : signé par Meta, vérifié par le module.
+    if (path === messageries.CHEMIN_WEBHOOK) return messageries.webhookWhatsApp(req, res, url);
+    if (path === "/helix/messageries" || path.startsWith("/helix/messageries/")) return handleMessageries(req, res, url, path.slice("/helix/messageries".length));
     if (req.method === "GET" && path === "/helix/drive") return handleDriveEtat(res);
     if (req.method === "POST" && path === "/helix/drive/connecter")
       return handleDriveConnecter(req, res, url);
@@ -5980,6 +6007,8 @@ void preparerMagasin().then(() => server.listen(PORT, HOST, () => {
   void slack.charger().catch(() => {});
   // Sheets, Slides, YouTube, LinkedIn, Facebook, Instagram, TikTok (oauthNatif.ts) : même contrainte.
   void natifs.charger().catch(() => {});
+  // Telegram, Discord, WhatsApp (natifs/messageries.ts) : même contrainte, et le relevé de Telegram reprend.
+  void messageries.charger().catch(() => {});
   // OpenCode manquant : posé en arrière-plan, sans attendre personne (27/09/2026, opencodeEnFond).
   codeEnFond();
   /*

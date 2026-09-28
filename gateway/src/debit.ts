@@ -54,6 +54,13 @@ const REGLES: { methode: string; chemin: string; regle: Regle }[] = [
    * deviner est hors de portée. La limite est là pour que personne n'essaie.
    */
   { methode: "POST", chemin: "/helix/invitations/rejoindre", regle: { max: 10, fenetreMs: 60_000 } },
+  /*
+   * Notifications de WhatsApp (natifs/messageries.ts) : publiques, et chacune
+   * coûte un HMAC. Meta les groupe (jusqu'à 1000 par envoi) : 300 par minute
+   * laissent passer un pic réel et arrêtent un envoi en boucle.
+   */
+  { methode: "POST", chemin: "/helix/messageries/whatsapp/webhook", regle: { max: 300, fenetreMs: 60_000 } },
+  { methode: "GET", chemin: "/helix/messageries/whatsapp/webhook", regle: { max: 30, fenetreMs: 60_000 } },
 ];
 
 /** Plus ancien que la plus longue fenêtre : on peut oublier l'appelant. */

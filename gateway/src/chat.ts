@@ -23,6 +23,7 @@ import * as tachesProgrammees from "./tachesProgrammees.ts";
 import * as drive from "./drive.ts";
 import * as slack from "./slack.ts";
 import * as natifs from "./outilsNatifs.ts";
+import * as messageries from "./natifs/messageries.ts";
 import { journaliser } from "./audit.ts";
 import * as approbation from "./approbation.ts";
 import * as usage from "./usage.ts";
@@ -1008,7 +1009,8 @@ export async function handleChatRequest(
   const outilsDrive = drive.toolsForModel();
   const outilsSlack = slack.toolsForModel();
   // Sheets, Slides, YouTube et réseaux sociaux (outilsNatifs.ts) : pour une personne identifiée seulement.
-  const outilsNatifs = qui ? natifs.toolsForModel() : [];
+  // Et les messageries (natifs/messageries.ts, 28/09/2026), sous les mêmes règles.
+  const outilsNatifs = qui ? [...natifs.toolsForModel(), ...messageries.toolsForModel()] : [];
 
   // La bibliothèque de l'équipe et les réunions transcrites : ce que la personne y voit, en lecture.
   const outilsBibliotheque = qui ? [...bibliotheque.toolsForModel(), ...reunions.toolsForModel()] : [];

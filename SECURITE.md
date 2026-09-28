@@ -5896,3 +5896,68 @@ réel ; l'application Intel empaquetée ; Qwen3 4B, 8B et 30B A3B sous llama.cpp
 téléchargé et chargé ; les empreintes des autres sont celles de Hugging Face, pas recalculées) ; la
 vitesse au processeur d'un Mac Intel ; la mise en veille du modèle après vingt minutes
 (`sleep-idle-seconds`).
+
+## 55. Emplacement du moteur et des modèles (28 septembre 2026)
+
+Demandé par Medhi le 28/09/2026 : choisir le disque où vont le moteur et les modèles (un D: quand le
+disque principal n'a pas la place). `gateway/src/emplacementModeles.ts` ; décision : PROJET.md
+§ 3.20. Le point sensible est connu : c'est du dossier de LM Studio que la passerelle lance `lms`, et
+le pointeur `~/.lmstudio-home-pointer` a déjà porté une faille « Élevé » (un membre le faisait écrire
+par ses agents, § 29). Choisir l'emplacement, c'est choisir ce dossier.
+
+### 55.1 Les routes
+
+| Route | Qui | Journal |
+|---|---|---|
+| `GET /helix/emplacement-modeles` | une séance (barrière commune, `EXECUTION`) | non (lecture) |
+| `POST /helix/emplacement-modeles` `{ dossier }` ou `{ dossier: null }` | l'administrateur seul (`reserveeALAdministration`, refus au journal `reglage.refuse`) | `moteur.emplacement` : dossier, ancien pointeur ou emplacement, octets déplacés |
+| `POST /helix/emplacement-modeles/verifier` | l'administrateur seul : c'est un regard sur les disques de la machine | non (rien ne change) |
+
+### 55.2 Ce qui est refusé, et pourquoi
+
+| Dossier | Risque | Tenu par |
+|---|---|---|
+| Relatif, vide, caractère de contrôle | chemin compris autrement qu'écrit | refus avant tout accès au disque |
+| Partage réseau (`\\serveur`, `//serveur`, lecteur réseau Windows, montage non « local » sous macOS, type réseau sous Linux) | sous Windows, ouvrir `\\serveur` envoie les identifiants du compte ; modèles lus en continu par le réseau | refus du chemin écrit, puis du chemin réel (un lecteur `Z:` peut se résoudre en `\\…`), puis de son montage (`/sbin/mount`, `/proc/self/mounts`, `DriveInfo` sous Windows) |
+| Dans l'espace des agents, ou le contenant | un agent y poserait un `bin/lms` que la passerelle lancerait | chemin réel (liens résolus) comparé à chaque espace ; en « Tout mon poste », seulement au dossier personnel (les autres disques entiers y sont ouverts, le sous-dossier choisi devient une zone protégée, comme `~/.lmstudio`) |
+| Dans le dossier personnel | en « Tout mon poste », il devient l'espace des agents et `dossierLmStudio` cesse de suivre le pointeur | refusé ; l'emplacement habituel y est déjà |
+| Zone protégée, ou en contenant une | lecture ou écriture des données de l'instance, des clés | `estProtege`, `contientUneZone` sur le chemin réel |
+| À un autre compte, non inscriptible | pointeur refusé ensuite par `dossierLmStudio` ; échec au milieu d'un téléchargement | propriétaire comparé (macOS, Linux), fichier d'essai écrit puis effacé ; si `dossierLmStudio` ne suit pas le pointeur écrit, l'ancien est remis |
+| Sous-dossier des modèles du moteur ouvert non vide | fichiers d'une personne mêlés à ceux du moteur | refusé : il doit être neuf ou vide |
+
+Le sous-dossier choisi (`<dossier>/LM Studio`, `<dossier>/modeles-llamacpp`) devient une zone
+protégée (`zonesProtegees.ts`) ; le reste du disque choisi ne l'est pas. Un pointeur vers le
+dossier personnel ou une racine de disque n'est pas repris en zone (il fermerait tout le poste).
+
+### 55.3 Rien de perdu, rien d'écrasé
+
+| Situation | Ce qui se passe |
+|---|---|
+| LM Studio en place (moteur, déclaration, modèles ou téléchargement commencé, dans `~/.lmstudio`, le dossier suivi ou `~/.cache/lm-studio`) | le pointeur n'est pas réécrit (409) ; l'écran donne la marche à suivre, Helix fermé |
+| Revenir à l'emplacement habituel alors que le dossier choisi porte une installation | refusé (409) : elle deviendrait orpheline |
+| Pointeur écrit | à côté puis renommé (jamais à moitié écrit) ; l'ancien contenu est au journal |
+| llmster posé dans `~/.lmstudio` malgré le pointeur, ou dossier choisi disparu | l'écran le dit ; l'installation s'arrête avant de télécharger (`incoherenceEmplacement`) |
+| Modèles du moteur ouvert déplacés vers un autre disque | copie sous `.copie-helix`, ouverture `wx` (jamais par-dessus un fichier), écrite jusqu'au disque (`flush`), taille comparée à l'original et au catalogue ; emplacement retenu seulement ensuite, originaux effacés en dernier ; copie ratée : copies effacées, originaux intacts |
+| Même disque | renommage fichier par fichier ; un échec remet les précédents |
+| Disque de destination trop petit (marge de 1 Go) | refusé avant la première écriture |
+| Téléchargement, installation ou mise en route en cours | refusé (409) ; pendant un déplacement, ni serveur, ni téléchargement, ni ménage |
+| Ménage au démarrage | n'efface plus que ses `.partiel` et `.copie-helix` (avant : tout ce qui n'était pas au catalogue, ce qui aurait compris les fichiers d'une personne sur le disque choisi) |
+
+### 55.4 Essayé
+
+`scripts/essai-emplacement-modeles.mjs` (dossier personnel jetable, faux `lms`, deux volumes montés
+pour l'essai par `hdiutil`), le 28/09/2026 sur macOS : 49 contrôles réussis, repris par
+`npm run securite`, section 20, avec les barrières contre l'instance de la batterie (sans séance,
+collègue, LM Studio coupé : rien d'écrit ; à la section 3, tant que les séances d'essai sont
+valables) et des contrôles du code. Batterie entière le 28/09/2026 : 1718 réussies, 2 échecs sans
+rapport (mentions des tiers : l'arbre de travail d'essai n'avait pas de `node_modules` à lui). La
+section 19 interrogeait l'instance après son arrêt (la batterie s'arrêtait sur « fetch failed ») :
+ce contrôle est passé avant l'arrêt (« 18 ter »). Aucun essai n'a touché
+`~/.lmstudio`, le vrai pointeur, les ports 1234 et 41343 ni le vrai `lms`.
+
+### 55.5 Pas essayé
+
+Windows (chemins `D:\`, refus d'un lecteur réseau par PowerShell, pointeur sous `%USERPROFILE%`) et
+Linux ; le vrai llmster suivant le pointeur à l'amorce (lu dans le code de LM Studio, pas vu) ; la
+marche à suivre pour LM Studio déjà installé ; le sélecteur de dossier de l'application empaquetée ;
+le déplacement d'un vrai modèle de plusieurs gigaoctets.

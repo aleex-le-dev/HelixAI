@@ -3,8 +3,8 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { closeSync, openSync, readSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
-import { homedir } from "node:os";
 import { findLms } from "./backends.ts";
+import { dossierLmStudio } from "./engine.ts";
 import { destinataireDe, publierStatut } from "./fluxCode.ts";
 import { cleRelaisValide } from "./opencode.ts";
 
@@ -218,7 +218,8 @@ async function etatLms(): Promise<EtatLms[] | null> {
  * fichier le plus récent. Les lignes relevées le 25/09/2026 :
  * `[2026-09-25 15:00:15][INFO][qwen3-8b] Prompt processing progress: 0.0%`.
  */
-export function progressionJournal(modele: string, depuis: number, racine = join(homedir(), ".lmstudio", "server-logs")): number | undefined {
+// Dans le dossier de LM Studio que suit la passerelle, pointeur compris (28/09/2026 : il peut être sur un autre disque).
+export function progressionJournal(modele: string, depuis: number, racine = join(dossierLmStudio(), "server-logs")): number | undefined {
   let fichier: string | undefined;
   try {
     const mois = readdirSync(racine).filter((n) => /^\d{4}-\d{2}$/.test(n)).sort().pop();

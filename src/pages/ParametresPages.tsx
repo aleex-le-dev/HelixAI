@@ -36,6 +36,7 @@ import { OuvrirInstance } from "@/components/settings/OuvrirInstance";
 import { useMcp } from "@/hooks/useMcp";
 import { SettingsPage, SettingsRow, Card } from "@/components/settings/SettingsShell";
 import { SeancesEtJournal } from "@/components/settings/SeancesEtJournal";
+import { EmplacementModeles } from "@/components/onboarding/EmplacementModeles";
 import { DeuxFacteurs } from "@/components/settings/DeuxFacteurs";
 import { SupprimerCompte } from "@/components/settings/SupprimerCompte";
 import { SignalerProbleme } from "@/components/settings/SignalerProbleme";
@@ -1269,6 +1270,24 @@ export function ApiSettings() {
  * maintenant mesurées par la passerelle : voir `gateway/src/usage.ts` et
  * `src/components/settings/Usage.tsx`.
  */
+/*
+ * Le moteur et les modèles de la machine de l'instance : où ils sont, la
+ * place qu'il reste, et comment les mettre sur un autre disque (28/09/2026,
+ * gateway/src/emplacementModeles.ts).
+ */
+export function ModelesLocauxSettings() {
+  return (
+    <SettingsPage
+      title={t("Modèles locaux")}
+      subtitle={t("Le moteur et les modèles qui tournent sur la machine de l'instance, et le disque où ils sont rangés.")}
+    >
+      <Card>
+        <EmplacementModeles reglages />
+      </Card>
+    </SettingsPage>
+  );
+}
+
 export function ModelesSettings() {
   return (
     <SettingsPage

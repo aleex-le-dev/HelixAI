@@ -85,7 +85,7 @@ machine :
 |---|---|---|
 | Outils fichiers (MCP) | `npx` | Sans lui (ou sous Windows, où c'est un `.cmd`), Helix le lance par un vrai Node : celui du système, sinon son Node officiel, posé au besoin (nodejs.org, empreinte vérifiée). Hors ligne et sans Node : pas d'outils |
 | Écran Code | OpenCode : celui que Helix pose seul, en arrière-plan, depuis le 27/09/2026 (1.18.32, empreinte SHA-256 écrite dans le code, `<données>/opencode/`), sinon `HELIX_OPENCODE_BIN`, `~/.opencode/bin/opencode` ou le `PATH`. Codex, second moteur facultatif, n'est jamais installé par Helix | Hors ligne, ou sur un poste rattaché : l'écran Code propose « Installer OpenCode » (administrateur), et rappelle la commande manuelle |
-| Modèles locaux | LM Studio | L'écran de mise en route l'installe, sans intervention : son moteur sans interface (llmster 0.0.25-1, empreinte SHA-512 écrite dans le code) sur Mac à puce Apple, Windows et Linux ; sur un Mac où l'application LM Studio a déjà servi, c'est elle qui sert ; sur Mac Intel, llama.cpp à la place (moteur ouvert, MIT, b11146, `<données>/llamacpp/`, modèles Qwen3 GGUF épinglés ; `HELIX_MOTEUR=llamacpp` le choisit ailleurs sur macOS) |
+| Modèles locaux | LM Studio | L'écran de mise en route l'installe, sans intervention : son moteur sans interface (llmster 0.0.25-1, empreinte SHA-512 écrite dans le code) sur Mac à puce Apple, Windows et Linux ; sur un Mac où l'application LM Studio a déjà servi, c'est elle qui sert ; sur Mac Intel, llama.cpp à la place (moteur ouvert, MIT, b11146, `<données>/llamacpp/`, modèles Qwen3 GGUF épinglés ; `HELIX_MOTEUR=llamacpp` le choisit ailleurs sur macOS). L'emplacement se choisit (voir « Emplacement du moteur et des modèles ») |
 
 Avec un modèle local, l'écran Code peut attendre une ou deux minutes avant le premier
 mot : le modèle lit d'abord toute la demande, et la relit s'il l'a perdue parce qu'un
@@ -93,7 +93,33 @@ autre programme s'en est servi entre-temps (LM Studio ne sert souvent qu'une dem
 la fois). L'écran le dit (« Le modèle lit la demande », avec le temps écoulé et, pour
 LM Studio sur le poste, le pourcentage lu) et son panneau de suivi montre ce que fait
 l'agent. Le journal de LM Studio lu pour ce pourcentage est
-`~/.lmstudio/server-logs/` ; sans lui, il n'y a simplement pas de chiffre.
+`server-logs/` dans son dossier (`~/.lmstudio`, ou celui que désigne `~/.lmstudio-home-pointer`) ;
+sans lui, il n'y a simplement pas de chiffre.
+
+### Emplacement du moteur et des modèles
+
+Un modèle pèse de 2 à 18 Go. Quand le disque principal n'a pas la place, l'administrateur choisit
+un autre disque (un D: sous Windows, un disque externe sur Mac) :
+
+- **Avant l'installation**, sur l'écran de mise en route : l'emplacement, la place libre sur ce
+  disque et la place nécessaire (moteur, modèle conseillé, 1 Go de marge), puis « Changer ». Dans
+  l'application, le sélecteur de dossier du système ; dans un navigateur, ou pour une instance
+  distante, un champ où écrire le chemin sur la machine de l'instance. Avec LM Studio, Helix écrit
+  alors `~/.lmstudio-home-pointer` vers `<dossier choisi>/LM Studio` : moteur, téléchargements en
+  cours et modèles y vont. Avec llama.cpp (Mac Intel), les modèles vont dans
+  `<dossier choisi>/modeles-llamacpp` ; le moteur (11 Mo) reste dans les données de l'instance.
+- **Après l'installation**, dans Réglages, Modèles locaux. llama.cpp : Helix déplace les modèles
+  (renommage sur le même disque ; sinon copie, taille vérifiée, puis effacement des originaux ; rien
+  n'est effacé si la copie échoue). LM Studio déjà installé : Helix ne déplace pas le dossier d'un
+  LM Studio qui tourne. À la main : quitter Helix et LM Studio, `"<dossier>/bin/lms" daemon down`,
+  déplacer tout le dossier, écrire son nouveau chemin (seul sur une ligne) dans
+  `~/.lmstudio-home-pointer`, rouvrir Helix. Pour les nouveaux modèles seulement, le réglage « My
+  Models › Change » de l'application LM Studio suffit, mais les téléchargements en cours passent
+  encore par le disque principal (`.internal/temp-downloads` du dossier de LM Studio).
+
+Le dossier doit être absolu, sur un disque de cette machine (pas un partage réseau), hors du
+dossier personnel, hors de l'espace des agents et des zones protégées, à ce compte et inscriptible.
+Le sous-dossier créé devient une zone protégée. Détail : SECURITE.md § 55.
 
 ⚠ Le paquet de `npm run package` n'est signé qu'**ad hoc**, pas par Apple : macOS dit
 qu'Apple n'a pas pu le vérifier (« Ouvrir quand même ») et `spctl` le refuse.
@@ -230,6 +256,9 @@ Toutes exigent le jeton d'instance, sauf `GET /` et `GET /health`. Celles marqu�
 | `GET /helix/provision`, `GET /helix/provision/stream` | État et progression de la mise en route | non |
 | `POST /helix/provision/moteur` | Installe le moteur de LM Studio (llmster sur Mac à puce Apple, Windows et Linux ; llama.cpp sur Mac Intel, sans conditions à accepter) ; administrateur seul, une installation à la fois, conditions de LM Studio acceptées | oui |
 | `POST /helix/provision/start` | Télécharge et charge un modèle du catalogue | oui |
+| `GET /helix/emplacement-modeles` | Où vont le moteur et les modèles, place libre, place nécessaire, ce qui peut changer | oui |
+| `POST /helix/emplacement-modeles` | Choisit l'emplacement (`{ "dossier": "D:\\IA" }`, ou `null` pour l'habituel) ; déplace les modèles de llama.cpp s'il y en a ; administrateur seul, au journal | oui |
+| `POST /helix/emplacement-modeles/verifier` | Juge un dossier sans rien changer (sous-dossier qui serait créé, place libre) ; administrateur seul | oui |
 | `POST /helix/auth/create`, `POST /helix/auth/verify` | Création de compte, connexion | voir ci-dessous |
 | `POST /helix/auth/premier-mot-de-passe` | Premier mot de passe d'un compte créé avant 0.9.0, une seule fois | non |
 | `POST /helix/auth/deux-facteurs` | Second pas de la connexion : défi remis par `verify` et code | non |

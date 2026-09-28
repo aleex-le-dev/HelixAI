@@ -1791,6 +1791,71 @@ réflexion, appel d'outil, clé exigée, écoute locale, arrêt avec la passerel
 l'application Intel empaquetée, les modèles 4B, 8B et 30B sous llama.cpp, la vitesse au processeur.
 Détail de sécurité : SECURITE.md § 54.
 
+### 3.20 Où vont le moteur et les modèles : au choix de l'administrateur (28/09/2026)
+
+**Demande de Medhi, 28/09/2026** : « pour installer son modèle etc. il faudrait pouvoir choisir où
+on l'installe avec LM Studio, car il y a des gens dont le disque principal n'a pas la place (ils ont
+un disque D: par exemple) ». Un modèle pèse de 2 à 18 Go ; sur un PC au disque système plein,
+l'installation échouait au milieu, sans rien proposer.
+
+**Décidé :**
+- **Écran de mise en route**, avant « Installer le moteur » : où iront le moteur et les modèles, la
+  place libre sur ce disque, la place nécessaire (moteur s'il manque, modèle conseillé, 1 Go de
+  marge), et « Changer ». Si la place manque, l'écran le dit et propose un autre disque. Dans
+  l'application, « Changer » ouvre le sélecteur de dossier du système ; dans un navigateur, ou pour
+  une instance distante (le sélecteur montrerait les disques du poste, pas ceux de l'instance), un
+  champ où écrire le chemin. Même encadré sur l'écran « Bienvenue » (avant le modèle).
+- **Réglages, Modèles locaux** (nouvelle entrée, avant « Modèles cloud ») : l'emplacement, la place
+  libre, et le changement après coup.
+- **Passerelle** (`gateway/src/emplacementModeles.ts`) : `GET /helix/emplacement-modeles` (une
+  séance), `POST /helix/emplacement-modeles` et `…/verifier` (l'administrateur seul ; le choix au
+  journal, `moteur.emplacement`). Le dossier est refusé s'il n'est pas absolu, s'il est sur un
+  partage réseau (`\\serveur`, lecteur réseau sous Windows, montage non « local » sous macOS, type
+  réseau sous Linux), dans le dossier personnel, dans l'espace des agents ou le contient, dans une
+  zone protégée ou en contient, pas à ce compte, ou pas inscriptible (un fichier d'essai y est écrit
+  puis effacé). Les données vont toujours dans un sous-dossier à elles (`LM Studio`,
+  `modeles-llamacpp`), qui devient une zone protégée.
+- **Hors du dossier personnel** : en « Tout mon poste », il devient l'espace des agents, et
+  `dossierLmStudio` cesserait de suivre le pointeur (le moteur paraîtrait disparu). L'emplacement
+  habituel y est déjà. Les autres disques entiers ouverts par « Tout mon poste » restent possibles.
+- **LM Studio, seulement avant la première installation** (ni moteur, ni déclaration, ni modèle, ni
+  téléchargement commencé, dans `~/.lmstudio`, le dossier suivi, `~/.cache/lm-studio`) : Helix écrit
+  `~/.lmstudio-home-pointer` vers `<dossier choisi>/LM Studio`. D'après le code ouvert de LM Studio
+  (`findLMStudioHome.ts`, lu le 28/09/2026), ce fichier désigne tout son dossier : moteur,
+  téléchargements en cours, modèles. L'archive de llmster et son contenu vont aussi sur ce disque.
+  Si llmster se pose quand même dans `~/.lmstudio`, ou si le dossier choisi a disparu (disque
+  débranché), l'installation s'arrête avant de télécharger, avec la raison : pas de boucle de 600 Mo.
+- **LM Studio déjà installé** : Helix ne déplace pas le dossier d'un LM Studio qui tourne (son moteur
+  est un service, qui ne s'arrête pas avec Helix). L'écran donne la marche à suivre : quitter Helix
+  et LM Studio, `lms daemon down`, déplacer le dossier, écrire son nouveau chemin dans le pointeur,
+  rouvrir. Ou, pour les nouveaux modèles seulement, le réglage « My Models › Change » de
+  l'application LM Studio, en disant que les téléchargements en cours passent encore par le disque
+  principal (`.internal/temp-downloads`).
+- **llama.cpp** : sans modèle, le choix est retenu tout de suite ; avec, Helix déplace les modèles
+  (renommage sur le même disque ; sinon copie sous un nom provisoire, jusqu'au disque, taille
+  comparée à l'original et au catalogue, puis seulement l'effacement des originaux). Rien n'est
+  effacé si la copie échoue ; la destination doit être vide. Le moteur (11 Mo) reste dans les
+  données. Le ménage du démarrage n'efface plus que ses propres `.partiel` et copies (avant, tout ce
+  qui n'était pas au catalogue).
+- Rattrapages : l'entraînement et le suivi de lecture de LM Studio lisaient `~/.lmstudio` en dur ;
+  ils suivent maintenant le dossier que suit la passerelle, pointeur compris.
+
+**Essayé** (le 28/09/2026, Mac à puce Apple, dossier personnel jetable, faux `lms`, jamais le vrai
+LM Studio) : `scripts/essai-emplacement-modeles.mjs`, 49 contrôles réussis (et 5 de plus dans `npm run securite`) : les refus (collègue,
+sans séance, espace des agents, dossier personnel, partages `\\` et `//`, chemin relatif, zone
+protégée, lien symbolique vers l'espace), pointeur écrit puis suivi et protégé, pointeur jamais
+écrit quand LM Studio est en place, moteur posé ailleurs dit sans téléchargement, disque débranché
+dit ; llama.cpp : déplacement par renommage, copie vers un volume monté pour l'essai, volume trop
+petit refusé, copie ratée sans perte, retour à l'emplacement habituel, ménage. L'écran vu dans le
+navigateur (serveur de développement), en français et en anglais, à 1280 et 375 px de large :
+choix refusé puis accepté, retour à l'emplacement habituel, marche à suivre de LM Studio installé,
+disque trop petit, déplacement confirmé puis fait.
+**Pas essayé** : Windows (chemins `D:\`, détection d'un lecteur réseau par PowerShell, écriture du
+pointeur sous `%USERPROFILE%`), Linux ; le vrai llmster (qu'il suive le pointeur à l'amorce est lu
+dans le code de LM Studio, pas vu) ; la marche à suivre de LM Studio installé (`lms daemon down`,
+déplacement à la main) ; le sélecteur de dossier de l'application empaquetée ; un vrai modèle de
+plusieurs Go déplacé. Détail de sécurité : SECURITE.md § 55.
+
 ## 4. Sécurité
 
 Le détail est dans [SECURITE.md](SECURITE.md). Voici ce qu'il faut avoir en tête.

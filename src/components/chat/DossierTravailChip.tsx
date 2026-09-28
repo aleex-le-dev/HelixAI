@@ -39,7 +39,7 @@ interface Contenu {
  */
 declare global {
   interface Window {
-    helix?: { choisirDossier?: () => Promise<string | null> };
+    helix?: { choisirDossier?: (options?: { titre?: string; message?: string; bouton?: string }) => Promise<string | null> };
   }
 }
 

@@ -71,6 +71,14 @@ const ARTICLES: Article[] = [
     corps: t("Trois origines, toujours affichées telles quelles :\n\n- local : le modèle tourne sur votre machine. Rien ne sort du poste. C'est le plus lent sur une grosse demande, et le plus sûr.\n- instance : le modèle tourne sur le serveur de votre organisation.\n- clé : vous avez branché votre propre compte chez un fournisseur. La demande part chez lui, et le pays d'hébergement est indiqué à côté du nom.\n\nAucun modèle distant n'est choisi à votre place. Si vous n'avez branché aucune clé, rien ne quitte votre installation.\n\nUn modèle de la machine passe un court essai sur ce poste, quand il est installé ou chargé pour la première fois. S'il répond mal ici (texte illisible, réponse qui tourne en boucle), il n'est plus choisi d'office, ni en « Auto » : le sélecteur le marque « répond mal sur cette machine », et vous pouvez toujours le prendre à la main.\n\n« Comparer intelligence et prix », en bas du sélecteur, place vos modèles selon la note publiée par Epoch AI (sous licence ouverte) et le prix publié par leur éditeur. Un modèle qu'Epoch AI ne note pas est listé à part, « pas de note publiée » : rien n'invente sa note.\n\nSous chaque réponse, le Chat indique combien de temps elle a pris, le temps avant le premier mot et, quand le modèle a réfléchi, la durée de sa réflexion."),
   },
   {
+    id: "modeles-locaux",
+    titre: t("Où sont rangés les modèles locaux"),
+    resume: t("Mettre le moteur et les modèles sur un autre disque."),
+    motsCles: ["disque", "place", "espace", "emplacement", "dossier", "stockage", "lm studio", "llama", "deplacer", "d:"],
+    lien: "/parametres/modeles-locaux",
+    corps: tf("Un modèle pèse de 2 à 18 Go. Si le disque principal n'a pas la place, choisissez-en un autre, par exemple D: sous Windows ou un disque externe sur Mac.\n\n- Avant l'installation : l'écran de mise en route montre où iront le moteur et les modèles, la place libre sur ce disque et la place nécessaire. « Changer » ouvre le choix d'un dossier. Les modèles iront alors sur ce disque, et le moteur aussi avec LM Studio, dans un sous-dossier « LM Studio » (« modeles-llamacpp » sur un Mac Intel).\n- Après l'installation : Réglages, Modèles locaux. Sur un Mac Intel, {0} déplace lui-même les modèles, et n'efface les originaux qu'une fois la copie vérifiée. Avec LM Studio déjà installé, {0} ne déplace pas son dossier pendant qu'il tourne : la page donne la marche à suivre.\n\nLe dossier choisi doit être sur un disque de cette machine (pas un partage réseau), hors de votre dossier personnel et de l'espace de travail des agents. Seul l'administrateur de l'instance le change.", branding.name),
+  },
+  {
     id: "usage",
     titre: t("Mon usage : ce que coûtent vos modèles"),
     resume: t("Jetons consommés, prix publié et coût estimé."),

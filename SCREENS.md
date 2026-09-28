@@ -526,6 +526,7 @@ le 28/09/2026 (« Signaler un problème », la dernière, depuis le 27/09/2026).
 | `/parametres/personnalisation` | Personnalisation de l'IA | ✅ **fonctionne** |
 | `/parametres/bot-recorder` | Bot Recorder | ✅ **fonctionne** (0.16.0) |
 | `/parametres/mcp` | Connecteurs | ✅ **fonctionne** |
+| `/parametres/modeles-locaux` | Modèles locaux (28/09/2026) : emplacement du moteur et des modèles, place libre, changement (déplacement pour llama.cpp, marche à suivre pour LM Studio installé) | ✅ **vu dans le navigateur** (serveur de développement, passerelle jetable, fr et en, 1280 et 375 px) ; Windows pas essayé |
 | `/parametres/modeles` | Modèles cloud | ✅ **fonctionne** |
 | `/parametres/entrainement` | Entraîner un modèle | ✅ **fonctionne sur Mac à puce Apple** (25/09/2026) ; carte NVIDIA pas essayée, et l'écran le dit |
 | `/parametres/abonnement` | Abonnement | ⚠ **écran sans paiement branché**, et il le dit |
@@ -1082,6 +1083,15 @@ modèle est suivi ensuite sur le même écran, y compris un téléchargement lai
 lancement précédent, et après une coupure du flux (passerelle redémarrée). « Commencer »
 n'apparaît qu'avec un modèle de Chat disponible ; un modèle conseillé pas encore essayé avec
 Helix le dit. Poste piloté par l'intégrateur : rien à installer, « Vérifier à nouveau ».
+
+**Emplacement du moteur et des modèles (28/09/2026)** : avant « Installer le moteur », et sur
+l'écran « Bienvenue » avant le modèle, un encadré dit où iront le moteur et les modèles, la place
+libre sur ce disque et la place nécessaire ; si elle manque, « Il n'y a pas assez de place sur ce
+disque » et un autre disque proposé. « Changer » (administrateur) ouvre le sélecteur de dossier
+dans l'application, un champ de chemin dans un navigateur ; un refus (espace des agents, dossier
+personnel, partage réseau…) s'affiche sous le champ ; « Revenir à l'emplacement habituel ». Vu
+dans le navigateur le 28/09/2026 (passerelle jetable, LM Studio et llama.cpp, fr et en, 1280 et
+375 px) ; le sélecteur de l'application empaquetée pas essayé.
 
 **Essai du modèle (27/09/2026)** : après le chargement, une étape de plus, « Vérification
 de … : une courte question d'essai... ». Un modèle qui répond mal sur cette machine (réponse

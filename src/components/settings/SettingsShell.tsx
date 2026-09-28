@@ -16,6 +16,7 @@ import {
   FileInput,
   Search,
   Cloud,
+  HardDrive,
   CreditCard,
   GraduationCap,
   Bug,
@@ -42,6 +43,8 @@ export const settingsNav: NavEntry[] = [
   // Une seule entrée pour tout ce qui se branche : courrier, agenda, services.
   // « Intégrations » a été retirée, elle menait à un second écran du même objet.
   { label: t("Connecteurs"), path: "/parametres/mcp", icon: Blocks },
+  // Le moteur et les modèles de la machine : où ils sont, la place qu'il reste (28/09/2026).
+  { label: t("Modèles locaux"), path: "/parametres/modeles-locaux", icon: HardDrive },
   { label: t("Modèles cloud"), path: "/parametres/modeles", icon: Cloud },
   { label: t("Entraîner un modèle"), path: "/parametres/entrainement", icon: GraduationCap },
   { label: t("Contrôle de l'écran"), path: "/parametres/ecran", icon: MonitorCog },

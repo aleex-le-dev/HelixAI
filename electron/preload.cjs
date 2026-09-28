@@ -58,8 +58,12 @@ contextBridge.exposeInMainWorld("helix", {
   plateforme: process.platform,
   /** Le processeur (`arm64`, `x64`) : « Signaler un problème » distingue ainsi un Mac Apple silicon d'un Mac Intel (27/09/2026). */
   architecture: process.arch,
-  /** Ouvre le sélecteur de dossier du système. Renvoie le chemin, ou null. */
-  choisirDossier: () => ipcRenderer.invoke("helix:choisir-dossier"),
+  /**
+   * Ouvre le sélecteur de dossier du système. Renvoie le chemin, ou null.
+   * `options` (titre, message, bouton), déjà traduits par l'écran : sans eux,
+   * ceux du dossier de travail (l'emplacement des modèles a les siens, 28/09/2026).
+   */
+  choisirDossier: (options) => ipcRenderer.invoke("helix:choisir-dossier", options),
   /**
    * Copier du texte (electron/pressePapiers.cjs, 27/09/2026) : la permission
    * du presse-papiers est refusée à la page, les boutons « Copier » passent

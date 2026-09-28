@@ -528,6 +528,24 @@ verifier(
   `${avecProvisoire.status} ${JSON.stringify(jProvisoire).slice(0, 100)}`,
 );
 verifier("le nouveau mot de passe doit différer du provisoire, et le provisoire ne vaut plus rien ensuite", identiqueRefuse.status === 400 && provisoireApres.status === 401, `${identiqueRefuse.status} ${provisoireApres.status}`);
+/*
+ * Emplacement du moteur et des modèles (section 20, SECURITE.md § 55) :
+ * vérifié ici, tant que les séances de l'administratrice et de la collègue
+ * sont valables (des sections suivantes les révoquent). LM Studio est coupé
+ * par le profil de la batterie : rien ici ne peut toucher un vrai LM Studio.
+ */
+{
+  const sansSeanceE = await appel("/helix/emplacement-modeles", { headers: avecJeton });
+  verifier("emplacement des modèles : le lire sans séance → 401", sansSeanceE.status === 401, sansSeanceE.status);
+  const parB = await appel("/helix/emplacement-modeles", { method: "POST", headers: avecSeanceB, body: JSON.stringify({ dossier: join(tmpdir(), "helix-emplacement-membre") }) });
+  verifier("emplacement des modèles : une collègue (non administratrice) ne le choisit pas → 403", parB.status === 403, parB.status);
+  const sondeB = await appel("/helix/emplacement-modeles/verifier", { method: "POST", headers: avecSeanceB, body: JSON.stringify({ dossier: "/" }) });
+  verifier("emplacement des modèles : ni ne sonde les disques de la machine → 403, rien de créé", sondeB.status === 403 && !existsSync(join(tmpdir(), "helix-emplacement-membre")), sondeB.status);
+  const etatE = await (await appel("/helix/emplacement-modeles", { headers: avecSeance })).json().catch(() => ({}));
+  verifier("emplacement des modèles : LM Studio coupé par le profil, aucun emplacement à régler, rien de lancé", etatE.moteur === null && etatE.changement === "aucun", JSON.stringify(etatE).slice(0, 160));
+  const choixAdmin = await appel("/helix/emplacement-modeles", { method: "POST", headers: avecSeance, body: JSON.stringify({ dossier: join(tmpdir(), "helix-emplacement-admin") }) });
+  verifier("emplacement des modèles : sans moteur local, même l'administratrice n'écrit rien (409)", choixAdmin.status === 409 && !existsSync(join(tmpdir(), "helix-emplacement-admin")), choixAdmin.status);
+}
 {
   // Un membre qui n'administre pas ne crée pas de compte : il invite (la personne choisit alors elle-même son mot de passe).
   const parB = await appel("/helix/auth/create", {
@@ -5528,6 +5546,20 @@ console.log("\n18. Tournée finale de la 2026.928.6 : appel recopié, recherche 
   );
 }
 
+/*
+ * Ce qui demande l'instance de la batterie vivante, pour les sections 19 et
+ * 20 écrites plus bas (28/09/2026) : la section 19 interrogeait l'instance
+ * après son arrêt, et la batterie s'arrêtait là sur « fetch failed ».
+ */
+console.log("\n18 ter. Avant l'arrêt de l'instance : le moteur présenté par l'écran de mise en route (section 19)");
+{
+  const statut = await (await fetch(`${G}/helix/provision`, { headers: avecSeance })).json().catch(() => ({}));
+  const attendu = process.platform === "darwin" && process.arch === "x64" ? "llamacpp" : "lmstudio";
+  verifier(`l'écran de mise en route présente le moteur de cette machine (${attendu})`, statut.moteur === attendu, statut.moteur);
+
+  // Les barrières de l'emplacement des modèles (section 20) se vérifient à la section 3, tant que les séances d'essai sont valables.
+}
+
 passerelle.kill();
 fauxModele.close();
 await attendre(500);
@@ -7437,9 +7469,50 @@ console.log("\n19. Moteur ouvert llama.cpp (Mac Intel) : épinglé, local, sous 
   verifier("un téléchargement vérifié : empreinte fausse, fichier effacé sans être ouvert ; nom définitif seulement après vérification", /empreinte\.digest\("hex"\) !== attendu\.sha256/.test(src) && /renommer\(partiel, destination\)/.test(src), "telechargerVerifie");
   verifier("LM Studio coupé là où sert le moteur ouvert (un seul moteur local)", /enabled: !moteurOuvert\(\)/.test(config), "config.ts");
   verifier("hors Mac Intel, le moteur ouvert ne sert que sur demande explicite (`HELIX_MOTEUR=llamacpp`)", /return process\.arch === "x64";/.test(base) && /if \(process\.platform !== "darwin"\) return false;/.test(base), "moteurOuvert");
-  const statut = await (await fetch(`${G}/helix/provision`, { headers: avecSeance })).json().catch(() => ({}));
-  const attendu = process.platform === "darwin" && process.arch === "x64" ? "llamacpp" : "lmstudio";
-  verifier(`l'écran de mise en route présente le moteur de cette machine (${attendu})`, statut.moteur === attendu, statut.moteur);
+  // Le moteur présenté par l'écran de mise en route se vérifie contre l'instance vivante, plus haut (« 18 ter »).
+}
+
+/*
+ * Emplacement du moteur et des modèles (28/09/2026, SECURITE.md § 55,
+ * gateway/src/emplacementModeles.ts). Ici, contre l'instance de la batterie
+ * (LM Studio y est coupé : rien n'y touche un vrai LM Studio), les barrières ;
+ * puis, de bout en bout, scripts/essai-emplacement-modeles.mjs (dossier
+ * personnel jetable, faux `lms`, volumes d'essai), repris sous
+ * « emplacement : ».
+ */
+console.log("\n20. Emplacement du moteur et des modèles : administrateur seul, dossier sûr, pointeur avant l'installation seulement, déplacement sans perte");
+{
+  // Les barrières contre l'instance de la batterie sont vérifiées à la section 3, tant que les séances d'essai sont valables.
+  const srcE = readFileSync(join(RACINE, "gateway", "src", "emplacementModeles.ts"), "utf8");
+  const srcMoteur = readFileSync(join(RACINE, "gateway", "src", "engine.ts"), "utf8");
+  const srcZones = readFileSync(join(RACINE, "gateway", "src", "zonesProtegees.ts"), "utf8");
+  const srcLlama = readFileSync(join(RACINE, "gateway", "src", "llamaCpp.ts"), "utf8");
+  verifier("le pointeur n'est écrit que si LM Studio n'est en place nulle part (moteur, déclaration, modèles)", /const deja = lmStudioEnPlace\(\);\s*if \(deja\)/.test(srcE), "choisirLmStudio");
+  verifier("le nouvel emplacement est une zone protégée (cible du pointeur, dossier des modèles du moteur ouvert)", /\.\.\.emplacementsDesModeles\(maison\)/.test(srcZones) && /emplacementLlamaChoisi\(\)/.test(srcZones), "zonesProtegees.ts");
+  verifier("l'installation de llmster s'arrête avant de télécharger si l'emplacement choisi est introuvable ou si le moteur s'est posé ailleurs", /const incoherence = incoherenceEmplacement\(\);\s*if \(incoherence\) throw new Error\(incoherence\);\s*const manquantes/.test(srcMoteur), "installerLlmster");
+  verifier("la copie d'un modèle n'écrase rien (`wx`), va jusqu'au disque (`flush`), et les originaux ne partent qu'une fois l'emplacement retenu", /flags: "wx", mode: 0o600, flush: true/.test(srcLlama) && /ecrireEmplacementLlama\(cible\);\s*\} catch \(err\) \{\s*for \(const p of posees\)/.test(srcLlama), "deplacer");
+  verifier("le ménage du moteur ouvert n'efface que ses `.partiel` et ses copies, jamais un fichier d'une personne", /!\/\\\.\(partiel\|copie-helix\)\$\/\.test\(nom\)/.test(srcLlama), "menageLlama");
+
+  const essaiE = await new Promise((fin) => {
+    const e = spawn(process.execPath, [join(RACINE, "scripts", "essai-emplacement-modeles.mjs")], { stdio: ["ignore", "pipe", "pipe"] });
+    let sortie = "";
+    e.stdout.on("data", (b) => (sortie += b));
+    e.stderr.on("data", (b) => (sortie += b));
+    const minuterie = setTimeout(() => e.kill(), 5 * 60_000);
+    e.on("close", (status) => {
+      clearTimeout(minuterie);
+      fin({ status, sortie });
+    });
+  });
+  const lignesE = essaiE.sortie.split("\n");
+  for (const ligne of lignesE) {
+    const ok = /^\s+✓ (.*)$/.exec(ligne);
+    const ko = /^\s+✗ (.*?)(?:  —  obtenu : .*)?$/.exec(ligne);
+    if (ok) verifier(`emplacement : ${ok[1]}`, true, "");
+    else if (ko) verifier(`emplacement : ${ko[1]}`, false, ligne.split("  —  obtenu : ")[1] ?? "");
+    else if (/^[A-G]\. /.test(ligne)) console.log(`  ${ligne}`);
+  }
+  verifier("emplacement : l'essai contre les passerelles jetables s'est déroulé jusqu'au bout", essaiE.status === 0, `${essaiE.status} ${lignesE.slice(-6).join(" ")}`);
 }
 
 console.log(`\n${reussis} vérification(s) réussie(s), ${echecs.length} échec(s).`);

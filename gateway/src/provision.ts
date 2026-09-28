@@ -6,7 +6,7 @@ import { backendById, faireLaPlace, findLms, lmStudioRepond, optionsDeChargement
 import { nomProduit } from "./marque.ts";
 import { langue, t, tf } from "./langue.ts";
 import { noteDuModele } from "./notesModeles.ts";
-import { dossierLmStudio, moteurAPoser, preparerDossiersLlmster } from "./engine.ts";
+import { dossierLmStudio, dossierModelesLmStudio, moteurAPoser, preparerDossiersLlmster } from "./engine.ts";
 import { aEssayer, essayerModele, estDefaillant, nomDuModele, noterCoupure, noterEssai, type Verdict } from "./santeModeles.ts";
 import { autoProvisionEnabled } from "./deployment.ts";
 import { cleLlamaCpp, moteurOuvert, urlLlamaCpp } from "./llamaCppBase.ts";
@@ -554,6 +554,9 @@ async function unloadOthers(lms: string, garder: string): Promise<number> {
  */
 let enCours: Promise<ProvisionState> | null = null;
 
+/** Une mise en route tourne-t-elle (téléchargement, chargement, essai) ? Les modèles ne changent pas d'emplacement pendant ce temps. */
+export const miseEnRouteEnCours = (): boolean => enCours !== null;
+
 /** Taille totale, en octets, des modèles et téléchargements en cours du moteur : elle grossit tant qu'un téléchargement avance. */
 function tailleDesModeles(): number {
   let total = 0;
@@ -577,7 +580,8 @@ function tailleDesModeles(): number {
     }
   };
   const racine = dossierLmStudio();
-  parcourir(join(racine, "models"), 0);
+  // Le dossier des modèles de LM Studio, ou celui de son réglage « My Models › Change » (28/09/2026).
+  parcourir(dossierModelesLmStudio(), 0);
   parcourir(join(racine, ".internal", "temp-downloads"), 0);
   return total;
 }

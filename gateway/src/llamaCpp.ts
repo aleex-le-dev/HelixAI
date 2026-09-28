@@ -10,16 +10,28 @@ import {
   mkdtempSync,
   openSync,
   readdirSync,
+  rmdirSync,
   rmSync,
   statSync,
   statfsSync,
   writeFileSync,
 } from "node:fs";
-import { join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { t, tf } from "./langue.ts";
-import { cleLlamaCpp, fichierCleLlamaCpp, moteurOuvert, portLlamaCpp, racineLlamaCpp, urlLlamaCpp } from "./llamaCppBase.ts";
+import {
+  cleLlamaCpp,
+  dossierModelesLlama,
+  dossierModelesParDefaut,
+  ecrireEmplacementLlama,
+  emplacementLlamaChoisi,
+  fichierCleLlamaCpp,
+  moteurOuvert,
+  portLlamaCpp,
+  racineLlamaCpp,
+  urlLlamaCpp,
+} from "./llamaCppBase.ts";
 import { renommer } from "./processus.ts";
 import { tarDuSysteme } from "./pythonPrive.ts";
 
@@ -133,7 +145,8 @@ export const MODELES_GGUF: Record<string, FichierGguf> = {
 
 const cible = () => `${process.platform}-${process.arch}`;
 const dossierVersion = () => join(racineLlamaCpp(), VERSION);
-const dossierModeles = () => join(racineLlamaCpp(), "modeles");
+// Celui choisi par l'administrateur, sinon `<données>/llamacpp/modeles` (llamaCppBase.ts, 28/09/2026).
+const dossierModeles = dossierModelesLlama;
 const fichierPreset = () => join(racineLlamaCpp(), "modeles.ini");
 const fichierJournal = () => join(racineLlamaCpp(), "serveur.log");
 /** Le cache de modèles du routeur, vide : sans lui, il listerait ceux de `~/Library/Caches/llama.cpp`, posés par d'autres. */
@@ -332,6 +345,16 @@ export function installerModeleLlama(cle: string, avancer: (a: AvanceeLlama) => 
   const f = MODELES_GGUF[cle];
   if (!f) return Promise.reject(new Error(tf("{0} n'est pas proposé avec le moteur llama.cpp.", cle)));
   if (existsSync(cheminModele(cle))) return Promise.resolve();
+  if (deplacement) return Promise.reject(new Error(t("Les modèles changent d'emplacement : attendez la fin du déplacement, puis réessayez.")));
+  /*
+   * Emplacement choisi sur un disque absent (débranché, pas encore monté) :
+   * rien n'est posé ailleurs à sa place. `mkdir` recréerait sinon le chemin
+   * sur le disque principal, là où il n'y a justement pas la place.
+   */
+  const choisi = emplacementLlamaChoisi();
+  if (choisi && !existsSync(dirname(choisi))) {
+    return Promise.reject(new Error(tf("L'emplacement choisi pour les modèles est introuvable ({0}) : branchez le disque, ou changez d'emplacement dans les réglages, Modèles locaux.", dirname(choisi))));
+  }
   let enCours = telechargements.get(cle);
   if (!enCours) {
     enCours = (async () => {
@@ -434,7 +457,8 @@ async function portPrisParUnAutre(): Promise<boolean> {
  * la même clé : il est gardé tel quel, plutôt qu'un second lancé à côté.
  */
 export function assurerServeurLlama(): Promise<boolean> {
-  if (!moteurOuvert() || !llamaCppInstalle() || modelesLlamaCpp().length === 0) return Promise.resolve(false);
+  // Pendant un déplacement des modèles, le serveur reste arrêté : il lirait un fichier en train de partir.
+  if (deplacement || !moteurOuvert() || !llamaCppInstalle() || modelesLlamaCpp().length === 0) return Promise.resolve(false);
   demarrage ??= lancer().finally(() => {
     demarrage = null;
   });
@@ -594,12 +618,205 @@ export function arreterLlama(): void {
   }
 }
 
-/** Efface les `.partiel` abandonnés d'un modèle qui n'est plus au catalogue (ménage, au démarrage). */
+/**
+ * Efface les `.partiel` abandonnés d'un modèle qui n'est plus au catalogue, et
+ * les copies laissées par un déplacement interrompu (ménage, au démarrage).
+ *
+ * Seulement ces deux sortes de fichiers, depuis le 28/09/2026 : le dossier des
+ * modèles peut être sur un disque choisi par l'administrateur, et « tout ce
+ * qui n'est pas au catalogue » y aurait compris ce qu'une personne y range.
+ */
 export function menageLlama(): void {
+  if (deplacement) return;
   try {
     const connus = new Set(Object.values(MODELES_GGUF).flatMap((f) => [f.fichier, `${f.fichier}.partiel`]));
-    for (const nom of readdirSync(dossierModeles())) if (!connus.has(nom)) rmSync(join(dossierModeles(), nom), { force: true });
+    for (const nom of readdirSync(dossierModeles())) {
+      if (connus.has(nom) || !/\.(partiel|copie-helix)$/.test(nom)) continue;
+      rmSync(join(dossierModeles(), nom), { force: true });
+    }
   } catch {
     /* pas encore de dossier */
   }
+}
+
+/* ── Changer les modèles d'emplacement (28/09/2026) ─────────────────────── */
+
+/*
+ * Demandé par Medhi le 28/09/2026 (emplacementModeles.ts) : après
+ * l'installation, l'administrateur peut mettre les modèles sur un autre
+ * disque. Règle : rien n'est perdu ni écrasé.
+ *  - Même disque : un renommage par fichier, instantané. Un renommage raté
+ *    remet les précédents en place.
+ *  - Autre disque : chaque fichier est copié sous un nom provisoire
+ *    (`.copie-helix`, jamais par-dessus un fichier existant), écrit jusqu'au
+ *    disque (`fsync`), sa taille comparée à l'original (et, pour un modèle
+ *    complet, à celle du catalogue), puis renommé. Le nouvel emplacement
+ *    n'est retenu qu'une fois tout copié ; les originaux ne sont effacés
+ *    qu'après. Une copie ratée efface les copies, jamais les originaux.
+ * Pendant ce temps, le serveur est arrêté, et ni téléchargement ni chargement
+ * ne part (`deplacement`).
+ */
+
+/** Le déplacement en cours, s'il y en a un. */
+let deplacement: Promise<void> | null = null;
+
+export const deplacementLlamaEnCours = (): boolean => deplacement !== null;
+
+/** Un téléchargement (moteur ou modèle) tourne-t-il ? */
+export const telechargementLlamaEnCours = (): boolean => telechargements.size > 0 || installationEnCours !== null;
+
+/** Les fichiers du moteur dans un dossier des modèles : ceux du catalogue et leurs `.partiel`. */
+function fichiersDuMoteur(dossier: string): string[] {
+  const connus = new Set(Object.values(MODELES_GGUF).flatMap((f) => [f.fichier, `${f.fichier}.partiel`]));
+  try {
+    return readdirSync(dossier).filter((nom) => connus.has(nom));
+  } catch {
+    return [];
+  }
+}
+
+/** Octets des modèles posés à l'emplacement actuel (`.partiel` compris). */
+export function octetsModelesLlama(): number {
+  let total = 0;
+  for (const nom of fichiersDuMoteur(dossierModeles())) {
+    try {
+      total += statSync(join(dossierModeles(), nom)).size;
+    } catch {
+      /* disparu entre-temps */
+    }
+  }
+  return total;
+}
+
+/**
+ * Déplace les modèles vers `cible` (le sous-dossier des modèles, déjà validé
+ * par emplacementModeles.ts ; null : l'emplacement habituel), puis retient
+ * ce nouvel emplacement. Rend la main à la fin ; `avancer` suit la copie.
+ */
+export function deplacerModelesLlama(cible: string | null, avancer: (a: AvanceeLlama) => void): Promise<void> {
+  if (deplacement) return Promise.reject(new Error(t("Un déplacement des modèles est déjà en cours.")));
+  if (telechargementLlamaEnCours()) return Promise.reject(new Error(t("Un téléchargement est en cours : attendez qu'il se termine, puis changez d'emplacement.")));
+  deplacement = deplacer(cible, avancer).finally(() => {
+    deplacement = null;
+    // Le serveur repart sur le nouvel emplacement (ou l'ancien, si rien n'a bougé).
+    void assurerServeurLlama().catch(() => {});
+  });
+  return deplacement;
+}
+
+/** Copie `de` vers `vers` (qui ne doit pas exister), jusqu'au disque. */
+async function copierFichier(de: string, vers: string, lus: (octets: number) => void): Promise<void> {
+  let n = 0;
+  const lecture = createReadStream(de);
+  lecture.on("data", (m) => {
+    n += (m as Buffer).length;
+    lus(n);
+  });
+  // `wx` : jamais par-dessus un fichier existant ; `flush` : écrit jusqu'au disque avant de se fermer.
+  await pipeline(lecture, createWriteStream(vers, { flags: "wx", mode: 0o600, flush: true }));
+}
+
+async function deplacer(cible: string | null, avancer: (a: AvanceeLlama) => void): Promise<void> {
+  const source = dossierModeles();
+  const destination = cible ?? dossierModelesParDefaut();
+  const noms = fichiersDuMoteur(source);
+  if (resolve(source) === resolve(destination) || noms.length === 0) {
+    // Rien à déplacer : seul l'emplacement retenu change.
+    mkdirSync(destination, { recursive: true, mode: 0o700 });
+    ecrireEmplacementLlama(cible);
+    ecrirePreset();
+    avancer({ message: t("Emplacement des modèles changé."), percent: 100 });
+    return;
+  }
+
+  // Le serveur s'arrête : il ne doit pas lire un fichier en train de partir.
+  const lui = serveur;
+  arreterLlama();
+  for (let i = 0; i < 50 && lui && lui.exitCode === null && lui.signalCode === null; i++) await new Promise((r) => setTimeout(r, 200));
+
+  mkdirSync(destination, { recursive: true, mode: 0o700 });
+  for (const nom of noms) {
+    if (existsSync(join(destination, nom)) || existsSync(join(destination, `${nom}.copie-helix`))) {
+      throw new Error(tf("Un fichier du même nom est déjà à la destination ({0}) : rien n'a été déplacé.", nom));
+    }
+  }
+  const tailles = new Map(noms.map((nom) => [nom, statSync(join(source, nom)).size]));
+  const total = [...tailles.values()].reduce((a, b) => a + b, 0);
+  const memeDisque = statSync(source).dev === statSync(destination).dev;
+
+  if (memeDisque) {
+    const faits: string[] = [];
+    try {
+      for (const nom of noms) {
+        renommer(join(source, nom), join(destination, nom));
+        faits.push(nom);
+        avancer({ message: tf("Déplacement des modèles... {0} %", Math.round((faits.length / noms.length) * 100)), percent: Math.round((faits.length / noms.length) * 100) });
+      }
+      ecrireEmplacementLlama(cible);
+    } catch (err) {
+      for (const nom of faits) {
+        try {
+          renommer(join(destination, nom), join(source, nom));
+        } catch {
+          console.error(`[helix] llama.cpp : ${nom} n'a pas pu revenir dans ${source} ; il est dans ${destination}.`);
+        }
+      }
+      throw new Error(tf("Le déplacement a échoué, les modèles restent où ils étaient : {0}", err instanceof Error ? err.message : String(err)));
+    }
+  } else {
+    const libre = placeLibre(destination);
+    if (libre !== null && libre < total + 1024 ** 3) {
+      throw new Error(tf("Pas assez de place à la destination : il faut {0} Go libres, il en reste {1}. Rien n'a été déplacé.", (total / 1e9 + 1).toFixed(1), (libre / 1e9).toFixed(1)));
+    }
+    const posees: string[] = [];
+    try {
+      let fait = 0;
+      let dernier = -1;
+      for (const nom of noms) {
+        const provisoire = join(destination, `${nom}.copie-helix`);
+        posees.push(provisoire);
+        await copierFichier(join(source, nom), provisoire, (n) => {
+          const p = Math.min(99, Math.floor(((fait + n) / total) * 100));
+          if (p !== dernier) {
+            dernier = p;
+            avancer({ message: tf("Copie des modèles vers le nouvel emplacement... {0} %", p), percent: p });
+          }
+        });
+        const attendu = tailles.get(nom)!;
+        const catalogue = Object.values(MODELES_GGUF).find((f) => f.fichier === nom)?.octets;
+        const copie = statSync(provisoire).size;
+        if (copie !== attendu || (catalogue !== undefined && copie !== catalogue)) {
+          throw new Error(tf("La copie de {0} n'a pas la taille de l'original ({1} octets au lieu de {2}).", nom, copie, attendu));
+        }
+        renommer(provisoire, join(destination, nom));
+        posees[posees.length - 1] = join(destination, nom);
+        fait += attendu;
+      }
+      ecrireEmplacementLlama(cible);
+    } catch (err) {
+      for (const p of posees) rmSync(p, { force: true });
+      try {
+        rmdirSync(destination);
+      } catch {
+        /* pas vide : il n'y a que ce qui y était avant */
+      }
+      throw new Error(tf("La copie a échoué : les modèles restent où ils étaient, rien n'a été effacé. {0}", err instanceof Error ? err.message : String(err)));
+    }
+    // Le nouvel emplacement est retenu : les originaux peuvent partir.
+    for (const nom of noms) {
+      try {
+        rmSync(join(source, nom), { force: true });
+      } catch (err) {
+        console.warn(`[helix] llama.cpp : l'original ${nom} n'a pas pu être effacé de ${source} (${err instanceof Error ? err.message : err}) ; la copie sert.`);
+      }
+    }
+  }
+  ecrirePreset();
+  // L'ancien sous-dossier, s'il est vide : jamais récursif, jamais le dossier choisi lui-même.
+  try {
+    rmdirSync(source);
+  } catch {
+    /* pas vide, ou déjà parti */
+  }
+  avancer({ message: t("Modèles déplacés."), percent: 100 });
 }

@@ -543,6 +543,15 @@ function orphelinSurLePort(): number | null {
         .split("\n")
         .some((l) => l.startsWith("n") && l.slice(1) === attendu);
       if (execute) return pid;
+      /*
+       * Ou lancé par un interpréteur avec notre chemin en tête de sa commande
+       * (le faux serveur des essais est un script). Suffisant pour l'ARRÊTER :
+       * un programme de ce compte qui se ferait passer pour le nôtre n'y gagne
+       * rien. Jamais pour lui faire confiance : la clé ne part que vers un
+       * écouteur reconnu au fichier qu'il exécute (`ecouteurReconnu`).
+       */
+      const commande = `${execFileSync("/bin/ps", ["-o", "command=", "-p", String(pid)], { encoding: "utf8", timeout: 5000 }).trim()} `;
+      if (commande.startsWith(`${serveurLlamaCpp()} `) || commande.includes(` ${serveurLlamaCpp()} `)) return pid;
     }
   } catch {
     /* lsof muet, ou rien à lire : rien de reconnu */

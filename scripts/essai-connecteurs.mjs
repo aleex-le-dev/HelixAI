@@ -478,8 +478,15 @@ const branches = {};
     refusRetour.status === 400 && !sansIssue.atlassian && issueRefus?.ok === false && /access_denied/.test(issueRefus?.message ?? ""),
     JSON.stringify({ sansIssue, issueRefus }),
   );
+  /*
+   * Après un refus, l'autorisation ne sert plus (usage unique, tournée des
+   * connexions du 28/09/2026) : la personne recommence par « Se connecter »,
+   * qui donne une nouvelle adresse, avec un nouveau state.
+   */
+  const nouvelle = await (await poster("/helix/connecteurs/connecter", A, { id: "atlassian" })).json();
+  verifier("Atlassian : après un refus, « Se connecter » donne une nouvelle autorisation (l'ancienne ne sert plus)", Boolean(nouvelle.adresse) && new URL(nouvelle.adresse).searchParams.get("state") !== etatDemande, JSON.stringify(nouvelle).slice(0, 200));
   // Sans page d'autorisation (code d'avant la revérification), la suite échoue sans s'arrêter.
-  const accord = depart.adresse ? await accorder(depart.adresse) : { code: "", state: "" };
+  const accord = nouvelle.adresse ? await accorder(nouvelle.adresse) : { code: "", state: "" };
   const faux = await appel(`/helix/oauth/retour?code=${accord.code}&state=${"x".repeat(32)}`);
   verifier("Atlassian : un retour avec un state inventé est refusé (400), rien n'est échangé", faux.status === 400 && !recues.some((x) => x.chemin === "/oauth/token"), faux.status);
   // Le navigateur que le service renvoie ne porte que sa propre langue (Accept-Language) : la page doit la suivre.

@@ -12,7 +12,7 @@
  * B. Emplacement des modèles : un sous-dossier `LM Studio` ou
  *    `modeles-llamacpp` déjà posé en lien symbolique.
  * C. Moteur ouvert : un autre programme sur son port ne reçoit ni la clé ni
- *    les Chats ; un serveur resté de Helix (le même fichier exécuté) est repris.
+ *    les Chats ; un serveur resté de Helix (le même fichier exécuté) est arrêté et remplacé.
  */
 import { spawn, spawnSync } from "node:child_process";
 import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
@@ -206,7 +206,7 @@ try {
     await arreter();
     faux.close();
 
-    // C2. Un serveur resté de Helix (le fichier posé par Helix, lancé avant la passerelle) : repris.
+    // C2. Un serveur resté de Helix (le fichier posé par Helix, lancé avant la passerelle) : arrêté et remplacé (revue finale du 28/09/2026), jamais doublé.
     const d2 = join(TMP, "donnees-e");
     preparer(d2, process.execPath);
     const portReste = await portLibre();
@@ -220,7 +220,9 @@ try {
     }
     await demarrer(d2, { HELIX_MOTEUR: "llamacpp", HELIX_LLAMACPP_PORT: String(portReste) });
     const m2 = await fetch(`${G}/v1/models`, { headers: { Authorization: `Bearer ${JETON}` } }).then((r) => r.json()).catch(() => ({}));
-    verifier("un serveur resté de Helix (même fichier exécuté, lu par lsof) est repris", (m2.data ?? []).some((m) => m.id === "llamacpp/qwen3-1.7b"), JSON.stringify(m2).slice(0, 200));
+    // Il gardait le modèle en mémoire après la fermeture de Helix : il est arrêté par son PID, puis remplacé (ici par une copie de Node, qui ne sait pas servir : seul l'arrêt compte).
+    for (let i = 0; i < 50 && reste.exitCode === null && reste.signalCode === null; i++) await attendre(200);
+    verifier("un serveur resté de Helix (même fichier exécuté, lu par lsof) est arrêté puis remplacé, jamais gardé à côté d'un second", reste.exitCode !== null || reste.signalCode !== null, `code ${reste.exitCode} signal ${reste.signalCode} ${JSON.stringify(m2).slice(0, 120)}`);
     await arreter();
     reste.kill();
 

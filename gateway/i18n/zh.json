@@ -295,6 +295,7 @@
   "Ce modèle est local : il n'a pas de frais d'API, il n'y a pas de tarif à renseigner.": "此模型在本地运行：没有 API 费用，无需填写价格。",
   "Ce modèle n'est pas disponible pour vous.": "您无权使用此模型。",
   "Ce modèle n'est pas installé.": "该模型尚未安装。",
+  "Ce modèle n'est pas proposé pour cette machine.": "此设备不提供该模型。",
   "Ce mot de passe est trop long.": "此密码过长。",
   "Ce n'est pas un dossier.": "这不是一个文件夹。",
   "Ce n'est pas un jeton de bot Slack : il commence par xoxb- et ne contient ni espace ni guillemet.": "这不是 Slack 机器人令牌：它以 xoxb- 开头，且不含空格或引号。",

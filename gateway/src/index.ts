@@ -705,8 +705,25 @@ async function handleEngineInstall(
   if (moteurEnInstallation) return send(res, 409, { error: { message: t("Le moteur est déjà en cours d'installation.") } });
   // Déploiement piloté par l'intégrateur : les modèles sont ceux du profil client, l'écran ne propose rien (revue du 27/09/2026).
   if (!autoProvisionEnabled()) return send(res, 403, { error: { message: t("Sur ce poste, les modèles sont préparés par l'intégrateur.") } });
-  if (moteurOuvert()) return installerMoteurOuvert(qui.userId, res);
-  const body = (await readJson(req).catch(() => ({}))) as { conditionsAcceptees?: unknown };
+  const body = (await readJson(req).catch(() => ({}))) as { conditionsAcceptees?: unknown; model?: unknown };
+  /*
+   * Le modèle qui suit le moteur (28/09/2026) : le conseillé par défaut, ou
+   * un autre, pourvu qu'il tienne sur la machine (les mêmes que l'écran de
+   * mise en route propose, `modelesQuiTiennent`). Sans lui, « installer le
+   * moteur » enchaînait toujours sur le conseillé, et une demande de modèle
+   * faite pendant l'installation se greffait sur celle-ci
+   * (`ensureLocalModel` n'en fait qu'une à la fois) : c'est ce qu'a montré
+   * l'essai Windows de bout en bout (scripts/essai-windows-ci.mjs), qui veut
+   * le plus léger. Vérifié avant rien installer ni journaliser.
+   */
+  let modeleChoisi: string | undefined;
+  if (body.model !== undefined) {
+    if (typeof body.model !== "string" || !modelesQuiTiennent(detectHardware()).some((m) => m.key === body.model)) {
+      return send(res, 400, { error: { message: t("Ce modèle n'est pas proposé pour cette machine."), code: "modele_non_propose" } });
+    }
+    modeleChoisi = body.model;
+  }
+  if (moteurOuvert()) return installerMoteurOuvert(qui.userId, res, modeleChoisi);
   // Même règle que partout : seul un `true` explicite vaut accord.
   if (body.conditionsAcceptees !== true) {
     return send(res, 400, {
@@ -770,7 +787,7 @@ async function handleEngineInstall(
        * étapes techniques dont il devrait comprendre l'ordre.
        */
       setProvisionState({ phase: "checking", message: t("Choix du modèle adapté à votre machine..."), percent: undefined });
-      apresMiseEnRoute(await ensureLocalModel());
+      apresMiseEnRoute(await ensureLocalModel(modeleChoisi));
     })
     .catch((err: unknown) => {
       setProvisionState({
@@ -792,14 +809,14 @@ async function handleEngineInstall(
  * pour s'en servir. Puis, comme pour LM Studio, le modèle adapté à la machine
  * dans la foulée : « installer Helix » reste une seule opération.
  */
-function installerMoteurOuvert(userId: string, res: http.ServerResponse): void {
+function installerMoteurOuvert(userId: string, res: http.ServerResponse, modeleChoisi?: string): void {
   journaliser("moteur.llamacpp_installation", userId, {});
   moteurEnInstallation = true;
   void installerLlamaCpp((a) => setProvisionState({ phase: "downloading", message: a.message, percent: a.percent }))
     .then(async () => {
       invalidate();
       setProvisionState({ phase: "checking", message: t("Choix du modèle adapté à votre machine..."), percent: undefined });
-      apresMiseEnRoute(await ensureLocalModel());
+      apresMiseEnRoute(await ensureLocalModel(modeleChoisi));
     })
     .catch((err: unknown) => {
       setProvisionState({

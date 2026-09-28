@@ -295,6 +295,7 @@
   "Ce modèle est local : il n'a pas de frais d'API, il n'y a pas de tarif à renseigner.": "このモデルはローカルで動作するため API 料金はかかりません。料金を入力する必要はありません。",
   "Ce modèle n'est pas disponible pour vous.": "このモデルはご利用いただけません。",
   "Ce modèle n'est pas installé.": "このモデルはインストールされていません。",
+  "Ce modèle n'est pas proposé pour cette machine.": "このモデルはこのマシンでは提供されていません。",
   "Ce mot de passe est trop long.": "このパスワードは長すぎます。",
   "Ce n'est pas un dossier.": "フォルダーではありません。",
   "Ce n'est pas un jeton de bot Slack : il commence par xoxb- et ne contient ni espace ni guillemet.": "Slack のボットトークンではありません。ボットトークンは xoxb- で始まり、空白や引用符を含みません。",

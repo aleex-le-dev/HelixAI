@@ -295,6 +295,7 @@
   "Ce modèle est local : il n'a pas de frais d'API, il n'y a pas de tarif à renseigner.": "This model is local: it has no API cost, so there is no price to enter.",
   "Ce modèle n'est pas disponible pour vous.": "This model is not available to you.",
   "Ce modèle n'est pas installé.": "This model is not installed.",
+  "Ce modèle n'est pas proposé pour cette machine.": "This model is not offered for this machine.",
   "Ce mot de passe est trop long.": "This password is too long.",
   "Ce n'est pas un dossier.": "This is not a folder.",
   "Ce n'est pas un jeton de bot Slack : il commence par xoxb- et ne contient ni espace ni guillemet.": "This is not a Slack bot token: it starts with xoxb- and contains neither spaces nor quotation marks.",

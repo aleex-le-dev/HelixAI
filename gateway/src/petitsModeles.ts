@@ -383,9 +383,19 @@ export function appelsDansLeTexte(texte: string, proposes: string[], plafond = 8
   }
   if (appels.length === 0 && balises.length === 0 && /<function=/.test(texte)) ajouterXml(texte);
   if (appels.length === 0 && balises.length === 0) {
-    // Toute la réponse est un appel (éventuellement dans un bloc ```json).
-    const nu = texte.trim().replace(/^```(?:json)?\s*|\s*```$/g, "");
-    if (/^\{[\s\S]*"(name|tool)"\s*:[\s\S]*\}$/.test(nu)) ajouterJson(nu);
+    /*
+     * Toute la réponse est un appel (éventuellement dans un bloc ```json).
+     * Sans expression à double `[\s\S]*` ni `\s*```$` (tournée finale de la
+     * 2026.928.6, SECURITE.md § 53) : sur un texte lu qui commence par `{`, porte
+     * beaucoup de `"name":` ou une longue suite de blancs, elles coûtaient le
+     * carré de sa taille (80 000 blancs : 6 s), à chaque appel relu par
+     * `appelsLus`.
+     */
+    let nu = texte.trim();
+    const ouverture = /^```(?:json)?/.exec(nu);
+    if (ouverture) nu = nu.slice(ouverture[0].length).trimStart();
+    if (nu.endsWith("```")) nu = nu.slice(0, -3).trimEnd();
+    if (nu.startsWith("{") && nu.endsWith("}") && /"(name|tool)"\s*:/.test(nu)) ajouterJson(nu);
   }
   return appels.slice(0, plafond);
 }

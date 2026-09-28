@@ -56,6 +56,13 @@
   --sidebar-border: 40 12% 90%;
   --sidebar-active: 40 24% 99%; /* pastille claire surelevee de l'element actif */
 
+  /*
+   * Fond clair derriere un logo de marque sombre, en theme sombre (LogoMarque,
+   * `pastille`) : blanc dans les deux themes, c'est le fond que ces logos
+   * attendent. Pas redefini plus bas, a dessein.
+   */
+  --pastille-marque: 0 0% 100%;
+
   /* --- Echelle de neutres (gris chauds) ----------------------------------- */
   --neutral-15: 240 10% 10%;
   --neutral-30: 240 8% 20%;

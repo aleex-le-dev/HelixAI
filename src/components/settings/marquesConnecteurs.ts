@@ -2,25 +2,14 @@ import {
   Blocks,
   BookOpen,
   Brain,
-  CalendarClock,
-  LayoutGrid,
-  ListTodo,
-  SquareCheckBig,
-  SquareKanban,
   Compass,
-  CreditCard,
   FileText,
   Folder,
   Globe,
-  Headset,
   Laptop,
-  ListChecks,
   Mail,
-  MessageSquare,
   Monitor,
   Search,
-  Table2,
-  TrendingUp,
   Video,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -37,6 +26,11 @@ import type { CleMarquePetite } from "@/components/ui/marques";
  * Une entrée absente n'est pas un défaut : elle retombe sur l'icône neutre
  * ci-dessous, puis sur un carré générique. Un service sans logo reste
  * branchable.
+ *
+ * Troisième tournée (28/09/2026, décision de Medhi : « mets les vrais ») :
+ * chaque service affiché porte son vrai logo, en couleur, y compris ceux dont
+ * la charte demandait un accord (Slack, HubSpot, Box, PayPal…). Sources dans
+ * scripts/marques/sources.json.
  */
 export const MARQUE_DU_CONNECTEUR: Record<string, CleMarquePetite> = {
   courrier: "gmail",
@@ -65,25 +59,33 @@ export const MARQUE_DU_CONNECTEUR: Record<string, CleMarquePetite> = {
   firecrawl: "firecrawl",
   exa: "exa",
   x: "x",
-  // Logos permis pour signaler la compatibilité (relevé du 28/09/2026, scripts/marques/sources.json).
   trello: "trello",
   clickup: "clickup",
   todoist: "todoist",
-  // Page de marque de Tavily publiée depuis le premier relevé (seconde tournée, 28/09/2026).
   tavily: "tavily",
+  // Troisième tournée (28/09/2026) : les services qui gardaient une icône neutre.
+  slack: "slack",
+  "slack-mcp": "slack",
+  "slack-jeton": "slack",
+  asana: "asana",
+  hubspot: "hubspot",
+  intercom: "intercom",
+  "airtable-mcp": "airtable",
+  "airtable-jeton": "airtable",
+  box: "box",
+  paypal: "paypal",
+  square: "square",
+  monday: "monday",
+  calendly: "calendly",
+  zoom: "zoom",
 };
 
 /**
- * Icône neutre pour les services sans logo utilisable : ceux dont la charte
- * interdit cet usage ou le soumet à une autorisation (Slack, LinkedIn, Meta,
- * TikTok, YouTube, HubSpot, Intercom, Asana, Airtable, Box, PayPal, Square),
- * et les serveurs livrés avec le produit, qui ne sont la marque de personne.
- * Tavily a désormais son logo (MARQUE_DU_CONNECTEUR passe devant) ; son
- * icône reste ici, pour le cas où la ligne serait trop petite pour sa charte. Raisons datées
- * dans scripts/marques/sources.json. YouTube n'a d'icône neutre que dans la
- * liste : sa charte fixe 100 px au moins, son logo est en grand dans son
- * panneau (ConnecteurNatif.tsx), et CleMarquePetite l'écarte des tables
- * ci-dessus.
+ * Icône neutre pour les services qui ne sont la marque de personne : les
+ * serveurs livrés avec le produit (fichiers, mémoire, navigateur…), le
+ * courrier par IMAP et l'entrée « autre ». Depuis la troisième tournée du
+ * 28/09/2026, aucun service de marque ne s'y trouve plus. Tavily garde la
+ * sienne pour le cas où la ligne serait trop petite pour sa charte.
  */
 export const ICONE_DU_CONNECTEUR: Record<string, LucideIcon> = {
   fichiers: Folder,
@@ -95,39 +97,14 @@ export const ICONE_DU_CONNECTEUR: Record<string, LucideIcon> = {
   reflexion: Brain,
   documentation: BookOpen,
   navigateur: Globe,
-  slack: MessageSquare,
-  "slack-mcp": MessageSquare,
-  "slack-jeton": MessageSquare,
   tavily: Search,
-  asana: ListChecks,
-  hubspot: TrendingUp,
-  intercom: Headset,
-  "airtable-mcp": Table2,
-  "airtable-jeton": Table2,
-  box: Folder,
-  paypal: CreditCard,
-  square: CreditCard,
   courrierIMAP: Mail,
   autre: Compass,
-  // Projets et rendez-vous (28/09/2026) : icônes neutres, les logos sont l'affaire d'un autre travail.
-  trello: SquareKanban,
-  monday: LayoutGrid,
-  clickup: SquareCheckBig,
-  todoist: ListTodo,
-  calendly: CalendarClock,
-  zoom: Video,
 };
 
 /** Le carré générique, quand ni marque ni icône ne sont connues. */
 export const ICONE_PAR_DEFAUT: LucideIcon = Blocks;
 
-/**
- * Logo des fournisseurs de modèles, par identifiant du catalogue de la
- * passerelle (gateway/src/fournisseurs.ts). Absents faute de logo utilisable
- * (28/09/2026, scripts/marques/sources.json) : OpenAI, Scaleway, OVHcloud,
- * IONOS, Groq, DeepSeek, et « compatible », qui n'est personne. Ils gardent
- * la clé neutre.
- */
 /**
  * Le logo de l'éditeur d'un modèle, déduit de son identifiant.
  *
@@ -136,30 +113,52 @@ export const ICONE_PAR_DEFAUT: LucideIcon = Blocks;
  * en commun le mot qui compte. Une correspondance manquante ne casse rien, la
  * ligne s'affiche avec l'icône neutre.
  *
- * Logos officiels seulement (28/09/2026, scripts/marques/sources.json) :
- * DeepSeek, Qwen, Llama, Gemma et les modèles d'OpenAI n'en ont pas ici, faute
- * de symbole officiel utilisable ou parce que leur charte demande une
- * autorisation. Gemma n'emprunte plus l'icône de Gemini, un autre produit.
+ * L'ordre compte : la première correspondance gagne. DeepSeek passe avant Qwen
+ * et Llama (« DeepSeek-R1-Distill-Qwen-7B » est un modèle de DeepSeek), et
+ * OpenAI en dernier, pour que « gpt » ne prenne pas le nom d'un autre.
+ *
+ * Troisième tournée (28/09/2026) : OpenAI (GPT, o1 à o4, gpt-oss), DeepSeek,
+ * Qwen, Llama (logo de Meta), Gemma, GLM (Z.ai) et MiniMax ont leur logo.
+ * Restent neutres, faute de fichier relevé : Phi (Microsoft), Granite (IBM),
+ * Nemotron (NVIDIA), OLMo (Ai2).
  * Partagé par le sélecteur de modèles et la comparaison des modèles.
  */
 const MARQUE_DU_MODELE: [RegExp, CleMarquePetite][] = [
   [/claude|anthropic/i, "claude"],
-  [/mistral|magistral|devstral|codestral|ministral|pixtral|voxtral/i, "mistral"],
+  [/deepseek/i, "deepseek"],
+  [/mistral|mixtral|magistral|devstral|codestral|ministral|pixtral|voxtral/i, "mistral"],
   [/gemini/i, "gemini"],
+  [/gemma/i, "gemma"],
   [/kimi|moonshot/i, "kimi"],
   [/perplexity|sonar/i, "perplexity"],
   [/grok/i, "grok"],
+  [/qwen|qwq/i, "qwen"],
+  [/llama/i, "meta"],
+  [/\bglm|chatglm|zai-org|z-ai/i, "zai"],
+  [/minimax/i, "minimax"],
+  [/gpt|openai|chatgpt|(^|[/:])o[1-9](-|$)/i, "openai"],
 ];
 
 export function marqueDuModele(id: string): CleMarquePetite | undefined {
   return MARQUE_DU_MODELE.find(([re]) => re.test(id))?.[1];
 }
 
+/**
+ * Logo des fournisseurs de modèles, par identifiant du catalogue de la
+ * passerelle (gateway/src/fournisseurs.ts). Seul « compatible », qui n'est
+ * personne, garde la clé neutre.
+ */
 export const MARQUE_DU_FOURNISSEUR: Record<string, CleMarquePetite> = {
   mistral: "mistral",
+  scaleway: "scaleway",
+  ovhcloud: "ovhcloud",
+  ionos: "ionos",
+  openai: "openai",
   anthropic: "anthropic",
   google: "gemini",
   openrouter: "openrouter",
+  groq: "groq",
+  deepseek: "deepseek",
   xai: "xai",
   together: "together",
 };

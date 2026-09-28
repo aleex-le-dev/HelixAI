@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
-import { Building2, Check, Cloud, ExternalLink, FileText, KeyRound, Link2, Loader2, Lock, Mail, MessagesSquare, Pencil, ShieldAlert, Table2, Trash2 } from "lucide-react";
-import type { LucideIcon } from "lucide-react";
+import { Check, ExternalLink, KeyRound, Link2, Loader2, Lock, Pencil, ShieldAlert, Trash2 } from "lucide-react";
+import type { CleMarquePetite } from "@/components/ui/marques";
 import {
   collerAdresseNatif,
   connecterNatif,
@@ -38,14 +38,14 @@ import { t, tf } from "@/lib/i18n";
  * l'annuaire. Les libellés sont ceux du portail en français le 28/09/2026 ;
  * ils changent, et l'écran le dit.
  *
- * Les logos officiels (clés de marque `outlook`, `onedrive`, `sharepoint`,
- * `excel`, `word`, `teams`) sont posés par un autre travail : icônes neutres
- * en attendant.
+ * Chaque ligne porte l'icône de son application Microsoft 365, celle de 2026
+ * que microsoft.com sert sur ses pages produit (troisième tournée des logos,
+ * 28/09/2026, décision de Medhi ; scripts/marques/sources.json).
  */
 
 const SERVICES: ServiceMicrosoft[] = ["outlook", "onedrive", "sharepoint", "excel", "word", "teams"];
 const NOMS: Record<ServiceMicrosoft, string> = { outlook: "Outlook", onedrive: "OneDrive", sharepoint: "SharePoint", excel: "Excel", word: "Word", teams: "Microsoft Teams" };
-const ICONES: Record<ServiceMicrosoft, LucideIcon> = { outlook: Mail, onedrive: Cloud, sharepoint: Building2, excel: Table2, word: FileText, teams: MessagesSquare };
+const MARQUES: Record<ServiceMicrosoft, CleMarquePetite> = { outlook: "outlook", onedrive: "onedrive", sharepoint: "sharepoint", excel: "excel", word: "word", teams: "teams" };
 
 /** Traduit au rendu : la langue n'est pas connue au chargement du module. */
 function resume(s: ServiceMicrosoft): string {
@@ -105,7 +105,7 @@ export function lignesMicrosoft(etat: EtatNatif | undefined, ouvert: string | nu
             ? t("Pas coché dans la connexion Microsoft 365")
             : resume(s),
       categorie: "Microsoft 365",
-      icone: ICONES[s],
+      marque: MARQUES[s],
       connecte: coche,
       ouvert: ouvert === s,
       onBasculer: () => basculer(s),

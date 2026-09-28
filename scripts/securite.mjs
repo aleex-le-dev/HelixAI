@@ -5957,12 +5957,14 @@ console.log("\n14 bis. Seconde tournée de l'audit : dépendances npm à date fi
     "marques.ts ou LogoMarque",
   );
   /*
-   * Marques à hauteur minimale (28/09/2026) : la charte de YouTube interdit son
-   * logo sous 100 px. LogoMarque (les lignes de liste, 13 à 22 px) ne peut pas
-   * le recevoir (type CleMarquePetite, que le typecheck tient), LogoMarqueGrand
-   * ne descend jamais sous le minimum et ne montre rien s'il n'a pas la place
-   * (jamais coupé), et le seul endroit qui l'appelle est le panneau YouTube,
-   * avec au moins 100 px.
+   * Logo complet de YouTube (28/09/2026) : en tête de son panneau, à 100 px au
+   * moins, entier. LogoMarque (les lignes de liste, 13 à 22 px) ne peut pas le
+   * recevoir (type CleMarquePetite, que le typecheck tient), LogoMarqueGrand ne
+   * descend jamais sous le minimum et ne montre rien s'il n'a pas la place
+   * (jamais coupé). Depuis la troisième tournée du même jour (décision de
+   * Medhi, « mets les vrais »), la liste montre aussi l'icône de YouTube en
+   * petit, par une autre clé (`youtubeIcone`) : le logo complet, lui, ne passe
+   * toujours pas dans une ligne.
    */
   const grandes = Object.entries(marquesSources.marques).filter(([, m]) => m.grand);
   const appelsGrands = [];
@@ -5977,7 +5979,7 @@ console.log("\n14 bis. Seconde tournée de l'audit : dépendances npm à date fi
     return !f.endsWith(join("settings", "ConnecteurNatif.tsx")) || !cle || hauteur < minimum(cle);
   });
   verifier(
-    "logos : YouTube n'apparaît qu'à 100 px ou plus, entier, en tête de son panneau, jamais dans une ligne de liste",
+    "logos : le logo complet de YouTube n'apparaît qu'à 100 px ou plus, entier, en tête de son panneau ; la ligne de la liste montre son icône (youtubeIcone)",
     grandes.length === 1 &&
       grandes[0][0] === "youtube" &&
       grandes[0][1].grand.hauteurMin >= 100 &&
@@ -5988,7 +5990,9 @@ console.log("\n14 bis. Seconde tournée de l'audit : dépendances npm à date fi
       /place >= l/.test(tuile) &&
       appelsGrands.length === 1 &&
       appelsFautifs.length === 0 &&
-      !/["']youtube["']/.test(src("src", "components", "settings", "marquesConnecteurs.ts")),
+      !/["']youtube["']/.test(src("src", "components", "settings", "marquesConnecteurs.ts")) &&
+      Boolean(marquesSources.marques.youtubeIcone && !marquesSources.marques.youtubeIcone.grand) &&
+      /\["youtube", "YouTube", [^\]]*"youtubeIcone"/.test(src("src", "pages", "ParametresPages.tsx")),
     appelsFautifs.map((a) => a.f).join(", ") || `${grandes.length} marque(s) grande(s), ${appelsGrands.length} appel(s)`,
   );
   /*
@@ -6024,6 +6028,42 @@ console.log("\n14 bis. Seconde tournée de l'audit : dépendances npm à date fi
     "logos : icônes de produit Google dans leur version la plus récente relevée (2026, Maps 2025)",
     iconesGoogle.length >= 9 && iconesGoogle.every(([, m]) => /_(2026|2025)\/v\d+\//.test(m.source) && m.clair.endsWith(".png")),
     iconesGoogle.filter(([, m]) => !/_(2026|2025)\//.test(m.source)).map(([c]) => c).join(", ") || `${iconesGoogle.length} icônes`,
+  );
+  /*
+   * Troisième tournée des logos (28/09/2026, décision de Medhi : « mets les
+   * vrais ») : plus aucune marque neutre par choix, chaque service et chaque
+   * fournisseur de la liste porte son logo, et un logo sombre sans version pour
+   * fond sombre reçoit une pastille claire (jamais recoloré). La décision est
+   * écrite dans sources.json, THIRD_PARTY_NOTICES.md et PROJET.md.
+   */
+  const microsoftTsx = src("src", "components", "settings", "ConnecteurMicrosoft.tsx");
+  const commerceTsx = src("src", "components", "settings", "ConnecteurCommerce.tsx");
+  const parametresTsx = src("src", "pages", "ParametresPages.tsx");
+  const cssTsx = src("src", "styles", "index.css");
+  const attendues = ["slack", "openai", "linkedin", "tiktok", "hubspot", "intercom", "box", "paypal", "asana", "airtable", "square", "monday", "mailchimp", "brevo", "ionos", "deepseek", "qwen", "calendly", "groq", "gemma", "scaleway", "ovhcloud", "meta", "outlook", "onedrive", "sharepoint", "excel", "word", "teams", "stripe", "shopify", "woocommerce", "salesforce", "pipedrive", "zendesk", "discord", "zoom", "whatsapp", "youtubeIcone"];
+  const sansLogo = attendues.filter((c) => !marquesSources.marques[c]);
+  const fournisseursSansLogo = ["mistral", "scaleway", "ovhcloud", "ionos", "openai", "anthropic", "google", "openrouter", "groq", "deepseek", "xai", "together"].filter((id) => !new RegExp(`\\b${id}: "`).test(src("src", "components", "settings", "marquesConnecteurs.ts").split("MARQUE_DU_FOURNISSEUR")[1] ?? ""));
+  verifier(
+    "logos, troisième tournée : chaque service et chaque fournisseur de la liste porte son vrai logo (Microsoft, commerce, messageries, réseaux, clés d'API), aucune marque neutre par choix, décision datée écrite",
+    sansLogo.length === 0 &&
+      fournisseursSansLogo.length === 0 &&
+      Object.keys(marquesSources.neutres).length === 0 &&
+      /28\/09\/2026, Medhi/.test(marquesSources.decision ?? "") &&
+      /MARQUES: Record<ServiceMicrosoft, CleMarquePetite>/.test(microsoftTsx) && !/icone: ICONES/.test(microsoftTsx) &&
+      /const LISTE: \[IdCommerce, string, CleMarquePetite\]\[\]/.test(commerceTsx) &&
+      !/LucideIcon/.test(parametresTsx) &&
+      /décision de Medhi/i.test(sectionLogos) && /28\/09\/2026/.test(sectionLogos),
+    [...sansLogo, ...fournisseursSansLogo].join(", ") || "écran ou mention à revoir",
+  );
+  const avecPastille = Object.entries(marquesSources.marques).filter(([, m]) => m.pastille).map(([c]) => c);
+  verifier(
+    "logos : un logo sombre sans version pour fond sombre (Square, OVHcloud, PayPal) reçoit une pastille claire en thème sombre, le dessin n'est pas recoloré",
+    ["square", "ovhcloud"].every((c) => avecPastille.includes(c)) &&
+      avecPastille.every((c) => !marquesSources.marques[c].sombre) &&
+      /m\.pastille \?/.test(tuile) && /marque-pastille/.test(tuile) &&
+      /:root\[data-theme="sombre"\] \.marque-pastille \{[^}]*hsl\(var\(--pastille-marque\)\)/.test(cssTsx) &&
+      !/filter|invert/.test((cssTsx.match(/\.marque-pastille \{[^}]*\}/g) ?? []).join("")),
+    avecPastille.join(", ") || "aucune pastille",
   );
 
   // Prix publiés : chaque ligne rattachée à un fournisseur qui a sa page officielle et sa date.
@@ -6258,6 +6298,11 @@ console.log("\n15 septies. Tournée de la 2026.928.3 : logos, mentions, X");
     classeUrl: `<svg viewBox="0 0 10 10"><style>.a{fill:URL(//exemple.test/p.svg#g)}</style><path class="a" d="M0 0h10v10z"/></svg>`,
     imageSet: `<svg viewBox="0 0 10 10"><path fill="image-set('https://exemple.test/i.png' 1x)" d="M0 0h10v10z"/></svg>`,
     entite: `<svg viewBox="0 0 10 10"><path fill="&#117;rl(https://exemple.test/p.svg#g)" d="M0 0h10v10z"/></svg>`,
+    // Troisième tournée (28/09/2026) : seules les règles @media du thème du système sont retirées ; toute autre règle @ reste refusée.
+    mediaEcran: `<svg viewBox="0 0 10 10"><style>@media screen{.a{fill:url(//exemple.test/p.svg#g)}}</style><path class="a" d="M0 0h10v10z"/></svg>`,
+    importCss: `<svg viewBox="0 0 10 10"><style>@import url(//exemple.test/s.css);</style><path d="M0 0h10v10z"/></svg>`,
+    fontFace: `<svg viewBox="0 0 10 10"><style>@font-face{font-family:x;src:url(//exemple.test/f.woff)}</style><path d="M0 0h10v10z"/></svg>`,
+    inkscapeHref: `<svg viewBox="0 0 10 10"><path inkscape:href="x" xlink:href="https://exemple.test/p.svg" d="M0 0h10v10z"/></svg>`,
   };
   const { copyFileSync, writeFileSync: ecrireFichier } = await import("node:fs");
   const genererAvec = (svg) => {
@@ -6282,6 +6327,9 @@ console.log("\n15 septies. Tournée de la 2026.928.3 : logos, mentions, X");
   verifier("logos : un SVG piégé (script, onload, foreignObject, lien javascript:, use, url() en majuscules, échappée ou par une classe, image-set, entité) n'arrive jamais à marques.ts", passes.length === 0, passes.join(", "));
   const temoinLogo = genererAvec(`<svg id="root" viewBox="0 0 10 10"><defs><linearGradient id="g"><stop offset="0" stop-color="#000"/></linearGradient></defs><path fill="url(#g)" transform="matrix(1 0 0 1 0 0)" d="M0 0h10v10z" style="fill-opacity:color(display-p3 1 0 0)"/></svg>`);
   verifier("logos, témoin : un dessin ordinaire (dégradé désigné par url(#…), matrix, color()) passe, sans l'id de sa racine", temoinLogo !== null && /url\(#a\)/.test(temoinLogo) && !/"root"/.test(temoinLogo), temoinLogo ? temoinLogo.slice(-300) : "refusé");
+  // Une règle @media du thème du système (icônes de Scaleway, Zendesk) est retirée avec tout ce qu'elle porte : rien n'en arrive à marques.ts.
+  const temoinMedia = genererAvec(`<svg viewBox="0 0 10 10"><style>@media (prefers-color-scheme:dark){path{fill:url(//exemple.test/p.svg#g)}}</style><path fill="#BF95F9" sodipodi:docname="x.svg" d="M0 0h10v10z"/></svg>`);
+  verifier("logos, témoin : une règle @media (prefers-color-scheme) est retirée sans rien laisser passer, les métadonnées sodipodi: ne sont pas recopiées", temoinMedia !== null && !/exemple\.test|sodipodi|docname/.test(temoinMedia) && /#BF95F9/.test(temoinMedia), temoinMedia ? temoinMedia.slice(-300) : "refusé");
   const marquesTs = readFileSync(join(RACINE, "src", "components", "ui", "marques.ts"), "utf8");
   const idsBruts = [...marquesTs.matchAll(/"id":"([^"]*)"/g)].map((m) => m[1]).filter((id) => !/^[a-z]$/.test(id));
   verifier("logos : marques.ts n'a ni url() hors du dessin (en toute casse), ni échappement, ni id venu tel quel d'un kit (« Layer_1 » deux fois sur la page)", !/url\(\s*['"]?(?!#)/i.test(marquesTs) && !/\\\\/.test(marquesTs.replace(/^[\s\S]*?export const MARQUES/, "")) && idsBruts.length === 0, idsBruts.join(", "));

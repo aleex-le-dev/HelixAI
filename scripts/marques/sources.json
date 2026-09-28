@@ -1,5 +1,5 @@
 {
-  "_lisezmoi": "Provenance des logos de src/components/ui/marques.ts. Chaque fichier de ce dossier (.svg, ou .png quand la société ne publie son logo qu'en image) est le fichier officiel tel que publié par la société (octet pour octet, sauf mention contraire dans « retouche »), relevé le 28/09/2026. « clair » sert en thème clair, « sombre » en thème sombre (absent : le même dessin sert aux deux). « cadre » recadre la zone visible (viewBox) sur le dessin, sans toucher au dessin : les kits livrent souvent le logo au milieu d'une grande marge. « tailleMin » (pixels) et « marge » (part de la hauteur affichée, ou pixels) sont la taille minimale et la zone de protection que la charte écrit en chiffres ; LogoMarque les applique. Les empreintes SHA-256 sont vérifiées par scripts/gen-marques.cjs ; `node scripts/gen-marques.cjs --noter` les réécrit après un nouveau relevé. Les marques de la liste « neutres » gardent une icône neutre, pour la raison dite.",
+  "_lisezmoi": "Provenance des logos de src/components/ui/marques.ts. Chaque fichier de ce dossier (.svg, ou .png quand la société ne publie son logo qu'en image) est le fichier officiel tel que publié par la société (octet pour octet, sauf mention contraire dans « retouche »), relevé le 28/09/2026. « clair » sert en thème clair, « sombre » en thème sombre (absent : le même dessin sert aux deux). « cadre » recadre la zone visible (viewBox) sur le dessin, sans toucher au dessin : les kits livrent souvent le logo au milieu d'une grande marge. « tailleMin » (pixels) et « marge » (part de la hauteur affichée, ou pixels) sont la taille minimale et la zone de protection que la charte écrit en chiffres ; LogoMarque les applique. Les empreintes SHA-256 sont vérifiées par scripts/gen-marques.cjs ; `node scripts/gen-marques.cjs --noter` les réécrit après un nouveau relevé. « pastille » pose une pastille claire derrière le logo en thème sombre, quand le logo n'a pas de version pour fond sombre et s'y perdrait. « neutres » liste les marques qui garderaient une icône neutre ; elle est vide depuis la décision de Medhi du 28/09/2026 (troisième tournée) : chaque service et chaque fournisseur affiché porte son vrai logo, en couleur, sans attendre l'accord des marques.",
   "releve": "2026-09-28",
   "marques": {
     "gmail": {
@@ -517,47 +517,451 @@
       "empreintes": {
         "clickup.svg": "a8b08e70df4a7d7c949a423b4f3caa04671e209617c8b73bc24cff846ae2e017"
       }
+    },
+    "slack": {
+      "titre": "Slack",
+      "clair": "slack.svg",
+      "source": "https://a.slack-edge.com/9cc0056/marketing/img/nav/logo.svg",
+      "page": "https://slack.com/media-kit",
+      "regle": "Décision de Medhi du 28/09/2026 : le vrai logo, en couleur, sans attendre l'accord de la marque. Le dièse en quatre couleurs que slack.com sert dans l'en-tête de sa page presse (le kit, lui, demande d'accepter des conditions : non téléchargé). Le même dessin sert aux deux thèmes.",
+      "empreintes": {
+        "slack.svg": "1f40066b694020057218c46eb2a11982b278d89b2dc8f96a21e4ea04e2b9db3b"
+      }
+    },
+    "openai": {
+      "titre": "OpenAI",
+      "clair": "openai.svg",
+      "sombre": "openai.sombre.svg",
+      "cadre": "769.69 227.44 267.2 267.2",
+      "source": "https://images.ctfassets.net/kftzwdyauwt9/3hUGLn3ypllZ0oa01qOYVq/28e8188e6f11b84c3e876569d492734f/Blossom_Light.svg, https://images.ctfassets.net/kftzwdyauwt9/3M8rPrJsENQL5tjaDzo6SL/f0f85c8e27090123c767ac3c8237b401/Blossom_Dark.svg",
+      "page": "https://openai.com/brand/",
+      "regle": "Décision de Medhi du 28/09/2026 : le vrai logo, en couleur, sans attendre l'accord de la marque. La « Blossom » de la page de marque d'OpenAI, noire sur fond clair, blanche sur fond sombre. Sert au fournisseur OpenAI et aux modèles GPT.",
+      "retouche": "Les deux fichiers de la page montrent la Blossom deux fois (dont une sur une grille de construction) : « cadre » ne garde que la seconde, sans grille ni cadre ; le dessin n'est pas modifié.",
+      "empreintes": {
+        "openai.svg": "01485e70cea6df8422f5abc643fbbd3c153442cc41da0e7d8e7451801ebf26e2",
+        "openai.sombre.svg": "cb4e7bbfc040397d393993798ff8a24b83e11f2f277556be96a7bdcb1cc41db5"
+      }
+    },
+    "linkedin": {
+      "titre": "LinkedIn",
+      "clair": "linkedin.svg",
+      "source": "https://static.licdn.com/aero-v1/sc/h/akt4ae504epesldzj74dzred8",
+      "page": "https://brand.linkedin.com/in-logo",
+      "regle": "Décision de Medhi du 28/09/2026 : le vrai logo, en couleur, sans attendre l'accord de la marque. Le [in] bleu que linkedin.com sert comme icône de site (SVG), le même dans les deux thèmes (le kit de marque demande d'accepter des conditions : non téléchargé).",
+      "empreintes": {
+        "linkedin.svg": "b1f9ca49adf83cc0c5953d1067f56dc0ba8d46b3262b7078792f19b96cb11bcd"
+      }
+    },
+    "tiktok": {
+      "titre": "TikTok",
+      "clair": "tiktok.svg",
+      "source": "https://sf16-va.tiktokcdn.com/obj/eden-va2/uvzhqeh7nuhd/tt4d/logo-pack.zip (Dev Portal Logo Pack/TikTok Logo Pack/TikTok – Icons/TikTok_Icon_Black.ai, page 1)",
+      "page": "https://developers.tiktok.com/doc/getting-started-design-guidelines",
+      "regle": "Décision de Medhi du 28/09/2026 : le vrai logo, en couleur, sans attendre l'accord de la marque. L'icône de TikTok (note en couleur sur carré noir) du kit de la page développeurs, téléchargeable sans case à cocher ; lisible sur les deux fonds.",
+      "retouche": "Le kit ne livre l'icône en vecteur qu'en .ai (au format PDF, SHA-256 d76ffdb96ef96082c3e65a8cc0f2a386d338849d1670c6d388aa616ad1061e1a) : tiktok.svg est la sortie, non retouchée, de `pdftocairo -svg -f 1 -l 1` (Poppler 26.06.0), comme pour YouTube.",
+      "empreintes": {
+        "tiktok.svg": "5f5ff24d64664b3531fef14b58e91b2a1880d918f48b0801b13f741e7d3b7e2b"
+      }
+    },
+    "hubspot": {
+      "titre": "HubSpot",
+      "clair": "hubspot.png",
+      "source": "https://www.hubspot.com/hs-fs/hubfs/HubSpot-sprocket-color-Aug-03-2022-04-23-39-02-PM.png",
+      "page": "https://www.hubspot.com/style-guide",
+      "regle": "Décision de Medhi du 28/09/2026 : le vrai logo, en couleur, sans attendre l'accord de la marque. Le « sprocket » orange, en PNG, tel que hubspot.com le sert ; le même dans les deux thèmes.",
+      "retouche": "PNG officiel de 267 × 269 pixels, non modifié.",
+      "empreintes": {
+        "hubspot.png": "cfe3b618102d420c0b21b55b92ddaee6f376c2d00ea67a11e1948640a8cccdae"
+      }
+    },
+    "intercom": {
+      "titre": "Intercom",
+      "clair": "intercom.png",
+      "source": "https://intercom.help/intercom/assets/favicon",
+      "page": "https://www.intercom.com/help/en/",
+      "regle": "Décision de Medhi du 28/09/2026 : le vrai logo, en couleur, sans attendre l'accord de la marque. Icône du site officiel, telle que le site la sert (favicon), sans modification. Icône noire d'Intercom, cerclée de clair, lisible sur les deux fonds.",
+      "retouche": "PNG officiel de 172 × 170 pixels, non modifié (le centre d'aide d'Intercom le sert comme icône).",
+      "empreintes": {
+        "intercom.png": "e3d3f23d9c8124f83d938166038c15839c98c639a545fce437920e6f79adf07d"
+      }
+    },
+    "box": {
+      "titre": "Box",
+      "clair": "box.png",
+      "source": "https://www.box.com/apple-touch-icon.png",
+      "page": "https://www.box.com/",
+      "regle": "Décision de Medhi du 28/09/2026 : le vrai logo, en couleur, sans attendre l'accord de la marque. Icône du site officiel, telle que le site la sert (favicon), sans modification. Tuile bleue « box ».",
+      "retouche": "PNG officiel de 180 pixels, non modifié.",
+      "empreintes": {
+        "box.png": "ea62105770008f36bc96ad075d9fdaf97df8a9b3d6a7929fcee55daff9df3eef"
+      }
+    },
+    "paypal": {
+      "titre": "PayPal",
+      "clair": "paypal.svg",
+      "source": "https://www.paypalobjects.com/paypal-ui/logos/svg/paypal-mark-color.svg",
+      "page": "https://www.paypal.com/",
+      "regle": "Décision de Medhi du 28/09/2026 : le vrai logo, en couleur, sans attendre l'accord de la marque. Le monogramme « P » en couleur servi par PayPal (paypalobjects.com). Sur fond sombre, une pastille claire derrière lui : son bleu marine s'y perd.",
+      "pastille": true,
+      "empreintes": {
+        "paypal.svg": "8766a4211434d2c318fbfa412ea9633b385ecf1cab6119f8894019d91ed7e027"
+      }
+    },
+    "asana": {
+      "titre": "Asana",
+      "clair": "asana.png",
+      "source": "https://asana.com/assets/img/brand/asana-logo-favicon.ico",
+      "page": "https://asana.com/brand",
+      "regle": "Décision de Medhi du 28/09/2026 : le vrai logo, en couleur, sans attendre l'accord de la marque. Les trois points corail, icône de site d'asana.com (sa charte demande de ne pas employer le symbole seul : Medhi a décidé de ne pas s'en soucier).",
+      "retouche": "Asana ne sert son symbole seul qu'en .ico (les PNG de brand.asana.biz refusent les téléchargements hors navigateur) : asana.png est l'image de 100 pixels de ce fichier, convertie en PNG par `sips -s format png` (macOS), pixels inchangés. SHA-256 du .ico : a42ae227f92cc034bed8015af2bb5664327c3ef4c207e3dc6cd06e8642845e77.",
+      "empreintes": {
+        "asana.png": "243f7549bd91247baae193155fea5563245dda6e1787d034c5d7c59b8e536081"
+      }
+    },
+    "airtable": {
+      "titre": "Airtable",
+      "clair": "airtable.png",
+      "source": "https://www.airtable.com/favicon.ico",
+      "page": "https://www.airtable.com/",
+      "regle": "Décision de Medhi du 28/09/2026 : le vrai logo, en couleur, sans attendre l'accord de la marque. Icône du site officiel, telle que le site la sert (favicon), sans modification. La boîte en trois couleurs.",
+      "retouche": "Servi sous le nom favicon.ico mais au format PNG (48 pixels) : fichier non modifié. C'est la plus grande version du symbole seul que le site serve.",
+      "empreintes": {
+        "airtable.png": "8020f46841434ab3782fa38d6b8d6c47b3ea69fc025ba8f8d3608e87c36c9aa3"
+      }
+    },
+    "square": {
+      "titre": "Square",
+      "clair": "square.svg",
+      "source": "https://upload.wikimedia.org/wikipedia/commons/3/30/Square%2C_Inc._-_Square_logo.svg (https://commons.wikimedia.org/wiki/File:Square,_Inc._-_Square_logo.svg)",
+      "page": "https://squareup.com/us/en/press",
+      "regle": "Décision de Medhi du 28/09/2026 : le vrai logo, en couleur, sans attendre l'accord de la marque. Le carré noir de Square. Aucun fichier du symbole seul n'est servi par Square hors .ico de 32 pixels : reproduction fidèle, non modifiée, de Wikimedia Commons. Sur fond sombre, une pastille claire derrière lui.",
+      "pastille": true,
+      "empreintes": {
+        "square.svg": "93190ef10ffae03589351a540940f84ce7e3149e92236bfb704abbd6d4f74e09"
+      }
+    },
+    "monday": {
+      "titre": "monday.com",
+      "clair": "monday.png",
+      "source": "https://cdn.prod.website-files.com/656da6fea306219773d04208/65af6bd6e742d497b5f23f69_645898132bbaac20f1963919_256x256.png",
+      "page": "https://monday.com/p/news/press-kit/",
+      "regle": "Décision de Medhi du 28/09/2026 : le vrai logo, en couleur, sans attendre l'accord de la marque. Les trois capsules sur tuile blanche, icône de 256 pixels que monday.com déclare pour son site.",
+      "retouche": "PNG officiel de 256 pixels, non modifié.",
+      "empreintes": {
+        "monday.png": "03c5839ffc8eaec1759f3ce99e329d1cb52e8de5e9cff1e0f0e779fe604c6c08"
+      }
+    },
+    "mailchimp": {
+      "titre": "Mailchimp",
+      "clair": "mailchimp.png",
+      "source": "https://digitalasset.intuit.com/render/content/dam/intuit/mc-fe/en_us/images/mailchimp-favicons/apple-touch-icon.png",
+      "page": "https://mailchimp.com/about/brand-assets/",
+      "regle": "Décision de Medhi du 28/09/2026 : le vrai logo, en couleur, sans attendre l'accord de la marque. Icône du site officiel, telle que le site la sert (favicon), sans modification. Freddie sur fond jaune Cavendish.",
+      "retouche": "PNG officiel de 180 pixels, non modifié.",
+      "empreintes": {
+        "mailchimp.png": "794278c5093177663748e4a179a7eedf815063f5ccfe0e86b42fee3a5a907901"
+      }
+    },
+    "brevo": {
+      "titre": "Brevo",
+      "clair": "brevo.svg",
+      "source": "https://corp-backend.brevo.com/wp-content/uploads/2025/07/Brevo_logo.svg",
+      "page": "https://www.brevo.com/press/",
+      "regle": "Décision de Medhi du 28/09/2026 : le vrai logo, en couleur, sans attendre l'accord de la marque. Le « B » vert dans son rond, que brevo.com déclare comme icône de site.",
+      "empreintes": {
+        "brevo.svg": "b6a8f454586580a1d79f86cb10b694f316c6bcc0af6e8b88d813d23d85f81f67"
+      }
+    },
+    "ionos": {
+      "titre": "IONOS",
+      "clair": "ionos.png",
+      "source": "https://www.ionos.com/favicon-96x96.png",
+      "page": "https://www.ionos.com/newsroom/download/",
+      "regle": "Décision de Medhi du 28/09/2026 : le vrai logo, en couleur, sans attendre l'accord de la marque. Icône du site officiel, telle que le site la sert (favicon), sans modification. Pas de symbole téléchargeable, seulement le nom : c'est l'icône du site qui sert.",
+      "retouche": "PNG officiel de 96 pixels, non modifié.",
+      "empreintes": {
+        "ionos.png": "32103a757ffae260639e7467814e067f86c65c35ccf2af9a1995c83f5d240285"
+      }
+    },
+    "deepseek": {
+      "titre": "DeepSeek",
+      "clair": "deepseek.svg",
+      "source": "https://api-docs.deepseek.com/img/favicon.svg",
+      "page": "https://api-docs.deepseek.com/",
+      "regle": "Décision de Medhi du 28/09/2026 : le vrai logo, en couleur, sans attendre l'accord de la marque. La baleine bleue, icône du site de documentation de l'API de DeepSeek ; la même dans les deux thèmes.",
+      "empreintes": {
+        "deepseek.svg": "0bf5e13ce954f13423a692f083f5cb0f4bcfde35c8b812f64efe89dabfdaed20"
+      }
+    },
+    "qwen": {
+      "titre": "Qwen",
+      "clair": "qwen.png",
+      "source": "https://img.alicdn.com/imgextra/i4/O1CN01OXv3EM1FN8t9W4P79_!!6000000000474-2-tps-80-80.png",
+      "page": "https://qwen.ai/",
+      "regle": "Décision de Medhi du 28/09/2026 : le vrai logo, en couleur, sans attendre l'accord de la marque. Icône du site officiel, telle que le site la sert (favicon), sans modification. Le symbole violet de Qwen.",
+      "retouche": "PNG officiel de 80 pixels, non modifié (le plus grand que qwen.ai serve).",
+      "empreintes": {
+        "qwen.png": "cd9390bc4209c319121d111f3a1f535b3c7dd909b8f860d41acc9744138d58df"
+      }
+    },
+    "calendly": {
+      "titre": "Calendly",
+      "clair": "calendly.svg",
+      "source": "https://calendly.com/media/favicon/icon.svg",
+      "page": "https://calendly.com/",
+      "regle": "Décision de Medhi du 28/09/2026 : le vrai logo, en couleur, sans attendre l'accord de la marque. Icône du site officiel, telle que le site la sert (favicon), sans modification.",
+      "empreintes": {
+        "calendly.svg": "ef2004d8cc8278f8036e3a0a3f57aa1ce11a28289aa64f16356ae74712b7bcfd"
+      }
+    },
+    "groq": {
+      "titre": "Groq",
+      "clair": "groq.svg",
+      "source": "https://groq.com/favicon.svg",
+      "page": "https://groq.com/",
+      "regle": "Décision de Medhi du 28/09/2026 : le vrai logo, en couleur, sans attendre l'accord de la marque. Icône du site officiel, telle que le site la sert (favicon), sans modification. L'éclair blanc sur carré orange.",
+      "empreintes": {
+        "groq.svg": "62f86752be058119931605a9b068496dc931ccb3d8210614ea373f11fdeef6a1"
+      }
+    },
+    "gemma": {
+      "titre": "Gemma",
+      "clair": "gemma.svg",
+      "source": "https://storage.googleapis.com/gdm-deepmind-com-prod-public/media/original_images/nav__dm__gemma__large.svg",
+      "page": "https://deepmind.google/models/gemma/",
+      "regle": "Décision de Medhi du 28/09/2026 : le vrai logo, en couleur, sans attendre l'accord de la marque. L'étoile bleue de Gemma, telle que Google DeepMind la sert dans le menu de son site ; la même dans les deux thèmes.",
+      "empreintes": {
+        "gemma.svg": "6e8124788ad93b54be99e45d261c7ceb686f4f4f5434403b73cdc706f6c0362e"
+      }
+    },
+    "scaleway": {
+      "titre": "Scaleway",
+      "clair": "scaleway.svg",
+      "source": "https://www.scaleway.com/favicon/website/favicon.svg",
+      "page": "https://ultraviolet.scaleway.com/6dd9b5c45/p/6840d3-logo",
+      "regle": "Décision de Medhi du 28/09/2026 : le vrai logo, en couleur, sans attendre l'accord de la marque. Icône du site officiel, telle que le site la sert (favicon), sans modification. Le symbole lavande de Scaleway.",
+      "retouche": "Le fichier passe au blanc quand le système est en thème sombre (règle `@media (prefers-color-scheme: dark)`) ; Helix choisit son thème lui-même, cette règle est donc ignorée par le générateur et la couleur lavande sert aux deux thèmes.",
+      "empreintes": {
+        "scaleway.svg": "51c7ffa592c55e6801f218d9a5ee7072cffb716438e2d09702f50cc582a25f3b"
+      }
+    },
+    "ovhcloud": {
+      "titre": "OVHcloud",
+      "clair": "ovhcloud.svg",
+      "source": "https://www.ovhcloud.com/icon.svg",
+      "page": "https://www.ovhcloud.com/",
+      "regle": "Décision de Medhi du 28/09/2026 : le vrai logo, en couleur, sans attendre l'accord de la marque. Icône du site officiel, telle que le site la sert (favicon), sans modification. Sur fond sombre, une pastille claire derrière lui : son bleu nuit s'y perd.",
+      "pastille": true,
+      "empreintes": {
+        "ovhcloud.svg": "902908101d7548a4444ba267a457239e730aedc6edd0251a01aaeddfb25329df"
+      }
+    },
+    "meta": {
+      "titre": "Meta",
+      "clair": "meta.svg",
+      "source": "https://static.xx.fbcdn.net/rsrc.php/yf/r/-7pQO6hUGK_.svg",
+      "page": "https://www.meta.com/",
+      "regle": "Décision de Medhi du 28/09/2026 : le vrai logo, en couleur, sans attendre l'accord de la marque. L'anneau de Meta en dégradé, icône de site de meta.com ; désigne les modèles Llama (Llama n'a pas de logo propre).",
+      "empreintes": {
+        "meta.svg": "9c354dc7d40f7862df2dfb34df05ae08c3e956d55a450379803d6cac6878a63e"
+      }
+    },
+    "outlook": {
+      "titre": "Outlook",
+      "clair": "outlook.svg",
+      "source": "https://www.microsoft.com/content/dam/microsoft/bade/images/icons/en-us/m365-app-icons-fy26/Outlook-Icon-FY26.svg",
+      "page": "https://www.microsoft.com/en-us/microsoft-365/outlook",
+      "regle": "Décision de Medhi du 28/09/2026 : le vrai logo, en couleur, sans attendre l'accord de la marque. Icône d'application Microsoft 365 de 2026 (« FY26 »), servie par microsoft.com sur ses pages produit ; la même sert aux deux thèmes.",
+      "empreintes": {
+        "outlook.svg": "d67b8bb4bb8d7afe8e71e066112452d5d681ea7991fa1ec7c37df962246b2c31"
+      }
+    },
+    "onedrive": {
+      "titre": "OneDrive",
+      "clair": "onedrive.svg",
+      "source": "https://www.microsoft.com/content/dam/microsoft/bade/images/icons/en-us/m365-app-icons-fy26/OneDrive-Icon-FY26.svg",
+      "page": "https://www.microsoft.com/en-us/microsoft-365/onedrive",
+      "regle": "Décision de Medhi du 28/09/2026 : le vrai logo, en couleur, sans attendre l'accord de la marque. Icône d'application Microsoft 365 de 2026 (« FY26 »), servie par microsoft.com sur ses pages produit ; la même sert aux deux thèmes.",
+      "empreintes": {
+        "onedrive.svg": "9f72ac359c7e03ca4723ce1a3b60f932a0bc5d2ce72dbdce365e83223142f6bc"
+      }
+    },
+    "sharepoint": {
+      "titre": "SharePoint",
+      "clair": "sharepoint.svg",
+      "source": "https://www.microsoft.com/content/dam/microsoft/bade/images/icons/en-us/m365-app-icons-fy26/SharePoint-Icon-FY26.svg",
+      "page": "https://www.microsoft.com/en-us/microsoft-365/sharepoint",
+      "regle": "Décision de Medhi du 28/09/2026 : le vrai logo, en couleur, sans attendre l'accord de la marque. Icône d'application Microsoft 365 de 2026 (« FY26 »), servie par microsoft.com sur ses pages produit ; la même sert aux deux thèmes.",
+      "empreintes": {
+        "sharepoint.svg": "0e2713d7afa583ab45efc68a64cfe4e5a735c61a5f41f7d884c2df6130869a54"
+      }
+    },
+    "excel": {
+      "titre": "Excel",
+      "clair": "excel.svg",
+      "source": "https://www.microsoft.com/content/dam/microsoft/bade/images/icons/en-us/m365-app-icons-fy26/Excel-Icon-FY26.svg",
+      "page": "https://www.microsoft.com/en-us/microsoft-365/excel",
+      "regle": "Décision de Medhi du 28/09/2026 : le vrai logo, en couleur, sans attendre l'accord de la marque. Icône d'application Microsoft 365 de 2026 (« FY26 »), servie par microsoft.com sur ses pages produit ; la même sert aux deux thèmes.",
+      "empreintes": {
+        "excel.svg": "ff01cdad545c6f1c0bff371c1f1758ad228174520c718c679bd454f6b4fcacf8"
+      }
+    },
+    "word": {
+      "titre": "Word",
+      "clair": "word.svg",
+      "source": "https://www.microsoft.com/content/dam/microsoft/bade/images/icons/en-us/m365-app-icons-fy26/Word-Icon-FY26.svg",
+      "page": "https://www.microsoft.com/en-us/microsoft-365/word",
+      "regle": "Décision de Medhi du 28/09/2026 : le vrai logo, en couleur, sans attendre l'accord de la marque. Icône d'application Microsoft 365 de 2026 (« FY26 »), servie par microsoft.com sur ses pages produit ; la même sert aux deux thèmes.",
+      "empreintes": {
+        "word.svg": "02bf3ae7245c5f4288e5135a31aa27c458e39ae431dc93d2d8847e5a7c123fdf"
+      }
+    },
+    "teams": {
+      "titre": "Microsoft Teams",
+      "clair": "teams.svg",
+      "source": "https://www.microsoft.com/content/dam/microsoft/bade/images/icons/en-us/m365-app-icons-fy26/Teams-Icon-FY26.svg",
+      "page": "https://www.microsoft.com/en-us/microsoft-365/teams",
+      "regle": "Décision de Medhi du 28/09/2026 : le vrai logo, en couleur, sans attendre l'accord de la marque. Icône d'application Microsoft 365 de 2026 (« FY26 »), servie par microsoft.com sur ses pages produit ; la même sert aux deux thèmes.",
+      "empreintes": {
+        "teams.svg": "6a33d49f19d1be2bcdf86921935a2171e5c18c3b11abe297ca03d5f4f302ba3a"
+      }
+    },
+    "stripe": {
+      "titre": "Stripe",
+      "clair": "stripe.svg",
+      "source": "https://images.stripeassets.com/fzn2n1nzq965/1hgcBNd12BfT9VLgbId7By/01d91920114b124fb4cf6d448f9f06eb/favicon.svg",
+      "page": "https://stripe.com/newsroom/brand-assets",
+      "regle": "Décision de Medhi du 28/09/2026 : le vrai logo, en couleur, sans attendre l'accord de la marque. L'icône de Stripe que stripe.com sert (le kit de la page de marque ne contient que le nom en toutes lettres).",
+      "empreintes": {
+        "stripe.svg": "7253e3eb4657773723a696a1f4ad9c8f62794191b9f09c1359db74a51d2d3ae5"
+      }
+    },
+    "shopify": {
+      "titre": "Shopify",
+      "clair": "shopify.svg",
+      "source": "https://cdn.shopify.com/shopifycloud/brochure/assets/brand-assets/shopify-logo-shopping-bag-full-color-66166b2e55d67988b56b4bd28b63c271e2b9713358cb723070a92bde17ad7d63.svg",
+      "page": "https://www.shopify.com/brand-assets",
+      "regle": "Décision de Medhi du 28/09/2026 : le vrai logo, en couleur, sans attendre l'accord de la marque. Le sac Shopify en couleur, téléchargé directement depuis la page de marque.",
+      "empreintes": {
+        "shopify.svg": "66166b2e55d67988b56b4bd28b63c271e2b9713358cb723070a92bde17ad7d63"
+      }
+    },
+    "woocommerce": {
+      "titre": "WooCommerce",
+      "clair": "woocommerce.png",
+      "source": "https://woocommerce.com/wp-content/uploads/2024/12/cropped-logo-w-favicon.png",
+      "page": "https://woocommerce.com/trademark-guidelines/",
+      "regle": "Décision de Medhi du 28/09/2026 : le vrai logo, en couleur, sans attendre l'accord de la marque. Icône du site officiel, telle que le site la sert (favicon), sans modification. Le « W » blanc sur rond violet.",
+      "retouche": "PNG officiel de 512 pixels, non modifié.",
+      "empreintes": {
+        "woocommerce.png": "ba0d287c4ccffd3ecd11be6421b5f8f0c503991d8c07a7d6e9f30077f5fe2292"
+      }
+    },
+    "salesforce": {
+      "titre": "Salesforce",
+      "clair": "salesforce.svg",
+      "source": "https://wp.sfdcdigital.com/en-us/wp-content/uploads/sites/4/2024/11/logo-salesforce.svg",
+      "page": "https://www.salesforce.com/",
+      "regle": "Décision de Medhi du 28/09/2026 : le vrai logo, en couleur, sans attendre l'accord de la marque. Le nuage bleu marqué « salesforce », servi dans l'en-tête de salesforce.com. C'est le logo complet (il n'existe pas de symbole seul) ; il reste reconnaissable à 22 px à sa forme et à sa couleur.",
+      "empreintes": {
+        "salesforce.svg": "29bc87240df68c546f04cb1bf3398b524b7d5e37a2d56f3b102b62f349244703"
+      }
+    },
+    "pipedrive": {
+      "titre": "Pipedrive",
+      "clair": "pipedrive.png",
+      "source": "https://cdn.dub-1.pipedriveassets.com/www-main-renderer/_next/static/media/apple-touch-icon-144x144.184934e8.png",
+      "page": "https://www.pipedrive.com/en/newsroom/press-kit",
+      "regle": "Décision de Medhi du 28/09/2026 : le vrai logo, en couleur, sans attendre l'accord de la marque. Icône du site officiel, telle que le site la sert (favicon), sans modification. Le « p » blanc sur rond vert.",
+      "retouche": "PNG officiel de 144 pixels, non modifié.",
+      "empreintes": {
+        "pipedrive.png": "712e5044c0bb8924e1aaf8481bcfa52796726fc90783f74df45430e161550ad4"
+      }
+    },
+    "zendesk": {
+      "titre": "Zendesk",
+      "clair": "zendesk.svg",
+      "source": "https://d1eipm3vz40hy0.cloudfront.net/images/logos/favicons/zendesk-icon.svg",
+      "page": "https://www.zendesk.com/",
+      "regle": "Décision de Medhi du 28/09/2026 : le vrai logo, en couleur, sans attendre l'accord de la marque. Icône du site officiel, telle que le site la sert (favicon), sans modification. Le symbole est dessiné « à la couleur du texte » (currentColor) : noir sur fond clair, blanc sur fond sombre, comme le prévoit le fichier.",
+      "retouche": "Le fichier passe au blanc quand le système est en thème sombre (règle `@media (prefers-color-scheme: dark)`) ; Helix choisit son thème lui-même, cette règle est ignorée par le générateur, et currentColor donne déjà le blanc en thème sombre.",
+      "empreintes": {
+        "zendesk.svg": "e8a769e596a357d82328b16093425b1094312fc6ec0aabbc803642a0d3debca5"
+      }
+    },
+    "discord": {
+      "titre": "Discord",
+      "clair": "discord.svg",
+      "source": "https://cdn.discordapp.com/assets/content/a736b95923ddbc155e828651c92471292e40727655d770a06cec89c48ba0b41f.zip (Discord_Symbol_Color/Discord-Symbol-Blurple.svg)",
+      "page": "https://discord.com/branding",
+      "regle": "Décision de Medhi du 28/09/2026 : le vrai logo, en couleur, sans attendre l'accord de la marque. Le symbole « blurple », téléchargé directement depuis la page de marque (sans case à cocher) ; lisible sur les deux fonds.",
+      "empreintes": {
+        "discord.svg": "d06eaa51e78a9984ebbd3fbc82f0245ac2ecb5bf0150f537204397c1da5c7bd8"
+      }
+    },
+    "zoom": {
+      "titre": "Zoom",
+      "clair": "zoom.svg",
+      "source": "https://developers.zoom.us/svgs/favicon.svg",
+      "page": "https://developers.zoom.us/",
+      "regle": "Décision de Medhi du 28/09/2026 : le vrai logo, en couleur, sans attendre l'accord de la marque. Icône du site officiel, telle que le site la sert (favicon), sans modification. L'icône « zm » bleue de l'application (la page de marque, brand.zoom.com, ne livre ses fichiers que par une application en JavaScript, et le logo complet est le seul mot « zoom »).",
+      "empreintes": {
+        "zoom.svg": "410740a6cf3fce41e9509054cec3a59b724c68381b4dda8fd64c65a67bbe0ea8"
+      }
+    },
+    "whatsapp": {
+      "titre": "WhatsApp",
+      "clair": "whatsapp.svg",
+      "source": "https://static.whatsapp.net/rsrc.php/y1/r/FJbTMJqMap7.svg",
+      "page": "https://www.whatsapp.com/",
+      "regle": "Décision de Medhi du 28/09/2026 : le vrai logo, en couleur, sans attendre l'accord de la marque. Icône du site officiel, telle que le site la sert (favicon), sans modification. La bulle verte (le kit de marque de Meta demande de cocher une case : non téléchargé). Sert à WhatsApp Business.",
+      "empreintes": {
+        "whatsapp.svg": "1ab6db0cc2eb55d911f151b0aa339c55b6b225efcceddb8ff2050cab1410e347"
+      }
+    },
+    "youtubeIcone": {
+      "titre": "YouTube",
+      "clair": "youtube-icone.svg",
+      "cadre": "102.69 119.17 396 277.4",
+      "source": "https://www.gstatic.com/marketing-cms/78/29/3e68a1414bb28d0b7e47b44c3c91/youtube-icon.zip (YouTube_Icon/Digital/01 Red/yt_icon_red_digital.ai)",
+      "page": "https://brand.youtube/youtube-icon/",
+      "regle": "Décision de Medhi du 28/09/2026 : le vrai logo, en couleur, sans attendre l'accord de la marque. L'icône rouge de YouTube, pour la ligne de la liste des connecteurs (la charte fixe 100 px au moins : Medhi a décidé de ne plus s'en soucier). Le logo complet reste en grand dans le panneau YouTube (clé « youtube »).",
+      "retouche": "Le kit ne livre pas de SVG : youtube-icone.svg est la sortie, non retouchée, de `pdftocairo -svg` (Poppler 26.06.0) sur le fichier .ai du kit, au format PDF (SHA-256 b5958b5f28b494b9e3e3962bdf5619c69c6733e409cc23845c6910af84d80c22) ; « cadre » retire la marge du plan de travail.",
+      "empreintes": {
+        "youtube-icone.svg": "bf163d7bbf270903846b95112324af3b6048d485450073d8d68b3baf60bb5887"
+      }
+    },
+    "zai": {
+      "titre": "Z.ai (GLM)",
+      "clair": "zai.svg",
+      "source": "https://z-cdn.chatglm.cn/z-ai/static/logo.svg",
+      "page": "https://z.ai/",
+      "regle": "Décision de Medhi du 28/09/2026 : le vrai logo, en couleur, sans attendre l'accord de la marque. Icône du site officiel, telle que le site la sert (favicon), sans modification. Le « Z » de Z.ai (Zhipu), éditeur des modèles GLM.",
+      "empreintes": {
+        "zai.svg": "07a45e8e35b0b631ed2c68cd1cb041f9721b1ceeb0bd0e34f1459b0304a741c7"
+      }
+    },
+    "minimax": {
+      "titre": "MiniMax",
+      "clair": "minimax.svg",
+      "source": "https://raw.githubusercontent.com/MiniMax-AI/MiniMax-01/main/figures/minimax.svg",
+      "page": "https://github.com/MiniMax-AI/MiniMax-01",
+      "regle": "Décision de Medhi du 28/09/2026 : le vrai logo, en couleur, sans attendre l'accord de la marque. Le symbole en dégradé publié dans le dépôt officiel de MiniMax ; désigne les modèles MiniMax.",
+      "empreintes": {
+        "minimax.svg": "1de341543d54099467e1c786020fe003b3a5edaf84151f31798f3e432fba9e6b"
+      }
+    },
+    "mattermost": {
+      "titre": "Mattermost",
+      "clair": "mattermost.svg",
+      "source": "https://mattermost.com/favicon.svg",
+      "page": "https://mattermost.com/",
+      "regle": "Décision de Medhi du 28/09/2026 : le vrai logo, en couleur, sans attendre l'accord de la marque. Icône du site officiel, telle que le site la sert (favicon), sans modification. La marque blanche sur disque bleu ; sert au canal Mattermost des employés.",
+      "empreintes": {
+        "mattermost.svg": "c8527f0398c000790d528e2543bc0bbbc81b10286a35fc6453ad5bb013a288d5"
+      }
     }
   },
-  "neutres": {
-    "slack": "https://slack.com/terms-of-service/slack-brand : une application peut dire qu'elle s'intègre à Slack, mais la charte interdit de « distribuer ou mettre à disposition » ses logos, ce que ferait un dépôt public ; le kit (https://slack.com/media-kit) ne se télécharge qu'en acceptant ces conditions. Relu le 28/09/2026.",
-    "openai": "https://openai.com/brand/ : pour un développeur de l'API, tout ce qui touche à l'application (nom, logo, description, captures d'écran) doit rester libre des marques d'OpenAI, logos compris ; tout autre usage passe par partnercomms@openai.com. Relu le 28/09/2026.",
-    "linkedin": "https://brand.linkedin.com/in-logo : un développeur ne peut employer le logo [in] que comme bouton « Share » ou widget « Follow » ; le kit se télécharge après acceptation des conditions de LinkedIn, ce qui ne changerait pas cette règle.",
-    "meta": "Modèles Llama : https://www.meta.com/brand/resources/meta/company-brand/ : tout usage du logo de Meta demande une approbation (« Brand Review ») et il est réservé aux partenariats sous accord, à la presse et à l'édition ; Llama n'a pas de page de marque propre (l'ancienne adresse n'existe plus). Le kit téléchargé par Medhi n'a pas été retrouvé sur le poste le 28/09/2026 ; il ne lèverait pas l'approbation demandée.",
-    "tiktok": "https://developers.tiktok.com/doc/getting-started-design-guidelines : pas de logo TikTok sans autorisation écrite préalable. Relu le 28/09/2026.",
-    "youtube": "https://brand.youtube/youtube-icon/ : hauteur minimale de 100 px en numérique, incompatible avec une ligne de liste de 22 px. Icône neutre dans la liste seulement : le logo officiel s'affiche en grand dans le panneau YouTube (voir « youtube » dans les marques).",
-    "hubspot": "https://www.hubspot.com/partners/app/branding-guidelines : le logo et le sprocket demandent une approbation préalable (formulaire, 7 à 10 jours) ; seuls les badges de partenaire se téléchargent sans elle.",
-    "intercom": "https://www.intercom.com/legal/trademark-usage : le logo désigné ne s'emploie que dans le cadre du programme développeur ou d'un accord écrit avec Intercom.",
-    "asana": "https://asana.com/brand : le symbole ne s'emploie jamais seul, et le logo complet est illisible à 22 px. Relu le 28/09/2026.",
-    "airtable": "https://www.airtable.com/company/trademark-guidelines : seuls deux assemblages icône et nom sont approuvés ; l'icône seule n'en fait pas partie. Relu le 28/09/2026.",
-    "box": "https://www.box.com/legal/trademark : sans accord écrit, un tiers ne peut utiliser aucun logo de Box, même pour décrire une intégration. Relu le 28/09/2026.",
-    "paypal": "https://newsroom.paypal-corp.com/media-resources : fichiers destinés à la presse ; un développeur doit demander l'accord de developer@paypal.com.",
-    "square": "https://developer.squareup.com/docs/brand-guidelines : seul un assemblage « Built with Square » en PNG est fourni aux développeurs, illisible à 22 px. Relu le 28/09/2026.",
-    "deepseek": "Aucune page de marque ; le seul fichier officiel (https://github.com/deepseek-ai/DeepSeek-V2/blob/main/figures/logo.svg) est l'assemblage baleine et nom, illisible à 22 px. Relu le 28/09/2026.",
-    "qwen": "Aucune page de marque ; le dépôt QwenLM ne publie qu'une image PNG de Qwen-Image. Relu le 28/09/2026.",
-    "gemma": "https://ai.google.dev/gemma/terms (§ 4.2) : les conditions de Gemma n'accordent aucun droit sur les logos de Google, et aucun fichier officiel du logo de Gemma n'est publié avec une règle d'usage. L'icône de Gemini, un autre produit, n'est pas prêtée à Gemma.",
-    "groq": "https://groq.com/brand-assets/ renvoie une page introuvable le 28/09/2026 ; aucune autre page de marque officielle.",
-    "scaleway": "https://ultraviolet.scaleway.com/6dd9b5c45/p/6840d3-logo : le logo complet s'emploie de préférence, le symbole seul en dernier recours, et jamais sous 32 px de haut en numérique ; les listes de Helix l'afficheraient entre 13 et 22 px.",
-    "ovhcloud": "https://www.ovhcloud.com/sites/default/files/external_files/trademark-usage-policy-en-30december-24.pdf : le logo d'OVHcloud ne s'emploie, sur un site ou dans un produit, qu'avec une licence écrite ; la compatibilité se dit avec le nom seul.",
-    "ionos": "https://www.ionos.com/newsroom/download/ : pas de symbole téléchargeable, seulement le nom. Relu le 28/09/2026.",
-    "outlook": "https://www.microsoft.com/en-us/legal/intellectualproperty/trademarks : les logos et icônes de produit de Microsoft ne s'emploient jamais sans licence expresse ; la compatibilité ne se dit qu'en texte. Les jeux d'icônes de Microsoft Learn sont réservés aux schémas d'architecture, à la formation et à la documentation.",
-    "onedrive": "Même règle que outlook (Microsoft).",
-    "sharepoint": "Même règle que outlook (Microsoft).",
-    "excel": "Même règle que outlook (Microsoft).",
-    "word": "Même règle que outlook (Microsoft).",
-    "teams": "Même règle que outlook (Microsoft).",
-    "whatsapp": "https://www.meta.com/brand/resources/whatsapp/whatsapp-brand/ : l'usage serait possible (logo non modifié, jamais l'élément le plus en vue, sans suggérer de partenariat), mais le kit ne se télécharge qu'en cochant « J'ai lu et j'accepte les règles applicables » : c'est à Medhi de l'accepter.",
-    "discord": "https://discord.com/branding : les marques de Discord ne servent qu'à dire qu'on utilise Discord ou qu'on y a un serveur ; tout autre usage demande la permission de Discord.",
-    "stripe": "https://stripe.com/marks/legal : les conditions couvrent un client de Stripe qui signale Stripe là où il s'en sert (page de paiement) ; tout autre usage passe par trademarks@stripe.com.",
-    "shopify": "https://www.shopify.com/brand-assets : tout usage des éléments de marque de Shopify doit être autorisé par écrit.",
-    "woocommerce": "https://woocommerce.com/trademark-guidelines/ : les logos WooCommerce et Woo ne peuvent servir à aucun usage ; la compatibilité se dit en texte.",
-    "salesforce": "https://www.salesforce.com/company/legal/tmcusageguidelines/ : un produit compatible ne peut montrer le logo d'un produit Salesforce que dans un schéma ou un diagramme qui explique comment il fonctionne avec lui.",
-    "pipedrive": "https://www.pipedrive.com/en/newsroom/press-kit : les fichiers du logo ne sont remis que sur demande.",
-    "zendesk": "https://www.zendesk.com/company/trademark-property/trademarks/ : aucune marque de Zendesk sans accord écrit qui contienne une licence ; sa page de fichiers de marque ne répond plus (28/09/2026).",
-    "monday": "https://monday.com/p/news/press-kit/ : le logo s'emploie avec le texte « monday.com » complet, jamais les capsules seules ; l'ensemble est illisible à 22 px.",
-    "calendly": "Aucune page de marque ni kit officiel trouvé (calendly.com/press, /brand, /newsroom, le 28/09/2026).",
-    "zoom": "https://www.zoom.com/en/trust/legal/zoom-api-license-and-tou/ : la licence de marque ne vaut que pour les applications bâties sur le SDK de Zoom ; tout autre usage demande l'accord écrit préalable de Zoom.",
-    "brevo": "https://www.brevo.com/press/ : seul le nom en toutes lettres est publié, sans symbole ni règle d'usage ; à 22 px de large, il ferait 6 px de haut.",
-    "mailchimp": "https://mailchimp.com/about/brand-assets/ : Freddie va toujours avec le nom, le kit ne livre que cet assemblage (illisible à 22 px), et l'associer à un autre graphisme demande l'accord écrit de Mailchimp."
-  }
+  "neutres": {},
+  "decision": "28/09/2026, Medhi : « Les logos, on s'en fout : mets les vrais. Si j'ai un souci, ils viendront me voir. » Chaque service et chaque fournisseur de modèles affiché dans Helix porte son vrai logo, en couleur ; Medhi assume le risque lié aux marques. Aucune case « j'accepte les conditions » n'a été cochée pour les relever."
 }

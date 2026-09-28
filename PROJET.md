@@ -608,6 +608,54 @@ la réponse de jetons contient-elle `scope` (sinon la connexion est refusée, et
 crédit (l'outil suppose 402) ; X exige-t-il les droits « Read and write » de l'application en
 plus de `tweet.write`.
 
+**Fait le 28/09/2026 : Google Docs, Google Forms et Dropbox, branche `connecteurs-documents`.**
+Demandé par Medhi avec les autres familles de connecteurs, sur le modèle des connecteurs
+natifs : mêmes règles (lecture par défaut ; écrire se coche à la connexion, administrateur
+seul, carte d'accord à chaque fois même au niveau « Tout approuver », contenu entier ; dix
+écritures par heure et par service, doublon refusé, place gardée après un 5xx, `sousGarde` ;
+appel recopié jamais lancé ; jetons jamais rendus ; fichiers par `fichierDuDossier`). Pour
+limiter les conflits avec les branches du même jour, le code vit à part :
+`gateway/src/natifs/documents.ts` (définitions, outils, essai et révocation de Dropbox),
+`src/components/settings/ConnecteurNatifDocuments.tsx` (textes du panneau),
+`scripts/essai-documents.mjs` (85 contrôles, repris par `npm run securite`, section 16 ter) ;
+les registres communs n'ont reçu que des ajouts courts. Clés de marque réservées aux logos :
+`googleDocs`, `googleForms`, `dropbox` ; icônes neutres en attendant (FileText,
+ClipboardList, HardDrive).
+
+| Service | Lecture (sans rien cocher) | En plus, si on le coche | Examen du fournisseur |
+|---|---|---|---|
+| Google Docs | `documents.readonly` : lire un document (onglets, tableaux), par morceaux de 15 000 caractères | `documents` : créer un document, ajouter du texte à la fin (rien n'est effacé) | aucun pour une application interne à un Workspace |
+| Google Forms | `forms.body.readonly`, `forms.responses.readonly` : le formulaire, ses réponses | (rien) | idem |
+| Dropbox | `account_info.read`, `files.metadata.read`, `files.content.read` : lister, chercher, lire un fichier texte (1 Mo) | `files.content.write` : envoyer un fichier du dossier de travail (50 Mo, jamais en remplacement) | aucun jusqu'à 50 comptes reliés (500 au plus en développement) ; au-delà, statut « production » après examen |
+
+Choix faits, et pourquoi : `drive.file` (non sensible) ne voit que les fichiers créés ou
+ouverts par l'application, pas un document qu'on nomme au modèle, d'où `documents` ;
+Forms n'a que ses deux portées de lecture, pour ne pas ouvrir le Drive (`drive.readonly`,
+restreinte). Dropbox : PKCE S256, application publique (sans secret) ou confidentielle
+(secret dans le corps, comme l'exemple de Dropbox) ; Dropbox veut l'adresse de retour exacte,
+sans joker de port : le retour passe par la route publique de l'instance, comme LinkedIn et
+X. Un fichier Dropbox est lu par l'identifiant relu dans sa métadonnée, pas par son nom ;
+l'argument d'en-tête (`Dropbox-API-Arg`) échappe tout ce qui n'est pas ASCII ; l'envoi est en
+`add`, sans renommage, conflit strict. Docs : le texte envoyé perd les caractères qui
+renversent l'affichage, que la carte ne montre pas (l'écart relevé pour les posts au § 41.3
+de SECURITE.md ne se reproduit pas ici). Détail et limites relevées : SECURITE.md § 45.
+
+**Pas encore essayé avec les vrais services** (règle du § 3.16 : dit ici, pas à l'écran) :
+tout est vérifié contre de faux serveurs écrits d'après la documentation lue le 28/09/2026.
+Points incertains : la forme exacte de l'« App key » de Dropbox (quinze caractères
+minuscules et chiffres sur les exemples, l'écran refuse une autre forme) ; Dropbox rend-il
+`scope` quand on le demande (la page lue le montre ; sinon la connexion est refusée) ;
+`files.content.write` suffit-il à `files/upload` sans `files.metadata.write` ; le
+renouvellement sans secret d'une application publique (les SDK de Dropbox le font) ;
+l'examen de Google pour une application externe avec `documents` (sensible). À essayer sur
+le poste : § 5, point 26.
+
+Vu à l'écran le 28/09/2026 (fenêtre Electron cachée, `vite`, passerelle jetable, faux fournisseurs) :
+le parcours de connexion de Dropbox et de Google Docs, en fr, en et ja, clair et sombre, 1440 et 375 px
+(SECURITE.md § 45.5). Deux défauts de 375 px corrigés pour tous les panneaux natifs ; un défaut plus
+ancien relevé, pas corrigé : le message rangé au retour du fournisseur est en anglais sur un écran
+français (la requête de retour n'a pas de langue).
+
 ### 3.6 Découpage des tâches lourdes
 
 Ajouté en septembre 2026, après mesure. Un modèle de 8 milliards de paramètres perd le
@@ -4717,6 +4765,13 @@ pas de source (c'est lui la source) : il se met à jour en installant le nouveau
     installé sur ce poste, l'essai Python est passé par `urllib`), un appel depuis une
     autre machine sur une instance ouverte aux collègues, et un client tiers (tableur,
     éditeur de code). L'écran API développeur dans l'application de bureau, pas vu.
+26. **Google Docs, Google Forms, Dropbox** (§ 3.5, 28/09/2026) : rien d'essayé contre
+    les vrais services. Sur le poste : activer « Google Docs API » et « Google Forms
+    API » dans le projet Google de l'instance, brancher, lire un document à onglets,
+    créer un document, ajouter du texte, lire les réponses d'un vrai formulaire ;
+    créer une application Dropbox (les deux accès, « App folder » et « Full
+    Dropbox »), déclarer `http://127.0.0.1:8787/helix/oauth/retour`, se connecter sans
+    secret puis avec, lister, chercher, lire, envoyer un fichier, débrancher.
 
 **Titulaire des droits** : tranché le 24/09/2026, « Medhi Clabaut » (entreprise
 individuelle, SIREN 994 907 145), partout ; mentions légales et section

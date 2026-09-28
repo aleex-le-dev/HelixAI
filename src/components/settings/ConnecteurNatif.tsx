@@ -335,7 +335,8 @@ export function ConnecteurNatif({ id, onChange }: { id: IdNatif; onChange?: () =
         </InfoBox>
       )}
       <InfoBox leading={<KeyRound size={15} strokeWidth={1.75} />}>
-        <div className="space-y-2">
+        {/* 375 px : une adresse ou une portée d'un seul tenant (dropbox.com/developers/apps, account_info.read) sortait du cadre ; elle se coupe. */}
+        <div className="space-y-2 [overflow-wrap:anywhere]">
           <p className="font-medium">{t("Préparer l'application, une fois pour toute l'instance")}</p>
           <Guide id={id} />
           <p className="font-medium">{id === "x" ? t("Ce que permet chaque offre de X") : t("Ce qui demande un examen du fournisseur")}</p>
@@ -405,7 +406,12 @@ export function ConnecteurNatif({ id, onChange }: { id: IdNatif; onChange?: () =
             </label>
           ))}
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <p className="text-xs text-muted-foreground">
+            {/*
+              * 375 px (vu le 28/09/2026 avec Google Forms) : l'identifiant Google, d'un seul
+              * tenant, sortait du panneau, et le libellé du bouton, replié sur deux lignes,
+              * était coupé par sa hauteur fixe. L'identifiant se coupe, le bouton grandit.
+              */}
+            <p className="min-w-0 break-all text-xs text-muted-foreground">
               {tf("Application : {0}", etat.application.identifiant ?? "")}
               {!etat.google && (
                 <>
@@ -416,7 +422,7 @@ export function ConnecteurNatif({ id, onChange }: { id: IdNatif; onChange?: () =
                 </>
               )}
             </p>
-            <Button size="sm" icon={enCours || attente ? Loader2 : Link2} disabled={enCours || attente} onClick={() => void lancer()}>
+            <Button size="sm" className="!h-auto min-h-8 max-w-full py-1.5 text-left" icon={enCours || attente ? Loader2 : Link2} disabled={enCours || attente} onClick={() => void lancer()}>
               {attente ? t("En attente de votre accord…") : tf("Se connecter à {0}", etat.nom)}
             </Button>
           </div>

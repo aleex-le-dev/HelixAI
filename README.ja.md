@@ -52,15 +52,15 @@ Helix AI は、チャット、エージェント、コーディング、ナレ�
 
 ## インストール
 
-お使いのシステム用のパッケージを [最新リリース](https://github.com/medhiclb/HelixAI/releases/tag/v2026.927.4) からダウンロードしてください。
-SHA-256 チェックサム：[`SHA256SUMS.txt`](https://github.com/medhiclb/HelixAI/releases/download/v2026.927.4/SHA256SUMS.txt)。
+お使いのシステム用のパッケージを [最新リリース](https://github.com/medhiclb/HelixAI/releases/tag/v2026.928.2) からダウンロードしてください。
+SHA-256 チェックサム：[`SHA256SUMS.txt`](https://github.com/medhiclb/HelixAI/releases/download/v2026.928.2/SHA256SUMS.txt)。
 
 | プラットフォーム | ダウンロード | インストール方法 |
 |---|---|---|
-| **macOS**（Apple シリコン） | [Helix-2026.927.4-arm64.dmg](https://github.com/medhiclb/HelixAI/releases/download/v2026.927.4/Helix-2026.927.4-arm64.dmg) | ディスクイメージを開き、Helix をアプリケーションフォルダーにドラッグします。初回起動時：「システム設定」›「プライバシーとセキュリティ」›「このまま開く」 |
-| **Windows 10/11**（x64） | [Helix-Setup-2026.927.4-x64.exe](https://github.com/medhiclb/HelixAI/releases/download/v2026.927.4/Helix-Setup-2026.927.4-x64.exe) | インストーラーを実行します（管理者権限は不要）。SmartScreen が表示された場合：「詳細情報」›「実行」 |
-| **Ubuntu、Debian**（x64） | [helix-plateforme_2026.927.4_amd64.deb](https://github.com/medhiclb/HelixAI/releases/download/v2026.927.4/helix-plateforme_2026.927.4_amd64.deb) | `sudo apt install ./helix-plateforme_2026.927.4_amd64.deb` |
-| **その他の Linux**（x64） | [Helix-2026.927.4.AppImage](https://github.com/medhiclb/HelixAI/releases/download/v2026.927.4/Helix-2026.927.4.AppImage) | `chmod +x Helix-2026.927.4.AppImage` の後、実行します。Ubuntu 24.04 では `.deb` をおすすめします |
+| **macOS**（Apple シリコン） | [Helix-2026.928.2-arm64.dmg](https://github.com/medhiclb/HelixAI/releases/download/v2026.928.2/Helix-2026.928.2-arm64.dmg) | ディスクイメージを開き、Helix をアプリケーションフォルダーにドラッグします。初回起動時：「システム設定」›「プライバシーとセキュリティ」›「このまま開く」 |
+| **Windows 10/11**（x64） | [Helix-Setup-2026.928.2-x64.exe](https://github.com/medhiclb/HelixAI/releases/download/v2026.928.2/Helix-Setup-2026.928.2-x64.exe) | インストーラーを実行します（管理者権限は不要）。SmartScreen が表示された場合：「詳細情報」›「実行」 |
+| **Ubuntu、Debian**（x64） | [helix-plateforme_2026.928.2_amd64.deb](https://github.com/medhiclb/HelixAI/releases/download/v2026.928.2/helix-plateforme_2026.928.2_amd64.deb) | `sudo apt install ./helix-plateforme_2026.928.2_amd64.deb` |
+| **その他の Linux**（x64） | [Helix-2026.928.2.AppImage](https://github.com/medhiclb/HelixAI/releases/download/v2026.928.2/Helix-2026.928.2.AppImage) | `chmod +x Helix-2026.928.2.AppImage` の後、実行します。Ubuntu 24.04 では `.deb` をおすすめします |
 
 初回起動時に、Helix AI は必要なものをすべて準備します。[LM Studio](https://lmstudio.ai) の
 ヘッドレスエンジン（固定バージョン、チェックサム検証済み）、またはマシンですでに使われている場合は

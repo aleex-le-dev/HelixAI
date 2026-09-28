@@ -4,7 +4,8 @@ import { homedir } from "node:os";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { journaliser } from "./audit.ts";
 import { apercuEnvoi, envoiSansAccord, presenterMessage } from "./courrier.ts";
-import { ECRITURES_COMMERCE, LECTURES_COMMERCE, resumeCommerce } from "./natifs/commerce.ts";
+import { ECRITURES_COMMERCE, LECTURES_COMMERCE } from "./natifs/commerceRegles.ts";
+import { resumeCommerce } from "./natifs/commerce.ts";
 import { APERCU_REQUIS, ECRITURES_PROJETS, estEcritureMcpProjet, estLectureMcpProjet, LECTURES_PROJETS, resumeProjet } from "./natifs/projetsRegles.ts";
 // Microsoft 365 (28/09/2026) : noms et phrases des cartes, dans un fichier sans autre dépendance que langue.ts.
 import { ECRITURES_MICROSOFT, LECTURES_MICROSOFT, resumeMicrosoft } from "./natifs/microsoftBase.ts";
@@ -302,9 +303,17 @@ export const demandeToujours = (outil: string) => toujoursConfirmer(outil) || (E
  * chargeable seule).
  */
 type Apercu = (outil: string, args: Record<string, unknown>) => Promise<{ resume: string; affiche: string } | { refus: string }>;
-let apercuNatif: Apercu | null = null;
+/*
+ * Registre porté par une fonction, hissée avec ce module : un `let` ne l'est pas,
+ * et natifs/projets.ts s'inscrit parfois avant que ce module ait fini de se
+ * charger (imports croisés, vu le 28/09/2026 à la fusion des connecteurs).
+ */
+function registreApercu(): { fn: Apercu | null } {
+  const porteur = registreApercu as unknown as { valeur?: { fn: Apercu | null } };
+  return (porteur.valeur ??= { fn: null });
+}
 export function definirApercuNatif(fn: Apercu): void {
-  apercuNatif = fn;
+  registreApercu().fn = fn;
 }
 
 /**
@@ -1135,6 +1144,7 @@ export async function verifierOutil(
    */
   let apercu: { resume: string; affiche: string } | null = null;
   if (APERCU_REQUIS.has(outil)) {
+    const apercuNatif = registreApercu().fn;
     const a = apercuNatif ? await apercuNatif(outil, args).catch((err: unknown) => ({ refus: err instanceof Error ? err.message : String(err) })) : { refus: "Refusé : la carte de cette campagne n'a pas pu être préparée. Rien n'a été fait." };
     if ("refus" in a) return { autorise: false, message: a.refus };
     if (a.affiche.length > CARTE_NATIVE_MAX) return { autorise: false, message: "Refusé sans rien demander : cette campagne est trop longue pour être montrée en entier sur la carte d'accord, et rien ne part sans avoir été lu en entier. Dis-le à l'utilisateur." };

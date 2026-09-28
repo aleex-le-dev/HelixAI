@@ -94,7 +94,6 @@ const IG = "17841400000000000";
  * (Google Docs, Google Forms, Dropbox : scripts/essai-documents.mjs) ; elles
  * ne sont pas branchées ici, et ne comptent pas dans ce qui suit.
  */
-const HUIT = ["sheets", "slides", "youtube", "linkedin", "facebook", "instagram", "tiktok", "x"];
 
 const recues = [];
 const controle = { tiktok401: false, uploadAilleurs: false, postPiege: false, deuxPages: false, x401: false, postPiegeX: false, x402moi: false };

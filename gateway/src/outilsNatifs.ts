@@ -26,6 +26,7 @@ import {
 import { executerDocuments, outilsDocuments } from "./natifs/documents.ts";
 // Commerce et relation client (28/09/2026, SECURITE.md § 47) : leur module, branché ici par trois lignes.
 import * as commerce from "./natifs/commerce.ts";
+import { PREFIXES_COMMERCE } from "./natifs/commerceRegles.ts";
 // Brevo et Mailchimp (SECURITE.md § 48) : leurs outils vivent à part, mêmes gardes que ceux-ci.
 import * as projets from "./natifs/projets.ts";
 // Microsoft 365 (28/09/2026) : ses outils dans leur fichier ; ce module lui passe ses gardes (`sousGarde`, `fichierDuDossier`).
@@ -86,7 +87,7 @@ const PREFIXES: Record<string, IdNatif> = {
 };
 
 /** Préfixes réservés : aucun connecteur ajouté ne peut les prendre (connecteurs.ts, `IDS_RESERVES`). */
-export const PREFIXES_NATIFS = [...Object.keys(PREFIXES).map((p) => p.slice(0, -2)), ...commerce.PREFIXES_COMMERCE];
+export const PREFIXES_NATIFS = [...Object.keys(PREFIXES).map((p) => p.slice(0, -2)), ...PREFIXES_COMMERCE];
 
 export const serviceDe = (nom: string): IdNatif | commerce.IdCommerce | null => {
   for (const [p, id] of Object.entries(PREFIXES)) if (nom.startsWith(p)) return id;

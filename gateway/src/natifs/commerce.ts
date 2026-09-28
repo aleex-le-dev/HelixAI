@@ -108,8 +108,6 @@ import { avecLangueDe, langue, t, tf, type Langue } from "../langue.ts";
  * repris par `npm run securite`, section 16 quinquies).
  */
 
-export type IdCommerce = "stripe" | "shopify" | "woocommerce" | "salesforce" | "pipedrive" | "zendesk";
-export const IDS_COMMERCE: IdCommerce[] = ["stripe", "shopify", "woocommerce", "salesforce", "pipedrive", "zendesk"];
 export const estIdCommerce = (v: unknown): v is IdCommerce => typeof v === "string" && (IDS_COMMERCE as string[]).includes(v);
 
 /** Comment le service se branche : une clé, des identifiants échangés sans navigateur, ou un accord dans le navigateur. */
@@ -1333,33 +1331,13 @@ interface Outil {
 }
 type Resultat = { ok: boolean; content: string };
 
-/*
- * Les noms exacts, lus par la barrière (approbation.ts) : les lectures ne
- * demandent rien au niveau « Demander avant de modifier » ; les écritures sont
- * confirmées à chaque fois, à tout niveau. Aucun outil de Stripe, Shopify ni
- * WooCommerce n'écrit.
- */
-export const LECTURES_COMMERCE = [
-  "stripe__paiements",
-  "stripe__clients",
-  "stripe__factures",
-  "stripe__abonnements",
-  "shopify__commandes",
-  "shopify__produits",
-  "shopify__stocks",
-  "woocommerce__commandes",
-  "woocommerce__produits",
-  "salesforce__contacts",
-  "salesforce__affaires",
-  "pipedrive__contacts",
-  "pipedrive__affaires",
-  "zendesk__tickets",
-  "zendesk__ticket",
-];
-export const ECRITURES_COMMERCE = ["salesforce__noter", "pipedrive__noter", "zendesk__repondre"];
+// Les listes lues par la barrière vivent dans commerceRegles.ts, sans aucune dépendance :
+// approbation.ts les lit à son chargement, et les imports croisés de la fusion du
+// 28/09/2026 le faisaient avant que ce module-ci ait fini de se charger.
+import { LECTURES_COMMERCE, ECRITURES_COMMERCE, IDS_COMMERCE, PREFIXES_COMMERCE, type IdCommerce } from "./commerceRegles.ts";
+export { LECTURES_COMMERCE, ECRITURES_COMMERCE, IDS_COMMERCE, PREFIXES_COMMERCE, type IdCommerce };
 
 /** Préfixes réservés (connecteurs.ts, `IDS_RESERVES`) : aucun connecteur MCP ne peut les prendre. */
-export const PREFIXES_COMMERCE: string[] = [...IDS_COMMERCE];
 
 export const serviceCommerce = (nom: string): IdCommerce | null => {
   const p = nom.slice(0, Math.max(0, nom.indexOf("__")));

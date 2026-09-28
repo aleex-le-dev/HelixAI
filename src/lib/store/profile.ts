@@ -48,7 +48,15 @@ export interface UserProfile {
    * premier « envoie ce mail » que l'assistant n'en avait pas les moyens.
    */
   outilsChat?: boolean;
+  /**
+   * RTK dans l'écran Code (gateway/src/rtk.ts, 28/09/2026) : « cloud » (défaut,
+   * seulement avec un modèle cloud), « toujours » (modèles locaux compris),
+   * « jamais ». Envoyé avec chaque demande, décidé par la passerelle.
+   */
+  rtkCode?: ReglageRtk;
 }
+
+export type ReglageRtk = "cloud" | "toujours" | "jamais";
 
 const key = (userId: string) => `profile:${userId}`;
 

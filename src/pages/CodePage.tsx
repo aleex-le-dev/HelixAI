@@ -15,6 +15,7 @@ import { InstallerOpencode } from "@/components/code/InstallerOpencode";
 import { useCode } from "@/hooks/useCode";
 import { useCodex } from "@/hooks/useCodex";
 import { AvisCodex, MoteurCode } from "@/components/code/MoteurCode";
+import { EconomiesRtk, ReglageRtkCode } from "@/components/code/ReglageRtk";
 import { moteurRetenu, retenirMoteur, type MoteurCode as Moteur } from "@/lib/codex";
 import { useProfile } from "@/hooks/useProfile";
 import { currentUser, prenom } from "@/lib/store/identity";
@@ -46,6 +47,8 @@ export function CodePage() {
   const code = useCode(dossier, {
     model: profile.preferredModelUid,
     effort: profile.preferredEffort ?? "moyen",
+    // RTK (gateway/src/rtk.ts) : d'office avec un modèle cloud, au choix avec les autres.
+    rtk: profile.rtkCode ?? "cloud",
   });
   /*
    * Codex, second moteur, avec le compte ChatGPT du propriétaire du poste
@@ -182,6 +185,10 @@ export function CodePage() {
             connexionRefus={codex.connexionRefus}
             occupe={vue.busy}
           />
+          {/* RTK ne concerne que les commandes lancées par OpenCode : Codex lance les siennes lui-même. */}
+          {moteur === "opencode" && (
+            <ReglageRtkCode valeur={profile.rtkCode ?? "cloud"} onChange={(v) => update({ rtkCode: v })} sessionId={sessionId} />
+          )}
         </>
       }
     />
@@ -235,6 +242,7 @@ export function CodePage() {
             <div className="mx-auto w-full max-w-[760px]">
               {composer}
               {moteur === "codex" && <AvisCodex etat={codex.etat} compact />}
+              {moteur === "opencode" && <EconomiesRtk sessionId={sessionId} occupe={vue.busy} />}
             </div>
           </div>
         </section>

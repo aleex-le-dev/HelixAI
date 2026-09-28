@@ -51,6 +51,26 @@ export async function fetchCodeStatus(): Promise<CodeStatus> {
 export interface ReglagesCode {
   model?: string;
   effort?: string;
+  /** RTK : « cloud », « toujours » ou « jamais » (gateway/src/rtk.ts). */
+  rtk?: string;
+}
+
+/** Ce que l'instance dit de RTK, et ce qu'il a épargné dans une session (GET /helix/code/rtk). */
+export interface EtatRtk {
+  etat: {
+    version: string;
+    branchable: boolean;
+    raison: string | null;
+    installe: boolean;
+    installation: { enCours: boolean; pourcent: number | null; erreur: string | null };
+  };
+  session?: { actif: boolean; economies: { commandes: number; jetons: number } | null };
+}
+
+export async function fetchRtk(sessionID?: string | null): Promise<EtatRtk | null> {
+  const res = await apiFetch(`/helix/code/rtk${sessionID ? `?sessionID=${encodeURIComponent(sessionID)}` : ""}`).catch(() => null);
+  if (!res?.ok) return null;
+  return (await res.json().catch(() => null)) as EtatRtk | null;
 }
 
 export async function createCodeSession(
@@ -88,7 +108,7 @@ export async function sendCodePrompt(
   const res = await apiFetch(`/helix/code/prompt`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ sessionID, text, model: reglages.model, effort: reglages.effort }),
+    body: JSON.stringify({ sessionID, text, model: reglages.model, effort: reglages.effort, rtk: reglages.rtk }),
   });
   const body = (await res.json().catch(() => ({}))) as {
     error?: { message?: string };

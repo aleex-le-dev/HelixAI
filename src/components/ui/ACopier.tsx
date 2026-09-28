@@ -93,7 +93,8 @@ export function ACopier({
       <span className="min-w-0 flex-1">
         <span
           ref={valeurRef}
-          className="block truncate font-mono text-[13px] text-foreground"
+          // Entière, à la ligne s'il le faut : à 375 px, l'adresse de l'API se lisait « http://localhost:1… » (28/09/2026).
+          className="block font-mono text-[13px] text-foreground [overflow-wrap:anywhere]"
           title={valeur}
         >
           {valeur}

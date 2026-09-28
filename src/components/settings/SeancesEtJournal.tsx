@@ -254,11 +254,16 @@ export function SeancesEtJournal() {
             {seances.map((s) => (
               <li
                 key={s.id}
-                className="flex items-center gap-3 rounded-xl border border-border px-3 py-2.5"
+                /*
+                 * « Fermer » passe à la ligne quand la place manque, et le nom du
+                 * poste n'est plus coupé (tournée à l'écran du 28/09/2026 : à
+                 * 375 px, il tenait en 30 px, « Mac · Ch… »).
+                 */
+                className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl border border-border px-3 py-2.5"
               >
                 <Laptop size={16} strokeWidth={1.75} className="shrink-0 text-muted-foreground" />
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-sm font-medium text-foreground">
+                <span className="min-w-0 flex-1 basis-32">
+                  <span className="block text-sm font-medium text-foreground [overflow-wrap:anywhere]">
                     {s.poste}
                     {s.courante && (
                       <span className="ml-2 rounded-full bg-muted px-2 py-0.5 text-xs font-normal text-muted-foreground">

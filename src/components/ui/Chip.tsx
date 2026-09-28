@@ -17,11 +17,17 @@ interface ChipProps extends ButtonHTMLAttributes<HTMLButtonElement> {
    * réduisait à « … »).
    */
   compacte?: boolean;
+  /**
+   * Faux : sous 640 px, ni chevron ni grande marge, pour une puce compacte qui
+   * partage sa ligne avec un libellé plus utile qu'elle (le niveau de
+   * raisonnement à côté du nom du modèle, tournée à l'écran du 28/09/2026).
+   */
+  chevronEtroit?: boolean;
 }
 
 /** Petit selecteur pilule (barre de contexte, ligne d'outils du composer). */
 export const Chip = forwardRef<HTMLButtonElement, ChipProps>(function Chip(
-  { leading, chevron = true, active, compacte = false, className, children, ...props },
+  { leading, chevron = true, active, compacte = false, chevronEtroit = true, className, children, ...props },
   ref,
 ) {
   const libelle = typeof children === "string" ? children : undefined;
@@ -39,6 +45,7 @@ export const Chip = forwardRef<HTMLButtonElement, ChipProps>(function Chip(
         "disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:bg-transparent",
         active && "bg-muted text-foreground",
         compacte && "max-sm:shrink-0",
+        !chevronEtroit && "max-sm:px-1.5",
         className,
       )}
       {...props}
@@ -53,7 +60,7 @@ export const Chip = forwardRef<HTMLButtonElement, ChipProps>(function Chip(
         <ChevronDown
           size={14}
           strokeWidth={2}
-          className="shrink-0 text-muted-foreground"
+          className={cn("shrink-0 text-muted-foreground", !chevronEtroit && "max-sm:hidden")}
         />
       )}
     </button>

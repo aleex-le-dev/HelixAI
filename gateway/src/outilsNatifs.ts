@@ -24,6 +24,8 @@ import {
 } from "./oauthNatif.ts";
 // Google Docs, Google Forms et Dropbox (28/09/2026) : leurs outils vivent à part, et reprennent les garde-fous d'ici.
 import { executerDocuments, outilsDocuments } from "./natifs/documents.ts";
+// Commerce et relation client (28/09/2026, SECURITE.md § 47) : leur module, branché ici par trois lignes.
+import * as commerce from "./natifs/commerce.ts";
 
 /**
  * Les outils de l'agent pour Google Sheets, Google Slides, YouTube, LinkedIn,
@@ -75,11 +77,11 @@ const PREFIXES: Record<string, IdNatif> = {
 };
 
 /** Préfixes réservés : aucun connecteur ajouté ne peut les prendre (connecteurs.ts, `IDS_RESERVES`). */
-export const PREFIXES_NATIFS = Object.keys(PREFIXES).map((p) => p.slice(0, -2));
+export const PREFIXES_NATIFS = [...Object.keys(PREFIXES).map((p) => p.slice(0, -2)), ...commerce.PREFIXES_COMMERCE];
 
-export const serviceDe = (nom: string): IdNatif | null => {
+export const serviceDe = (nom: string): IdNatif | commerce.IdCommerce | null => {
   for (const [p, id] of Object.entries(PREFIXES)) if (nom.startsWith(p)) return id;
-  return null;
+  return commerce.serviceCommerce(nom);
 };
 
 /*
@@ -221,6 +223,7 @@ export function toolsForModel(): Outil[] {
     }
   }
   outils.push(...outilsDocuments());
+  outils.push(...commerce.toolsForModel());
   return outils;
 }
 
@@ -233,7 +236,7 @@ export function toolsForModel(): Outil[] {
  * le texte pour refuser un doublon. `incertaine` : envoyée, mais le service
  * n'a pas dit si elle était faite (voir `issueIncertaine`).
  */
-const recentes: { service: IdNatif; quand: number; empreinte: string; incertaine?: boolean }[] = [];
+const recentes: { service: string; quand: number; empreinte: string; incertaine?: boolean }[] = [];
 
 /**
  * Une erreur après laquelle on ne sait pas si l'écriture a eu lieu : le
@@ -261,7 +264,7 @@ function issueIncertaine(err: unknown): boolean {
  * dix de l'heure. La vérification et la réservation se font maintenant d'un
  * seul tenant, sans `await` entre elles.
  */
-export async function sousGarde(service: IdNatif, contenu: string, agir: () => Promise<Resultat>): Promise<Resultat> {
+export async function sousGarde(service: string, contenu: string, agir: () => Promise<Resultat>): Promise<Resultat> {
   const maintenant = Date.now();
   while (recentes.length && maintenant - recentes[0]!.quand > 60 * 60_000) recentes.shift();
   const empreinte = contenu.trim().toLowerCase().replace(/\s+/g, " ");
@@ -307,6 +310,7 @@ async function exigerAdministrateur(pour: { userId: string } | undefined): Promi
 /* ------------------------------------------------------------------ */
 
 export async function callTool(nom: string, args: Record<string, unknown>, pour?: { userId: string; groupes: string[] }): Promise<Resultat> {
+  if (commerce.serviceCommerce(nom)) return commerce.callTool(nom, args, pour);
   const service = serviceDe(nom);
   if (!service || (!LECTURES_NATIVES.has(nom) && !ECRITURES_NATIVES.has(nom))) return refus(`Outil inconnu : ${nom}.`);
   await charger();

@@ -160,6 +160,7 @@ import * as drive from "./drive.ts";
 import * as agendaGoogle from "./agendaGoogle.ts";
 import * as natifs from "./oauthNatif.ts";
 import * as messageries from "./natifs/messageries.ts";
+import * as commerce from "./natifs/commerce.ts";
 import * as tachesProgrammees from "./tachesProgrammees.ts";
 import { chargerClientGoogle, effacerClientGoogle, enregistrerClientGoogle, etatClientGoogle } from "./clientGoogle.ts";
 import * as slack from "./slack.ts";
@@ -1344,6 +1345,15 @@ async function handleMessageries(req: http.IncomingMessage, res: http.ServerResp
   send(res, r.ok ? 200 : 400, { ...r, ...(await etatComplet()) });
 }
 
+/* Stripe, Shopify, WooCommerce, Salesforce, Pipedrive, Zendesk (natifs/commerce.ts, § 47) : mêmes droits que les connexions natives, décidés dans le module. */
+async function handleCommerce(req: http.IncomingMessage, res: http.ServerResponse, url: URL, suite: string): Promise<void> {
+  const qui = await demandeur(req, url);
+  if (!qui) return send(res, 401, sansSeance());
+  const corps = req.method === "POST" ? ((await readJson(req).catch(() => ({}))) as Record<string, unknown>) : {};
+  const r = await commerce.route(req.method ?? "", suite, corps && typeof corps === "object" ? corps : {}, qui, adresseVue(req) ?? "");
+  send(res, r.statut, r.corps);
+}
+
 async function handleAgendaGoogleEtat(req: http.IncomingMessage, res: http.ServerResponse, url: URL): Promise<void> {
   const qui = await demandeur(req, url);
   if (!qui) return send(res, 401, sansSeance());
@@ -1661,6 +1671,11 @@ const EXECUTION: { methode: string; chemin: string }[] = [
   { methode: "POST", chemin: "/helix/messageries/connecter" },
   { methode: "POST", chemin: "/helix/messageries/envoi" },
   { methode: "POST", chemin: "/helix/messageries/oublier" },
+  // Commerce et relation client (natifs/commerce.ts, § 47) : réservés en plus à l'administrateur.
+  { methode: "GET", chemin: "/helix/commerce" },
+  { methode: "POST", chemin: "/helix/commerce/enregistrer" },
+  { methode: "POST", chemin: "/helix/commerce/connecter" },
+  { methode: "POST", chemin: "/helix/commerce/oublier" },
   /*
    * Ajouter un connecteur lance un programme de plus sur la machine, et lui
    * confie un jeton d'accès à un service de l'entreprise ; le retirer coupe cet
@@ -3841,6 +3856,10 @@ async function handleOauthRetour(
     const r = await natifs.recevoir(url.searchParams, null);
     return repondre(t("Autorisation refusée"), r.message, false, 400);
   }
+  if (erreur && commerce.estEtatCommerce(url.searchParams.get("state") ?? "")) {
+    const r = await commerce.recevoir(url.searchParams);
+    return repondre(t("Autorisation refusée"), r.message, false, 400);
+  }
   if (erreur) {
     return repondre(
       t("Autorisation refusée"),
@@ -3869,8 +3888,9 @@ async function handleOauthRetour(
    * publique, c'est-à-dire une seconde surface à protéger.
    */
   // Troisième famille (28/09/2026) : LinkedIn, Facebook, Instagram (oauthNatif.ts), même route publique, même protection.
-  if (natifs.estEtatNatif(etat)) {
-    const r = await natifs.recevoir(url.searchParams, null);
+  // Salesforce, Pipedrive, Zendesk (natifs/commerce.ts) : préfixe « commerce. », même route, même protection.
+  if (natifs.estEtatNatif(etat) || commerce.estEtatCommerce(etat)) {
+    const r = natifs.estEtatNatif(etat) ? await natifs.recevoir(url.searchParams, null) : await commerce.recevoir(url.searchParams);
     return repondre(
       r.ok ? tf("{0} est branché", r.nom ?? t("Service")) : t("Autorisation interrompue"),
       r.ok ? `${r.message} ${tf("Vous pouvez fermer cette fenêtre et revenir à {0}.", nomProduit())}` : r.message,
@@ -5629,6 +5649,7 @@ const traiter = (
     // Telegram, Discord, WhatsApp (natifs/messageries.ts). Le webhook de WhatsApp est public (auth.ts) : signé par Meta, vérifié par le module.
     if (path === messageries.CHEMIN_WEBHOOK) return messageries.webhookWhatsApp(req, res, url);
     if (path === "/helix/messageries" || path.startsWith("/helix/messageries/")) return handleMessageries(req, res, url, path.slice("/helix/messageries".length));
+    if (path === "/helix/commerce" || path.startsWith("/helix/commerce/")) return handleCommerce(req, res, url, path.slice("/helix/commerce".length));
     if (req.method === "GET" && path === "/helix/drive") return handleDriveEtat(res);
     if (req.method === "POST" && path === "/helix/drive/connecter")
       return handleDriveConnecter(req, res, url);
@@ -6009,6 +6030,7 @@ void preparerMagasin().then(() => server.listen(PORT, HOST, () => {
   void natifs.charger().catch(() => {});
   // Telegram, Discord, WhatsApp (natifs/messageries.ts) : même contrainte, et le relevé de Telegram reprend.
   void messageries.charger().catch(() => {});
+  void commerce.charger().catch(() => {});
   // OpenCode manquant : posé en arrière-plan, sans attendre personne (27/09/2026, opencodeEnFond).
   codeEnFond();
   /*

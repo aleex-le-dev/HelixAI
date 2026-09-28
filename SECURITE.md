@@ -5121,3 +5121,126 @@ Telegram pour un bot bloqué), un webhook de Meta sur une vraie adresse https. L
 une fenêtre Electron cachée sur `vite` (fr, en, ja ; clair et sombre ; 1440 et 375 px ; connexion
 WhatsApp faite à l'écran) ; pas l'écran en chinois, ni la carte d'envoi à l'écran (vérifiée par
 l'essai, dans les détails qu'elle reçoit).
+## 47. Commerce et relation client (28/09/2026)
+
+Stripe, Shopify, WooCommerce, Salesforce, Pipedrive et Zendesk, demandés par Medhi, sur la branche
+`connecteurs-commerce` (`gateway/src/natifs/commerce.ts` ; écran `ConnecteurCommerce.tsx`). Choix
+de chaque voie et sources : PROJET.md § 3.5 et l'en-tête du module (documentation lue le
+28/09/2026). Contrôles : `scripts/essai-commerce.mjs` (92, faux services, passerelle jetable,
+`"chiffrement": "fichier"`, LM Studio et exo éteints, un vrai Chat avec un faux modèle), repris
+par `npm run securite` sous « commerce : », et `scripts/securite.mjs`, section 16 quinquies (les
+pièces seules, sans magasin). **Rien n'a été essayé contre les vrais services.**
+
+### 47.1 Pourquoi pas les serveurs MCP officiels
+
+Stripe (`mcp.stripe.com`), Salesforce (serveurs hébergés `sobject-*`) et Pipedrive
+(`mcp.pipedrive.ai`) publient un serveur MCP distant avec OAuth. Leurs outils passeraient par la
+barrière commune (`modifie`) : une carte selon le niveau, aucune au niveau « Tout approuver », et
+aucun contrôle « administrateur seulement ». Or ces serveurs écrivent de façon générale : tout POST
+de l'API Stripe (`stripe_api_write`, remboursements et paiements sortants compris, Stripe ne
+demandant sa propre confirmation que pour certains), création et modification de tout objet
+Salesforce, affaires et contacts Pipedrive. Les brancher tels quels aurait rendu fausses les règles
+des §§ 40 à 43 pour eux. Ils ne sont donc pas au catalogue ; la connexion directe tient les règles.
+
+### 47.2 Ce qui est tenu
+
+- **Lecture par défaut, écriture cochée.** Stripe, Shopify, WooCommerce : aucune écriture, aucun
+  outil qui écrit. Salesforce (une note), Pipedrive (une note), Zendesk (une réponse publique ou une
+  note interne) : seulement si la case est cochée à la connexion ; Pipedrive et Zendesk reçoivent
+  alors les portées en plus (`deals:full contacts:full`, `tickets:write`), Salesforce n'en a pas
+  (sa portée `api` n'a pas de variante en lecture seule : c'est une case de Helix, et l'écran le
+  dit).
+- **Écrire : l'administrateur, derrière une carte.** Les trois écritures sont dans
+  `ECRITURES_NATIVES`, donc `TOUJOURS_CONFIRMER` : une carte à chaque appel, même au niveau « Tout
+  approuver », l'accord ne vaut que pour cet appel, la carte montre les arguments entiers (essai :
+  une note de 2 700 caractères, vue jusqu'au dernier mot) et dit « réponse publique que Zendesk lui
+  enverra » ou « note interne ». L'outil vérifie ensuite que la personne administre l'instance
+  (essai : un collègue et un appel sans personne sont refusés, rien ne part). Ni les employés
+  OpenClaw ni l'agent de code n'ont ces outils ; les six préfixes sont réservés (`IDS_RESERVES`).
+- **`sousGarde`**, celle des connexions natives (exportée d'`outilsNatifs.ts`) : dix écritures par
+  heure et par service pour l'instance, doublon refusé dans la demi-heure, réservation d'un seul
+  tenant (essai : trois notes identiques lancées ensemble, une seule part ; douze notes, dix au
+  plus), place gardée après une issue incertaine (essai : Zendesk répond 503, la même réponse
+  relancée n'est pas renvoyée, et le message dit de vérifier).
+- **Stripe en lecture seule, par le transport.** `envoyer` n'a que des lignes GET pour Stripe, sur
+  quatre ressources et le compte : un remboursement, un virement, un transfert, une capture, une
+  résiliation, une modification, et même la lecture d'autres ressources sont refusés avant toute
+  connexion, quelle que soit la clé (essai et 16 quinquies). Une clé secrète (`sk_`) est refusée à
+  l'enregistrement : seule une clé restreinte (`rk_`) est prise, et l'essai de l'enregistrement dit
+  quelle ressource n'a pas « Lecture ». Sur tout l'essai, aucune requête autre que GET n'arrive au
+  faux Stripe.
+- **Ce qui part, par service.** Chaque requête passe par une liste de méthodes et de chemins
+  (`PERMIS`) et par les hôtes du service : `api.stripe.com` ; la boutique en `.myshopify.com` ; le
+  site WooCommerce saisi par l'administrateur ; `login.salesforce.com` (ou `test.`) et l'instance
+  rendue, suivie seulement si c'est un « My Domain » `*.my.salesforce.com` (essai : une instance
+  `malveillant.exemple.com` rendue fait tout refuser, rien n'y part) ; `oauth.pipedrive.com` et le
+  domaine rendu en `*.pipedrive.com` ; le sous-domaine `*.zendesk.com`. Shopify : seules quatre
+  requêtes GraphQL écrites dans le module partent (aucune mutation), la recherche du modèle y entre
+  en variable. Salesforce : le mot cherché n'accepte que lettres, chiffres, espaces et `@ . _ + ' -`,
+  l'apostrophe est échappée et `%` `_` perdent leur sens (essai : `O'Brien` part en `O\'Brien`).
+- **WooCommerce : pas de réseau interne.** L'adresse est en https, port 443, un nom public (ni IP, ni
+  `.local`, `.internal`, `.localhost`), et son nom est résolu à l'enregistrement **et avant chaque
+  appel** : une adresse du réseau interne, y compris une IPv6 « mappée », fait refuser sans
+  envoyer la clé. La clé part en HTTP Basic, jamais dans l'adresse.
+- **Accord dans le navigateur** (Salesforce, Pipedrive, Zendesk) : `state` de 32 octets, préfixe
+  `commerce.`, comparé à durée constante, dix minutes, une fois ; un `state` inventé ou allongé ne
+  mène à rien et n'annule pas la demande en cours ; PKCE S256 chez Salesforce et Zendesk (le
+  vérificateur ne quitte pas l'instance) ; Pipedrive n'en documente pas, le code ne vaut rien sans
+  le secret. Portées relues : en trop (essai : Zendesk rend « read write ») ou en moins (Pipedrive)
+  font révoquer et refuser. Le compte est lu avant tout enregistrement. Retour par la route
+  publique `/helix/oauth/retour`, page fixe sans `Location`.
+- **Clés et jetons.** Chiffrés au repos, liés à leur place (`connecteursCommerce#<service>#…`), dans
+  une collection interne jamais synchronisée ; jamais rendus par une route (l'état n'a que le nom
+  du compte, l'identifiant public d'une application, une adresse), jamais au journal (`natif.*`
+  nomme le service et l'outil), jamais au modèle. Essai : cherchés partout, en clair et en base 64
+  des en-têtes Basic (routes, disque, journal d'audit, sortie de la passerelle, ce qui est rendu au
+  modèle). Une autre application ou une autre clé rend le compte inutilisable (empreinte). Un
+  magasin illisible n'est jamais réécrit.
+- **Appel recopié.** Un ticket Zendesk lu, qui contient `<tool_call>{"name":"zendesk__repondre",…}`,
+  recopié par le modèle dans son résumé : aucune carte, rien envoyé, la citation reste du texte
+  (essai G, vrai Chat).
+- **Débrancher.** Salesforce (jeton d'actualisation révoqué), Pipedrive (jeton d'actualisation, en
+  Basic : l'application est désinstallée), Zendesk (`tokens/current`) ; Stripe, WooCommerce et
+  Shopify n'ont pas de révocation par l'API pour ces accès : la clé est effacée de l'instance et
+  l'écran dit où la révoquer chez le service.
+
+### 47.3 Trouvé en regardant l'écran, et corrigé
+
+| Gravité | Ce qui se passait | Correctif | Contrôle |
+|---|---|---|---|
+| Faible | L'issue d'une connexion (Zendesk, Salesforce, Pipedrive), relue ensuite par le panneau de l'administrateur, était écrite dans la langue du navigateur qui revient du service ; il n'envoie ni `X-Helix-Langue` ni `?langue=` : vu à l'écran en français, « Zendesk connected: … ». | La langue de qui a lancé la connexion est gardée avec la demande, et l'échange se fait dans cette langue (`avecLangueDe`). | essai C (1) |
+| Faible | Le nom d'un compte Stripe de test était gardé avec « (mode test) » traduit au moment de brancher : vu en chinois, en français. | « (test) », le mot de Stripe, que toutes les langues lisent. | essai B |
+
+**Même cause, non corrigée ici** : les connexions natives d'`oauthNatif.ts` (LinkedIn, Meta, X)
+reviennent par la même route et écrivent leur issue de la même façon ; à reprendre avec le même
+correctif (hors du périmètre de cette branche).
+
+### 47.4 Soupçons, non démontrés
+
+- **Lecture par les collègues** : comme au § 41.3, toute séance lit, par le modèle, ce que la clé
+  ou le compte branché voit (clients Stripe et leurs adresses, commandes, tickets). Conseiller une
+  clé ou un utilisateur dédié, aux droits réduits.
+- **Salesforce `api`** : la portée permet d'écrire tout ce que l'utilisateur connecté peut écrire ;
+  seul le code de Helix se limite (une note). Un jeton volé sur l'instance aurait les droits de cet
+  utilisateur : d'où le conseil de l'écran (un utilisateur aux droits utiles).
+- **Pipedrive** : sans PKCE, un code intercepté sur le retour en http ne s'échange pas sans le secret
+  (qui ne quitte pas l'instance) ; `deals:full` permet aussi de supprimer une affaire, que Helix ne
+  fait pas.
+- **WooCommerce, « DNS rebinding »** : entre la résolution vérifiée et la connexion, un serveur de
+  noms complice peut changer de réponse ; seul l'administrateur choisit le nom, et le certificat doit
+  être valable pour lui.
+- **Portées rendues** : Shopify (`scope` du « client credentials »), Salesforce et Zendesk pourraient
+  rendre une portée implicite de plus ; la règle la ferait refuser (à voir sur le vrai service).
+- **375 px** : la liste des connecteurs y est très étroite (rail, page, carte, panneau) ; le panneau
+  s'allège sous 640 px et coupe les mots longs, mais la ligne du service (`Connecteurs.tsx`, § 43.3)
+  laisse un mot long (« opportunités ») passer sous la pastille.
+
+### 47.5 Pas essayé
+
+Aucun vrai service : ni compte Stripe (même en mode test), ni boutique Shopify, ni site WooCommerce,
+ni organisation Salesforce, ni compte Pipedrive, ni compte Zendesk. En particulier : les adresses de
+retour en `http://127.0.0.1` chez Salesforce, Pipedrive (vérifiée au passage « live ») et Zendesk ;
+la forme réelle de `scope` chez chacun ; `GET /v1/account` avec une clé restreinte ; la version
+`v66.0` de Salesforce et `Note` dans Lightning ; l'API v2 de Pipedrive (`/api/v2/persons/search`) ;
+la rotation du jeton d'actualisation de Zendesk sur un vrai client ; l'écran dans l'application
+empaquetée (vu dans une fenêtre Electron cachée sur `vite`).

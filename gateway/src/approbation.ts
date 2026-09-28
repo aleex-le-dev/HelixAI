@@ -4,6 +4,7 @@ import { homedir } from "node:os";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { journaliser } from "./audit.ts";
 import { apercuEnvoi, envoiSansAccord, presenterMessage } from "./courrier.ts";
+import { ECRITURES_COMMERCE, LECTURES_COMMERCE, resumeCommerce } from "./natifs/commerce.ts";
 
 /**
  * Approbation des actions de l'agent.
@@ -239,6 +240,8 @@ export const LECTURES_NATIVES = new Set([
   "whatsapp__conversations",
   "whatsapp__messages",
   "whatsapp__modeles",
+  // Commerce et relation client (natifs/commerce.ts, SECURITE.md § 47).
+  ...LECTURES_COMMERCE,
 ]);
 export const ECRITURES_NATIVES = new Set([
   "sheets__ecrire",
@@ -256,6 +259,8 @@ export const ECRITURES_NATIVES = new Set([
   "discord__envoyer",
   "whatsapp__envoyer",
   "whatsapp__envoyer_modele",
+  // Une note Salesforce ou Pipedrive, une réponse Zendesk : une carte à chaque fois (§ 47).
+  ...ECRITURES_COMMERCE,
 ]);
 
 /**
@@ -635,7 +640,7 @@ function resumeNatif(outil: string, args: Record<string, unknown>): string | nul
     case "dropbox__envoyer":
       return `envoyer vers le Dropbox connecté le fichier ${typeof args.fichier === "string" ? abreger(args.fichier).slice(0, 200) : "?"} du dossier de travail, dans le dossier ${typeof args.dossier === "string" && args.dossier.trim() ? args.dossier.trim().slice(0, 200) : "racine"} (un fichier du même nom n'est jamais remplacé)`;
   }
-  return null;
+  return resumeCommerce(outil, args);
 }
 
 /* ------------------------------------------------------------------ */

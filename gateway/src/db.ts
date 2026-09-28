@@ -81,6 +81,8 @@ export const COLLECTIONS_INTERNES = [
   "connecteursNatifs",
   // Telegram, Discord, WhatsApp (natifs/messageries.ts, 28/09/2026) : jetons de bot et messages reçus, jamais sur un poste.
   "messageries",
+  // Stripe, Shopify, WooCommerce, Salesforce, Pipedrive, Zendesk (natifs/commerce.ts) : clés et jetons, même raison.
+  "connecteursCommerce",
   // Tâches programmées (tachesProgrammees.ts) : exécutées par l'instance, jamais recopiées sur les postes.
   "tachesProgrammees",
   "connecteurs",

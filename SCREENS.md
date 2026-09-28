@@ -50,6 +50,7 @@ Toutes les routes déclarées dans `src/App.tsx`, dans l'ordre du fichier.
 | `/reunions` | Réunions | `reunions` | ✅ **fonctionne** (0.16.0), bot dans l'application de bureau |
 | `/groupes` | Groupes | `groupes` | ✅ **fonctionne** (0.16.0) |
 | `/taches` | Tâches | `taches` | ✅ **fonctionne** |
+| `/modeles` | Modèles (28/09/2026), ouverte depuis le sélecteur de modèles | toujours | ✅ **vu dans le navigateur** (passerelle jetable, faux `lms`), voir § 3 |
 | `/parametres/*` | Réglages, 12 sous-pages | toujours | mixte, voir § 5 |
 | `*` | repli sur l'accueil | | |
 
@@ -119,6 +120,25 @@ prix de sortie publié par l'éditeur (échelle logarithmique), ou tableau. Tous
 de la personne y figurent : un point, la bande « Sur votre machine » (sans frais d'API), la
 bande « Cloud, prix non relevé », ou la liste « Pas de note publiée par Epoch AI pour : ».
 Sous le graphique, la source, sa licence (CC BY 4.0), le lien et la date des relevés.
+
+**Installer un modèle, et la page `/modeles` (28/09/2026)** : le sous-menu « Installer un
+modèle » du sélecteur garde sa courte liste (les trois mieux notés qui tiennent, puis le
+meilleur de chaque autre éditeur, et les modèles d'écran), avec en tête « Voir tous les
+modèles » ; sans rien à y proposer, le même lien est sous les modèles de la machine. La page
+`src/pages/ModelesPage.tsx` lit tout le catalogue (`modeles` de `GET /helix/provision`,
+`catalogueComplet` dans `gateway/src/provision.ts`) : la machine en une ligne (mémoire, puce
+Apple, carte NVIDIA ou non), onglets Converser et Piloter l'écran, recherche (nom, éditeur,
+pays), éditeur, tri (note, plus légers, plus lourds), filtres (lit les images, raisonne, rapide
+sans carte graphique), une fiche par modèle (éditeur et pays, licence, taille, note ECI ou
+« sans note publiée », capacités, « Recommandé », « Installé »). Ceux qui tiennent d'abord,
+avec « Installer » (même route que le sélecteur, progression sur la fiche et en tête de page) ;
+les autres grisés, sans bouton, avec la raison chiffrée (« demande environ 25,6 Go de mémoire,
+cette machine en a 16 »), et la passerelle les refuse aussi (409). Mac Intel : les seuls
+modèles GGUF épinglés du moteur ouvert, sans onglet d'écran. Vu dans le navigateur le
+28/09/2026 (fr et en, 1280 et 375 px) contre une passerelle jetable, un faux `lms` et un faux
+serveur à la place de LM Studio : filtres, recherche « france », installation de Qwen3 1.7B
+suivie jusqu'à « Installé », refus de gpt-oss 120B par la route, mode llama.cpp. Pas essayé : un vrai
+téléchargement par LM Studio, et les modèles ajoutés ce jour-là chargés avec Helix.
 
 Ce qui reste fictif sur cet écran :
 

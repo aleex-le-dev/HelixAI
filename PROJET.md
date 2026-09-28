@@ -2024,6 +2024,67 @@ la mémoire faisait conseiller Qwen3.5 35B A3B sur un PC de 32 Go, gpt-oss 20B s
 **Pas essayé** : tout cela sur un vrai PC Windows. À vérifier sur le poste de Medhi ou d'une des
 personnes touchées : installation du moteur de bout en bout, démarrage du service, `passerelle.log`.
 
+### 3.22 Page « Modèles » : tout le catalogue libre, au choix, seulement ce qui tient (28/09/2026)
+
+**Demande de Medhi, 28/09/2026** (capture du sous-menu « Installer un modèle », six modèles) :
+« pas possible d'un menu genre nouvel onglet qui s'ouvre, ou juste plus de modèles, genre avoir
+des Mistral 2B si pas proposé ; je veux laisser le choix comme avec LM Studio », et plus tôt :
+« les gens doivent pouvoir choisir un modèle plus petit s'ils veulent, même si on recommande en
+fonction du PC, mais il ne faut pas proposer des modèles trop puissants qui vont tout faire
+crasher ».
+
+**Décidé :**
+- **Une page `/modeles`**, ouverte depuis « Installer un modèle » du sélecteur par « Voir tous
+  les modèles » (le sous-menu garde sa courte liste). Recherche, tri (note, taille), filtres
+  (éditeur, images, raisonnement, rapide sans carte graphique), une fiche par modèle. Seuls les
+  modèles qui tiennent (`tientSur`) s'installent ; les autres sont visibles, grisés, avec la
+  raison chiffrée (`pourquoiTropLourd`, mêmes calculs), et `POST /helix/provision/start` refuse
+  un modèle nommé qui ne tient pas (409, `refusTropLourd` ; le conseillé passe toujours).
+- **Quarante modèles de plus** (`FICHES_AU_CHOIX`, `provision.ts`), tous Apache 2.0 ou MIT,
+  tous dans le catalogue de LM Studio (identifiant de `lms get`, taille et capacités relevés sur
+  lmstudio.ai/models, licence sur la fiche Hugging Face du dépôt d'origine, cache à 32 768
+  jetons calculé sur son `config.json`) : Qwen3 2507 (4B, 30B A3B, 235B A22B, Instruct et
+  Thinking), Qwen3 Coder 30B, Qwen3 Next 80B, Qwen3.5 27B, Qwen3.6 27B et 35B A3B ; Ministral 3
+  (3B et 8B Reasoning, 14B Instruct), Mistral 7B v0.3, Mistral NeMo, Mistral Small 3.2,
+  Devstral Small 2507 et 2 ; Phi-4 mini, mini Reasoning, Reasoning, Reasoning Plus ; Granite
+  4.0 (H Micro, Micro, H Tiny, H Small), Granite 4.1 3B et 30B ; DeepSeek R1 Distill Qwen 7B,
+  14B, 32B et R1 0528 Qwen3 8B ; gpt-oss 120B ; OLMo 3 7B Instruct et 32B Think ; GLM-4.6V
+  Flash ; ERNIE 4.5 21B A3B ; Seed-OSS 36B ; Rnj-1 8B. Et Qwen3-VL 32B pour l'écran.
+- **Au choix seulement** (`auChoix`) : jamais installés d'office, conseillés, pris en repli ni
+  mis dans la courte liste du sélecteur. Le conseil pour chaque machine est donc exactement
+  celui d'avant (comparé sur 120 profils de machine, et contrôlé par `npm run securite` § 32).
+  **À trancher par Medhi** : deux modèles à experts sont mieux notés que celui qu'ils
+  remplaceraient pour la même mémoire, là où un modèle dense de 27B ne tient pas (PC avec une
+  petite carte NVIDIA, ou sans carte) : Qwen3.6 35B A3B (143,92) face à Qwen3.5 35B A3B
+  (142,52), Qwen3 30B A3B Thinking 2507 (139,63) face à Qwen3 30B A3B (136,18). Les faire
+  entrer dans le conseil changerait ce que Helix installe sur ces machines, sans qu'ils aient
+  été essayés. (Qwen3.6 27B, 146,47, reste derrière Qwen3.8 27B, 149,38, déjà conseillé.)
+- **Écartés** : Phi-4 (16 384 jetons au plus, Helix charge à 32 768), Bonsai 27B (poids à 1 bit,
+  noyaux encore dans les copies de l'éditeur), Laguna S 2.1 (licence OpenMDW), LFM2 (licence
+  LFM), Nemotron 3 (NVIDIA), Codestral (non commerciale), Devstral 2 123B (licence « other »),
+  les distillations Llama de DeepSeek R1, Gemma, Llama, GLM-5.3 Flash (seulement dans le cloud
+  de LM Studio), Qwen3 0.6B et SmolLM3 (absents du catalogue de LM Studio), Qwen3 Coder 480B
+  (250 Go). Pas de « Mistral 2B » : le plus petit Mistral est Ministral 3 3B (2 à 2,5 Go), déjà
+  là.
+- **Mac Intel** : la page ne montre que le catalogue GGUF épinglé du moteur ouvert (quatre Qwen3),
+  inchangé : aucun GGUF ajouté, faute d'avoir épinglé révision et empreinte de chacun.
+
+**Relevé en passant, pas corrigé** (hors de cette demande, et cela changerait le conseil) : les
+tailles de plusieurs fiches existantes sont plus petites que celles que LM Studio publie
+aujourd'hui (Qwen3.5 9B : 6 Go au catalogue, 7 chez LM Studio ; Qwen3.5 4B : 3 et 3,75 ;
+Ministral 3 8B : 5,5 et 6,5 ; OLMo 3 7B Think : 4,5 et 6, et son cache ignore les couches à
+fenêtre glissante, 1,5 Gio de plus ; Magistral Small : 14 et 15,35 ; Qwen3-VL 2B : 2 et 3).
+Sur une carte NVIDIA de 8 Go, Qwen3.5 9B à 7 Go ne passerait plus `tientSur`.
+
+**Vu marcher** (28/09/2026, serveur de développement contre une passerelle jetable, faux `lms`,
+faux serveur à la place de LM Studio, fr et en, 1280 et 375 px) : la page, les filtres, la
+recherche, l'installation suivie jusqu'à « Installé », le lien depuis le sélecteur, la liste
+élargie de la mise en route (installation de Mistral 7B v0.3 choisi), le mode llama.cpp ;
+`scripts/essai-page-modeles.mjs` (15 vérifications). **Pas essayé** : aucun des modèles ajoutés
+n'a été téléchargé ni chargé avec Helix (ni outils, ni raisonnement, ni essai de santé réels),
+aucun vrai `lms get` de ces identifiants, la page dans l'application de bureau, en chinois et
+en japonais à l'écran (seul le taux de traduction est relu).
+
 ## 4. Sécurité
 
 Le détail est dans [SECURITE.md](SECURITE.md). Voici ce qu'il faut avoir en tête.
@@ -3642,6 +3703,13 @@ DuckDuckGo, la dictée et la transcription (Whisper non installé), un télécha
 En chinois, seul le taux de traduction a été relu, pas l'écran. Le Chat n'a ni « relancer »
 ni « modifier » une question envoyée, et pas d'export d'un Chat seul (l'export complet est
 dans Confidentialité) : fonctions absentes, pas des pannes.
+
+**Page « Modèles » (28/09/2026, PROJET.md § 3.22)** : dans l'application, sélecteur de modèles,
+« Installer un modèle sur cette machine », « Voir tous les modèles ». Installer un petit modèle
+ajouté ce jour-là (Granite 4.0 H Micro ou Phi-4 mini) et un Mistral (Ministral 3 3B Reasoning) :
+le vrai `lms get` accepte-t-il l'identifiant, la taille annoncée est-elle la bonne, le modèle
+répond-il à l'essai de santé, avec outils et raisonnement dans le Chat. Relever les modèles
+grisés et leurs chiffres sur le Mac de 16 Go et sur le PC Windows.
 
 **PC Windows (processeur seul, 16 Go, llmster 0.0.25)**
 1. **Mise à jour** : installer 2026.928.1. Un poste installé avant 2026.927.3 n'a pas la clé

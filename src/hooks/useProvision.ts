@@ -18,6 +18,8 @@ export interface CatalogEntry {
   minMemoryGb: number;
   downloadGb: number;
   description: string;
+  /** Qui publie les poids (gateway/src/provision.ts). */
+  editeur?: string;
   /**
    * Essayé avec Helix ? Faux : l'accueil dit que s'il ne se charge pas, un
    * autre modèle prend le relais (sans dire qu'il n'a pas été essayé, PROJET.md

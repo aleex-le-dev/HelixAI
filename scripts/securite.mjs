@@ -7997,6 +7997,90 @@ console.log("\n31. Windows et mise en route : moteur de LM Studio installé en e
   verifier("l'écran de mise en route propose seulement les modèles qui tiennent, et montre celui qui s'installe", /possibles: modelesQuiTiennent\(hardware\)/.test(readFileSync(join(RACINE, "gateway", "src", "index.ts"), "utf8")) && /const affiche = enCours \?\? choisi;/.test(ecran), "index.ts, FirstRun.tsx");
 }
 
+/*
+ * 32. La page « Modèles » et le catalogue élargi (28/09/2026, demandé par
+ * Medhi : « laisser le choix comme avec LM Studio », des modèles plus petits,
+ * jamais un modèle qui fait tout planter). Le catalogue par le module de la
+ * passerelle, la page par lecture du code, la route de bout en bout par
+ * `scripts/essai-page-modeles.mjs` (passerelle jetable, faux `lms`, aucun réseau).
+ */
+console.log("\n32. Page « Modèles » : catalogue libre élargi, seulement ce qui tient sur la machine");
+{
+  const { pathToFileURL: versUrl } = await import("node:url");
+  const src = (f) => versUrl(join(RACINE, "gateway", "src", f)).href;
+  const prov = await import(src("provision.ts"));
+  const tous = [...prov.CATALOG, ...prov.VISION_CATALOG];
+  const auChoix = tous.filter((e) => e.auChoix);
+  verifier("catalogue : licences Apache 2.0 ou MIT seulement (règle du projet)", tous.every((e) => ["Apache 2.0", "MIT"].includes(e.licence)), tous.filter((e) => !["Apache 2.0", "MIT"].includes(e.licence)).map((e) => e.key).join(","));
+  verifier("catalogue : au moins trente modèles au choix, aucun marqué « essayé avec Helix »", auChoix.length >= 30 && auChoix.every((e) => e.verifie === false), `${auChoix.length}, ${auChoix.filter((e) => e.verifie).map((e) => e.key).join(",")}`);
+  const cles = tous.map((e) => `${prov.VISION_CATALOG.includes(e) ? "gui" : "chat"}:${e.key}`);
+  verifier("catalogue : aucune clé en double", new Set(cles).size === cles.length, cles.filter((c, i) => cles.indexOf(c) !== i).join(","));
+  const ecartes = /(^|\/)(phi-4$|codestral|gemma|llama|lfm2|nemotron|laguna|bonsai)|distill-llama|devstral-2-2512/i;
+  verifier("catalogue : les écartés n'y sont pas (Phi-4 à 16 384 jetons, licences Llama, Gemma, LFM, NVIDIA, OpenMDW, non commerciale, poids à 1 bit)", !tous.some((e) => ecartes.test(e.key)), tous.filter((e) => ecartes.test(e.key)).map((e) => e.key).join(","));
+  verifier("catalogue : un modèle sans outils ne les promet pas dans sa description", prov.CATALOG.filter((e) => !e.outils).every((e) => !/outils|tools/.test(e.description)), prov.CATALOG.filter((e) => !e.outils && /outils|tools/.test(e.description)).map((e) => e.key).join(","));
+  const machines = [];
+  for (const go of [4, 8, 16, 24, 32, 48, 64, 128, 256, 512]) {
+    machines.push({ platform: "darwin", arch: "arm64", totalMemoryGb: go, cpuCount: 8, appleSilicon: true });
+    machines.push({ platform: "win32", arch: "x64", totalMemoryGb: go, cpuCount: 8, appleSilicon: false });
+    for (const v of [4, 8, 12, 24]) machines.push({ platform: "linux", arch: "x64", totalMemoryGb: go, cpuCount: 8, appleSilicon: false, gpuVramGb: v });
+  }
+  const incoherents = [];
+  const conseilsAuChoix = [];
+  const tropLourdsProposes = [];
+  for (const hw of machines) {
+    for (const e of tous) if (prov.tientSur(hw, e) !== (prov.pourquoiTropLourd(hw, e) === null)) incoherents.push(`${e.key}@${hw.totalMemoryGb}`);
+    const conseil = [prov.recommend(hw), prov.recommendVision(hw), ...prov.replis(hw, prov.CATALOG, prov.recommend(hw)).slice(1), ...prov.adaptesALaMachine(hw)];
+    for (const e of conseil) if (e.auChoix) conseilsAuChoix.push(`${e.key}@${hw.totalMemoryGb}`);
+    for (const e of prov.modelesQuiTiennent(hw)) if (!prov.tientSur(hw, e)) tropLourdsProposes.push(`${e.key}@${hw.totalMemoryGb}`);
+  }
+  verifier("la raison chiffrée (`pourquoiTropLourd`) dit exactement ce que dit `tientSur`, sur tout le catalogue et 60 machines", incoherents.length === 0, incoherents.slice(0, 5).join(","));
+  verifier("les modèles au choix ne sont jamais conseillés, pris en repli ni dans la courte liste du sélecteur", conseilsAuChoix.length === 0, conseilsAuChoix.slice(0, 5).join(","));
+  verifier("l'écran de mise en route ne propose jamais un modèle qui ne tient pas, et profite des modèles au choix", tropLourdsProposes.length === 0 && prov.modelesQuiTiennent(machines[4]).some((e) => e.auChoix), tropLourdsProposes.slice(0, 5).join(","));
+  const mac16 = { platform: "darwin", arch: "arm64", totalMemoryGb: 16, cpuCount: 8, appleSilicon: true };
+  const mac4 = { ...mac16, totalMemoryGb: 4 };
+  verifier(
+    "refus nommé : gpt-oss 120B sur un Mac de 16 Go est refusé avec les chiffres ; Granite 4.0 H Micro passe ; le conseillé d'une machine où rien ne tient passe",
+    /71[.,]5/.test(prov.refusTropLourd(mac16, "openai/gpt-oss-120b", "chat") ?? "") && prov.refusTropLourd(mac16, "ibm/granite-4-h-micro", "chat") === null && prov.refusTropLourd(mac4, prov.recommend(mac4).key, "chat") === null,
+    `${prov.refusTropLourd(mac16, "openai/gpt-oss-120b", "chat")} | ${prov.refusTropLourd(mac4, prov.recommend(mac4).key, "chat")}`,
+  );
+  // Mac Intel : le seul catalogue GGUF épinglé (llamaCpp.ts), aucun modèle d'écran.
+  const avantMoteur = process.env.HELIX_MOTEUR;
+  let ouvert = [];
+  if (process.platform === "darwin") {
+    process.env.HELIX_MOTEUR = "llamacpp";
+    try {
+      ouvert = prov.catalogueComplet(mac16);
+    } finally {
+      if (avantMoteur === undefined) delete process.env.HELIX_MOTEUR;
+      else process.env.HELIX_MOTEUR = avantMoteur;
+    }
+    const { MODELES_GGUF } = await import(src("llamaCpp.ts"));
+    verifier("Mac Intel : la page ne montre que les modèles GGUF épinglés, et aucun modèle d'écran", ouvert.length > 0 && ouvert.every((e) => MODELES_GGUF[e.key] && e.role === "chat"), ouvert.map((e) => e.key).join(","));
+  }
+  const index = readFileSync(join(RACINE, "gateway", "src", "index.ts"), "utf8");
+  verifier("route : `/helix/provision/start` refuse un modèle trop lourd (409) avant de lancer la mise en route", /const refus = typeof model === "string" \? refusTropLourd\(/.test(index) && /if \(refus\) return send\(res, 409/.test(index) && index.indexOf("if (refus) return send(res, 409") < index.indexOf("void ensureLocalModel(model, catalogue)"), "index.ts");
+  verifier("route : `/helix/provision` rend tout le catalogue, avec « installé » et la raison", /modeles: catalogueComplet\(hardware\)\.map\(\(e\) => \(\{ \.\.\.e, installe: presents\.has/.test(index), "index.ts");
+  const lire = (...p) => readFileSync(join(RACINE, ...p), "utf8");
+  const page = lire("src", "pages", "ModelesPage.tsx");
+  const picker = lire("src", "components", "chat", "ModelPicker.tsx");
+  verifier("page : route « /modeles », ouverte depuis « Installer un modèle » du sélecteur par « Voir tous les modèles »", /path: "\/modeles", element: <ModelesPage \/>/.test(lire("src", "App.tsx")) && (picker.match(/navigate\("\/modeles"\)/g) ?? []).length >= 2 && /t\("Voir tous les modèles"\)/.test(picker), "App.tsx, ModelPicker.tsx");
+  verifier("page : le bouton « Installer » n'existe que pour un modèle qui tient ; un trop lourd montre sa raison", /\) : lourd \? \(\s*<span[^>]*>\{t\("Trop lourd pour cette machine"\)\}/.test(page) && /\{m\.tropLourd && <p[^>]*>\{m\.tropLourd\.texte\}<\/p>\}/.test(page), "ModelesPage.tsx");
+  verifier("page : même route d'installation que le sélecteur, recherche, tri et filtres (éditeur, images, raisonne, rapide sans carte)", /demanderInstallation\(m\)/.test(page) && /\/helix\/provision\/start/.test(lire("src", "lib", "installables.ts")) && /\(!images \|\| m\.vision\)/.test(page) && /\(!raisonne \|\| m\.raisonne\)/.test(page) && /\(!rapide \|\| m\.moe\)/.test(page) && /editeur === "tous" \|\| m\.editeur === editeur/.test(page), "ModelesPage.tsx");
+  verifier("page : l'attribution CC BY 4.0 d'Epoch AI est sous les notes", /SOURCE_NOTES\.licenceUrl/.test(page) && /SOURCE_NOTES\.page/.test(page), "ModelesPage.tsx");
+
+  const { spawnSync: lancerEssai } = await import("node:child_process");
+  const essai = lancerEssai(process.execPath, [join(RACINE, "scripts", "essai-page-modeles.mjs")], { encoding: "utf8", timeout: 5 * 60_000 });
+  const lignes = `${essai.stdout ?? ""}${essai.stderr ?? ""}`.split("\n");
+  for (const ligne of lignes) {
+    const ok = /^\s+✓ (.*)$/.exec(ligne);
+    const ko = /^\s+✗ (.*?)(?:  —  obtenu : .*)?$/.exec(ligne);
+    if (ok) verifier(`page Modèles : ${ok[1]}`, true, "");
+    else if (ko) verifier(`page Modèles : ${ko[1]}`, false, ligne.split("  —  obtenu : ")[1] ?? "");
+    else if (/^[A-C]\. /.test(ligne)) console.log(`  ${ligne}`);
+  }
+  verifier("page Modèles : l'essai de la passerelle s'est déroulé jusqu'au bout", essai.status === 0, `${essai.status} ${essai.error?.message ?? ""} ${lignes.slice(-6).join(" ")}`);
+}
+
 console.log(`\n${reussis} vérification(s) réussie(s), ${echecs.length} échec(s).`);
 if (echecs.length) {
   console.log("Échecs :");

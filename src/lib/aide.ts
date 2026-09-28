@@ -71,6 +71,15 @@ const ARTICLES: Article[] = [
     corps: t("Trois origines, toujours affichées telles quelles :\n\n- local : le modèle tourne sur votre machine. Rien ne sort du poste. C'est le plus lent sur une grosse demande, et le plus sûr.\n- instance : le modèle tourne sur le serveur de votre organisation.\n- clé : vous avez branché votre propre compte chez un fournisseur. La demande part chez lui, et le pays d'hébergement est indiqué à côté du nom.\n\nAucun modèle distant n'est choisi à votre place. Si vous n'avez branché aucune clé, rien ne quitte votre installation.\n\nUn modèle de la machine passe un court essai sur ce poste, quand il est installé ou chargé pour la première fois. S'il répond mal ici (texte illisible, réponse qui tourne en boucle), il n'est plus choisi d'office, ni en « Auto » : le sélecteur le marque « répond mal sur cette machine », et vous pouvez toujours le prendre à la main.\n\n« Comparer intelligence et prix », en bas du sélecteur, place vos modèles selon la note publiée par Epoch AI (sous licence ouverte) et le prix publié par leur éditeur. Un modèle qu'Epoch AI ne note pas est listé à part, « pas de note publiée » : rien n'invente sa note.\n\nSous chaque réponse, le Chat indique combien de temps elle a pris, le temps avant le premier mot et, quand le modèle a réfléchi, la durée de sa réflexion."),
   },
   {
+    // La page « Modèles » (28/09/2026) : tout le catalogue libre, seulement ce qui tient sur la machine.
+    id: "catalogue-modeles",
+    titre: t("Installer d'autres modèles"),
+    resume: t("Tous les modèles libres, plus petits ou plus grands, qui tiennent sur la machine."),
+    motsCles: ["modele", "installer", "telecharger", "catalogue", "petit", "leger", "mistral", "qwen", "phi", "granite", "deepseek", "lm studio"],
+    lien: "/modeles",
+    corps: t("Le sélecteur de modèles du Chat propose une courte liste, adaptée à la machine. Pour choisir parmi tous les modèles libres (licences Apache 2.0 ou MIT) : sélecteur de modèles, « Installer un modèle sur cette machine », puis « Voir tous les modèles ».\n\nLa page « Modèles » :\n- recherche par nom, éditeur ou pays ;\n- tri par note (Epoch AI) ou par taille ;\n- filtres : éditeur, lit les images, raisonne, rapide sans carte graphique ;\n- pour chaque modèle : éditeur et pays, licence, taille du téléchargement, note ou « sans note publiée », capacités.\n\nSeuls les modèles que cette machine fait tourner sans ralentir s'installent. Les plus lourds restent visibles, grisés, avec la raison : la mémoire qu'ils demandent, et celle de la machine. Un modèle plus léger répond plus vite, avec des réponses plus simples.\n\nUne installation à la fois : le téléchargement se suit sur la page, puis le modèle apparaît dans le sélecteur. Le modèle posé à la mise en route reste celui qui est conseillé pour la machine ; l'écran de mise en route propose aussi les autres, par « Choisir un autre modèle »."),
+  },
+  {
     id: "modeles-locaux",
     titre: t("Où sont rangés les modèles locaux"),
     resume: t("Mettre le moteur et les modèles sur un autre disque."),

@@ -1,4 +1,14 @@
 const { app, BrowserWindow, clipboard, dialog, ipcMain, nativeTheme, net, protocol, safeStorage, shell, systemPreferences } = require("electron");
+
+/*
+ * Lancée depuis le terminal de VS Code, qui définit ELECTRON_RUN_AS_NODE=1,
+ * l'application démarrait en mode Node et se fermait aussitôt (signalé le
+ * 28/09/2026). Le fusible RunAsNode est fermé : Electron ignore désormais la
+ * variable. On la retire quand même de l'environnement, pour qu'elle ne passe
+ * pas à tout ce que Helix lance (un éditeur construit sur Electron, ouvert
+ * depuis Helix, démarrerait sinon en mode Node).
+ */
+delete process.env.ELECTRON_RUN_AS_NODE;
 const { demarrerMiseAJour, changerLangue: changerLangueMaj } = require("./miseAJour.cjs");
 const coffre = require("./coffre.cjs");
 const grandStockage = require("./grandStockage.cjs");
@@ -15,12 +25,12 @@ const { installerPressePapiers } = require("./pressePapiers.cjs");
  * (séance, préférences). Sans la variable, rien ne change.
  */
 if (process.env.HELIX_PROFIL_ESSAI) app.setPath("userData", process.env.HELIX_PROFIL_ESSAI);
-const { spawn } = require("node:child_process");
 const path = require("node:path");
 const http = require("node:http");
 const fs = require("node:fs");
 const os = require("node:os");
 const { pathToFileURL } = require("node:url");
+const { lancerPasserelle, envoyerALaPasserelle, arreterPasserelle } = require("./passerelle.cjs");
 
 /**
  * Processus principal Helix.
@@ -182,25 +192,15 @@ async function startGateway() {
     : path.join(process.resourcesPath, "dist-gateway", "index.cjs");
 
   /*
-   * `--disable-sigusr1` (seconde tournée du test d'intrusion, 28/09/2026) : le
-   * fusible EnableNodeCliInspectArguments ne protège que le processus
-   * principal. En mode Node, le binaire de Helix ouvrait encore le débogueur
-   * de Node sur 127.0.0.1:9229 quand on envoyait SIGUSR1 à la passerelle
-   * (essayé sur Electron 44.4.5, fusibles du paquet posés) : un programme du
-   * même compte y faisait tourner son code dans le processus qui tient la clé
-   * des données déchiffrée et toutes les séances. La passerelle n'a pas besoin
-   * de ce débogueur.
+   * Un `utilityProcess` d'Electron depuis le 28/09/2026 (electron/passerelle.cjs,
+   * pour le pourquoi) : l'application ne relance plus son binaire en mode
+   * Node, et le fusible RunAsNode est fermé.
    */
-  const enfant = spawn(process.execPath, ["--disable-sigusr1", entry], {
+  const enfant = lancerPasserelle({
+    entry,
+    nom: NOM_AFFICHE,
     env: {
       ...process.env,
-      /*
-       * Permet au binaire Electron de se comporter comme Node pour ce process.
-       * C'est pourquoi le fusible RunAsNode reste ouvert (package.json,
-       * `build.electronFuses`) ; NODE_OPTIONS et --inspect, eux, sont fermés
-       * depuis le 27/09/2026 (SECURITE.md), et la passerelle n'en a pas besoin.
-       */
-      ELECTRON_RUN_AS_NODE: "1",
       HELIX_GATEWAY_PORT: String(GATEWAY_PORT),
       // Marque blanche : les messages de la passerelle disent le nom du produit livré.
       HELIX_NOM_PRODUIT: NOM_AFFICHE,
@@ -209,19 +209,9 @@ async function startGateway() {
       // Le banc d'essai des pages : adresse sur la boucle locale et clé, pour la passerelle seule.
       ...(rendu ? { HELIX_RENDU_URL: rendu.url, HELIX_RENDU_CLE: rendu.cle } : {}),
     },
-    // Le canal (`ipc`) sert à demander l'arrêt : sous Windows, il n'y a pas de signal (voir stopGateway).
-    stdio: ["ignore", "pipe", "pipe", "ipc"],
-    windowsHide: true,
-    /*
-     * Le dossier personnel, pas celui de l'installation (audit Windows du
-     * 27/09/2026) : sinon chaque programme lancé par la passerelle (dont le
-     * moteur, qui survit à Helix) tenait le dossier d'installation ouvert, et
-     * la désinstallation le laissait derrière elle.
-     */
-    cwd: os.homedir(),
   });
-  // Un envoi sur un canal déjà fermé émet une erreur : écoutée, elle ne fait pas planter l'application en quittant.
-  enfant.on("error", (err) => console.error("[helix] passerelle :", err?.message ?? err));
+  // Erreur fatale du processus (plantage) : notée ; `exit` suit toujours, et le superviseur relance.
+  enfant.on("error", (type, lieu) => console.error("[helix] passerelle :", type, lieu ?? ""));
   /*
    * macOS : l'autorisation d'enregistrer l'écran, lue sans la demander. La
    * passerelle prenait une vraie capture pour la connaître, et macOS ouvrait
@@ -229,19 +219,24 @@ async function startGateway() {
    * l'écran (vu le 27/09/2026). Seul ce processus sait la lire sans capture.
    */
   enfant.on("message", (m) => {
-    if (!m || m.type !== "permission-ecran" || !enfant.connected) return;
+    if (!m || typeof m !== "object" || enfant.helixArretee) return;
+    if (m.type === "node-prive") {
+      reponsesPasserelle.get(m.id)?.(m);
+      return;
+    }
+    if (m.type !== "permission-ecran") return;
     let statut = "inconnu";
     try {
       if (process.platform === "darwin") statut = systemPreferences.getMediaAccessStatus("screen");
     } catch {
       /* inconnu : la passerelle fait comme avant */
     }
-    enfant.send({ type: "permission-ecran", id: m.id, statut }, () => {});
+    envoyerALaPasserelle(enfant, { type: "permission-ecran", id: m.id, statut });
   });
   gateway = enfant;
 
-  enfant.stdout.on("data", (b) => process.stdout.write(`[passerelle] ${b}`));
-  enfant.stderr.on("data", (b) => {
+  enfant.stdout?.on("data", (b) => process.stdout.write(`[passerelle] ${b}`));
+  enfant.stderr?.on("data", (b) => {
     const texte = String(b);
     process.stderr.write(`[passerelle] ${texte}`);
     /*
@@ -294,36 +289,45 @@ async function startGateway() {
   console.error("[helix] la passerelle n'a pas démarré à temps.");
 }
 
+/** Réponses attendues de la passerelle, par numéro de demande. */
+const reponsesPasserelle = new Map();
+let numeroDemande = 0;
+
+/**
+ * Le Node de Helix, posé par la passerelle (gateway/src/installationOpenClaw.ts :
+ * version épinglée, empreinte vérifiée), pour la commande `helix`. Par le
+ * canal de la passerelle : ce processus n'a pas à refaire le téléchargement,
+ * et aucune route HTTP n'y mène. Rend `{ ok, erreur? }`.
+ */
+function demanderNodePrive() {
+  const enfant = gateway;
+  if (!enfant || enfant.helixArretee) return Promise.resolve({ ok: false, erreur: "passerelle" });
+  const id = ++numeroDemande;
+  return new Promise((resolve) => {
+    const fin = setTimeout(() => {
+      reponsesPasserelle.delete(id);
+      resolve({ ok: false, erreur: "délai" });
+    }, 15 * 60_000);
+    reponsesPasserelle.set(id, (m) => {
+      clearTimeout(fin);
+      reponsesPasserelle.delete(id);
+      resolve({ ok: m.ok === true, erreur: typeof m.erreur === "string" ? m.erreur : undefined });
+    });
+    if (!envoyerALaPasserelle(enfant, { type: "node-prive", id })) {
+      clearTimeout(fin);
+      reponsesPasserelle.delete(id);
+      resolve({ ok: false, erreur: "passerelle" });
+    }
+  });
+}
+
 /** Arrête la passerelle ; la promesse se résout quand elle est vraiment arrêtée (port libéré), 5 s au plus. */
 function stopGateway() {
   // Arrêt voulu : le superviseur ne doit pas la relancer derrière nous.
   arretDemande = true;
   const enfant = gateway;
   gateway = null;
-  if (!enfant || enfant.exitCode !== null || enfant.signalCode !== null) return Promise.resolve();
-  return new Promise((resolve) => {
-    enfant.once("exit", () => resolve());
-    if (process.platform === "win32") {
-      /*
-       * Sous Windows, `kill()` tue net : la passerelle n'arrêtait pas ce
-       * qu'elle avait lancé (audit du 27/09/2026). On lui demande de s'arrêter
-       * par le canal ; au bout de 4 s, l'arbre entier est abattu.
-       */
-      try {
-        if (enfant.connected) enfant.send({ type: "arret" }, () => {});
-      } catch {
-        /* canal déjà fermé */
-      }
-      setTimeout(() => {
-        if (enfant.exitCode === null && enfant.pid) {
-          spawn("taskkill", ["/pid", String(enfant.pid), "/T", "/F"], { stdio: "ignore", windowsHide: true });
-        }
-      }, 4000).unref?.();
-    } else {
-      enfant.kill();
-    }
-    setTimeout(resolve, 5000).unref?.();
-  });
+  return arreterPasserelle(enfant);
 }
 
 /**
@@ -611,7 +615,8 @@ ipcMain.handle("helix:cli-etat", (event) => {
 });
 ipcMain.handle("helix:cli-installer", (event) => {
   if (!depuisLaFenetre(event)) throw new Error("Refusé.");
-  return ligneDeCommande.installer();
+  // Sans Node sur le poste, la passerelle pose celui de Helix (demanderNodePrive).
+  return ligneDeCommande.installer({ demanderNodePrive });
 });
 ipcMain.handle("helix:cli-retirer", (event) => {
   if (!depuisLaFenetre(event)) throw new Error("Refusé.");
@@ -1281,6 +1286,8 @@ app.whenReady().then(async () => {
     await startGateway();
   }
   createWindow();
+  // Un lanceur `helix` d'avant le 28/09/2026 visait ce binaire en mode Node, qui n'existe plus (ligneDeCommande.cjs).
+  if (!isDev && ligneDeCommande.remplacerAncienLanceur()) console.log("[helix] lanceur de la commande helix remis à jour (Node au lieu du mode Node de l'application).");
   void demarrerMiseAJour(depuisLaFenetre);
 
   app.on("activate", () => {
@@ -1325,17 +1332,21 @@ app.on("before-quit", (event) => {
     return;
   }
   /*
-   * Sous Windows, on attend que la passerelle se soit arrêtée (au plus 5 s) :
-   * Electron quittait aussitôt, et l'arrêt de secours (`taskkill` de tout
-   * l'arbre) n'avait pas le temps de partir (audit du 27/09/2026).
+   * On attend que la passerelle se soit arrêtée (au plus 5 s). D'abord sous
+   * Windows : Electron quittait aussitôt, et l'arrêt de secours (`taskkill` de
+   * tout l'arbre) n'avait pas le temps de partir (audit du 27/09/2026). Puis
+   * partout, depuis que la passerelle est un `utilityProcess` (28/09/2026) :
+   * Electron arrête ses processus utilitaires en quittant, sans leur laisser
+   * le temps d'arrêter OpenCode, OpenClaw ou le serveur de modèles (essayé :
+   * aucun gestionnaire de sortie n'y tourne).
    */
-  if (process.platform === "win32" && gateway && !arretWindowsFait) {
+  if (gateway && !arretPasserelleFait) {
     event.preventDefault();
-    arretWindowsFait = true;
+    arretPasserelleFait = true;
     void stopGateway().finally(() => app.quit());
     return;
   }
   stopGateway();
 });
-let arretWindowsFait = false;
+let arretPasserelleFait = false;
 process.on("exit", stopGateway);

@@ -833,6 +833,7 @@
   "Moteur introuvable pour {0}.": "{0} のエンジンが見つかりません。",
   "Navigateur (Playwright)": "ブラウザー（Playwright）",
   "ne correspond pas à l'ancre : journal tronqué ou réécrit": "アンカーと一致しません：ログが切り詰められたか、書き換えられています",
+  "Node est introuvable sur cette machine : les bibliothèques Node ne peuvent pas être chargées.": "このマシンに Node が見つかりません。Node ライブラリを読み込めません。",
   "Node s'est installé, mais son npm est introuvable.": "Node はインストールされましたが、npm が見つかりません。",
   "Nom d'application manquant.": "アプリケーション名がありません。",
   "Nom de fichier invalide.": "ファイル名が無効です。",

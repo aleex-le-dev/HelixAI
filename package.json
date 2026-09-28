@@ -50,7 +50,7 @@
     "afterSign": "scripts/signature/signer-mise-a-jour.cjs",
     "afterPack": "scripts/signature/cle-windows.cjs",
     "electronFuses": {
-      "runAsNode": true,
+      "runAsNode": false,
       "enableNodeOptionsEnvironmentVariable": false,
       "enableNodeCliInspectArguments": false
     },

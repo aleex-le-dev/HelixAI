@@ -26,7 +26,8 @@ Le 27/09/2026 :
   à sable, ce que Helix ne lit pas ;
 - § 31, **test d'intrusion de l'application et de la chaîne de mise à jour** : archive à
   lien symbolique, droits ouverts, manifeste sans limite, fusibles d'Electron
-  (NODE_OPTIONS et `--inspect` fermés, RunAsNode ouvert), fichiers cachés du banc d'essai.
+  (NODE_OPTIONS et `--inspect` fermés, RunAsNode ouvert, puis fermé le 28/09/2026 : § 51), fichiers
+  cachés du banc d'essai.
   Ce qu'il dit des fusibles remplace la phrase du § 24 (« aucun fusible Electron n'est
   configuré »), vraie le 26/09 ;
 - § 32, **chaîne d'approvisionnement et dépôt public** : empreintes recomparées à la
@@ -410,12 +411,13 @@ l'instance n'envoie pas de courrier. L'autorité est la possession du poste et d
 son trousseau. L'outil de récupération redéfinit un mot de passe, ou retire la
 double authentification d'un compte qui a perdu téléphone et codes de secours.
 Aucune route HTTP n'y mène. Il est **embarqué dans l'application** depuis 0.9.0
-(`dist-gateway/motdepasse.cjs`) et tourne avec le binaire de l'application,
-sans Node installé :
+(`dist-gateway/motdepasse.cjs`). Il tournait avec le binaire de l'application
+(`ELECTRON_RUN_AS_NODE=1`) ; depuis le 28/09/2026 le fusible RunAsNode est fermé (§ 51), et il
+se lance avec Node 20 ou plus (celui du système, ou celui que Helix pose dans
+`~/.helix/data/openclaw-moteur/node/bin/node`) :
 
 ```
-ELECTRON_RUN_AS_NODE=1 "/Applications/<Nom>.app/Contents/MacOS/<Nom>" \
-  "/Applications/<Nom>.app/Contents/Resources/dist-gateway/motdepasse.cjs"
+node "/Applications/<Nom>.app/Contents/Resources/dist-gateway/motdepasse.cjs"
 ```
 
 Depuis les sources : `npm run motdepasse`. La saisie ne s'affiche pas et le mot
@@ -3654,9 +3656,10 @@ rejoués contre le code d'avant échouent. `node scripts/essai-source-github.mjs
   (`ligneDeCommande.cjs`) et des outils de la passerelle lancent le binaire de l'application en
   mode Node. Un programme du même compte peut donc faire tourner du code avec le binaire de Helix.
   Le fermer demande de lancer la passerelle par `utilityProcess` et de donner un Node à la ligne
-  de commande : pas fait, pas essayé.
+  de commande : pas fait, pas essayé. *Fait le 28/09/2026 : § 51 (RunAsNode fermé, passerelle en
+  `utilityProcess`, commande `helix` sur un vrai Node).*
 - **OnlyLoadAppFromAsar et EnableEmbeddedAsarIntegrityValidation** restent désactivés : sans intérêt
-  tant que RunAsNode est ouvert, et la validation d'intégrité sous Windows n'a pas été essayée.
+  tant que RunAsNode est ouvert (fermé depuis, § 51 ; ces deux-là restent désactivés, pas repris), et la validation d'intégrité sous Windows n'a pas été essayée.
   GrantFileProtocolExtraPrivileges reste ouvert : la reprise de l'ancien stockage charge encore
   une page `file://`.
 - **Les fusibles posés par `build.electronFuses` n'ont pas été lus sur un paquet fabriqué** : pas
@@ -4073,7 +4076,7 @@ test), aux fusibles du paquet posés (`@electron/fuses` : RunAsNode ouvert, NODE
 | Gravité | Composant | Ce qui se passait | Correctif | Contrôles (`npm run securite`, 13 quater) |
 |---|---|---|---|---|
 | Moyenne | Banc d'essai des pages (`electron/rendu.cjs`) | La page à l'essai (écrite par un modèle, ou prise dans un dépôt cloné, avec les scripts de CDN qu'elle charge) est servie depuis `http://127.0.0.1:<port>` : elle joignait tous les services de la machine. Essayé : un service local qui répond `Access-Control-Allow-Origin: *` (Ollama le fait pour les origines de boucle locale, LM Studio quand son CORS est activé, beaucoup de serveurs de développement) était **lu** par `127.0.0.1`, `localhost` et `0.0.0.0` ; un nom public qui pointe vers 127.0.0.1 (`localtest.me`, `*.nip.io`) passait de même. La passerelle admet toute origine de boucle locale (`entetes.ts`) : ses routes publiques aussi. L'en-tête `treat-as-public-address` ne change rien dans ce Chromium (même essai). | Un mandataire à soi (`electron/filtreReseau.cjs`), que la session de la page doit utiliser, boucle locale comprise (`<-loopback>`) : il résout le nom lui-même et se connecte à l'adresse qu'il a vérifiée ; un nom local, ou qui change de réponse (« DNS rebinding »), ne passe pas. Refusés : boucle locale, réseaux privés, lien local (169.254, donc les métadonnées d'un nuage), CGNAT 100.64/10 (Tailscale), multidiffusion, IPv4 écrite en IPv6. Seule exception : le service de la page. WebRTC n'ouvre plus d'UDP à côté (`disable_non_proxied_udp`). Le rapport dit « adresse de la machine ou du réseau local : refusée pendant l'essai ». Internet reste ouvert (un CDN en HTTPS essayé : servi). | 9, dont le banc joué dans le vrai Electron : `R=LLL` avant, `R=bbb` après |
-| Faible | Passerelle en mode Node (`electron/main.cjs`) | Le fusible EnableNodeCliInspectArguments ne protège que le processus principal (essayé : SIGUSR1 n'y ouvre rien). La passerelle, elle, tourne avec le binaire de Helix en mode Node : **SIGUSR1 ouvrait le débogueur de Node** sur 127.0.0.1:9229 (essayé avec la vraie `dist-gateway`, fusibles posés). Un programme du même compte pouvait y exécuter son code dans le processus qui tient la clé des données déchiffrée et toutes les séances. `--inspect` en argument est aussi respecté en mode Node, mais ces arguments-là, c'est Helix qui les écrit. | `--disable-sigusr1` au lancement de la passerelle. Même essai : aucun débogueur, la passerelle répond toujours. | 3, dont un témoin (sans l'option, le débogueur s'ouvre) |
+| Faible | Passerelle en mode Node (`electron/main.cjs`) | Le fusible EnableNodeCliInspectArguments ne protège que le processus principal (essayé : SIGUSR1 n'y ouvre rien). La passerelle, elle, tourne avec le binaire de Helix en mode Node : **SIGUSR1 ouvrait le débogueur de Node** sur 127.0.0.1:9229 (essayé avec la vraie `dist-gateway`, fusibles posés). Un programme du même compte pouvait y exécuter son code dans le processus qui tient la clé des données déchiffrée et toutes les séances. `--inspect` en argument est aussi respecté en mode Node, mais ces arguments-là, c'est Helix qui les écrit. | `--disable-sigusr1` au lancement de la passerelle. Même essai : aucun débogueur, la passerelle répond toujours. *Remplacé le 28/09/2026 (§ 51) : dans un `utilityProcess`, l'option n'a plus d'effet ; c'est la passerelle qui écoute SIGUSR1.* | 3, dont un témoin (sans l'option, le débogueur s'ouvre) ; remplacés au § 51 |
 | Faible | Mise à jour macOS (`signatureEditeur.cjs`, `miseAJour.cjs`) | Soupçon du § 31.3, démontré : le relevé signé hache chaque programme **sans** sa signature de code, or les droits (entitlements) et le durcissement (« hardened runtime ») y sont écrits. Essayé avec la doublure de mise à jour et une copie de `/usr/bin/true` : le code authentique re-signé ad hoc **sans durcissement**, ou avec `com.apple.security.get-task-allow`, gardait un relevé identique et s'installait. Une source piratée (instance rattachée, publication GitHub remplacée) rendait ainsi Helix injectable (DYLD_INSERT_LIBRARIES, débogueur) par un programme du même compte, avec les autorisations accordées à Helix. Aujourd'hui, RunAsNode ouvert donne déjà cette prise ; le jour où il sera fermé, ce trou l'aurait rouverte. | `controlerSignaturesDeCode` : rien de plus que l'application qui tourne. Chaque droit d'un programme de la nouvelle doit exister, à la même valeur, dans l'installée ; un programme durci dans l'installée l'est aussi dans la nouvelle. Vérifié sur `release/mac-arm64/Helix.app` comparée à elle-même : acceptée (0,4 s). **Conséquence** : une version qui ajoute un droit à `build/entitlements.mac.plist` ne s'installe plus d'un clic sur les postes d'avant ; elle se pose alors à la main, une fois. | 4 |
 | Faible | Relevé signé (`signatureEditeur.cjs`) | Soupçon du § 31.3 : tout ce qui s'appelait `_CodeSignature`, à toute profondeur et sous toute forme (fichier, lien), était hors du relevé. Essayé : un `Contents/Resources/_CodeSignature/charge.js` ajouté à une application signée, ou un lien de ce nom, passait la vérification. Aucun chargeur trouvé qui les lirait : de la place pour un fichier non signé, pas encore une exécution. | Écartés seulement en vrais dossiers, à leurs places (`<paquet>/Contents/`, `<cadre>.framework/Versions/<v>/`). L'application publiée n'en a pas d'autres (neuf, relevés) : son relevé ne change pas (vérifié : `release/mac-arm64/Helix.app` 2026.927.4 passe la nouvelle vérification avec sa clé), et les postes déjà installés calculent le même. | 3 |
 | Faible | Canal `helix:langue` (`main.cjs`) | Seul canal `helix:*` de la fenêtre principale qui ne vérifiait pas l'expéditeur. Il ne fait que changer la langue des textes du processus principal ; c'était le seul à répondre à une autre fenêtre (celle du bot, qui partage le monde de Google Meet). | `depuisLaFenetre`, comme les autres. | 1 (chaque canal de main.cjs) |
@@ -4104,7 +4107,9 @@ Relu dans le code, puis essayé sur la copie aux fusibles du paquet :
 remplaçant à `process.execPath` en mode Node pour `--check` (Node n'a pas de vérificateur de syntaxe
 ESM sans dépendance), pour l'épreuve de l'atelier (un `worker_thread`) et pour le repli de npm (le
 Node privé) ; et surtout un Node pour la commande `helix`, qui n'en exige pas aujourd'hui. Deux à
-trois jours avec les essais sur les trois systèmes : pas fait.
+trois jours avec les essais sur les trois systèmes : pas fait. *Fait le 28/09/2026 : § 51. Les
+`worker_thread` et le Node privé ont servi comme prévu ; pour `--check`, `vm.SourceTextModule` dans un
+fil qui porte `--experimental-vm-modules` lit les modules sans dépendance.*
 
 ### 38.3 Examiné, et qui tient
 
@@ -4140,7 +4145,8 @@ trois jours avec les essais sur les trois systèmes : pas fait.
   couvre.
 - **Commande `helix`** : lancée sans `--disable-sigusr1`. Elle vit le temps d'une commande et lit le
   jeton d'instance, qu'un programme du même compte peut lire de toute façon. Non changé : le lanceur
-  déjà posé chez les gens aurait différé de celui du paquet.
+  déjà posé chez les gens aurait différé de celui du paquet. *Depuis le 28/09/2026 (§ 51), elle
+  tourne avec un vrai Node, plus avec le binaire de Helix.*
 - **Signalement** : l'identifiant du modèle choisi part tel quel (`<moteur>/<modèle>`). Un moteur
   nommé par l'administrateur, ou un modèle affiné chez un fournisseur (`ft:…:<organisation>:…`),
   peut y porter un nom d'entreprise, sur un ticket public. La personne le voit avant d'envoyer.
@@ -4166,8 +4172,11 @@ d'agent avec ses polices et ses CDN (un seul CDN essayé).
 **À vérifier sur le paquet construit** :
 1. `npx @electron/fuses read --app release/mac-arm64/Helix.app` (et `win-unpacked/Helix.exe`) :
    RunAsNode ouvert, EnableNodeOptionsEnvironmentVariable et EnableNodeCliInspectArguments fermés.
+   *Depuis le 28/09/2026 : RunAsNode fermé aussi, relu sur les trois paquets (§ 51).*
 2. Application lancée : `ps -o args= -p <pid de la passerelle>` montre `--disable-sigusr1` ; après
    `kill -USR1 <pid>`, rien n'écoute sur 9229 (`lsof -iTCP:9229`) et la passerelle répond.
+   *Depuis le § 51, la passerelle est un `utilityProcess` (`--utility-sub-type=node.mojom.NodeService`) ;
+   `kill -USR1` essayé sur une copie du paquet : rien sur 9229.*
 3. `helix` en ligne de commande, l'atelier (« Vérifier »), un petit modèle qui code
    (`node --check`), un connecteur MCP.
 4. Helix Code : faire vérifier une page qui charge une police Google et un script de CDN ; le
@@ -5659,3 +5668,89 @@ japonais, clair et sombre, 1440 et 375 px : aucun débordement horizontal, aucun
 Seconde passerelle au profil fermé : l'entrée grisée, la raison en toutes lettres, traduite. Défaut
 vu et corrigé : à 375 px en japonais, « 質問は DuckDuck… » coupait le nom du moteur dans le menu ; la
 phrase passe désormais à la ligne.
+## 52. RunAsNode fermé (28 septembre 2026)
+
+Signalé à Medhi le 28/09/2026 et vérifié le jour même sur le paquet construit : le fusible
+RunAsNode était ouvert (`package.json`, `build.electronFuses`). N'importe quel programme du Mac
+pouvait lancer `Helix.app/Contents/MacOS/Helix` avec `ELECTRON_RUN_AS_NODE=1` et faire tourner
+son JavaScript sous l'identité de Helix : macOS lui prêtait alors les autorisations données à
+Helix (accessibilité, micro, écran), et un logiciel malveillant pouvait piloter la souris et le
+clavier ou écouter le micro sans rien demander. Même cause, défaut visible : lancé depuis le
+terminal de VS Code, qui définit cette variable, Helix démarrait en mode Node et se fermait
+aussitôt.
+
+Le fusible est fermé (`"runAsNode": false`), et plus rien de Helix ne lance son binaire en mode
+Node. Ce qui s'en servait, et ce qui le remplace :
+
+| Usage | Avant | Maintenant |
+|---|---|---|
+| La passerelle (`electron/main.cjs`) | `spawn(process.execPath, …)` avec `ELECTRON_RUN_AS_NODE=1`, canal `ipc` | `utilityProcess.fork` (`electron/passerelle.cjs`) : même environnement (la variable en moins), même dossier de travail (le dossier personnel), mêmes journaux (stdout et stderr lus), même surveillance et relance. Canal `process.parentPort` (`gateway/src/canalApplication.ts`), mêmes messages (`permission-ecran`, `arret`). `disclaim` à faux : les demandes d'autorisation de macOS restent celles de Helix. |
+| Arrêt de la passerelle | SIGTERM ; canal puis `taskkill /T /F` sous Windows | Pareil. Mais Electron arrête ses processus utilitaires en quittant **sans** que leurs gestionnaires tournent (essayé) : l'application attend maintenant la fin de la passerelle avant de quitter, sur les trois systèmes (5 s au plus), pour qu'elle arrête OpenCode, OpenClaw et le serveur de modèles. |
+| Débogueur de la passerelle (§ 38.1) | `--disable-sigusr1` | **Sans effet** dans un `utilityProcess` : `execArgv` y est seulement recopié dans `process.execArgv` (essayé avec l'Electron du projet, fusible `--inspect` ouvert : SIGUSR1 ouvrait 9229 avec ou sans l'option). La passerelle écoute SIGUSR1 (`gateway/src/index.ts`, hors Windows), ce qui le retire au débogueur : plus rien sur 9229, même fusible `--inspect` ouvert. Le fusible reste fermé dans le paquet. |
+| Contrôle de syntaxe des petits modèles (`petitsModeles.ts`) | `node --check` par le binaire de la passerelle | `gateway/src/syntaxeNode.ts`, dans la passerelle : `new vm.Script` (enveloppe CommonJS, compilée, jamais appelée) et `new vm.SourceTextModule` pour un module (compilé, ni lié ni évalué), dans un fil (`Worker`) qui seul porte `--experimental-vm-modules`. Le code contrôlé n'arrive dans le fil que comme donnée. Même message qu'avant (fichier, ligne, erreur). |
+| Épreuve Node de l'atelier (`atelier.ts`) | `process.execPath` (héritait d'`ELECTRON_RUN_AS_NODE`) | Le Node du npm qui a installé les bibliothèques, sinon celui du système, sinon celui de Helix ; aucun : l'épreuve le dit. Le repli de `nodeDuScript` n'est plus le binaire de la passerelle. |
+| Serveurs MCP (`npx`), installation d'OpenClaw, OpenCode | Node du système ou Node de Helix, déjà | Inchangé (relu). |
+| Commande `helix` (`ligneDeCommande.cjs`) | `ELECTRON_RUN_AS_NODE=1 exec <Helix> helix.mjs` | Le lanceur choisit à chaque lancement le Node de Helix (`installationOpenClaw.ts` : 24.21.0 épinglé, empreinte vérifiée), sinon `node` du PATH ou des emplacements usuels en version 20 ou plus ; aucun : il le dit (code 127). « Mettre en place » demande à la passerelle, par son canal, de poser le Node de Helix quand il n'y en a aucun (aucune route HTTP n'y mène). Un lanceur d'avant est réécrit au démarrage (seulement le nôtre, seulement sous sa forme ancienne). |
+| Outil de récupération (`motdepasse.cjs`) | `ELECTRON_RUN_AS_NODE=1 <Helix> motdepasse.cjs` | `node …/dist-gateway/motdepasse.cjs`, Node 20 ou plus (docs/GUIDE.md). Essayé avec le Node du système sur le fichier d'un paquet fabriqué. |
+| Téléchargement de l'application (`telechargement.ts`) | Le `.app` qui contient `process.execPath` | Le `.app` le plus extérieur : dans un `utilityProcess`, `process.execPath` est l'assistant (`Helix Helper.app`), qu'on aurait servi. |
+
+L'application retire aussi `ELECTRON_RUN_AS_NODE` de son propre environnement au démarrage : la
+variable reçue de VS Code ne passe plus à ce que Helix lance.
+
+### 52.1 Vérifié
+
+- **`npm run securite`** (1 577 contrôles, 0 échec le 28/09/2026 ; section 13 quater, et le contrôle des fusibles) : fusible `runAsNode` à
+  `false` ; plus aucun `ELECTRON_RUN_AS_NODE` ni `process.execPath` pour lancer Helix comme Node
+  dans `electron/`, `gateway/src` et `cli/` ; la vraie passerelle (empaquetée comme
+  `build:gateway`), lancée par `electron/passerelle.cjs` dans l'Electron du projet : elle répond, le
+  canal marche dans les deux sens, SIGUSR1 n'ouvre pas 9229 (fusible `--inspect` ouvert dans ce
+  binaire : c'est l'écoute du signal qui ferme), l'arrêt passe par son gestionnaire (code 0, port
+  libéré) ; le contrôle de syntaxe : fichiers justes admis (script, module, `await` au premier
+  niveau, `#!`), fichiers faux signalés avec leur ligne, **aucun code exécuté** (chaque fichier
+  écrirait un témoin) ; la commande `helix` : avec le Node du PATH, avec celui de Helix sans Node
+  dans le PATH, un Node trop ancien écarté.
+- **Paquet construit** (`electron-builder --mac dir --arm64`, dans un worktree) :
+  `npx @electron/fuses read` dit RunAsNode, EnableNodeOptionsEnvironmentVariable et
+  EnableNodeCliInspectArguments « Disabled ». `--win dir` et `--linux dir` fabriqués pour les
+  relire : pareil. Puis une **copie** du paquet, lancée avec un `HOME`, des données, un profil et
+  un port jetables, `"chiffrement": "fichier"`, un faux `security` en tête du PATH, les mises à jour
+  coupées. Son point d'entrée est remplacé par un fichier qui neutralise `safeStorage` et
+  l'association des liens `helix://` avant de charger le vrai `electron/main.cjs` du paquet
+  (binaire, fusibles, `main.cjs` et passerelle inchangés) : sinon l'application touchait au
+  trousseau de la machine. Lancée avec `ELECTRON_RUN_AS_NODE=1` et
+  `-e "require('fs').writeFileSync(…)"`, comme depuis VS Code : l'application s'ouvre (processus
+  principal de type `browser`, fenêtre, passerelle en `utilityProcess` `node.mojom.NodeService`),
+  le code de `-e` ne s'exécute pas. Sans la variable : pareil. Dans les deux cas la passerelle
+  répond (`/v1/models` : 200 avec le jeton, 401 sans), `kill -USR1` sur son PID n'ouvre rien sur
+  9229 et elle répond encore, et l'arrêt du processus principal par son PID arrête tout (passerelle,
+  serveur de fichiers MCP, port libéré). La commande `helix` du paquet (`Resources/cli`) répond
+  par le lanceur, avec le Node du système.
+
+### 52.2 Limites, dites comme telles
+
+- **Application tuée net** (plantage, `kill -9`) : Electron arrête aussitôt la passerelle, sans ses
+  gestionnaires (essayé). Avant, la coupure du canal `ipc` la faisait arrêter proprement ce
+  qu'elle avait lancé ; ce qu'elle a lancé (OpenCode, le serveur de LM Studio) peut maintenant
+  survivre à un plantage de l'application. L'arrêt normal, lui, attend la passerelle.
+- **Commande `helix` sous Windows** : toujours pas proposée (il faudrait un `.cmd` et le PATH du
+  registre), comme avant ; elle marche avec `node <Helix>\resources\cli\helix.mjs`. AppImage :
+  toujours pas (le chemin change à chaque lancement).
+- **Sans Node et sans passerelle** (poste rattaché à une instance d'entreprise) : « Mettre en
+  place » ne peut pas poser le Node de Helix ; l'écran le dit, et le lanceur aussi.
+- **Contrôle de syntaxe** : `vm.SourceTextModule` est marqué expérimental par Node ; s'il
+  disparaissait, le fil ne démarrerait plus et le contrôle ne dirait rien (il n'affirme rien
+  quand il ne peut pas contrôler) plutôt que de se tromper. Un `.js` est jugé des deux façons
+  (CommonJS, puis module) sans lire le `package.json` du projet : un peu plus permissif que
+  `node --check`.
+
+### 52.3 Pas essayé
+
+Windows et Linux lancés pour de vrai (seuls leurs fusibles ont été relus, et le code relu :
+`utilityProcess` existe sur les trois, le Node de Helix a une archive pour chacun, le signal
+SIGUSR1 n'est écouté qu'hors de Windows) ; le paquet d'origine lancé tel quel (il touche au
+trousseau de la machine : c'est sa copie au point d'entrée remplacé qui a été lancée) ; le contrôle
+de l'écran et l'accessibilité depuis la passerelle en `utilityProcess` (le canal a été essayé avec la
+demande `node-prive`, pas avec `permission-ecran`, ni une vraie capture, ni un vrai clic) ; « Mettre en place » la commande
+`helix` depuis l'écran, et la pose du Node de Helix par le canal sur une machine sans Node (le
+canal a été essayé avec un Node de Helix déjà posé) ; l'atelier (« Vérifier ») sur une vraie
+installation ; une mise à jour d'un clic d'une version d'avant vers celle-ci.

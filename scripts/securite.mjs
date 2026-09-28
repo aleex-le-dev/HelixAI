@@ -3912,7 +3912,15 @@ console.log("\n10. Dossier de l'équipe contenant les données de l'instance, in
   process.env.HELIX_WORKSPACE = ESPACE;
   process.env.HELIX_DATA_DIR = DONNEES2;
   process.env.HELIX_CONFIG = PROFIL2;
-  const mcp = await import(join(RACINE, "gateway", "src", "mcp.ts"));
+  /*
+   * Une instance neuve du module (`?espace-essai`) : mcp.ts lit HELIX_WORKSPACE
+   * à son chargement, et il est déjà chargé plus haut par la barrière
+   * (approbation.ts -> natifs/commerce.ts -> oauthNatif.ts -> natifs/documents.ts
+   * -> outilsNatifs.ts -> mcp.ts, relevé le 28/09/2026). Sans cela, le serveur
+   * de fichiers démarrait sur le dossier personnel au lieu de l'espace d'essai.
+   */
+  const { pathToFileURL: versUrlMcp } = await import("node:url");
+  const mcp = await import(`${versUrlMcp(join(RACINE, "gateway", "src", "mcp.ts")).href}?espace-essai`);
   const demarre = await mcp.startServer("fichiers");
   if (!demarre.ok) {
     console.log(`  · serveur de fichiers MCP indisponible (${String(demarre.error).slice(0, 80)}) : essai de l'agent sauté`);
@@ -4278,6 +4286,8 @@ console.log("\n11 bis bis. Application et chaîne de mise à jour (test d'intrus
   // Fusibles d'Electron (package.json, build.electronFuses) : NODE_OPTIONS et --inspect fermés dans le paquet.
   const fusibles = JSON.parse(fsm.readFileSync(join(RACINE, "package.json"), "utf8")).build?.electronFuses ?? {};
   verifier("paquet : NODE_OPTIONS et --inspect n'ouvrent pas l'application (fusibles)", fusibles.enableNodeOptionsEnvironmentVariable === false && fusibles.enableNodeCliInspectArguments === false, JSON.stringify(fusibles));
+  // Fermé le 28/09/2026 (SECURITE.md, « RunAsNode fermé ») : ELECTRON_RUN_AS_NODE=1 ne fait plus de Helix un Node pour n'importe quel programme.
+  verifier("paquet : ELECTRON_RUN_AS_NODE n'ouvre pas l'application (fusible runAsNode à false)", fusibles.runAsNode === false, JSON.stringify(fusibles));
 }
 
 console.log("\n11 ter. Une requête mal formée n'arrête pas l'instance (test d'intrusion du 27/09/2026)");
@@ -4851,6 +4861,7 @@ console.log("\n11 septies. Petit modèle qui code : Helix répare, relance, vér
       const retours = recues.flatMap((r) => (r.messages ?? []).filter((m) => m.role === "tool").map((m) => String(m.content)));
       return { reponse, outils, recues, retours: [...new Set(retours)], premiere: recues[0] };
     };
+    // Le Node de la batterie sert de juge indépendant (ici, c'est un vrai Node, pas le binaire de Helix).
     const nodeCheck = (f) => spawnSync(process.execPath, ["--check", f], { encoding: "utf8" }).status === 0;
 
     const a = await demander("SCENARIO-A Écris dans calc.js une fonction somme(a, b).");
@@ -4867,7 +4878,7 @@ console.log("\n11 septies. Petit modèle qui code : Helix répare, relance, vér
       `${a.outils.join(",")} | ${a.retours.map((t) => t.slice(0, 120)).join(" || ")}`,
     );
     verifier(
-      "code à la syntaxe fausse : node --check le voit, le modèle reçoit la ligne et l'erreur, réécrit, et le fichier final compile",
+      "code à la syntaxe fausse : le contrôle de la passerelle le voit, le modèle reçoit la ligne et l'erreur, réécrit, et le fichier final compile",
       a.retours.some((t) => /\[Contrôle de l'instance\].*erreur de syntaxe JavaScript/s.test(t)) && a.outils.filter((n) => n === "fichiers__write_file").length === 2 && nodeCheck(chemin("calc.js")) && lireF(chemin("calc.js"), "utf8").includes("return a + b;"),
       `${a.outils.join(",")} | ${existsSync(chemin("calc.js")) ? lireF(chemin("calc.js"), "utf8").slice(0, 80) : "absent"}`,
     );
@@ -5494,9 +5505,37 @@ console.log("\n13 quater. Application de bureau et interface : seconde tournée 
   const base = join(AUX, "seconde-tournee");
   mkdirSync(base, { recursive: true });
 
-  // 1. La passerelle, lancée en mode Node par le binaire de l'application, n'ouvre pas le débogueur sur SIGUSR1.
+  const { spawnSync } = await import("node:child_process");
+  const { pathToFileURL } = await import("node:url");
+  /*
+   * 1. RunAsNode fermé (28/09/2026, SECURITE.md, « RunAsNode fermé ») : la
+   * passerelle tourne dans un `utilityProcess`, plus rien ne lance le binaire
+   * de Helix en mode Node, et SIGUSR1 n'ouvre pas le débogueur de la passerelle.
+   */
   const main = src("electron", "main.cjs");
-  verifier("passerelle : lancée avec --disable-sigusr1 (le fusible --inspect ne couvre pas le mode Node)", /spawn\(process\.execPath, \["--disable-sigusr1", entry\]/.test(main), "option absente");
+  const lanceurPasserelle = src("electron", "passerelle.cjs");
+  verifier(
+    "passerelle : lancée par utilityProcess.fork (electron/passerelle.cjs), plus par le binaire de l'application en mode Node",
+    /utilityProcess\.fork\(entry,/.test(lanceurPasserelle) && /lancerPasserelle\(\{/.test(main) && !/spawn\(process\.execPath/.test(main),
+    "lancement introuvable ou ancien",
+  );
+  // Le code sans ses commentaires : ceux-ci racontent l'ancienne manière, et c'est voulu.
+  const sansCommentaires = (texte) => texte.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:"'`\\])\/\/[^\n]*/g, "$1");
+  const fichiersCode = [
+    ...readdirSync(join(RACINE, "electron")).filter((f) => f.endsWith(".cjs")).map((f) => join("electron", f)),
+    ...readdirSync(join(RACINE, "gateway", "src")).filter((f) => f.endsWith(".ts")).map((f) => join("gateway", "src", f)),
+    ...readdirSync(join(RACINE, "cli")).filter((f) => f.endsWith(".mjs")).map((f) => join("cli", f)),
+  ];
+  const modeNode = [];
+  for (const f of fichiersCode) {
+    const code = sansCommentaires(readFileSync(join(RACINE, f), "utf8"));
+    if (/ELECTRON_RUN_AS_NODE\s*(?::|=(?!=))\s*["'`]?1/.test(code)) modeNode.push(`${f} (ELECTRON_RUN_AS_NODE)`);
+    // Le binaire du processus relancé comme programme : dans l'application, c'est Helix, qui n'est plus un Node.
+    if (/\b(?:spawn|spawnSync|execFile|execFileSync|exec|lancer|fork|executer)\(\s*process\.execPath\b/.test(code)) modeNode.push(`${f} (process.execPath)`);
+    if (/\?\?\s*process\.execPath\b/.test(code)) modeNode.push(`${f} (repli sur process.execPath)`);
+  }
+  verifier("plus aucun ELECTRON_RUN_AS_NODE ni process.execPath pour lancer Helix comme Node (electron, passerelle, ligne de commande)", modeNode.length === 0, modeNode.join(", "));
+
   let binaire = null;
   try {
     binaire = exiger("electron");
@@ -5504,28 +5543,130 @@ console.log("\n13 quater. Application de bureau et interface : seconde tournée 
     binaire = null;
   }
   if (process.platform !== "win32" && typeof binaire === "string" && existsSync(binaire)) {
-    const essaiSignal = async (options) => {
-      const enfant = spawn(binaire, [...options, "-e", "setTimeout(() => {}, 5000)"], { env: { ...process.env, ELECTRON_RUN_AS_NODE: "1" }, stdio: ["ignore", "pipe", "pipe"] });
-      let sortie = "";
-      enfant.stdout.on("data", (b) => (sortie += b));
-      enfant.stderr.on("data", (b) => (sortie += b));
-      await new Promise((r) => setTimeout(r, 1000));
-      try {
-        process.kill(enfant.pid, "SIGUSR1");
-      } catch {
-        /* déjà sorti */
-      }
-      await new Promise((r) => setTimeout(r, 1500));
-      const vivant = enfant.exitCode === null;
-      enfant.kill();
-      return { debogueur: /Debugger listening/.test(sortie), vivant };
-    };
-    const sans = await essaiSignal([]);
-    const avec = await essaiSignal(["--disable-sigusr1"]);
-    verifier("témoin : sans l'option, SIGUSR1 ouvre le débogueur du binaire d'Electron en mode Node", sans.debogueur, JSON.stringify(sans));
-    verifier("avec --disable-sigusr1, SIGUSR1 n'ouvre rien et le processus continue", !avec.debogueur && avec.vivant, JSON.stringify(avec));
+    /*
+     * La vraie passerelle, empaquetée comme `npm run build:gateway`, lancée
+     * par electron/passerelle.cjs dans l'Electron du projet
+     * (scripts/essai-passerelle-electron.cjs). Ce binaire a le fusible
+     * --inspect ouvert : si SIGUSR1 n'y ouvre rien, c'est l'écoute du signal
+     * par la passerelle qui le ferme.
+     */
+    const { build } = await import("esbuild");
+    const dossierEssai = join(base, "passerelle-utilitaire");
+    const donneesEssai = join(dossierEssai, "donnees");
+    // Un Node de Helix déjà « posé » : la demande `node-prive` répond sans rien télécharger (npmPrive, installationOpenClaw.ts).
+    const versionFactice = join(donneesEssai, "openclaw-moteur", "node-v0");
+    fsm.mkdirSync(join(versionFactice, "bin"), { recursive: true });
+    fsm.mkdirSync(join(versionFactice, "lib", "node_modules", "npm", "bin"), { recursive: true });
+    fsm.symlinkSync(process.execPath, join(versionFactice, "bin", "node"));
+    fsm.writeFileSync(join(versionFactice, "lib", "node_modules", "npm", "bin", "npm-cli.js"), "");
+    fsm.symlinkSync("node-v0", join(donneesEssai, "openclaw-moteur", "node"));
+    const profilEssai = join(dossierEssai, "profil.json");
+    fsm.writeFileSync(profilEssai, JSON.stringify({ chiffrement: "fichier", backends: [{ id: "lmstudio", enabled: false }, { id: "exo", enabled: false }] }));
+    const entree = join(dossierEssai, "index.cjs");
+    await build({ entryPoints: [join(RACINE, "gateway", "src", "index.ts")], bundle: true, platform: "node", target: "node20", format: "cjs", outfile: entree, external: ["pg-native"], logLevel: "error" });
+    const portEssai = await portLibre();
+    let essai = null;
+    try {
+      const envEssai = { ...process.env };
+      delete envEssai.ELECTRON_RUN_AS_NODE;
+      essai = JSON.parse(
+        execFileSync(binaire, [join(RACINE, "scripts", "essai-passerelle-electron.cjs"), RACINE, entree, donneesEssai, String(portEssai), profilEssai], { env: envEssai, encoding: "utf8", timeout: 120_000, stdio: ["ignore", "pipe", "ignore"] })
+          .trim()
+          .split("\n")
+          .pop(),
+      );
+    } catch (err) {
+      essai = { plantage: String(err?.message ?? err).slice(0, 200) };
+    }
+    verifier("passerelle en utilityProcess : elle démarre et répond sur /health", essai?.repond === true, JSON.stringify(essai).slice(0, 300));
+    verifier("passerelle en utilityProcess : le canal marche dans les deux sens (demande « node-prive », réponse reçue)", essai?.canal?.type === "node-prive" && essai.canal.id === 7 && essai.canal.ok === true, JSON.stringify(essai?.canal));
+    verifier(
+      "passerelle en utilityProcess : SIGUSR1 n'ouvre pas le débogueur (9229), la passerelle continue de répondre",
+      essai?.debogueurAvant === false && essai?.debogueurApres === false && essai?.repondApresSignal === true && essai?.signalNote === true,
+      JSON.stringify(essai).slice(0, 300),
+    );
+    verifier("passerelle en utilityProcess : l'arrêt passe par son gestionnaire (code 0) et libère le port", essai?.arret?.code === 0 && essai.arret.portLibre === true, JSON.stringify(essai?.arret));
   } else {
-    console.log("  · binaire d'Electron absent ou Windows : essai du signal sauté");
+    console.log("  · binaire d'Electron absent ou Windows : passerelle en utilityProcess non essayée ici");
+  }
+
+  /*
+   * Le contrôle de syntaxe des petits modèles (syntaxeNode.ts) : il remplace
+   * `node --check`, qui lançait le binaire de Helix en mode Node. Un fichier
+   * faux est signalé avec sa ligne, un juste passe, et le code contrôlé ne
+   * s'exécute jamais (chaque fichier écrirait un témoin s'il tournait).
+   */
+  {
+    const dossierSyntaxe = join(base, "syntaxe");
+    fsm.mkdirSync(dossierSyntaxe, { recursive: true });
+    const temoin = join(dossierSyntaxe, "EXECUTE");
+    const ecrit = `require("node:fs").writeFileSync(${JSON.stringify(temoin)}, "1");`;
+    const cas = {
+      "juste.js": `const a = 1;\n${ecrit}\nmodule.exports = { a };\n`,
+      "faux.js": `const a = 1;\nfunction f( {\n  return a;\n}\n`,
+      "module.js": `import fs from "node:fs";\nfs.writeFileSync(${JSON.stringify(temoin)}, "1");\nexport const b = await Promise.resolve(2);\n`,
+      "juste.mjs": `import fs from "node:fs";\nfs.writeFileSync(${JSON.stringify(temoin)}, "1");\nexport default 1;\n`,
+      "faux.mjs": `import fs from "node:fs";\nexport const b = ;\n`,
+      "juste.cjs": `#!/usr/bin/env node\nif (true) return;\n${ecrit}\n`,
+      "faux.cjs": `const x = {;\n`,
+    };
+    for (const [nom, code] of Object.entries(cas)) fsm.writeFileSync(join(dossierSyntaxe, nom), code);
+    let lu = {};
+    try {
+      const programme = `const { verifierEcriture } = await import(${JSON.stringify(pathToFileURL(join(RACINE, "gateway", "src", "petitsModeles.ts")).href)});
+const r = {};
+for (const nom of ${JSON.stringify(Object.keys(cas))}) r[nom] = await verifierEcriture(${JSON.stringify(dossierSyntaxe)} + "/" + nom, ${JSON.stringify(dossierSyntaxe)});
+console.log(JSON.stringify(r));`;
+      lu = JSON.parse(execFileSync(process.execPath, ["--no-warnings", "--input-type=module", "-e", programme], { encoding: "utf8", timeout: 60_000, env: { ...process.env, HELIX_DATA_DIR: join(dossierSyntaxe, "donnees") } }).trim().split("\n").pop());
+    } catch (err) {
+      lu = { plantage: String(err?.message ?? err).slice(0, 200) };
+    }
+    const justes = ["juste.js", "module.js", "juste.mjs", "juste.cjs"];
+    verifier("contrôle de syntaxe (petits modèles) : un fichier juste passe (script, module, CommonJS, `await` au premier niveau, `#!`)", justes.every((n) => lu[n] === null), JSON.stringify(lu).slice(0, 300));
+    verifier(
+      "contrôle de syntaxe (petits modèles) : un fichier faux est signalé avec sa ligne (.js, .mjs, .cjs)",
+      /faux\.js : erreur de syntaxe JavaScript ligne 3/.test(lu["faux.js"] ?? "") && /faux\.mjs : erreur de syntaxe JavaScript ligne 2/.test(lu["faux.mjs"] ?? "") && /faux\.cjs : erreur de syntaxe JavaScript ligne 1/.test(lu["faux.cjs"] ?? ""),
+      JSON.stringify(lu).slice(0, 300),
+    );
+    verifier("contrôle de syntaxe (petits modèles) : le code contrôlé n'est jamais exécuté", !existsSync(temoin), "le témoin a été écrit");
+    const syntaxe = src("gateway", "src", "syntaxeNode.ts");
+    verifier("contrôle de syntaxe : compilation seule (vm.Script, vm.SourceTextModule), aucun programme lancé", /new vm\.SourceTextModule\(/.test(syntaxe) && !/\.(?:link|evaluate)\(/.test(sansCommentaires(syntaxe)) && !/child_process/.test(syntaxe), "autre chose que la compilation");
+  }
+
+  /*
+   * La commande `helix` : le lanceur posé par l'application (ligneDeCommande.cjs)
+   * choisit un vrai Node, celui de Helix d'abord, puis celui du système en
+   * version 20 ou plus, et le dit quand il n'y en a aucun.
+   */
+  if (process.platform !== "win32") {
+    const { contenuLanceur } = exiger(join(RACINE, "electron", "ligneDeCommande.cjs"));
+    const dossierCli = join(base, "commande-helix");
+    fsm.mkdirSync(join(dossierCli, "systeme"), { recursive: true });
+    const ecrireLanceur = (nom, prive) => {
+      const chemin = join(dossierCli, nom);
+      fsm.writeFileSync(chemin, contenuLanceur({ script: join(RACINE, "cli", "helix.mjs"), prive, nom: "Essai" }), { mode: 0o755 });
+      return chemin;
+    };
+    // Un « Node » trop ancien : il échoue au contrôle de version, le lanceur passe au suivant.
+    const ancien = join(dossierCli, "node-ancien");
+    fsm.writeFileSync(ancien, "#!/bin/sh\nexit 1\n", { mode: 0o755 });
+    fsm.symlinkSync(process.execPath, join(dossierCli, "systeme", "node"));
+    const lancer = (lanceur, path) => spawnSync("/bin/sh", [lanceur, "aide"], { encoding: "utf8", timeout: 30_000, env: { HOME: dossierCli, PATH: path } });
+    const parPath = lancer(ecrireLanceur("helix-systeme", join(dossierCli, "absent", "node")), `${join(dossierCli, "systeme")}:/usr/bin:/bin`);
+    const parPrive = lancer(ecrireLanceur("helix-prive", process.execPath), "/usr/bin:/bin");
+    const tropAncien = lancer(ecrireLanceur("helix-ancien", ancien), `${join(dossierCli, "systeme")}:/usr/bin:/bin`);
+    const lanceurTexte = fsm.readFileSync(join(dossierCli, "helix-prive"), "utf8");
+    verifier("commande helix : le lanceur n'utilise plus le binaire de l'application (ni ELECTRON_RUN_AS_NODE)", !lanceurTexte.includes("ELECTRON_RUN_AS_NODE") && lanceurTexte.includes("posé par l'application"), lanceurTexte.slice(0, 200));
+    verifier("commande helix : elle fonctionne avec le Node du système trouvé dans le PATH", parPath.status === 0 && parPath.stdout.includes("Utilisation"), `${parPath.status} ${parPath.stderr.slice(0, 160)}`);
+    verifier("commande helix : elle fonctionne avec le Node de Helix, sans Node dans le PATH", parPrive.status === 0 && parPrive.stdout.includes("Utilisation"), `${parPrive.status} ${parPrive.stderr.slice(0, 160)}`);
+    verifier("commande helix : un Node trop ancien est écarté au profit du suivant", tropAncien.status === 0 && tropAncien.stdout.includes("Utilisation"), `${tropAncien.status} ${tropAncien.stderr.slice(0, 160)}`);
+    // Sans aucun Node : seulement si cette machine n'en a pas aux emplacements usuels que le lanceur essaie aussi.
+    if (!["/opt/homebrew/bin/node", "/usr/local/bin/node", "/usr/bin/node"].some((c) => existsSync(c))) {
+      const aucun = lancer(ecrireLanceur("helix-aucun", join(dossierCli, "absent", "node")), "/usr/bin:/bin");
+      verifier("commande helix : sans Node, elle le dit (code 127) au lieu d'échouer en silence", aucun.status === 127 && /Node 20 ou plus est introuvable/.test(aucun.stderr), `${aucun.status} ${aucun.stderr.slice(0, 160)}`);
+    } else {
+      console.log("  · un Node est installé à un emplacement usuel : le cas « aucun Node » n'est pas essayé ici");
+    }
   }
 
   // 2. Le banc d'essai des pages : Internet, mais ni la machine ni le réseau local.

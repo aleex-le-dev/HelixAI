@@ -14,7 +14,7 @@ import {
 import { constants, existsSync, readdirSync, readFileSync } from "node:fs";
 import { cpus, homedir, tmpdir, totalmem } from "node:os";
 import { dirname, join, delimiter } from "node:path";
-import { assurerNodePrive, nodePriveInstallable, npmPrive } from "./installationOpenClaw.ts";
+import { assurerNodePrive, nodePriveInstallable, npmPrive, npxPrive } from "./installationOpenClaw.ts";
 import { assurerPythonPrive, pythonPrive, pythonPriveInstallable, taillePythonPriveMo } from "./pythonPrive.ts";
 import paquetsFiges from "./atelier-paquets.json" with { type: "json" };
 
@@ -321,7 +321,11 @@ async function pythonPourVenv(installer: boolean, avancer?: (pourcent: number) =
  * Par le Node auquel ce script appartient, s'il est là (`node.exe` à côté de
  * `node_modules` sous Windows, `bin/node` ailleurs) : npm suit les versions de
  * Node, pas celle d'Electron (audit Windows du 27/09/2026). Sinon, le Node de
- * l'application.
+ * Helix s'il est posé, et à défaut `node` du PATH.
+ *
+ * Plus jamais le binaire de la passerelle (28/09/2026) : dans l'application de
+ * bureau, c'est celui de Helix, qui n'est plus un Node depuis que le fusible
+ * RunAsNode est fermé ; le lancer ouvrirait une seconde application.
  */
 function nodeDuScript(script: string): string {
   const racineNpm = dirname(dirname(dirname(script))); // …/node_modules/npm/bin/npm-cli.js → …/node_modules
@@ -330,7 +334,22 @@ function nodeDuScript(script: string): string {
     process.platform === "win32"
       ? [join(racine, "node.exe")]
       : [join(racine, "bin", "node"), join(dirname(racine), "bin", "node")]; // …/lib/node_modules → …/bin/node
-  return candidats.find((c) => existsSync(c)) ?? process.execPath;
+  return candidats.find((c) => existsSync(c)) ?? npxPrive()?.node ?? "node";
+}
+
+/**
+ * Le Node qui charge les bibliothèques de l'atelier pour les vérifier : celui
+ * du npm qui les a installées (le même Node, les mêmes modules natifs), sinon
+ * le Node du système, sinon celui de Helix. Null s'il n'y en a aucun.
+ */
+async function nodeDeLAtelier(): Promise<string | null> {
+  const npm = await trouverNpm();
+  if (npm?.endsWith(".js")) return nodeDuScript(npm);
+  if (npm) {
+    const voisin = join(dirname(npm), process.platform === "win32" ? "node.exe" : "node");
+    if (await existe(voisin)) return voisin;
+  }
+  return (await trouverNode()) ?? npxPrive()?.node ?? null;
 }
 const commandeDe = (commande: string, args: string[]): [string, string[]] =>
   commande.endsWith(".js") ? [nodeDuScript(commande), [commande, ...args]] : [commande, args];
@@ -1091,7 +1110,10 @@ export async function verifier(): Promise<Verification> {
         const scriptNode = join(travail, "verification.mjs");
         await writeFile(scriptNode, SCRIPT_NODE, "utf8");
 
-        const { stdout } = await exec(process.execPath, [scriptNode], {
+        // Un vrai Node (nodeDeLAtelier) : le binaire de la passerelle n'en est plus un dans l'application (28/09/2026).
+        const node = await nodeDeLAtelier();
+        if (!node) throw new Error(t("Node est introuvable sur cette machine : les bibliothèques Node ne peuvent pas être chargées."));
+        const { stdout } = await exec(node, [scriptNode], {
           cwd: travail,
           timeout: 3 * 60_000,
           maxBuffer: 4 * 1024 * 1024,

@@ -112,11 +112,16 @@ depuis le 27/09/2026 : l'archive ou l'installateur n'est installé que si sa sig
 l'éditeur est bonne avec la clé de l'application qui tourne (SIGNATURE.md § 4, SECURITE.md
 §§ 29.7 et 29.11). Sous Linux, la fenêtre ouvre le paquet dans le navigateur.
 
-Le paquet ferme deux fusibles d'Electron (`build.electronFuses` de `package.json`) :
-`NODE_OPTIONS` et `--inspect` n'ouvrent plus l'application. RunAsNode reste ouvert, parce
-que la passerelle et la ligne de commande lancent le binaire de l'application en mode Node
-(SECURITE.md § 31). Ces fusibles n'ont pas encore été relus sur un paquet fabriqué :
-`npx @electron/fuses read --app release/mac-arm64/Helix.app` à la prochaine fabrication.
+Le paquet ferme trois fusibles d'Electron (`build.electronFuses` de `package.json`) :
+`NODE_OPTIONS`, `--inspect` et, depuis le 28/09/2026, RunAsNode. `ELECTRON_RUN_AS_NODE=1`
+ne fait donc plus du binaire de Helix un Node que n'importe quel programme du poste
+pourrait lancer avec les autorisations de Helix (SECURITE.md, § 52 « RunAsNode fermé ») ;
+lancé depuis le terminal de VS Code, qui définit cette variable, Helix s'ouvre
+normalement. La passerelle tourne dans un `utilityProcess` (`electron/passerelle.cjs`),
+la commande `helix` avec un vrai Node (celui que Helix pose, sinon celui du système en
+version 20 ou plus). Relu le 28/09/2026 sur des paquets fabriqués (`--mac dir`,
+`--win dir`, `--linux dir`) : `npx @electron/fuses read --app release/mac-arm64/Helix.app`
+dit « RunAsNode is Disabled » sur les trois.
 
 ⚠ **LM Studio**, le moteur installé par défaut, est un logiciel fermé dont les
 conditions (version du 23/08/2026) permettent l'usage personnel et les besoins
@@ -591,13 +596,18 @@ l'administrateur passe par l'outil de récupération (choix 3), application ferm
 
 **Mot de passe oublié, téléphone perdu.** Il n'y a pas de récupération par courriel :
 l'instance n'envoie pas de courrier. L'administrateur du poste qui héberge l'instance
-lance l'outil de récupération, embarqué dans l'application :
+lance l'outil de récupération, embarqué dans l'application, avec Node 20 ou plus :
 
 ```bash
-ELECTRON_RUN_AS_NODE=1 "/Applications/Helix.app/Contents/MacOS/Helix" "/Applications/Helix.app/Contents/Resources/dist-gateway/motdepasse.cjs"
+node "/Applications/Helix.app/Contents/Resources/dist-gateway/motdepasse.cjs"
 ```
 
-(le nom `Helix` est celui de l'application livrée au client). Il redéfinit un mot de
+(le nom `Helix` est celui de l'application livrée au client). Sans Node sur le poste,
+celui que Helix pose fait l'affaire (`~/.helix/data/openclaw-moteur/node/bin/node` ;
+Paramètres, Ligne de commande, « Mettre en place » le pose s'il manque). Jusqu'au
+28/09/2026, l'outil tournait avec le binaire de l'application (`ELECTRON_RUN_AS_NODE=1`) :
+ce n'est plus possible, le fusible RunAsNode étant fermé (SECURITE.md § 52). Essayé le
+28/09/2026 avec le Node du système sur le `motdepasse.cjs` d'un paquet fabriqué. Il redéfinit un mot de
 passe, retire la double authentification, ou supprime un compte ; chaque usage est
 inscrit au journal.
 

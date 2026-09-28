@@ -57,14 +57,22 @@ export interface EtatPaquet {
 function applicationEnCours(): string | null {
   const force = process.env.HELIX_APP_BUNDLE;
   if (force) return existsSync(force) ? force : null;
+  /*
+   * Le `.app` le plus extérieur (28/09/2026) : la passerelle tourne désormais
+   * dans un `utilityProcess`, dont le binaire est l'assistant rangé dans
+   * l'application (`Helix.app/Contents/Frameworks/Helix Helper.app/…`). Le
+   * premier `.app` rencontré en remontant était celui de l'assistant, et
+   * c'est lui qu'on aurait servi.
+   */
   let dossier = dirname(process.execPath);
-  for (let i = 0; i < 6; i++) {
-    if (dossier.endsWith(".app")) return dossier;
+  let trouve: string | null = null;
+  for (let i = 0; i < 9; i++) {
+    if (dossier.endsWith(".app")) trouve = dossier;
     const parent = dirname(dossier);
     if (parent === dossier) break;
     dossier = parent;
   }
-  return null;
+  return trouve;
 }
 
 /** La version inscrite dans l'application elle-même, pas dans le code source. */

@@ -11,6 +11,7 @@ import { langue, t, tf } from "./langue.ts";
 import { existsSync, statSync, readFileSync as lireFichier, writeFileSync } from "node:fs";
 import { adresseMachine, applicationMachine, applicationsDisponibles, dossierEchange, echangeDansLaMachine, systemeMachine } from "./machine.ts";
 import { relireDocument } from "./relecture.ts";
+import { canalOuvert, ecouterLApplication, envoyerALApplication } from "./canalApplication.ts";
 
 /**
  * Contrôle de l'écran (ADR-011).
@@ -154,21 +155,21 @@ async function logicalScreen(): Promise<{ largeur: number; hauteur: number } | n
 let numeroDemande = 0;
 async function autorisationCapture(): Promise<{ ok: true } | { ok: false; error: string }> {
   const statut = await new Promise<string | null>((resolve) => {
-    if (typeof process.send !== "function" || !process.connected) return resolve(null);
+    // Le canal de l'application (canalApplication.ts : `utilityProcess` depuis le 28/09/2026).
+    if (!canalOuvert()) return resolve(null);
     const id = ++numeroDemande;
     const fin = setTimeout(() => {
-      process.off("message", reponse);
+      arreter();
       resolve(null);
     }, 2000);
-    const reponse = (m: unknown) => {
+    const arreter = ecouterLApplication((m: unknown) => {
       const r = m as { type?: unknown; id?: unknown; statut?: unknown } | null;
       if (!r || r.type !== "permission-ecran" || r.id !== id) return;
       clearTimeout(fin);
-      process.off("message", reponse);
+      arreter();
       resolve(typeof r.statut === "string" ? r.statut : null);
-    };
-    process.on("message", reponse);
-    process.send({ type: "permission-ecran", id });
+    });
+    envoyerALApplication({ type: "permission-ecran", id });
   });
   if (statut === "granted" || statut === "not-determined") return { ok: true };
   /*

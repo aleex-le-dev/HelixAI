@@ -1963,10 +1963,12 @@ réussis le 26/09/2026**.
 - **Codex** (27/09/2026, § 3.14) : ce qu'il fait ne passe pas par la barrière
   d'approbation de Helix ; seul son bac à sable le borne, et Helix ne borne pas ce qu'il
   lit sur le poste. D'où la réserve au propriétaire du poste, et l'écran le dit.
-- **RunAsNode reste ouvert** dans le paquet (les fusibles NODE_OPTIONS et `--inspect`
-  sont fermés depuis le 27/09/2026) : un programme du même compte peut faire tourner du
-  code avec le binaire de l'application. Le fermer demande de lancer la passerelle
-  autrement (SECURITE.md § 31.3).
+- **RunAsNode fermé le 28/09/2026** (les fusibles NODE_OPTIONS et `--inspect` le sont
+  depuis le 27/09/2026) : `ELECTRON_RUN_AS_NODE=1` ne fait plus du binaire de Helix un Node
+  que n'importe quel programme du compte lancerait avec les autorisations de Helix. La
+  passerelle tourne dans un `utilityProcess`, la commande `helix` avec un vrai Node
+  (SECURITE.md § 51 ; entrée du 28/09/2026 au § 5). Restent : un plantage de l'application
+  arrête la passerelle sans qu'elle arrête ce qu'elle a lancé (§ 51.2).
 
 ---
 
@@ -2101,9 +2103,10 @@ grille de tuiles portant les logos des services.
 `npm run build` vérifie les deux projets. L'outil de récupération redéfinit le mot de
 passe d'un compte, ou retire sa double authentification, depuis le poste, sans écho :
 il n'existe pas de « mot de passe oublié » par courriel, l'instance ne sait pas envoyer
-de courrier. Il est **embarqué dans l'application** (`dist-gateway/motdepasse.cjs`,
-lancé par le binaire de l'application, sans Node installé) ; depuis les sources,
-`npm run motdepasse`.
+de courrier. Il est **embarqué dans l'application** (`dist-gateway/motdepasse.cjs`) ;
+depuis le 28/09/2026 il se lance avec Node 20 ou plus (`node …/motdepasse.cjs`, docs/GUIDE.md),
+et non plus avec le binaire de l'application, le fusible RunAsNode étant fermé ; depuis les
+sources, `npm run motdepasse`.
 
 ### Ce qui est encore annoncé sans fonctionner, et le dit
 
@@ -3374,10 +3377,13 @@ simulé) ; rien de cela n'a tourné sur la vraie machine.*
 
 **Le paquet fabriqué**
 13. **Fusibles** : `npx @electron/fuses read --app release/mac-arm64/Helix.app` (et
-    `release/win-unpacked/Helix.exe`) doit montrer NODE_OPTIONS et `--inspect` fermés,
-    RunAsNode ouvert ; puis lancer l'application et vérifier ce qui passe par RunAsNode : la
-    passerelle démarre, `helix` répond en ligne de commande, le contrôle `node --check` des
-    petits modèles répond.
+    `release/win-unpacked/Helix.exe`) doit montrer NODE_OPTIONS, `--inspect` et RunAsNode
+    fermés (relu le 28/09/2026 sur les trois paquets `dir`, SECURITE.md § 51). Reste à faire
+    sur le poste, application installée : « Mettre en place » la commande `helix` depuis
+    l'écran (sur une machine avec Node, puis sans), un petit modèle qui écrit un fichier faux
+    (contrôle de syntaxe dans la passerelle), l'atelier (« Vérifier »), le contrôle de l'écran
+    (autorisation lue par le canal de la passerelle), et Helix ouvert depuis le terminal de
+    VS Code.
 14. Dans l'application empaquetée : le travail de Code qui continue quand on quitte sa
     session, pendant une vraie préparation d'application ; « Signaler un problème » ouvert
     pour de vrai (ticket prérempli vu sur GitHub, brouillon dans la messagerie).
@@ -3621,7 +3627,7 @@ sur le poste et sur l'instance) ; lanceur `helix` qui ne remplace jamais un prog
 étranger (essayé dans un HOME d'essai), shell de connexion lu sans geler l'application ;
 `~/.helix` en 0700 ; clé d'API vidée du presse-papiers après une minute si elle y est
 encore. Non corrigé, documenté : RunAsNode reste actif (la passerelle et le lanceur en
-ont besoin).
+ont besoin). *Fermé le 28/09/2026 (SECURITE.md § 51).*
 
 **Fait le 26/09/2026 : contrôle automatique de Helix Code** (`gateway/src/controleCode.ts`,
 `electron/rendu.cjs`). Demandé par Medhi : « le petit modèle doit produire un bon niveau
@@ -4344,8 +4350,9 @@ et permissions ([documentation](https://opencode.ai/docs/agents/)), vérifiés d
   Appels écrits dans le texte ou la réflexion (`<tool_call>` JSON, `<function=…>` XML, réponse qui
   n'est qu'un objet `{"name", "arguments"}`) lancés comme de vrais appels, vers un outil proposé
   seulement, en passant par la barrière comme les autres.
-- **Contrôle après chaque écriture** (tout modèle) : `node --check` (le binaire de la passerelle, en
-  `ELECTRON_RUN_AS_NODE`, environnement réduit), Python par `ast.parse` (ni import ni `.pyc`),
+- **Contrôle après chaque écriture** (tout modèle) : la compilation JavaScript dans la passerelle
+  (`syntaxeNode.ts` depuis le 28/09/2026 ; avant, `node --check` par le binaire de la passerelle en
+  `ELECTRON_RUN_AS_NODE`), Python par `ast.parse` (ni import ni `.pyc`),
   `JSON.parse`, accolades CSS, scripts d'une page ; rien du code écrit n'est exécuté. Le problème
   (fichier, ligne, message) est joint au retour de l'outil ; avant la réponse finale, deux relances
   au plus par demande tant qu'un fichier reste faux, puis la réponse le dit à la personne
@@ -4700,6 +4707,42 @@ anglais et en japonais à 375 px (le menu défile, aucun débordement de la page
 
 **Pas essayé** : l'application empaquetée ; Linux (archives épinglées, enveloppe écrite pour `/bin/bash` ou `/bin/sh`) ; un vrai modèle qui
 lit ces sorties condensées.
+
+**Fait le 28/09/2026 : fusible RunAsNode fermé (branche `fusible-runasnode`).** Signalé à Medhi
+et vérifié sur le paquet construit : avec RunAsNode ouvert, n'importe quel programme du Mac lançait
+`Helix.app/Contents/MacOS/Helix` avec `ELECTRON_RUN_AS_NODE=1` et faisait tourner son JavaScript avec
+les autorisations de Helix (accessibilité, micro, écran) ; et Helix lancé depuis le terminal de VS Code
+se fermait aussitôt. Le fusible est fermé, et ce qui s'en servait a changé (SECURITE.md § 52, tableau) :
+- **la passerelle** tourne dans un `utilityProcess` (`electron/passerelle.cjs`), canal
+  `process.parentPort` (`gateway/src/canalApplication.ts`), mêmes messages, environnement, dossier et
+  journaux ; l'application attend sa fin avant de quitter (Electron arrête ses processus utilitaires
+  sans laisser tourner leurs gestionnaires, essayé) ; SIGUSR1 est écouté par la passerelle
+  (`--disable-sigusr1` n'a pas d'effet dans un `utilityProcess`, mesuré) ;
+- **le contrôle de syntaxe** des petits modèles compile dans la passerelle (`syntaxeNode.ts` :
+  `vm.Script`, `vm.SourceTextModule` dans un fil), sans rien exécuter ;
+- **l'atelier** vérifie ses bibliothèques avec un vrai Node (celui du npm, du système ou de Helix) ;
+- **la commande `helix`** : un lanceur qui prend le Node de Helix (épinglé, empreinte vérifiée), sinon
+  celui du système en version 20 ou plus, et le dit s'il n'y en a aucun ; « Mettre en place » fait
+  poser le Node de Helix par la passerelle quand il manque ; un ancien lanceur est réécrit au
+  démarrage. Écran : une phrase de plus dans Paramètres, Ligne de commande (en, zh, ja à 100 %) ;
+- **l'outil de récupération** se lance avec `node` (docs/GUIDE.md) ;
+- **le téléchargement de l'application** sert le `.app` le plus extérieur (l'assistant d'Electron
+  n'est plus pris pour l'application).
+
+*Vérifié* : `npm run typecheck`, i18n à 100 %, `npm run securite` (1 577 contrôles, 0 échec ; contrôles nouveaux de la section
+13 quater : passerelle lancée par `electron/passerelle.cjs` dans l'Electron du projet, canal,
+SIGUSR1, arrêt ; contrôle de syntaxe sans exécution ; lanceur `helix`) ; paquets `--mac dir`,
+`--win dir`, `--linux dir` fabriqués, RunAsNode « Disabled » sur les trois ; une copie du paquet macOS
+lancée (point d'entrée remplacé pour ne pas toucher au trousseau, le reste inchangé), avec et sans
+`ELECTRON_RUN_AS_NODE=1` : elle s'ouvre, le code de `-e` ne tourne pas, la passerelle répond, SIGUSR1
+n'ouvre pas 9229, tout s'arrête avec le processus principal. Au passage, dans `npm run securite`,
+l'essai de l'agent sur le serveur de fichiers (section 10) échouait sur `main` : `mcp.ts` était déjà
+chargé par la barrière (approbation.ts -> natifs/commerce.ts -> … -> mcp.ts) et ne relisait pas
+l'espace d'essai ; l'essai charge maintenant une instance neuve du module.
+
+*Pas essayé* : Windows et Linux lancés ; le paquet d'origine lancé tel quel ; « Mettre en place »
+depuis l'écran, et la pose du Node de Helix sur une machine sans Node ; le contrôle de l'écran et
+l'accessibilité depuis la passerelle en `utilityProcess` ; l'atelier sur une vraie installation.
 
 **Fait le 28/09/2026 : seconde tournée, les régressions entre fusions.** Sur le code fusionné le
 27/09 au soir (6b77c21), contre une instance jetable (clé des données en fichier, dossier de données,

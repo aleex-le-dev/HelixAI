@@ -26,7 +26,23 @@ interface EtatCli {
   chemin: string;
   profil: string;
   ligneAjoutee: boolean;
+  /**
+   * Le Node dont se sert le lanceur (depuis le 28/09/2026, il n'utilise plus
+   * le binaire de l'application) : celui de l'application, celui du système,
+   * ou aucun. Absent d'une application plus ancienne.
+   */
+  node?: "prive" | "systeme" | null;
+  /** Le Node de l'application n'a pas pu être posé : la raison, telle que la passerelle l'a dite. */
+  erreurNode?: string;
 }
+
+/** La raison, dite à la personne : les deux codes de electron/main.cjs, ou le message de la passerelle. */
+const raisonNode = (erreur: string): string =>
+  erreur === "passerelle"
+    ? t("la passerelle de cet ordinateur ne répond pas (poste rattaché à une autre instance, ou passerelle arrêtée)")
+    : erreur === "délai"
+      ? t("le téléchargement n'a pas abouti à temps")
+      : erreur;
 
 interface PontCli {
   etat: () => Promise<EtatCli>;
@@ -80,7 +96,7 @@ export function LigneDeCommande() {
           <h3 className="text-lg font-semibold text-foreground">{t("Ligne de commande")}</h3>
           <p className="mt-1 max-w-md text-sm text-muted-foreground">
             {t(
-              "Le Chat et l'agent de code dans un terminal, avec les mêmes modèles, les mêmes règles et la même barrière d'approbation que l'application. Elle est livrée avec l'application : rien à installer d'autre.",
+              "Le Chat et l'agent de code dans un terminal, avec les mêmes modèles, les mêmes règles et la même barrière d'approbation que l'application. Elle est livrée avec l'application et tourne avec Node 20 ou plus : celui de cet ordinateur, ou celui que l'application pose s'il n'y en a pas.",
             )}
           </p>
         </div>
@@ -118,7 +134,7 @@ export function LigneDeCommande() {
                 {t("Retirer")}
               </Button>
             )}
-            {!etat.etranger && !(etat.installe && etat.aJour) && (
+            {!etat.etranger && (!(etat.installe && etat.aJour) || etat.node === null) && (
               <Button icon={occupe ? Loader2 : Check} disabled={occupe} onClick={() => void agir((p) => p.installer())}>
                 {etat.installe ? t("Mettre à jour") : t("Mettre en place")}
               </Button>
@@ -138,6 +154,13 @@ export function LigneDeCommande() {
                 etat.profil.replace(/^.*\//, "~/"),
               )}
             </p>
+          )}
+          {!etat.etranger && etat.node === null && (
+            <InfoBox tone="warning" leading={<Info size={15} strokeWidth={1.75} />}>
+              {etat.erreurNode
+                ? tf("Aucun Node 20 ou plus sur cet ordinateur, et celui de l'application n'a pas pu être posé : {0}. La commande le dira tant qu'il manque.", raisonNode(etat.erreurNode))
+                : tf("Aucun Node 20 ou plus sur cet ordinateur : « {0} » pose celui de l'application (téléchargé depuis nodejs.org, empreinte vérifiée).", etat.installe ? t("Mettre à jour") : t("Mettre en place"))}
+            </InfoBox>
           )}
           {etat.installe && etat.ligneAjoutee && (
             <p className="text-xs text-muted-foreground">

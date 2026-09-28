@@ -86,7 +86,8 @@ import * as bibliotheque from "./bibliotheque.ts";
 import * as connaissances from "./connaissances.ts";
 import * as reunions from "./reunions.ts";
 import { etat as etatAgenda } from "./agenda.ts";
-import { installerOpenClaw, etatInstallation } from "./installationOpenClaw.ts";
+import { installerOpenClaw, etatInstallation, assurerNodePrive } from "./installationOpenClaw.ts";
+import { canalOuvert, ecouterLApplication, envoyerALApplication, surFinDuCanal } from "./canalApplication.ts";
 import { listerEspace, lireFichierEspace } from "./espace.ts";
 import { consommationDe } from "./usage.ts";
 import { servirOutils, auteurEmploye } from "./serveurOutils.ts";
@@ -5929,17 +5930,48 @@ process.on("exit", arreterProprement);
  * arrêtée net, ou plantée) : la passerelle s'arrête aussi, au lieu de rester
  * seule sur le port. Sans canal (passerelle lancée à la main, serveur), rien
  * ne change.
+ *
+ * Depuis le 28/09/2026 le canal est celui d'un `utilityProcess`
+ * (canalApplication.ts). L'application y demande aussi le Node de Helix pour
+ * la commande `helix` (electron/ligneDeCommande.cjs) : ce canal ne s'ouvre
+ * qu'entre l'application et sa passerelle, aucune route HTTP n'y mène.
  */
-if (typeof process.send === "function") {
-  process.on("message", (m) => {
-    if (m && typeof m === "object" && (m as { type?: unknown }).type === "arret") {
+if (canalOuvert()) {
+  ecouterLApplication((m) => {
+    const message = m && typeof m === "object" ? (m as { type?: unknown; id?: unknown }) : null;
+    if (message?.type === "arret") {
       arreterProprement();
       process.exit(0);
     }
+    if (message?.type === "node-prive") {
+      const id = message.id;
+      void assurerNodePrive().then(
+        () => envoyerALApplication({ type: "node-prive", id, ok: true }),
+        (err: unknown) => envoyerALApplication({ type: "node-prive", id, ok: false, erreur: err instanceof Error ? err.message : String(err) }),
+      );
+    }
   });
-  process.on("disconnect", () => {
+  surFinDuCanal(() => {
     arreterProprement();
     process.exit(0);
+  });
+}
+
+/*
+ * SIGUSR1 ouvre le débogueur de Node sur 127.0.0.1:9229, et un programme du
+ * même compte y faisait tourner son code dans la passerelle, qui tient la clé
+ * des données déchiffrée et toutes les séances (seconde tournée du test
+ * d'intrusion, 28/09/2026). L'option `--disable-sigusr1` n'y fait rien dans un
+ * `utilityProcess` : `execArgv` y est seulement recopié dans
+ * `process.execArgv` (essayé le 28/09/2026 avec Electron 44.4.5 : le
+ * débogueur s'ouvrait quand même, fusible --inspect ouvert). Écouter le signal
+ * le retire au débogueur (même essai : plus rien sur 9229). La passerelle n'a
+ * pas besoin de ce débogueur, en application comme en serveur. Windows n'a pas
+ * ce signal.
+ */
+if (process.platform !== "win32") {
+  process.on("SIGUSR1", () => {
+    console.error("[helix] signal SIGUSR1 reçu et ignoré : le débogueur de Node reste fermé.");
   });
 }
 

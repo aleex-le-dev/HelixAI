@@ -437,7 +437,7 @@ export function Connecteurs({ maison = [] }: { maison?: ServiceMaison[] } = {}) 
               disabled={retrait === entree.id}
               onClick={() => void retirerConnecteur(entree.id)}
             >
-              {retrait === entree.id ? "Retrait..." : t("Retirer")}
+              {retrait === entree.id ? t("Retrait...") : t("Retirer")}
             </Button>
           ) : attente === entree.id ? (
             <Button variant="ghost" size="sm" icon={Loader2} disabled>
@@ -530,7 +530,7 @@ export function Connecteurs({ maison = [] }: { maison?: ServiceMaison[] } = {}) 
                 icon={enCours ? Loader2 : Check}
                 disabled={enCours || !etat.chiffrementDonnees}
               >
-                {enCours ? "Connexion..." : t("Connecter")}
+                {enCours ? t("Connexion...") : t("Connecter")}
               </Button>
               {(entree.console ?? entree.documentation) && (
                 <a
@@ -664,7 +664,7 @@ export function Connecteurs({ maison = [] }: { maison?: ServiceMaison[] } = {}) 
                   disabled={retrait === c.id}
                   onClick={() => void retirerConnecteur(c.id)}
                 >
-                  {retrait === c.id ? "Retrait..." : t("Retirer")}
+                  {retrait === c.id ? t("Retrait...") : t("Retirer")}
                 </Button>
               </div>
             </div>

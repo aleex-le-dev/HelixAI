@@ -980,9 +980,7 @@ function resoudreCommande(
   if (!ID_VALIDE.test(id)) {
     return {
       ok: false,
-      message:
-        "Identifiant de connecteur invalide : lettres minuscules, chiffres, tiret " +
-        "et souligné, 32 caractères au plus.",
+      message: t("Identifiant de connecteur invalide : lettres minuscules, chiffres, tiret et souligné, 32 caractères au plus."),
     };
   }
 
@@ -1029,12 +1027,11 @@ function resoudreCommande(
   if (!commandeLibreAutorisee()) {
     return {
       ok: false,
-      message:
-        `Aucun connecteur « ${id} » dans le catalogue de ${nomProduit()}, et cette instance ` +
-        "n'autorise pas les commandes libres. Un serveur MCP est un programme exécuté " +
-        "sur cette machine : " + nomProduit() + " ne lance que les commandes de son catalogue. Pour " +
-        "un serveur interne, l'intégrateur doit régler « connecteursLibres » sur true " +
-        "dans helix.config.json.",
+      message: tf(
+        "Aucun connecteur « {0} » dans le catalogue de {1}, et cette instance n'autorise pas les commandes libres. Un serveur MCP est un programme exécuté sur cette machine : {1} ne lance que les commandes de son catalogue. Pour un serveur interne, l'intégrateur doit régler « connecteursLibres » sur true dans helix.config.json.",
+        id,
+        nomProduit(),
+      ),
     };
   }
 
@@ -1150,11 +1147,10 @@ export async function ajouter(brut: unknown, qui: string): Promise<Resultat> {
   if (Object.keys(recolte.secrets).length > 0 && !chiffrementActif()) {
     return {
       ok: false,
-      message:
-        "Le chiffrement des données n'est pas actif sur cette machine : " + nomProduit() + " refuse " +
-        "d'enregistrer un jeton d'accès en clair. Déverrouillez le trousseau du compte " +
-        "hôte, ou réglez « chiffrement » sur « fichier » dans helix.config.json, puis " +
-        "recommencez.",
+      message: tf(
+        "Le chiffrement des données n'est pas actif sur cette machine : {0} refuse d'enregistrer un jeton d'accès en clair. Déverrouillez le trousseau du compte hôte, ou réglez « chiffrement » sur « fichier » dans helix.config.json, puis recommencez.",
+        nomProduit(),
+      ),
     };
   }
 
@@ -1181,15 +1177,16 @@ export async function ajouter(brut: unknown, qui: string): Promise<Resultat> {
      * en anglais et souvent obscur, ne sert qu'au diagnostic — et il a déjà été
      * débarrassé du secret par `mcp.ts` avant d'arriver ici.
      */
+    // Traduits le 28/09/2026 (revérification des connecteurs) : ces messages étaient montrés en français dans toutes les langues.
     const conseil = verdict.attendus.length > 0 || verdict.libre
-      ? "Vérifiez que le jeton saisi est valide, et que cette machine a accès à Internet."
-      : "Vérifiez que cette machine a accès à Internet.";
+      ? t("Vérifiez que le jeton saisi est valide, et que cette machine a accès à Internet.")
+      : t("Vérifiez que cette machine a accès à Internet.");
 
     return {
       ok: false,
       message:
-        `« ${verdict.label} » n'a pas démarré. ${conseil}` +
-        (demarrage.error ? ` Détail technique : ${demarrage.error}` : ""),
+        tf("« {0} » n'a pas démarré. {1}", t(verdict.label), conseil) +
+        (demarrage.error ? ` ${tf("Détail technique : {0}", demarrage.error)}` : ""),
     };
   }
 
@@ -1246,8 +1243,8 @@ export async function retirer(id: string, qui: string): Promise<Resultat> {
     return {
       ok: false,
       message: entreeCatalogue(id)?.integre
-        ? "Ce serveur est livré avec " + nomProduit() + " et ne peut pas être retiré."
-        : `Aucun connecteur « ${id} » sur cette instance.`,
+        ? tf("Ce serveur est livré avec {0} et ne peut pas être retiré.", nomProduit())
+        : tf("Aucun connecteur « {0} » sur cette instance.", id),
     };
   }
 
@@ -1262,7 +1259,7 @@ export async function retirer(id: string, qui: string): Promise<Resultat> {
 
   journaliser("connecteur.retire", qui, { connecteur: id });
 
-  return { ok: true, message: tf("« {0} » a été retiré de cette instance.", connecteur.label) };
+  return { ok: true, message: tf("« {0} » a été retiré de cette instance.", t(connecteur.label)) };
 }
 
 /* ------------------------------------------------------------------ */
@@ -1304,10 +1301,10 @@ export async function connecter(
   if (!chiffrementActif()) {
     return {
       ok: false,
-      message:
-        "Le chiffrement des données n'est pas actif sur cette machine : " + nomProduit() +
-        " refuse d'y conserver un jeton d'accès. Déverrouillez le trousseau du compte hôte, " +
-        "ou réglez « chiffrement » sur « fichier » dans helix.config.json.",
+      message: tf(
+        "Le chiffrement des données n'est pas actif sur cette machine : {0} refuse d'y conserver un jeton d'accès. Déverrouillez le trousseau du compte hôte, ou réglez « chiffrement » sur « fichier » dans helix.config.json.",
+        nomProduit(),
+      ),
     };
   }
 
@@ -1328,10 +1325,9 @@ export async function connecter(
     if (!dejaLa && !donne) {
       return {
         ok: false,
-        message:
-          `${entree.label} demande une application déclarée chez lui. Créez-la` +
-          (entree.console ? ` sur ${entree.console}` : "") +
-          `, indiquez ${retour} comme adresse de retour, puis collez son identifiant ici.`,
+        message: entree.console
+          ? tf("{0} demande une application déclarée chez lui. Créez-la sur {1}, indiquez {2} comme adresse de retour, puis collez son identifiant ici.", t(entree.label), entree.console, retour)
+          : tf("{0} demande une application déclarée chez lui. Créez-la, indiquez {1} comme adresse de retour, puis collez son identifiant ici.", t(entree.label), retour),
       };
     }
     if (donne) {
@@ -1350,7 +1346,7 @@ export async function connecter(
   } catch (err) {
     return {
       ok: false,
-      message: tf("{0} n'a pas pu être contacté : {1}", entree.label, err instanceof Error ? err.message : String(err)),
+      message: tf("{0} n'a pas pu être contacté : {1}", t(entree.label), err instanceof Error ? err.message : String(err)),
     };
   }
 
@@ -1360,13 +1356,13 @@ export async function connecter(
   }
 
   if (!fournisseur.adresseAutorisation) {
-    return { ok: false, message: tf("{0} n'a pas indiqué de page d'autorisation.", entree.label) };
+    return { ok: false, message: tf("{0} n'a pas indiqué de page d'autorisation.", t(entree.label)) };
   }
   journaliser("connecteur.ajoute", qui, { connecteur: id, etape: "autorisation demandée" });
   return {
     ok: true,
     adresse: fournisseur.adresseAutorisation,
-    message: tf("Autorisez {0} dans la page qui vient de s'ouvrir.", entree.label),
+    message: tf("Autorisez {0} dans la page qui vient de s'ouvrir.", t(entree.label)),
   };
 }
 
@@ -1396,18 +1392,18 @@ export async function acheverAutorisation(
       authorizationCode: code,
     });
     if (resultat !== "AUTHORIZED") {
-      return { ok: false, message: tf("{0} n'a pas accordé l'autorisation.", entree.label) };
+      return { ok: false, message: tf("{0} n'a pas accordé l'autorisation.", t(entree.label)) };
     }
   } catch (err) {
     return {
       ok: false,
-      message: tf("Échange refusé par {0} : {1}", entree.label, err instanceof Error ? err.message : String(err)),
+      message: tf("Échange refusé par {0} : {1}", t(entree.label), err instanceof Error ? err.message : String(err)),
     };
   }
 
   memoriserRetour(attendu.id, attendu.retour);
   const r = await brancherDistant(entree, attendu.pour ?? "systeme");
-  return { ...r, label: entree.label };
+  return { ...r, label: t(entree.label) };
 }
 
 /** Enregistre et démarre un service distant, une fois l'autorisation obtenue. */
@@ -1431,7 +1427,7 @@ async function brancherDistant(
     await retirerServeur(entree.id);
     return {
       ok: false,
-      message: tf("{0} a autorisé l'accès, mais son serveur n'a pas répondu : {1}.", entree.label, demarrage.error ?? "cause inconnue"),
+      message: tf("{0} a autorisé l'accès, mais son serveur n'a pas répondu : {1}.", t(entree.label), demarrage.error ?? t("cause inconnue")),
     };
   }
 
@@ -1445,8 +1441,8 @@ async function brancherDistant(
     ok: true,
     message:
       outils > 1
-        ? tf("{0} est branché : {1} outils disponibles.", entree.label, outils)
-        : tf("{0} est branché : {1} outil disponible.", entree.label, outils),
+        ? tf("{0} est branché : {1} outils disponibles.", t(entree.label), outils)
+        : tf("{0} est branché : {1} outil disponible.", t(entree.label), outils),
   };
 }
 

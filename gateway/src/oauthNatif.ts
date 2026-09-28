@@ -938,7 +938,8 @@ function pageBoucle(res: http.ServerResponse, statut: number, titre: string, mes
     "X-Frame-Options": "DENY",
   });
   res.end(
-    '<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Connexion</title></head>' +
+    // Langue et titre de la demande (tournée des connecteurs du 28/09/2026) : la page disait « fr » et « Connexion » à tous.
+    `<!doctype html><html lang="${langue()}"><head><meta charset="utf-8"><title>${echapperHtml(titre)}</title></head>` +
       '<body style="font-family:system-ui,sans-serif;max-width:34rem;margin:4rem auto;padding:0 1rem;line-height:1.5">' +
       `<h1 style="font-size:1.25rem">${echapperHtml(titre)}</h1><p>${echapperHtml(message)}</p></body></html>`,
   );

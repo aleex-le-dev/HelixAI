@@ -680,7 +680,7 @@ function echapperHtml(texte: string): string {
  */
 function pageRetour(res: http.ServerResponse, statut: number, titre: string, message: string): void {
   const corps =
-    '<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Google Drive</title></head>' +
+    `<!doctype html><html lang="${langue()}"><head><meta charset="utf-8"><title>Google Drive</title></head>` +
     '<body style="font-family:system-ui,sans-serif;max-width:34rem;margin:4rem auto;padding:0 1rem;line-height:1.5">' +
     `<h1 style="font-size:1.25rem">${echapperHtml(titre)}</h1><p>${echapperHtml(message)}</p>` +
     "</body></html>";

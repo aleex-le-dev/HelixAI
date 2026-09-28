@@ -1575,6 +1575,20 @@ export async function handleChatRequest(
       if (result.toolCalls.length === 0 && nomsProposes.length > 0) {
         let ecrits = petits.appelsDansLeTexte(result.content, nomsProposes);
         if (ecrits.length === 0 && !result.content.trim() && result.reflexion) ecrits = petits.appelsDansLeTexte(result.reflexion, nomsProposes);
+        /*
+         * Sauf l'appel qui ne fait que recopier un appel écrit dans ce que le
+         * modèle a lu (une publication, un mail, une page, un document) : c'est
+         * une citation, pas une décision du modèle (petitsModeles.ts,
+         * `appelsLus`, SECURITE.md § 41). Il reste du texte dans la réponse.
+         */
+        if (ecrits.length > 0) {
+          const lus = petits.appelsLus(fil, nomsProposes);
+          const recopies = ecrits.filter((e) => lus.has(petits.empreinteAppel(e)));
+          if (recopies.length > 0) {
+            ecrits = ecrits.filter((e) => !lus.has(petits.empreinteAppel(e)));
+            console.log(`[chat] ${recopies.length} appel(s) écrit(s) par ${model.id} recopié(s) d'un contenu lu (${recopies.map((e) => e.name).join(", ")}) : non lancé(s).`);
+          }
+        }
         if (ecrits.length > 0) {
           result.toolCalls = ecrits.map((e, k) => ({ id: `helix_texte_${iteration}_${k}`, name: e.name, args: e.args }));
           result.content = petits.sansAppelsEcrits(result.content);

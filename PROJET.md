@@ -510,7 +510,7 @@ Douze services sont branchés ainsi, vérifiés un à un le 18/09/2026 (leur ser
 répond, publie ses métadonnées et accepte l'enregistrement dynamique) : Notion,
 Linear, Jira et Confluence, Asana, Sentry, Intercom, Canva, Figma, Webflow, Wix,
 Vercel, Square, PayPal. Quatre autres publient un serveur mais veulent une
-application déclarée chez eux : GitHub, Slack, Box, Airtable. (Revérifié le 28/09/2026 : Figma et Vercel retirés, Asana
+application déclarée chez eux : GitHub, Slack, Box, Airtable. (Revérifié le 28/09/2026 : Figma et Vercel retirés puis remis le même jour, Asana
 passé en application déclarée, Airtable en un clic ; voir plus bas.) Une personne la crée
 une seule fois, colle son identifiant, et le bouton « Se connecter » suffit ensuite à
 tout le monde. Les autres restent branchés par jeton, avec un serveur exécuté sur la
@@ -624,9 +624,10 @@ SECURITE.md § 49. Ce qu'il faut retenir :
   reconnecte : l'autorisation d'une adresse ne sert jamais à une autre.
 - **Webflow** ne documente que l'ancien transport SSE, que Helix ne parlait pas : `mcp.ts` se replie
   désormais sur SSE quand le transport « streamable » est refusé (spécification MCP).
-- **Figma et Vercel sont retirés du catalogue** : leur documentation réserve leur serveur aux clients
-  qu'ils ont approuvés. Décision prise ici, réversible si l'un d'eux ouvre l'accès (liste d'attente
-  chez Figma) ; à confirmer par Medhi.
+- **Figma et Vercel ont été retirés du catalogue, puis remis le même jour** : leur documentation
+  réserve leur serveur aux clients qu'ils ont approuvés, mais Medhi a branché Helix à Vercel depuis
+  l'écran et la page d'autorisation de Vercel l'a accepté (capture du 28/09/2026). Décision de
+  Medhi : ils restent (`connecteurs.ts`, commentaire de Figma).
 - Écran : pour GitHub, Slack, Box et Asana, l'adresse de retour à déclarer s'effaçait aussitôt
   affichée ; elle reste. Panneaux Facebook et Instagram : Meta ne fait plus choisir un type d'app
   mais des cas d'usage. La page de retour d'autorisation suit la langue du navigateur.

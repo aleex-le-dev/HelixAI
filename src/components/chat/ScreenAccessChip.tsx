@@ -64,6 +64,12 @@ export function ScreenAccessChip({ modeleVoit = true }: { modeleVoit?: boolean }
           onClick={p.onClick}
           active={open}
           aria-expanded={p["aria-expanded"]}
+          /*
+           * L'icône seule sous 640 px (écran allumé ou barré suffit à le lire) :
+           * à 375 px, elle prenait la place du nom du dossier de Cowork, réduit
+           * à sa première lettre (parcours du 28/09/2026).
+           */
+          compacte
         >
           {sansVision
             ? t("Écran : sans vision")

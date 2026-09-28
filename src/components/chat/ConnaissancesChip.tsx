@@ -57,6 +57,8 @@ export function ConnaissancesChip({
           onClick={p.onClick}
           active={open || actives.size > 0}
           aria-expanded={p["aria-expanded"]}
+          // L'icône seule sous 640 px, comme les outils (OutilsChip.tsx) ; elle se colore quand une base est cochée.
+          compacte
         >
           {libelle}
         </Chip>

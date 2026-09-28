@@ -106,6 +106,12 @@ export function ProjectSelector({
           active={open || Boolean(selected)}
           aria-expanded={p["aria-expanded"]}
           title={selected ? tf("Rangé dans le projet {0}", selected.name) : t("Ranger ce chat dans un projet")}
+          /*
+           * L'icône seule sous 640 px, comme les autres puces de la barre
+           * (parcours du 28/09/2026) : à 375 px, quatre puces sur une ligne ne
+           * laissaient à « Projet » et « Agent » que « Pr » et « A », coupés net.
+           */
+          compacte
         >
           <span className="inline-block max-w-[160px] truncate align-bottom">
             {selected ? selected.name : t("Projet")}
@@ -220,8 +226,10 @@ export function AgentSelector({
           // La photo de l'agent choisi, s'il en a une (27/09/2026).
           leading={selected?.photo ? <AvatarAgent photo={selected.photo} nom={selected.name} size={16} /> : <Bot size={15} strokeWidth={1.75} />}
           onClick={p.onClick}
-          active={open}
+          // Allumée quand un agent est choisi : sous 640 px, son nom ne se lit plus qu'au survol.
+          active={open || selected.id !== DEFAULT_AGENT.id}
           aria-expanded={p["aria-expanded"]}
+          compacte
         >
           {/* Libellé court « Agent » tant qu'on est sur l'agent par défaut. */}
           {selected.id === DEFAULT_AGENT.id ? t("Agent") : selected.name}

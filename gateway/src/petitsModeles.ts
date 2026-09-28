@@ -4,6 +4,7 @@ import { basename, extname, isAbsolute, relative, resolve as resoudreChemin, sep
 import { accoladesCss, syntaxeJs } from "./controleWeb.ts";
 import { etapeExigeAction } from "./plan.ts";
 import { pythonPrive } from "./pythonPrive.ts";
+import { controlerSyntaxeJs } from "./syntaxeNode.ts";
 import { cheminReel, estProtege } from "./zonesProtegees.ts";
 
 /**
@@ -686,7 +687,8 @@ function lancer(commande: string, args: string[], env?: NodeJS.ProcessEnv): Prom
 
 /**
  * La syntaxe d'un fichier que l'agent vient d'écrire, contrôlée sans rien
- * exécuter de son code : `node --check` (compile seulement), l'analyse de
+ * exécuter de son code : la compilation JavaScript dans la passerelle
+ * (syntaxeNode.ts, ce que faisait `node --check`), l'analyse de
  * Python par `ast.parse` (ni import ni `.pyc` écrit, contrairement à
  * `py_compile`), `JSON.parse`, l'équilibre des accolades CSS et la
  * compilation des scripts écrits dans une page (controleWeb.ts). Rend le
@@ -725,20 +727,15 @@ export async function verifierEcriture(absolu: string, racine: string): Promise<
   }
   if (ext === ".js" || ext === ".mjs" || ext === ".cjs") {
     /*
-     * `node --check` plutôt que `node:vm` : il sait lire un module (import,
-     * export), que la compilation d'un script refuse. Le binaire de la
-     * passerelle, même dans Electron (ELECTRON_RUN_AS_NODE) ; un environnement
-     * réduit, sans les secrets de l'instance : rien n'est exécuté, mais rien
-     * n'a à y être non plus.
+     * Compilé dans la passerelle, sans lancer de programme ni rien exécuter
+     * (syntaxeNode.ts) : `node --check` lançait le binaire de Helix en mode
+     * Node, ce qui demandait le fusible RunAsNode ouvert (fermé le
+     * 28/09/2026). Les modules (import, export) sont lus comme avant.
      */
-    const r = await lancer(process.execPath, ["--check", absolu], {
-      ELECTRON_RUN_AS_NODE: "1",
-      PATH: process.env.PATH ?? "",
-      ...(process.env.SystemRoot ? { SystemRoot: process.env.SystemRoot } : {}),
-    });
-    if (!r || r.code === 0) return null;
-    const ligne = r.erreur.match(/:(\d+)\r?\n/)?.[1];
-    const message = r.erreur.match(/^\w*Error: .*$/m)?.[0] ?? r.erreur.trim().split("\n").pop() ?? "";
+    const erreur = await controlerSyntaxeJs(texte, absolu);
+    if (!erreur) return null;
+    const ligne = erreur.match(/:(\d+)\r?\n/)?.[1];
+    const message = erreur.match(/^\w*Error: .*$/m)?.[0] ?? erreur.trim().split("\n").pop() ?? "";
     return `${rel} : erreur de syntaxe JavaScript${ligne ? ` ligne ${ligne}` : ""} (${message.slice(0, 200)})`;
   }
   if (ext === ".py") {

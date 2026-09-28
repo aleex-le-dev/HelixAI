@@ -3,10 +3,21 @@
  *
  * Elle n'était pas dans le paquet : il fallait le dépôt et un Node installé.
  * Le paquet l'embarque maintenant (extraResources, `Resources/cli`), et un
- * bouton des Paramètres pose un petit lanceur dans `~/.local/bin/helix`. Le
- * lanceur fait tourner le script avec le binaire de l'application en mode Node
- * (ELECTRON_RUN_AS_NODE, comme la passerelle) : le poste n'a pas besoin de
- * Node.
+ * bouton des Paramètres pose un petit lanceur dans `~/.local/bin/helix`.
+ *
+ * Le lanceur fait tourner le script avec un vrai Node (28/09/2026). Il le
+ * faisait avec le binaire de l'application en mode Node (ELECTRON_RUN_AS_NODE),
+ * ce qui obligeait à laisser ouvert le fusible RunAsNode, par lequel
+ * n'importe quel programme du poste pouvait faire tourner son code sous
+ * l'identité de Helix (SECURITE.md, « RunAsNode fermé »). Dans l'ordre :
+ *  1. le Node que Helix pose lui-même (gateway/src/installationOpenClaw.ts :
+ *     version épinglée, empreinte vérifiée), s'il est là ;
+ *  2. sinon le Node du système, s'il est en version 20 ou plus (ce que
+ *     demande cli/helix.mjs) ;
+ *  3. sinon le lanceur le dit, et « Mettre en place » demande à la passerelle
+ *     de poser le Node de Helix (par son canal, electron/main.cjs).
+ * Le choix se fait à chaque lancement, dans le lanceur : un Node installé ou
+ * retiré ensuite est pris en compte sans rien refaire.
  *
  * Aucun droit d'administrateur : rien n'est écrit hors du dossier personnel.
  * Si `~/.local/bin` n'est pas dans le PATH du shell de connexion, une ligne
@@ -24,9 +35,16 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const { execFile } = require("node:child_process");
-const { app } = require("electron");
+
+/*
+ * `app` lu au moment de s'en servir : `contenuLanceur` et les essais
+ * (scripts/securite.mjs) chargent ce fichier hors d'Electron.
+ */
+const app = () => require("electron").app;
 
 const MARQUE = "# Ajouté par HelixAI (ligne de commande helix)";
+/** La version de Node que demande cli/helix.mjs (fetch intégré, modules standard). */
+const NODE_MINIMUM = 20;
 const dossierLanceur = () => path.join(os.homedir(), ".local", "bin");
 const lanceur = () => path.join(dossierLanceur(), "helix");
 /*
@@ -44,20 +62,81 @@ function profil() {
 
 /** Le script livré : dans le paquet, ou dans le dépôt en développement. */
 function script() {
-  return app.isPackaged
+  return app().isPackaged
     ? path.join(process.resourcesPath, "cli", "helix.mjs")
     : path.join(__dirname, "..", "cli", "helix.mjs");
 }
 
+/**
+ * Le Node que Helix pose : même règle que `racine()` de
+ * gateway/src/installationOpenClaw.ts (la passerelle reçoit le même
+ * environnement que ce processus). `node` y est un lien vers la version
+ * installée : le chemin reste bon quand elle change.
+ */
+function nodePrive() {
+  const donnees = process.env.HELIX_DATA_DIR ?? path.join(os.homedir(), ".helix", "data");
+  return path.join(donnees, "openclaw-moteur", "node", "bin", "node");
+}
+
+/** Le nom affiché, dans le message du lanceur quand aucun Node ne convient. */
+function nomProduit() {
+  try {
+    const nom = require("../package.json").nomAffiche;
+    if (typeof nom === "string" && nom.trim()) return nom.trim();
+  } catch {
+    /* paquet sans nom affiché */
+  }
+  return "Helix";
+}
+
 const guillemets = (s) => `'${String(s).replace(/'/g, `'\\''`)}'`;
 
-function contenuLanceur() {
+/**
+ * Le lanceur. Il choisit le Node à chaque lancement (voir l'en-tête) : celui
+ * de Helix, puis `node` du PATH du terminal, puis les emplacements usuels, le
+ * premier en version 20 ou plus. Le message final est en français, comme toute
+ * la ligne de commande (cli/textes.mjs, décision du 25/09/2026).
+ */
+function contenuLanceur({ script: scriptCli = script(), prive = nodePrive(), nom = nomProduit() } = {}) {
+  const verifier = `process.exit(Number(process.versions.node.split(".")[0]) >= ${NODE_MINIMUM} ? 0 : 1)`;
   return [
     "#!/bin/sh",
     "# Lanceur de la ligne de commande helix, posé par l'application (Paramètres).",
-    `ELECTRON_RUN_AS_NODE=1 exec ${guillemets(process.execPath)} ${guillemets(script())} "$@"`,
+    `# Node : celui que l'application pose, sinon celui du système en version ${NODE_MINIMUM} ou plus.`,
+    `for NODE in ${guillemets(prive)} "$(command -v node 2>/dev/null)" /opt/homebrew/bin/node /usr/local/bin/node /usr/bin/node; do`,
+    `  [ -n "$NODE" ] && [ -x "$NODE" ] || continue`,
+    `  "$NODE" -e ${guillemets(verifier)} 2>/dev/null || continue`,
+    `  exec "$NODE" ${guillemets(scriptCli)} "$@"`,
+    "done",
+    `echo ${guillemets(`helix : Node ${NODE_MINIMUM} ou plus est introuvable sur cet ordinateur. Ouvrez ${nom}, Paramètres, Ligne de commande : « Mettre en place » pose le Node de ${nom}.`)} >&2`,
+    "exit 127",
     "",
   ].join("\n");
+}
+
+/** `node --version` d'un exécutable, en nombre (22 pour v22.4.1), ou 0. */
+function versionNode(chemin) {
+  return new Promise((resolve) => {
+    execFile(chemin, ["--version"], { encoding: "utf8", timeout: 5000 }, (err, sortie) => {
+      resolve(err ? 0 : Number(/^v(\d+)/.exec(String(sortie).trim())?.[1] ?? 0));
+    });
+  });
+}
+
+/**
+ * Le Node dont se servira le lanceur, vu depuis l'application : `prive`,
+ * `systeme` (dans le PATH du shell de connexion ou aux emplacements usuels),
+ * ou null. Même ordre que le lanceur.
+ */
+async function nodeUtilisable() {
+  const prive = nodePrive();
+  if (fs.existsSync(prive) && (await versionNode(prive)) >= NODE_MINIMUM) return "prive";
+  const dossiers = [...(await pathDuShell()).split(":").filter(Boolean), "/opt/homebrew/bin", "/usr/local/bin", "/usr/bin"];
+  for (const dossier of [...new Set(dossiers)]) {
+    const candidat = path.join(dossier, "node");
+    if (fs.existsSync(candidat) && (await versionNode(candidat)) >= NODE_MINIMUM) return "systeme";
+  }
+  return null;
 }
 
 /**
@@ -119,10 +198,18 @@ async function etat() {
     chemin: lanceur(),
     profil: profil(),
     ligneAjoutee,
+    // Le Node dont se servira le lanceur : « prive » (celui de Helix), « systeme », ou null (aucun en version 20 ou plus).
+    node: disponible ? await nodeUtilisable() : null,
   };
 }
 
-async function installer() {
+/**
+ * Pose le lanceur. `demanderNodePrive` (electron/main.cjs) : quand le poste
+ * n'a aucun Node qui convienne, la passerelle pose celui de Helix. Le lanceur
+ * est posé même si cela échoue : il le dira à chaque lancement, et l'état
+ * rendu porte la raison (`erreurNode`), que l'écran affiche.
+ */
+async function installer({ demanderNodePrive } = {}) {
   if (empechement()) throw new Error(empechement() === "appimage" ? "Pas avec l'AppImage : installez le paquet .deb." : "Windows n'est pas encore pris en charge.");
   if (!fs.existsSync(script())) throw new Error("La ligne de commande est absente de ce paquet.");
   if (fs.existsSync(lanceur())) {
@@ -134,10 +221,12 @@ async function installer() {
     }
     if (!estLeNotre(actuel)) return etat();
   }
-  fs.mkdirSync(dossierLanceur(), { recursive: true });
-  const tmp = `${lanceur()}.${process.pid}.tmp`;
-  fs.writeFileSync(tmp, contenuLanceur(), { mode: 0o755 });
-  fs.renameSync(tmp, lanceur());
+  let erreurNode;
+  if (!(await nodeUtilisable()) && typeof demanderNodePrive === "function") {
+    const r = await demanderNodePrive();
+    if (!r.ok) erreurNode = r.erreur || "inconnue";
+  }
+  poser();
   if (!(await pathDuShell()).split(":").includes(dossierLanceur())) {
     let actuel = "";
     try {
@@ -150,7 +239,34 @@ async function installer() {
       fs.appendFileSync(profil(), ajout);
     }
   }
-  return etat();
+  return { ...(await etat()), ...(erreurNode ? { erreurNode } : {}) };
+}
+
+/** Écrit le lanceur (à côté, puis renommé). */
+function poser() {
+  fs.mkdirSync(dossierLanceur(), { recursive: true });
+  const tmp = `${lanceur()}.${process.pid}.tmp`;
+  fs.writeFileSync(tmp, contenuLanceur(), { mode: 0o755 });
+  fs.renameSync(tmp, lanceur());
+}
+
+/**
+ * Au démarrage : un lanceur posé par une version d'avant le 28/09/2026
+ * lançait le binaire de l'application avec ELECTRON_RUN_AS_NODE. Le fusible
+ * RunAsNode étant fermé, il ouvrirait l'application au lieu de la ligne de
+ * commande. Il est réécrit, seulement s'il est le nôtre et de cette forme
+ * ancienne : rien n'est téléchargé ici, le lanceur dira s'il manque Node.
+ */
+function remplacerAncienLanceur() {
+  if (empechement()) return false;
+  try {
+    const actuel = fs.readFileSync(lanceur(), "utf8");
+    if (!estLeNotre(actuel) || !actuel.includes("ELECTRON_RUN_AS_NODE") || !fs.existsSync(script())) return false;
+    poser();
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 async function retirer() {
@@ -173,4 +289,4 @@ async function retirer() {
   return etat();
 }
 
-module.exports = { etat, installer, retirer };
+module.exports = { etat, installer, retirer, remplacerAncienLanceur, contenuLanceur, NODE_MINIMUM };

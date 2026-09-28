@@ -7,6 +7,7 @@ import * as agenda from "./agenda.ts";
 import * as tachesProgrammees from "./tachesProgrammees.ts";
 import * as drive from "./drive.ts";
 import * as slack from "./slack.ts";
+import * as natifs from "./outilsNatifs.ts";
 import * as bibliotheque from "./bibliotheque.ts";
 import * as controleWeb from "./controleWeb.ts";
 import { definirEspaceDeTravail } from "./approbation.ts";
@@ -94,6 +95,13 @@ export async function executerOutil(
 ): Promise<{ ok: boolean; content: string }> {
   // Les tâches programmées (tachesProgrammees.ts) : au nom de la personne, hors des familles des employés.
   if (nom.startsWith("taches__")) return tachesProgrammees.callTool(nom, args, pour?.userId);
+  /*
+   * Sheets, Slides, YouTube, LinkedIn, Facebook, Instagram, TikTok
+   * (outilsNatifs.ts) : au nom de la personne, qui doit administrer
+   * l'instance pour écrire ou publier. Hors des familles des employés : un
+   * employé OpenClaw ne les voit pas (serveurOutils.ts ne sert que sa famille).
+   */
+  if (natifs.serviceDe(nom)) return natifs.callTool(nom, args, pour);
   switch (familleDe(nom)) {
     case "bibliotheque":
       return bibliotheque.callTool(nom, args, pour ?? { userId: "", groupes: [] });

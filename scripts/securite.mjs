@@ -369,6 +369,8 @@ const ROUTES = [
   ["POST", "/helix/agenda/google/oublier"],
   // Ajoutées le 27/09/2026 : Codex avec le compte ChatGPT du propriétaire (codex.ts).
   ["GET", "/helix/codex"], ["POST", "/helix/codex/connexion"], ["POST", "/helix/codex/tache"], ["POST", "/helix/codex/arreter"],
+  // Ajoutées le 28/09/2026 : Sheets, Slides, YouTube et réseaux sociaux (oauthNatif.ts, section 15 bis).
+  ["GET", "/helix/natifs"], ["POST", "/helix/natifs/application"], ["POST", "/helix/natifs/connecter"], ["POST", "/helix/natifs/code"], ["POST", "/helix/natifs/oublier"],
 ];
 for (const [methode, chemin] of ROUTES) {
   const r = await appel(chemin, { method: methode, headers: { "Content-Type": "application/json" }, body: methode === "POST" ? "{}" : undefined });
@@ -413,6 +415,8 @@ const SEANCE_REQUISE = [
   ["GET", "/helix/cles-api"], ["POST", "/helix/cles-api"], ["POST", "/helix/cles-api/cle_x"], ["POST", "/helix/cles-api/cle_x/revoquer"],
   // Ajoutés le 27/09/2026 : Codex (codex.ts).
   ["GET", "/helix/codex"], ["POST", "/helix/codex/connexion"], ["POST", "/helix/codex/connexion/annuler"], ["POST", "/helix/codex/tache"], ["POST", "/helix/codex/arreter"],
+  // Ajoutés le 28/09/2026 : Sheets, Slides, YouTube et réseaux sociaux (oauthNatif.ts).
+  ["GET", "/helix/natifs"], ["POST", "/helix/natifs/application"], ["POST", "/helix/natifs/application/effacer"], ["POST", "/helix/natifs/connecter"], ["POST", "/helix/natifs/code"], ["POST", "/helix/natifs/oublier"],
 ];
 for (const [methode, chemin] of SEANCE_REQUISE) {
   const r = await appel(chemin, { method: methode, headers: avecJeton, body: methode === "POST" ? "{}" : undefined });
@@ -5649,6 +5653,54 @@ console.log("\n14 bis. Seconde tournée de l'audit : dépendances npm à date fi
     }
     verifier("dépôt : aucun fichier suivi avec « Co-Authored-By », renvoi au fichier de consignes d'un outil d'IA ni nom court Windows de ce poste", traces.length === 0, traces.slice(0, 5).join(", "));
   }
+}
+
+/*
+ * Google Sheets, Slides, YouTube, LinkedIn, Facebook, Instagram, TikTok
+ * (oauthNatif.ts, outilsNatifs.ts, 28/09/2026). La barrière d'abord, chargée
+ * ici même ; puis, de bout en bout, une passerelle jetable devant de faux
+ * serveurs OAuth et de fausses API (scripts/essai-natifs.mjs, lancé à part
+ * comme l'essai des fournisseurs : il remplace le client HTTPS de sa
+ * passerelle). Aucun vrai service n'est joint.
+ */
+console.log("\n15 bis. Connecteurs réseaux sociaux et Google");
+{
+  const { pathToFileURL: versUrl } = await import("node:url");
+  const { modifie, demandeToujours, resumerOutil } = await import(versUrl(join(RACINE, "gateway", "src", "approbation.ts")).href);
+  const lectures = ["sheets__lire", "slides__lire", "youtube__chaine", "youtube__videos", "linkedin__profil", "linkedin__pages", "linkedin__publications", "linkedin__statistiques", "facebook__pages", "facebook__publications", "instagram__compte", "instagram__publications", "instagram__statistiques", "tiktok__profil", "tiktok__videos"];
+  const ecritures = ["sheets__ecrire", "sheets__ajouter_lignes", "linkedin__publier", "facebook__publier", "instagram__publier", "tiktok__publier_video"];
+  verifier("réseaux et Google : lire ne demande rien au niveau « Demander avant de modifier »", lectures.every((o) => !modifie(o) && !demandeToujours(o)), lectures.filter((o) => modifie(o)).join(", "));
+  verifier("réseaux et Google : écrire une feuille et publier demandent une carte à chaque fois, à tout niveau", ecritures.every((o) => modifie(o) && demandeToujours(o)), ecritures.filter((o) => !demandeToujours(o)).join(", "));
+  verifier("réseaux et Google : un outil inconnu de ces préfixes est traité comme une modification", ["linkedin__supprimer", "facebook__inconnu", "tiktok__publier_photo"].every((o) => modifie(o)), "laissez-passer");
+  const carte = resumerOutil("facebook__publier", { page: "Page", message: "Bonjour à tous", lien: "https://exemple.fr" });
+  verifier("réseaux et Google : la carte dit où et quoi, et qu'une publication ne se reprend pas", /page Facebook « Page »/.test(carte) && /Bonjour à tous/.test(carte) && /ne se reprend pas/.test(carte), carte);
+  // Les préfixes ne se prêtent pas à un connecteur ajouté (connecteurs.ts, `IDS_RESERVES`) : vérifié aussi par la route dans l'essai.
+  const reserves = readFileSync(join(RACINE, "gateway", "src", "connecteurs.ts"), "utf8").match(/const IDS_RESERVES = new Set\(\[([^\]]*)\]\)/)?.[1] ?? "";
+  verifier("réseaux et Google : les sept préfixes sont réservés aux connexions natives", ["sheets", "slides", "youtube", "linkedin", "facebook", "instagram", "tiktok"].every((p) => reserves.includes(`"${p}"`)), reserves);
+  const familles = readFileSync(join(RACINE, "gateway", "src", "outils.ts"), "utf8").match(/export const FAMILLES: Famille\[\] = \[([^\]]*)\]/)?.[1] ?? "";
+  verifier("réseaux et Google : hors des familles des employés OpenClaw (ils ne publient pas)", !/sheets|linkedin|facebook|instagram|tiktok|youtube|slides/.test(familles), familles);
+
+  const { spawn: lancer } = await import("node:child_process");
+  const essai = await new Promise((fin) => {
+    const e = lancer(process.execPath, [join(RACINE, "scripts", "essai-natifs.mjs")], { stdio: ["ignore", "pipe", "pipe"] });
+    let sortie = "";
+    e.stdout.on("data", (b) => (sortie += b));
+    e.stderr.on("data", (b) => (sortie += b));
+    const minuterie = setTimeout(() => e.kill(), 5 * 60_000);
+    e.on("close", (status) => {
+      clearTimeout(minuterie);
+      fin({ status, sortie });
+    });
+  });
+  const lignes = essai.sortie.split("\n");
+  for (const ligne of lignes) {
+    const ok = /^\s+✓ (.*)$/.exec(ligne);
+    const ko = /^\s+✗ (.*?)(?:  —  obtenu : .*)?$/.exec(ligne);
+    if (ok) verifier(`natifs : ${ok[1]}`, true, "");
+    else if (ko) verifier(`natifs : ${ko[1]}`, false, ligne.split("  —  obtenu : ")[1] ?? "");
+    else if (/^[A-F]\. /.test(ligne)) console.log(`  ${ligne}`);
+  }
+  verifier("natifs : l'essai contre les faux fournisseurs s'est déroulé jusqu'au bout", essai.status === 0 || lignes.some((l) => /vérification\(s\) réussie\(s\)/.test(l)), `${essai.status} ${lignes.slice(-6).join(" ")}`);
 }
 
 console.log(`\n${reussis} vérification(s) réussie(s), ${echecs.length} échec(s).`);

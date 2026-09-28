@@ -18,7 +18,15 @@ import {
   Trash2,
   Plus,
   Loader2,
+  Sheet,
+  Presentation,
+  Youtube,
+  Linkedin,
+  Facebook,
+  Instagram,
+  Music2,
 } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { useProfile } from "@/hooks/useProfile";
 import { useComputer } from "@/hooks/useComputer";
 import { runAction, installerModeleEcran, MODE_LABEL } from "@/lib/computer";
@@ -46,6 +54,8 @@ import { Connecteurs } from "@/components/settings/Connecteurs";
 import { CourrierIMAP } from "@/components/settings/CourrierIMAP";
 import { DriveGoogle } from "@/components/settings/DriveGoogle";
 import { SlackConnecteur } from "@/components/settings/SlackConnecteur";
+import { ConnecteurNatif } from "@/components/settings/ConnecteurNatif";
+import { etatNatifs, type EtatNatif, type IdNatif } from "@/lib/natifs";
 import { etat as etatDrive, type EtatDrive } from "@/lib/drive";
 import { etat as etatSlack, type EtatSlack } from "@/lib/slack";
 import type { ServiceMaison } from "@/components/settings/Connecteurs";
@@ -944,22 +954,23 @@ export function McpSettings() {
    * quatre rejoignent la liste, avec leur logo et leur panneau, sous le titre
    * « Services connectés » : une seule liste, une seule recherche.
    */
-  const [ouvert, setOuvert] = useState<"courrier" | "agenda" | "drive" | "slack" | null>(null);
+  const [ouvert, setOuvert] = useState<string | null>(null);
   const [courrierPret, setCourrierPret] = useState(false);
   const [agendaPret, setAgendaPret] = useState(false);
   const [drive, setDrive] = useState<EtatDrive | null>(null);
   const [slack, setSlack] = useState<EtatSlack | null>(null);
+  const [natifs, setNatifs] = useState<EtatNatif[]>([]);
 
   const relire = useCallback(() => {
     void etatCourrier().then((e) => setCourrierPret(Boolean(e?.configure)));
     void etatAgenda().then((e) => setAgendaPret(Boolean(e?.configure)));
     void etatDrive().then(setDrive);
     void etatSlack().then(setSlack);
+    void etatNatifs().then((e) => setNatifs(e?.services ?? []));
   }, []);
   useEffect(relire, [relire]);
 
-  const basculer = (cle: "courrier" | "agenda" | "drive" | "slack") =>
-    setOuvert((o) => (o === cle ? null : cle));
+  const basculer = (cle: string) => setOuvert((o) => (o === cle ? null : cle));
 
   const CATEGORIE = t("Courrier, agenda et fichiers");
 
@@ -1009,6 +1020,33 @@ export function McpSettings() {
       onBasculer: () => basculer("slack"),
       panneau: <SlackConnecteur onChange={relire} />,
     },
+    /*
+     * Sheets, Slides, YouTube et réseaux sociaux (28/09/2026,
+     * ConnecteurNatif.tsx). Icônes de Lucide : ces marques ne sont pas dans
+     * la table des logos (marques.ts), et une icône neutre suffit à les reconnaître.
+     */
+    ...([
+      ["sheets", "Google Sheets", t("Lire vos feuilles, et y écrire après accord"), Sheet, CATEGORIE],
+      ["slides", "Google Slides", t("Lire vos présentations"), Presentation, CATEGORIE],
+      ["youtube", "YouTube", t("Vidéos et statistiques d'une chaîne"), Youtube, t("Réseaux sociaux")],
+      ["linkedin", "LinkedIn", t("Publier après accord, et lire une page d'entreprise"), Linkedin, t("Réseaux sociaux")],
+      ["facebook", "Facebook", t("Pages : publications, réactions, publier après accord"), Facebook, t("Réseaux sociaux")],
+      ["instagram", "Instagram", t("Compte professionnel : publications, statistiques, publier après accord"), Instagram, t("Réseaux sociaux")],
+      ["tiktok", "TikTok", t("Vidéos, statistiques, publier après accord"), Music2, t("Réseaux sociaux")],
+    ] as [IdNatif, string, string, LucideIcon, string][]).map(([id, label, description, icone, categorie]): ServiceMaison => {
+      const e = natifs.find((s) => s.id === id);
+      return {
+        id,
+        label,
+        description: e?.configure ? tf("Connecté : {0}", e.compte ?? "") : e?.aReconnecter ? t("Accès perdu, à reconnecter") : description,
+        categorie,
+        icone,
+        connecte: Boolean(e?.configure),
+        ouvert: ouvert === id,
+        onBasculer: () => basculer(id),
+        panneau: <ConnecteurNatif id={id} onChange={relire} />,
+      };
+    }),
   ];
 
   return (

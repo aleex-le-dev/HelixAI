@@ -158,6 +158,7 @@ import {
 import * as connecteurs from "./connecteurs.ts";
 import * as drive from "./drive.ts";
 import * as agendaGoogle from "./agendaGoogle.ts";
+import * as natifs from "./oauthNatif.ts";
 import * as tachesProgrammees from "./tachesProgrammees.ts";
 import { chargerClientGoogle, effacerClientGoogle, enregistrerClientGoogle, etatClientGoogle } from "./clientGoogle.ts";
 import * as slack from "./slack.ts";
@@ -1279,6 +1280,51 @@ async function handleClientGoogleEffacer(req: http.IncomingMessage, res: http.Se
   send(res, 200, { ...r, etat: etatClientGoogle() });
 }
 
+/*
+ * Connexions natives (oauthNatif.ts, 28/09/2026). Lire l'état : une séance.
+ * Tout le reste (enregistrer l'application d'un fournisseur, brancher ou
+ * débrancher un compte) : l'administrateur. Un compte branché vaut pour toute
+ * l'instance, et publie au nom de l'organisation ; c'est la règle de la boîte
+ * mail commune (`reserveeALAdministration`). L'état ne contient ni jeton ni
+ * secret, sous aucune forme.
+ */
+async function handleNatifs(req: http.IncomingMessage, res: http.ServerResponse, url: URL, suite: string): Promise<void> {
+  const qui = await demandeur(req, url);
+  if (!qui) return send(res, 401, sansSeance());
+  const base = adresseVue(req) ?? "";
+  const etatComplet = async () => ({ services: await natifs.etat(base), administrateur: await estAdministrateur(qui.userId) });
+  if (req.method === "GET" && suite === "") return send(res, 200, await etatComplet());
+  if (req.method !== "POST") return send(res, 404, { error: { message: t("Introuvable.") } });
+  if (await reserveeALAdministration(res, qui, t("Seul l'administrateur de l'instance peut brancher, débrancher ou configurer ces services : ils agissent au nom de toute l'organisation."))) return;
+  const body = (await readJson(req).catch(() => ({}))) as { service?: unknown; clientId?: unknown; clientSecret?: unknown; choix?: unknown; adresse?: unknown };
+  let r: { ok: boolean; message: string; url?: string };
+  try {
+    switch (suite) {
+      case "/application":
+        r = await natifs.enregistrerApplication(body.service, body.clientId, body.clientSecret, qui.userId);
+        break;
+      case "/application/effacer":
+        r = await natifs.effacerApplication(body.service, qui.userId);
+        break;
+      case "/connecter":
+        if (!base) return send(res, 400, { error: { message: t("Adresse d'instance illisible.") } });
+        r = await natifs.demarrer(body.service, qui.userId, base, body.choix);
+        break;
+      case "/code":
+        r = await natifs.collerAdresse(body.service, body.adresse, qui.userId);
+        break;
+      case "/oublier":
+        r = await natifs.oublier(body.service, qui.userId);
+        break;
+      default:
+        return send(res, 404, { error: { message: t("Introuvable.") } });
+    }
+  } catch (err) {
+    r = { ok: false, message: natifs.messageUtilisateur(err) };
+  }
+  send(res, r.ok ? 200 : 400, { ...r, ...(await etatComplet()) });
+}
+
 async function handleAgendaGoogleEtat(req: http.IncomingMessage, res: http.ServerResponse, url: URL): Promise<void> {
   const qui = await demandeur(req, url);
   if (!qui) return send(res, 401, sansSeance());
@@ -1584,6 +1630,13 @@ const EXECUTION: { methode: string; chemin: string }[] = [
   { methode: "POST", chemin: "/helix/drive/oublier" },
   { methode: "POST", chemin: "/helix/slack/configurer" },
   { methode: "POST", chemin: "/helix/slack/oublier" },
+  // Sheets, Slides, YouTube, réseaux sociaux (oauthNatif.ts, 28/09/2026) : réservés en plus à l'administrateur (`handleNatifs`).
+  { methode: "GET", chemin: "/helix/natifs" },
+  { methode: "POST", chemin: "/helix/natifs/application" },
+  { methode: "POST", chemin: "/helix/natifs/application/effacer" },
+  { methode: "POST", chemin: "/helix/natifs/connecter" },
+  { methode: "POST", chemin: "/helix/natifs/code" },
+  { methode: "POST", chemin: "/helix/natifs/oublier" },
   /*
    * Ajouter un connecteur lance un programme de plus sur la machine, et lui
    * confie un jeton d'accès à un service de l'entreprise ; le retirer coupe cet
@@ -3759,6 +3812,11 @@ async function handleOauthRetour(
   };
 
   const erreur = url.searchParams.get("error");
+  // Un refus chez LinkedIn ou Meta clôt la demande en cours, si son `state` est le bon (oauthNatif.ts) ; sinon il ne touche à rien.
+  if (erreur && natifs.estEtatNatif(url.searchParams.get("state") ?? "")) {
+    const r = await natifs.recevoir(url.searchParams, null);
+    return repondre("Autorisation refusée", r.message, false, 400);
+  }
   if (erreur) {
     return repondre(
       "Autorisation refusée",
@@ -3786,6 +3844,17 @@ async function handleOauthRetour(
    * et c'est lui qui aiguille — l'alternative aurait été une seconde route
    * publique, c'est-à-dire une seconde surface à protéger.
    */
+  // Troisième famille (28/09/2026) : LinkedIn, Facebook, Instagram (oauthNatif.ts), même route publique, même protection.
+  if (natifs.estEtatNatif(etat)) {
+    const r = await natifs.recevoir(url.searchParams, null);
+    return repondre(
+      r.ok ? tf("{0} est branché", r.nom ?? "Service") : "Autorisation interrompue",
+      r.ok ? `${r.message} ${tf("Vous pouvez fermer cette fenêtre et revenir à {0}.", nomProduit())}` : r.message,
+      r.ok,
+      r.ok ? 200 : 400,
+    );
+  }
+
   if (estEtatCourrier(etat)) {
     const r = await acheverCourrier(code, etat);
     if (!r.ok) return repondre("Autorisation interrompue", r.message, false, 400);
@@ -5527,6 +5596,8 @@ const traiter = (
     if (req.method === "POST" && path === "/helix/agenda/google/connecter") return handleAgendaGoogleConnecter(req, res, url);
     if (req.method === "POST" && path === "/helix/agenda/google/code") return handleAgendaGoogleCode(req, res, url);
     if (req.method === "POST" && path === "/helix/agenda/google/oublier") return handleAgendaGoogleOublier(req, res, url);
+    // Sheets, Slides, YouTube, LinkedIn, Facebook, Instagram, TikTok (oauthNatif.ts, 28/09/2026).
+    if (path === "/helix/natifs" || path.startsWith("/helix/natifs/")) return handleNatifs(req, res, url, path.slice("/helix/natifs".length));
     if (req.method === "GET" && path === "/helix/drive") return handleDriveEtat(res);
     if (req.method === "POST" && path === "/helix/drive/connecter")
       return handleDriveConnecter(req, res, url);
@@ -5900,6 +5971,8 @@ void preparerMagasin().then(() => server.listen(PORT, HOST, () => {
   void drive.charger().catch(() => {});
   void agendaGoogle.charger().catch(() => {});
   void slack.charger().catch(() => {});
+  // Sheets, Slides, YouTube, LinkedIn, Facebook, Instagram, TikTok (oauthNatif.ts) : même contrainte.
+  void natifs.charger().catch(() => {});
   // OpenCode manquant : posé en arrière-plan, sans attendre personne (27/09/2026, opencodeEnFond).
   codeEnFond();
   /*

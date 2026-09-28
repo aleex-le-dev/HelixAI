@@ -72,6 +72,13 @@ export const COLLECTIONS_INTERNES = [
    */
   "clientGoogle",
   "agendaGoogle",
+  /*
+   * Google Sheets, Slides, YouTube, LinkedIn, Facebook, Instagram, TikTok
+   * (oauthNatif.ts, 28/09/2026) : les applications saisies à l'écran (secret
+   * chiffré) et les jetons de chaque compte branché. Un jeton qui publie au nom
+   * de l'organisation ne se recopie sur aucun poste.
+   */
+  "connecteursNatifs",
   // Tâches programmées (tachesProgrammees.ts) : exécutées par l'instance, jamais recopiées sur les postes.
   "tachesProgrammees",
   "connecteurs",

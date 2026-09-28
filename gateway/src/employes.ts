@@ -3,7 +3,7 @@ import * as webGarde from "./webGarde.ts";
 import { chmodSync, cpSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, writeFileSync, renameSync } from "node:fs";
 import { open as ouvrirFichier, rename as renommer, rm as effacer } from "node:fs/promises";
 import { homedir } from "node:os";
-import { dirname, join, delimiter } from "node:path";
+import { dirname, join } from "node:path";
 import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { db } from "./db.ts";
 import { deployment } from "./deployment.ts";
@@ -19,7 +19,22 @@ import { t, tf } from "./langue.ts";
 import { OUTIL_EMPLOYE } from "./connaissances.ts";
 import { groupesDe, listerGroupes } from "./groupes.ts";
 import { chiffrerOctets, dechiffrerOctets } from "./secret.ts";
-import { arreterArbre } from "./processus.ts";
+import { arreterArbre, arreterPidArbre, renommer as renommerSur } from "./processus.ts";
+import {
+  candidatsOpenClaw,
+  chercherDansPath,
+  commandeLigneDeProcessus,
+  dossiersDuLancement,
+  estPasserelleOpenClaw,
+  garderVariables,
+  joindrePath,
+  lancementOpenClaw,
+  lireVariable,
+  paquetDerriereLanceur,
+  pathSysteme,
+  poserPath,
+  type Lancement,
+} from "./plateformeOpenClaw.ts";
 import { backendById, discover, type Discovery } from "./backends.ts";
 
 /**
@@ -554,38 +569,56 @@ const auMoins = (v: number[], min: number[]) => {
 };
 
 export interface Moteur {
+  /** Le lanceur trouvé : ce qui l'identifie (`binaireGere()`, `openclaw.chemin` du profil). */
   bin: string;
   version: string;
+  /** Version du Node qui le fait tourner. */
   node: string;
+  /**
+   * Comment le lancer : le lanceur lui-même sur macOS et Linux ; sous Windows,
+   * `node.exe openclaw.mjs` (plateformeOpenClaw.ts, `lancementOpenClaw`).
+   */
+  lancement: Lancement;
 }
 
 let moteurCache: { moteur: Moteur | null; raison?: string; at: number } | null = null;
 
 function candidats(): string[] {
-  const liste: string[] = [];
-  const impose = deployment().openclaw?.chemin;
-  if (impose) liste.push(impose);
-  // Celui qu'Helix a installé passe avant tout autre : c'est la version éprouvée.
-  liste.push(binaireGere());
-  for (const d of (process.env.PATH ?? "").split(delimiter)) if (d) liste.push(join(d, "openclaw"));
-  // L'application lancée depuis le Finder n'hérite pas du PATH du terminal.
-  const nvm = join(homedir(), ".nvm", "versions", "node");
-  if (existsSync(nvm)) {
-    for (const v of readdirSync(nvm)) liste.push(join(nvm, v, "bin", "openclaw"));
-  }
-  liste.push("/opt/homebrew/bin/openclaw", "/usr/local/bin/openclaw", join(homedir(), ".local", "bin", "openclaw"));
-  return [...new Set(liste)];
+  return candidatsOpenClaw({
+    platform: process.platform,
+    env: process.env,
+    maison: homedir(),
+    impose: deployment().openclaw?.chemin,
+    gere: binaireGere(),
+    versionsNvm: () => {
+      const nvm = join(homedir(), ".nvm", "versions", "node");
+      try {
+        return existsSync(nvm) ? readdirSync(nvm) : [];
+      } catch {
+        return [];
+      }
+    },
+  });
 }
 
-function versionDe(bin: string): string | null {
+/** Le paquet `openclaw` d'un lanceur, et son point d'entrée (le champ `bin` de son package.json). */
+function paquetDe(bin: string, paquet: string | null): { version: string; entree: string } | null {
+  const lire = (pkg: string) => {
+    const j = JSON.parse(readFileSync(pkg, "utf8")) as { name?: string; version?: string; bin?: string | Record<string, string> };
+    if (j.name !== "openclaw" || !j.version) return null;
+    const entree = typeof j.bin === "string" ? j.bin : j.bin?.openclaw;
+    return { version: j.version, entree: entree || "openclaw.mjs" };
+  };
   try {
+    // Windows : le paquet est à côté du lanceur de npm, sans lien à suivre.
+    if (paquet) return existsSync(join(paquet, "package.json")) ? lire(join(paquet, "package.json")) : null;
     // …/bin/openclaw → …/lib/node_modules/openclaw/<point d'entrée>
     let d = dirname(realpathSync(bin));
     for (let i = 0; i < 5; i++) {
       const pkg = join(d, "package.json");
       if (existsSync(pkg)) {
-        const j = JSON.parse(readFileSync(pkg, "utf8")) as { name?: string; version?: string };
-        if (j.name === "openclaw" && j.version) return j.version;
+        const trouve = lire(pkg);
+        if (trouve) return trouve;
       }
       d = dirname(d);
     }
@@ -593,6 +626,21 @@ function versionDe(bin: string): string | null {
     /* lien cassé : candidat suivant */
   }
   return null;
+}
+
+/** Comment lancer le candidat `bin`, et sa version ; null s'il n'est pas un OpenClaw qu'on sait lancer d'ici. */
+function examiner(bin: string): { lancement: Lancement; version: string } | null {
+  const p = process.platform;
+  const nodeDuPath = () => chercherDansPath("node", process.env, p, existsSync);
+  // Windows : le package.json d'abord, pour lancer le point d'entrée qu'il déclare (`openclaw.mjs` en 2026.9.4).
+  const derriere = paquetDerriereLanceur(bin, p);
+  const avant = derriere ? paquetDe(bin, derriere) : null;
+  if (derriere && !avant) return null;
+  const lancement = lancementOpenClaw(bin, p, existsSync, nodeDuPath, avant?.entree);
+  if (!lancement) return null;
+  const pkg = avant ?? paquetDe(bin, lancement.paquet);
+  if (!pkg) return null;
+  return { lancement, version: pkg.version };
 }
 
 interface Sortie {
@@ -616,8 +664,9 @@ export async function detecterMoteur(forcer = false): Promise<{ moteur: Moteur |
   let meilleur: Moteur | null = null;
   for (const bin of candidats()) {
     if (!existsSync(bin)) continue;
-    const version = versionDe(bin);
-    if (!version) continue;
+    const trouve = examiner(bin);
+    if (!trouve) continue;
+    const { version, lancement } = trouve;
     // Le premier candidat valable parmi l'imposé et l'installé par Helix l'emporte ; ailleurs, le plus récent.
     if (meilleur && (meilleur.bin === binaireGere() || meilleur.bin === deployment().openclaw?.chemin)) continue;
     if (meilleur && auMoins(versionNum(meilleur.version), versionNum(version))) continue;
@@ -625,14 +674,13 @@ export async function detecterMoteur(forcer = false): Promise<{ moteur: Moteur |
       raison = tf("OpenClaw {0} est trop ancien : il faut la version 2026.8.1 (OpenClaw 2.0) ou plus récente.", version);
       continue;
     }
-    const nodeBin = join(dirname(bin), "node");
-    const n = await executer(existsSync(nodeBin) ? nodeBin : "node", ["--version"], process.env, 10_000);
+    const n = await executer(lancement.node, ["--version"], process.env, 10_000);
     const node = n.sortie.trim();
     if (!n.ok || !auMoins(versionNum(node), NODE_MIN)) {
       raison = tf("OpenClaw {0} est présent, mais il lui faut Node 24.16 ou plus récent (trouvé : {1}).", version, node || t("aucun"));
       continue;
     }
-    meilleur = { bin, version, node };
+    meilleur = { bin, version, node, lancement };
   }
   moteurCache = { moteur: meilleur, raison: meilleur ? undefined : raison, at: Date.now() };
   return moteurCache;
@@ -751,16 +799,28 @@ export function connaitrePasserelle(p: { url: string; jeton: string }): void {
  */
 const TRANSMISES_OPENCLAW = ["HOME", "USER", "LOGNAME", "SHELL", "LANG", "TZ", "TERM", "TMPDIR",
   "HTTPS_PROXY", "HTTP_PROXY", "NO_PROXY", "https_proxy", "http_proxy", "no_proxy", "SSL_CERT_FILE", "SSL_CERT_DIR", "NODE_EXTRA_CA_CERTS",
-  "SystemRoot", "SYSTEMROOT", "APPDATA", "LOCALAPPDATA", "USERPROFILE", "TEMP", "TMP", "ComSpec", "PATHEXT", "windir"];
+  "SystemRoot", "SYSTEMROOT", "APPDATA", "LOCALAPPDATA", "USERPROFILE", "TEMP", "TMP", "ComSpec", "PATHEXT", "windir",
+  /*
+   * Windows natif (28/09/2026) : où sont les programmes (OpenClaw y cherche
+   * PowerShell 7, `ProgramFiles\PowerShell\7`, avant Windows PowerShell), le
+   * dossier personnel sous ses deux formes, le nom du compte et du poste, le
+   * processeur, et les modules de PowerShell (les commandes d'un employé
+   * Libre y passent). Aucun secret.
+   */
+  "ProgramFiles", "ProgramFiles(x86)", "ProgramW6432", "ProgramData", "CommonProgramFiles", "CommonProgramFiles(x86)", "CommonProgramW6432",
+  "SystemDrive", "ALLUSERSPROFILE", "HOMEDRIVE", "HOMEPATH", "USERNAME", "USERDOMAIN", "COMPUTERNAME", "PUBLIC", "OS", "PROCESSOR_ARCHITECTURE", "NUMBER_OF_PROCESSORS", "PSModulePath"];
 
 function envOpenClaw(moteur: Moteur): NodeJS.ProcessEnv {
-  const env: NodeJS.ProcessEnv = {};
-  for (const [nom, valeur] of Object.entries(process.env)) {
-    if (valeur !== undefined && (TRANSMISES_OPENCLAW.includes(nom) || nom.startsWith("LC_"))) env[nom] = valeur;
-  }
+  const p = process.platform;
+  // Sous Windows, les noms sans tenir compte de la casse (`Temp`, `COMSPEC`), comme Windows les lit.
+  const env: NodeJS.ProcessEnv = garderVariables(process.env, TRANSMISES_OPENCLAW, ["LC_"], p);
+  /*
+   * Le Node qui accompagne l'installation d'OpenClaw, pas celui d'Electron,
+   * en tête du PATH. `;` sous Windows (un `:` y collait le dossier au suivant,
+   * et `C:` devenait un dossier à lui seul).
+   */
+  poserPath(env, joindrePath([...dossiersDuLancement(moteur.bin, moteur.lancement, p), lireVariable(process.env, "PATH", p) ?? pathSysteme(p, process.env)], p), p);
   Object.assign(env, {
-    // Le Node qui accompagne l'installation d'OpenClaw, pas celui d'Electron.
-    PATH: `${dirname(moteur.bin)}:${process.env.PATH ?? "/usr/bin:/bin"}`,
     OPENCLAW_STATE_DIR: dossier(),
     OPENCLAW_CONFIG_PATH: fichierConfig(),
   });
@@ -1102,7 +1162,8 @@ function appliquerConfiguration(employes: Employe[]): void {
   mkdirSync(dossier(), { recursive: true, mode: 0o700 });
   const tmp = `${fichierConfig()}.helix-tmp`;
   writeFileSync(tmp, JSON.stringify(cfg, null, 2), { mode: 0o600 });
-  renameSync(tmp, fichierConfig());
+  // Sous Windows, un renommage peut échouer un instant (OpenClaw relit le fichier, l'antivirus l'inspecte) : réessayé.
+  renommerSur(tmp, fichierConfig());
 }
 
 const majuscule = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
@@ -1142,6 +1203,14 @@ function outilsDuPalier(e: Employe): string[] {
       "- Exécuter des commandes sur la machine (`exec`). Explique ce que fait une commande avant de la lancer, et n'efface rien sans qu'on te l'ait demandé.",
       "- Te programmer des rappels (`cron`).",
     );
+    /*
+     * Windows natif (28/09/2026) : OpenClaw y passe ses commandes à PowerShell
+     * (plateformeOpenClaw.ts). Sans le savoir, un modèle écrit du `bash`
+     * (`ls -la`, `grep`, `&&` sous Windows PowerShell 5.1) et échoue.
+     */
+    if (process.platform === "win32") {
+      lignes.push("- Cette machine est sous Windows : tes commandes passent par PowerShell. Écris-les en PowerShell (`Get-ChildItem`, `Select-String`, `;` entre deux commandes), pas en bash.");
+    }
   }
   return lignes;
 }
@@ -1273,14 +1342,20 @@ async function arreterOrphelin(): Promise<void> {
   const pid = Number(readFileSync(fichier, "utf8").trim());
   rmSync(fichier, { force: true });
   if (!Number.isInteger(pid) || pid <= 1) return;
-  const ps = await executer("/bin/ps", ["-p", String(pid), "-o", "command="], process.env, 5_000);
+  /*
+   * Sa ligne de commande : `ps` sur macOS et Linux ; sous Windows, qui n'a
+   * pas de `ps`, PowerShell (plateformeOpenClaw.ts). Une ligne qu'on ne peut
+   * pas lire, et on n'arrête rien : le port pris se dit à l'écran.
+   */
+  const commande = commandeLigneDeProcessus(pid, process.platform, process.env);
+  const ps = await executer(commande.fichier, commande.args, process.env, 15_000);
   // OpenClaw se renomme « openclaw-gateway » : sa ligne de commande ne porte plus ses arguments.
-  if (!ps.ok || !ps.sortie.includes("openclaw")) return;
-  try {
-    process.kill(pid, "SIGTERM");
-  } catch {
-    return;
-  }
+  if (!ps.ok || !estPasserelleOpenClaw(ps.sortie, process.platform)) return;
+  /*
+   * Tout son arbre : sous Windows, `process.kill` n'arrête que ce numéro-là,
+   * et le Node que le lanceur d'OpenClaw relance pour lui-même gardait le port.
+   */
+  arreterPidArbre(pid, "SIGTERM");
   for (let i = 0; i < 20 && (await portOuvert(portOpenClaw())); i++) await new Promise((r) => setTimeout(r, 250));
 }
 
@@ -1321,7 +1396,8 @@ async function lancerProcessus(moteur: Moteur): Promise<void> {
   arretDemande = false;
   mkdirSync(join(dossier(), "journaux"), { recursive: true, mode: 0o700 });
   const sortieConsole = join(dossier(), "journaux", "console.log");
-  const p = spawn(moteur.bin, ["gateway", "run", "--port", String(portOpenClaw())], {
+  // Sous Windows, `node.exe openclaw.mjs gateway run …` : jamais le `.cmd`, ni `cmd.exe` entre les deux.
+  const p = spawn(moteur.lancement.fichier, [...moteur.lancement.prefixe, "gateway", "run", "--port", String(portOpenClaw())], {
     env: envOpenClaw(moteur),
     stdio: ["ignore", "pipe", "pipe"],
   });
@@ -1511,7 +1587,7 @@ async function instanceMuette(): Promise<string | null> {
 async function oc(args: string[], delaiMs = 60_000): Promise<Sortie> {
   const { moteur, raison } = await detecterMoteur();
   if (!moteur) return { ok: false, sortie: "", erreur: raison ?? t("OpenClaw introuvable.") };
-  return executer(moteur.bin, args, envOpenClaw(moteur), delaiMs);
+  return executer(moteur.lancement.fichier, [...moteur.lancement.prefixe, ...args], envOpenClaw(moteur), delaiMs);
 }
 
 /**
@@ -1539,7 +1615,8 @@ async function effacerArchives(agent: string, cles: string[] = [], personnes?: s
   if (existsSync(base)) {
     const { moteur } = await detecterMoteur();
     if (moteur) {
-      const node = join(dirname(moteur.bin), "node");
+      // Le Node d'OpenClaw (`node.exe` sous Windows), celui qui a `node:sqlite` à la bonne version.
+      const node = moteur.lancement.node;
       const script = [
         'const { DatabaseSync } = require("node:sqlite");',
         "const base = process.argv[1];",
@@ -1559,7 +1636,7 @@ async function effacerArchives(agent: string, cles: string[] = [], personnes?: s
         "d.close();",
         "process.stdout.write(JSON.stringify(noms));",
       ].join("\n");
-      const r = await executer(existsSync(node) ? node : "node", ["--no-warnings", "-e", script, base, JSON.stringify({ cles, personnes })], envOpenClaw(moteur), 30_000);
+      const r = await executer(node, ["--no-warnings", "-e", script, base, JSON.stringify({ cles, personnes })], envOpenClaw(moteur), 30_000);
       for (const n of lireJson<string[]>(r.sortie) ?? []) noms.add(n);
     }
   }
@@ -1880,10 +1957,15 @@ export async function restaurerMemoire(id: string, copie: string, qui: string): 
   for (const f of fichiers) {
     if (typeof f.chemin !== "string" || typeof f.contenu !== "string") continue;
     const parts = f.chemin.split("/");
-    // Rien hors de son espace, rien dans les fiches qu'Helix écrit.
-    if (parts.some((p) => !p || p === "." || p === "..") || (parts.length === 1 && FICHIERS_HELIX.has(parts[0]!)) || parts[0] === "documents") continue;
+    /*
+     * Rien hors de son espace, rien dans les fiches qu'Helix écrit. Sous
+     * Windows, `\` et `C:` sont aussi des séparateurs : un morceau qui en
+     * porte sortirait de l'espace par `join` (28/09/2026).
+     */
+    if (parts.some((p) => !p || p === "." || p === ".." || /[\\:]/.test(p)) || (parts.length === 1 && FICHIERS_HELIX.has(parts[0]!)) || parts[0] === "documents") continue;
     let cible = join(espace, ...parts);
-    if (existsSync(cible)) cible = cible.replace(/(\.[^./]+)?$/, (ext) => `.restaure${ext}`);
+    // Le suffixe va avant l'extension du fichier, jamais dans le nom d'un dossier (`C:\a.b\notes` sous Windows).
+    if (existsSync(cible)) cible = cible.replace(/(\.[^./\\]+)?$/, (ext) => `.restaure${ext}`);
     mkdirSync(dirname(cible), { recursive: true, mode: 0o700 });
     writeFileSync(cible, Buffer.from(f.contenu, "base64"), { mode: 0o600 });
     remis++;
@@ -2553,6 +2635,12 @@ export async function etatMoteur(): Promise<{
   miseAJour?: string;
   /** Version publiée plus récente encore, pas encore éprouvée : dite, pas proposée. */
   parue?: string;
+  /**
+   * Le système de la machine de l'instance (pas celui de qui regarde) : sous
+   * Windows, l'écran dit que les commandes d'un employé Libre passent par
+   * PowerShell (28/09/2026).
+   */
+  plateforme: NodeJS.Platform;
 }> {
   const { moteur, raison } = await detecterMoteur();
   const visee = versionVisee();
@@ -2568,6 +2656,7 @@ export async function etatMoteur(): Promise<{
     installation: etatInstallation(),
     ...(moteur && plusRecente(visee, moteur.version) ? { miseAJour: visee } : {}),
     ...(moteur && derniere && plusRecente(derniere, visee) && plusRecente(derniere, moteur.version) ? { parue: derniere } : {}),
+    plateforme: process.platform,
   };
 }
 
@@ -2595,7 +2684,8 @@ export const crochetsMiseAJour: Crochets = {
   preparer: async () => {
     enMaintenance = true;
     await arreterProcessus();
-    rmSync(miseDeCote(), { recursive: true, force: true });
+    // Réessayé : sous Windows, un fichier que l'instance vient de lâcher reste pris un instant.
+    rmSync(miseDeCote(), { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
     if (existsSync(dossier())) {
       const racine = dossier();
       cpSync(racine, miseDeCote(), {
@@ -2617,8 +2707,9 @@ export const crochetsMiseAJour: Crochets = {
     enMaintenance = true;
     await arreterProcessus();
     if (existsSync(miseDeCote())) {
-      rmSync(dossier(), { recursive: true, force: true });
-      renameSync(miseDeCote(), dossier());
+      rmSync(dossier(), { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
+      // Réessayé sous Windows (antivirus, fichier encore tenu) : un échec laisserait l'instance sans données.
+      renommerSur(miseDeCote(), dossier());
     }
     moteurCache = null;
     configurationFaite = false;

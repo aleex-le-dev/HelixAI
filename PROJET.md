@@ -397,6 +397,63 @@ serveur hébergé) ; un petit modèle peut encore annoncer « fait » à tort, d
 rendu à relire dans l'onglet Activité. Pas de skills de ClawHub : c'est voulu (plus de
 824 skills malveillantes y ont été recensées en février 2026).
 
+**Windows : OpenClaw natif, sans WSL (décision du 28/09/2026).** Vu par Medhi sur un PC
+Windows, écran « Agents IA », sur la carte d'un agent : « Pas encore en service :
+L'installation automatique d'OpenClaw n'existe que pour macOS et Linux (sous Windows,
+OpenClaw demande WSL) ». Sa question : installer WSL automatiquement ? **Non** : il y faut
+les droits d'administrateur et un redémarrage, ce que Helix ne demande nulle part ailleurs.
+Mais la documentation officielle, relue ce jour-là (docs.openclaw.ai/platforms/windows),
+dit « OpenClaw ships a native Windows Hub companion app plus Windows CLI support », WSL2
+« the most Linux-compatible Gateway runtime », recommandé, pas exigé. **Helix pose donc
+OpenClaw en natif sous Windows (x64 et arm64)**, par le même chemin qu'ailleurs :
+
+- le Node officiel en `.zip` (24.21.0, empreintes déjà épinglées pour l'atelier), extrait
+  par le `tar.exe` de Windows, relié par une jonction (`<données>\openclaw-moteur\node`) ;
+- npm lancé par `node.exe npm-cli.js` (jamais `npm.cmd`, que Node refuse de lancer sans
+  `cmd.exe`), avec `--prefix` écrit en toutes lettres (un `.npmrc` de la personne ou
+  `%APPDATA%\npm` l'enverrait ailleurs ; vaut aussi sur macOS et Linux), environnement sans
+  `npm_*` quelle que soit la casse et un seul `PATH` (sous Windows, `{ ...process.env, PATH }`
+  gardait aussi `Path`) ;
+- OpenClaw lancé par `node.exe <paquet>\openclaw.mjs gateway run --port 18800`, sans
+  interpréteur de commandes : **ni tâche planifiée ni service** (`openclaw gateway install`
+  n'est jamais appelé), c'est la passerelle Helix qui le lance comme processus enfant, comme
+  sur macOS ;
+- PATH en `;`, variables transmises lues sans tenir compte de la casse, plus celles dont
+  OpenClaw a besoin pour trouver PowerShell (`ProgramFiles`, `ProgramW6432`, `PSModulePath`…) ;
+- arrêt par `taskkill.exe /PID <n> /T /F` de System32 (tout l'arbre : le lanceur d'OpenClaw
+  relance Node pour lui-même ; `/F` parce qu'une application console sans fenêtre n'a pas
+  d'autre arrêt, et c'est ce que fait OpenClaw quand on arrête sa propre tâche planifiée) ;
+  l'orphelin d'une passerelle tuée net est reconnu par sa ligne de commande, lue par
+  PowerShell (CIM, `Win32_Process` ; Windows n'a pas de `ps`, et `wmic` est retiré de
+  Windows 11 24H2), jamais par le nom du programme ;
+- renommages réessayés (antivirus), mémoire restaurée qui refuse `\` et `:` dans un nom.
+
+Le code qui dépend du système est dans `gateway/src/plateformeOpenClaw.ts`, en fonctions qui
+reçoivent le système en paramètre. **Ce qui a été essayé, sur le Mac seulement** :
+`scripts/essai-openclaw-windows.mjs` (59 contrôles, aussi dans `npm run securite`, § 21) fait
+tourner ces fonctions avec `win32` et `path.win32` (chemins avec espaces et accents,
+`Path`/`PATH`, lanceur de npm, Node du PATH hors alias du Store, PowerShell encodé, taskkill),
+et l'arrêt réel de `processus.ts` dans un Node où `process.platform` vaut `win32` (taskkill
+intercepté). Le même script, avec `--installation`, a refait sur ce Mac une vraie
+installation jetable par le nouveau chemin commun (Node épinglé, `npm-cli.js`, `--prefix`,
+`openclaw@2026.9.4`, puis une passerelle OpenClaw lancée sur un port libre qui ouvre son
+port), dossier personnel et données temporaires : passé le 28/09/2026. **Rien n'a été
+essayé sur un vrai Windows** : l'archive posée et reliée, npm et le script d'installation
+d'OpenClaw (`postinstall` par `cmd.exe`), OpenClaw qui démarre, ses modules natifs (koffi,
+node-pty : versions win32 x64 et arm64 publiées), ses messageries (en JavaScript ou
+WebAssembly, lu dans les paquets, pas essayé), la ligne de commande lue par PowerShell,
+taskkill, les chemins longs, l'antivirus.
+
+Ce qui reste limité sous Windows natif, dit pour cette capacité seulement : **les commandes
+d'un employé Libre passent par PowerShell** (OpenClaw 2026.9.4, `getShellConfig` :
+PowerShell 7 s'il est installé, sinon Windows PowerShell 5.1), pas par un shell Unix. L'écran
+le dit au palier Libre quand l'instance tourne sous Windows (`moteur.plateforme`), et la
+fiche de poste de l'employé lui dit d'écrire ses commandes en PowerShell. La recherche dans
+la mémoire se fait par mots partout (Helix ne règle pas d'embeddings) : l'absence de
+`sqlite-vec` pour Windows arm64 n'y change rien. Rien d'autre n'est coupé : les capacités
+que la documentation d'OpenClaw réserve à Linux ou macOS (nœuds, conteneurs, bureau distant)
+sont déjà coupées par Helix sur tous les systèmes.
+
 ### 3.5 Connecteurs vers les outils du client
 
 **Décision révisée le 5 septembre 2026.** La position initiale — Composio, au motif
@@ -3557,6 +3614,15 @@ dans Confidentialité) : fonctions absentes, pas des pannes.
    Windows (`mailto:`).
 6. **Sans clic** : OpenCode posé seul au démarrage ; Python et Node de Helix pour l'atelier ;
    l'icône de la barre des tâches (cache de l'explorateur).
+6 bis. **Agents toujours actifs, OpenClaw natif (28/09/2026, § 3.4)** : créer un agent depuis
+   « Agents IA » ; la carte doit passer de « Téléchargement… » à « En service » sans message
+   sur WSL. Relever : `<données>\openclaw-moteur` (dossier `node-v24.21.0-win-x64` et jonction
+   `node`, `node\openclaw.cmd`, `node\node_modules\openclaw`), la durée, l'antivirus, un
+   nom de compte avec espace ou accent. Puis : lui parler, une mission, « Arrêter » Helix et
+   vérifier dans le Gestionnaire des tâches qu'aucun `node.exe` d'OpenClaw ne reste ; tuer
+   Helix net, le relancer (l'orphelin doit être arrêté, le port 18800 repris) ; au palier
+   Libre, « liste les fichiers de ton espace » (commande PowerShell attendue) ; Telegram ou
+   WhatsApp branché ; une mise à jour d'OpenClaw si une version éprouvée plus récente existe.
 
 **MacBook (Mac à puce Apple sans LM Studio ouvert)**
 7. Le parcours complet de mise en route : llmster posé et démarré par Helix, le modèle
@@ -5440,8 +5506,8 @@ pas de source (c'est lui la source) : il se met à jour en installant le nouveau
    24.04 (installation, atelier, moteur, modèle, Chat, application ouverte), pas sur une
    vraie machine ; restent l'icône de la zone de notification (GNOME sans l'extension
    AppIndicator ne la montre pas), l'AppImage, images, dictée, Helix Code, machine de
-   l'agent, la vitesse réelle. Pas proposés sous Windows : OpenClaw (il y demande WSL), la
-   ligne de commande ; nulle part hors macOS : essais de code en bac à sable. Mise à jour
+   l'agent, la vitesse réelle. Pas proposée sous Windows : la ligne de commande (OpenClaw y
+   est posé en natif depuis le 28/09/2026, § 3.4, jamais essayé sur un vrai PC) ; nulle part hors macOS : essais de code en bac à sable. Mise à jour
    d'un clic : macOS, et Windows depuis le 27/09/2026 (écrite, jamais essayée sur un vrai PC) ;
    pas sous Linux.
 10. **Entraînement sur carte NVIDIA** : installation de PyTorch CUDA, QLoRA, comparaison

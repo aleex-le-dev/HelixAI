@@ -6161,7 +6161,9 @@ console.log("\n14 bis. Seconde tournée de l'audit : dépendances npm à date fi
   );
   verifier(
     "OpenClaw : installé avec --before à cette date pour la version éprouvée",
-    /if \(version === VERSION_OPENCLAW_EPROUVEE\) args\.push\(`--before=\$\{DEPENDANCES_NPM_AVANT\}`\)/.test(sansCommentaires(oc)),
+    // Depuis le 28/09/2026, les arguments sont écrits par plateformeOpenClaw.ts (argumentsInstallation), communs à Windows.
+    /avant: version === VERSION_OPENCLAW_EPROUVEE \? DEPENDANCES_NPM_AVANT : undefined/.test(sansCommentaires(oc)) &&
+      /if \(options\.avant\) args\.push\(`--before=\$\{options\.avant\}`\)/.test(sansCommentaires(src("gateway", "src", "plateformeOpenClaw.ts"))),
     "--before absent",
   );
   // Et ce que fait vraiment le lancement : un faux npx relève son environnement.
@@ -7641,6 +7643,28 @@ console.log("\n23. Emplacement du moteur et des modèles : administrateur seul, 
     else if (/^[A-G]\. /.test(ligne)) console.log(`  ${ligne}`);
   }
   verifier("emplacement : l'essai contre les passerelles jetables s'est déroulé jusqu'au bout", essaiE.status === 0, `${essaiE.status} ${lignesE.slice(-6).join(" ")}`);
+}
+
+/*
+ * 24. OpenClaw natif sous Windows (28/09/2026, PROJET.md § 3.4, SECURITE.md
+ * § 57) : Helix ne refuse plus les employés sous Windows. Pas de Windows ici :
+ * `scripts/essai-openclaw-windows.mjs` essaie la logique avec `win32` et
+ * `path.win32`, et l'arrêt de l'arbre dans un Node où `process.platform` vaut
+ * `win32` (taskkill intercepté). Aucun OpenClaw lancé, aucun réseau.
+ */
+console.log("\n24. OpenClaw natif sous Windows : installation, lancement sans cmd.exe, environnement, arrêt de l'arbre, écran");
+{
+  const { spawnSync: lancerEssai } = await import("node:child_process");
+  const essai = lancerEssai(process.execPath, [join(RACINE, "scripts", "essai-openclaw-windows.mjs")], { encoding: "utf8", timeout: 5 * 60_000 });
+  const lignes = `${essai.stdout ?? ""}${essai.stderr ?? ""}`.split("\n");
+  for (const ligne of lignes) {
+    const ok = /^\s+✓ (.*)$/.exec(ligne);
+    const ko = /^\s+✗ (.*?)(?:  —  obtenu : .*)?$/.exec(ligne);
+    if (ok) verifier(`windows : ${ok[1]}`, true, "");
+    else if (ko) verifier(`windows : ${ko[1]}`, false, ligne.split("  —  obtenu : ")[1] ?? "");
+    else if (/^[A-G]\. /.test(ligne)) console.log(`  ${ligne}`);
+  }
+  verifier("windows : l'essai s'est déroulé jusqu'au bout", essai.status === 0, `${essai.status} ${essai.error?.message ?? ""} ${lignes.slice(-6).join(" ")}`);
 }
 
 console.log(`\n${reussis} vérification(s) réussie(s), ${echecs.length} échec(s).`);

@@ -1,0 +1,289 @@
+/*
+ * OpenClaw natif sous Windows : ce qui s'essaie depuis un Mac.
+ *
+ *   node scripts/essai-openclaw-windows.mjs                 (lancé aussi par npm run securite)
+ *   node scripts/essai-openclaw-windows.mjs --installation  (en plus : vraie installation sur ce poste, voir la fin)
+ *
+ * Écrit le 28/09/2026, quand Helix est passé d'un refus (« sous Windows,
+ * OpenClaw demande WSL ») à un OpenClaw natif. Il n'y a pas de Windows ici :
+ * on essaie la logique telle que Windows la verra, en passant `win32` aux
+ * fonctions de plateformeOpenClaw.ts (chemins en `path.win32`), et, dans un
+ * Node à part où `process.platform` vaut `win32`, l'arrêt d'un arbre de
+ * processus (taskkill intercepté, jamais lancé). Ce qui ne s'essaie qu'avec
+ * un vrai Windows (l'archive posée, npm, OpenClaw qui démarre, PowerShell qui
+ * lit une ligne de commande) est dit dans PROJET.md § 3.4.
+ *
+ * Aucun OpenClaw n'est lancé par défaut, ni celui de la personne (port
+ * 18789), ni celui de Helix (18800). Avec `--installation`, une instance
+ * jetable : dossier personnel et données dans un dossier temporaire, un port
+ * libre, arrêtée par son numéro.
+ */
+import { spawnSync, spawn } from "node:child_process";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
+import { createServer } from "node:net";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
+
+const RACINE = join(dirname(fileURLToPath(import.meta.url)), "..");
+let reussis = 0;
+const echecs = [];
+function verifier(nom, condition, obtenu) {
+  if (condition) {
+    reussis++;
+    console.log(`  ✓ ${nom}`);
+  } else {
+    echecs.push(nom);
+    console.log(`  ✗ ${nom}  —  obtenu : ${String(obtenu).slice(0, 400)}`);
+  }
+}
+const lire = (...c) => readFileSync(join(RACINE, ...c), "utf8");
+const sansCommentaires = (s) => s.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+
+const P = await import(pathToFileURL(join(RACINE, "gateway", "src", "plateformeOpenClaw.ts")).href);
+const W = "win32";
+
+console.log("A. Node officiel pour Windows");
+{
+  const x64 = P.archiveNode({ platform: W, arch: "x64", release: "10.0.26100" });
+  const arm = P.archiveNode({ platform: W, arch: "arm64", release: "10.0.26100" });
+  verifier("Windows x64 : l'archive .zip officielle, plus aucun refus", x64.dossier === "win-x64" && x64.extension === ".zip" && !("erreur" in x64), JSON.stringify(x64));
+  verifier("Windows arm64 : l'archive .zip officielle", arm.dossier === "win-arm64" && arm.extension === ".zip", JSON.stringify(arm));
+  const ia32 = P.archiveNode({ platform: W, arch: "ia32", release: "10.0" });
+  verifier("Windows 32 bits : refusé, avec le processeur nommé", "erreur" in ia32 && ia32.erreur.includes("ia32"), JSON.stringify(ia32));
+  const autre = P.archiveNode({ platform: "freebsd", arch: "x64", release: "14" });
+  verifier("système sans archive : le refus ne parle plus de WSL", "erreur" in autre && !/WSL/.test(autre.erreur), JSON.stringify(autre));
+  const vieuxMac = P.archiveNode({ platform: "darwin", arch: "arm64", release: "22.5.0" });
+  const mac = P.archiveNode({ platform: "darwin", arch: "arm64", release: "25.0.0" });
+  verifier("macOS inchangé : 13.5 au moins, archive tar.gz", "erreur" in vieuxMac && mac.dossier === "darwin-arm64" && mac.extension === ".tar.gz", JSON.stringify([vieuxMac, mac]));
+  const source = lire("gateway", "src", "installationOpenClaw.ts");
+  const empreinte = (nom) => new RegExp(`"node-v24\\.21\\.0-${nom}\\.zip": "[0-9a-f]{64}"`).test(source);
+  verifier("les deux archives Windows de Node 24.21.0 ont leur empreinte SHA-256 écrite dans le code", empreinte("win-x64") && empreinte("win-arm64"), "empreinte manquante");
+  const tar = P.commandeExtraction("C:\\Users\\Jean Dupont\\.helix\\a.zip", "C:\\Users\\Jean Dupont\\.helix\\x", ".zip", W, { SystemRoot: "D:\\WINDOWS" });
+  verifier("extraction : le tar.exe de System32 (lu dans SystemRoot), `-xf` pour un .zip, chemins avec espaces en un seul argument", tar.fichier === "D:\\WINDOWS\\System32\\tar.exe" && tar.args[0] === "-xf" && tar.args[1] === "C:\\Users\\Jean Dupont\\.helix\\a.zip", JSON.stringify(tar));
+}
+
+console.log("B. Disposition du Node privé et installation par npm");
+{
+  const dossier = "C:\\Users\\Hélène Dupont\\.helix\\data\\openclaw-moteur\\node";
+  const d = P.dispositionNode(dossier, W);
+  verifier("Windows : node.exe à la racine, npm-cli.js sous node_modules\\npm\\bin, openclaw.cmd à la racine", d.node === `${dossier}\\node.exe` && d.npmCli === `${dossier}\\node_modules\\npm\\bin\\npm-cli.js` && d.lanceurOpenClaw === `${dossier}\\openclaw.cmd` && d.dossierBin === dossier && d.paquets === `${dossier}\\node_modules`, JSON.stringify(d));
+  const m = P.dispositionNode("/u/.helix/data/openclaw-moteur/node", "darwin");
+  verifier("macOS et Linux inchangés : bin/node, lib/node_modules, bin/openclaw", m.node === "/u/.helix/data/openclaw-moteur/node/bin/node" && m.lanceurOpenClaw === "/u/.helix/data/openclaw-moteur/node/bin/openclaw" && m.npmCli === "/u/.helix/data/openclaw-moteur/node/lib/node_modules/npm/bin/npm-cli.js", JSON.stringify(m));
+  const env = P.envInstallation(
+    { Path: "C:\\Program Files\\Git\\cmd;C:\\Windows\\system32", SystemRoot: "C:\\Windows", ComSpec: "C:\\Windows\\system32\\cmd.exe", NPM_CONFIG_PREFIX: "D:\\ailleurs", npm_config_registry: "http://registre.piege", HELIX_CONFIG: "x", Electron_Run_As_Node: "1", APPDATA: "C:\\Users\\a\\AppData\\Roaming", TEMP: "C:\\T" },
+    dossier,
+    W,
+  );
+  const cles = Object.keys(env);
+  verifier("environnement de npm : un seul PATH (le `Path` d'origine retiré), qui commence par le Node privé", cles.filter((k) => k.toLowerCase() === "path").length === 1 && env.PATH.startsWith(`${dossier};`), JSON.stringify(env.PATH));
+  verifier("environnement de npm : System32 et Windows PowerShell dans le PATH (cmd.exe fait tourner les scripts d'installation)", env.PATH.split(";").includes("C:\\Windows\\System32") && env.PATH.includes("WindowsPowerShell\\v1.0"), env.PATH);
+  verifier("environnement de npm : ni NPM_CONFIG_PREFIX ni npm_config_registry, quelle que soit la casse ; ni HELIX_ ni Electron_", !cles.some((k) => /^(npm_|helix_|electron_)/i.test(k)), cles.join(","));
+  verifier("environnement de npm : ComSpec, APPDATA et TEMP gardés", env.ComSpec && env.APPDATA && env.TEMP, cles.join(","));
+  const args = P.argumentsInstallation("2026.9.4", dossier, { avant: "2026-09-27T00:00:00.000Z", scriptsApprouves: true });
+  const i = args.indexOf("--prefix");
+  verifier("npm install : préfixe global explicite, chemin avec espace et accent en un seul argument", args[0] === "install" && args[1] === "-g" && i > 0 && args[i + 1] === dossier, JSON.stringify(args));
+  verifier("npm install : version épinglée, dépendances à date fixe, scripts du seul paquet openclaw", args.includes("openclaw@2026.9.4") && args.includes("--before=2026-09-27T00:00:00.000Z") && args.includes("--allow-scripts=openclaw"), JSON.stringify(args));
+  const source = sansCommentaires(lire("gateway", "src", "installationOpenClaw.ts"));
+  verifier("installation : npm lancé par node et npm-cli.js (jamais npm.cmd, jamais bin/npm)", /executer\(d\.node, \[d\.npmCli, \.\.\.args\]/.test(source) && !/join\(binNode, "npm"\)/.test(source) && !/npm\.cmd/.test(source), "npm lancé autrement");
+  verifier("installation : la vérification lance OpenClaw comme il sera lancé (node.exe openclaw.mjs sous Windows)", /executer\(lancement\.fichier, \[\.\.\.lancement\.prefixe, "--version"\]/.test(source), "vérification autrement");
+  const msg = P.sansChemins("EPERM: operation not permitted, rename 'C:\\Users\\Jean Dupont\\.helix\\data\\x' -> \\\\serveur\\partage\\y (/Users/medhi/.npm/_logs) https://registry.npmjs.org/openclaw");
+  verifier("message de npm à l'écran : sans chemin de la machine (Windows, UNC, Unix), l'adresse du registre gardée", !/Users\\|serveur|\/Users\/medhi/.test(msg) && msg.includes("registry.npmjs.org"), msg);
+}
+
+console.log("C. Trouver OpenClaw et le lancer sans cmd.exe");
+{
+  const existe = (fichiers) => (f) => fichiers.includes(f);
+  const prefixe = "C:\\Users\\Jean Dupont\\.helix\\data\\openclaw-moteur\\node";
+  const gere = `${prefixe}\\openclaw.cmd`;
+  const script = `${prefixe}\\node_modules\\openclaw\\openclaw.mjs`;
+  const l = P.lancementOpenClaw(gere, W, existe([gere, script, `${prefixe}\\node.exe`]), () => "C:\\autre\\node.exe");
+  verifier("le Node privé : node.exe à côté du lanceur, openclaw.mjs en premier argument, le .cmd jamais lancé", l && l.fichier === `${prefixe}\\node.exe` && l.prefixe.length === 1 && l.prefixe[0] === script && l.node === l.fichier && !l.fichier.endsWith(".cmd"), JSON.stringify(l));
+  const npmGlobal = "C:\\Users\\a\\AppData\\Roaming\\npm";
+  const l2 = P.lancementOpenClaw(`${npmGlobal}\\openclaw.cmd`, W, existe([`${npmGlobal}\\openclaw.cmd`, `${npmGlobal}\\node_modules\\openclaw\\openclaw.mjs`]), () => "C:\\Program Files\\nodejs\\node.exe");
+  verifier("un OpenClaw déjà installé par npm (%APPDATA%\\npm) : le Node du PATH, comme le fait le .cmd de npm", l2 && l2.fichier === "C:\\Program Files\\nodejs\\node.exe" && l2.paquet === `${npmGlobal}\\node_modules\\openclaw`, JSON.stringify(l2));
+  verifier("sans Node nulle part : pas de lancement (candidat écarté, pas d'erreur)", P.lancementOpenClaw(`${npmGlobal}\\openclaw.cmd`, W, existe([`${npmGlobal}\\openclaw.cmd`, `${npmGlobal}\\node_modules\\openclaw\\openclaw.mjs`]), () => null) === null, "lancé");
+  verifier("lanceur sans paquet à côté (un .cmd écrit à la main) : écarté", P.lancementOpenClaw("C:\\outils\\openclaw.cmd", W, existe(["C:\\outils\\openclaw.cmd", "C:\\outils\\node.exe"]), () => null) === null, "lancé");
+  const l3 = P.lancementOpenClaw("D:\\oc\\openclaw.mjs", W, existe(["D:\\oc\\openclaw.mjs"]), () => "C:\\n\\node.exe");
+  verifier("chemin imposé vers openclaw.mjs : lancé par Node", l3 && l3.fichier === "C:\\n\\node.exe" && l3.prefixe[0] === "D:\\oc\\openclaw.mjs", JSON.stringify(l3));
+  verifier("un .exe inconnu : écarté", P.lancementOpenClaw("C:\\x\\openclaw.exe", W, () => true, () => "node") === null, "lancé");
+  const l4 = P.lancementOpenClaw(gere, W, existe([gere, `${prefixe}\\node_modules\\openclaw\\bin\\oc.mjs`, `${prefixe}\\node.exe`]), () => null, "bin\\oc.mjs");
+  verifier("point d'entrée déclaré par le package.json : c'est lui qui est lancé", l4 && l4.prefixe[0] === `${prefixe}\\node_modules\\openclaw\\bin\\oc.mjs`, JSON.stringify(l4));
+  verifier(
+    "le paquet derrière un lanceur de npm (openclaw.cmd, .ps1, sans extension), rien derrière un script ni hors de Windows",
+    P.paquetDerriereLanceur(gere, W) === `${prefixe}\\node_modules\\openclaw` && P.paquetDerriereLanceur(`${prefixe}\\openclaw.ps1`, W) === `${prefixe}\\node_modules\\openclaw` && P.paquetDerriereLanceur(`${prefixe}\\openclaw`, W) === `${prefixe}\\node_modules\\openclaw` && P.paquetDerriereLanceur(script, W) === null && P.paquetDerriereLanceur("/u/node/bin/openclaw", "darwin") === null,
+    "mauvais paquet",
+  );
+  const employesSource = sansCommentaires(lire("gateway", "src", "employes.ts"));
+  verifier("détection : sous Windows, le package.json est lu avant le lancement, pour lancer le point d'entrée qu'il déclare", /const derriere = paquetDerriereLanceur\(bin, p\);[\s\S]{0,200}lancementOpenClaw\(bin, p, existsSync, nodeDuPath, avant\?\.entree\)/.test(employesSource), "ordre inversé");
+  const lm = P.lancementOpenClaw("/u/node/bin/openclaw", "darwin", existe(["/u/node/bin/node"]), () => null);
+  verifier("macOS inchangé : le lanceur lui-même, le node posé à côté", lm.fichier === "/u/node/bin/openclaw" && lm.prefixe.length === 0 && lm.node === "/u/node/bin/node", JSON.stringify(lm));
+  verifier("PATH d'OpenClaw sous Windows : le dossier de son Node, puis celui du lanceur", JSON.stringify(P.dossiersDuLancement(`${npmGlobal}\\openclaw.cmd`, l2, W)) === JSON.stringify(["C:\\Program Files\\nodejs", npmGlobal]), JSON.stringify(P.dossiersDuLancement(`${npmGlobal}\\openclaw.cmd`, l2, W)));
+
+  const env = { Path: `C:\\Windows\\system32;"C:\\Program Files\\nodejs";C:\\WINDOWS\\SYSTEM32;C:\\Users\\a\\AppData\\Local\\Microsoft\\WindowsApps`, APPDATA: "C:\\Users\\a\\AppData\\Roaming" };
+  const c = P.candidatsOpenClaw({ platform: W, env, maison: "C:\\Users\\a", impose: undefined, gere, versionsNvm: () => ["v24.0.0"] });
+  verifier("candidats Windows : celui de Helix d'abord, puis openclaw.cmd de chaque dossier du PATH (guillemets retirés, doublons de casse écartés), puis %APPDATA%\\npm", c[0] === gere && c.includes("C:\\Program Files\\nodejs\\openclaw.cmd") && c.filter((x) => x.toLowerCase() === "c:\\windows\\system32\\openclaw.cmd").length === 1 && c[c.length - 1] === `${npmGlobal}\\openclaw.cmd`, JSON.stringify(c));
+  verifier("candidats Windows : ni Homebrew, ni nvm, ni un chemin Unix", !c.some((x) => x.startsWith("/") || x.includes("homebrew") || x.includes(".nvm")), JSON.stringify(c));
+  const cm = P.candidatsOpenClaw({ platform: "darwin", env: { PATH: "/usr/bin:/bin" }, maison: "/Users/a", impose: "/opt/oc", gere: "/g/bin/openclaw", versionsNvm: () => ["v24.21.0"] });
+  verifier("candidats macOS inchangés : imposé, celui de Helix, PATH, nvm, Homebrew, ~/.local/bin", JSON.stringify(cm) === JSON.stringify(["/opt/oc", "/g/bin/openclaw", "/usr/bin/openclaw", "/bin/openclaw", "/Users/a/.nvm/versions/node/v24.21.0/bin/openclaw", "/opt/homebrew/bin/openclaw", "/usr/local/bin/openclaw", "/Users/a/.local/bin/openclaw"]), JSON.stringify(cm));
+  const n = P.chercherDansPath("node", env, W, existe(["C:\\Users\\a\\AppData\\Local\\Microsoft\\WindowsApps\\node.exe", "C:\\Program Files\\nodejs\\node.exe"]));
+  verifier("Node du PATH sous Windows : node.exe, lu dans `Path`, sans l'alias du Microsoft Store", n === "C:\\Program Files\\nodejs\\node.exe", String(n));
+}
+
+console.log("D. Environnement d'OpenClaw sous Windows");
+{
+  const source = { Path: "C:\\Windows\\system32", Temp: "C:\\T", COMSPEC: "C:\\Windows\\system32\\cmd.exe", ProgramFiles: "C:\\Program Files", AWS_SECRET_ACCESS_KEY: "secret", OPENAI_API_KEY: "sk-x", LC_ALL: "fr_FR.UTF-8", USERPROFILE: "C:\\Users\\a" };
+  const noms = ["TEMP", "ComSpec", "ProgramFiles", "USERPROFILE", "PATHEXT"];
+  const garde = P.garderVariables(source, noms, ["LC_"], W);
+  verifier("variables transmises : sous Windows sans tenir compte de la casse (Temp, COMSPEC), les clés de l'hôte écartées", garde.Temp && garde.COMSPEC && garde.ProgramFiles && garde.LC_ALL && !garde.AWS_SECRET_ACCESS_KEY && !garde.OPENAI_API_KEY && !garde.Path, JSON.stringify(Object.keys(garde)));
+  const gardeMac = P.garderVariables({ Temp: "x", TEMP: "y" }, ["TEMP"], [], "darwin");
+  verifier("variables transmises : macOS et Linux restent sensibles à la casse", !gardeMac.Temp && gardeMac.TEMP === "y", JSON.stringify(gardeMac));
+  const env = P.poserPath({ Path: "C:\\a", PATH: "C:\\b" }, P.joindrePath(["C:\\node", "C:\\a;c:\\NODE;;C:\\b"], W), W);
+  verifier("PATH sous Windows : `;`, un seul PATH, doublons de casse écartés", JSON.stringify(env) === JSON.stringify({ PATH: "C:\\node;C:\\a;C:\\b" }), JSON.stringify(env));
+  verifier("PATH sous macOS : `:`", P.joindrePath(["/a/bin", "/usr/bin:/bin"], "darwin") === "/a/bin:/usr/bin:/bin", P.joindrePath(["/a/bin", "/usr/bin:/bin"], "darwin"));
+  const employes = sansCommentaires(lire("gateway", "src", "employes.ts"));
+  verifier("employes.ts : OpenClaw reçoit ce qu'il faut pour trouver PowerShell (ProgramFiles, ProgramW6432, PSModulePath)", /"ProgramFiles", "ProgramFiles\(x86\)", "ProgramW6432"/.test(employes) && /"PSModulePath"/.test(employes), "variables absentes");
+  verifier("employes.ts : le PATH d'OpenClaw passe par joindrePath (plus de `:` écrit en dur)", /poserPath\(env, joindrePath\(\[\.\.\.dossiersDuLancement\(moteur\.bin, moteur\.lancement, p\)/.test(employes) && !/PATH: `\$\{dirname\(moteur\.bin\)\}:/.test(employes), "PATH écrit en dur");
+}
+
+console.log("E. Lancer, piloter, arrêter l'instance de Helix");
+{
+  const employes = sansCommentaires(lire("gateway", "src", "employes.ts"));
+  verifier("la passerelle OpenClaw est lancée par son lancement (node.exe openclaw.mjs sous Windows)", /spawn\(moteur\.lancement\.fichier, \[\.\.\.moteur\.lancement\.prefixe, "gateway", "run", "--port"/.test(employes), "spawn(moteur.bin)");
+  verifier("les commandes openclaw de Helix passent par le même lancement", /executer\(moteur\.lancement\.fichier, \[\.\.\.moteur\.lancement\.prefixe, \.\.\.args\]/.test(employes), "oc() autrement");
+  verifier("la base de l'agent est ouverte par le Node d'OpenClaw (node.exe sous Windows), pas par `<dossier>/node`", /const node = moteur\.lancement\.node;/.test(employes) && !/join\(dirname\(moteur\.bin\), "node"\)/.test(employes), "node en dur");
+  verifier("orphelin : plus de /bin/ps ni de process.kill en dur ; arrêt de tout son arbre", !/"\/bin\/ps"/.test(employes) && !/process\.kill\(pid/.test(employes) && /arreterPidArbre\(pid, "SIGTERM"\)/.test(employes), "POSIX en dur");
+  verifier("mise à jour annulée : les données remises par un renommage réessayé (Windows), et l'effacement réessayé", /renommerSur\(miseDeCote\(\), dossier\(\)\)/.test(employes) && /maxRetries: 10/.test(employes), "renameSync");
+  verifier("configuration d'OpenClaw : remplacée par un renommage réessayé", /renommerSur\(tmp, fichierConfig\(\)\)/.test(employes), "renameSync");
+  verifier("mémoire restaurée : un morceau de chemin avec `\\` ou `:` est refusé (il sortirait de l'espace sous Windows)", /p === "\.\." \|\| \/\[\\\\:\]\/\.test\(p\)/.test(employes), "garde absente");
+  verifier("fiche de poste d'un employé Libre sous Windows : ses commandes sont à écrire en PowerShell", /process\.platform === "win32"[\s\S]{0,200}tes commandes passent par PowerShell/.test(employes), "consigne absente");
+
+  const lp = P.commandeLigneDeProcessus(4242, W, { SystemRoot: "C:\\Windows" });
+  const script = Buffer.from(lp.args[lp.args.indexOf("-EncodedCommand") + 1], "base64").toString("utf16le");
+  verifier("ligne de commande d'un processus sous Windows : Windows PowerShell de System32, script encodé qui ne porte que le numéro", lp.fichier === "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" && lp.args.includes("-NoProfile") && /Win32_Process -Filter 'ProcessId = 4242'/.test(script) && !/"/.test(script), `${lp.fichier} ${script}`);
+  let refus = false;
+  try {
+    P.commandeLigneDeProcessus(Number("4242; Stop-Computer"), W, {});
+  } catch {
+    refus = true;
+  }
+  verifier("un numéro de processus qui n'est pas un entier est refusé avant toute commande", refus, "accepté");
+  verifier("macOS : `ps -p <pid> -o command=` comme avant", JSON.stringify(P.commandeLigneDeProcessus(12, "darwin", {})) === JSON.stringify({ fichier: "/bin/ps", args: ["-p", "12", "-o", "command="] }), "autre");
+  const ligne = '"C:\\Users\\Jean Dupont\\.helix\\data\\openclaw-moteur\\node\\node.exe" "C:\\Users\\Jean Dupont\\.helix\\data\\openclaw-moteur\\node\\node_modules\\openclaw\\openclaw.mjs" gateway run --port 18800';
+  verifier("reconnaître l'OpenClaw de Helix sous Windows (node.exe … openclaw.mjs gateway run), pas un autre Node", P.estPasserelleOpenClaw(ligne, W) && !P.estPasserelleOpenClaw('"C:\\nodejs\\node.exe" serveur.js', W) && !P.estPasserelleOpenClaw("node.exe openclaw.mjs doctor", W) && P.estPasserelleOpenClaw("openclaw-gateway", "darwin"), "mauvais verdict");
+  const tk = P.commandeArretArbre(4242, { SystemRoot: "C:\\Windows" });
+  verifier("arrêt de l'arbre : taskkill.exe de System32, /PID /T /F, jamais /IM", tk.fichier === "C:\\Windows\\System32\\taskkill.exe" && JSON.stringify(tk.args) === JSON.stringify(["/PID", "4242", "/T", "/F"]) && !tk.args.includes("/IM"), JSON.stringify(tk));
+
+  /*
+   * L'arrêt réel de processus.ts, dans un Node où `process.platform` vaut
+   * `win32` : `spawnSync` est intercepté avant l'import (processus.ts le lit
+   * par liaison vivante), rien n'est lancé. Un processus enfant « vivant »
+   * (exitCode null) doit partir par taskkill, pas par kill().
+   */
+  const code = `Object.defineProperty(process, "platform", { value: "win32" });
+    process.env.SystemRoot = "C:\\\\Windows";
+    const cp = (await import("node:module")).createRequire(import.meta.url)("node:child_process");
+    const vus = [];
+    cp.spawnSync = (f, a, o) => { vus.push({ f, a, cache: o?.windowsHide === true }); return { status: 0 }; };
+    const pr = await import("./gateway/src/processus.ts");
+    let tue = false;
+    pr.arreterArbre({ pid: 5151, exitCode: null, signalCode: null, kill() { tue = true; } });
+    pr.arreterPidArbre(6161);
+    pr.arreterArbre({ pid: 7171, exitCode: 0, signalCode: null, kill() { tue = true; } });
+    console.log(JSON.stringify({ vus, tue }));`;
+  const r = spawnSync(process.execPath, ["--experimental-strip-types", "--no-warnings", "--input-type=module", "-e", code], { cwd: RACINE, encoding: "utf8", timeout: 60_000 });
+  let resultat = null;
+  try {
+    resultat = JSON.parse((r.stdout ?? "").trim().split("\n").pop());
+  } catch {
+    /* sortie illisible : dite plus bas */
+  }
+  const attendu = (pid) => resultat?.vus.some((v) => /[\\/]System32[\\/]taskkill\.exe$/.test(v.f) && JSON.stringify(v.a) === JSON.stringify(["/pid", String(pid), "/T", "/F"]) && v.cache);
+  verifier("Windows (simulé) : l'instance s'arrête par taskkill de System32 sur son numéro, tout l'arbre, sans console, jamais par kill()", resultat && attendu(5151) && attendu(6161) && !resultat.tue, `${r.stdout} ${r.stderr}`.slice(0, 400));
+  verifier("Windows (simulé) : un processus déjà terminé n'est pas visé (son numéro a pu être repris)", resultat && !resultat.vus.some((v) => v.a.includes("7171")), JSON.stringify(resultat));
+}
+
+console.log("F. Ce que l'écran et la documentation disent");
+{
+  const catalogues = ["en", "zh", "ja"].map((l) => lire("gateway", "i18n", `${l}.json`)).join("") + lire("gateway", "src", "installationOpenClaw.ts") + lire("gateway", "src", "plateformeOpenClaw.ts").replace(/\/\*[\s\S]*?\*\//g, "");
+  verifier("plus aucun message qui dit que Windows demande WSL (passerelle, catalogues)", !/demande WSL|requires WSL|需要 WSL|WSL が必要/.test(catalogues), "reste un texte WSL");
+  const public_ = ["README.md", "README.fr.md", "README.zh.md", "README.ja.md", "docs/GUIDE.md"].map((f) => lire(f)).join("\n");
+  verifier("vitrine et guide : plus de « OpenClaw y demande WSL »", !/OpenClaw (y demande|needs) WSL|OpenClaw 在 Windows 上需要 WSL|OpenClaw に WSL が必要/.test(public_), "reste un texte WSL");
+  const ecran = lire("src", "components", "agents", "Employes.tsx");
+  verifier("écran : au palier Libre, sur une instance Windows, il est dit que les commandes passent par PowerShell (cette capacité seulement)", /windows && <>\{" "\}\{t\("Sur cette instance \(Windows\), ses commandes passent par PowerShell/.test(ecran) && /windows=\{etat\.moteur\.plateforme === "win32"\}/.test(ecran), "absent");
+  const cle = "Sur cette instance (Windows), ses commandes passent par PowerShell : une commande écrite pour macOS ou Linux peut ne pas y marcher.";
+  verifier("écran : cette phrase est traduite en anglais, chinois et japonais", ["en", "zh", "ja"].every((l) => (JSON.parse(lire("src", "i18n", `${l}.json`))[cle] ?? "").length > 10), "traduction manquante");
+  verifier("passerelle : le système de l'instance est donné à l'écran (moteur.plateforme)", /plateforme: process\.platform,/.test(lire("gateway", "src", "employes.ts")), "absent");
+}
+
+/*
+ * --installation : la vraie installation, sur ce poste (macOS ou Linux), pour
+ * vérifier que le chemin commun (npm par node et npm-cli.js, `--prefix`
+ * explicite, vérification par le lancement) n'a rien cassé. Données et
+ * dossier personnel jetables, réseau requis (nodejs.org, registry.npmjs.org),
+ * plusieurs minutes. Puis une passerelle OpenClaw jetable sur un port libre,
+ * arrêtée par son numéro. Jamais lancé par la batterie.
+ */
+if (process.argv.includes("--installation")) {
+  console.log("G. Installation réelle sur ce poste (jetable)");
+  const racine = mkdtempSync(join(tmpdir(), "helix-oc-win-"));
+  const maison = join(racine, "maison");
+  const donnees = join(racine, "donnees");
+  mkdirSync(maison, { recursive: true });
+  mkdirSync(donnees, { recursive: true });
+  writeFileSync(join(racine, "profil.json"), JSON.stringify({ chiffrement: "fichier" }));
+  const env = { ...process.env, HOME: maison, USERPROFILE: maison, HELIX_DATA_DIR: donnees, HELIX_CONFIG: join(racine, "profil.json") };
+  const code = `const i = await import("./gateway/src/installationOpenClaw.ts");
+    i.installerOpenClaw("essai", { apres: async () => {} });
+    for (;;) { await new Promise((r) => setTimeout(r, 2000)); const e = i.etatInstallation(); if (e.etape === "termine" || e.etape === "erreur") { console.log("ETAT " + JSON.stringify(e)); console.log("LANCEMENT " + JSON.stringify(i.lancementGere())); break; } }`;
+  const r = spawnSync(process.execPath, ["--experimental-strip-types", "--no-warnings", "--input-type=module", "-e", code], { cwd: RACINE, env, encoding: "utf8", timeout: 30 * 60_000 });
+  const sortie = `${r.stdout ?? ""}${r.stderr ?? ""}`;
+  const etat = JSON.parse(/ETAT (.*)/.exec(sortie)?.[1] ?? "null");
+  const lancement = JSON.parse(/LANCEMENT (.*)/.exec(sortie)?.[1] ?? "null");
+  verifier("installation réelle : Node épinglé, puis openclaw@2026.9.4 par npm-cli.js avec --prefix, vérifié", etat?.etape === "termine" && etat.version === "2026.9.4", sortie.slice(-600));
+  verifier("installation réelle : rien hors du dossier de données jetable (dossier personnel vide de .openclaw et de .npm-global)", !existsSync(join(maison, ".openclaw")) && !existsSync(join(maison, ".npm-global")), "écrit hors du dossier");
+  if (lancement) {
+    const port = await new Promise((ok) => {
+      const s = createServer();
+      s.listen(0, "127.0.0.1", () => {
+        const { port: p } = s.address();
+        s.close(() => ok(p));
+      });
+    });
+    const etatOc = join(racine, "etat-openclaw");
+    mkdirSync(etatOc, { recursive: true });
+    writeFileSync(join(etatOc, "openclaw.json"), JSON.stringify({ gateway: { mode: "local", bind: "loopback", port, auth: { mode: "token", token: "jeton-essai-" + port } }, discovery: { mdns: { mode: "off" } }, telemetry: { enabled: false }, update: { checkOnStart: false } }));
+    const p = spawn(lancement.fichier, [...lancement.prefixe, "gateway", "run", "--port", String(port)], {
+      env: { PATH: `${dirname(lancement.node)}:/usr/bin:/bin`, HOME: maison, OPENCLAW_STATE_DIR: etatOc, OPENCLAW_CONFIG_PATH: join(etatOc, "openclaw.json"), TMPDIR: tmpdir() },
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    let journal = "";
+    p.stdout.on("data", (b) => (journal += b));
+    p.stderr.on("data", (b) => (journal += b));
+    let ouvert = false;
+    for (let i = 0; i < 120 && !ouvert; i++) {
+      try {
+        await fetch(`http://127.0.0.1:${port}/`, { signal: AbortSignal.timeout(1000) });
+        ouvert = true;
+      } catch {
+        await new Promise((ok) => setTimeout(ok, 500));
+      }
+    }
+    verifier(`OpenClaw jetable lancé comme Helix le lance (port ${port}, jamais 18789 ni 18800) : il ouvre son port`, ouvert, journal.slice(-600));
+    p.kill("SIGTERM");
+    await new Promise((ok) => {
+      const m = setTimeout(() => {
+        p.kill("SIGKILL");
+        ok();
+      }, 10_000);
+      p.once("exit", () => {
+        clearTimeout(m);
+        ok();
+      });
+    });
+  }
+  rmSync(racine, { recursive: true, force: true, maxRetries: 5 });
+}
+
+console.log(`\n${reussis} vérification(s) réussie(s), ${echecs.length} échec(s).`);
+if (echecs.length) process.exit(1);

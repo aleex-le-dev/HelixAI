@@ -3066,6 +3066,7 @@
   "Sur ce canal, il converse et cherche sur le web s'il en a le droit, mais ne touche ni aux mails, ni aux fichiers, ni aux agendas de l'entreprise.": "On this channel, it converses and searches the web if allowed, but touches neither the company's emails, nor its files, nor its calendars.",
   "sur ce poste": "on this computer",
   "Sur ce poste, les modèles sont préparés par l'intégrateur, et aucun n'est encore disponible. Contactez la personne qui a installé ce poste.": "On this computer, models are prepared by the integrator, and none is available yet. Contact the person who set up this computer.",
+  "Sur cette instance (Windows), ses commandes passent par PowerShell : une commande écrite pour macOS ou Linux peut ne pas y marcher.": "On this instance (Windows), its commands go through PowerShell: a command written for macOS or Linux may not work there.",
   "sur cette machine.": "on this machine.",
   "sur la machine": "on the machine",
   "sur la machine de l'instance": "on the instance's machine",

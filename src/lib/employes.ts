@@ -126,6 +126,8 @@ export interface EtatEmployes {
     miseAJour?: string;
     /** Version publiée plus récente encore, pas encore éprouvée. */
     parue?: string;
+    /** Système de la machine de l'instance (`win32` : ses commandes passent par PowerShell). Absent d'une instance plus ancienne. */
+    plateforme?: string;
   };
   employes: Employe[];
   familles: { id: Famille; disponible: boolean }[];

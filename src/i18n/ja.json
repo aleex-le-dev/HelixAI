@@ -3066,6 +3066,7 @@
   "Sur ce canal, il converse et cherche sur le web s'il en a le droit, mais ne touche ni aux mails, ni aux fichiers, ni aux agendas de l'entreprise.": "このチャンネルでは、許可されていれば会話や Web 検索を行いますが、会社のメール、ファイル、カレンダーには触れません。",
   "sur ce poste": "この端末で",
   "Sur ce poste, les modèles sont préparés par l'intégrateur, et aucun n'est encore disponible. Contactez la personne qui a installé ce poste.": "この端末では、モデルはインテグレーターが用意していますが、まだ利用できるものがありません。この端末をインストールした人に連絡してください。",
+  "Sur cette instance (Windows), ses commandes passent par PowerShell : une commande écrite pour macOS ou Linux peut ne pas y marcher.": "このインスタンス（Windows）では、コマンドは PowerShell で実行されます：macOS や Linux 向けに書かれたコマンドは動かないことがあります。",
   "sur cette machine.": "（このマシン）。",
   "sur la machine": "マシン上",
   "sur la machine de l'instance": "インスタンスのマシンで",

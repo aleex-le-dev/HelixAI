@@ -9,6 +9,16 @@ import { deployment } from "./deployment.ts";
 import { journaliser } from "./audit.ts";
 import { t, tf } from "./langue.ts";
 import { renommer } from "./processus.ts";
+import {
+  archiveNode,
+  argumentsInstallation,
+  commandeExtraction,
+  dispositionNode,
+  envInstallation,
+  lancementOpenClaw,
+  sansChemins,
+  type Lancement,
+} from "./plateformeOpenClaw.ts";
 
 /**
  * Installe OpenClaw pour les employés, depuis l'interface, sans droits
@@ -28,6 +38,11 @@ import { renommer } from "./processus.ts";
  * Tout vit dans `<données>/openclaw-moteur`. Le Node du système, la
  * configuration du shell et toute installation personnelle d'OpenClaw restent
  * tels quels. Désinstaller, c'est supprimer ce dossier.
+ *
+ * Sous Windows aussi depuis le 28/09/2026, sans WSL (plateformeOpenClaw.ts
+ * dit pourquoi et ce qui y change) : même Node officiel en `.zip`, même npm,
+ * lancé par `node.exe npm-cli.js`, et OpenClaw lancé par `node.exe
+ * openclaw.mjs`, jamais par son `.cmd`.
  */
 
 /** Version d'OpenClaw sur laquelle la configuration écrite par Helix a été éprouvée. */
@@ -60,8 +75,16 @@ export const DEPENDANCES_NPM_AVANT = "2026-09-27T00:00:00.000Z";
 const racine = () =>
   join(process.env.HELIX_DATA_DIR ?? join(homedir(), ".helix", "data"), "openclaw-moteur");
 
-/** Exécutable d'OpenClaw installé par Helix (disposition « préfixe global » du Node privé). */
-export const binaireGere = () => join(racine(), "node", "bin", "openclaw");
+/**
+ * Lanceur d'OpenClaw installé par Helix (disposition « préfixe global » du
+ * Node privé) : `node/bin/openclaw`, ou `node\openclaw.cmd` sous Windows. Il
+ * sert à le reconnaître ; sous Windows, on lance `node.exe openclaw.mjs`
+ * (`lancementGere`).
+ */
+export const binaireGere = () => dispositionNode(join(racine(), "node"), platform()).lanceurOpenClaw;
+
+/** Comment lancer l'OpenClaw de Helix (null s'il n'est pas installé). */
+export const lancementGere = (): Lancement | null => lancementOpenClaw(binaireGere(), platform(), existsSync, () => null);
 
 export type Etape = "repos" | "preparation" | "node" | "openclaw" | "verification" | "termine" | "erreur";
 
@@ -92,28 +115,14 @@ function executer(bin: string, args: string[], env: NodeJS.ProcessEnv, delaiMs: 
 
 /**
  * Archive officielle de Node pour cette machine, ou la raison pour laquelle il
- * n'y en a pas. `pour` : OpenClaw ne s'installe pas sous Windows (il y demande
- * WSL) ; l'atelier, lui, s'y sert de ce Node pour npm quand la machine n'en a
- * pas (27/09/2026).
+ * n'y en a pas. La même pour OpenClaw et pour l'atelier : sous Windows, elle
+ * ne servait qu'à l'atelier (27/09/2026), OpenClaw y demandant WSL ; depuis
+ * le 28/09/2026, OpenClaw s'y installe aussi, en natif.
  */
-function plateformeNode(pour: "openclaw" | "atelier" = "openclaw"): { dossier: string; cleIndex: string; extension: ".tar.gz" | ".zip" } | { erreur: string } {
-  const a = arch() === "arm64" ? "arm64" : arch() === "x64" ? "x64" : null;
-  if (!a) return { erreur: tf("Processeur non pris en charge ({0}).", arch()) };
-  if (platform() === "win32" && pour === "atelier") return { dossier: `win-${a}`, cleIndex: `win-${a}-zip`, extension: ".zip" };
-  if (platform() === "darwin") {
-    // Node 24 exige macOS 13.5 ou plus récent (Darwin 22.6).
-    const [maj = 0, min = 0] = release().split(".").map(Number);
-    if (maj < 22 || (maj === 22 && min < 6)) {
-      return { erreur: t("OpenClaw demande macOS 13.5 ou plus récent sur cette machine.") };
-    }
-    return { dossier: `darwin-${a}`, cleIndex: `osx-${a}-tar`, extension: ".tar.gz" };
-  }
-  if (platform() === "linux") return { dossier: `linux-${a}`, cleIndex: `linux-${a}`, extension: ".tar.gz" };
-  return { erreur: t("L'installation automatique d'OpenClaw n'existe que pour macOS et Linux (sous Windows, OpenClaw demande WSL).") };
-}
+const plateformeNode = () => archiveNode({ platform: platform(), arch: arch(), release: release() });
 
 /** Le Node privé : `node.exe` à la racine de son dossier sous Windows, dans `bin/` ailleurs. */
-const executableNode = (dossier: string) => (platform() === "win32" ? join(dossier, "node.exe") : join(dossier, "bin", "node"));
+const executableNode = (dossier: string) => dispositionNode(dossier, platform()).node;
 
 /**
  * Le npm du Node privé, s'il est installé : son script (`npm-cli.js`), que
@@ -122,7 +131,7 @@ const executableNode = (dossier: string) => (platform() === "win32" ? join(dossi
 export function npmPrive(): string | null {
   const dossier = join(racine(), "node");
   // Le script lui-même, lancé par Node (atelier.ts) : `bin/npm` passe par `env node`, introuvable sans Node sur la machine.
-  const npm = platform() === "win32" ? join(dossier, "node_modules", "npm", "bin", "npm-cli.js") : join(dossier, "lib", "node_modules", "npm", "bin", "npm-cli.js");
+  const npm = dispositionNode(dossier, platform()).npmCli;
   return existsSync(npm) && existsSync(executableNode(dossier)) ? npm : null;
 }
 
@@ -132,15 +141,13 @@ export function npmPrive(): string | null {
  * `node`) et le script de `npx`. Null s'il n'est pas installé.
  */
 export function npxPrive(): { node: string; dossier: string; script: string } | null {
-  const dossier = join(racine(), "node");
-  const node = executableNode(dossier);
-  const script = platform() === "win32" ? join(dossier, "node_modules", "npm", "bin", "npx-cli.js") : join(dossier, "lib", "node_modules", "npm", "bin", "npx-cli.js");
-  return existsSync(node) && existsSync(script) ? { node, dossier: platform() === "win32" ? dossier : join(dossier, "bin"), script } : null;
+  const d = dispositionNode(join(racine(), "node"), platform());
+  return existsSync(d.node) && existsSync(d.npxCli) ? { node: d.node, dossier: d.dossierBin, script: d.npxCli } : null;
 }
 
 /** Le Node privé peut-il être installé ici ? La raison sinon. */
 export function nodePriveInstallable(): string | null {
-  const p = plateformeNode("atelier");
+  const p = plateformeNode();
   return "erreur" in p ? p.erreur : null;
 }
 
@@ -148,7 +155,7 @@ export function nodePriveInstallable(): string | null {
 export async function assurerNodePrive(): Promise<string> {
   const deja = npmPrive();
   if (deja) return deja;
-  await installerNode("atelier");
+  await installerNode();
   const npm = npmPrive();
   if (!npm) throw new Error(t("Node s'est installé, mais son npm est introuvable."));
   return npm;
@@ -187,19 +194,19 @@ const versionNode = (): string => deployment().openclaw?.node?.replace(/^v/, "")
  * Une installation à la fois (revue de sécurité du 27/09/2026) : l'atelier et
  * deux serveurs d'outils pouvaient la demander ensemble, et chacune effaçait
  * puis remettait le dossier de Node sous l'autre, en train de s'en servir.
+ * Une seule file depuis le 28/09/2026 : OpenClaw et l'atelier posent le même
+ * Node, et deux files distinctes l'auraient posé deux fois en même temps.
  */
-const nodeEnCours = new Map<string, Promise<string>>();
-function installerNode(pour: "openclaw" | "atelier" = "openclaw"): Promise<string> {
-  let enCoursIci = nodeEnCours.get(pour);
-  if (!enCoursIci) {
-    enCoursIci = installerNodeUneFois(pour).finally(() => nodeEnCours.delete(pour));
-    nodeEnCours.set(pour, enCoursIci);
-  }
-  return enCoursIci;
+let nodeEnCours: Promise<string> | null = null;
+function installerNode(): Promise<string> {
+  nodeEnCours ??= installerNodeUneFois().finally(() => {
+    nodeEnCours = null;
+  });
+  return nodeEnCours;
 }
 
-async function installerNodeUneFois(pour: "openclaw" | "atelier"): Promise<string> {
-  const p = plateformeNode(pour);
+async function installerNodeUneFois(): Promise<string> {
+  const p = plateformeNode();
   if ("erreur" in p) throw new Error(p.erreur);
   const version = versionNode();
   const nom = `node-v${version}-${p.dossier}`;
@@ -258,8 +265,8 @@ async function installerNodeUneFois(pour: "openclaw" | "atelier"): Promise<strin
   const provisoire = join(racine(), `.extraction-${Date.now()}`);
   mkdirSync(provisoire, { recursive: true });
   // Le `tar` du système : sous Windows, celui de Windows, qui ouvre aussi les .zip (celui de Git ne sait pas lire `C:`).
-  const tar = platform() === "win32" ? join(process.env.SystemRoot ?? "C:\\Windows", "System32", "tar.exe") : "/usr/bin/tar";
-  const extraction = await executer(tar, [p.extension === ".zip" ? "-xf" : "-xzf", archive, "-C", provisoire], process.env, 5 * 60_000);
+  const tar = commandeExtraction(archive, provisoire, p.extension, platform(), process.env);
+  const extraction = await executer(tar.fichier, tar.args, process.env, 5 * 60_000);
   rmSync(dossierArchive, { recursive: true, force: true });
   if (!extraction.ok) {
     rmSync(provisoire, { recursive: true, force: true });
@@ -305,27 +312,36 @@ function relier(lien: string, cible: string): void {
 }
 
 async function installerPaquet(version: string): Promise<string> {
-  const binNode = join(racine(), "node", "bin");
-  const env: NodeJS.ProcessEnv = { ...process.env, PATH: `${binNode}:/usr/bin:/bin:/usr/sbin:/sbin` };
-  for (const k of Object.keys(env)) if (k.startsWith("HELIX_") || k.startsWith("ELECTRON_") || k.startsWith("npm_")) delete env[k];
-  const npm = join(binNode, "npm");
-  const v = await executer(npm, ["--version"], env, 30_000);
+  /*
+   * npm lancé par le Node privé, sur son script (`npm-cli.js`) : sous Windows,
+   * `npm.cmd` ne se lance pas sans `cmd.exe` ; ailleurs, `bin/npm` faisait la
+   * même chose en passant par `env node`. Préfixe global écrit en toutes
+   * lettres (28/09/2026) : un `.npmrc` de la personne (`prefix=`), ou
+   * `%APPDATA%\npm` sous Windows, aurait posé OpenClaw ailleurs que là où
+   * Helix le cherche.
+   */
+  const prefixe = join(racine(), "node");
+  const d = dispositionNode(prefixe, platform());
+  const env = envInstallation(process.env, d.dossierBin, platform());
+  const npm = (args: string[], delaiMs: number) => executer(d.node, [d.npmCli, ...args], env, delaiMs);
+  const v = await npm(["--version"], 30_000);
   const [maj = 0, min = 0] = v.sortie.trim().split(".").map(Number);
-  if (!v.ok) throw new Error("npm, livré avec Node, ne répond pas.");
-  const args = ["install", "-g", `openclaw@${version}`, "--no-fund", "--no-audit", "--loglevel=error"];
+  if (!v.ok) throw new Error(t("npm, livré avec Node, ne répond pas."));
   /*
    * Ses dépendances à la date de l'essai (DEPENDANCES_NPM_AVANT), pour la
    * version éprouvée seulement : une version choisie par le profil peut être
    * plus récente que la date, et serait refusée.
    */
-  if (version === VERSION_OPENCLAW_EPROUVEE) args.push(`--before=${DEPENDANCES_NPM_AVANT}`);
-  // npm 11.16 et suivants bloquent les scripts d'installation non approuvés : on n'approuve qu'OpenClaw.
-  if (maj > 11 || (maj === 11 && min >= 16)) args.push("--allow-scripts=openclaw");
-  const r = await executer(npm, args, env, 20 * 60_000);
-  if (!r.ok || !existsSync(binaireGere())) throw new Error(`OpenClaw ne s'est pas installé : ${raisonNpm(r.erreur || r.sortie, version)}`);
-  const verif = await executer(binaireGere(), ["--version"], env, 60_000);
+  const args = argumentsInstallation(version, prefixe, {
+    avant: version === VERSION_OPENCLAW_EPROUVEE ? DEPENDANCES_NPM_AVANT : undefined,
+    scriptsApprouves: maj > 11 || (maj === 11 && min >= 16),
+  });
+  const r = await npm(args, 20 * 60_000);
+  const lancement = lancementGere();
+  if (!r.ok || !existsSync(binaireGere()) || !lancement) throw new Error(tf("OpenClaw ne s'est pas installé : {0}", raisonNpm(r.erreur || r.sortie, version)));
+  const verif = await executer(lancement.fichier, [...lancement.prefixe, "--version"], env, 60_000);
   const trouvee = /(\d{4}\.\d+\.\d+)/.exec(verif.sortie)?.[1];
-  if (!verif.ok || !trouvee) throw new Error("OpenClaw s'est installé mais ne démarre pas.");
+  if (!verif.ok || !trouvee) throw new Error(t("OpenClaw s'est installé mais ne démarre pas."));
   return trouvee;
 }
 
@@ -382,17 +398,20 @@ export interface Crochets {
  * la machine et un jargon qui n'apprend rien à qui installe.
  */
 function raisonNpm(sortie: string, version: string): string {
-  if (/notarget|No matching version/i.test(sortie)) return `la version ${version} d'OpenClaw n'est pas publiée`;
+  if (/notarget|No matching version/i.test(sortie)) return tf("la version {0} d'OpenClaw n'est pas publiée", version);
   if (/ENOTFOUND|EAI_AGAIN|ETIMEDOUT|ECONNREFUSED|ECONNRESET|network/i.test(sortie)) {
-    return "le registre npm est injoignable : vérifiez l'accès à internet de cette machine";
+    return t("le registre npm est injoignable : vérifiez l'accès à internet de cette machine");
   }
-  if (/ENOSPC/i.test(sortie)) return "il n'y a plus assez de place sur le disque";
-  if (/EACCES|EPERM/i.test(sortie)) return "le dossier d'installation n'est pas accessible en écriture";
+  if (/ENOSPC/i.test(sortie)) return t("il n'y a plus assez de place sur le disque");
+  if (/EACCES|EPERM|EBUSY/i.test(sortie)) return t("le dossier d'installation n'est pas accessible en écriture");
+  // Windows : un chemin trop long pour l'outil qui l'ouvre.
+  if (/ENAMETOOLONG/i.test(sortie)) return t("un chemin du dossier d'installation est trop long pour cette machine");
   const ligne = sortie
-    .split("\n")
+    .split(/\r?\n/)
     .map((l) => l.replace(/^npm (error|ERR!)\s*/i, "").trim())
-    .find((l) => l && !/log of this run|^A complete log|\/_logs\//i.test(l));
-  return `npm a échoué${ligne ? ` (${ligne.replace(/\/[^\s]+/g, "…").slice(0, 160)})` : ""}`;
+    .find((l) => l && !/log of this run|^A complete log|[\\/]_logs[\\/]/i.test(l));
+  // Sans les chemins de la machine, ceux de Windows compris (`C:\Users\…`).
+  return ligne ? tf("npm a échoué ({0})", sansChemins(ligne).slice(0, 160)) : t("npm a échoué");
 }
 
 /**
@@ -418,15 +437,15 @@ export function installerOpenClaw(qui: string, crochets: Crochets, avant?: strin
       const node = await installerNode();
       etat = {
         etape: "openclaw",
-        message: avant ? `Mise à jour d'OpenClaw vers ${versionVisee()} (une à deux minutes)…` : "Installation d'OpenClaw (quelques minutes)…",
+        message: avant ? tf("Mise à jour d'OpenClaw vers {0} (une à deux minutes)…", versionVisee()) : t("Installation d'OpenClaw (quelques minutes)…"),
       };
       paquetChange = true;
       const version = await installerPaquet(versionVisee());
-      etat = { etape: "verification", message: avant ? "Redémarrage de vos agents…" : "Vérification…" };
+      etat = { etape: "verification", message: avant ? t("Redémarrage de vos agents…") : t("Vérification…") };
       await crochets.apres();
       etat = {
         etape: "termine",
-        message: avant ? `OpenClaw est passé de ${avant} à ${version}.` : `OpenClaw ${version} est installé.`,
+        message: avant ? tf("OpenClaw est passé de {0} à {1}.", avant, version) : tf("OpenClaw {0} est installé.", version),
         version,
         ...(avant ? { de: avant } : {}),
       };
@@ -439,9 +458,9 @@ export function installerOpenClaw(qui: string, crochets: Crochets, avant?: strin
         try {
           if (paquetChange) await installerPaquet(avant);
           await crochets.retablir();
-          message = `La mise à jour n'a pas abouti (${message.replace(/\.$/, "")}). Vos agents sont revenus à OpenClaw ${avant}, sans rien perdre.`;
+          message = tf("La mise à jour n'a pas abouti ({0}). Vos agents sont revenus à OpenClaw {1}, sans rien perdre.", message.replace(/\.$/, ""), avant);
         } catch (err2) {
-          message = `La mise à jour n'a pas abouti, et le retour à OpenClaw ${avant} non plus : ${err2 instanceof Error ? err2.message : String(err2)}`;
+          message = tf("La mise à jour n'a pas abouti, et le retour à OpenClaw {0} non plus : {1}", avant, err2 instanceof Error ? err2.message : String(err2));
         }
       }
       etat = { etape: "erreur", message };

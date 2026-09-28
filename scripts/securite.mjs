@@ -6028,6 +6028,25 @@ console.log("\n15 septies. Tournée de la 2026.928.3 : logos, mentions, X");
   const sourceOutils = readFileSync(join(RACINE, "gateway", "src", "outilsNatifs.ts"), "utf8");
   verifier("X et TikTok : le fichier du dossier est ouvert sans attendre (O_NONBLOCK : un tube nommé ne bloque plus l'outil)", /O_NOFOLLOW \| \(constants\.O_NONBLOCK \?\? 0\)/.test(sourceOutils), "O_NONBLOCK absent");
 
+  /*
+   * Même piège que l'image de X, ailleurs : GET /helix/espace/fichier ouvrait
+   * le fichier avec `openSync`, sans O_NONBLOCK. Un tube nommé du dossier de
+   * l'équipe figeait toute la passerelle (essayé : /health muet). Ici, dans un
+   * processus à part, dont on borne la durée : il doit répondre, et refuser.
+   */
+  let tubeEspace = "pas de mkfifo";
+  const dossierTube = mkdtempSync(join(tmpdir(), "helix-tube-"));
+  try {
+    mkdirSync(join(dossierTube, "espace"));
+    execFileSync("mkfifo", [join(dossierTube, "espace", "tuyau.txt")]);
+    const sonde = `const e = await import(${JSON.stringify(versUrl(join(RACINE, "gateway", "src", "espace.ts")).href)}); const r = e.lireFichierEspace("tuyau.txt"); console.log("RENDU " + r.ok + " " + (r.statut ?? ""));`;
+    tubeEspace = execFileSync(process.execPath, ["--input-type=module", "-e", sonde], { env: { ...process.env, HELIX_WORKSPACE: join(dossierTube, "espace"), HELIX_DATA_DIR: join(dossierTube, "donnees") }, encoding: "utf8", timeout: 8000, stdio: ["ignore", "pipe", "ignore"] }).trim();
+  } catch (e) {
+    tubeEspace = e.code === "ETIMEDOUT" || e.signal ? "bloqué" : `erreur ${String(e.message).slice(0, 120)}`;
+  }
+  rmSync(dossierTube, { recursive: true, force: true });
+  verifier("dossier de l'équipe : un tube nommé est refusé tout de suite (il figeait toute la passerelle)", /RENDU false 400/.test(tubeEspace), tubeEspace);
+
   // L'adresse de retour de X suit l'adresse où la passerelle écoute vraiment (essayé : sur ::1, 127.0.0.1 ne menait à rien).
   const natifX = await import(versUrl(join(RACINE, "gateway", "src", "oauthNatif.ts")).href);
   const retours = {};
@@ -6039,7 +6058,7 @@ console.log("\n15 septies. Tournée de la 2026.928.3 : logos, mentions, X");
 
   // Écran (vu dans une fenêtre cachée, contre une instance jetable).
   const natifEcran = readFileSync(join(RACINE, "src", "components", "settings", "ConnecteurNatif.tsx"), "utf8");
-  verifier("X, panneau : ne dit plus « X examine les applications » (sa rubrique dit « Aucun examen de X ») ; il dit pourquoi l'application est la vôtre", /id === "x"\s*\?[\s\S]{0,400}X facture chaque appel/.test(natifEcran), "phrase commune donnée à X");
+  verifier("X, panneau : ne dit plus « X examine les applications » (sa rubrique dit « Aucun examen de X ») ; il dit pourquoi l'application est la vôtre", /id === "x"\s*\?[\s\S]{0,900}X facture chaque appel/.test(natifEcran), "phrase commune donnée à X");
   const comparer = readFileSync(join(RACINE, "src", "components", "chat", "ComparerModeles.tsx"), "utf8");
   const bande = comparer.slice(comparer.indexOf("const pointDeBande"), comparer.indexOf("</circle>", comparer.indexOf("const pointDeBande")));
   verifier("Comparer les modèles : dans les colonnes « Sur votre machine » et « Cloud, prix non relevé », les noms s'écrivent à droite des points (centrés au-dessus, un nom descendu tombait sur le point suivant)", /x=\{cx \+ 12\}/.test(bande) && /textAnchor="start"/.test(bande) && /Math\.max\(py \+ 4, precedent \+ 14\)/.test(comparer), "noms centrés sur les points");

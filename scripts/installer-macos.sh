@@ -22,11 +22,16 @@ TRAVAIL="$(mktemp -d)"
 trap 'hdiutil detach -quiet "$TRAVAIL/volume" 2>/dev/null || true; rm -rf "$TRAVAIL"' EXIT
 
 [ "$(uname -s)" = "Darwin" ] || { echo "Ce script est pour macOS." >&2; exit 1; }
-[ "$(uname -m)" = "arm64" ] || { echo "Helix pour macOS demande un Mac à puce Apple." >&2; exit 1; }
+# Mac Intel aussi depuis le 28/09/2026 (première application Intel publiée, moteur llama.cpp) : l'image disque de ce processeur.
+case "$(uname -m)" in
+  arm64) ARCH=arm64 ;;
+  x86_64) ARCH=x64 ;;
+  *) echo "Processeur non pris en charge : $(uname -m)." >&2; exit 1 ;;
+esac
 
 echo "Recherche de la dernière version de Helix..."
 if command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
-  gh release download -R "$DEPOT" -p '*-arm64.dmg' -p 'SHA256SUMS.txt' -D "$TRAVAIL"
+  gh release download -R "$DEPOT" -p "*-$ARCH.dmg" -p 'SHA256SUMS.txt' -D "$TRAVAIL"
 else
   BASE="https://github.com/$DEPOT/releases/latest/download"
   # Le code de sortie de curl lui-même (sans pipefail, celui d'awk seul comptait, et ce message ne s'affichait jamais).
@@ -34,7 +39,7 @@ else
     echo "Publication injoignable. Dépôt privé : installez gh (https://cli.github.com) et connectez-vous (gh auth login)." >&2
     exit 1
   }
-  NOM="$(awk '/-arm64\.dmg$/ {print $2}' "$TRAVAIL/SHA256SUMS.txt")"
+  NOM="$(awk -v suffixe="-$ARCH.dmg" 'substr($2, length($2) - length(suffixe) + 1) == suffixe {print $2}' "$TRAVAIL/SHA256SUMS.txt")"
   [ -n "$NOM" ] || { echo "Aucune image disque pour Mac dans la publication." >&2; exit 1; }
   # Un seul nom de fichier, sans chemin ni retour à la ligne : sinon `-o "$TRAVAIL/$NOM"` écrivait où la liste le voulait (`../`).
   case "$NOM" in
@@ -43,7 +48,7 @@ else
   curl -fL --progress-bar "$BASE/$NOM" -o "$TRAVAIL/$NOM"
 fi
 
-DMG="$(ls "$TRAVAIL"/*-arm64.dmg)"
+DMG="$(ls "$TRAVAIL"/*-"$ARCH".dmg)"
 NOM="$(basename "$DMG")"
 ATTENDUE="$(awk -v n="$NOM" '$2 == n {print $1}' "$TRAVAIL/SHA256SUMS.txt")"
 OBTENUE="$(shasum -a 256 "$DMG" | awk '{print $1}')"

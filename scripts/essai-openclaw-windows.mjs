@@ -314,7 +314,7 @@ if (process.argv.includes("--installation")) {
    * (`releve-visual-cpp.json`).
    */
   const ps = (script, variables) => {
-    const e = { ...process.env, ...variables };
+    const e = V.envPowerShell(process.env, variables);
     const c = V.commandePowerShell(script, e);
     const r = spawnSync(c.fichier, c.args, { env: e, encoding: "utf8", timeout: 120_000, windowsHide: true });
     return { status: r.status, sortie: r.stdout ?? "", erreur: r.stderr ?? "" };
@@ -558,8 +558,20 @@ if (process.argv.includes("--installation")) {
           const modulesVc = [join("@openclaw", `fs-safe-win32-${process.arch}-msvc`, "fs-safe-native.node"), join("@ubjs", `node-win32-${process.arch}-msvc`, `uniffi-runtime-napi.win32-${process.arch}-msvc.node`)]
             .map((m) => join(dependances, m))
             .filter((m) => existsSync(m));
+          /*
+           * Windows cherche une DLL aussi dans le dossier du programme et dans
+           * chaque dossier du PATH : sur la machine de GitHub, bien des
+           * programmes (Python, Git, outils) en posent une copie (premier essai
+           * du 29/09/2026 : les modules se chargeaient encore). On les liste, et
+           * les modules sont chargés avec le PATH que Helix donne à OpenClaw
+           * (le Node privé, puis System32 et Windows PowerShell).
+           */
+          const copies = [...new Set([dirname(nodePrive), process.env.SystemRoot ?? "C:\\Windows", ...(process.env.PATH ?? "").split(";")].filter(Boolean))].filter((d) => existsSync(join(d, "vcruntime140.dll")));
+          rapport.push(`copies de vcruntime140.dll hors de System32 (PATH de la machine de GitHub) : ${copies.join(" ; ") || "aucune"}`);
+          const envMinimal = P.garderVariables(process.env, ["SystemRoot", "windir", "TEMP", "TMP", "USERPROFILE"], [], "win32");
+          P.poserPath(envMinimal, P.joindrePath([dirname(nodePrive), P.pathSysteme("win32", process.env)], "win32"), "win32");
           const charges = modulesVc.map((m) => {
-            const c = spawnSync(nodePrive, ["-e", "require(process.argv[1])", m], { encoding: "utf8", timeout: 30_000, windowsHide: true });
+            const c = spawnSync(nodePrive, ["-e", "require(process.argv[1])", m], { env: envMinimal, encoding: "utf8", timeout: 30_000, windowsHide: true });
             rapport.push(`${m.slice(dependances.length)} : ${c.status === 0 ? "se charge" : `ne se charge pas (${String(c.stderr).trim().split(/\r?\n/).find((l) => /Error|module/i.test(l)) ?? c.status})`}`);
             return c.status === 0;
           });

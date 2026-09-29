@@ -9211,6 +9211,159 @@ console.log("\n42. Réflexion du modèle : canal séparé, `reasoning`, `<think>
   verifier("l'essai de la réflexion refuse de tourner sans HELIX_ESSAI_MACHINE_JETABLE=1 (code 2, rien lancé ni écrit)", refusR.status === 2 && /jetable/.test(refusR.stdout) && essaiR.indexOf('HELIX_ESSAI_MACHINE_JETABLE !== "1"') < essaiR.indexOf("mkdirSync(SORTIE"), `${refusR.status} ${refusR.stdout}`);
 }
 
+/*
+ * 43. Les bibliothèques Visual C++ de Microsoft sous Windows (29/09/2026,
+ * décision de Medhi). Deux modules natifs d'OpenClaw importent
+ * `VCRUNTIME140.dll` : quand elle manque, Helix installe le paquet officiel de
+ * Microsoft, épinglé, vérifié (taille, empreinte, signature Authenticode), avec
+ * l'autorisation d'administrateur que Windows demande. Ici, depuis un Mac :
+ * la détection (présentes, absentes, trop anciennes), simulée dans un Node où
+ * `process.platform` vaut `win32` (PowerShell intercepté, jamais lancé) ;
+ * l'adresse et l'empreinte écrites dans le code ; la signature refusée quand
+ * elle n'est pas celle de Microsoft ; les codes de sortie de l'installeur
+ * traduits ; aucune adresse venue d'une requête ni du profil ; l'étape
+ * affichée. Le téléchargement et l'installeur réels tournent sur les Windows
+ * de GitHub (essai-openclaw-windows.yml).
+ */
+console.log("\n43. Bibliothèques Visual C++ de Microsoft sous Windows : détection, paquet épinglé et vérifié, autorisation de Windows, étape affichée (29/09/2026)");
+{
+  const V = await import(join(RACINE, "gateway", "src", "visualCpp.ts"));
+  const L = await import(join(RACINE, "gateway", "src", "langue.ts"));
+  const src = (...p) => readFileSync(join(RACINE, ...p), "utf8");
+  const sansCommentaires = (s) => s.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+  const fr = (f) => L.dansLaLangue("fr", f);
+
+  // Le paquet : adresse versionnée de Microsoft, empreinte et taille dans le code.
+  for (const arch of ["x64", "arm64"]) {
+    const p = V.paquetVisualCpp(arch);
+    const m = /^https:\/\/download\.visualstudio\.microsoft\.com\/download\/pr\/[0-9a-f-]{36}\/([0-9A-F]{64})\/VC_redist\.(x64|arm64)\.exe$/.exec(p?.adresse ?? "");
+    verifier(`paquet ${arch} : adresse versionnée de download.visualstudio.microsoft.com (jamais aka.ms), empreinte SHA-256 (celle que Microsoft écrit dans l'adresse), taille et version écrites dans le code`, m && m[2] === arch && m[1].toLowerCase() === p.sha256 && /^[0-9a-f]{64}$/.test(p.sha256) && p.octets > 1_000_000 && /^14\.\d+\.\d+\.\d+$/.test(p.version) && !/aka\.ms/.test(p.adresse), JSON.stringify(p));
+  }
+  verifier("pas de paquet pour un processeur sans Node privé (ia32), ni pour un nom inventé", V.paquetVisualCpp("ia32") === null && V.paquetVisualCpp("x64;calc") === null, "paquet");
+  verifier("la DLL cherchée est celle que les modules d'OpenClaw importent (relevé du 29/09/2026)", JSON.stringify(V.DLL_VISUAL_CPP) === JSON.stringify(["VCRUNTIME140.dll"]), JSON.stringify(V.DLL_VISUAL_CPP));
+
+  // La détection, fonction pure.
+  const dll = (present, version) => ({ nom: "VCRUNTIME140.dll", present, version });
+  const min = V.VERSION_MINIMALE_VISUAL_CPP;
+  const present = V.verdictVisualCpp({ registre: [{ installe: 1, version: "v14.50.35719.00" }], dll: [dll(true, "14.50.35719.0")] });
+  const absent = V.verdictVisualCpp({ registre: [], dll: [dll(false)] });
+  const registreSeul = V.verdictVisualCpp({ registre: [{ installe: 1, version: "v14.50.35719.00" }], dll: [dll(false)] });
+  const ancien = V.verdictVisualCpp({ registre: [{ installe: 1, version: "v14.29.30139.00" }], dll: [dll(true, "14.29.30139.0")] });
+  const fichierSeul = V.verdictVisualCpp({ registre: [], dll: [dll(true, "14.50.35719.0")] });
+  verifier("détection : présentes (registre et DLL à jour)", present.etat === "present" && present.version.startsWith("14.50.35719"), JSON.stringify(present));
+  verifier("détection : DLL absente de System32 → absentes, même si le registre dit « installé » (c'est la DLL que Windows charge)", absent.etat === "absent" && registreSeul.etat === "absent" && absent.manque.includes("VCRUNTIME140.dll"), JSON.stringify([absent, registreSeul]));
+  verifier(`détection : version sous la minimale (${min}) → trop anciennes ; une DLL à jour posée sans le paquet compte`, ancien.etat === "ancien" && fichierSeul.etat === "present", JSON.stringify([ancien, fichierSeul]));
+  verifier("comparaison des versions nombre par nombre (14.9 < 14.44 < 14.50)", !V.versionAuMoins("14.9", "14.44") && V.versionAuMoins("14.44.35211.0", "14.44") && V.versionAuMoins("v14.50", "14.44"), "texte");
+  verifier("relevé illisible : null (on ne bloque pas une installation sur un doute)", V.lireReleve("pas du json") === null && V.lireReleve('{"registre":{"installe":1,"version":"v14.50.1.0"},"dll":{"nom":"VCRUNTIME140.dll","present":true,"version":"14.50.1.0"}}')?.dll.length === 1, "autre");
+
+  // La même détection, telle que Windows la fait tourner (PowerShell intercepté).
+  const simuler = (reponse, variables = "") => {
+    const code = `Object.defineProperty(process, "platform", { value: "win32" });
+      Object.defineProperty(process, "arch", { value: "x64" });
+      process.env.SystemRoot = "C:\\\\Windows";${variables}
+      const m = await import("node:module");
+      const cp = m.createRequire(import.meta.url)("node:child_process");
+      const vus = [];
+      cp.execFile = (f, a, o, cb) => { vus.push({ f, a, env: { arch: o.env.HELIX_VC_ARCH, dll: o.env.HELIX_VC_DLL }, cache: o.windowsHide === true }); cb(null, ${JSON.stringify(reponse)}, ""); };
+      m.syncBuiltinESMExports();
+      const V = await import("./gateway/src/visualCpp.ts");
+      const d = await V.detecterVisualCpp(true);
+      console.log(JSON.stringify({ d, vus, script: vus[0] ? Buffer.from(vus[0].a[vus[0].a.indexOf("-EncodedCommand") + 1], "base64").toString("utf16le") : "" }));`;
+    const r = spawnSync(process.execPath, ["--experimental-strip-types", "--no-warnings", "--input-type=module", "-e", code], { cwd: RACINE, encoding: "utf8", timeout: 60_000 });
+    try {
+      return JSON.parse((r.stdout ?? "").trim().split("\n").pop());
+    } catch {
+      return { erreur: `${r.stdout} ${r.stderr}`.slice(0, 400) };
+    }
+  };
+  const { spawnSync } = await import("node:child_process");
+  const json = (registre, d) => JSON.stringify({ registre, dll: [d] });
+  const wPresent = simuler(json([{ installe: 1, version: "v14.50.35719.00" }], dll(true, "14.50.35719.0")));
+  const wAbsent = simuler(json([], dll(false)));
+  const wAncien = simuler(json([{ installe: 1, version: "v14.16.27012.00" }], dll(true, "14.16.27012.0")));
+  verifier("Windows (simulé) : présentes, absentes, trop anciennes, selon ce que PowerShell relève", wPresent.d?.etat === "present" && wAbsent.d?.etat === "absent" && wAncien.d?.etat === "ancien", JSON.stringify([wPresent.d, wAbsent.d, wAncien.d, wPresent.erreur]));
+  const appel = wPresent.vus?.[0];
+  verifier(
+    "Windows (simulé) : Windows PowerShell de System32, script encodé et constant (le processeur et la DLL passent par l'environnement, jamais dans le script), sans fenêtre",
+    appel && appel.f === "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" && appel.a.includes("-NoProfile") && appel.env.arch === "x64" && appel.env.dll === "VCRUNTIME140.dll" && appel.cache && wPresent.script === V.SCRIPT_RELEVE && !/x64|VCRUNTIME/.test(V.SCRIPT_RELEVE),
+    JSON.stringify(appel),
+  );
+  const wForce = simuler(json([{ installe: 1, version: "v14.50.35719.00" }], dll(true, "14.50.35719.0")), `\n      process.env.HELIX_ESSAI_VISUAL_CPP = "absent";`);
+  verifier("variable réservée aux essais (HELIX_ESSAI_VISUAL_CPP=absent) : la détection dit « absentes » sans rien relever", wForce.d?.etat === "absent" && wForce.vus?.length === 0, JSON.stringify(wForce));
+  verifier("hors de Windows : rien à faire (null), aucune commande lancée", (await V.detecterVisualCpp(true)) === null, "relevé");
+
+  // La signature.
+  const bonne = { statut: "Valid", signataire: V.SIGNATAIRE_MICROSOFT, racine: "CN=Microsoft Root Certificate Authority 2011, O=Microsoft Corporation, L=Redmond, S=Washington, C=US", empreinteRacine: V.RACINES_MICROSOFT[0] };
+  const refus = (s) => fr(() => V.refusSignature(s));
+  verifier("signature de Microsoft (Valid, « Microsoft Corporation », racine de Microsoft) : acceptée", refus(bonne) === null, refus(bonne));
+  verifier(
+    "signature refusée : absente, non valide (HashMismatch, NotSigned), autre signataire (même « Microsoft Corporation » dans un autre champ), autre racine (ajoutée au magasin de la machine)",
+    [null, { ...bonne, statut: "HashMismatch" }, { ...bonne, statut: "NotSigned", signataire: "" }, { ...bonne, signataire: "CN=Microsoft Corporation Ltd, O=Evil" }, { ...bonne, signataire: "CN=Evil, O=Microsoft Corporation" }, { ...bonne, empreinteRacine: "00".repeat(20) }].every((s) => typeof refus(s) === "string" && refus(s).length > 5),
+    "acceptée",
+  );
+
+  // L'installeur : scripts constants, élévation par Windows, codes traduits.
+  verifier(
+    "installeur : Start-Process -Verb RunAs (ShellExecute, pas cmd.exe), /install /quiet /norestart, fichier et journal lus dans l'environnement, code de sortie et refus de l'UAC rendus",
+    /Start-Process -FilePath \$env:HELIX_VC_FICHIER -ArgumentList @\('\/install', '\/quiet', '\/norestart', '\/log'/.test(V.SCRIPT_INSTALLATION) && /-Verb RunAs/.test(V.SCRIPT_INSTALLATION) && /NativeErrorCode/.test(V.SCRIPT_INSTALLATION) && !/cmd\.exe|Invoke-Expression|iex /i.test(V.SCRIPT_INSTALLATION + V.SCRIPT_SIGNATURE + V.SCRIPT_RELEVE) && !/\$\{/.test(V.SCRIPT_INSTALLATION + V.SCRIPT_SIGNATURE + V.SCRIPT_RELEVE),
+    V.SCRIPT_INSTALLATION,
+  );
+  verifier("signature : Get-AuthenticodeSignature sur le fichier, chaîne construite jusqu'à sa racine", /Get-AuthenticodeSignature -LiteralPath \$env:HELIX_VC_FICHIER/.test(V.SCRIPT_SIGNATURE) && /ChainElements\[\$c\.ChainElements\.Count - 1\]/.test(V.SCRIPT_SIGNATURE), V.SCRIPT_SIGNATURE);
+  const issue = (c, n) => fr(() => V.issueInstalleur(c, n));
+  verifier("codes : 0 et 1638 (déjà plus récent) bons ; 3010 bon avec redémarrage conseillé", issue(0).ok && issue(1638).ok && !issue(1638).redemarrage && issue(3010).ok && issue(3010).redemarrage === true, JSON.stringify([issue(0), issue(1638), issue(3010)]));
+  const uac = issue(null, 1223);
+  verifier("UAC refusée (1223, à l'installeur ou au lancement) : « Windows a refusé l'autorisation », quoi faire, l'administrateur du PC et le lien officiel de Microsoft", !uac.ok && /refusé l'autorisation/.test(uac.message) && /administrateur/.test(uac.message) && uac.message.includes(V.PAGE_VISUAL_CPP) && issue(1223).message === uac.message && issue(null, 740).message === uac.message, uac.message);
+  verifier("codes : 1618 (autre installation en cours) dit comme tel ; un autre code, avec son numéro et le lien officiel ; pas de code, dit", /autre installation/.test(issue(1618).message) && /1603/.test(issue(1603).message) && issue(1603).message.includes(V.PAGE_VISUAL_CPP) && !issue(null).ok, JSON.stringify([issue(1618), issue(1603), issue(null)]));
+  verifier("sortie de l'installeur lue : code, ou code natif d'un lancement refusé", V.lireCodeInstalleur('{"code":1638}').code === 1638 && V.lireCodeInstalleur('{"code":null,"natif":1223,"erreur":"annulé"}').natif === 1223 && V.lireCodeInstalleur("n'importe quoi").code === null, "autre");
+
+  // Aucune adresse, empreinte ni signataire venus d'ailleurs.
+  const vc = sansCommentaires(src("gateway", "src", "visualCpp.ts"));
+  verifier(
+    "visualCpp.ts : un seul téléchargement, de l'adresse épinglée, sans redirection ; ni profil, ni requête, ni variable d'environnement pour l'adresse",
+    (vc.match(/fetch\(/g) ?? []).length === 1 && /fetch\(paquet\.adresse, \{ redirect: "error"/.test(vc) && !/deployment|profil|req\.|url\.searchParams|process\.env\.HELIX_VC_ADRESSE/.test(vc),
+    "autre fetch",
+  );
+  verifier(
+    "visualCpp.ts : taille et empreinte vérifiées, puis signature, puis empreinte relue juste avant le lancement, du même fichier ; dossier à soi (mkdtemp, `wx`), effacé ensuite",
+    vc.indexOf("recu !== paquet.octets || empreinte.digest") < vc.indexOf("refusSignature(signature)") && vc.indexOf("refusSignature(signature)") < vc.indexOf("await empreinteFichier(fichier)") && vc.indexOf("await empreinteFichier(fichier)") < vc.indexOf("SCRIPT_INSTALLATION, { HELIX_VC_FICHIER: fichier") && /mkdtempSync\(join\(racine\(\), "\.telechargement-"\)\)/.test(vc) && /flags: "wx"/.test(vc) && /finally \{\s*rmSync\(travail/.test(vc),
+    "ordre",
+  );
+  const index = sansCommentaires(src("gateway", "src", "index.ts"));
+  verifier(
+    "route d'installation : seule l'étape de Microsoft quand OpenClaw est installé sans elles ; séance exigée ; rien lu du corps de la requête",
+    /if \(avant\.installe && !avant\.miseAJour && avant\.visualCpp\) \{\s*reparerVisualCpp\(qui\.userId, employes\.crochetsInstallation\);/.test(index) && /path === "\/helix\/openclaw\/installer"\) \{\s*const qui = await demandeur\(req, url\);\s*if \(!qui\) return send\(res, 401/.test(index) && !/reparerVisualCpp\([^)]*(body|lireCorps|req)/.test(index),
+    "route",
+  );
+  const employesSrc = sansCommentaires(src("gateway", "src", "employes.ts"));
+  verifier("démarrage raté d'un OpenClaw installé : sous Windows, la détection est refaite et le manque des bibliothèques est dit", /const vc = await detecterVisualCpp\(true\)\.catch\(\(\) => null\);\s*if \(vc && vc\.etat !== "present"\) throw new Error\(messageVisualCppManquant\(\)\);/.test(employesSrc) && /visualCpp: vc\.etat/.test(employesSrc), "absent");
+
+  // L'étape à l'écran, et ses traductions.
+  const lib = src("src", "lib", "employes.ts");
+  const ecran = src("src", "components", "agents", "Employes.tsx");
+  verifier(
+    "écran : l'étape « visualcpp » compte comme une installation en cours (carte de l'agent, bandeau), avec son avancement ; bandeau et bouton quand OpenClaw est installé sans elles",
+    /ETAPES_EN_COURS[^=]*= \["preparation", "visualcpp", "node", "openclaw", "verification"\]/.test(lib) && /i\.etape === "node" \|\| i\.etape === "visualcpp"/.test(lib) && /messageEtape\(i\)/.test(src("src", "hooks", "useMiseEnService.ts")) && /if \(etat\.moteur\.visualCpp\)/.test(ecran) && /t\("Installer les bibliothèques de Microsoft"\)/.test(ecran) && /etat\.moteur\.installe && !etat\.moteur\.visualCpp/.test(lib),
+    "étape absente",
+  );
+  const cles = [
+    ["gateway", "Installation des bibliothèques de Microsoft (Visual C++)… OpenClaw en a besoin pour démarrer, et elles manquent sur ce PC : Windows va demander une autorisation d'administrateur pour les installer (si la demande n'apparaît pas, regardez la barre des tâches)."],
+    ["gateway", "Windows a refusé l'autorisation d'administrateur. Relancez et acceptez la demande de Windows (si elle n'apparaît pas, regardez la barre des tâches). Si ce compte n'a pas le mot de passe d'un administrateur, demandez à la personne qui gère ce PC d'installer le « Microsoft Visual C++ Redistributable » depuis"],
+    ["gateway", "OpenClaw ne peut pas démarrer : les bibliothèques Visual C++ de Microsoft manquent sur ce PC. Installez-les depuis la page Agents (Windows demandera une autorisation d'administrateur)."],
+    ["src", "Le paquet officiel de Microsoft est téléchargé et vérifié, puis Windows vous demande une autorisation d'administrateur pour l'installer."],
+    ["src", "Installer les bibliothèques de Microsoft"],
+  ];
+  const manquantes = cles.filter(([ou, cle]) => !["en", "zh", "ja"].every((l) => (JSON.parse(src(ou, "i18n", `${l}.json`))[cle] ?? "").length > 10));
+  verifier("l'étape, le refus de l'UAC, le démarrage raté et le bandeau : traduits en anglais, chinois et japonais", manquantes.length === 0, manquantes.map(([, c]) => c.slice(0, 60)).join(" | "));
+
+  // L'essai sur une vraie machine.
+  const flux = src(".github", "workflows", "essai-openclaw-windows.yml");
+  verifier(
+    "essai sur les Windows de GitHub : x64 et arm64 avec la détection forcée à « absentes » (téléchargement, empreinte, signature et installeur réels), et une machine sans VCRUNTIME140.dll le temps de l'essai",
+    /id: x64\n[\s\S]{0,200}options: "--visual-cpp-absent"/.test(flux) && /id: arm64\n[\s\S]{0,200}options: "--visual-cpp-absent --sans-vcruntime"/.test(flux) && /--sans-vcruntime/.test(flux) && /gateway\/src\/visualCpp\.ts/.test(flux),
+    "essai-openclaw-windows.yml",
+  );
+}
+
 console.log(`\n${reussis} vérification(s) réussie(s), ${echecs.length} échec(s).`);
 if (echecs.length) {
   console.log("Échecs :");

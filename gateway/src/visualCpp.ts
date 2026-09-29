@@ -245,6 +245,21 @@ export function commandePowerShell(script: string, env: Record<string, string | 
   };
 }
 
+/**
+ * L'environnement de ce Windows PowerShell : celui de la passerelle, plus les
+ * variables `HELIX_VC_*`, **sans `PSModulePath`**. Vu sur le Windows de GitHub
+ * le 29/09/2026 : lancé depuis PowerShell 7, Windows PowerShell 5.1 hérite de
+ * ses dossiers de modules, et `Get-AuthenticodeSignature` ne se charge plus
+ * (le module de PowerShell 7 du même nom est pris à la place). Sans la
+ * variable, il reprend ses dossiers d'office. Même cas chez une personne qui
+ * lancerait Helix depuis PowerShell 7.
+ */
+export function envPowerShell(source: Record<string, string | undefined>, variables: Record<string, string>): Record<string, string | undefined> {
+  const env: Record<string, string | undefined> = {};
+  for (const [k, v] of Object.entries(source)) if (!/^psmodulepath$/i.test(k)) env[k] = v;
+  return { ...env, ...variables };
+}
+
 /* ---- Signature ----------------------------------------------------------- */
 
 export interface Signature {
@@ -322,7 +337,7 @@ export function issueInstalleur(code: number | null, natif?: number): IssueInsta
 const racine = () => join(process.env.HELIX_DATA_DIR ?? join(homedir(), ".helix", "data"), "visual-cpp");
 
 function powershell(script: string, variables: Record<string, string>, delaiMs: number): Promise<{ ok: boolean; sortie: string; erreur: string }> {
-  const env = { ...process.env, ...variables };
+  const env = envPowerShell(process.env, variables);
   const c = commandePowerShell(script, env);
   return new Promise((resolve) =>
     execFile(c.fichier, c.args, { env, timeout: delaiMs, windowsHide: true, maxBuffer: 4 * 1024 * 1024 }, (err, sortie, erreur) =>
@@ -427,7 +442,7 @@ export async function installerVisualCpp(avancer?: (pourcent: number) => void): 
     try {
       signature = JSON.parse(lue.sortie.trim()) as Signature;
     } catch {
-      console.warn(`[visual-cpp] signature illisible : ${(lue.erreur || lue.sortie).slice(0, 300)}`);
+      console.warn(`[visual-cpp] signature illisible : ${(lue.erreur || lue.sortie).slice(0, 4000)}`);
     }
     const refus = refusSignature(signature);
     if (refus) throw new Error(tf("Le paquet de Microsoft a été refusé : {0}. Il a été effacé sans être lancé.", refus));

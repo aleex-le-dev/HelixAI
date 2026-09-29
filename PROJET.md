@@ -4524,6 +4524,24 @@ explicite. Pas essayé : la demande affichée pendant une vraie préparation d'a
 le panneau de suivi d'une session rouverte après rechargement repart vide (seule la suite
 s'y inscrit).
 
+**Fait le 29/09/2026 : retrait d'un agent, cadre de focus, trois défauts d'écran.** Signalés par
+Medhi sous Windows, ou relevés par la tournée de la documentation :
+- *Retrait d'un agent* (`src/pages/AgentsPage.tsx`) : la corbeille d'une carte n'apparaissait qu'au
+  survol (introuvable au clavier et au toucher) ; l'échec du retrait de l'agent toujours actif était
+  avalé, la carte disparaissait, et l'agent restait dans l'instance, revenu ensuite sans bouton pour
+  le retirer ; rien ne se voyait pendant le nettoyage d'OpenClaw (jusqu'à 60 s par appel quand il ne
+  répond pas). Maintenant : corbeille toujours visible, « Retrait… » pendant l'opération, la carte
+  ne part que si le retrait a abouti, sinon « Le retrait n'a pas abouti : … » ; le panneau d'un agent
+  retiré se ferme. **Pas vu à l'écran** : créer un agent sur une instance d'essai lance
+  l'installation d'OpenClaw.
+- *Cadre de focus vert* (`src/lib/modaliteSaisie.ts`, `styles/index.css`, ARCHITECTURE.md ADR-075) :
+  il restait sur un bouton après un envoi par Entrée ; il ne s'affiche plus qu'après Tab ou les
+  flèches. Reproduit et vérifié sur une page d'essai (ancienne règle : cadre ; nouvelle : aucun).
+- *Mémoire de l'IA* (Réglages → Personnalisation) : l'écran promettait que l'IA « se souvient de vos
+  conversations précédentes » ; il dit maintenant que seuls les éléments ajoutés accompagnent les
+  demandes. *Ouvrir l'instance* : trois boutons passent par `t()`. *Apparence* : « Suit l'apparence
+  de l'ordinateur » au lieu de « de macOS ».
+
 **Fait le 29/09/2026 : file d'attente dans le Chat (et Cowork).** Demandé par Medhi : « il y
 a des gens impatients : ça évite que le message se coupe pendant une réponse ». Constaté
 avant : pendant une réponse, Entrée ne faisait rien (`canSend` faux), et le bouton d'envoi

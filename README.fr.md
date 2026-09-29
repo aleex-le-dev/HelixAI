@@ -163,7 +163,7 @@ toujours actif au palier « Libre » passent par PowerShell.
   Mistral (Magistral, Ministral), OpenAI gpt-oss, Z.ai GLM, IBM Granite, Ai2 OLMo, Meta et
   DeepSeek. Les modèles cloud marchent avec votre propre clé. Pièces jointes, dictée (Whisper,
   sur la machine), création d'images (Z-Image Turbo, FLUX.2 klein) et de courtes vidéos (Wan 2.1
-  et 2.2), elles aussi sur la machine.
+  et 2.2), elles aussi sur la machine. Un message envoyé pendant qu'une réponse s'écrit attend son tour au lieu de la couper.
 - **Comparer les modèles** : chaque modèle que vous pouvez utiliser, placé selon sa note de
   capacités face au prix que demande son éditeur, pour peser sur un même graphique un modèle
   local et un modèle cloud.

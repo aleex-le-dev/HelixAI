@@ -123,7 +123,7 @@ Windows 上暂不提供：`helix` 命令行。在 Windows 上，“自由”级�
 
 ## 功能
 
-- **Chat**：使用**按每台机器挑选**的本地模型：Helix AI 会安装能装入该机器内存、评分最高的开源模型（Apache 2.0 或 MIT），从小型笔记本到工作站都适用，并推荐该机器能运行的其他模型。模型目录涵盖 Qwen、Mistral（Magistral、Ministral）、OpenAI gpt-oss、Z.ai GLM、IBM Granite、Ai2 OLMo、Meta 和 DeepSeek。云端模型可用您自己的 API 密钥。支持附件、语音输入（Whisper，本机运行）、图像生成（Z-Image Turbo、FLUX.2 klein）以及短视频生成（Wan 2.1 和 2.2），同样在本机运行。
+- **Chat**：使用**按每台机器挑选**的本地模型：Helix AI 会安装能装入该机器内存、评分最高的开源模型（Apache 2.0 或 MIT），从小型笔记本到工作站都适用，并推荐该机器能运行的其他模型。模型目录涵盖 Qwen、Mistral（Magistral、Ministral）、OpenAI gpt-oss、Z.ai GLM、IBM Granite、Ai2 OLMo、Meta 和 DeepSeek。云端模型可用您自己的 API 密钥。支持附件、语音输入（Whisper，本机运行）、图像生成（Z-Image Turbo、FLUX.2 klein）以及短视频生成（Wan 2.1 和 2.2），同样在本机运行。在回答生成过程中发送的消息会排队等候，而不会打断当前回答。
 - **模型比较**：您可以使用的每个模型都按能力评分与其发布方的价格排布，本地模型和云端模型可以在同一张图上权衡。
 - **Chat 中的网络搜索**：从「+」菜单开启后，它会以标签形式保留，直到您移除。问题发送到 DuckDuckGo，您的实例打开找到的网页，回答以链接列出其来源。网页只作为数据读取，绝不作为指令；管理员可以为整个实例关闭此功能。
 - **知识库（RAG）**：汇集文档，实例在本机为其建立索引，回答会引用所用的段落。每个人只能找到自己有权查看的文档。

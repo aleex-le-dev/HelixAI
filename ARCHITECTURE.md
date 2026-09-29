@@ -2042,6 +2042,40 @@ Pour Code, la passerelle sert elle-même ses connecteurs à OpenCode, par MCP, s
 
 **Conséquences.** Changer un chiffre d'`offre.ts` suffit : `npm run securite` (section 38) refait les comptes, dont le pire cas (chacun vide son crédit), positif au prix de lancement ; les marges en usage central sont une simulation, pas une mesure. Crédit épuisé, le Chat passerait au modèle local : c'est la règle affichée, rien ne la met en œuvre tant qu'il n'y a ni relais chez l'agence (qui garde la clé de l'hébergeur), ni compte de consommation par abonné, ni paiement (PROJET.md, « la nouvelle grille d'abonnement », et « Ce qui dépend du client »).
 
+### ADR-072 : Une file d'attente par Chat, hors de l'écran ✅ implémenté (29/09/2026)
+
+**Contexte.** Pendant une réponse, Entrée ne faisait rien et le bouton d'envoi devenait « Arrêter » à la même place : qui voulait envoyer la suite coupait la réponse (Medhi : « ça évite que le message se coupe pendant une réponse »).
+
+**Décision.** Un message écrit pendant une réponse entre dans la file de ce Chat (`src/lib/fileAttente.ts`, module pur ; affichage `src/components/chat/FileAttente.tsx`), avec ses pièces jointes et les choix du moment. Il part seul à la fin normale de la réponse ; après une erreur ou « Arrêter », la file se met en pause jusqu'à « Envoyer maintenant ». La réponse s'écrit hors du crochet (`useChat.ts`), pour qu'un message parte même quand l'écran montre un autre Chat. Dix messages au plus. « Arrêter » devient un bouton à part.
+
+**Écarté.** Garder la file au rechargement : la déconnexion recharge la page, et la personne suivante sur un poste partagé verrait et enverrait les messages d'une autre ; synchroniser la file entre postes.
+
+**Conséquences.** Chat et Cowork ; l'écran Code garde son bouton (sa conversation vient d'OpenCode). `npm run securite`, section 40.
+
+### ADR-073 : La réflexion et l'attente dites sur toutes les plateformes ✅ implémenté, essayé sous Windows et Linux (29/09/2026)
+
+**Contexte.** Sous Windows et Linux, au processeur, le Chat ne montrait qu'un curseur pendant plus d'une minute avant la première réflexion (tri de la demande, puis lecture par le moteur), là où le Mac répond en quelques secondes. Qwen3.5 2B pouvait redire le même paragraphe dans sa réflexion pendant dix minutes, sans répondre.
+
+**Décision.** La passerelle (`gateway/src/chat.ts`) dit l'attente avec son temps (« … organise le travail (N s) », « … lit la demande (N s) »), effacée au premier morceau, jamais présentée comme de la réflexion ; elle sépare une réflexion écrite dans le texte (`<think>…</think>`, balises coupées entre deux morceaux, `</think>` seul) et la rend comme `reasoning_content` (`gateway/src/reflexionEnLigne.ts`) ; l'extension VS Code et la ligne de commande font de même ; le garde-fou (`gardeBoucle.ts`) coupe un long paragraphe redit à l'identique dans la réflexion.
+
+**Conséquences.** L'essai Windows de GitHub garde le flux brut au moteur seul, au relais et au Chat, sous Windows et sous Linux (`scripts/essai-reflexion-ci.mjs`) ; `npm run securite`, section 42.
+
+### ADR-074 : OpenClaw sous Windows, sans scripts des dépendances et avec Visual C++ ✅ implémenté, essayé sur trois Windows de GitHub (29/09/2026)
+
+**Contexte.** « npm a échoué (code 1) » chez Medhi en déployant un agent ; `--allow-scripts=openclaw` n'arrêtait rien (npm 11.19 avertit seulement), et des scripts de dépendances pouvaient se rabattre sur une compilation. Deux modules d'OpenClaw importent `VCRUNTIME140.dll`.
+
+**Décision.** `npm install --ignore-scripts`, puis Helix lance lui-même les deux scripts d'OpenClaw avec `node.exe` (`installationOpenClaw.ts`) ; le message d'échec nomme le paquet et la cause, la sortie complète va dans `passerelle.log`. Quand les bibliothèques Visual C++ manquent ou sont trop anciennes, Helix télécharge le paquet officiel de Microsoft (version 14.51 épinglée, x64 et arm64, empreinte, signature Authenticode jusqu'à la racine de Microsoft), le lance avec l'autorisation de Windows (UAC), et traduit chaque code de sortie (`gateway/src/visualCpp.ts`). Exception de licence décidée par Medhi (PROJET.md § 3.9).
+
+**Conséquences.** Seule élévation que Helix demande (SECURITE.md § 64) ; essai `essai-openclaw-windows.yml` sur x64, un compte accentué et arm64 ; `npm run securite`, sections 41 et 43.
+
+### ADR-075 : Le cadre de focus au clavier seulement ✅ implémenté (29/09/2026)
+
+**Contexte.** Sous Windows, un cadre vert restait sur le « + » et d'autres boutons après un envoi par Entrée : Chromium affiche `:focus-visible` quand l'interface redonne le focus à un bouton après une saisie au clavier.
+
+**Décision.** `src/lib/modaliteSaisie.ts` pose `data-saisie="clavier"` sur le document après Tab, les flèches, Début, Fin, Page préc., Page suiv., et `"pointeur"` au moindre clic ou toucher ; le cadre (`styles/index.css`) ne s'affiche que sous `data-saisie="clavier"`. Ni Entrée ni Échap ne l'allument.
+
+**Conséquences.** Les personnes qui naviguent au clavier gardent leur cadre ; les autres ne le voient plus.
+
 ## 7. Roadmap
 
 | Phase | Contenu | État |

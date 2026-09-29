@@ -47,6 +47,15 @@ const ARTICLES: Article[] = [
     corps: t("Chaque chat de la barre latérale porte quatre actions, visibles au survol.\n\n- Renommer (ou un double clic sur son nom) : le nom se change sur place, Entrée le garde, Échap l'annule. Le chat ne remonte pas en tête de liste pour autant.\n- Partager : vous invitez une personne par son adresse. Elle voit la conversation, elle ne peut pas la ranger à votre place.\n- Archiver : le chat quitte la liste et se retrouve sous « Archivés », en bas. Rien n'est effacé, et un clic le remet en place. L'archivage est personnel : archiver un chat partagé ne le retire pas de la liste des autres.\n- Supprimer : les messages sont effacés pour de bon. Il n'y a pas de corbeille ; archivez plutôt si vous hésitez.\n\nUn chat peut aussi être rangé dans un Projet, depuis le champ de saisie. Ce classement ne partage rien : il ne fait qu'ordonner votre propre écran.\n\nPendant qu'une réponse s'écrit, vous pouvez déjà écrire la suite : Entrée, ou le bouton d'envoi (qui dit alors « Mettre en file »), la met dans la file d'attente du Chat, au-dessus du champ de saisie, sans couper la réponse. Chaque message en attente se modifie ou se retire, jusqu'à dix par Chat, et ils partent l'un après l'autre avec les pièces jointes et les choix du moment où vous les avez écrits. Si la réponse échoue ou si vous l'arrêtez, la file se met en pause : « Envoyer maintenant » la relance. La file reste sur ce poste et se perd si la page est rechargée ou l'application fermée."),
   },
   {
+    // L'attente et la réflexion, dites sur toutes les plateformes (29/09/2026, ARCHITECTURE.md ADR-073).
+    id: "attente-modele",
+    titre: t("Pendant que le modèle travaille"),
+    resume: t("Ce que le Chat affiche avant la réponse, et combien de temps ça peut prendre."),
+    motsCles: ["attente", "lent", "long", "réflexion", "reflexion", "réfléchit", "temps", "curseur", "rien ne se passe", "windows", "linux", "processeur"],
+    lien: "/",
+    corps: t("Avant d'écrire, le modèle peut prendre du temps, surtout sur un ordinateur sans carte graphique : plus d'une minute n'a rien d'anormal. Le Chat dit ce qui se passe, avec le temps écoulé et le nom du modèle : « … organise le travail », puis « … lit la demande », puis « Réflexion en cours » quand le modèle réfléchit. Cliquez sur la réflexion pour la lire ; sa durée reste affichée une fois la réponse écrite.\n\nVous pouvez envoyer un autre message pendant ce temps : il attend son tour dans la file, au-dessus de la zone de saisie."),
+  },
+  {
     id: "documents-joints",
     titre: t("Joindre un document au Chat"),
     resume: t("Ce que le modèle lit d'un fichier joint, et ce qu'il ne lit pas."),

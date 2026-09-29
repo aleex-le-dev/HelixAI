@@ -374,6 +374,20 @@ jour, chaque mois (1 à 28, ou le dernier jour), chaque heure, et l'heure à la 
 seul, et sa carte ouvre la fiche décrite ci-dessous (état « En service », ou l'étape de
 sa mise en service, dont l'installation d'OpenClaw la première fois).
 
+**Sous Windows, les bibliothèques de Microsoft (29/09/2026)** (`gateway/src/visualCpp.ts`) : quand
+les bibliothèques Visual C++ manquent ou sont trop anciennes, la mise en service commence par une
+étape « Installation des bibliothèques de Microsoft (Visual C++)… », avec la progression du
+téléchargement, pourquoi Windows va demander une autorisation d'administrateur, et « si la demande
+n'apparaît pas, regardez la barre des tâches ». Refus, compte sans droits, installation déjà en
+cours, redémarrage conseillé : chacun son message, avec la page officielle de Microsoft. Un OpenClaw
+déjà installé sans ces bibliothèques : bandeau en haut de la page avec « Installer les bibliothèques
+de Microsoft ».
+
+**Retirer un agent (29/09/2026)** : la corbeille d'une carte est toujours visible, en discret (elle
+n'apparaissait qu'au survol) ; « Supprimer » puis « Retrait… » pendant l'opération ; si le retrait de
+l'agent toujours actif échoue, la carte reste et dit « Le retrait n'a pas abouti : … ». Le panneau
+d'un agent retiré depuis sa fiche se ferme.
+
 **Bases de connaissances d'un agent** (25/09/2026) : à la création d'un agent et sur
 sa carte (« Connaissances de {0} »), le choix des bases que le Chat consulte avec cet
 agent. Depuis le 25/09/2026, l'employé OpenClaw de l'agent y cherche aussi (sa fiche,
@@ -1238,6 +1252,9 @@ quand la fenêtre est basse. Voir `SECURITE.md` § 2.
   recherche, liste des conversations, pied avec avatar, thème, notifications,
   réglages et aide. Les entrées sont filtrées par les modules actifs.
 - **Barre latérale repliée** : rail d'icônes, mêmes entrées.
+- **Cadre de focus** (29/09/2026, `lib/modaliteSaisie.ts`) : un anneau vert, discret, seulement
+  après une navigation au clavier (Tab, flèches) ; un clic ou un toucher l'éteint, et un envoi par
+  Entrée ne l'allume pas sur le bouton qui reprend le focus.
 
 **Chaque chat porte quatre actions au survol** (0.22.0, renommer ajouté depuis) : **renommer** (aussi par double clic ; Entrée garde, Échap annule), partager, **archiver**,
 supprimer. Archiver range le chat sous « Archivés », en bas de la liste, repliable et

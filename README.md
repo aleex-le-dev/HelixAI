@@ -153,7 +153,7 @@ at the "Free" level go through PowerShell.
   suggests the others it can run. The catalogue covers Qwen, Mistral (Magistral, Ministral),
   OpenAI gpt-oss, Z.ai GLM, IBM Granite, Ai2 OLMo, Meta and DeepSeek. Cloud models work with your
   own API key. Attachments, dictation (Whisper, on the machine), image generation (Z-Image Turbo,
-  FLUX.2 klein) and short videos (Wan 2.1 and 2.2), also on the machine.
+  FLUX.2 klein) and short videos (Wan 2.1 and 2.2), also on the machine. A message sent while an answer is still being written waits its turn instead of cutting it.
 - **Compare the models**: every model you can use, placed by capability score against the price
   its publisher charges, so a local model and a cloud one can be weighed on one chart.
 - **Web search in the Chat**: turn it on from the « + » menu and it stays as a chip until you

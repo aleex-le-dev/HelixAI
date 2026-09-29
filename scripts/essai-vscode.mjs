@@ -1,0 +1,203 @@
+/*
+ * Essai de l'extension VS Code (extensions/vscode/extension.js), 29/09/2026.
+ *
+ *   npm run essai:vscode
+ *
+ * Un faux module `vscode` (commandes, coffre, vue du Chat, saisies répondues
+ * d'avance) charge la vraie extension, contre une passerelle jetable et un
+ * faux modèle compatible OpenAI : Chat en flux, fichier joint, connexion et
+ * séance, un tour de Helix Code, déconnexion, adresse refusée. Rien ne touche
+ * ~/.helix ni LM Studio. Ce que l'essai ne voit pas : l'affichage de la vue
+ * dans un vrai VS Code.
+ */
+import { spawn } from "node:child_process";
+import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { createServer } from "node:http";
+import { createServer as net } from "node:net";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import Module from "node:module";
+import { dirname } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const RACINE = join(dirname(fileURLToPath(import.meta.url)), "..");
+const libre = () => new Promise((ok) => { const s = net(); s.listen(0, "127.0.0.1", () => { const { port } = s.address(); s.close(() => ok(port)); }); });
+const attendre = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// Faux modèle : répond « Bonjour depuis le faux modèle. » en flux.
+const PORT_MODELE = await libre();
+const appelsModele = [];
+createServer((req, res) => {
+  let corps = "";
+  req.on("data", (b) => (corps += b));
+  req.on("end", () => {
+    if (req.url.endsWith("/models")) {
+      res.setHeader("Content-Type", "application/json");
+      return res.end(JSON.stringify({ object: "list", data: [{ id: "faux-modele", object: "model" }] }));
+    }
+    if (req.url.endsWith("/chat/completions")) {
+      appelsModele.push(JSON.parse(corps || "{}"));
+      res.setHeader("Content-Type", "text/event-stream");
+      const morceaux = ["Bonjour ", "depuis le ", "faux modèle."];
+      for (const m of morceaux) res.write(`data: ${JSON.stringify({ id: "x", object: "chat.completion.chunk", created: 1, model: "faux-modele", choices: [{ index: 0, delta: { role: "assistant", content: m }, finish_reason: null }] })}\n\n`);
+      res.write(`data: ${JSON.stringify({ id: "x", object: "chat.completion.chunk", created: 1, model: "faux-modele", choices: [{ index: 0, delta: {}, finish_reason: "stop" }], usage: { prompt_tokens: 5, completion_tokens: 5, total_tokens: 10 } })}\n\n`);
+      return res.end("data: [DONE]\n\n");
+    }
+    res.statusCode = 404;
+    res.end("{}");
+  });
+}).listen(PORT_MODELE, "127.0.0.1");
+
+const PORT = await libre();
+const BANC = mkdtempSync(join(tmpdir(), "helix-essai-vscode-"));
+const DONNEES = join(BANC, "donnees"), PROJET = join(BANC, "projet"), ESPACE = join(BANC, "espace");
+for (const d of [DONNEES, PROJET, ESPACE, join(BANC, "lume")]) mkdirSync(d, { recursive: true });
+const G = `http://127.0.0.1:${PORT}`;
+const passerelle = spawn(process.execPath, [join(RACINE, "gateway", "src", "index.ts")], {
+  env: {
+    ...process.env,
+    HELIX_GATEWAY_PORT: String(PORT), HELIX_DATA_DIR: DONNEES, HELIX_CODE_DIR: PROJET, HELIX_WORKSPACE: ESPACE,
+    HELIX_LUME_DIR: join(BANC, "lume"), HELIX_EXO_URL: "http://127.0.0.1:9/v1",
+    HELIX_LMSTUDIO_URL: `http://127.0.0.1:${PORT_MODELE}/v1`, HELIX_CONFIG: join(BANC, "helix.config.json"), HELIX_GATEWAY_HOST: "",
+  },
+  stdio: ["ignore", "pipe", "pipe"], detached: true,
+});
+writeFileSync(join(BANC, "helix.config.json"), "{}");
+let journal = "";
+passerelle.stdout.on("data", (b) => (journal += b));
+passerelle.stderr.on("data", (b) => (journal += b));
+for (let i = 0; i < 80; i++) { try { await fetch(`${G}/health`); break; } catch { await attendre(250); } }
+await attendre(1500);
+
+let reussis = 0; const echecs = [];
+const verifier = (nom, c, obtenu) => { if (c) { reussis++; console.log(`  ✓ ${nom}`); } else { echecs.push(nom); console.log(`  ✗ ${nom} — obtenu : ${String(obtenu).slice(0, 500)}`); } };
+
+const JETON = readFileSync(join(DONNEES, "instance-token"), "utf8").trim();
+const MDP = "Essai-VSCode-2026!";
+await fetch(`${G}/helix/auth/create`, { method: "POST", headers: { Authorization: `Bearer ${JETON}`, "Content-Type": "application/json" }, body: JSON.stringify({ fullName: "Essai VS Code", email: "vscode@example.test", password: MDP }) });
+
+// Faux module vscode.
+const messages = { info: [], erreur: [], avert: [] };
+const reponsesSaisie = [];
+const secrets = new Map();
+const commandes = new Map();
+const postes = [];
+let fournisseur = null;
+const reglagesVs = { adresse: G, jeton: "", modele: "" };
+const Uri = { joinPath: (...p) => ({ p: p.map(String).join("/") }), file: (f) => ({ p: f }) };
+const vscode = {
+  Uri,
+  workspace: {
+    getConfiguration: () => ({ get: (k) => reglagesVs[k] }),
+    asRelativePath: () => "exemple.js",
+    workspaceFolders: [{ uri: { fsPath: PROJET }, name: "projet" }],
+  },
+  window: {
+    activeTextEditor: null,
+    showInformationMessage: (m) => messages.info.push(m),
+    showErrorMessage: (m) => messages.erreur.push(m),
+    showWarningMessage: (m) => messages.avert.push(m),
+    showQuickPick: async (items) => items[0],
+    showInputBox: async () => reponsesSaisie.shift(),
+    registerWebviewViewProvider: (_id, f) => { fournisseur = f; return { dispose() {} }; },
+  },
+  commands: {
+    registerCommand: (n, f) => { commandes.set(n, f); return { dispose() {} }; },
+    executeCommand: async (n, ...a) => commandes.get(n)?.(...a),
+  },
+};
+const charger = Module._load;
+Module._load = function (demande, ...reste) { return demande === "vscode" ? vscode : charger.call(this, demande, ...reste); };
+process.env.HELIX_DATA_DIR = DONNEES; // le jeton du poste, lu seulement pour le port que l'application a ouvert
+const extension = Module.createRequire(import.meta.url)(join(RACINE, "extensions", "vscode", "extension.js"));
+const contexte = { subscriptions: [], extensionUri: { p: "ext" }, secrets: { get: async (k) => secrets.get(k), store: async (k, v) => void secrets.set(k, v), delete: async (k) => void secrets.delete(k) } };
+extension.activate(contexte);
+
+let surMessage = null;
+const vue = { webview: { options: {}, html: "", cspSource: "vscode-resource:", asWebviewUri: (u) => u.p, postMessage: (m) => { postes.push(m); return Promise.resolve(true); }, onDidReceiveMessage: (f) => { surMessage = f; } } };
+fournisseur.resolveWebviewView(vue);
+const attendreFin = async (depuis, ms = 120_000) => {
+  const t = Date.now();
+  while (Date.now() - t < ms) { if (postes.slice(depuis).some((m) => m.type === "fin" || m.type === "erreur")) return; await attendre(200); }
+};
+
+console.log("1. Activation et page");
+verifier("commandes enregistrées", ["helix.expliquer", "helix.ameliorer", "helix.nouveau", "helix.seConnecter", "helix.seDeconnecter"].every((c) => commandes.has(c)), [...commandes.keys()]);
+verifier("page avec CSP à nonce et onglets Chat/Code", /script-src 'nonce-/.test(vue.webview.html) && /onglet-code/.test(vue.webview.html), vue.webview.html.slice(0, 200));
+
+console.log("2. Chat (jeton du poste, faux modèle)");
+{
+  const d = postes.length;
+  surMessage({ type: "question", texte: "Dis bonjour", joindre: false });
+  await attendreFin(d);
+  const suite = postes.slice(d);
+  const texte = suite.filter((m) => m.type === "morceau").map((m) => m.texte).join("");
+  verifier("réponse reçue en flux, puis « fin »", texte === "Bonjour depuis le faux modèle." && suite.at(-1)?.type === "fin", JSON.stringify(suite).slice(0, 400) + " | " + journal.slice(-400));
+}
+{
+  const d = postes.length;
+  surMessage({ type: "question", texte: "Et encore ?", joindre: false });
+  await attendreFin(d);
+  const dernier = appelsModele.at(-1);
+  verifier("le second tour envoie l'historique (4 messages dont la réponse)", (dernier?.messages ?? []).filter((m) => m.role !== "system").length >= 3, JSON.stringify(dernier?.messages ?? []).slice(0, 300));
+}
+{
+  vscode.window.activeTextEditor = { document: { getText: (sel) => (sel ? "" : "const a = 1;"), languageId: "javascript", uri: {} }, selection: { isEmpty: true } };
+  const d = postes.length;
+  await commandes.get("helix.expliquer")();
+  verifier("« Expliquer » sans sélection : le dit", messages.info.some((m) => /Sélectionnez d'abord/.test(m)), messages.info);
+  surMessage({ type: "question", texte: "Relis ce fichier", joindre: true });
+  await attendreFin(d);
+  const envoye = JSON.stringify(appelsModele.at(-1)?.messages ?? []);
+  verifier("fichier ouvert joint à la question", /exemple\.js/.test(envoye) && /const a = 1;/.test(envoye), envoye.slice(0, 300));
+  vscode.window.activeTextEditor = null;
+}
+
+console.log("3. Connexion (compte, mot de passe, séance dans le coffre)");
+{
+  reponsesSaisie.push("mauvais-mot-de-passe");
+  await commandes.get("helix.seConnecter")();
+  verifier("mauvais mot de passe : refusé, rien dans le coffre", messages.erreur.length > 0 && secrets.size === 0, JSON.stringify([messages.erreur, [...secrets.keys()]]));
+  reponsesSaisie.push(MDP);
+  await commandes.get("helix.seConnecter")();
+  const cle = `helix.seance:${G}`;
+  verifier("bon mot de passe : séance gardée pour cette adresse", secrets.has(cle) && messages.info.some((m) => /Connecté à Helix/.test(m)), JSON.stringify([...secrets.keys(), messages.info]));
+  const r = await fetch(`${G}/helix/auth/sessions`, { headers: { Authorization: `Bearer ${JETON}`, "X-Helix-Session": secrets.get(cle) } });
+  const corps = await r.json().catch(() => ({}));
+  verifier("la séance est valide et dite « VS Code »", r.ok && JSON.stringify(corps).includes("VS Code"), `${r.status} ${JSON.stringify(corps).slice(0, 300)}`);
+}
+
+console.log("4. Code (Helix Code sur le dossier ouvert)");
+{
+  const d = postes.length;
+  surMessage({ type: "code", texte: "Réponds juste bonjour, sans toucher aux fichiers." });
+  await attendreFin(d, 180_000);
+  const suite = postes.slice(d);
+  const erreur = suite.find((m) => m.type === "erreur");
+  verifier("un tour de Code se termine (texte rendu, « fin »)", !erreur && suite.at(-1)?.type === "fin" && suite.some((m) => m.type === "code"), JSON.stringify(suite).slice(0, 600));
+}
+
+console.log("5. Déconnexion");
+{
+  await commandes.get("helix.seDeconnecter")();
+  verifier("séance retirée du coffre", secrets.size === 0, [...secrets.keys()]);
+  const d = postes.length;
+  surMessage({ type: "code", texte: "écris un fichier" });
+  await attendreFin(d, 30_000);
+  const e = postes.slice(d).find((m) => m.type === "erreur");
+  verifier("Code sans séance : demande de se connecter", e && /connect/i.test(e.texte), JSON.stringify(postes.slice(d)));
+}
+
+console.log("6. Adresse refusée");
+{
+  reglagesVs.adresse = "http://exemple.com:8787";
+  const d = postes.length;
+  surMessage({ type: "question", texte: "bonjour", joindre: false });
+  await attendreFin(d, 10_000);
+  const e = postes.slice(d).find((m) => m.type === "erreur");
+  verifier("http hors de la boucle locale : refusé, jeton pas envoyé", e && /https/.test(e.texte), JSON.stringify(postes.slice(d)));
+}
+
+console.log(`\n${reussis} réussis, ${echecs.length} échoués.`);
+try { process.kill(-passerelle.pid, "SIGTERM"); } catch {}
+process.exit(echecs.length ? 1 : 0);

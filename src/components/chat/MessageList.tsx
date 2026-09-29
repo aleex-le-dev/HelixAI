@@ -535,7 +535,8 @@ function Bubble({ message }: { message: Message }) {
             )}
           >
             <TriangleAlert size={15} strokeWidth={1.75} className="mt-0.5 shrink-0 text-destructive" />
-            <span>{message.error}</span>
+            {/* Coupé n'importe où s'il le faut : une clé masquée (« sk-proj-****… ») sortait de la bulle (29/09/2026). */}
+            <span className="min-w-0 [overflow-wrap:anywhere]">{message.error}</span>
           </p>
         )}
         {!message.streaming && <DureeReponse durees={message.durees} />}

@@ -304,7 +304,7 @@ export function messageDuRefus(detail: string): string {
   try {
     j = JSON.parse(detail);
   } catch {
-    return detail.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 240);
+    return abreger(detail.replace(/<[^>]+>/g, " "));
   }
   const premier = Array.isArray(j) ? objet(j[0]) : objet(j);
   const e = premier.error;
@@ -319,7 +319,21 @@ export function messageDuRefus(detail: string): string {
       : undefined,
   ];
   const texte = candidats.find((c): c is string => typeof c === "string" && c.trim().length > 0);
-  return (texte ?? detail).trim().slice(0, 240);
+  return abreger(texte ?? detail);
+}
+
+/**
+ * Le refus tel qu'on peut le montrer. Vu le 29/09/2026 : OpenAI renvoie la
+ * clé masquée (« sk-proj-****…**** », une centaine d'étoiles), et la coupe à
+ * 240 caractères tombait au milieu de son adresse (« https://platform. »).
+ * Les étoiles deviennent « … », et la coupe se fait entre deux mots.
+ */
+function abreger(texte: string): string {
+  const net = texte.replace(/\*{4,}/g, "…").replace(/\s+/g, " ").trim();
+  if (net.length <= 240) return net;
+  const coupe = net.slice(0, 240);
+  const espace = coupe.lastIndexOf(" ");
+  return `${(espace > 160 ? coupe.slice(0, espace) : coupe).replace(/[\s,;:.]+$/, "")}…`;
 }
 
 /** Une modification de la requête, rejouable sur les suivantes. */

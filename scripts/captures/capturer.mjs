@@ -500,7 +500,15 @@ async function prendre(nom) {
   await chrome.envoyer("Input.dispatchMouseEvent", { type: "mouseMoved", x: 1279, y: 799 });
   await pause(250);
   const brute = join(TMP, `${nom}-brute.png`);
-  writeFileSync(brute, await chrome.capture());
+  const image = await chrome.capture();
+  /*
+   * Une page encore blanche donne un PNG de quelques Ko : c'est ce qui a été
+   * publié pour « Entraîner un modèle » en français le 29/09/2026 (8 Ko, au
+   * lieu de 160). En dessous de 40 Ko, la capture est refusée plutôt que
+   * posée dans le README.
+   */
+  if (image.length < 40_000) throw new Error(`capture ${nom} : page vide ou pas encore affichée (${Math.round(image.length / 1024)} Ko)`);
+  writeFileSync(brute, image);
   // En 256 couleurs, comme les images des autres langues (deux fois plus légères, rien de visible perdu sur une interface).
   const palette = await new Promise((ok) => {
     const p = spawn("ffmpeg", ["-v", "error", "-y", "-i", brute, "-vf", "split[a][b];[a]palettegen=max_colors=256:reserve_transparent=0[p];[b][p]paletteuse=dither=none", "-pix_fmt", "pal8", f], { stdio: ["ignore", "ignore", "inherit"] });

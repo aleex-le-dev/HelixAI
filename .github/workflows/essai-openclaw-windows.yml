@@ -1,0 +1,100 @@
+# Installation d'OpenClaw sous Windows (29/09/2026) : sur une vraie machine Windows jetable,
+# le chemin exact de Helix quand on déploie un agent (installerOpenClaw de
+# gateway/src/installationOpenClaw.ts) : Node privé téléchargé et vérifié, npm lancé par
+# node.exe npm-cli.js avec les mêmes arguments et le même environnement, puis
+# `openclaw --version` et une passerelle OpenClaw jetable sur un port libre.
+# Né de « npm a échoué (code 1) », vu par Medhi le 29/09/2026 en déployant un agent.
+# La sortie complète de l'installation et les journaux de npm sont gardés en artefact,
+# que l'essai passe ou non. Rien n'est installé hors des dossiers temporaires.
+#
+# À part de essai-windows.yml, exprès : cinq à dix minutes par machine, les trois en même
+# temps, sans construire l'application ni toucher à LM Studio ; un échec ici dit tout de
+# suite que c'est l'installation d'OpenClaw, pas le reste du parcours.
+name: Essai OpenClaw sous Windows
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, essai-openclaw-windows]
+    paths:
+      - "gateway/src/installationOpenClaw.ts"
+      - "gateway/src/plateformeOpenClaw.ts"
+      - "gateway/src/employes.ts"
+      - "gateway/src/processus.ts"
+      - "scripts/essai-openclaw-windows.mjs"
+      - ".github/workflows/essai-openclaw-windows.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: essai-openclaw-windows-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  installation:
+    name: Installation d'OpenClaw comme Helix la fait (${{ matrix.nom }})
+    runs-on: ${{ matrix.machine }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Windows x64, compte de la machine de GitHub (runneradmin, dossier temporaire en nom court).
+          - id: x64
+            nom: Windows x64
+            machine: windows-latest
+            options: ""
+          # Windows x64, comme chez une personne : compte « Hélène Dupont » (espace et accents partout sous son dossier).
+          - id: x64-compte-accentue
+            nom: Windows x64, compte avec espace et accents
+            machine: windows-latest
+            options: "--compte-accentue --deux-fois"
+          # Windows sur processeur ARM (Snapdragon) : les modules natifs n'y ont pas toujours de binaire précompilé.
+          - id: arm64
+            nom: Windows arm64
+            machine: windows-11-arm
+            options: ""
+    steps:
+      # Fins de ligne telles qu'au dépôt, comme sur la machine qui fabrique les versions.
+      - name: Fins de ligne du dépôt
+        run: git config --global core.autocrlf false
+
+      - name: Récupérer le code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Le Node qui fait tourner la passerelle (comme node gateway/src) ; OpenClaw, lui, est installé
+      # par le Node privé que Helix télécharge (24.21.0, empreinte vérifiée).
+      - name: Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Dépendances
+        run: npm ci
+
+      # Lecture seule : ce qui distingue cette machine d'un poste ordinaire (chemins longs, antivirus, outils).
+      - name: Machine
+        shell: pwsh
+        run: |
+          $fs = Get-ItemProperty -Path HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem -Name LongPathsEnabled -ErrorAction SilentlyContinue
+          "LongPathsEnabled : $($fs.LongPathsEnabled)"
+          try { $mp = Get-MpComputerStatus -ErrorAction Stop; "Defender : temps réel $($mp.RealTimeProtectionEnabled), antivirus $($mp.AntivirusEnabled)" } catch { "Defender : état illisible ($($_.Exception.Message))" }
+          "git : $((Get-Command git -ErrorAction SilentlyContinue).Source)"
+          "python : $((Get-Command python -ErrorAction SilentlyContinue).Source)"
+          "Processeur : $env:PROCESSOR_ARCHITECTURE"
+
+      - name: Installation réelle d'OpenClaw (chemin de Helix)
+        run: node scripts/essai-openclaw-windows.mjs --installation --sortie essai-openclaw-windows-sortie ${{ matrix.options }}
+
+      - name: Garder les journaux
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: essai-openclaw-windows-journaux-${{ matrix.id }}
+          path: essai-openclaw-windows-sortie
+          if-no-files-found: warn
+          retention-days: 14

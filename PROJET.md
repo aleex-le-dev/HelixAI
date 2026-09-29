@@ -437,12 +437,67 @@ et l'arrêt réel de `processus.ts` dans un Node où `process.platform` vaut `wi
 intercepté). Le même script, avec `--installation`, a refait sur ce Mac une vraie
 installation jetable par le nouveau chemin commun (Node épinglé, `npm-cli.js`, `--prefix`,
 `openclaw@2026.9.4`, puis une passerelle OpenClaw lancée sur un port libre qui ouvre son
-port), dossier personnel et données temporaires : passé le 28/09/2026. **Rien n'a été
-essayé sur un vrai Windows** : l'archive posée et reliée, npm et le script d'installation
-d'OpenClaw (`postinstall` par `cmd.exe`), OpenClaw qui démarre, ses modules natifs (koffi,
-node-pty : versions win32 x64 et arm64 publiées), ses messageries (en JavaScript ou
-WebAssembly, lu dans les paquets, pas essayé), la ligne de commande lue par PowerShell,
-taskkill, les chemins longs, l'antivirus.
+port), dossier personnel et données temporaires : passé le 28/09/2026. Sur un vrai
+Windows, depuis le 29/09/2026 (entrée suivante) : l'installation telle que Helix la fait,
+`openclaw --version`, une passerelle OpenClaw qui ouvre son port et son arrêt par taskkill,
+sur les machines Windows de GitHub. **Pas essayé sur un vrai Windows** : l'application
+empaquetée qui installe OpenClaw (la passerelle dans le `utilityProcess` d'Electron), un
+employé qui travaille (messageries, en JavaScript ou WebAssembly, lu dans les paquets), la
+ligne de commande lue par PowerShell, un antivirus autre que Defender, Smart App Control.
+
+**« npm a échoué (code 1) » en déployant un agent sous Windows (Medhi, 29/09/2026).**
+*Symptôme* : l'écran « Agents IA » disait seulement « OpenClaw ne s'est pas installé : npm a
+échoué (code 1) ». `raisonNpm` gardait la première ligne d'erreur de npm, `code 1`, alors que
+npm écrit ensuite le paquet (`path …\node_modules\<paquet>`), la commande et ce que le
+script a dit ; et rien de la sortie de npm n'allait au journal : impossible de savoir, chez
+Medhi, quel script s'était arrêté. *Reproduire* : `.github/workflows/essai-openclaw-windows.yml`
+fait tourner `installerOpenClaw` lui-même (`scripts/essai-openclaw-windows.mjs --installation`,
+Node privé téléchargé et vérifié, mêmes arguments, même `envInstallation`) sur trois machines :
+Windows x64 ; Windows x64 avec un compte « Hélène Dupont » (espace et accents dans les
+données, le dossier temporaire et le cache de npm), installé deux fois de suite comme un
+« Réessayer » ; Windows arm64 (Defender actif). Journaux de npm, liste des modules natifs,
+DLL importées et plus long chemin gardés en artefact. **Le défaut ne s'est pas reproduit** :
+première exécution verte, par le chemin d'installation de la 2026.929.2
+(https://github.com/medhiclb/HelixAI/actions/runs/36583023504), puis les trois machines
+vertes (https://github.com/medhiclb/HelixAI/actions/runs/36587942660). La cause chez Medhi
+tient donc à sa machine, et reste à lire dans son `passerelle.log` au prochain essai. *Ce
+que le journal de Windows a montré* :
+
+- en npm 11.19.0 (celui du Node 24.21.0), `--allow-scripts=openclaw` ne bloquait rien :
+  « 4 packages have install scripts not yet covered by allowScripts », et les scripts de
+  `@google/genai`, `koffi` (`cnoke.cjs --prebuild`), `tree-sitter-bash` (`node-gyp-build`) et
+  `protobufjs` ont tourné, par `cmd.exe`, en plus des deux d'OpenClaw. On croyait le contraire
+  depuis le 27/09 (SECURITE.md § 57.1, corrigé) ;
+- chaque module natif a son binaire précompilé pour Windows x64 et arm64, qui se charge sans
+  Visual C++ pour ceux qui ont un script (koffi, tree-sitter-bash : KERNEL32 et ADVAPI32
+  seulement). Quand il ne se charge pas (Smart App Control, stratégie de l'entreprise, fichier
+  abîmé), `node-gyp-build` et `cnoke` se rabattent sur une compilation, qui échoue sur un poste
+  sans outils de compilation, avec « code 1 ». Deux modules sans script demandent
+  `VCRUNTIME140.dll` (`@openclaw/fs-safe-win32-x64-msvc`, `@ubjs/node-win32-*-msvc`) : présent
+  sur les machines de GitHub ; sans lui, c'est OpenClaw qui ne démarrerait pas, pas npm ;
+- plus long chemin posé : 205 caractères sous le dossier de données ; avec
+  `C:\Users\<nom>\.helix\data`, la limite de 260 (chemins longs éteints, réglage d'office de
+  Windows) n'est atteinte qu'au-delà de 33 lettres de nom de compte. Les machines de GitHub
+  ont les chemins longs allumés.
+
+*Correction* : (1) `npm install --ignore-scripts`, puis les deux scripts d'OpenClaw, et eux
+seuls, lancés par `node.exe <fichier>` dans le dossier du paquet, sans `cmd.exe`
+(`scriptsOpenClaw` : seule la forme `node <fichier du paquet>` est acceptée). Cela retire du
+chemin quatre scripts inutiles quand le binaire se charge, dont les deux qui compilent, et
+`cmd.exe` (vert sur les trois machines :
+https://github.com/medhiclb/HelixAI/actions/runs/36590620759) ; (2) `raisonNpm` nomme le
+paquet et la cause (première ligne du script qui ressemble à une erreur), dit à part un module
+refusé par Windows (Smart App Control), une compilation sans outils, git absent, un fichier
+tenu par l'antivirus (EBUSY, EPERM sur un renommage), un certificat refusé (proxy qui
+inspecte), et, s'il n'y a vraiment que « code 1 », le dit tel quel ; sans chemins de la
+machine, espaces compris (`sansChemins`, « Dupont\.helix\… » restait) ; (3) la sortie
+entière de npm ou du script, avec le chemin du journal de npm, va à `passerelle.log`
+(`journaliserNpm`), et l'écran dit où la lire. Contrôles : `npm run securite` § 41, et
+`scripts/essai-openclaw-windows.mjs`. L'essai reste à part de `essai-windows.yml` (cinq à
+dix minutes par machine, en parallèle, sans construire l'application), lancé à la main et à
+chaque poussée sur `main` qui touche l'installation. **À faire chez Medhi** : réessayer avec
+cette version ; si l'échec revient, la phrase à l'écran et `passerelle.log`
+(`%APPDATA%\helix-plateforme\logs\`) diront le paquet et la cause.
 
 Ce qui reste limité sous Windows natif, dit pour cette capacité seulement : **les commandes
 d'un employé Libre passent par PowerShell** (OpenClaw 2026.9.4, `getShellConfig` :

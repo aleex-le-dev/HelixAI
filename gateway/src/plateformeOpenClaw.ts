@@ -1,5 +1,6 @@
 import { posix, win32 } from "node:path";
 import { t, tf } from "./langue.ts";
+import { nomProduit } from "./marque.ts";
 
 /**
  * Ce qui change d'un système à l'autre pour l'OpenClaw de Helix : l'archive
@@ -222,13 +223,69 @@ export function envInstallation(source: Env, dossierBin: string, p: NodeJS.Platf
   return poserPath(env, joindrePath([dossierBin, pathSysteme(p, source)], p), p);
 }
 
-/** Les arguments de `npm install` pour OpenClaw : préfixe explicite, pour qu'aucun `.npmrc` de la personne ne l'envoie ailleurs. */
-export function argumentsInstallation(version: string, prefixe: string, options: { avant?: string; scriptsApprouves: boolean }): string[] {
-  const args = ["install", "-g", "--prefix", prefixe, `openclaw@${version}`, "--no-fund", "--no-audit", "--loglevel=error"];
+/**
+ * Les arguments de `npm install` pour OpenClaw : préfixe explicite, pour
+ * qu'aucun `.npmrc` de la personne ne l'envoie ailleurs, et aucun script
+ * d'installation (`--ignore-scripts`) : ceux d'OpenClaw lui-même sont lancés
+ * ensuite par Helix (`scriptsOpenClaw`), par Node, sans interpréteur.
+ *
+ * Pourquoi plus `--allow-scripts=openclaw` (29/09/2026) : on le croyait
+ * suffisant pour ne laisser tourner que les scripts d'OpenClaw. Le journal de
+ * npm 11.19.0 (celui du Node 24.21.0 épinglé), relevé sur le Windows de
+ * GitHub, dit autre chose : « 4 packages have install scripts not yet
+ * covered by allowScripts », et ceux de `@google/genai`, `koffi`,
+ * `tree-sitter-bash` et `protobufjs` ont tourné quand même, par `cmd.exe`.
+ * En npm 11.19, un paquet non approuvé n'est qu'un avertissement
+ * (`strict-allow-scripts`, éteint d'office, en ferait une erreur, et aucune
+ * option de la ligne de commande ne sait refuser un paquet). Ces quatre
+ * scripts ne servent à rien quand le binaire précompilé se charge (vérifié :
+ * chaque module natif a le sien pour Windows x64 et arm64) ; quand il ne se
+ * charge pas, ceux de `koffi` et `tree-sitter-bash` se rabattent sur une
+ * compilation, qui échoue sur un poste sans outils : c'est l'une des voies
+ * vers le « npm a échoué (code 1) » vu par Medhi.
+ */
+export function argumentsInstallation(version: string, prefixe: string, options: { avant?: string }): string[] {
+  const args = ["install", "-g", "--prefix", prefixe, `openclaw@${version}`, "--no-fund", "--no-audit", "--loglevel=error", "--ignore-scripts"];
   if (options.avant) args.push(`--before=${options.avant}`);
-  // npm 11.16 et suivants bloquent les scripts d'installation non approuvés : on n'approuve qu'OpenClaw.
-  if (options.scriptsApprouves) args.push("--allow-scripts=openclaw");
   return args;
+}
+
+/** Un script d'installation d'OpenClaw, tel que Helix le lance : `node <fichier>`, dans le dossier du paquet. */
+export interface ScriptOpenClaw {
+  etape: "preinstall" | "install" | "postinstall";
+  fichier: string;
+}
+
+/**
+ * Les scripts d'installation qu'OpenClaw déclare (`package.json`), dans
+ * l'ordre où npm les aurait lancés, à lancer par le Node privé après
+ * `npm install --ignore-scripts`. OpenClaw 2026.9.4 en a deux : `preinstall`
+ * (`node scripts/preinstall-package-manager-warning.mjs` : vérifie la version
+ * de Node, retire la sentinelle d'une ancienne version) et `postinstall`
+ * (`node scripts/postinstall-bundled-plugins.mjs` : range `dist`, puis retire
+ * la marque « installation en cours » sans laquelle OpenClaw se sait
+ * inachevé). Lu dans le paquet le 29/09/2026.
+ *
+ * Seule la forme `node <chemin relatif .mjs/.js/.cjs>` est acceptée, et le
+ * chemin doit rester dans le paquet : tout autre script (une commande pour
+ * un interpréteur, un `&&`, un chemin qui sort) est refusé avec sa raison
+ * plutôt que confié à `cmd.exe` ou à `sh`.
+ */
+export function scriptsOpenClaw(manifeste: unknown, dossierPaquet: string, p: NodeJS.Platform): ScriptOpenClaw[] | { erreur: string } {
+  const c = chemins(p);
+  const declares = (manifeste as { scripts?: Record<string, unknown> } | null)?.scripts ?? {};
+  const liste: ScriptOpenClaw[] = [];
+  for (const etape of ["preinstall", "install", "postinstall"] as const) {
+    const brut = declares[etape];
+    if (brut === undefined) continue;
+    const m = typeof brut === "string" ? /^node\s+([\w@./-]+\.[cm]?js)$/.exec(brut.trim()) : null;
+    const relatif = m?.[1];
+    const fichier = relatif ? c.resolve(dossierPaquet, relatif) : "";
+    const dedans = relatif && !relatif.split(/[\\/]/).includes("..") && !c.isAbsolute(relatif) && c.relative(dossierPaquet, fichier).split(/[\\/]/)[0] !== "..";
+    if (!dedans) return { erreur: tf("OpenClaw déclare un script d'installation ({0}) que {1} ne lance pas sans interpréteur de commandes : {2}", etape, nomProduit(), String(brut).slice(0, 120)) };
+    liste.push({ etape, fichier });
+  }
+  return liste;
 }
 
 /* ---- Trouver et lancer OpenClaw ------------------------------------------ */
@@ -416,12 +473,105 @@ export function commandeArretArbre(pid: number, env: Env): { fichier: string; ar
 }
 
 /**
+ * Ce que npm a dit, en une phrase : ses messages bruts portent des chemins de
+ * la machine et un jargon qui n'apprend rien à qui installe.
+ *
+ * 29/09/2026 : sous Windows, Medhi ne voyait que « npm a échoué (code 1) ».
+ * Quand le script d'installation d'un paquet échoue, npm écrit d'abord
+ * `code 1`, `path <dossier du paquet>`, `command failed`, `command <la
+ * commande>`, puis ce que le script a dit, et enfin le chemin de son journal :
+ * on gardait la première ligne, la seule qui ne dit rien. On nomme maintenant
+ * le paquet et la cause (la première ligne du script qui l'explique), ou ce
+ * qui manque à la machine (outils de compilation, git), toujours sans
+ * chemins. La sortie entière va dans le journal de la passerelle
+ * (installationOpenClaw.ts, `journaliserNpm`).
+ */
+export function raisonNpm(sortie: string, version: string, origine: "npm" | "script" = "npm"): string {
+  if (/notarget|No matching version/i.test(sortie)) return tf("la version {0} d'OpenClaw n'est pas publiée", version);
+  if (/ENOTFOUND|EAI_AGAIN|ETIMEDOUT|ECONNREFUSED|ECONNRESET|network|UNABLE_TO_GET_ISSUER_CERT|SELF_SIGNED_CERT|CERT_/i.test(sortie)) {
+    if (/UNABLE_TO_GET_ISSUER_CERT|SELF_SIGNED_CERT|CERT_/i.test(sortie)) {
+      return t("le registre npm répond avec un certificat que Node ne reconnaît pas (proxy ou antivirus qui inspecte les connexions) : autorisez registry.npmjs.org, ou demandez le certificat de votre proxy à votre service informatique");
+    }
+    return t("le registre npm est injoignable : vérifiez l'accès à internet de cette machine");
+  }
+  if (/ENOSPC/i.test(sortie)) return t("il n'y a plus assez de place sur le disque");
+  // Windows : un fichier tenu par un autre programme, le plus souvent l'antivirus qui analyse ce que npm vient d'écrire.
+  if (/EBUSY|EPERM[^\n]*(rename|unlink|rmdir)|operation not permitted, (rename|unlink|rmdir)/i.test(sortie)) {
+    return tf("un fichier du dossier d'installation est tenu par un autre programme (souvent l'antivirus) : réessayez dans un instant, ou excluez le dossier de données de {0} de l'analyse", nomProduit());
+  }
+  if (/EACCES|EPERM/i.test(sortie)) return t("le dossier d'installation n'est pas accessible en écriture");
+  // Windows : un chemin trop long pour l'outil qui l'ouvre.
+  if (/ENAMETOOLONG/i.test(sortie)) return t("un chemin du dossier d'installation est trop long pour cette machine");
+
+  const lignes = sortie
+    .split(/\r?\n/)
+    .map((l) => l.replace(/^npm (error|ERR!)\s?/i, "").trim())
+    .filter(Boolean);
+  // Le paquet dont le script a échoué : `path …\node_modules\<paquet>` (ou `@portée\paquet`).
+  const chemin = lignes.find((l) => /^path\s/i.test(l)) ?? "";
+  const paquet = /node_modules[\\/]((?:@[^\\/\s]+[\\/])?[^\\/\s]+)[\\/]?\s*$/.exec(chemin)?.[1]?.replace(/\\/g, "/");
+  // Ce qu'a dit le script lui-même : les lignes après `command …` (la commande nomme parfois node-gyp sans rien compiler).
+  const apres = lignes.findIndex((l) => /^command\s+(?!failed\b)/i.test(l));
+  const duScript = apres >= 0 ? lignes.slice(apres + 1) : lignes;
+  /*
+   * Windows 11 : Smart App Control (ou une stratégie de l'entreprise, WDAC)
+   * refuse de charger un module natif non signé. Le binaire précompilé ne se
+   * charge pas, et le script du paquet se rabat sur une compilation, qui
+   * échoue à son tour : c'est le refus qu'il faut dire, pas la compilation.
+   */
+  if (/Application Control policy has blocked|stratégie de contrôle d'application|a bloqué ce fichier|blocked this file/i.test(sortie)) {
+    return t("Windows a refusé de charger un module d'OpenClaw (Smart App Control ou une stratégie de l'entreprise) : tant que ce contrôle le refuse, OpenClaw ne peut pas tourner sur ce poste ; voyez avec la personne qui gère ce poste");
+  }
+  const compilation = /gyp ERR!|node-gyp rebuild|Visual Studio|find Python|MSBuild|cl\.exe|CMake|make: /i;
+  if (compilation.test(duScript.join("\n"))) {
+    // Ne devrait pas arriver : chaque module natif d'OpenClaw 2026.9.4 a son binaire précompilé pour Windows x64 et arm64, et il se charge sans Visual C++ (vu sur GitHub le 29/09/2026).
+    return paquet
+      ? tf("le module « {0} » n'a pas pu utiliser son binaire précompilé et a voulu se compiler sur cette machine, sans outils de compilation", paquet)
+      : t("un module n'a pas pu utiliser son binaire précompilé et a voulu se compiler sur cette machine, sans outils de compilation");
+  }
+  if (/spawn git ENOENT|'git' n'est pas reconnu|'git' is not recognized|git: (command )?not found|not found: git/i.test(sortie)) {
+    return t("npm a besoin de git pour une dépendance, et git n'est pas installé sur cette machine");
+  }
+  const bruit = (l: string) =>
+    /^(code|errno|syscall|signal)\s+\S+$|^path\s|^command( failed)?(\s|$)|^cwd\s|complete log of this run|log of this run|[\\/]_logs[\\/]|^at\s|^node:internal|^\^+$|^Node\.js v\d/i.test(l);
+  /*
+   * La cause : parmi ce qu'a dit le script (après `command …`), la première
+   * ligne qui ressemble à une erreur, sinon la première tout court ; hors
+   * script, la première ligne qui n'est pas du bruit.
+   */
+  const candidates = duScript.filter((l) => !bruit(l));
+  const erreur = /\b(error|erreur|ERR_[A-Z_]+|E[A-Z]{3,}|cannot|failed|échou|not found|introuvable|refus|denied|unsupported)\b/i;
+  const ligne = candidates.find((l) => erreur.test(l)) ?? candidates[0];
+  const propre = ligne ? sansChemins(ligne).replace(/\s+/g, " ").slice(0, 200) : "";
+  if (paquet && apres >= 0) {
+    return propre
+      ? tf("le script d'installation du paquet « {0} » a échoué ({1})", paquet, propre)
+      : tf("le script d'installation du paquet « {0} » a échoué", paquet);
+  }
+  // Un script d'OpenClaw lancé par Helix (installationOpenClaw.ts) : sa sortie brute, la cause suffit.
+  if (origine === "script") return propre || t("il s'est arrêté sans rien dire");
+  if (propre) return tf("npm a échoué ({0})", propre);
+  // Rien d'autre que le code : on le dit, la sortie entière est dans le journal (journaliserNpm).
+  const code = /^code\s+(\S+)$/im.exec(lignes.join("\n"))?.[1];
+  return code ? tf("npm a échoué (code {0}) sans en dire plus", code) : t("npm a échoué");
+}
+
+/**
  * Un message de npm sans les chemins de la machine : ceux d'Unix (`/Users/…`)
  * et ceux de Windows (`C:\Users\…`, `\\serveur\partage`).
  */
 export function sansChemins(texte: string): string {
+  /*
+   * Un dossier du chemin peut contenir des espaces (`C:\Users\Jean Dupont\…`,
+   * le cas ordinaire sous Windows) : on avale chaque dossier suivi d'un
+   * séparateur, espaces compris, et le dernier morceau jusqu'au premier blanc
+   * (29/09/2026 ; avant, « Dupont\.helix\… » restait à l'écran). Quitte à
+   * avaler quelques mots de plus : mieux vaut perdre un mot qu'un nom. Un
+   * dossier ne contient jamais `:`, ce qui arrête le chemin avant une adresse
+   * (`https://registry.npmjs.org/…`, gardée).
+   */
   return texte
-    .replace(/\b[A-Za-z]:[\\/][^\s"']*/g, "…")
-    .replace(/\\\\[^\s"']+/g, "…")
-    .replace(/(^|[\s"'(=])\/[^\s"')]+/g, "$1…");
+    .replace(/\b[A-Za-z]:[\\/](?:[^\\/"'\n:<>|?*]*\\)*[^\s"'<>|?*]*/g, "…")
+    .replace(/\\\\(?:[^\\/"'\n:<>|?*]*\\)*[^\s"'<>|?*]*/g, "…")
+    .replace(/(^|[\s"'(=])\/(?:[^/"'\n:)]*\/)*[^\s"'):]*/g, "$1…");
 }

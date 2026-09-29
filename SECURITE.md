@@ -4205,7 +4205,7 @@ public.
 | Attribution d'Epoch AI (CC BY 4.0) | À l'écran, auteur, titre, lien, licence et date étaient là. Manquaient l'indication des modifications (section 3(a)(1)(B) de la licence : extrait des modèles depuis 2024, identifiants sans « _high », deux écartés, noms rapprochés) et toute mention dans le dépôt. | Faible | **Oui** : phrase ajoutée sous « Comparer les modèles » (traduite), attribution complète dans THIRD_PARTY_NOTICES.md § 3. |
 | Page de prix d'OpenAI | `platform.openai.com/docs/pricing` renvoie (301) vers `developers.openai.com/api/docs/pricing`. | Faible | **Oui**. |
 | Traces dans le dépôt | `scripts/securite.mjs` renvoyait au fichier de consignes d'un outil d'IA (qui n'est pas publié) ; le nom court Windows du poste de Medhi (`…~1`) figurait dans `zonesProtegees.ts` et ici. | Faible | **Oui** dans l'arbre ; l'historique poussé les garde (le réécrire demanderait de forcer la branche publique : pas fait). |
-| OpenClaw avec un npm antérieur à 11.16 | Sans `--allow-scripts` (npm trop ancien), les scripts d'installation de toutes les dépendances tournent : `@google/genai`, `koffi`, `protobufjs`, `tree-sitter-bash` en ont. N'arrive que si le profil impose un Node plus ancien : le Node 24.21.0 épinglé porte npm 11.19.0 (index de nodejs.org). | Faible | Non. |
+| OpenClaw avec un npm antérieur à 11.16 | Sans `--allow-scripts` (npm trop ancien), les scripts d'installation de toutes les dépendances tournent : `@google/genai`, `koffi`, `protobufjs`, `tree-sitter-bash` en ont. N'arrive que si le profil impose un Node plus ancien : le Node 24.21.0 épinglé porte npm 11.19.0 (index de nodejs.org). | Faible | **Oui, et plus large que prévu (29/09/2026)** : même avec npm 11.19.0 et `--allow-scripts=openclaw`, ces quatre scripts tournaient (npm n'avertit que). `--ignore-scripts` pour tous, puis les deux scripts d'OpenClaw lancés par Node (§ 57.1). |
 | Modèle de conversation (`lms get`) | Ni révision ni empreinte possibles avec `lms` (§ 39.2). | Moyenne (inchangée) | Non : deux voies, à décider. |
 | Pile NVIDIA de l'entraînement | Les empreintes sont relevables (§ 39.5), mais la liste ne peut pas être essayée sans carte NVIDIA. | Moyenne (inchangée) | Non : relevé fait, pas branché. |
 | FFmpeg dans les roues de PyAV | FFmpeg se déclare LGPL-3.0+, mais x264 et x265 (GPL-2.0+) sont dans les roues et liés ; les roues ne portent aucun de ces textes de licence (§ 39.4). | Information (Helix ne redistribue pas ces roues) | Documenté. |
@@ -6033,9 +6033,18 @@ comme sur macOS et Linux. Code propre au système : `gateway/src/plateformeOpenC
 - **Aucun interpréteur de commandes entre Helix et OpenClaw.** Ni `openclaw.cmd` ni `npm.cmd` :
   Node refuse de lancer un `.cmd` sans `shell` (CVE-2024-27980), et `cmd.exe` réinterprète
   `&`, `^`, `%` et les guillemets d'un chemin. Helix lance `node.exe npm-cli.js …` et
-  `node.exe openclaw.mjs …` par `execFile`/`spawn`, arguments en tableau. Seul le script
-  d'installation d'OpenClaw passe par `cmd.exe`, lancé par npm, et seulement pour le paquet
-  `openclaw` (`--allow-scripts=openclaw`), comme sur macOS.
+  `node.exe openclaw.mjs …` par `execFile`/`spawn`, arguments en tableau. **Corrigé le
+  29/09/2026** : on écrivait ici que seul le script d'installation d'OpenClaw passait par
+  `cmd.exe` (`--allow-scripts=openclaw`). Le journal de npm 11.19.0 relevé sur le Windows de
+  GitHub (essai-openclaw-windows.yml) montre que les scripts de `@google/genai`, `koffi`,
+  `tree-sitter-bash` et `protobufjs` tournaient aussi, par `cmd.exe` : npm 11.19 ne fait
+  qu'avertir pour un paquet non approuvé (« not yet covered by allowScripts »), et c'était
+  pareil sur macOS et Linux. Désormais `npm install --ignore-scripts`, puis Helix lance
+  lui-même les deux scripts d'OpenClaw (`preinstall`, `postinstall`) par `node.exe <fichier>`,
+  dans le dossier du paquet, sans interpréteur ; un script déclaré sous une autre forme que
+  `node <fichier du paquet>` est refusé avec sa raison (`scriptsOpenClaw`,
+  plateformeOpenClaw.ts ; contrôles dans `scripts/essai-openclaw-windows.mjs` et
+  `npm run securite` § 41). Plus aucun `cmd.exe` pendant l'installation, sur aucun système.
 - **Ni tâche planifiée, ni service, ni droits d'administrateur.** Helix ne lance jamais
   `openclaw gateway install` : l'instance est un processus enfant de la passerelle, sur la
   boucle locale et son jeton, dans `<données>\openclaw`. L'OpenClaw personnel

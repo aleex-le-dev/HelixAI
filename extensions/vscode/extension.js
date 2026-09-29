@@ -71,14 +71,122 @@ function reglages() {
   return { adresse, jeton, modele: String(c.get("modele") || "") };
 }
 
+/*
+ * Réflexion écrite dans le texte, entre `<think>` et `</think>` (29/09/2026) :
+ * certains moteurs ne la séparent pas (réglage de LM Studio, gabarit du modèle
+ * non reconnu, service qui rend le texte brut), et les balises s'affichaient
+ * ici avec toute la réflexion. Même découpage que la passerelle
+ * (gateway/src/reflexionEnLigne.ts, essayé par la section 40 de
+ * scripts/securite.mjs) : une réflexion en tête du texte, balises coupées
+ * n'importe où entre deux morceaux, ou la balise fermante seule quand le
+ * gabarit du modèle a déjà ouvert la sienne (`requalifie` : les derniers
+ * caractères déjà rendus comme réponse étaient la réflexion).
+ */
+function separateurReflexion() {
+  const OUVRANTE = "<think>";
+  const FERMANTE = "</think>";
+  const debutDe = (tete, balise) => tete.length < balise.length && balise.startsWith(tete);
+  const suffixe = (s, balise) => {
+    for (let n = Math.min(balise.length - 1, s.length); n > 0; n--) if (balise.startsWith(s.slice(s.length - n))) return n;
+    return 0;
+  };
+  let etat = "debut";
+  let retenu = "";
+  let rendus = 0;
+  let vue = false;
+  return {
+    /** Réflexion reçue par son canal séparé : le texte qui suit est la réponse. */
+    canalSepare() {
+      if (etat === "debut" && rendus === 0) etat = "apres";
+    },
+    /** @param {string} morceau @returns {{texte: string, reflexion: string, requalifie?: number}} */
+    ajouter(morceau) {
+      const sortie = { texte: "", reflexion: "" };
+      let reste = retenu + morceau;
+      retenu = "";
+      while (reste) {
+        if (etat === "reponse") {
+          sortie.texte += reste;
+          reste = "";
+        } else if (etat === "debut") {
+          const tete = reste.trimStart();
+          if (rendus === 0) {
+            if (!tete || debutDe(tete, OUVRANTE) || debutDe(tete, FERMANTE)) {
+              retenu = reste;
+              break;
+            }
+            if (tete.startsWith(OUVRANTE) || tete.startsWith(FERMANTE)) {
+              etat = tete.startsWith(OUVRANTE) ? "dedans" : "apres";
+              reste = tete.slice(tete.startsWith(OUVRANTE) ? OUVRANTE.length : FERMANTE.length);
+              continue;
+            }
+          }
+          const i = reste.indexOf(FERMANTE);
+          if (i >= 0) {
+            if (rendus > 0) sortie.requalifie = rendus;
+            sortie.reflexion += reste.slice(0, i);
+            rendus = 0;
+            etat = "apres";
+            reste = reste.slice(i + FERMANTE.length);
+            continue;
+          }
+          const n = suffixe(reste, FERMANTE);
+          sortie.texte += reste.slice(0, reste.length - n);
+          rendus += reste.length - n;
+          retenu = reste.slice(reste.length - n);
+          reste = "";
+        } else if (etat === "dedans") {
+          if (!vue) reste = reste.trimStart();
+          if (!reste) break;
+          const i = reste.indexOf(FERMANTE);
+          if (i >= 0) {
+            sortie.reflexion += reste.slice(0, i);
+            etat = "apres";
+            reste = reste.slice(i + FERMANTE.length);
+            continue;
+          }
+          const n = suffixe(reste, FERMANTE);
+          sortie.reflexion += reste.slice(0, reste.length - n);
+          if (reste.length > n) vue = true;
+          retenu = reste.slice(reste.length - n);
+          reste = "";
+        } else {
+          const tete = reste.trimStart();
+          if (!tete || debutDe(tete, FERMANTE)) {
+            retenu = tete;
+            break;
+          }
+          if (tete.startsWith(FERMANTE)) {
+            reste = tete.slice(FERMANTE.length);
+            continue;
+          }
+          etat = "reponse";
+          reste = tete;
+        }
+      }
+      return sortie;
+    },
+    /** Fin du flux : ce qui était retenu est rendu à sa place. */
+    finir() {
+      const r = retenu;
+      retenu = "";
+      if (etat === "dedans") return { texte: "", reflexion: r };
+      const t = r.trim();
+      if ((etat === "debut" || etat === "apres") && rendus === 0 && (!t || OUVRANTE.startsWith(t) || FERMANTE.startsWith(t))) return { texte: "", reflexion: "" };
+      return { texte: r, reflexion: "" };
+    },
+  };
+}
+
 /**
  * Pose une question à l'instance, et rend la réponse morceau par morceau.
  * @param {{role: string, content: string}[]} messages
  * @param {(texte: string) => void} surMorceau
  * @param {AbortSignal} signal
- * @param {() => void} [surReflexion] le modèle réfléchit avant de répondre (`reasoning_content`)
+ * @param {() => void} [surReflexion] le modèle réfléchit avant de répondre (`reasoning_content`, ou `<think>` dans le texte)
+ * @param {(caracteres: number) => void} [surRequalifier] les derniers caractères rendus étaient la réflexion (`</think>` seul)
  */
-async function demander(messages, surMorceau, signal, surReflexion) {
+async function demander(messages, surMorceau, signal, surReflexion, surRequalifier) {
   const { adresse, jeton, modele } = reglages();
   if (!jeton) {
     throw new Error(
@@ -105,6 +213,13 @@ async function demander(messages, surMorceau, signal, surReflexion) {
   const lecteur = res.body.getReader();
   const decodeur = new TextDecoder();
   let reste = "";
+  const separateur = separateurReflexion();
+  /** @param {{texte: string, reflexion: string, requalifie?: number}} m */
+  const rendre = (m) => {
+    if (m.requalifie) surRequalifier?.(m.requalifie);
+    if (m.reflexion) surReflexion?.();
+    if (m.texte) surMorceau(m.texte);
+  };
   for (;;) {
     const { done, value } = await lecteur.read();
     if (done) break;
@@ -115,7 +230,7 @@ async function demander(messages, surMorceau, signal, surReflexion) {
       const l = ligne.trim();
       if (!l.startsWith("data:")) continue;
       const donnee = l.slice(5).trim();
-      if (donnee === "[DONE]") return;
+      if (donnee === "[DONE]") return rendre(separateur.finir());
       try {
         const evenement = JSON.parse(donnee);
         if (evenement.error) throw new Error(evenement.error.message || "Erreur du modèle.");
@@ -125,8 +240,11 @@ async function demander(messages, surMorceau, signal, surReflexion) {
          * parfois plus de deux minutes avant d'écrire, et la vue n'affichait
          * que « … » (vu dans VS Code le 29/09/2026).
          */
-        if (delta?.reasoning_content || delta?.reasoning) surReflexion?.();
-        if (delta?.content) surMorceau(delta.content);
+        if (delta?.reasoning_content || delta?.reasoning) {
+          separateur.canalSepare();
+          surReflexion?.();
+        }
+        if (typeof delta?.content === "string" && delta.content) rendre(separateur.ajouter(delta.content));
       } catch (err) {
         if (err instanceof Error && !(err instanceof SyntaxError)) throw err;
       }
@@ -485,6 +603,11 @@ class VueChat {
         if (Date.now() - dernierSigne < 1000) return;
         dernierSigne = Date.now();
         this.vue?.webview.postMessage({ type: "reflexion" });
+      }, (n) => {
+        // Ce qui s'affichait comme réponse était la réflexion : retiré, et la vue redit que le modèle réfléchit.
+        reponse = reponse.slice(0, Math.max(0, reponse.length - n));
+        dernierSigne = Date.now();
+        this.vue?.webview.postMessage({ type: "requalifier", caracteres: n });
       });
       this.historique.push({ role: "assistant", content: reponse });
       this.vue?.webview.postMessage({ type: "fin" });

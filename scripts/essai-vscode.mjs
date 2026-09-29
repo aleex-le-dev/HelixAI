@@ -45,6 +45,21 @@ createServer((req, res) => {
     if (req.url.endsWith("/chat/completions")) {
       appelsModele.push(JSON.parse(corps || "{}"));
       res.setHeader("Content-Type", "text/event-stream");
+      /*
+       * « balises-essai » (29/09/2026) : la réflexion laissée dans le texte, balises coupées entre deux morceaux, puis
+       * « fermante-essai » : sans balise ouvrante (gabarit qui l'a posée), comme un moteur qui ne sépare pas.
+       */
+      // La dernière question seulement : l'historique renvoyé à chaque tour porte les précédentes.
+      const derniere = String(appelsModele.at(-1)?.messages?.at(-1)?.content ?? "");
+      const enLigne = /balises-essai/.test(derniere)
+        ? ["<thi", "nk>\nJe réfléchis", " encore.</th", "ink>\n\nBonjour ", "depuis le faux modèle."]
+        : /fermante-essai/.test(derniere)
+          ? ["Je réfléchis", " encore.\n</think>", "\n\nBonjour ", "depuis le faux modèle."]
+          : null;
+      if (enLigne) {
+        for (const m of enLigne) res.write(`data: ${JSON.stringify({ id: "x", object: "chat.completion.chunk", created: 1, model: "faux-modele", choices: [{ index: 0, delta: { content: m }, finish_reason: null }] })}\n\n`);
+        return res.end("data: [DONE]\n\n");
+      }
       // Deux morceaux de réflexion d'abord, comme Qwen3 (`reasoning_content`) : la vue doit le dire, sans les montrer.
       for (const r of ["Je réfléchis", " encore."]) res.write(`data: ${JSON.stringify({ id: "x", object: "chat.completion.chunk", created: 1, model: "faux-modele", choices: [{ index: 0, delta: { reasoning_content: r }, finish_reason: null }] })}\n\n`);
       const morceaux = ["Bonjour ", "depuis le ", "faux modèle."];
@@ -148,6 +163,28 @@ console.log("2. Chat (jeton du poste, faux modèle)");
   if (AVEC_MODELE) console.log(`    réponse du modèle : ${JSON.stringify(texte.slice(0, 200))}`);
   if (!AVEC_MODELE) verifier("réflexion du modèle signalée à la vue, jamais affichée comme réponse", suite.some((m) => m.type === "reflexion") && !texte.includes("réfléchis"), JSON.stringify(suite).slice(0, 300));
   verifier("réponse reçue en flux, puis « fin »", (AVEC_MODELE ? texte.trim().length > 0 : texte === "Bonjour depuis le faux modèle.") && suite.at(-1)?.type === "fin", JSON.stringify(suite).slice(0, 400) + " | " + journal.slice(-400));
+}
+if (!AVEC_MODELE) {
+  // Réflexion dans le texte (29/09/2026) : dite à la vue, jamais affichée ni gardée comme réponse, balises comprises.
+  for (const [forme, nom] of [["balises-essai", "entre <think> et </think>, balises coupées"], ["fermante-essai", "sans balise ouvrante (</think> seul)"]]) {
+    const d = postes.length;
+    const avant = [...(fournisseur.historique ?? [])];
+    surMessage({ type: "question", texte: `Dis bonjour ${forme}`, joindre: false });
+    await attendreFin(d);
+    const suite = postes.slice(d);
+    let vu = "";
+    for (const m of suite) {
+      if (m.type === "morceau") vu += m.texte;
+      if (m.type === "requalifier") vu = vu.slice(0, Math.max(0, vu.length - m.caracteres));
+    }
+    const garde = [...(fournisseur.historique ?? [])].slice(avant.length).find((m) => m.role === "assistant")?.content ?? "";
+    verifier(
+      `réflexion ${nom} : signalée à la vue, retirée de la réponse affichée et de l'historique`,
+      // Requalifiée, la vue le dit d'elle-même (« Le modèle réfléchit… ») : le message de requalification vaut signal.
+      suite.some((m) => m.type === "reflexion" || m.type === "requalifier") && vu.trim() === "Bonjour depuis le faux modèle." && garde.trim() === "Bonjour depuis le faux modèle." && suite.at(-1)?.type === "fin",
+      JSON.stringify({ vu, garde, suite }).slice(0, 500),
+    );
+  }
 }
 {
   const d = postes.length;

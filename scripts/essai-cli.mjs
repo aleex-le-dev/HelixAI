@@ -439,6 +439,44 @@ try {
   }
 
   /* ----------------------------------------------------------------------- */
+  /*
+   * La réflexion laissée dans le texte par un moteur qui ne la sépare pas
+   * (29/09/2026) : un faux point d'accès compatible à la place de l'instance
+   * envoie `<think>…</think>` (balises coupées) ou `</think>` seul. La
+   * réponse s'écrit sans balise ni réflexion ; déjà écrite, une réflexion
+   * requalifiée est dite.
+   */
+  console.log("\n5 bis. Réflexion écrite dans le texte");
+  {
+    const { createServer: serveurHttp } = await import("node:http");
+    const FORMES = {
+      "balises-essai": ["<thi", "nk>\nJe réfléchis", " encore.</th", "ink>\n\nBonjour ", "depuis le faux modèle."],
+      "fermante-essai": ["Je réfléchis", " encore.\n</think>", "\n\nBonjour ", "depuis le faux modèle."],
+    };
+    const faux = serveurHttp((req, res) => {
+      let corps = "";
+      req.on("data", (b) => (corps += b));
+      req.on("end", () => {
+        const derniere = String(JSON.parse(corps || "{}").messages?.at(-1)?.content ?? "");
+        const forme = Object.keys(FORMES).find((f) => derniere.includes(f)) ?? "balises-essai";
+        res.setHeader("Content-Type", "text/event-stream");
+        for (const m of FORMES[forme]) res.write(`data: ${JSON.stringify({ choices: [{ index: 0, delta: { content: m } }] })}\n\n`);
+        res.end("data: [DONE]\n\n");
+      });
+    });
+    const portFaux = await portLibre();
+    await new Promise((ok) => faux.listen(portFaux, "127.0.0.1", ok));
+    try {
+      const balises = await cliEnFond(["chat", "--adresse", `http://127.0.0.1:${portFaux}`, "--jeton", "essai", "Dis bonjour balises-essai"]).fin;
+      verifier("réflexion entre balises coupées : seule la réponse s'écrit, sans balise ni réflexion", balises.code === 0 && /Bonjour depuis le faux modèle\./.test(balises.sortie) && !/think>|réfléchis/.test(balises.sortie), balises.sortie);
+      const fermante = await cliEnFond(["chat", "--adresse", `http://127.0.0.1:${portFaux}`, "--jeton", "essai", "Dis bonjour fermante-essai"]).fin;
+      verifier("</think> seul : la balise ne s'écrit pas, ce qui précède est dit comme la réflexion, puis la réponse", fermante.code === 0 && /Bonjour depuis le faux modèle\./.test(fermante.sortie) && !/think>/.test(fermante.sortie) && /ce qui précède était la réflexion du modèle/.test(fermante.sortie), fermante.sortie);
+    } finally {
+      faux.close();
+    }
+  }
+
+  /* ----------------------------------------------------------------------- */
   console.log("\n6. Déconnexion");
   {
     const r = cli(["deconnexion"]);

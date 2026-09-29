@@ -1,5 +1,6 @@
 import { posix, win32 } from "node:path";
 import { t, tf } from "./langue.ts";
+import { nomProduit } from "./marque.ts";
 
 /**
  * Ce qui change d'un système à l'autre pour l'OpenClaw de Helix : l'archive
@@ -440,7 +441,7 @@ export function raisonNpm(sortie: string, version: string): string {
   if (/ENOSPC/i.test(sortie)) return t("il n'y a plus assez de place sur le disque");
   // Windows : un fichier tenu par un autre programme, le plus souvent l'antivirus qui analyse ce que npm vient d'écrire.
   if (/EBUSY|EPERM[^\n]*(rename|unlink|rmdir)|operation not permitted, (rename|unlink|rmdir)/i.test(sortie)) {
-    return t("un fichier du dossier d'installation est tenu par un autre programme (souvent l'antivirus) : réessayez dans un instant, ou excluez le dossier de données de Helix de l'analyse");
+    return tf("un fichier du dossier d'installation est tenu par un autre programme (souvent l'antivirus) : réessayez dans un instant, ou excluez le dossier de données de {0} de l'analyse", nomProduit());
   }
   if (/EACCES|EPERM/i.test(sortie)) return t("le dossier d'installation n'est pas accessible en écriture");
   // Windows : un chemin trop long pour l'outil qui l'ouvre.
@@ -479,7 +480,10 @@ export function raisonNpm(sortie: string, version: string): string {
       ? tf("le script d'installation du paquet « {0} » a échoué ({1})", paquet, propre)
       : tf("le script d'installation du paquet « {0} » a échoué", paquet);
   }
-  return propre ? tf("npm a échoué ({0})", propre) : t("npm a échoué");
+  if (propre) return tf("npm a échoué ({0})", propre);
+  // Rien d'autre que le code : on le dit, la sortie entière est dans le journal (journaliserNpm).
+  const code = /^code\s+(\S+)$/im.exec(lignes.join("\n"))?.[1];
+  return code ? tf("npm a échoué (code {0}) sans en dire plus", code) : t("npm a échoué");
 }
 
 /**
@@ -492,10 +496,12 @@ export function sansChemins(texte: string): string {
    * le cas ordinaire sous Windows) : on avale chaque dossier suivi d'un
    * séparateur, espaces compris, et le dernier morceau jusqu'au premier blanc
    * (29/09/2026 ; avant, « Dupont\.helix\… » restait à l'écran). Quitte à
-   * avaler quelques mots de plus : mieux vaut perdre un mot qu'un nom.
+   * avaler quelques mots de plus : mieux vaut perdre un mot qu'un nom. Un
+   * dossier ne contient jamais `:`, ce qui arrête le chemin avant une adresse
+   * (`https://registry.npmjs.org/…`, gardée).
    */
   return texte
-    .replace(/\b[A-Za-z]:[\\/](?:[^\\/"'\n]*[\\/])*[^\s"'\\/]*/g, "…")
-    .replace(/\\\\(?:[^\\/"'\n]*[\\/])*[^\s"'\\/]*/g, "…")
-    .replace(/(^|[\s"'(=])\/(?:[^/"'\n)]*\/)*[^\s"')/]*/g, "$1…");
+    .replace(/\b[A-Za-z]:[\\/](?:[^\\/"'\n:<>|?*]*\\)*[^\s"'<>|?*]*/g, "…")
+    .replace(/\\\\(?:[^\\/"'\n:<>|?*]*\\)*[^\s"'<>|?*]*/g, "…")
+    .replace(/(^|[\s"'(=])\/(?:[^/"'\n:)]*\/)*[^\s"'):]*/g, "$1…");
 }

@@ -37,7 +37,8 @@ export function InfoBox({
       )}
     >
       {leading && <span className="mt-0.5 shrink-0">{leading}</span>}
-      <div className="min-w-0">{children}</div>
+      {/* Coupé n'importe où s'il le faut : un encart d'erreur montre souvent une adresse ou une réponse brute sans espace. */}
+      <div className="min-w-0 [overflow-wrap:anywhere]">{children}</div>
     </div>
   );
 }

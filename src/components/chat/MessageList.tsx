@@ -529,6 +529,7 @@ function Bubble({ message }: { message: Message }) {
         <SourcesWeb message={message} />
         {message.error && (
           <p
+            role="alert"
             className={cn(
               "flex items-start gap-2 rounded-xl border border-destructive/30 bg-destructive/[0.06] px-3 py-2.5 text-sm text-foreground",
               message.content.trim() && "mt-3",

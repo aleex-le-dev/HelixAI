@@ -51,6 +51,17 @@
   body {
     @apply bg-background text-foreground font-sans antialiased;
     font-feature-settings: "ss01", "cv01";
+    /* Un mot plus long que sa place (adresse, jeton, chemin) passe à la ligne au lieu de sortir de l'écran. */
+    overflow-wrap: break-word;
+  }
+
+  /*
+   * Les erreurs, coupées n'importe où s'il le faut (29/09/2026) : OpenAI
+   * renvoie une clé masquée d'une centaine d'étoiles sans espace, et dans une
+   * boîte en flex, `break-word` ne suffit pas à la retenir dans sa bulle.
+   */
+  [role="alert"] {
+    overflow-wrap: anywhere;
   }
 
   /*

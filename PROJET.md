@@ -4422,6 +4422,67 @@ l'instance » et « Application... » ne passent pas par `t()` ; « Réglage du 
 « Suit l'apparence de macOS » même sous Windows ; aucun script du dépôt ne fabrique ni ne joint
 le `.vsix` (fait à la main à la publication, `vsce package` dans `extensions/vscode/`).
 
+**Signalé par Medhi le 29/09/2026 : sous Windows (peut-être sous Linux), le Chat n'affiche ni la
+réflexion du modèle local ni son temps (« Réflexion en cours... N s », puis la durée), alors que
+le Mac les affiche.** Rien ne pouvait s'essayer sous Windows d'ici : l'essai de GitHub garde
+maintenant le flux brut d'une question qui fait réfléchir, au moteur seul (API de LM Studio),
+par le relais de Helix et par le Chat de Helix, sous Windows (étape 6 de
+`scripts/essai-windows-ci.mjs`) et sous Linux (job `reflexion-linux`, llmster posé par la
+passerelle seule), pour Qwen3 1.7B et Qwen3.5 2B (`scripts/essai-reflexion-ci.mjs`, artefacts
+`reflexion-<modèle>-<endroit>.sse.txt` et `.temps.txt`). **Ce que le flux brut a montré** (quatre
+exécutions, branche `essai-reflexion-windows`, llmster 0.0.25-1, machines sans carte graphique) :
+1. **Le format n'est pas en cause sur ce moteur.** Sous Windows comme sous Linux, LM Studio
+   envoie la réflexion par `reasoning_content`, jamais dans le texte : `"delta":{"role":"assistant",
+   "reasoning_content":"Okay"}` puis, après la réflexion, `"delta":{"content":"Le"}` (Qwen3 1.7B,
+   Windows) ; de même pour Qwen3.5 2B quand Helix lui demande de réfléchir (sans `reasoning_effort`,
+   LM Studio ne le fait pas réfléchir du tout). Le Chat de Helix la relaie séparée, avec son temps
+   (exécution 36589891031 : 3 345 caractères de réflexion sur 198 s sous Windows).
+2. **Ce qui était muet, c'est l'attente avant la réflexion.** Au processeur, sous Windows : 50 s
+   pour le tri qui décide s'il faut découper la demande (une requête sans flux), puis 36 s de lecture
+   de la demande par le moteur, soit 86 s avant le premier mot de réflexion, avec pour seul affichage
+   un curseur qui clignote ; sous Linux, 36 s puis 25 s. Sur un Mac à puce Apple, ces deux phases
+   tiennent en quelques secondes : c'est la différence que l'on voit à l'écran.
+3. **Qwen3.5 2B part en boucle dans sa réflexion** avec la consigne du Chat, sous Windows et sous
+   Linux : un paragraphe de 347 caractères (« Wait, I need to check if the instruction is telling me
+   to *not* answer the question at all. … Okay, so I will answer the question. ») redit à l'identique,
+   13 000 à 22 000 caractères en dix minutes, sans réponse. Trop long pour la période de 200
+   caractères du garde-fou, il serait allé jusqu'au plafond (plus d'une heure à 8 jetons par seconde).
+4. Qwen3 1.7B ne réfléchit pas toujours : une fois sur deux par le Chat, pas un mot de réflexion à
+   « Combien font 17 fois 23 ? », quand le moteur seul en écrivait 4 000 caractères. Rien à corriger.
+
+**Corrigé :**
+- *Attente dite* (chat.ts, `attenteAffichee`) : après trois secondes sans rien du moteur, le Chat
+  affiche un statut avec le temps écoulé, « … organise le travail (N s)... » pendant le tri,
+  « … lit la demande (N s)... » avant le premier morceau de chaque appel ; il s'efface au premier
+  morceau. Ce n'est jamais présenté comme de la réflexion. La ligne de commande (`--outils`) le
+  réécrit sur place ; hors terminal, une ligne par étape, pas une par seconde. Traduit (en, zh, ja).
+- *Garde-fou* (gardeBoucle.ts) : dans la réflexion seulement, un bloc de 201 à 1 500 caractères redit
+  six fois de suite à l'identique est une boucle (le paragraphe de Qwen3.5 2B est coupé après 2 167
+  caractères) ; le texte d'une réponse garde l'ancienne règle (une réponse peut redire à la demande).
+- *Réflexion écrite dans le texte* (gateway/src/reflexionEnLigne.ts), pour les moteurs qui ne la
+  séparent pas (application LM Studio dont le réglage « séparer reasoning_content » est coupé,
+  gabarit non reconnu, service qui rend le texte brut) : **pas vu dans ces essais**, mais l'écran
+  retirait alors tout `<think>…</think>` du texte (MessageList.tsx), ce qui aurait donné exactement
+  le symptôme. La passerelle sépare maintenant, au fil du flux, `<think>…</think>` en tête (balises
+  coupées n'importe où entre deux morceaux) et `</think>` seul quand le gabarit a ouvert la balise
+  (le texte déjà envoyé est requalifié par l'évènement `reflexion_requalifiee`, que useChat.ts
+  applique, temps compris) ; même séparation, recopiée, dans l'extension VS Code et la ligne de
+  commande (qui affichaient les balises). Le relais de l'API compatible reste octet pour octet.
+
+**Vérifié** : `npm run securite` (section 40 : chaque forme et chaque coupure, les copies de la
+ligne de commande et de l'extension contre 4 000 flux tirés au hasard, une instance jetable devant un
+faux moteur lent, le garde-fou sur le paragraphe de Windows) ; `npm run essai:cli` et
+`npm run essai:vscode` (réflexion entre balises coupées, `</think>` seul) ; l'essai de GitHub sous
+Windows et Linux, vert : https://github.com/medhiclb/HelixAI/actions/runs/36601390922 (Windows 38/38,
+Linux 11/11 ; par le Chat de Helix, Qwen3.5 2B : 8 427 caractères de réflexion par
+`reasoning_content` sur 158 s sous Windows, 6 270 sur 181 s sous Linux, réponse « 17 fois 23 fait
+**391**. » sans balise ; premier signe à l'écran à 3,7 s, le statut d'attente). **Pas vérifié** : le PC de Medhi, son modèle et son moteur (si
+c'est l'application LM Studio et non llmster, le réglage de séparation est à regarder) ; l'écran
+lui-même sous Windows (l'essai lit le flux comme useChat.ts le lit, sans ouvrir la fenêtre) ; un
+modèle plus gros. **À décider par Medhi** : sous Windows et Linux, Helix envoie à Qwen3.5 une
+pénalité de présence nulle (`echantillonnageLocal`, 27/09/2026) ; Qwen conseille 1,5 contre les
+répétitions en réflexion, et c'est peut-être ce qui fait boucler Qwen3.5 2B ici (pas essayé).
+
 **Fait le 26/09/2026 : revue de sécurité du poste de travail, corrigée** (SECURITE.md
 § 24). Extension VS Code 0.2.4 (adresse et jeton de portée machine, https hors du poste,
 jeton du poste seulement pour le port de l'application `instance-port`, séance par

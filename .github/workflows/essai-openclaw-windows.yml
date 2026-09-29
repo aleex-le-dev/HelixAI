@@ -6,12 +6,23 @@
 # Né de « npm a échoué (code 1) », vu par Medhi le 29/09/2026 en déployant un agent.
 # La sortie complète de l'installation et les journaux de npm sont gardés en artefact,
 # que l'essai passe ou non. Rien n'est installé hors des dossiers temporaires.
+#
+# À part de essai-windows.yml, exprès : cinq à dix minutes par machine, les trois en même
+# temps, sans construire l'application ni toucher à LM Studio ; un échec ici dit tout de
+# suite que c'est l'installation d'OpenClaw, pas le reste du parcours.
 name: Essai OpenClaw sous Windows
 
 on:
   workflow_dispatch:
   push:
-    branches: [essai-openclaw-windows]
+    branches: [main, essai-openclaw-windows]
+    paths:
+      - "gateway/src/installationOpenClaw.ts"
+      - "gateway/src/plateformeOpenClaw.ts"
+      - "gateway/src/employes.ts"
+      - "gateway/src/processus.ts"
+      - "scripts/essai-openclaw-windows.mjs"
+      - ".github/workflows/essai-openclaw-windows.yml"
 
 permissions:
   contents: read

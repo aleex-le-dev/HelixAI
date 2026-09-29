@@ -12,7 +12,7 @@ refaite à l'envers.
 |---|---|
 | Version | 2026.929.1 (`package.json`) |
 | Dernière mise à jour | 29 septembre 2026 |
-| Vérifié | `npm run securite` : 2095 contrôles, 0 échec (29/09/2026) ; `npm run typecheck` ; traductions à 100 % en anglais, chinois et japonais (interface 3 774 phrases, passerelle 1 447) ; essai Windows sur GitHub Actions |
+| Vérifié | `npm run securite` : 2108 contrôles, 0 échec (29/09/2026) ; `npm run typecheck` ; traductions à 100 % en anglais, chinois et japonais (interface 3 815 phrases, passerelle 1 447) ; essai Windows sur GitHub Actions |
 | Reste à essayer | sur les vraies machines : § 5, « Ce qui reste à essayer sur les postes de Medhi » |
 | Documents liés | [ARCHITECTURE.md](ARCHITECTURE.md), [SECURITE.md](SECURITE.md), [SCREENS.md](SCREENS.md), [SIGNATURE.md](SIGNATURE.md), [README.md](README.md), [docs/GUIDE.md](docs/GUIDE.md) |
 
@@ -3074,12 +3074,14 @@ inconnu refusé. **Non vérifié** : le trajet réel chez Google et Microsoft, q
 demande un compte Workspace ou M365 et une application déclarée.
 
 Fait en 0.24.0 : **la page d'abonnement** (Paramètres → Abonnement), demandée par
-le client. Quatre formules à 10, 20, 100 et 200 € par mois, avec les jetons
-compris, leur équivalent en échanges et en pages, et deux modèles à poids ouverts
-**hébergés en France**. Le calcul n'est pas écrit dans l'écran : il vit dans
-`src/config/offre.ts`, avec le coût de revient relevé chez les éditeurs le
-20/09/2026, la part du prix qui paie le calcul (45 %), et la formule qui en
-déduit les jetons. Changer un chiffre suffit.
+le client. D'abord quatre formules à 10, 20, 100 et 200 € par mois et deux modèles ;
+**refaite le 29/09/2026** (entrée suivante) : six formules pour particuliers et
+entreprises, plus Entreprise sur devis, trois modèles à poids ouverts **hébergés à
+Paris**, prix de lancement, mensuel ou annuel. Le calcul n'est pas écrit dans
+l'écran : il vit dans `src/config/offre.ts`, avec le coût de revient relevé chez
+l'hébergeur, les frais de paiement, la part du net qui paie le calcul (60 %), et la
+formule qui en déduit les jetons. Changer un chiffre suffit ; `npm run securite`
+(§ 38) refait les comptes.
 
 Ce que cet écran dit, et qui n'est pas confortable : **aucun paiement n'y est
 branché**, les prix sont une proposition appuyée sur un devis d'hébergement encore
@@ -3088,6 +3090,88 @@ branché**, les prix sont une proposition appuyée sur un devis d'hébergement e
 s'interdit. Le module est **éteint par défaut** : une entreprise qui installe
 HelixAI chez elle n'achète rien, et n'a pas à voir une offre commerciale dans ses
 propres réglages.
+
+**Décidé et fait le 29/09/2026 : la nouvelle grille d'abonnement** (décision de
+Medhi). Elle vise ChatGPT et Claude palier par palier, moins cher à chaque marche,
+avec la plateforme complète en plus, et un rabais de lancement pour faire venir les
+premiers abonnés.
+
+- *Particuliers, TTC par mois, prix normal puis prix de lancement* (−30 % les six
+  premiers mois de l'abonnement) : Découverte 4,99 → 3,49 € (en face de ChatGPT Go,
+  8 $ ; modèle rapide seul) ; Plus 12,99 → 8,99 € (ChatGPT Plus, Claude Pro, 20 $) ;
+  Pro 49,99 → 34,99 € (ChatGPT Pro, Claude Max, 100 $) ; Max 99,99 → 69,99 €
+  (ChatGPT Pro, Claude Max, 200 $). Un poste ; les trois modèles sauf Découverte.
+- *Entreprises, HT par poste et par mois, deux postes au moins* : Équipe 14,99 →
+  10,49 € (ChatGPT Business, Claude Team, 25 $) ; Équipe Premium 69,99 → 48,99 €
+  (leurs formules premium, 125 $). Entreprise : sur devis, sans prix affiché
+  (abonnement par poste, consommation réelle au coût de l'hébergeur plus 30 %,
+  installation sur leurs serveurs, accompagnement, support garanti), un bouton pour
+  écrire.
+- *Annuel* : dix fois le mensuel normal, arrondi en ,99 (49,99 €, 129,99 €, 499,99 €,
+  999,99 €, 149,99 € et 699,99 € HT par poste). Le rabais de lancement ne vaut que
+  pour le mensuel, pour garder la grille simple. Les prix concurrents ne sont **pas**
+  affichés à l'écran : ils changent sans nous, ils restent dans les commentaires de
+  `offre.ts`.
+- *Modèles*, hébergés à Paris chez Scaleway, prix relevés par Medhi le 29/09/2026
+  (https://www.scaleway.com/en/pricing/model-as-a-service/, euros par million de
+  jetons, entrée / sortie) : rapide, Mistral Small 3.2 24B (0,15 / 0,35), soit
+  0,20 € le million en Chat (trois jetons lus pour un écrit) ; polyvalent, DeepSeek
+  V4 Flash (0,40 / 0,80, 0,08 en cache, non compté), 0,50 € ; expert, Qwen3.5 397B
+  A17B (0,60 / 3,60), 1,35 €. Ils remplacent « Modèle rapide » et « Modèle expert ».
+- *Le calcul, corrigé* : l'ancien prenait 45 % du prix **TTC**, TVA et frais
+  compris, donc de l'argent qui n'arrive jamais. Désormais net = HT (TTC / 1,20 pour
+  un particulier) moins les frais de paiement estimés (1,5 % + 0,25 € par paiement
+  pour une carte de l'UE, plus 0,7 % de Stripe Billing, sur le TTC payé) ; crédit du
+  mois = 60 % du net **du prix normal**, rabais ou pas ; jetons = crédit / coût du
+  modèle. Un seul crédit, que chaque modèle consomme à son tarif (×1, ×2,5, ×6,75) ;
+  pour les entreprises, crédit par poste, mis en commun dans l'équipe.
+- *Jetons retrouvés par le calcul* (en millions, rapide / polyvalent / expert, au
+  centième) : Découverte 11,40 en rapide ; Plus 30,87 / 12,35 / 4,57 ; Pro 120,93 /
+  48,37 / 17,91 ; Max 242,63 / 97,05 / 35,95 ; Équipe 43,03 / 17,21 / 6,38 ;
+  Premium 203,68 / 81,47 / 30,17 par poste. Ce sont les chiffres de la décision au
+  dixième près : la décision les arrondissait au plus proche, l'écran les arrondit
+  **vers le bas** (30,8 au lieu de 30,9 pour Plus en rapide, 4,5 au lieu de 4,6 en
+  expert, 97,0 au lieu de 97,1 pour Max), pour ne jamais afficher plus que ce qui
+  est payé.
+- *Équivalences affichées, en « environ »* : un échange de Chat ≈ 3 000 jetons
+  (question, historique et réponse ; 1 500 avant, qui oubliait l'historique), une
+  tâche d'agent ou de Code ≈ 150 000. Soit, par exemple, environ 342 échanges par
+  jour en rapide et 82 tâches par mois en polyvalent pour Plus.
+- *Hypothèses d'usage et marges* (simulation de la décision, pas une mesure) :
+  médianes supposées de 0,8 / 2,5 / 10 / 25 M de jetons par mois pour Découverte,
+  Plus, Pro et Max, 1,5 et 8 M par poste pour Équipe et Premium ; marge en usage
+  central de 75 à 93 % au prix normal. **Pire cas** (chacun vide tout son crédit) :
+  toujours positif au prix de lancement, de 0,30 € par mois pour Découverte à 8,01 €
+  pour Max ; à −40 %, Découverte perdrait de l'argent. Le pire cas est refait par
+  `npm run securite` (§ 38) à chaque changement de chiffre ; les marges centrales ne
+  le sont pas.
+- *Crédit épuisé* : le Chat passe au modèle local de la machine, sans facture en
+  plus. C'est la règle de l'offre, dite à l'écran ; rien ne la met en œuvre tant
+  qu'il n'y a ni relais ni compte de consommation.
+- *La plateforme comprise*, listée à l'écran, et vérifiée dans le code ligne par
+  ligne : modèles locaux gratuits et sans limite, Chat (recherche web, documents
+  joints), Cowork, Code, agents (« jour et nuit, tant que la machine qui les héberge
+  est allumée » : un agent vit dans l'instance, il s'arrête avec elle), connecteurs
+  (Gmail, Drive, Slack, Microsoft 365…), réunions, extension VS Code et ligne de
+  commande, fichiers, Chats et réglages qui restent sur la machine, modèles hébergés
+  en France, logiciel libre.
+- *Rabais de lancement* : `LANCEMENT` dans `offre.ts` (taux, durée en mois, `actif`
+  pour le couper partout). Le prix de lancement est calculé : prix normal moins le
+  taux, ramené au montant en ,49 ou ,99 juste en dessous (12,99 € donne 9,09 €,
+  affiché 8,99 €).
+
+À l'écran (vérifié dans le navigateur contre une instance jetable, en 1280 et 375 px,
+thèmes clair et sombre) : la plateforme comprise d'abord, les trois modèles avec ce
+qu'ils consomment du crédit, puis un sélecteur Mensuel / Annuel, les Particuliers et
+les Entreprises en cartes (prix de lancement, prix normal barré, « −30 % les 6
+premiers mois, puis … », jetons par modèle, équivalences), la carte Entreprise sur
+devis, et l'encart qui dit que rien n'est ouvert. **Rien n'encaisse** : les deux
+boutons ouvrent la messagerie, et `npm run securite` (§ 38) vérifie qu'aucun
+« S'abonner » ni bouton de paiement n'y entre et que le module reste éteint par
+défaut. À faire avant d'ouvrir : le relais chez l'agence qui garde la clé de
+l'hébergeur, un compte de consommation par abonné (qui applique le crédit et la
+bascule au modèle local), le paiement ; puis relire les frais réels de Stripe et
+les prix de Scaleway.
 
 Fait en 0.23.0 : **ouvrir son instance à ses collègues depuis l'écran**. Le produit
 sert trois situations — un particulier seul, une entreprise dont l'intégrateur règle
@@ -4093,10 +4177,13 @@ ne restent ici que les points ouverts.*
    le compte Apple Developer (99 € par an) et le certificat « Developer ID
    Application ». La mise à jour automatique s'active d'elle-même ensuite.
 2. **Abonnements aux modèles hébergés** : l'écran existe (Paramètres →
-   Abonnement), rien n'encaisse. Dans l'ordre : devis réel d'hébergement chez un
-   fournisseur européen, relais chez l'agence qui garde la clé (jamais la clé
-   dans le profil du client), jeton et compte de consommation par client,
-   paiement. (Les clés d'API de l'instance, qui devaient venir avec selon la
+   Abonnement), rien n'encaisse. La grille est décidée depuis le 29/09/2026 (six
+   formules et Entreprise sur devis, trois modèles chez Scaleway à Paris, prix au
+   jeton publiés : plus besoin de devis de location de cartes, voir « la nouvelle
+   grille d'abonnement » plus haut). Reste, dans l'ordre : relais chez l'agence qui
+   garde la clé de l'hébergeur (jamais la clé dans le profil du client), jeton et
+   compte de consommation par abonné (crédit du mois, bascule au modèle local quand
+   il est épuisé), paiement (Stripe, dont les frais sont estimés dans `offre.ts`). (Les clés d'API de l'instance, qui devaient venir avec selon la
    décision du 20/09/2026, sont faites depuis le 26/09/2026, § 3.13.)
 3. **Relecture native** des traductions anglaise et chinoise.
 4. **Essais avec de vrais comptes** : bot dans une vraie réunion Google Meet

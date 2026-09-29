@@ -1,15 +1,28 @@
-import { Check, Cpu, Mail, MapPin, TriangleAlert } from "lucide-react";
+import { useState } from "react";
+import { Building2, Check, Cpu, Mail, MapPin, TriangleAlert, User } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { Card } from "@/components/settings/SettingsShell";
 import { Button } from "@/components/ui/Button";
 import { InfoBox } from "@/components/ui/InfoBox";
+import { SegmentedTabs } from "@/components/ui/SegmentedTabs";
 import { branding } from "@/config/branding";
 import {
   FORMULES,
+  JETONS_PAR_ECHANGE,
+  JETONS_PAR_TACHE,
+  LANCEMENT,
   MODELES_INCLUS,
-  echangesPour,
+  MOIS_PAYES_PAR_AN,
+  SUR_DEVIS,
+  arrondiBas,
+  echangesParJour,
+  facteur,
   jetonsInclus,
-  pagesPour,
+  prixAnnuel,
+  prixLancement,
+  tachesParMois,
   type Formule,
+  type Public,
 } from "@/config/offre";
 import { locale, t, tf } from "@/lib/i18n";
 
@@ -21,21 +34,64 @@ import { locale, t, tf } from "@/lib/i18n";
  * Que le logiciel reste gratuit. C'est contre-intuitif, et si ce n'est pas dit
  * en premier, tout le reste se lit comme un logiciel qu'on essaie de vendre
  * après l'avoir donné. Ce qui est vendu, c'est le **calcul** : des modèles
- * puissants qui tournent sur des cartes en Europe, pour qui n'a pas envie
- * d'acheter la carte.
+ * puissants qui tournent sur des cartes à Paris, pour qui n'a pas envie
+ * d'acheter la carte. La plateforme entière est comprise dans chaque formule,
+ * et l'écran la montre avant les prix.
  *
  * ── Ce qu'il ne fait pas, et le dit ─────────────────────────────────────────
  *
  * Rien n'est branché à un système de paiement. Un bouton « S'abonner » qui
  * n'encaisse rien serait exactement le genre de promesse que ce produit
  * s'interdit. L'écran présente donc une offre, annonce qu'elle n'est pas
- * ouverte, et propose d'écrire — ce qui, lui, fonctionne vraiment.
+ * ouverte, et propose d'écrire, ce qui, lui, fonctionne vraiment
+ * (`npm run securite`, § 38, vérifie qu'aucun bouton de paiement n'y entre).
  *
  * Les chiffres viennent tous de `src/config/offre.ts`, avec leur mode de
- * calcul : coût de revient, part du prix qui paie le calcul, jetons qui en
- * découlent. Aucun nombre n'est écrit à la main dans cet écran.
+ * calcul : coût de revient, frais de paiement, part du net qui paie le
+ * calcul, jetons qui en découlent. Aucun nombre n'est écrit à la main ici.
+ *
+ * Refait le 29/09/2026 (grille de Medhi) : deux publics, un sélecteur
+ * Mensuel / Annuel, le prix de lancement barré, trois modèles.
  */
+
+type Periode = "mensuel" | "annuel";
+
+const euros = (montant: number) =>
+  new Intl.NumberFormat(locale(), { style: "currency", currency: "EUR" }).format(montant);
+
+const millions = (n: number) =>
+  new Intl.NumberFormat(locale(), { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(arrondiBas(n));
+
+const entier = (n: number) => n.toLocaleString(locale());
+
+/**
+ * Ce que la plateforme comprend, dans chaque formule. Chaque ligne existe
+ * dans le logiciel (vérifié le 29/09/2026 : pages Chat, Cowork, Code, Agents,
+ * Réunions ; connecteurs de la passerelle ; `extensions/vscode` et
+ * `cli/helix.mjs`). Les agents tournent dans l'instance : « jour et nuit »
+ * seulement tant que la machine qui l'héberge est allumée, et l'écran le dit.
+ */
+function plateforme(): string[] {
+  return [
+    t("Modèles locaux sur vos machines, gratuits et sans limite"),
+    t("Chat, avec recherche sur le web et documents joints"),
+    t("Cowork : un agent qui travaille dans vos fichiers"),
+    t("Code : un agent de code dans vos projets"),
+    t("Agents qui travaillent seuls, jour et nuit, tant que la machine qui les héberge est allumée"),
+    t("Connecteurs : Gmail, Drive, Slack, Microsoft 365 et bien d'autres"),
+    t("Réunions : enregistrement, transcription, compte rendu"),
+    t("Extension VS Code et ligne de commande"),
+    t("Vos fichiers, vos Chats et vos réglages restent sur vos machines"),
+    t("Modèles hébergés en France, logiciel libre au code public"),
+  ];
+}
+
 export function Abonnement() {
+  const [periode, setPeriode] = useState<Periode>("mensuel");
+  const lancement = LANCEMENT.actif && periode === "mensuel";
+  const particuliers = FORMULES.filter((f) => f.public === "particulier");
+  const entreprises = FORMULES.filter((f) => f.public === "entreprise");
+
   return (
     <>
       <Card>
@@ -43,48 +99,99 @@ export function Abonnement() {
           {t("Le logiciel est gratuit. Ce qui se paie, c'est le calcul.")}
         </h3>
         <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-          {branding.name}{" "}{t("est un logiciel libre : vous pouvez l'installer sur vos machines, gratuitement et pour toujours, et y faire tourner vos propres modèles. C'est le cas aujourd'hui sur ce poste, et rien ne vous oblige à en changer.")}
+          {branding.name}{" "}{t("est un logiciel libre : vous pouvez l'installer sur vos machines, gratuitement et pour toujours, et y faire tourner vos propres modèles. C'est le cas aujourd'hui sur ce poste, et rien ne vous oblige à en changer.")}
         </p>
         <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-          {t("Un modèle vraiment puissant demande une carte graphique à plusieurs milliers d'euros, et quelqu'un pour l'entretenir. L'abonnement vous donne accès à ces modèles sans acheter la carte : ils tournent sur des serveurs loués en Europe, et vos données ne quittent pas l'Union.")}
+          {t("Un modèle vraiment puissant demande une carte graphique à plusieurs milliers d'euros, et quelqu'un pour l'entretenir. L'abonnement vous donne accès à ces modèles sans acheter la carte : ils tournent sur des serveurs à Paris, et vos demandes ne quittent pas la France.")}
         </p>
 
-        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+        <h4 className="mt-5 text-sm font-semibold text-foreground">
+          {t("Dans chaque formule, la plateforme entière")}
+        </h4>
+        <ul className="mt-2 grid gap-x-6 gap-y-1.5 cq-md:grid-cols-2">
+          {plateforme().map((ligne) => (
+            <li key={ligne} className="flex items-start gap-2 text-sm text-muted-foreground">
+              <Check size={14} strokeWidth={2.5} className="mt-0.5 shrink-0 text-success" />
+              <span className="min-w-0">{ligne}</span>
+            </li>
+          ))}
+        </ul>
+      </Card>
+
+      <Card className="mt-6">
+        <h3 className="text-lg font-semibold text-foreground">{t("Trois modèles hébergés")}</h3>
+        <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
+          {t("Chaque formule donne un crédit de calcul par mois. Chaque modèle le consomme à son tarif : le rapide le moins, l'expert le plus.")}
+        </p>
+        <div className="mt-4 grid gap-3 cq-md:grid-cols-3">
           {MODELES_INCLUS.map((m) => (
-            <div key={m.id} className="rounded-xl border border-border p-3">
+            <div key={m.id} className="flex flex-col rounded-xl border border-border p-3">
               <p className="flex items-center gap-2 text-sm font-medium text-foreground">
-                <Cpu size={15} strokeWidth={1.75} /> {m.nom}
+                <Cpu size={15} strokeWidth={1.75} className="shrink-0" /> {m.nom}
+                <span className="ml-auto whitespace-nowrap rounded-full bg-muted px-2 py-0.5 text-xs tabular-nums text-muted-foreground">
+                  {tf("crédit ×{0}", facteur(m).toLocaleString(locale(), { maximumFractionDigits: 2 }))}
+                </span>
               </p>
-              <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                {m.description}
-              </p>
-              <p className="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground">
-                <MapPin size={13} strokeWidth={1.75} />{" "}{t("Hébergé en")}{" "}{m.heberge}, {m.origine}
+              <p className="mt-0.5 text-xs text-muted-foreground">{m.modele}</p>
+              <p className="mt-2 text-xs leading-relaxed text-muted-foreground">{m.description}</p>
+              <p className="mt-auto flex items-center gap-1.5 pt-2 text-xs text-muted-foreground">
+                <MapPin size={13} strokeWidth={1.75} className="shrink-0" />
+                {tf("Hébergé à {0}", m.heberge)}
               </p>
             </div>
           ))}
         </div>
-
         <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
-          {t("Les modèles sont à poids ouverts, d'où qu'ils viennent. C'est ce qui permet de les faire tourner sur des machines européennes plutôt que d'envoyer vos documents chez leur éditeur : le pays du modèle compte moins que le pays de la machine qui le fait tourner.")}
+          {t("Les modèles sont à poids ouverts, d'où qu'ils viennent. C'est ce qui permet de les faire tourner sur des machines en France plutôt que d'envoyer vos documents chez leur éditeur : le pays du modèle compte moins que le pays de la machine qui le fait tourner.")}
         </p>
       </Card>
 
       <Card className="mt-6">
-        <h3 className="text-lg font-semibold text-foreground">{t("Les formules")}</h3>
-        <p className="mt-1 text-sm text-muted-foreground">
-          {t("Chaque formule comprend une réserve de jetons par mois. Un jeton est un morceau de mot : ce que le modèle lit et écrit se compte ainsi.")}
+        <div className="flex flex-wrap items-center gap-3">
+          <h3 className="text-lg font-semibold text-foreground">{t("Les formules")}</h3>
+          <SegmentedTabs
+            size="sm"
+            className="ml-auto"
+            value={periode}
+            onChange={(v) => setPeriode(v as Periode)}
+            options={[
+              { id: "mensuel", label: t("Mensuel") },
+              { id: "annuel", label: t("Annuel") },
+            ]}
+          />
+        </div>
+        <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+          {lancement
+            ? tf("Prix de lancement : −{0} % sur le mensuel, les {1} premiers mois de l'abonnement. Les jetons restent ceux du prix normal. À l'année, {2} mois sont offerts.", Math.round(LANCEMENT.taux * 100), LANCEMENT.mois, 12 - MOIS_PAYES_PAR_AN)
+            : tf("À l'année, {0} mois sont offerts : vous en payez {1} sur douze. Le crédit reste le même chaque mois.", 12 - MOIS_PAYES_PAR_AN, MOIS_PAYES_PAR_AN)}
         </p>
 
-        <div className="mt-4 grid gap-3 lg:grid-cols-2">
-          {FORMULES.map((f) => (
-            <CarteFormule key={f.id} formule={f} />
+        <TitrePublic icone={User} titre={t("Particuliers")} detail={t("Prix TTC")} />
+        <div className="mt-3 grid gap-3 cq-md:grid-cols-2">
+          {particuliers.map((f) => (
+            <CarteFormule key={f.id} formule={f} periode={periode} />
           ))}
         </div>
 
-        <p className="mt-4 text-xs leading-relaxed text-muted-foreground">
-          {t("Au-delà de la réserve, rien ne s'arrête : vos modèles installés sur vos machines continuent de répondre, gratuitement, comme aujourd'hui. Vous choisissez le modèle à chaque conversation, et son pays reste affiché.")}
-        </p>
+        <TitrePublic icone={Building2} titre={t("Entreprises")} detail={tf("Prix HT, par poste, {0} postes minimum", Math.min(...entreprises.map((f) => f.postesMin)))} />
+        <div className="mt-3 grid gap-3 cq-md:grid-cols-2">
+          {entreprises.map((f) => (
+            <CarteFormule key={f.id} formule={f} periode={periode} />
+          ))}
+          <CarteSurDevis />
+        </div>
+
+        <div className="mt-5 space-y-1.5 text-xs leading-relaxed text-muted-foreground">
+          <p>
+            {t("Les jetons d'une formule sont trois façons de dépenser le même crédit : tout sur un modèle, ou un mélange. Ils ne s'additionnent pas.")}
+          </p>
+          <p>
+            {t("Quand le crédit du mois est épuisé, le Chat passe au modèle local de votre machine, sans rien facturer de plus.")}
+          </p>
+          <p>
+            {tf("Les équivalences sont des estimations : un échange de Chat compte environ {0} jetons (question, historique et réponse), une tâche d'agent ou de Code environ {1}.", entier(JETONS_PAR_ECHANGE), entier(JETONS_PAR_TACHE))}
+          </p>
+        </div>
       </Card>
 
       <Card className="mt-6">
@@ -92,20 +199,13 @@ export function Abonnement() {
           <span className="font-medium text-foreground">
             {t("Ces formules ne sont pas encore ouvertes.")}
           </span>{" "}
-          {t("Aucun paiement n'est possible depuis cet écran, et les prix affichés sont une proposition : ils reposent sur des coûts relevés chez les éditeurs et sur un devis d'hébergement encore à confirmer. Ils peuvent changer avant l'ouverture.")}
+          {t("Aucun paiement n'est possible depuis cet écran, et les prix affichés sont une proposition : ils reposent sur les tarifs publiés par l'hébergeur et peuvent changer avant l'ouverture.")}
         </InfoBox>
         <div className="mt-3 flex flex-wrap items-center gap-2">
-          <Button
-            icon={Mail}
-            onClick={() => {
-              window.location.href = `mailto:${branding.urls.supportEmail}?subject=${encodeURIComponent(
-                tf("Intérêt pour un abonnement {0}", branding.name),
-              )}`;
-            }}
-          >
+          <Button icon={Mail} onClick={() => ecrire(tf("Intérêt pour un abonnement {0}", branding.name))}>
             {t("Écrire pour être prévenu")}
           </Button>
-          <span className="text-xs text-muted-foreground">
+          <span className="min-w-0 text-xs text-muted-foreground [overflow-wrap:anywhere]">
             {t("Votre message part de votre messagerie, vers")}{" "}{branding.urls.supportEmail}.
           </span>
         </div>
@@ -114,53 +214,138 @@ export function Abonnement() {
   );
 }
 
-function CarteFormule({ formule }: { formule: Formule }) {
-  const rapide = MODELES_INCLUS.find((m) => m.role === "rapide");
-  const expert = MODELES_INCLUS.find((m) => m.role === "expert");
-  const millionsRapide = rapide ? jetonsInclus(formule, rapide) : 0;
-  const millionsExpert = expert ? jetonsInclus(formule, expert) : 0;
-  const nombre = (n: number) => n.toLocaleString(locale());
+/** Ouvre la messagerie de la personne : c'est tout ce que cet écran sait faire, et il le fait vraiment. */
+function ecrire(sujet: string) {
+  window.location.href = `mailto:${branding.urls.supportEmail}?subject=${encodeURIComponent(sujet)}`;
+}
+
+function TitrePublic({ icone: Icone, titre, detail }: { icone: LucideIcon; titre: string; detail: string }) {
+  return (
+    <div className="mt-6 flex flex-wrap items-baseline gap-x-2 gap-y-0.5 border-b border-border pb-2">
+      <h4 className="flex items-center gap-2 text-base font-semibold text-foreground">
+        <Icone size={16} strokeWidth={1.75} className="shrink-0 self-center" /> {titre}
+      </h4>
+      <span className="text-xs text-muted-foreground">{detail}</span>
+    </div>
+  );
+}
+
+/** « TTC par mois », « HT par poste et par an »… selon le public et la période. */
+function unite(pub: Public, periode: Periode): string {
+  if (pub === "particulier") return periode === "mensuel" ? t("TTC par mois") : t("TTC par an");
+  return periode === "mensuel" ? t("HT par poste et par mois") : t("HT par poste et par an");
+}
+
+function CarteFormule({ formule, periode }: { formule: Formule; periode: Periode }) {
+  const modeles = MODELES_INCLUS.filter((m) => formule.modeles.includes(m.id));
+  const rapide = modeles.find((m) => m.id === "rapide") ?? modeles[0];
+  // Les tâches se comptent sur le polyvalent, fait pour elles ; Découverte n'a que le rapide.
+  const pourTaches = modeles.find((m) => m.id === "polyvalent") ?? rapide;
+  const annuel = periode === "annuel";
+  const remise = !annuel && LANCEMENT.actif ? prixLancement(formule) : formule.prix;
+  const affiche = annuel ? prixAnnuel(formule) : remise;
+  const entreprise = formule.public === "entreprise";
 
   return (
-    <div className="flex flex-col rounded-xl border border-border p-4">
-      <div className="flex items-baseline gap-2">
-        <span className="text-base font-semibold text-foreground">{formule.nom}</span>
-        <span className="ml-auto text-lg font-semibold tabular-nums text-foreground">
-          {formule.prix} €
-        </span>
-        <span className="text-xs text-muted-foreground">{t("par mois")}</span>
-      </div>
+    <div className="flex min-w-0 flex-col rounded-xl border border-border p-3 cq-sm:p-4">
+      <p className="text-base font-semibold text-foreground">{formule.nom}</p>
       <p className="mt-0.5 text-xs text-muted-foreground">{formule.pour}</p>
 
-      <div className="mt-3 rounded-lg bg-muted/50 p-3 text-sm">
-        <p className="text-foreground">
-          <span className="font-medium tabular-nums">{tf("{0} millions", millionsRapide)}</span>{" "}{t("de jetons sur le modèle rapide")}
-        </p>
-        <p className="mt-0.5 text-xs text-muted-foreground">
-          {t("Environ")}{" "}{nombre(echangesPour(millionsRapide))}{" "}{t("échanges, ou")}{" "}
-          {nombre(pagesPour(millionsRapide))}{" "}{t("pages lues et écrites.")}
-        </p>
-        {formule.prix >= 20 && (
-          <p className="mt-2 text-foreground">
-            <span className="font-medium tabular-nums">{tf("{0} millions", millionsExpert)}</span>{" "}{t("si vous les dépensez sur le modèle expert")}
-          </p>
+      <div className="mt-3 flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+        <span className="text-2xl font-semibold tabular-nums text-foreground">{euros(affiche)}</span>
+        {remise < formule.prix && (
+          <s className="text-sm tabular-nums text-muted-foreground">
+            <span className="sr-only">{t("au lieu de")} </span>
+            {euros(formule.prix)}
+          </s>
         )}
+        <span className="text-xs text-muted-foreground">{unite(formule.public, periode)}</span>
+      </div>
+      <p className="mt-1 min-h-[1.25rem] text-xs text-muted-foreground">
+        {annuel ? (
+          tf("Soit {0} par mois", euros(affiche / 12))
+        ) : remise < formule.prix ? (
+          <>
+            <span className="mr-1.5 whitespace-nowrap rounded-full bg-success/15 px-1.5 py-0.5 font-medium text-success">
+              {tf("−{0} %", Math.round(LANCEMENT.taux * 100))}
+            </span>
+            {tf("les {0} premiers mois, puis {1}", LANCEMENT.mois, euros(formule.prix))}
+          </>
+        ) : null}
+      </p>
+
+      <div className="mt-3 rounded-lg bg-muted/50 p-3">
+        <p className="text-xs font-medium text-muted-foreground">
+          {entreprise ? t("Crédit par poste et par mois, mis en commun dans l'équipe") : t("Crédit du mois")}
+        </p>
+        <dl className="mt-1.5 space-y-1">
+          {modeles.map((m, i) => (
+            <div key={m.id} className="flex flex-wrap items-baseline justify-between gap-x-3 text-sm">
+              <dt className="text-muted-foreground">
+                {i > 0 && <span className="mr-1 text-xs">{t("ou")}</span>}
+                {m.nom}
+              </dt>
+              <dd className="font-medium tabular-nums text-foreground">
+                {tf("{0} millions de jetons", millions(jetonsInclus(formule, m)))}
+              </dd>
+            </div>
+          ))}
+        </dl>
+        <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+          {tf("Environ {0} échanges de Chat par jour avec le modèle rapide", entier(echangesParJour(jetonsInclus(formule, rapide))))}
+          {", "}
+          {pourTaches.id === "polyvalent"
+            ? tf("ou environ {0} tâches d'agent ou de Code par mois avec le polyvalent.", entier(tachesParMois(jetonsInclus(formule, pourTaches))))
+            : tf("ou environ {0} tâches d'agent ou de Code par mois.", entier(tachesParMois(jetonsInclus(formule, pourTaches))))}
+        </p>
       </div>
 
       <ul className="mt-3 space-y-1.5">
-        <li className="flex items-start gap-2 text-sm text-muted-foreground">
-          <Check size={14} strokeWidth={2.5} className="mt-0.5 shrink-0 text-success" />
-          {formule.postes === 1
-            ? t("Un poste")
-            : tf("Jusqu'à {0} postes, jetons partagés", formule.postes)}
-        </li>
-        {formule.enPlus.map((ligne) => (
-          <li key={ligne} className="flex items-start gap-2 text-sm text-muted-foreground">
-            <Check size={14} strokeWidth={2.5} className="mt-0.5 shrink-0 text-success" />
-            {ligne}
-          </li>
+        <Ligne>{formule.modeles.length === MODELES_INCLUS.length ? t("Les trois modèles hébergés") : t("Le modèle rapide")}</Ligne>
+        <Ligne>{entreprise ? tf("{0} postes minimum", formule.postesMin) : t("Un poste")}</Ligne>
+        <Ligne>{t("Toute la plateforme")}</Ligne>
+      </ul>
+    </div>
+  );
+}
+
+function Ligne({ children }: { children: string }) {
+  return (
+    <li className="flex items-start gap-2 text-sm text-muted-foreground">
+      <Check size={14} strokeWidth={2.5} className="mt-0.5 shrink-0 text-success" />
+      <span className="min-w-0">{children}</span>
+    </li>
+  );
+}
+
+/** La formule Entreprise : pas de prix, un devis. Le bouton écrit, il n'achète rien. */
+function CarteSurDevis() {
+  const lignes = [
+    t("Un abonnement par poste"),
+    tf("La consommation réelle, au coût de l'hébergeur plus {0} %", Math.round(SUR_DEVIS.majoration * 100)),
+    t("Installation sur vos serveurs"),
+    t("Accompagnement de vos équipes"),
+    t("Support garanti par contrat"),
+  ];
+  return (
+    <div className="flex min-w-0 flex-col rounded-xl border border-border p-4 cq-md:col-span-2">
+      <div className="flex flex-wrap items-baseline gap-x-2">
+        <p className="text-base font-semibold text-foreground">{SUR_DEVIS.nom}</p>
+        <span className="text-sm text-muted-foreground">{t("Sur devis")}</span>
+      </div>
+      <p className="mt-0.5 text-xs text-muted-foreground">
+        {t("Pour une organisation qui veut tout chez elle, avec un engagement de service")}
+      </p>
+      <ul className="mt-3 grid gap-x-6 gap-y-1.5 cq-md:grid-cols-2">
+        {lignes.map((l) => (
+          <Ligne key={l}>{l}</Ligne>
         ))}
       </ul>
+      <div className="mt-4">
+        <Button variant="secondary" icon={Mail} onClick={() => ecrire(tf("Demande de devis {0} Entreprise", branding.name))}>
+          {t("Demander un devis")}
+        </Button>
+      </div>
     </div>
   );
 }

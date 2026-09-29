@@ -4,6 +4,9 @@
 # node.exe npm-cli.js avec les mêmes arguments et le même environnement, puis
 # `openclaw --version` et une passerelle OpenClaw jetable sur un port libre.
 # Né de « npm a échoué (code 1) », vu par Medhi le 29/09/2026 en déployant un agent.
+# Depuis le 29/09/2026, aussi les bibliothèques Visual C++ de Microsoft (gateway/src/visualCpp.ts) :
+# relevé de la machine, paquets x64 et arm64 téléchargés et vérifiés (taille, empreinte, signature),
+# installeur réel, et un essai sans VCRUNTIME140.dll (releve-visual-cpp.json, sans-vcruntime.txt).
 # La sortie complète de l'installation et les journaux de npm sont gardés en artefact,
 # que l'essai passe ou non. Rien n'est installé hors des dossiers temporaires.
 #
@@ -15,7 +18,7 @@ name: Essai OpenClaw sous Windows
 on:
   workflow_dispatch:
   push:
-    branches: [main, essai-openclaw-windows, essai-vcredist-windows]
+    branches: [main, essai-openclaw-windows]
     paths:
       - "gateway/src/installationOpenClaw.ts"
       - "gateway/src/plateformeOpenClaw.ts"
@@ -41,17 +44,20 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # Windows x64, compte de la machine de GitHub (runneradmin, dossier temporaire en nom court).
+          # Windows x64, compte de la machine de GitHub (runneradmin, dossier temporaire en nom court) ;
+          # la détection de Visual C++ forcée à « absentes » : paquet, vérifications et installeur réels.
           - id: x64
             nom: Windows x64
             machine: windows-latest
             options: "--visual-cpp-absent"
-          # Windows x64, comme chez une personne : compte « Hélène Dupont » (espace et accents partout sous son dossier).
+          # Windows x64, comme chez une personne : compte « Hélène Dupont » (espace et accents partout sous son dossier) ;
+          # détection réelle (« présentes »), puis VCRUNTIME140.dll retirée le temps de l'essai.
           - id: x64-compte-accentue
             nom: Windows x64, compte avec espace et accents
             machine: windows-latest
             options: "--compte-accentue --deux-fois --sans-vcruntime"
-          # Windows sur processeur ARM (Snapdragon) : les modules natifs n'y ont pas toujours de binaire précompilé.
+          # Windows sur processeur ARM (Snapdragon) : les modules natifs n'y ont pas toujours de binaire précompilé ;
+          # paquet arm64 de Visual C++ installé pour de bon, puis la DLL retirée le temps de l'essai.
           - id: arm64
             nom: Windows arm64
             machine: windows-11-arm

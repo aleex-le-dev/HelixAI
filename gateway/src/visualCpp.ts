@@ -402,7 +402,7 @@ async function empreinteFichier(fichier: string): Promise<string> {
 /**
  * Télécharge, vérifie et lance le paquet de Microsoft pour ce processeur. Rend
  * `{ redemarrage }` quand Windows conseille de redémarrer ; lève une erreur
- * en français sinon. Journal de la passerelle : ce qui a été fait, la sortie
+ * dans la langue de l'écran sinon. Journal de la passerelle : ce qui a été fait, la sortie
  * de l'installeur quand il échoue.
  */
 export async function installerVisualCpp(avancer?: (pourcent: number) => void): Promise<{ redemarrage: boolean; version: string }> {

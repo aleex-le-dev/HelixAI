@@ -563,8 +563,11 @@ taille, empreinte, version et signature vérifiées ; la détection forcée à �
 Microsoft lancé avec élévation (code 0, déjà présent), puis OpenClaw installé, `--version` et sa
 passerelle ; la DLL retirée le temps de l'essai (x64 avec le compte accentué, et arm64) : détection
 « absentes », modules qui ne se chargent plus, détection « présentes » une fois remise. Exécutions :
-https://github.com/medhiclb/HelixAI/actions/runs/36621998206 (relevé : signature et version) et
-EXECUTION_VERTE. **Pas essayé** : un vrai PC sans Visual C++, la demande de l'UAC (les machines de GitHub
+https://github.com/medhiclb/HelixAI/actions/runs/36621998206 (relevé : signature et version), puis les
+trois machines vertes : https://github.com/medhiclb/HelixAI/actions/runs/36625709938. Deux défauts
+trouvés en route et corrigés : Windows PowerShell lancé depuis PowerShell 7 héritait de son
+`PSModulePath`, et `Get-AuthenticodeSignature` ne se chargeait plus (la vérification échouait fermée :
+paquet refusé) ; la version du paquet, supposée 14.50, est 14.51.36247.0. **Pas essayé** : un vrai PC sans Visual C++, la demande de l'UAC (les machines de GitHub
 n'en ont pas), son refus, un compte standard, un code 3010, un proxy devant
 `download.visualstudio.microsoft.com`, et ce qui, dans OpenClaw, échoue sans ces deux modules.
 

@@ -237,6 +237,38 @@ l'expiration vaut refus. Essai automatique : `npm run essai:cli` (ajouter
 `-- --modele` avec LM Studio). Vérifié sur macOS seulement ; textes en français
 seulement.
 
+### Extension VS Code
+
+`extensions/vscode/` (version 0.2.5, sans dépendance) : le Chat de l'instance et Helix Code
+dans VS Code. **Installation** : le paquet `helix-ai-0.2.5.vsix` est joint à chaque version
+GitHub (https://github.com/medhiclb/HelixAI/releases/latest) ; dans VS Code, vue Extensions,
+menu « … » en haut de la vue, « Install from VSIX… », puis le fichier. Une version plus
+récente s'installe de la même façon, par-dessus. Le paquet se refait avec `vsce package` dans
+`extensions/vscode/` (les `.vsix` sont ignorés par git).
+
+- Icône Helix dans la barre d'activité : onglets **Chat** (« Joindre le fichier ouvert »,
+  coché par défaut ; « Insérer » au-dessus de chaque bloc de code, qui remplace la sélection
+  ou insère au curseur) et **Code** (Helix Code sur le dossier ouvert, accords dans une
+  fenêtre « Autoriser » / « Refuser »).
+- Commandes : « Helix : expliquer la sélection » et « Helix : améliorer la sélection » (aussi
+  au clic droit sur du code sélectionné), « Helix : nouveau Chat », « Helix : se connecter
+  (pour Helix Code) », « Helix : se déconnecter ».
+- Réglages : `helix.adresse` (défaut `http://127.0.0.1:8787`, `https` exigé hors de cet
+  ordinateur), `helix.jeton` (vide : lu dans `~/.helix/data/instance-token`, seulement pour le
+  port de l'application), `helix.modele` (vide : Auto). Les deux premiers sont de portée
+  machine : le `.vscode/settings.json` d'un dépôt ne les change pas, et l'extension ne
+  s'active que dans un espace de travail de confiance.
+- Le Chat se contente du jeton d'instance ; l'onglet Code exige une séance (« Helix : se
+  connecter » : compte, mot de passe, code si la double authentification est active), gardée
+  par adresse dans le coffre de VS Code, et l'instance de cet ordinateur (sinon :
+  `helix code --dossier`).
+- Pendant la réflexion du modèle, la vue dit « Le modèle réfléchit (N s)… » (0.2.5, comme le
+  code de la question, désormais mis en forme, et le bouton « Insérer », posé au-dessus du
+  code).
+
+Essai automatique : `npm run essai:vscode` (faux module `vscode`, vraie extension, instance
+jetable ; ajouter `-- --modele` avec LM Studio).
+
 ### Passerelle modèles
 
 `gateway/` est le seul point de contact avec l'inférence (cf.
@@ -263,8 +295,13 @@ OpenAI ; leurs différences (liste des modèles paginée ou en tableau nu, capac
 déclarées, champs refusés, raisonnement dans `reasoning` ou en morceaux `thinking`,
 appels d'outils sans `index`) sont traitées dans `gateway/src/modelesCloud.ts`, et
 vérifiées contre des faux fournisseurs par `scripts/essai-fournisseurs.mjs` (lancé par
-`npm run securite`, sans vraie clé ni appel sortant). Ce qui n'a pas encore été essayé
-avec de vraies clés est tenu dans PROJET.md.
+`npm run securite`, sans vraie clé ni appel sortant). L'état des essais avec de vraies
+clés est tenu dans PROJET.md.
+
+Un refus long d'un fournisseur (OpenAI renvoie par exemple la clé masquée, une centaine
+d'étoiles) est abrégé avant d'arriver à l'écran (`abreger`, `modelesCloud.ts`) : les
+étoiles deviennent « … », la coupe se fait entre deux mots à 240 caractères, et la bulle
+d'erreur du Chat passe à la ligne n'importe où plutôt que de déborder (29/09/2026).
 
 Pour le Chat, il suffit que **LM Studio tourne avec son serveur local activé** et qu'un
 modèle de conversation soit installé. Si le serveur local est éteint, la passerelle
@@ -448,10 +485,67 @@ Google Drive, l'agenda (CalDAV ou Google Agenda) et Slack valent pour toute
 l'instance, comme la boîte mail commune : seul l'administrateur les branche, les
 remplace ou les débranche ; chaque membre en voit l'état, et ses agents les lisent.
 
+**Connexions natives** (`gateway/src/oauthNatif.ts` pour la connexion, `outilsNatifs.ts` et
+`gateway/src/natifs/` pour les outils, guides pas à pas dans `src/lib/guidesApplications.ts`) :
+Google Sheets, Slides, Docs, Forms, YouTube, Dropbox, LinkedIn, Facebook, Instagram, TikTok,
+X, Brevo, Mailchimp, Microsoft 365, messageries, commerce. Chaque organisation crée son
+application chez le service (le panneau dit où, et quoi recopier) ; brancher, débrancher,
+enregistrer une application : l'administrateur seul ; lire : tout Chat ; écrire ou publier :
+une carte d'accord à chaque fois, même au niveau « Tout approuver », acceptée par
+l'administrateur seul ; dix écritures ou publications par heure et par service au plus, un
+doublon dans la demi-heure refusé.
+
+**LinkedIn, deux lignes et deux applications** (29/09/2026) :
+
+| Ligne | Application LinkedIn | Portées | Outils |
+|---|---|---|---|
+| LinkedIn | celle du profil (produits « Sign In with LinkedIn using OpenID Connect », « Share on LinkedIn ») | `openid profile` ; `w_member_social` si « publier » est coché | `linkedin__profil`, `linkedin__publier` (au nom du profil seulement) |
+| LinkedIn (Page d'entreprise) | une seconde, neuve, avec le seul produit « Community Management API » | `r_organization_social`, `rw_organization_admin` ; `w_organization_social` si « publier » est coché | `linkedin__pages`, `linkedin__publications`, `linkedin__statistiques` (partages des douze derniers mois), `linkedin__publier_page` |
+
+LinkedIn n'accorde « Community Management API » qu'à une application qui n'a aucun autre
+produit, et après examen : organisation, adresse e-mail professionnelle, vérification de
+l'application par un super administrateur de la page (« Settings », « Verify », lien valable
+30 jours). Il n'annonce pas de délai. Le compte branché doit administrer au moins une page
+(rôle ADMINISTRATOR) ; la page visée est toujours prise parmi celles-là. Au palier de
+développement, LinkedIn permet 500 appels par jour pour l'application et 100 par personne,
+et chaque outil de page
+coûte un appel plus un par page. Les deux lignes partagent l'adresse de retour
+(`/helix/oauth/retour`). Essai : `scripts/essai-natifs.mjs` (lancé par `npm run securite`).
+
+**Palmier Pro** (29/09/2026, `gateway/src/palmier.ts`, `gateway/src/palmierRegles.ts`) :
+monteur vidéo pour macOS 26 sur Mac à puce Apple, d'un autre éditeur, avec génération de
+vidéos, d'images et de son chez Palmier. Ouvert, il sert un serveur MCP sur
+`http://127.0.0.1:19789/mcp`. Le catalogue (`gateway/src/connecteurs.ts`) le déclare comme
+entrée `local` : port et chemin écrits dans le catalogue, jamais reçus d'une requête. Ligne
+« Palmier Pro » de la rubrique « Documents et données », bouton « Brancher » (un clic, sans
+navigateur ni jeton), « Réessayer » après une fermeture ; la ligne n'est servie que sur un Mac à
+puce Apple, et demande macOS 26 ou plus récent.
+
+- Avant chaque requête, l'instance vérifie que le programme à l'écoute est bien Palmier Pro :
+  processus trouvé par `lsof`, signature du processus vérifiée par `codesign` (identifiant
+  `io.palmier.pro`, équipe `MMFLRC7562`), exécutable dans /Applications ou ~/Applications.
+  Sinon, rien ne lui est envoyé. Aucune autre adresse locale n'est acceptée pour un serveur
+  MCP : en http, seulement une entrée `local` sur 127.0.0.1 et son port ; en https, jamais
+  `localhost` ni une adresse IP interne.
+- Neuf lectures passent sans carte (`get_timeline`, `inspect_timeline`, `get_media`,
+  `inspect_media`, `get_multicam`, `detect_beats`, `inspect_color`, `list_models`,
+  `read_skill`) ; tout le reste, et tout outil inconnu, demande une carte d'accord à chaque
+  appel, à tout niveau, que seul l'administrateur accepte. Les employés et l'agent de code
+  n'ont que les lectures.
+- Les générations (`generate_video`, `generate_image`, `generate_audio`, `upscale_media`)
+  partent chez Palmier, hors de la machine, sur l'abonnement ou les crédits du compte Palmier ;
+  `get_transcript` et `add_captions` peuvent passer par son service de transcription. La carte
+  le dit.
+
+Essai : `npm run essai:palmier` (faux Palmier Pro sur un port libre, repris par
+`npm run securite`).
+
 Pour Gmail et Google Agenda, il faut un **mot de passe d'application** Google,
 pas le mot de passe habituel : le formulaire l'indique et pré-remplit le serveur
-d'après le domaine de l'adresse. Microsoft 365 n'est pas encore pris en charge :
-il exige OAuth 2.0.
+d'après le domaine de l'adresse. Une boîte Workspace ou Microsoft 365 se branche aussi
+sans mot de passe, par « Se connecter avec Google » ou « Se connecter avec Microsoft »,
+avec l'application de l'organisation ; Microsoft 365 (Outlook, OneDrive, SharePoint,
+Excel, Word, Teams) a aussi ses lignes dans Connecteurs, par une seule connexion.
 
 Les outils d'un service ne sont proposés à l'agent qu'une fois ce service
 configuré, et ils le sont dans le Chat comme dans Cowork et Code. Dans le Chat,
@@ -867,6 +961,10 @@ npm run preview           # sert le build de production
 npm run typecheck         # vérification TypeScript, interface et passerelle
 npm run typecheck:gateway # passerelle seule (tsconfig.gateway.json)
 npm run motdepasse        # redéfinit le mot de passe d'un compte, depuis le poste
+npm run securite          # la batterie de sécurité, contre une instance jetable
+npm run essai:cli         # la ligne de commande (-- --modele : avec LM Studio)
+npm run essai:vscode      # l'extension VS Code, avec un faux module vscode (-- --modele : avec LM Studio)
+npm run essai:palmier     # le connecteur Palmier Pro, contre un faux Palmier Pro
 ```
 
 ## Rebrander pour un nouveau client
@@ -976,6 +1074,16 @@ Modules ajoutés les 27 et 28/09/2026, côté passerelle (`gateway/src/`) :
 | `prixPublies.ts` | Prix publiés par les fournisseurs sur leurs pages de prix, avec la date du relevé |
 | `nomsModeles.ts` | Correspondance prudente entre un identifiant de modèle et sa note ou son prix |
 
+Modules ajoutés ou changés le 29/09/2026 (`gateway/src/`) :
+
+| Module | Rôle |
+|---|---|
+| `palmier.ts` | Palmier Pro : reconnaissance de l'application à l'écoute (`lsof`, `codesign`), branchement de l'entrée `local` |
+| `palmierRegles.ts` | Palmier Pro : lectures sans carte, écritures et générations sur carte, ce qui sort de la machine |
+| `oauthNatif.ts`, `outilsNatifs.ts` | Seconde application LinkedIn (`linkedinPage`) et outils de page aiguillés vers ses jetons |
+| `mcp.ts` | `adresseServeurPermise` : aucune adresse locale hors d'une entrée `local` du catalogue |
+| `modelesCloud.ts` | `abreger` : refus d'un fournisseur abrégé pour l'écran, clé masquée comprise |
+
 Côté interface : `src/components/code/MoteurCode.tsx`, `src/hooks/useCodex.ts`, `src/lib/codex.ts`
 (choix du moteur de Code) ; `src/components/chat/PiecesJointesMessage.tsx` (cartes des pièces
 jointes), `src/lib/decodage.ts` (UTF-8, UTF-16, Windows-1252) ; `src/lib/durees.ts` (durées des
@@ -1031,8 +1139,9 @@ l'agent d'orchestration par défaut. Aucun tiret cadratin dans les textes affich
   et n'est jamais réimporté ni écrasé ; s'il a grandi dans un export plus récent,
   on peut en ajouter une copie complète à côté. Code : `src/lib/importGemini.ts`,
   essai `node scripts/essai-import-gemini.mjs` ;
-- Extension VS Code (`extensions/vscode/`) : Chat, Helix Code sur le dossier
-  ouvert, expliquer ou améliorer une sélection ;
+- Extension VS Code (`extensions/vscode/`, 0.2.5) : Chat, Helix Code sur le dossier
+  ouvert, expliquer ou améliorer une sélection ; paquet `.vsix` joint à chaque version
+  GitHub (voir « Extension VS Code » plus haut) ;
 - **Bases de connaissances** (RAG, 25/09/2026) : dans Fichiers, onglet « Bases de
   connaissances », on rassemble des documents que l'instance indexe sur la machine
   (modèle d'embeddings de LM Studio, index chiffrés). Un Chat qui a des bases (celles
@@ -1092,6 +1201,9 @@ l'agent d'orchestration par défaut. Aucun tiret cadratin dans les textes affich
 - Réglages → **Contrôle de l'écran** (activable depuis l'interface sur un poste
   autonome), Personnalisation de l'IA ;
 - Réglages → **Connecteurs** : Google Drive et Slack en lecture seule ;
+- Réglages → **Connecteurs** : la Page d'entreprise LinkedIn, par sa propre application
+  (29/09/2026), et **Palmier Pro**, application ouverte sur le Mac de l'instance
+  (29/09/2026), voir « Connecteurs » plus haut ;
 - Réglages → Préférences, **À propos** : mise à jour de l'application depuis le
   serveur de l'agence, l'instance du poste rattaché ou les publications GitHub ;
   automatique une fois l'application signée par Apple, d'un clic sinon (macOS, et Windows
@@ -1148,10 +1260,21 @@ l'agent d'orchestration par défaut. Aucun tiret cadratin dans les textes affich
   l'interface et 650 dans la passerelle ; le 28/09/2026, 2 945 et 966, traduites à
   100 % dans les deux langues (`npm run i18n` le mesure). Ce que vous écrivez n'est
   jamais traduit (0.25.0) ;
-- **Réglages → Abonnement** : l'offre d'hébergement des modèles en France, pour
-  les particuliers et pour les entreprises, avec ce que chaque formule comprend.
-  Éteinte par défaut en marque blanche.
-  Aucun paiement n'y est branché, et l'écran le dit (0.24.0).
+- **Réglages → Abonnement** : l'offre d'hébergement des modèles en France, allumée
+  dans la version du prestataire (`featureOverrides` de `src/config/branding.ts`),
+  éteinte en marque blanche (0.24.0, grille refaite le 29/09/2026). La page dit que
+  le logiciel est gratuit et que ce qui se paie est le calcul ; elle présente trois
+  modèles hébergés à Paris (rapide, polyvalent, expert), qui consomment un même
+  crédit mensuel chacun à son tarif ; puis, sous un sélecteur Mensuel / Annuel, les
+  formules Particuliers (Découverte, Plus, Pro, Max, prix TTC) et Entreprises
+  (Équipe, Équipe Premium, HT par poste, deux postes au moins ; Entreprise sur
+  devis), avec le prix de lancement (−30 % les six premiers mois, en mensuel), les
+  jetons par modèle et leur équivalent en échanges par jour et en tâches par mois.
+  Le crédit du mois vaut 60 % du net du prix normal (HT moins les frais de paiement
+  estimés), rabais ou pas ; chiffres et calcul dans `src/config/offre.ts`, refaits
+  par `npm run securite`. **Rien n'est encaissé** : les formules ne sont pas
+  ouvertes, aucun paiement n'est branché, l'écran le dit, et ses boutons ouvrent un
+  mail.
 
 **Encore annoncé sans fonctionner, et marqué comme tel à l'écran :**
 

@@ -165,13 +165,16 @@ at the "Free" level go through PowerShell.
 - **Cowork**: an agent that works on your files and, with your approval, on a virtual desktop
   (LibreOffice, browser) to produce Word, Excel, PowerPoint and PDF documents.
 - **Helix Code**: a coding agent on your project folder (built on OpenCode), with a live panel of
-  its tasks, commands and edited files; also in **VS Code** (extension included) and in the
+  its tasks, commands and edited files; also in **VS Code** (the extension is attached to every
+  [release](https://github.com/medhiclb/HelixAI/releases/latest); install it with "Install from VSIX…") and in the
   terminal with the **`helix` command line**. On macOS and Linux, with a cloud model, the output of its
   commands goes through [RTK](https://github.com/rtk-ai/rtk) first, to spend fewer tokens; the approval card
   still shows the command as written.
 - **Connectors**: mail, Google Calendar (read and write), Google Drive, Slack, Notion and MCP
   servers, behind an **approval gate**: nothing that changes something happens without your
-  go-ahead.
+  go-ahead. LinkedIn connects a profile and, through a second LinkedIn app, a company Page;
+  Palmier Pro, a video editor for Apple silicon Macs, lets agents edit on its timeline while it
+  is open on the instance's Mac.
 - **Scheduled tasks**: an instruction and a rhythm (every day, Monday to Friday, a day of the week
   or of the month), run with your tools, even with the window closed, by the agent you choose.
 - **Always-on agents**: scheduled missions, replies to incoming mail and messaging apps, with

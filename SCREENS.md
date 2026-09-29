@@ -110,6 +110,16 @@ de « … » : partie 2 sur 5... »). Un Chat long dont les premiers messages n'
 le dit aussi en tête de la réponse. Vu dans le navigateur contre une instance jetable et un
 faux modèle (cartes, CSV en UTF-16, lecture en 5 parties) ; pas avec un vrai modèle.
 
+**Bulle d'erreur (29/09/2026)** : une réponse en échec se termine par un cadre d'alerte
+(`role="alert"`, icône d'avertissement, `MessageList.tsx`) qui porte le message. Un refus
+long d'un fournisseur cloud y arrive abrégé par la passerelle (`abreger`,
+`gateway/src/modelesCloud.ts`) : la clé masquée qu'OpenAI renvoie (« sk-proj-****… », une
+centaine d'étoiles) devient « … », et la coupe, à 240 caractères, tombe entre deux mots au lieu
+du milieu d'une adresse. Le texte passe à la ligne n'importe où (`overflow-wrap: anywhere`,
+pour tout `[role="alert"]` dans `src/styles/index.css`, donc aussi les `InfoBox` d'alerte) :
+avant, la clé sans espace sortait de la bulle. Défaut vu le 29/09/2026 sur un refus d'OpenAI
+(commentaires d'`abreger` et de `MessageList.tsx`).
+
 **Durées (27/09/2026)** : « Réflexion : 12 s » sur le bloc de raisonnement, la durée de
 chaque étape d'outil, et sous la réponse « Réponse en 1 min 04 s · premier mot après 3 s »,
 gardées avec le Chat.
@@ -545,11 +555,11 @@ le 28/09/2026 (« Signaler un problème », la dernière, depuis le 27/09/2026).
 | `/parametres/securite` | Sécurité | ✅ **fonctionne** |
 | `/parametres/personnalisation` | Personnalisation de l'IA | ✅ **fonctionne** |
 | `/parametres/bot-recorder` | Bot Recorder | ✅ **fonctionne** (0.16.0) |
-| `/parametres/mcp` | Connecteurs | ✅ **fonctionne** |
+| `/parametres/mcp` | Connecteurs (lignes « LinkedIn (Page d'entreprise) » et « Palmier Pro » depuis le 29/09/2026) | ✅ **fonctionne** ; ces deux lignes vérifiées contre des doublures seulement |
 | `/parametres/modeles-locaux` | Modèles locaux (28/09/2026) : emplacement du moteur et des modèles, place libre, changement (déplacement pour llama.cpp, marche à suivre pour LM Studio installé) | ✅ **vu dans le navigateur** (serveur de développement, passerelle jetable, fr et en, 1280 et 375 px) ; Windows pas essayé |
 | `/parametres/modeles` | Modèles cloud | ✅ **fonctionne** |
 | `/parametres/entrainement` | Entraîner un modèle | ✅ **fonctionne sur Mac à puce Apple** (25/09/2026) ; carte NVIDIA pas essayée, et l'écran le dit |
-| `/parametres/abonnement` | Abonnement | ⚠ **écran sans paiement branché**, et il le dit |
+| `/parametres/abonnement` | Abonnement (version du prestataire seulement) : grille refaite le 29/09/2026, voir § 6 « Réglages, Abonnement » | ⚠ **écran sans paiement branché**, et il le dit |
 | `/parametres/importer` | Importer depuis d'autres IA | ✅ **fonctionne** (24/09/2026, par morceaux depuis le 25/09) |
 | `/parametres/ecran` | Contrôle de l'écran | ✅ **fonctionne** |
 | `/parametres/integrations` | (redirige vers Connecteurs) | ↪ **supprimé** |
@@ -687,6 +697,39 @@ Deux boutons, et l'écran dit lequel s'applique avant qu'on clique :
   l'adresse de retour à y inscrire ;
 - **« Connecter »** pour les serveurs à exécuter sur la machine de l'instance : un
   formulaire, un jeton à coller, et l'aide qui dit où le trouver.
+- **« Brancher »** (29/09/2026), pour une application ouverte sur la machine de l'instance
+  (Palmier Pro) : un clic, sans navigateur ni jeton. L'encart du bas dit alors « Trois façons
+  de brancher » au lieu de deux, et ce que fait « Brancher ».
+
+**LinkedIn, deux lignes (29/09/2026)**, rubrique « Réseaux sociaux », même logo :
+« LinkedIn » (« Profil : publier en son nom après accord ») et, juste dessous, « LinkedIn (Page
+d'entreprise) » (« Page : publications, statistiques, publier après accord »), chacune avec son
+panneau `ConnecteurNatif.tsx`. Le panneau du profil porte un encart « Cette application sert
+au profil. La Page d'entreprise se branche à part… » et le bouton « Brancher la Page
+d'entreprise », qui ouvre la ligne de la page et l'amène à l'écran ; si le compte avait été
+branché avec l'ancienne case « page », l'encart passe en avertissement et le dit. Le panneau
+de la page : « Avec une seconde application LinkedIn, que votre organisation crée pour sa Page
+d'entreprise, une fois… », le texte de l'examen (produit « Community Management API »,
+paliers de développement et standard, pas de délai annoncé), le guide pas à pas
+(`guideLinkedinPage` : « Ouvrir la création d'une nouvelle application LinkedIn », vérification
+par le super administrateur, demande du produit, adresse de retour et portées copiables, « À
+ne pas faire »), les champs « Client ID » et « Primary Client Secret » de la seconde
+application, et la case « Permettre de publier des posts au nom des pages que le compte
+administre. ». Branchée : « Connecté : » et le nom de la première page administrée.
+
+**Palmier Pro (29/09/2026)**, rubrique « Documents et données » (avec Canva et Figma), logo
+tiré de l'icône de son site, servi seulement quand l'instance tourne sur un Mac à puce Apple.
+Bouton « Brancher » ; si l'application n'est pas ouverte ou pas reconnue, le message le dit en
+tête de l'écran et le panneau « Brancher Palmier Pro, pas à pas » s'ouvre
+(`guideApplicationLocale`) : bouton vers la page de téléchargement officielle, installer dans
+Applications, ouvrir un projet, « Brancher », se connecter à son compte Palmier pour générer ;
+« À ne pas faire » : le lancer depuis l'image disque ou Téléchargements, le fermer pendant
+qu'un agent monte. Branché : pastille d'état, nombre d'outils, « Retirer » ; application
+fermée depuis : « Réessayer » à côté de « Retirer ». L'écran relance de lui-même une application
+locale arrêtée, au plus toutes les quinze secondes. Les cartes d'accord de ses outils disent,
+pour une génération, qu'elle part chez Palmier, hors de cette machine, sur les crédits du
+compte (`libellesOutils.ts`). Vérifié contre un faux Palmier Pro (`npm run essai:palmier`) ;
+la vraie application n'a pas été vue.
 
 En pied d'écran, ce que les deux voies garantissent, écrit en toutes lettres : aucune
 ne passe par un tiers, le jeton reste chiffré dans l'instance, et Helix ne lance que
@@ -886,12 +929,25 @@ Pas un écran, mais une surface : `helix` dans un terminal (Chat, `chat --outils
 demandes d'accord « Autoriser ? [o/N] ». Textes en français seulement
 (`cli/textes.mjs`). Détail dans docs/GUIDE.md.
 
-### Extension VS Code (24/09/2026)
+### Extension VS Code (24/09/2026, 0.2.5 le 29/09/2026)
 
 Icône Helix dans la barre de VS Code : onglets **Chat** (« Joindre le fichier
-ouvert », « Insérer » sur chaque bloc de code) et **Code** (actions de l'agent
-affichées « ✓ Écriture index.html »). Clic droit sur une sélection :
-« Helix : expliquer / améliorer la sélection ».
+ouvert », coché par défaut ; « Insérer » au-dessus de chaque bloc de code d'une
+réponse, pas sur le code de la question) et **Code** (actions de l'agent
+affichées « ✓ Écriture index.html », accords dans une fenêtre « Helix Code veut … »,
+« Autoriser » / « Refuser »). Clic droit sur une sélection :
+« Helix : expliquer / améliorer la sélection ». Boutons « Nouveau » et « Envoyer »
+(« Arrêter » pendant une réponse).
+
+0.2.5 (vu dans un vrai VS Code le 29/09/2026, profil jetable, PROJET.md) : pendant la
+réflexion du modèle, la ligne d'attente dit « Le modèle réfléchit… » puis « Le modèle
+réfléchit (N s)… » après deux secondes, au lieu de « … » (Qwen3 réfléchit parfois plus de
+deux minutes) ; dans Code s'y ajoutent « Le modèle se charge en mémoire (…)... » et « Le
+modèle lit la demande (…)... ». Le code de la question garde son indentation (bloc mis en
+forme). Le bouton « Insérer » a sa place au-dessus du code (`chat.css`) : il recouvrait la
+fin de la première ligne. Le paquet `helix-ai-0.2.5.vsix` est joint à la version GitHub
+2026.929.2 et s'installe par Extensions, « … », « Install from VSIX… ». Pas vus dans le
+vrai VS Code : la connexion et l'onglet Code (vérifiés par `npm run essai:vscode`).
 
 ### Apparence, quatre modes
 

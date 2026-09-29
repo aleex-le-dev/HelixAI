@@ -2,7 +2,7 @@
 
 Thank you for considering a contribution. HelixAI is developed in French: the code,
 comments and technical documentation are written in French, and the interface is
-translated into English and Chinese. Issues and pull requests are welcome in English or
+translated into English, Chinese and Japanese. Issues and pull requests are welcome in English or
 French.
 
 ## Before writing code
@@ -21,7 +21,7 @@ Each rule fixes a defect that has already happened in this repository.
   it contains a value. The French sentence is the translation key (`src/lib/i18n.ts`,
   `gateway/src/langue.ts`). `node scripts/i18n.mjs --ecrire` and
   `node scripts/i18n-passerelle.mjs --ecrire` prepare the new keys; then fill in
-  `src/i18n/{en,zh}.json` and `gateway/i18n/{en,zh}.json`. Both catalogues stay at 100 %.
+  `src/i18n/{en,zh,ja}.json` and `gateway/i18n/{en,zh,ja}.json`. Every catalogue stays at 100 %.
 - **No product name in code**: `branding.name` in the interface, `nomProduit()` in the
   gateway. The software ships as a white label.
 - **No hard-coded colour** outside `src/styles/tokens.css`.
@@ -42,7 +42,7 @@ Each rule fixes a defect that has already happened in this repository.
 
 ```bash
 npm run typecheck                    # interface and gateway
-npm run securite                     # the security suite (over 730 checks), against a disposable instance;
+npm run securite                     # the security suite (over 2,100 checks), against a disposable instance;
                                      # it also runs scripts/essai-fournisseurs.mjs (fake cloud providers)
 node scripts/i18n.mjs                # interface translations: 100 %
 node scripts/i18n-passerelle.mjs     # gateway translations: 100 %
@@ -52,7 +52,11 @@ node scripts/essai-notes-modeles.mjs # model scores (Epoch AI), published prices
 
 `essai-notes-modeles.mjs` needs Node 23.6 or later (or add `--experimental-strip-types`). If you
 touch the design detection or the command line, also run `npm run essai:design` and
-`npm run essai:cli`.
+`npm run essai:cli`. If you touch the VS Code extension (`extensions/vscode/`), run
+`npm run essai:vscode` (a fake `vscode` module drives the real extension against a disposable
+instance); if you touch the Palmier Pro connector or local MCP servers, run
+`npm run essai:palmier` (a fake Palmier Pro on a free port; `npm run securite` runs it too).
+`essai:cli` and `essai:vscode` also accept `-- --modele`, which uses a model served by LM Studio.
 
 None of these scripts needs a model, a real provider key or the network. Each gateway they start
 has a disposable data folder and keeps its data key in a file there (`"chiffrement": "fichier"`

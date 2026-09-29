@@ -4404,6 +4404,24 @@ perdait l'indentation de son code ; le bouton « Insérer » recouvrait la premi
 **Pas essayé** : la connexion et l'onglet Code dans le vrai VS Code (le mot de passe se
 tape, ce que je ne fais pas dans un éditeur) ; ils le sont par `essai:vscode`.
 
+**Fait le 29/09/2026 : documentation de la 2026.929.2 et aide intégrée sur tout le
+logiciel.** README (quatre langues) : Page d'entreprise LinkedIn, Palmier Pro, extension
+jointe à chaque version ; docs/GUIDE.md (connexions natives, LinkedIn en deux lignes, Palmier
+Pro, extension VS Code, Abonnement, essais) ; ARCHITECTURE.md (ADR-069 à 071, ADR-049, carte
+des modules) ; SCREENS.md ; extensions/vscode/README.md ; CONTRIBUTING.md. Demandé par Medhi :
+l'aide doit couvrir chaque écran qu'on peut ouvrir. Dix-huit articles ajoutés à `aide.ts`,
+écrits d'après le code et traduits (en, zh, ja) : Cowork, extension VS Code, ligne de
+commande, bases de connaissances, Projets, Groupes, LinkedIn (profil et Page), bot de
+réunion, Profil, Sécurité, apparence et formats, mise à jour, Personnalisation de l'IA,
+Entraîner un modèle, Contrôle de l'écran, API développeur, Installer les apps, Abonnement
+(sans prix, module `abonnement`). Relevé en les écrivant, pas corrigé (code non touché) :
+Personnalisation de l'IA dit « Permet à l'IA de se souvenir de vos conversations
+précédentes », alors qu'aucun code n'ajoute de souvenir seul (seuls les éléments ajoutés à la
+main existent ; l'article le dit) ; dans Profil, les boutons « Ouvrir l'instance », « Refermer
+l'instance » et « Application... » ne passent pas par `t()` ; « Réglage du système » dit
+« Suit l'apparence de macOS » même sous Windows ; aucun script du dépôt ne fabrique ni ne joint
+le `.vsix` (fait à la main à la publication, `vsce package` dans `extensions/vscode/`).
+
 **Fait le 26/09/2026 : revue de sécurité du poste de travail, corrigée** (SECURITE.md
 § 24). Extension VS Code 0.2.4 (adresse et jeton de portée machine, https hors du poste,
 jeton du poste seulement pour le port de l'application `instance-port`, séance par

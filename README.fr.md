@@ -178,12 +178,15 @@ toujours actif au palier « Libre » passent par PowerShell.
   virtuel (LibreOffice, navigateur) pour produire des documents Word, Excel, PowerPoint et PDF.
 - **Helix Code** : un agent de code sur le dossier de votre projet (bâti sur OpenCode), avec un
   panneau qui suit en direct ses tâches, ses commandes et les fichiers modifiés ; aussi dans
-  **VS Code** (extension fournie) et dans le terminal avec la **commande `helix`**. Sur macOS et
+  **VS Code** (extension jointe à chaque [version](https://github.com/medhiclb/HelixAI/releases/latest), à installer par
+  « Install from VSIX… ») et dans le terminal avec la **commande `helix`**. Sur macOS et
   Linux, avec un modèle cloud, la sortie de ses commandes passe d'abord par [RTK](https://github.com/rtk-ai/rtk), pour
   consommer moins de jetons ; la carte d'accord montre toujours la commande telle qu'écrite.
 - **Connecteurs** : courrier, Google Agenda (lecture et écriture), Google Drive, Slack, Notion et
   serveurs MCP, derrière une **barrière d'approbation** : rien qui modifie quelque chose ne se
-  fait sans votre accord.
+  fait sans votre accord. LinkedIn branche un profil et, par une seconde application LinkedIn,
+  une Page d'entreprise ; Palmier Pro, monteur vidéo pour Mac à puce Apple, laisse les agents
+  monter sur sa timeline tant qu'il est ouvert sur le Mac de l'instance.
 - **Tâches programmées** : une consigne et un rythme (chaque jour, du lundi au vendredi, un jour
   de la semaine ou du mois), exécutée avec vos outils, même fenêtre fermée, par l'agent de votre
   choix.

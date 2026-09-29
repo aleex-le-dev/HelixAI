@@ -128,8 +128,8 @@ Windows 上暂不提供：`helix` 命令行。在 Windows 上，“自由”级�
 - **Chat 中的网络搜索**：从「+」菜单开启后，它会以标签形式保留，直到您移除。问题发送到 DuckDuckGo，您的实例打开找到的网页，回答以链接列出其来源。网页只作为数据读取，绝不作为指令；管理员可以为整个实例关闭此功能。
 - **知识库（RAG）**：汇集文档，实例在本机为其建立索引，回答会引用所用的段落。每个人只能找到自己有权查看的文档。
 - **Cowork**：在您的文件上工作的智能体，经您同意后还可在虚拟桌面（LibreOffice、浏览器）上操作，生成 Word、Excel、PowerPoint 和 PDF 文档。
-- **Helix Code**：作用于项目文件夹的代码智能体（基于 OpenCode），配有实时面板，显示其任务、命令和修改的文件；也可在 **VS Code**（附带扩展）和终端中通过 **`helix` 命令行**使用。在 macOS 和 Linux 上使用云端模型时，其命令的输出会先经过 [RTK](https://github.com/rtk-ai/rtk) 精简，以减少 token 消耗；审批卡片仍显示原始命令。
-- **连接器**：邮件、Google 日历（读写）、Google Drive、Slack、Notion 和 MCP 服务器，均受**审批机制**保护：任何修改操作都须经您同意。
+- **Helix Code**：作用于项目文件夹的代码智能体（基于 OpenCode），配有实时面板，显示其任务、命令和修改的文件；也可在 **VS Code**（扩展随每个[版本](https://github.com/medhiclb/HelixAI/releases/latest)附带，通过“Install from VSIX…”安装）和终端中通过 **`helix` 命令行**使用。在 macOS 和 Linux 上使用云端模型时，其命令的输出会先经过 [RTK](https://github.com/rtk-ai/rtk) 精简，以减少 token 消耗；审批卡片仍显示原始命令。
+- **连接器**：邮件、Google 日历（读写）、Google Drive、Slack、Notion 和 MCP 服务器，均受**审批机制**保护：任何修改操作都须经您同意。LinkedIn 可连接个人资料，并通过第二个 LinkedIn 应用连接公司主页；Palmier Pro（适用于 Apple 芯片 Mac 的视频剪辑软件）在实例所在的 Mac 上打开时，智能体可在其时间线上剪辑。
 - **定时任务**：一条指令加一个频率（每天、周一至周五、每周或每月某天），用您的工具执行，即使窗口关闭也会运行，可指定执行的智能体。
 - **全天候智能体**：定时任务、回复收到的邮件和即时消息，并可使用各自的知识库和头像。处理收到的邮件时权限受限：上网时只打开已见过的地址。
 - **训练模型**：示例、训练、与原始模型对比，然后安装到 LM Studio（Apple 芯片上使用 MLX，NVIDIA 显卡上使用 Unsloth）。

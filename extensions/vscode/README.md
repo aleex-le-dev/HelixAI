@@ -4,8 +4,18 @@ Le Chat de votre instance Helix dans VS Code : vos modèles (locaux d'abord), vo
 
 - **Chat** dans la barre latérale (icône Helix), avec « Joindre le fichier ouvert ».
 - **Expliquer / Améliorer la sélection** : clic droit sur du code sélectionné.
-- **Insérer** : chaque bloc de code d'une réponse s'insère à la place de la sélection.
+- **Insérer** : chaque bloc de code d'une réponse porte, au-dessus du code, un bouton qui l'insère à la place de la sélection.
 - **Code** (onglet) : Helix Code lit, écrit et modifie les fichiers du dossier ouvert. Il faut se connecter une fois avec son compte Helix (commande « Helix : se connecter ») ; la séance est gardée dans le coffre de VS Code.
+
+## Installer
+
+Le paquet `helix-ai-<version>.vsix` est joint à chaque version de Helix, sur https://github.com/medhiclb/HelixAI/releases/latest. Téléchargez-le, puis dans VS Code : vue Extensions, menu « … » en haut de la vue, « Install from VSIX… », et choisissez le fichier. Pour une version plus récente, refaites la même chose : elle remplace l'ancienne.
+
+## Nouveautés de la 0.2.5
+
+- Pendant que le modèle réfléchit avant de répondre, la vue dit « Le modèle réfléchit (N s)… » au lieu de « … ».
+- Le code de votre question garde sa mise en forme (indentation, lignes) dans le fil.
+- Le bouton « Insérer » est posé au-dessus du code : il ne recouvre plus la première ligne.
 
 ## Réglages
 

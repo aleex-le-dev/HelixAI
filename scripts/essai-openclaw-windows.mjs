@@ -80,10 +80,27 @@ console.log("B. Disposition du Node privé et installation par npm");
   verifier("environnement de npm : System32 et Windows PowerShell dans le PATH (cmd.exe fait tourner les scripts d'installation)", env.PATH.split(";").includes("C:\\Windows\\System32") && env.PATH.includes("WindowsPowerShell\\v1.0"), env.PATH);
   verifier("environnement de npm : ni NPM_CONFIG_PREFIX ni npm_config_registry, quelle que soit la casse ; ni HELIX_ ni Electron_", !cles.some((k) => /^(npm_|helix_|electron_)/i.test(k)), cles.join(","));
   verifier("environnement de npm : ComSpec, APPDATA et TEMP gardés", env.ComSpec && env.APPDATA && env.TEMP, cles.join(","));
-  const args = P.argumentsInstallation("2026.9.4", dossier, { avant: "2026-09-27T00:00:00.000Z", scriptsApprouves: true });
+  const args = P.argumentsInstallation("2026.9.4", dossier, { avant: "2026-09-27T00:00:00.000Z" });
   const i = args.indexOf("--prefix");
   verifier("npm install : préfixe global explicite, chemin avec espace et accent en un seul argument", args[0] === "install" && args[1] === "-g" && i > 0 && args[i + 1] === dossier, JSON.stringify(args));
-  verifier("npm install : version épinglée, dépendances à date fixe, scripts du seul paquet openclaw", args.includes("openclaw@2026.9.4") && args.includes("--before=2026-09-27T00:00:00.000Z") && args.includes("--allow-scripts=openclaw"), JSON.stringify(args));
+  // 29/09/2026 : `--allow-scripts=openclaw` laissait tourner (par cmd.exe) les scripts de quatre dépendances, npm 11.19 ne faisant qu'avertir.
+  verifier("npm install : version épinglée, dépendances à date fixe, aucun script d'installation (ceux d'OpenClaw lancés à part, par Node)", args.includes("openclaw@2026.9.4") && args.includes("--before=2026-09-27T00:00:00.000Z") && args.includes("--ignore-scripts") && !args.some((a) => a.startsWith("--allow-scripts")), JSON.stringify(args));
+  const paquetOc = `${dossier}\\node_modules\\openclaw`;
+  const sc = P.scriptsOpenClaw({ scripts: { preinstall: "node scripts/preinstall-package-manager-warning.mjs", postinstall: "node scripts/postinstall-bundled-plugins.mjs", test: "vitest" } }, paquetOc, W);
+  verifier(
+    "scripts d'OpenClaw 2026.9.4 : preinstall puis postinstall, chacun un fichier du paquet lancé par Node (les autres scripts ignorés)",
+    Array.isArray(sc) && sc.length === 2 && sc[0].etape === "preinstall" && sc[0].fichier === `${paquetOc}\\scripts\\preinstall-package-manager-warning.mjs` && sc[1].etape === "postinstall" && sc[1].fichier === `${paquetOc}\\scripts\\postinstall-bundled-plugins.mjs`,
+    JSON.stringify(sc),
+  );
+  const refuses = [
+    { postinstall: "node scripts/a.mjs && del /q C:\\x" },
+    { postinstall: "node ..\\..\\ailleurs.mjs" },
+    { install: "node-gyp rebuild" },
+    { preinstall: "node C:\\autre\\x.mjs" },
+    { postinstall: "powershell -c evil" },
+  ].map((scripts) => P.scriptsOpenClaw({ scripts }, paquetOc, W));
+  verifier("scripts d'OpenClaw : tout ce qui n'est pas « node <fichier du paquet> » est refusé avec sa raison (&&, .., chemin absolu, autre programme)", refuses.every((r) => !Array.isArray(r) && "erreur" in r), JSON.stringify(refuses));
+  verifier("scripts d'OpenClaw : lancés par le Node privé, dans le dossier du paquet, sans shell", /executer\(d\.node, \[s\.fichier\], env, 5 \* 60_000, dossierPaquet\)/.test(sansCommentaires(lire("gateway", "src", "installationOpenClaw.ts"))), "autrement");
   const source = sansCommentaires(lire("gateway", "src", "installationOpenClaw.ts"));
   verifier("installation : npm lancé par node et npm-cli.js (jamais npm.cmd, jamais bin/npm)", /executer\(d\.node, \[d\.npmCli, \.\.\.args\]/.test(source) && !/join\(binNode, "npm"\)/.test(source) && !/npm\.cmd/.test(source), "npm lancé autrement");
   verifier("installation : la vérification lance OpenClaw comme il sera lancé (node.exe openclaw.mjs sous Windows)", /executer\(lancement\.fichier, \[\.\.\.lancement\.prefixe, "--version"\]/.test(source), "vérification autrement");

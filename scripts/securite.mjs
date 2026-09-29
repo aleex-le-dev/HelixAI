@@ -8715,6 +8715,71 @@ console.log("\n39. Palmier Pro : application locale reconnue avant de lui parler
   verifier("logo de Palmier Pro : l'icône de son site, empreinte notée, relié à la fiche", /"palmier": \{/.test(src("scripts", "marques", "sources.json")) && /palmier: "palmier",/.test(src("src", "components", "settings", "marquesConnecteurs.ts")), "sources.json, marquesConnecteurs.ts");
 }
 
+/*
+ * 41. « npm a échoué (code 1) » en déployant un agent sous Windows (Medhi,
+ * 29/09/2026, PROJET.md § 3.4) : l'écran ne gardait que la première ligne
+ * d'erreur de npm, qui ne dit rien. raisonNpm nomme maintenant le paquet et
+ * la cause, sans chemins de la machine (ceux de Windows ont des espaces), et
+ * la sortie entière va au journal de la passerelle. Sorties de npm écrites
+ * telles que npm 11 les rend quand le script d'installation d'un paquet
+ * échoue.
+ */
+console.log("\n41. OpenClaw : ce que npm a dit quand l'installation échoue (29/09/2026)");
+{
+  const P = await import(join(RACINE, "gateway", "src", "plateformeOpenClaw.ts"));
+  const L = await import(join(RACINE, "gateway", "src", "langue.ts"));
+  const raison = (sortie) => L.dansLaLangue("fr", () => P.raisonNpm(sortie, "2026.9.4"));
+  const maison = "C:\\Users\\Jean Dupont";
+  const journal = `npm error A complete log of this run can be found in: ${maison}\\AppData\\Local\\npm-cache\\_logs\\2026-09-29T10_00_00_000Z-debug-0.log`;
+  const sansMachine = (m) => !/[A-Za-z]:\\|Users\\|Jean|Dupont|_logs|debug-0/.test(m);
+  const script = raison(
+    [
+      "npm error code 1",
+      `npm error path ${maison}\\.helix\\data\\openclaw-moteur\\node\\node_modules\\openclaw`,
+      "npm error command failed",
+      "npm error command C:\\WINDOWS\\system32\\cmd.exe /d /s /c node scripts/postinstall-bundled-plugins.mjs",
+      "npm error node:internal/modules/run_main:123",
+      "npm error     triggerUncaughtException(",
+      "npm error Error: unsafe dist root: dist escaped package root",
+      journal,
+    ].join("\n"),
+  );
+  verifier("script d'installation en échec : le paquet et la cause sont dits, plus « code 1 » seul", /« openclaw »/.test(script) && /unsafe dist root: dist escaped package root/.test(script) && !/code 1/.test(script), script);
+  verifier("script d'installation en échec : aucun chemin de la machine (C:\\Users\\…, nom de la personne, journal de npm)", sansMachine(script), script);
+  const portee = raison(["npm error code 1", `npm error path ${maison}\\.helix\\data\\openclaw-moteur\\node\\node_modules\\openclaw\\node_modules\\@lydell\\node-pty`, "npm error command failed", "npm error command C:\\WINDOWS\\system32\\cmd.exe /d /s /c node install.js", `npm error Error: Cannot find module '${maison}\\.helix\\x.js'`, journal].join("\n"));
+  verifier("paquet à portée (@lydell/node-pty) nommé en entier, chemin avec espace retiré en entier", /« @lydell\/node-pty »/.test(portee) && /Cannot find module/.test(portee) && sansMachine(portee), portee);
+  const gyp = raison(["npm error code 1", `npm error path ${maison}\\x\\node_modules\\openclaw\\node_modules\\tree-sitter-bash`, "npm error command failed", "npm error command C:\\WINDOWS\\system32\\cmd.exe /d /s /c node-gyp-build", "npm error gyp info it worked if it ends with ok", "npm error gyp ERR! find VS could not find a version of Visual Studio 2017 or newer to use", journal].join("\n"));
+  verifier("module à compiler sans outils (gyp ERR!, Visual Studio) : dit comme tel, le module nommé, sans le jargon de gyp", /tree-sitter-bash/.test(gyp) && /compiler/.test(gyp) && !/gyp ERR/.test(gyp) && sansMachine(gyp), gyp);
+  const cmake = raison(["npm error code 1", `npm error path ${maison}\\x\\node_modules\\openclaw\\node_modules\\koffi`, "npm error command failed", "npm error command C:\\WINDOWS\\system32\\cmd.exe /d /s /c node ./cnoke.cjs -P . -D src/koffi --prebuild --release", "npm error Cannot find CMake, make sure it is installed and in your PATH", journal].join("\n"));
+  verifier("koffi qui veut se recompiler (CMake introuvable) : dit comme un module à compiler", /koffi/.test(cmake) && /compiler/.test(cmake) && sansMachine(cmake), cmake);
+  const bloque = raison(["npm error code 1", `npm error path ${maison}\\x\\node_modules\\openclaw\\node_modules\\tree-sitter-bash`, "npm error command failed", "npm error command C:\\WINDOWS\\system32\\cmd.exe /d /s /c node-gyp-build", `npm error Error: An Application Control policy has blocked this file. \\\\?\\${maison}\\x\\tree-sitter-bash.node`, "npm error gyp ERR! find VS could not find a version of Visual Studio 2017 or newer to use", journal].join("\n"));
+  verifier("module natif refusé par Windows (Smart App Control, WDAC) : c'est le refus qui est dit, pas la compilation qui a suivi", /Smart App Control/.test(bloque) && !/compiler/.test(bloque) && sansMachine(bloque), bloque);
+  const occupe = raison(`npm error code EBUSY\nnpm error syscall rename\nnpm error path ${maison}\\x\nnpm error EBUSY: resource busy or locked, rename '${maison}\\x' -> '${maison}\\y'\n${journal}`);
+  verifier("fichier tenu (EBUSY, Windows) : l'antivirus est nommé, et quoi faire", /antivirus/.test(occupe) && /réessayez/.test(occupe) && sansMachine(occupe), occupe);
+  const seul = raison(`npm error code 1\n${journal}`);
+  verifier("npm qui ne dit que « code 1 » : le code est dit tel quel, sans le chemin du journal", /code 1/.test(seul) && sansMachine(seul), seul);
+  verifier("versions et réseau : inchangés", /n'est pas publiée/.test(raison("npm error code ETARGET\nnpm error notarget No matching version found for openclaw@2026.9.4.")) && /injoignable/.test(raison("npm error code ENOTFOUND\nnpm error network request to https://registry.npmjs.org/openclaw failed")), "autre message");
+  verifier("certificat refusé (proxy ou antivirus qui inspecte) : dit comme tel, pas « injoignable »", /certificat/.test(raison("npm error code UNABLE_TO_GET_ISSUER_CERT_LOCALLY\nnpm error errno UNABLE_TO_GET_ISSUER_CERT_LOCALLY\nnpm error request to https://registry.npmjs.org/openclaw failed, reason: unable to get local issuer certificate")), "injoignable");
+  const nettoye = P.sansChemins("Cannot find module C:\\Program Files (x86)\\Jean Dupont\\x.js voir https://registry.npmjs.org/openclaw (/Users/jean dupont/.npm/_logs)");
+  verifier(
+    "sansChemins : un chemin Windows ou Unix avec espaces part en entier, une adresse reste",
+    nettoye === "Cannot find module … voir https://registry.npmjs.org/openclaw (…)",
+    nettoye,
+  );
+  const install = readFileSync(join(RACINE, "gateway", "src", "installationOpenClaw.ts"), "utf8");
+  verifier(
+    "journal de la passerelle : la sortie entière de npm (et le chemin de son journal) y est écrite quand l'installation ou la vérification échoue",
+    /journaliserNpm\(`npm install openclaw@\$\{version\} a échoué`, r\);[\s\S]{0,200}throw new Error\(tf\("OpenClaw ne s'est pas installé : \{0\}\. La sortie complète de npm est dans le journal de la passerelle \(passerelle\.log\)\.", raisonNpm\(/.test(install) && /journaliserNpm\("openclaw --version ne répond pas après l'installation", verif\);/.test(install) && /console\.error\(`\[openclaw\] \$\{quoi\} \(code \$\{r\.code\}\)\$\{journal \? `, journal complet de npm : \$\{journal\}` : ""\}/.test(install),
+    "installationOpenClaw.ts",
+  );
+  const flux = readFileSync(join(RACINE, ".github", "workflows", "essai-openclaw-windows.yml"), "utf8");
+  verifier(
+    "essai sur un vrai Windows (GitHub Actions) : x64, compte avec espace et accents, arm64 ; journaux de npm gardés ; lancé à la main et sur sa branche seulement",
+    /windows-latest/.test(flux) && /windows-11-arm/.test(flux) && /--compte-accentue/.test(flux) && /essai-openclaw-windows\.mjs --installation --sortie/.test(flux) && /upload-artifact@[0-9a-f]{40}/.test(flux) && /branches: \[essai-openclaw-windows\]/.test(flux) && /permissions:\s*\n\s*contents: read/.test(flux),
+    "essai-openclaw-windows.yml",
+  );
+}
+
 console.log(`\n${reussis} vérification(s) réussie(s), ${echecs.length} échec(s).`);
 if (echecs.length) {
   console.log("Échecs :");

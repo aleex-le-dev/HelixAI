@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { execFile } from "node:child_process";
-import { createWriteStream, existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, readlinkSync, unlinkSync } from "node:fs";
+import { createWriteStream, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, readlinkSync, unlinkSync } from "node:fs";
 import { homedir, release, platform, arch } from "node:os";
 import { join, resolve } from "node:path";
 import { Readable } from "node:stream";
@@ -17,6 +17,7 @@ import {
   envInstallation,
   lancementOpenClaw,
   raisonNpm,
+  scriptsOpenClaw,
   type Lancement,
 } from "./plateformeOpenClaw.ts";
 
@@ -31,9 +32,12 @@ import {
  *  1. un Node officiel (24.21.0 LTS, épinglé avec ses empreintes, ou la version
  *     du profil), dont l'archive est vérifiée avant d'être ouverte ;
  *  2. OpenClaw installé par le npm de ce Node, dans ce même dossier, à la
- *     version qu'Helix a éprouvée (ou celle du profil), avec l'autorisation de
- *     scripts d'installation limitée au seul paquet `openclaw` (npm 11.16+) ;
- *  3. vérification : `openclaw --version`.
+ *     version qu'Helix a éprouvée (ou celle du profil), sans aucun script
+ *     d'installation (`--ignore-scripts`, depuis le 29/09/2026 : voir
+ *     `argumentsInstallation`) ;
+ *  3. les scripts d'installation d'OpenClaw lui-même, et eux seuls, lancés par
+ *     ce Node sans interpréteur de commandes (`scriptsOpenClaw`) ;
+ *  4. vérification : `openclaw --version`.
  *
  * Tout vit dans `<données>/openclaw-moteur`. Le Node du système, la
  * configuration du shell et toute installation personnelle d'OpenClaw restent
@@ -105,9 +109,9 @@ export function etatInstallation(): EtatInstallation {
   return etat;
 }
 
-function executer(bin: string, args: string[], env: NodeJS.ProcessEnv, delaiMs: number): Promise<{ ok: boolean; sortie: string; erreur: string; code: string }> {
+function executer(bin: string, args: string[], env: NodeJS.ProcessEnv, delaiMs: number, cwd?: string): Promise<{ ok: boolean; sortie: string; erreur: string; code: string }> {
   return new Promise((resolve) => {
-    execFile(bin, args, { env, timeout: delaiMs, maxBuffer: 32 * 1024 * 1024, windowsHide: true }, (err, sortie, erreur) => {
+    execFile(bin, args, { env, timeout: delaiMs, maxBuffer: 32 * 1024 * 1024, windowsHide: true, ...(cwd ? { cwd } : {}) }, (err, sortie, erreur) => {
       const e = err as (Error & { code?: unknown; signal?: unknown; killed?: boolean }) | null;
       const code = !e ? "0" : e.killed ? `arrêté après ${Math.round(delaiMs / 1000)} s` : String(e.code ?? e.signal ?? "?");
       resolve({ ok: !err, sortie: String(sortie), erreur: String(erreur) || (err ? err.message : ""), code });
@@ -340,7 +344,6 @@ async function installerPaquet(version: string): Promise<string> {
   const env = envInstallation(process.env, d.dossierBin, platform());
   const npm = (args: string[], delaiMs: number) => executer(d.node, [d.npmCli, ...args], env, delaiMs);
   const v = await npm(["--version"], 30_000);
-  const [maj = 0, min = 0] = v.sortie.trim().split(".").map(Number);
   if (!v.ok) throw new Error(t("npm, livré avec Node, ne répond pas."));
   /*
    * Ses dépendances à la date de l'essai (DEPENDANCES_NPM_AVANT), pour la
@@ -349,13 +352,36 @@ async function installerPaquet(version: string): Promise<string> {
    */
   const args = argumentsInstallation(version, prefixe, {
     avant: version === VERSION_OPENCLAW_EPROUVEE ? DEPENDANCES_NPM_AVANT : undefined,
-    scriptsApprouves: maj > 11 || (maj === 11 && min >= 16),
   });
   const r = await npm(args, 20 * 60_000);
   const lancement = lancementGere();
   if (!r.ok || !existsSync(binaireGere()) || !lancement) {
     journaliserNpm(`npm install openclaw@${version} a échoué`, r);
-    throw new Error(tf("OpenClaw ne s'est pas installé : {0}", raisonNpm(`${r.erreur}\n${r.sortie}`, version)));
+    // Où lire le reste : la phrase à l'écran ne remplace pas la sortie de npm, que la personne peut transmettre.
+    throw new Error(tf("OpenClaw ne s'est pas installé : {0}. La sortie complète de npm est dans le journal de la passerelle (passerelle.log).", raisonNpm(`${r.erreur}\n${r.sortie}`, version)));
+  }
+  /*
+   * Les scripts d'installation d'OpenClaw, et eux seuls (npm les a sautés,
+   * `--ignore-scripts`) : par le Node privé, dans le dossier du paquet, sans
+   * `cmd.exe` ni `sh`. Sans son `postinstall`, OpenClaw garde sa marque
+   * « installation en cours ». Une erreur ici dit l'étape et la cause, pas
+   * « npm a échoué (code 1) ».
+   */
+  const dossierPaquet = join(d.paquets, "openclaw");
+  let manifeste: unknown = null;
+  try {
+    manifeste = JSON.parse(readFileSync(join(dossierPaquet, "package.json"), "utf8"));
+  } catch {
+    throw new Error(t("OpenClaw ne s'est pas installé : son package.json est illisible."));
+  }
+  const scripts = scriptsOpenClaw(manifeste, dossierPaquet, platform());
+  if ("erreur" in scripts) throw new Error(tf("OpenClaw ne s'est pas installé : {0}", scripts.erreur));
+  for (const s of scripts) {
+    const rs = await executer(d.node, [s.fichier], env, 5 * 60_000, dossierPaquet);
+    if (!rs.ok) {
+      journaliserNpm(`script ${s.etape} d'openclaw@${version} a échoué`, rs);
+      throw new Error(tf("OpenClaw ne s'est pas installé : son script d'installation ({0}) s'est arrêté ({1}). Sa sortie complète est dans le journal de la passerelle (passerelle.log).", s.etape, raisonNpm(`${rs.erreur}\n${rs.sortie}`, version, "script")));
+    }
   }
   const verif = await executer(lancement.fichier, [...lancement.prefixe, "--version"], env, 60_000);
   const trouvee = /(\d{4}\.\d+\.\d+)/.exec(verif.sortie)?.[1];

@@ -18,7 +18,7 @@ name: Essai OpenClaw sous Windows
 on:
   workflow_dispatch:
   push:
-    branches: [main, essai-openclaw-windows]
+    branches: [main]
     paths:
       - "gateway/src/installationOpenClaw.ts"
       - "gateway/src/plateformeOpenClaw.ts"

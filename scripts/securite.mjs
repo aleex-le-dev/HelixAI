@@ -8860,8 +8860,8 @@ console.log("\n41. OpenClaw : ce que npm a dit quand l'installation échoue (29/
   );
   const flux = readFileSync(join(RACINE, ".github", "workflows", "essai-openclaw-windows.yml"), "utf8");
   verifier(
-    "essai sur un vrai Windows (GitHub Actions) : x64, compte avec espace et accents, arm64 ; journaux de npm gardés ; lancé à la main, et sur main ou sa branche quand l'installation change",
-    /windows-latest/.test(flux) && /windows-11-arm/.test(flux) && /--compte-accentue/.test(flux) && /essai-openclaw-windows\.mjs --installation --sortie/.test(flux) && /upload-artifact@[0-9a-f]{40}/.test(flux) && /branches: \[main, essai-openclaw-windows\]/.test(flux) && /paths:[\s\S]*installationOpenClaw\.ts/.test(flux) && /permissions:\s*\n\s*contents: read/.test(flux),
+    "essai sur un vrai Windows (GitHub Actions) : x64, compte avec espace et accents, arm64 ; journaux de npm gardés ; lancé à la main, et sur main quand l'installation change (les branches de mise au point sont retirées à la fusion, 29/09/2026)",
+    /windows-latest/.test(flux) && /windows-11-arm/.test(flux) && /--compte-accentue/.test(flux) && /essai-openclaw-windows\.mjs --installation --sortie/.test(flux) && /upload-artifact@[0-9a-f]{40}/.test(flux) && /branches: \[main\]/.test(flux) && /paths:[\s\S]*installationOpenClaw\.ts/.test(flux) && /permissions:\s*\n\s*contents: read/.test(flux),
     "essai-openclaw-windows.yml",
   );
 }

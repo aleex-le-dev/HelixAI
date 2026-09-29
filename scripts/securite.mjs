@@ -9200,8 +9200,9 @@ console.log("\n42. Réflexion du modèle : canal séparé, `reasoning`, `<think>
   const flux = src(".github", "workflows", "essai-windows.yml");
   const essaiR = src("scripts", "essai-reflexion-ci.mjs");
   verifier(
-    "essai sur machine jetable : la branche d'essai déclenche le flux sans retirer main ; Windows (étape 6) et Linux (llmster) gardent les flux bruts de la réflexion",
-    /branches: \[main, essai-reflexion-windows\]/.test(flux) && /runs-on: ubuntu-latest/.test(flux) && /essai-reflexion-ci\.mjs --modeles/.test(flux) && /essaiReflexion\(\{ G, entetes, dire, verifier, sortie: SORTIE, modeles: MODELES_REFLEXION \}\)/.test(src("scripts", "essai-windows-ci.mjs")) &&
+    // La branche d'essai de la mise au point a servi puis a été retirée à la fusion (29/09/2026) : main seule déclenche l'essai.
+    "essai sur machine jetable : main déclenche le flux ; Windows (étape 6) et Linux (llmster) gardent les flux bruts de la réflexion",
+    /branches: \[main\]/.test(flux) && /runs-on: ubuntu-latest/.test(flux) && /essai-reflexion-ci\.mjs --modeles/.test(flux) && /essaiReflexion\(\{ G, entetes, dire, verifier, sortie: SORTIE, modeles: MODELES_REFLEXION \}\)/.test(src("scripts", "essai-windows-ci.mjs")) &&
       /reflexion-\$\{slug\}-\$\{endroit\}\.sse\.txt/.test(essaiR) && /\["lmstudio", `\$\{lmStudio\}\/chat\/completions`/.test(essaiR) && /tools: false, effort: "moyen"/.test(essaiR),
     "essai-windows.yml, essai-reflexion-ci.mjs",
   );

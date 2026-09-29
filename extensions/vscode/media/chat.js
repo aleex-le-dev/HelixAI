@@ -9,6 +9,8 @@
   let texteEnCours = "";
   /** Début de la réflexion du modèle, pour dire depuis combien de temps il réfléchit. */
   let reflexionDepuis = 0;
+  /** Arrivée du premier morceau de la réponse : une réflexion requalifiée commence là. */
+  let premierMorceau = 0;
   /** « chat » : le Chat de l'instance ; « code » : Helix Code sur le dossier ouvert. */
   let mode = "chat";
   const ongletChat = document.getElementById("onglet-chat");
@@ -89,7 +91,19 @@
       if (!reflexionDepuis) reflexionDepuis = Date.now();
       const s = Math.round((Date.now() - reflexionDepuis) / 1000);
       enCours.textContent = s < 2 ? "Le modèle réfléchit…" : `Le modèle réfléchit (${s} s)…`;
+    } else if (m.type === "requalifier" && enCours) {
+      // La réflexion du modèle était arrivée comme réponse (`</think>` seul, 29/09/2026) : retirée, l'attente reprend.
+      texteEnCours = texteEnCours.slice(0, Math.max(0, texteEnCours.length - m.caracteres));
+      if (texteEnCours.trim()) enCours.innerHTML = rendu(texteEnCours);
+      else {
+        enCours.classList.add("attente");
+        // Elle a commencé avec le premier morceau reçu, pas maintenant.
+        if (!reflexionDepuis) reflexionDepuis = premierMorceau || Date.now();
+        const s = Math.round((Date.now() - reflexionDepuis) / 1000);
+        enCours.textContent = s < 2 ? "Le modèle réfléchit…" : `Le modèle réfléchit (${s} s)…`;
+      }
     } else if (m.type === "morceau" && enCours) {
+      if (!texteEnCours) premierMorceau = Date.now();
       texteEnCours += m.texte;
       enCours.classList.remove("attente");
       enCours.innerHTML = rendu(texteEnCours);

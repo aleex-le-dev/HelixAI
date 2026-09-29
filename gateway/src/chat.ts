@@ -62,6 +62,7 @@ import {
 import { moteurDeLaMachine, type BackendConfig, type ChatRequest, type ModelInfo } from "./types.ts";
 import { t, tf } from "./langue.ts";
 import { gardesDeFlux, type Degenerescence } from "./gardeBoucle.ts";
+import { SeparateurReflexion, type MorceauSepare } from "./reflexionEnLigne.ts";
 import { contexteDuModele, echantillonnageLocal } from "./backends.ts";
 import { apresCoupure } from "./provision.ts";
 import { integrerDocuments, jetonsEstimes, messagesAvecDocuments } from "./documentsJoints.ts";
@@ -150,6 +151,8 @@ async function consumeUpstream(
   releve?: usage.Releve,
   /** Ce qui a déjà été écrit dans la réponse, par les appels précédents de la même demande. */
   sortie?: { fin: string },
+  /** Le modèle devait réfléchir : une balise `</think>` seule dit alors que ce qui précède était sa réflexion. */
+  reflechit = false,
 ): Promise<UpstreamResult> {
   const reader = upstream.body!.getReader();
   const decoder = new TextDecoder();
@@ -163,6 +166,57 @@ async function consumeUpstream(
   const gardes = gardesDeFlux();
   let degenere: Degenerescence | null = null;
   let erreur: { statut: number; detail: string } | null = null;
+  /*
+   * Réflexion restée dans le texte, entre `<think>` et `</think>` (29/09/2026,
+   * reflexionEnLigne.ts) : séparée ici, au fil du flux, et envoyée à l'écran
+   * par le même canal que celle d'un moteur qui la sépare lui-même. Sans cela
+   * l'écran la retirait du texte, et il ne restait ni réflexion ni temps.
+   */
+  const separateur = new SeparateurReflexion({ fermetureSeule: reflechit });
+  /** Arrivée du premier texte de cet appel : l'écran en date une réflexion requalifiée. */
+  let premierTexte = 0;
+  const rendreTexte = (texte: string) => {
+    if (!texte) return;
+    /*
+     * Une étape, sa reprise et son contrôle écrivent chacun à la suite
+     * dans la même réponse. Sans séparation, les textes se collaient :
+     * « …avant de continuer.Le dossier… » (vu sur un plan réel). Un
+     * paragraphe neuf, seulement si le texte précédent n'en finit pas déjà un.
+     */
+    if (!content && sortie?.fin && !/\n\s*$/.test(sortie.fin)) emitContent(res, "\n\n");
+    premierTexte ||= Date.now();
+    content += texte;
+    emitContent(res, texte);
+    if (sortie) sortie.fin = (sortie.fin + texte).slice(-4);
+    degenere ??= gardes.texte.ajouter(texte);
+  };
+  const rendreReflexion = (texte: string) => {
+    if (!texte) return;
+    sse(res, {
+      choices: [{ index: 0, delta: { reasoning_content: texte } }],
+    });
+    degenere ??= gardes.reflexion.ajouter(texte);
+    if (reflexion.length < 200_000) reflexion += texte;
+  };
+  const rendreSepare = (m: MorceauSepare) => {
+    if (m.requalifie) {
+      /*
+       * `</think>` seul : ce qui est déjà parti comme texte était la
+       * réflexion. L'écran le déplace (useChat.ts) ; ici, la réponse gardée
+       * pour la suite (historique, plan) le perd de même.
+       */
+      const n = Math.min(m.requalifie, content.length);
+      const deplace = content.slice(content.length - n);
+      content = content.slice(0, content.length - n);
+      emitHelix(res, { type: "reflexion_requalifiee", caracteres: n, depuisMs: premierTexte ? Date.now() - premierTexte : 0 });
+      if (reflexion.length < 200_000) reflexion += deplace;
+      premierTexte = 0;
+      // La réponse repart de zéro à l'écran : pas de second séparateur de paragraphe devant elle.
+      if (sortie) sortie.fin = "\n\n";
+    }
+    rendreReflexion(m.reflexion);
+    rendreTexte(m.texte);
+  };
 
   for (;;) {
     /*
@@ -223,26 +277,12 @@ async function consumeUpstream(
         const lu = lireDelta(choice.delta);
         const delta = { ...(choice.delta ?? {}), content: lu.texte, reasoning_content: lu.reflexion };
 
-        if (typeof delta.content === "string" && delta.content) {
-          /*
-           * Une étape, sa reprise et son contrôle écrivent chacun à la suite
-           * dans la même réponse. Sans séparation, les textes se collaient :
-           * « …avant de continuer.Le dossier… » (vu sur un plan réel). Un
-           * paragraphe neuf, seulement si le texte précédent n'en finit pas déjà un.
-           */
-          if (!content && sortie?.fin && !/\n\s*$/.test(sortie.fin)) emitContent(res, "\n\n");
-          content += delta.content;
-          emitContent(res, delta.content);
-          if (sortie) sortie.fin = (sortie.fin + delta.content).slice(-4);
-          degenere ??= gardes.texte.ajouter(delta.content);
-        }
+        // La réflexion par son canal d'abord : le moteur sépare, et le texte qui suit est la réponse.
         if (typeof delta.reasoning_content === "string" && delta.reasoning_content) {
-          sse(res, {
-            choices: [{ index: 0, delta: { reasoning_content: delta.reasoning_content } }],
-          });
-          degenere ??= gardes.reflexion.ajouter(delta.reasoning_content);
-          if (reflexion.length < 200_000) reflexion += delta.reasoning_content;
+          separateur.canalSepare();
+          rendreReflexion(delta.reasoning_content);
         }
+        if (typeof delta.content === "string" && delta.content) rendreSepare(separateur.ajouter(delta.content));
 
         // Les appels d'outils arrivent par fragments, indexés (ou non : voir `accumulerAppels`).
         accumulerAppels(toolCalls, delta.tool_calls);
@@ -251,6 +291,9 @@ async function consumeUpstream(
       }
     }
   }
+
+  // Ce que le séparateur retenait encore (un bout de balise, une réflexion jamais refermée).
+  if (!degenere) rendreSepare(separateur.finir());
 
   // Coupé en route : les appels d'outils à moitié reçus ne partent pas.
   if (degenere) return { content, toolCalls: [], finishReason: "boucle", degenere };
@@ -1628,7 +1671,12 @@ export async function handleChatRequest(
        * flux se coupe en route, puisque le moteur a déjà travaillé.
        */
       const releve = new usage.Releve(qui, model, payload);
-      const result = await consumeUpstream(upstream, res, releve, sortie).finally(() => releve.clore());
+      /*
+       * Balise fermante seule reconnue dès que le niveau choisi fait réfléchir,
+       * même pour un modèle que son nom ne dit pas raisonneur (OLMo Think,
+       * Phi-4 Reasoning, gpt-oss) : c'est justement son gabarit qui ouvre la balise.
+       */
+      const result = await consumeUpstream(upstream, res, releve, sortie, niveauEffort(body.effort).raisonner).finally(() => releve.clore());
       if (result.content) texte = result.content;
 
       /*

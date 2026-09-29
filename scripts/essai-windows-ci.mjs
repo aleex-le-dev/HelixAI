@@ -38,7 +38,10 @@
  *     (comme après un redémarrage de la machine), l'application rouverte, et
  *     la même question : c'est là que le service doit être relevé par
  *     l'application empaquetée ;
- *  6. réussi ou non, dans `--sortie` : le journal de cet essai, celui de
+ *  6. la réflexion du modèle (29/09/2026) : le flux brut d'une question qui
+ *     fait réfléchir, au moteur seul, par le relais et par le Chat de Helix,
+ *     pour le modèle de l'essai et `--reflexion-modeles` (scripts/essai-reflexion-ci.mjs) ;
+ *  7. réussi ou non, dans `--sortie` : le journal de cet essai, celui de
  *     l'application (sa sortie), `passerelle.log`, la liste de
  *     `%USERPROFILE%\.lmstudio` et le contenu des `*install-location.json`.
  *
@@ -57,6 +60,7 @@ import { copyFileSync, createWriteStream, existsSync, mkdirSync, readFileSync, r
 import { homedir, tmpdir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { essaiReflexion } from "./essai-reflexion-ci.mjs";
 
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), "..");
 const option = (nom, defaut) => {
@@ -67,6 +71,8 @@ const APP = resolve(option("app", join(RACINE, "release", "win-unpacked", "Helix
 const MODELE = option("modele", "qwen3-1.7b");
 const SORTIE = resolve(option("sortie", join(RACINE, "essai-windows-sortie")));
 const DELAI_MS = Number(option("delai-minutes", "45")) * 60_000;
+// La réflexion est essayée sur le modèle de l'essai, puis sur ceux-ci (Qwen3.5 : gabarit qui ouvre lui-même `<think>`).
+const MODELES_REFLEXION = [...new Set([MODELE, ...option("reflexion-modeles", "qwen/qwen3.5-2b").split(",").filter(Boolean)])];
 const PORT = 8787;
 const G = `http://127.0.0.1:${PORT}`;
 
@@ -352,6 +358,15 @@ async function etapes() {
   // Au-delà de ce que l'application attend (40 sondes), elle a soit vu sa passerelle, soit abandonné en le disant.
   await attendre(Math.max(0, 70_000 - (Date.now() - rouverte)));
   verifier("l'application a vu sa passerelle à temps pour ouvrir sa fenêtre", !/la passerelle n'a pas démarré à temps/.test(sortieApplication), "« la passerelle n'a pas démarré à temps » dans sa sortie");
+
+  /*
+   * 6. La réflexion du modèle (29/09/2026) : sous Windows, le Chat n'en
+   * affichait ni le texte ni le temps. Le flux brut d'une question qui fait
+   * réfléchir, au moteur seul puis à travers Helix, pour chaque modèle ; le
+   * Chat de Helix doit la rendre séparée (scripts/essai-reflexion-ci.mjs).
+   */
+  dire("6. La réflexion du modèle : moteur seul, relais de Helix, Chat de Helix");
+  await essaiReflexion({ G, entetes, dire, verifier, sortie: SORTIE, modeles: MODELES_REFLEXION });
 }
 
 /** Nom comparable d'un modèle, sans source ni éditeur (« lmstudio/qwen/qwen3-1.7b » → « qwen3-1.7b »), comme santeModeles.ts. */

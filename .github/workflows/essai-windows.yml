@@ -4,18 +4,22 @@
 # Le pilotage est dans scripts/essai-windows-ci.mjs (mode d'emploi en tête) ; les journaux
 # (passerelle.log, sortie de l'application, dossier de LM Studio) sont gardés en artefact,
 # que l'essai passe ou non. Avant chaque publication, cet essai doit être vert (docs/GUIDE.md).
+# Depuis le 29/09/2026, il garde aussi le flux brut de la réflexion du modèle (moteur seul, relais
+# et Chat de Helix, scripts/essai-reflexion-ci.mjs), et le même essai tourne sous Linux (llmster).
 name: Essai Windows
 
 on:
   workflow_dispatch:
   push:
-    branches: [main]
+    # essai-reflexion-windows (29/09/2026) : la réflexion du modèle, essayée sans toucher à main.
+    branches: [main, essai-reflexion-windows]
     paths:
       - "gateway/**"
       - "electron/**"
       - "src/**"
       - "package.json"
       - "scripts/essai-windows-ci.mjs"
+      - "scripts/essai-reflexion-ci.mjs"
       - ".github/workflows/essai-windows.yml"
 
 permissions:
@@ -71,5 +75,40 @@ jobs:
         with:
           name: essai-windows-journaux
           path: essai-windows-sortie
+          if-no-files-found: warn
+          retention-days: 14
+
+  # La réflexion du modèle sous Linux (29/09/2026) : la passerelle seule (node gateway/src),
+  # le moteur sans interface de LM Studio (llmster) posé par elle, et les mêmes flux gardés.
+  reflexion-linux:
+    name: Réflexion du modèle sous Linux
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Récupérer le code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Dépendances
+        run: npm ci
+
+      - name: Réflexion du modèle (moteur seul, relais et Chat de Helix)
+        env:
+          HELIX_ESSAI_MACHINE_JETABLE: "1"
+        run: node scripts/essai-reflexion-ci.mjs --modeles qwen3-1.7b,qwen/qwen3.5-2b --sortie essai-reflexion-sortie
+
+      - name: Garder les flux et les journaux
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: essai-reflexion-linux
+          path: essai-reflexion-sortie
           if-no-files-found: warn
           retention-days: 14

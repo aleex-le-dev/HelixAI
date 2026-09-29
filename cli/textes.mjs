@@ -98,6 +98,9 @@ Les actions qui demandent votre accord s'affichent ici et attendent votre répon
     "sans prétendre l'avoir fait, et indique que « helix chat --outils » (outils de l'instance) ou « helix code » " +
     "(agent de code sur le dossier courant) le permettent.",
   reponseVide: "(réponse vide)",
+  chatReflexion: (duree) => `Le modèle réfléchit (${duree})...`,
+  chatReflexionFaite: (duree) => `Réflexion : ${duree}`,
+  chatReflexionRequalifiee: "(ce qui précède était la réflexion du modèle ; sa réponse suit)",
 
   // Code
   codeSession: (dossier) => `${NOM} Code sur ${dossier}`,

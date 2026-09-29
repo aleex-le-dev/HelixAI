@@ -558,6 +558,25 @@ export function useChat(options: Options) {
                 patch(replyId, {
                   sources: { citations: event.sources ?? [], ignorees: event.ignorees, aReindexer: event.aReindexer, erreur: event.erreur },
                 });
+              } else if (event.type === "reflexion_requalifiee") {
+                /*
+                 * Réflexion écrite dans le texte sans balise ouvrante (29/09/2026,
+                 * gateway/src/reflexionEnLigne.ts) : le gabarit du modèle avait
+                 * ouvert `<think>`, et seul `</think>` a dit que ce qui venait
+                 * d'arriver comme réponse était sa réflexion. Déplacé, avec son
+                 * temps, compté depuis l'arrivée du premier morceau.
+                 */
+                const n = Math.max(0, Math.min(event.caracteres, content.length));
+                if (n > 0) {
+                  const deplace = content.slice(content.length - n);
+                  content = content.slice(0, content.length - n);
+                  reasoning = reasoning ? `${reasoning}\n\n${deplace}` : deplace;
+                  dernierMorceauReflexion = Date.now();
+                  durees.reflexionDepuis ??= dernierMorceauReflexion - Math.max(0, event.depuisMs ?? 0);
+                  // Ce n'était pas le premier mot de la réponse.
+                  if (!content.trim()) durees.premierMot = undefined;
+                  patch(replyId, { content, reasoning, durees: { ...durees } });
+                }
               } else if (event.type === "error") {
                 patch(replyId, { error: event.message });
               } else if (event.type === "statut") {

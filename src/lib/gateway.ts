@@ -114,6 +114,12 @@ export type HelixEvent =
   | { type: "capture"; largeur: number; hauteur: number }
   /* Ce que la passerelle fait avant la réponse (chargement d'un modèle…). Vide : c'est fini. */
   | { type: "statut"; message: string }
+  /*
+   * Les `caracteres` derniers du texte reçu étaient la réflexion du modèle, écrite sans balise
+   * ouvrante et reconnue à `</think>` (gateway/src/reflexionEnLigne.ts, 29/09/2026) ; `depuisMs` :
+   * depuis quand elle arrivait.
+   */
+  | { type: "reflexion_requalifiee"; caracteres: number; depuisMs?: number }
   /* Passages des bases de connaissances donnés au modèle, pour les citer sous la réponse. */
   | { type: "sources"; sources: Citation[]; ignorees?: number; aReindexer?: number; erreur?: string }
   /* Sources de la recherche sur le web, au fil des recherches et des pages lues (gateway/src/rechercheWeb.ts). */

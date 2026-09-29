@@ -8715,6 +8715,297 @@ console.log("\n39. Palmier Pro : application locale reconnue avant de lui parler
   verifier("logo de Palmier Pro : l'icône de son site, empreinte notée, relié à la fiche", /"palmier": \{/.test(src("scripts", "marques", "sources.json")) && /palmier: "palmier",/.test(src("src", "components", "settings", "marquesConnecteurs.ts")), "sources.json, marquesConnecteurs.ts");
 }
 
+/*
+ * 40. La réflexion du modèle, sous toutes ses formes, rendue de même à l'écran
+ * (29/09/2026). Signalé par Medhi : sous Windows, le Chat n'affichait ni la
+ * réflexion ni son temps, alors que le Mac les affiche. Le Chat ne connaissait
+ * que le canal séparé (`reasoning_content`) ; une réflexion laissée dans le
+ * texte, entre `<think>` et `</think>`, était retirée à l'affichage, sans
+ * rien à sa place (gateway/src/reflexionEnLigne.ts). Ici : le séparateur seul,
+ * sur chaque forme et chaque coupure possible entre deux morceaux ; les
+ * copies de la ligne de commande et de l'extension VS Code, qui doivent dire
+ * pareil ; puis une instance jetable devant un faux moteur qui envoie chaque
+ * forme lentement, lue comme l'écran la lit (useChat.ts), temps compris.
+ */
+console.log("\n40. Réflexion du modèle : canal séparé, `reasoning`, `<think>` dans le texte, coupé ou sans balise ouvrante, même écran (29/09/2026)");
+{
+  const { pathToFileURL: versUrlReflexion } = await import("node:url");
+  const { SeparateurReflexion, separerReflexion } = await import(versUrlReflexion(join(RACINE, "gateway", "src", "reflexionEnLigne.ts")).href);
+  const src = (...p) => readFileSync(join(RACINE, ...p), "utf8");
+  /** Ce que l'écran obtient d'une suite de morceaux de texte : réflexion déplacée si elle est requalifiée. */
+  const lire = (separateur, morceaux) => {
+    let texte = "";
+    let reflexion = "";
+    const prendre = (m) => {
+      if (m.requalifie) {
+        reflexion += texte.slice(texte.length - m.requalifie);
+        texte = texte.slice(0, texte.length - m.requalifie);
+      }
+      reflexion += m.reflexion;
+      texte += m.texte;
+    };
+    for (const m of morceaux) prendre(separateur.ajouter(m));
+    prendre(separateur.finir());
+    return { texte, reflexion };
+  };
+  const REFLEXION = "Je calcule 17 fois 23.";
+  const REPONSE = "Réponse : 391.";
+  const formes = {
+    "un bloc <think>…</think>": `<think>\n${REFLEXION}\n</think>\n\n${REPONSE}`,
+    "une balise fermante seule (gabarit qui a ouvert)": `${REFLEXION}\n</think>\n\n${REPONSE}`,
+    "des espaces avant <think>": `\n  <think>${REFLEXION}</think>${REPONSE}`,
+  };
+  const juste = (r) => r.reflexion.trim() === REFLEXION && r.texte === REPONSE;
+  for (const [nom, entier] of Object.entries(formes)) {
+    const rates = [];
+    // D'un bloc, caractère par caractère, et coupé en deux à chaque position (au milieu de chaque balise compris).
+    const decoupes = [[entier], entier.split(""), ...Array.from({ length: entier.length - 1 }, (_, k) => [entier.slice(0, k + 1), entier.slice(k + 1)])];
+    for (const d of decoupes) {
+      const r = lire(new SeparateurReflexion({ fermetureSeule: true }), d);
+      if (!juste(r)) rates.push(`${JSON.stringify(d.slice(0, 3))} → ${JSON.stringify(r)}`);
+    }
+    verifier(`séparateur, ${nom} : réflexion à part et réponse sans balise, quelle que soit la coupure (${decoupes.length} découpes)`, rates.length === 0, rates.slice(0, 2).join(" | "));
+  }
+  {
+    const sans = lire(new SeparateurReflexion({ fermetureSeule: true }), ["Réponse", " : 391", "."]);
+    const html = lire(new SeparateurReflexion({ fermetureSeule: true }), ["<b>gras</b> et <", "i>italique</i>"]);
+    verifier("séparateur, sans réflexion : le texte passe tel quel, balises HTML comprises, rien n'est pris pour de la réflexion", sans.texte === REPONSE && !sans.reflexion && html.texte === "<b>gras</b> et <i>italique</i>" && !html.reflexion, JSON.stringify([sans, html]));
+    // Morceau par morceau, rien n'est retenu au-delà d'un début possible de balise : la réponse s'affiche sans retard.
+    const s = new SeparateurReflexion({ fermetureSeule: true });
+    const premier = s.ajouter("Bonjour, ");
+    const second = s.ajouter("voici <");
+    verifier("séparateur, sans réflexion : aucune attente, sauf un « < » qui pourrait ouvrir une balise", premier.texte === "Bonjour, " && second.texte === "voici " && s.ajouter("br>").texte === "<br>", JSON.stringify([premier, second]));
+    const seule = lire(new SeparateurReflexion({ fermetureSeule: false }), [`${REFLEXION}</think>${REPONSE}`]);
+    verifier("séparateur : une balise fermante au milieu d'une réponse sans réflexion demandée (niveau « Aucun ») n'est pas requalifiée", seule.texte === `${REFLEXION}</think>${REPONSE}` && !seule.reflexion, JSON.stringify(seule));
+    const vide = lire(new SeparateurReflexion({ fermetureSeule: false }), ["<think>\n\n</think>\n\n", REPONSE]);
+    const ouverte = lire(new SeparateurReflexion({ fermetureSeule: true }), ["<think>Je calcule", " encore"]);
+    verifier("séparateur : réflexion vide (Qwen3 en « Aucun ») retirée ; réflexion jamais refermée (jetons épuisés) gardée comme réflexion, sans réponse inventée", vide.texte === REPONSE && !vide.reflexion && ouverte.reflexion === "Je calcule encore" && !ouverte.texte, JSON.stringify([vide, ouverte]));
+    const canal = new SeparateurReflexion({ fermetureSeule: true });
+    canal.canalSepare();
+    const apresCanal = lire(canal, ["\n\n", "</think>", "\n\n", REPONSE]);
+    verifier("séparateur : après une réflexion reçue par son canal, le texte est la réponse (une balise fermante égarée en tête est retirée)", apresCanal.texte === REPONSE && !apresCanal.reflexion, JSON.stringify(apresCanal));
+    const entier = separerReflexion(`<think>${REFLEXION}</think>${REPONSE}`);
+    verifier("séparateur : `separerReflexion` sur un texte entier", entier.texte === REPONSE && entier.reflexion === REFLEXION, JSON.stringify(entier));
+  }
+
+  // La ligne de commande et l'extension portent une copie du séparateur (fichiers autonomes) : même résultat, forme par forme et au hasard.
+  const copie = (fichier) => {
+    const code = /\nfunction separateurReflexion\(\) \{[\s\S]*?\n\}\n/.exec(src(...fichier))?.[0];
+    return code ? new Function(`${code}; return separateurReflexion;`)() : null;
+  };
+  const copies = { "ligne de commande": copie(["cli", "helix.mjs"]), "extension VS Code": copie(["extensions", "vscode", "extension.js"]) };
+  const bouts = ["<think>", "</think>", "\n", " ", "abc", "<", "</", "th", "ink>", REPONSE, "<b>"];
+  let graine = 29_09_2026;
+  const hasard = (n) => {
+    graine = (graine * 1103515245 + 12345) % 2 ** 31;
+    return graine % n;
+  };
+  for (const [nom, fabrique] of Object.entries(copies)) {
+    const ecarts = [];
+    if (!fabrique) ecarts.push("séparateur introuvable dans le fichier");
+    for (let k = 0; fabrique && k < 4000 && ecarts.length < 3; k++) {
+      let texte = "";
+      for (let i = 0, n = 1 + hasard(8); i < n; i++) texte += bouts[hasard(bouts.length)];
+      const morceaux = [];
+      for (let p = 0; p < texte.length; ) {
+        const l = 1 + hasard(5);
+        morceaux.push(texte.slice(p, p + l));
+        p += l;
+      }
+      const attendu = JSON.stringify(lire(new SeparateurReflexion({ fermetureSeule: true }), morceaux));
+      const obtenu = JSON.stringify(lire(fabrique(), morceaux));
+      if (attendu !== obtenu) ecarts.push(`${JSON.stringify(morceaux)} : ${obtenu} au lieu de ${attendu}`);
+    }
+    for (const entier of Object.values(formes)) if (fabrique && !juste(lire(fabrique(), entier.split("")))) ecarts.push(entier);
+    verifier(`${nom} : même séparation que la passerelle (formes du Chat et 4 000 flux tirés au hasard)`, ecarts.length === 0, ecarts.join(" | "));
+  }
+  {
+    const ext = src("extensions", "vscode", "extension.js");
+    const vue = src("extensions", "vscode", "media", "chat.js");
+    const cli = src("cli", "helix.mjs");
+    verifier(
+      "extension et ligne de commande : le texte passe par le séparateur, la réflexion par son canal le fait taire, la fin du flux rend ce qui était retenu, une réflexion requalifiée est retirée de la réponse",
+      /rendre\(separateur\.ajouter\(delta\.content\)\)/.test(ext) && /separateur\.canalSepare\(\)/.test(ext) && /return rendre\(separateur\.finir\(\)\)/.test(ext) && /type: "requalifier"/.test(ext) && /m\.type === "requalifier"/.test(vue) &&
+        /rendre\(separateur\.ajouter\(delta\.content\)\)/.test(cli) && /separateur\.canalSepare\(\)/.test(cli) && /rendre\(separateur\.finir\(\)\)/.test(cli) && /T\.chatReflexionRequalifiee/.test(cli),
+      "extension.js, chat.js, helix.mjs",
+    );
+    const chat = src("gateway", "src", "chat.ts");
+    const useChat = src("src", "hooks", "useChat.ts");
+    verifier(
+      "passerelle : le flux de l'écran passe par le séparateur (réflexion du canal d'abord), la requalification est dite par un évènement que l'écran applique, avec son temps",
+      /const separateur = new SeparateurReflexion\(\{ fermetureSeule: reflechit \}\)/.test(chat) && /separateur\.canalSepare\(\);\s*rendreReflexion\(delta\.reasoning_content\);/.test(chat) && /rendreSepare\(separateur\.finir\(\)\)/.test(chat) &&
+        /type: "reflexion_requalifiee", caracteres: n, depuisMs/.test(chat) && /event\.type === "reflexion_requalifiee"/.test(useChat) && /durees\.reflexionDepuis \?\?= dernierMorceauReflexion - Math\.max\(0, event\.depuisMs \?\? 0\)/.test(useChat),
+      "chat.ts, useChat.ts",
+    );
+  }
+
+  /*
+   * De bout en bout : une instance jetable devant un faux moteur local qui
+   * envoie chaque forme de réflexion en trois morceaux espacés de 150 ms, puis
+   * la réponse. Lu comme l'écran (src/lib/gateway.ts puis useChat.ts) : même
+   * réflexion, même réponse, et un temps de réflexion mesuré.
+   */
+  const REFLEXION_FLUX = ["Je calcule", " 17 fois", " 23."];
+  const FORMES_FLUX = {
+    canal: [...REFLEXION_FLUX.map((r) => ({ reasoning_content: r })), { content: REPONSE }],
+    reasoning: [...REFLEXION_FLUX.map((r) => ({ reasoning: r })), { content: REPONSE }],
+    bloc: [{ content: "<think>\n" }, ...REFLEXION_FLUX.map((r) => ({ content: r })), { content: "\n</think>\n\n" }, { content: REPONSE }],
+    coupe: [{ content: "<thi" }, { content: "nk>\nJe calcule" }, { content: " 17 fois" }, { content: " 23.\n</th" }, { content: "ink>\n\nRépo" }, { content: "nse : 391." }],
+    fermante: [...REFLEXION_FLUX.map((r) => ({ content: r })), { content: "\n</think>" }, { content: "\n\n" }, { content: REPONSE }],
+    sans: [{ content: "Réponse" }, { content: " : 391." }],
+  };
+  const { createServer: serveurReflexion } = await import("node:http");
+  const { writeFileSync: ecrireReflexion, mkdirSync: dossierReflexion } = await import("node:fs");
+  const moteur = serveurReflexion((req, res) => {
+    let corps = "";
+    req.on("data", (b) => (corps += b));
+    req.on("end", async () => {
+      if (req.url === "/v1/models") {
+        res.setHeader("Content-Type", "application/json");
+        return res.end(JSON.stringify({ object: "list", data: [{ id: "qwen3-essai-reflexion", object: "model" }] }));
+      }
+      const demande = JSON.parse(corps || "{}");
+      if (demande.stream === false) {
+        // Essai du modèle au premier chargement (santeModeles.ts), et tout appel sans flux : une phrase.
+        res.setHeader("Content-Type", "application/json");
+        return res.end(JSON.stringify({ id: "r", object: "chat.completion", choices: [{ index: 0, message: { role: "assistant", content: "Bonjour !" }, finish_reason: "stop" }] }));
+      }
+      const texte = JSON.stringify(demande.messages ?? []);
+      const forme = /forme-(\w+)/.exec(texte)?.[1] ?? "sans";
+      res.setHeader("Content-Type", "text/event-stream");
+      const morceau = (delta, fin = null) => res.write(`data: ${JSON.stringify({ id: "r", object: "chat.completion.chunk", created: 1, model: "qwen3-essai-reflexion", choices: [{ index: 0, delta, finish_reason: fin }] })}\n\n`);
+      morceau({ role: "assistant" });
+      for (const d of FORMES_FLUX[forme] ?? FORMES_FLUX.sans) {
+        morceau(d);
+        await attendre(150);
+      }
+      morceau({}, "stop");
+      res.end("data: [DONE]\n\n");
+    });
+  });
+  const portMoteur = await portLibre();
+  await new Promise((ok) => moteur.listen(portMoteur, "127.0.0.1", ok));
+  const banc = mkdtempSync(join(tmpdir(), "helix-securite-reflexion-"));
+  const donneesR = join(banc, "donnees");
+  dossierReflexion(donneesR, { recursive: true });
+  ecrireReflexion(join(banc, "profil.json"), JSON.stringify({ chiffrement: "fichier" }));
+  const portR = await portLibre();
+  const instance = spawn(process.execPath, [join(RACINE, "gateway", "src", "index.ts")], {
+    env: {
+      ...process.env,
+      HELIX_GATEWAY_PORT: String(portR),
+      HELIX_DATA_DIR: donneesR,
+      HELIX_CONFIG: join(banc, "profil.json"),
+      HELIX_LMSTUDIO_URL: `http://127.0.0.1:${portMoteur}/v1`,
+      HELIX_EXO_URL: "http://127.0.0.1:9/v1",
+      HELIX_CODE_DIR: join(banc, "projet"),
+      HELIX_WORKSPACE: join(banc, "espace"),
+      HELIX_GATEWAY_HOST: "",
+    },
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  let journalR = "";
+  instance.stdout.on("data", (b) => (journalR += b));
+  instance.stderr.on("data", (b) => (journalR += b));
+  const GR = `http://127.0.0.1:${portR}`;
+  for (let i = 0; i < 80; i++) {
+    try {
+      await fetch(`${GR}/health`);
+      break;
+    } catch {
+      await attendre(250);
+    }
+  }
+  try {
+    const jetonR = readFileSync(join(donneesR, "instance-token"), "utf8").trim();
+    const entetesR = { "Content-Type": "application/json", Authorization: `Bearer ${jetonR}`, "X-Helix-Langue": "fr" };
+    const compte = await (await fetch(`${GR}/helix/auth/create`, { method: "POST", headers: entetesR, body: JSON.stringify({ fullName: "Essai réflexion", email: "reflexion@example.test", password: "Essai-Reflexion-2026!" }) })).json().catch(() => ({}));
+    const seanceR = { ...entetesR, "X-Helix-Session": compte.session?.token ?? "" };
+    const liste = await (await fetch(`${GR}/helix/models`, { headers: seanceR })).json().catch(() => ({}));
+    const modele = (liste.models ?? []).find((m) => /qwen3-essai-reflexion/.test(m.id))?.id;
+    verifier("instance jetable : le faux moteur local est proposé au Chat", Boolean(modele), JSON.stringify(liste).slice(0, 300));
+    /** Une question comme l'écran la pose, lue comme l'écran la lit : texte, réflexion, requalification, et leurs heures d'arrivée. */
+    const poser = async (forme) => {
+      const r = await fetch(`${GR}/v1/chat/completions`, {
+        method: "POST",
+        headers: seanceR,
+        body: JSON.stringify({ model: modele, effort: "moyen", tools: false, stream: true, messages: [{ role: "user", content: `Combien font 17 fois 23 ? forme-${forme}` }] }),
+      });
+      const lecteur = r.body.getReader();
+      const decodeur = new TextDecoder();
+      let tampon = "";
+      let texte = "";
+      let reflexion = "";
+      let debutReflexion = 0;
+      let finReflexion = 0;
+      let brut = "";
+      for (;;) {
+        const { done, value } = await lecteur.read();
+        if (done) break;
+        const morceau = decodeur.decode(value, { stream: true });
+        brut += morceau;
+        tampon += morceau;
+        const evenements = tampon.split("\n\n");
+        tampon = evenements.pop() ?? "";
+        for (const e of evenements) {
+          const ligne = e.split("\n").find((l) => l.startsWith("data:"));
+          const donnee = ligne?.slice(5).trim();
+          if (!donnee || donnee === "[DONE]") continue;
+          const json = JSON.parse(donnee);
+          const maintenant = Date.now();
+          if (json.helix?.type === "reflexion_requalifiee") {
+            const n = Math.min(json.helix.caracteres, texte.length);
+            reflexion += texte.slice(texte.length - n);
+            texte = texte.slice(0, texte.length - n);
+            debutReflexion ||= maintenant - (json.helix.depuisMs ?? 0);
+            finReflexion = maintenant;
+          }
+          const delta = json.choices?.[0]?.delta;
+          if (typeof delta?.reasoning_content === "string") {
+            reflexion += delta.reasoning_content;
+            debutReflexion ||= maintenant;
+            finReflexion = maintenant;
+          }
+          if (typeof delta?.content === "string") texte += delta.content;
+        }
+      }
+      return { statut: r.status, texte, reflexion, duree: finReflexion - debutReflexion, brut };
+    };
+    for (const forme of ["canal", "reasoning", "bloc", "coupe", "fermante"]) {
+      const r = await poser(forme);
+      verifier(
+        `Chat de bout en bout, forme « ${forme} » : réflexion séparée, réponse sans balise, temps de réflexion mesuré`,
+        r.statut === 200 && r.reflexion.trim() === REFLEXION && r.texte.trim() === REPONSE && !/think>/.test(r.texte) && r.duree >= 250,
+        `${r.statut} ${JSON.stringify({ texte: r.texte, reflexion: r.reflexion, duree: r.duree })} ${r.brut.slice(-300)}`,
+      );
+    }
+    const sans = await poser("sans");
+    verifier("Chat de bout en bout, sans réflexion : la réponse seule, aucune réflexion inventée", sans.statut === 200 && sans.texte.trim() === REPONSE && !sans.reflexion, JSON.stringify({ texte: sans.texte, reflexion: sans.reflexion }));
+    // L'API compatible (OpenCode, clés) reste un relais octet pour octet : la réflexion dans le texte lui arrive telle que le moteur l'envoie.
+    const relais = await (await fetch(`${GR}/v1/chat/completions`, { method: "POST", headers: entetesR, body: JSON.stringify({ model: modele, stream: true, messages: [{ role: "user", content: "forme-bloc" }] }) })).text();
+    verifier("API compatible : le relais reste tel quel (les clients séparent eux-mêmes, comme la ligne de commande et l'extension)", /"content":"<think>\\n"/.test(relais) && !/reflexion_requalifiee/.test(relais), relais.slice(0, 300));
+  } finally {
+    instance.kill();
+    moteur.close();
+    await attendre(300);
+    rmSync(banc, { recursive: true, force: true });
+  }
+  if (echecs.some((e) => e.startsWith("Chat de bout en bout"))) console.log(journalR.split("\n").slice(-20).join("\n"));
+
+  // L'essai sur une vraie machine (GitHub Actions) : le flux brut gardé, au moteur seul et à travers Helix, sous Windows et sous Linux.
+  const flux = src(".github", "workflows", "essai-windows.yml");
+  const essaiR = src("scripts", "essai-reflexion-ci.mjs");
+  verifier(
+    "essai sur machine jetable : la branche d'essai déclenche le flux sans retirer main ; Windows (étape 6) et Linux (llmster) gardent les flux bruts de la réflexion",
+    /branches: \[main, essai-reflexion-windows\]/.test(flux) && /runs-on: ubuntu-latest/.test(flux) && /essai-reflexion-ci\.mjs --modeles/.test(flux) && /essaiReflexion\(\{ G, entetes, dire, verifier, sortie: SORTIE, modeles: MODELES_REFLEXION \}\)/.test(src("scripts", "essai-windows-ci.mjs")) &&
+      /reflexion-\$\{slug\}-\$\{endroit\}\.sse\.txt/.test(essaiR) && /\["lmstudio", `\$\{lmStudio\}\/chat\/completions`/.test(essaiR) && /tools: false, effort: "moyen"/.test(essaiR),
+    "essai-windows.yml, essai-reflexion-ci.mjs",
+  );
+  const { spawnSync: lancerReflexion } = await import("node:child_process");
+  const refusR = lancerReflexion(process.execPath, [join(RACINE, "scripts", "essai-reflexion-ci.mjs")], { encoding: "utf8", env: { PATH: process.env.PATH }, timeout: 30_000 });
+  verifier("l'essai de la réflexion refuse de tourner sans HELIX_ESSAI_MACHINE_JETABLE=1 (code 2, rien lancé ni écrit)", refusR.status === 2 && /jetable/.test(refusR.stdout) && essaiR.indexOf('HELIX_ESSAI_MACHINE_JETABLE !== "1"') < essaiR.indexOf("mkdirSync(SORTIE"), `${refusR.status} ${refusR.stdout}`);
+}
+
 console.log(`\n${reussis} vérification(s) réussie(s), ${echecs.length} échec(s).`);
 if (echecs.length) {
   console.log("Échecs :");

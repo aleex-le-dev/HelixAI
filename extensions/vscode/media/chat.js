@@ -7,6 +7,8 @@
   const envoyer = document.getElementById("envoyer");
   let enCours = null;
   let texteEnCours = "";
+  /** Début de la réflexion du modèle, pour dire depuis combien de temps il réfléchit. */
+  let reflexionDepuis = 0;
   /** « chat » : le Chat de l'instance ; « code » : Helix Code sur le dossier ouvert. */
   let mode = "chat";
   const ongletChat = document.getElementById("onglet-chat");
@@ -77,10 +79,16 @@
 
   window.addEventListener("message", ({ data: m }) => {
     if (m.type === "question") {
-      ajouter("personne", echapper(m.texte).replace(/\n/g, "<br>") + (m.fichier ? `<span class="piece">${echapper(m.fichier)}</span>` : ""));
+      // Mise en forme comme les réponses : le code d'une question (« Améliorer la sélection ») garde son indentation.
+      ajouter("personne", rendu(m.texte) + (m.fichier ? `<span class="piece">${echapper(m.fichier)}</span>` : ""));
       texteEnCours = "";
+      reflexionDepuis = 0;
       enCours = ajouter("helix attente", "…");
       occupe(true);
+    } else if (m.type === "reflexion" && enCours?.classList.contains("attente")) {
+      if (!reflexionDepuis) reflexionDepuis = Date.now();
+      const s = Math.round((Date.now() - reflexionDepuis) / 1000);
+      enCours.textContent = s < 2 ? "Le modèle réfléchit…" : `Le modèle réfléchit (${s} s)…`;
     } else if (m.type === "morceau" && enCours) {
       texteEnCours += m.texte;
       enCours.classList.remove("attente");
@@ -126,8 +134,9 @@
       fil.scrollTop = fil.scrollHeight;
     } else if (m.type === "fin" || m.type === "erreur") {
       if (m.type === "erreur" && enCours) {
+        // « … » ou « Le modèle réfléchit » : remplacé par l'erreur.
+        if (enCours.classList.contains("attente")) enCours.innerHTML = "";
         enCours.classList.remove("attente");
-        if (enCours.textContent === "…") enCours.innerHTML = "";
         const p = document.createElement("p");
         p.className = "erreur";
         p.innerHTML = echapper(m.texte) + (/connectez-vous/i.test(m.texte) ? ` <button type="button" class="connexion">Se connecter</button>` : "");

@@ -9,6 +9,12 @@
  * séance, un tour de Helix Code, déconnexion, adresse refusée. Rien ne touche
  * ~/.helix ni LM Studio. Ce que l'essai ne voit pas : l'affichage de la vue
  * dans un vrai VS Code.
+ *
+ *   npm run essai:vscode -- --modele
+ *
+ * Avec le modèle de LM Studio (http://127.0.0.1:1234) au lieu du faux : une
+ * vraie réponse au Chat, et Helix Code qui crée un fichier dans le projet,
+ * carte d'accord comprise. Compter quelques minutes.
  */
 import { spawn } from "node:child_process";
 import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -23,6 +29,7 @@ import { fileURLToPath } from "node:url";
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), "..");
 const libre = () => new Promise((ok) => { const s = net(); s.listen(0, "127.0.0.1", () => { const { port } = s.address(); s.close(() => ok(port)); }); });
 const attendre = (ms) => new Promise((r) => setTimeout(r, ms));
+const AVEC_MODELE = process.argv.includes("--modele");
 
 // Faux modèle : répond « Bonjour depuis le faux modèle. » en flux.
 const PORT_MODELE = await libre();
@@ -38,6 +45,8 @@ createServer((req, res) => {
     if (req.url.endsWith("/chat/completions")) {
       appelsModele.push(JSON.parse(corps || "{}"));
       res.setHeader("Content-Type", "text/event-stream");
+      // Deux morceaux de réflexion d'abord, comme Qwen3 (`reasoning_content`) : la vue doit le dire, sans les montrer.
+      for (const r of ["Je réfléchis", " encore."]) res.write(`data: ${JSON.stringify({ id: "x", object: "chat.completion.chunk", created: 1, model: "faux-modele", choices: [{ index: 0, delta: { reasoning_content: r }, finish_reason: null }] })}\n\n`);
       const morceaux = ["Bonjour ", "depuis le ", "faux modèle."];
       for (const m of morceaux) res.write(`data: ${JSON.stringify({ id: "x", object: "chat.completion.chunk", created: 1, model: "faux-modele", choices: [{ index: 0, delta: { role: "assistant", content: m }, finish_reason: null }] })}\n\n`);
       res.write(`data: ${JSON.stringify({ id: "x", object: "chat.completion.chunk", created: 1, model: "faux-modele", choices: [{ index: 0, delta: {}, finish_reason: "stop" }], usage: { prompt_tokens: 5, completion_tokens: 5, total_tokens: 10 } })}\n\n`);
@@ -58,7 +67,7 @@ const passerelle = spawn(process.execPath, [join(RACINE, "gateway", "src", "inde
     ...process.env,
     HELIX_GATEWAY_PORT: String(PORT), HELIX_DATA_DIR: DONNEES, HELIX_CODE_DIR: PROJET, HELIX_WORKSPACE: ESPACE,
     HELIX_LUME_DIR: join(BANC, "lume"), HELIX_EXO_URL: "http://127.0.0.1:9/v1",
-    HELIX_LMSTUDIO_URL: `http://127.0.0.1:${PORT_MODELE}/v1`, HELIX_CONFIG: join(BANC, "helix.config.json"), HELIX_GATEWAY_HOST: "",
+    ...(AVEC_MODELE ? {} : { HELIX_LMSTUDIO_URL: `http://127.0.0.1:${PORT_MODELE}/v1` }), HELIX_CONFIG: join(BANC, "helix.config.json"), HELIX_GATEWAY_HOST: "",
   },
   stdio: ["ignore", "pipe", "pipe"], detached: true,
 });
@@ -96,7 +105,11 @@ const vscode = {
     activeTextEditor: null,
     showInformationMessage: (m) => messages.info.push(m),
     showErrorMessage: (m) => messages.erreur.push(m),
-    showWarningMessage: (m) => messages.avert.push(m),
+    // Une carte d'accord de Helix Code : « Autoriser », comme la personne qui clique.
+    showWarningMessage: (m) => {
+      messages.avert.push(m);
+      return Promise.resolve(/^Helix Code veut/.test(m) ? "Autoriser" : undefined);
+    },
     showQuickPick: async (items) => items[0],
     showInputBox: async () => reponsesSaisie.shift(),
     registerWebviewViewProvider: (_id, f) => { fournisseur = f; return { dispose() {} }; },
@@ -132,14 +145,17 @@ console.log("2. Chat (jeton du poste, faux modèle)");
   await attendreFin(d);
   const suite = postes.slice(d);
   const texte = suite.filter((m) => m.type === "morceau").map((m) => m.texte).join("");
-  verifier("réponse reçue en flux, puis « fin »", texte === "Bonjour depuis le faux modèle." && suite.at(-1)?.type === "fin", JSON.stringify(suite).slice(0, 400) + " | " + journal.slice(-400));
+  if (AVEC_MODELE) console.log(`    réponse du modèle : ${JSON.stringify(texte.slice(0, 200))}`);
+  if (!AVEC_MODELE) verifier("réflexion du modèle signalée à la vue, jamais affichée comme réponse", suite.some((m) => m.type === "reflexion") && !texte.includes("réfléchis"), JSON.stringify(suite).slice(0, 300));
+  verifier("réponse reçue en flux, puis « fin »", (AVEC_MODELE ? texte.trim().length > 0 : texte === "Bonjour depuis le faux modèle.") && suite.at(-1)?.type === "fin", JSON.stringify(suite).slice(0, 400) + " | " + journal.slice(-400));
 }
 {
   const d = postes.length;
   surMessage({ type: "question", texte: "Et encore ?", joindre: false });
   await attendreFin(d);
   const dernier = appelsModele.at(-1);
-  verifier("le second tour envoie l'historique (4 messages dont la réponse)", (dernier?.messages ?? []).filter((m) => m.role !== "system").length >= 3, JSON.stringify(dernier?.messages ?? []).slice(0, 300));
+  if (AVEC_MODELE) verifier("second tour : réponse reçue", postes.slice(d).some((m) => m.type === "morceau") && postes.at(-1)?.type === "fin", JSON.stringify(postes.slice(d)).slice(0, 300));
+  else verifier("le second tour envoie l'historique (4 messages dont la réponse)", (dernier?.messages ?? []).filter((m) => m.role !== "system").length >= 3, JSON.stringify(dernier?.messages ?? []).slice(0, 300));
 }
 {
   vscode.window.activeTextEditor = { document: { getText: (sel) => (sel ? "" : "const a = 1;"), languageId: "javascript", uri: {} }, selection: { isEmpty: true } };
@@ -149,7 +165,10 @@ console.log("2. Chat (jeton du poste, faux modèle)");
   surMessage({ type: "question", texte: "Relis ce fichier", joindre: true });
   await attendreFin(d);
   const envoye = JSON.stringify(appelsModele.at(-1)?.messages ?? []);
-  verifier("fichier ouvert joint à la question", /exemple\.js/.test(envoye) && /const a = 1;/.test(envoye), envoye.slice(0, 300));
+  const lu = postes.slice(d).filter((m) => m.type === "morceau").map((m) => m.texte).join("");
+  if (AVEC_MODELE) console.log(`    sur le fichier joint : ${JSON.stringify(lu.slice(0, 200))}`);
+  if (AVEC_MODELE) verifier("fichier ouvert joint : le modèle en parle", /const|a\s*=\s*1|variable|constante/i.test(lu), lu.slice(0, 300));
+  else verifier("fichier ouvert joint à la question", /exemple\.js/.test(envoye) && /const a = 1;/.test(envoye), envoye.slice(0, 300));
   vscode.window.activeTextEditor = null;
 }
 
@@ -170,11 +189,17 @@ console.log("3. Connexion (compte, mot de passe, séance dans le coffre)");
 console.log("4. Code (Helix Code sur le dossier ouvert)");
 {
   const d = postes.length;
-  surMessage({ type: "code", texte: "Réponds juste bonjour, sans toucher aux fichiers." });
-  await attendreFin(d, 180_000);
+  surMessage({ type: "code", texte: AVEC_MODELE ? "Crée le fichier bonjour.txt contenant exactement le mot bonjour. Rien d'autre." : "Réponds juste bonjour, sans toucher aux fichiers." });
+  await attendreFin(d, AVEC_MODELE ? 600_000 : 180_000);
   const suite = postes.slice(d);
   const erreur = suite.find((m) => m.type === "erreur");
   verifier("un tour de Code se termine (texte rendu, « fin »)", !erreur && suite.at(-1)?.type === "fin" && suite.some((m) => m.type === "code"), JSON.stringify(suite).slice(0, 600));
+  if (AVEC_MODELE) {
+    const { existsSync } = await import("node:fs");
+    const f = join(PROJET, "bonjour.txt");
+    console.log(`    actions : ${JSON.stringify(suite.filter((m) => m.outil).map((m) => m.outil))} ; cartes : ${JSON.stringify(messages.avert)}`);
+    verifier("Helix Code a créé bonjour.txt dans le dossier ouvert", existsSync(f) && /bonjour/i.test(readFileSync(f, "utf8")), existsSync(f) ? readFileSync(f, "utf8") : "absent");
+  }
 }
 
 console.log("5. Déconnexion");

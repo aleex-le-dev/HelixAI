@@ -38,6 +38,17 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
+/*
+ * Le rendez-vous du faux Google Agenda, demain à 9 h : daté en dur du 29/09/2026,
+ * il était passé dès ce jour-là à 10 h, et l'agenda ne le comptait plus parmi les
+ * « prochains » (l'essai échouait, pas le code).
+ */
+const DEMAIN_9H = (() => {
+  const d = new Date(Date.now() + 86_400_000);
+  d.setHours(9, 0, 0, 0);
+  return d;
+})();
+
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), "..");
 
 let reussis = 0;
@@ -217,7 +228,7 @@ const faux = serveurHttp(async (req, res) => {
   }
   if (hote === "www.googleapis.com" && auth.startsWith("Bearer ACCES-agenda")) {
     if (p === "/calendar/v3/users/me/calendarList") return reponse(res, 200, { items: [{ id: "alice@exemple.test", summary: "Alice Essai", primary: true, accessRole: "owner" }] });
-    if (/^\/calendar\/v3\/calendars\/[^/]+\/events$/.test(p) && req.method === "GET") return reponse(res, 200, { items: [{ id: "evt1", summary: "Réunion essai", start: { dateTime: "2026-09-29T09:00:00+02:00" }, end: { dateTime: "2026-09-29T10:00:00+02:00" } }] });
+    if (/^\/calendar\/v3\/calendars\/[^/]+\/events$/.test(p) && req.method === "GET") return reponse(res, 200, { items: [{ id: "evt1", summary: "Réunion essai", start: { dateTime: DEMAIN_9H.toISOString() }, end: { dateTime: new Date(DEMAIN_9H.getTime() + 3_600_000).toISOString() } }] });
   }
   if (hote === "www.googleapis.com" && auth.startsWith("Bearer ACCES-youtube")) {
     if (p === "/youtube/v3/channels") return reponse(res, 200, { items: [{ id: "UCabcdefghijklmnopqrstuv", snippet: { title: "Chaîne essai", publishedAt: "2024-01-01T00:00:00Z" }, statistics: { subscriberCount: "12", viewCount: "340", videoCount: "2" }, contentDetails: { relatedPlaylists: { uploads: "UUabcdefghijklmnopqrstuv" } } }] });

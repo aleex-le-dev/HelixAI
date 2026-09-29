@@ -76,8 +76,9 @@ function reglages() {
  * @param {{role: string, content: string}[]} messages
  * @param {(texte: string) => void} surMorceau
  * @param {AbortSignal} signal
+ * @param {() => void} [surReflexion] le modèle réfléchit avant de répondre (`reasoning_content`)
  */
-async function demander(messages, surMorceau, signal) {
+async function demander(messages, surMorceau, signal, surReflexion) {
   const { adresse, jeton, modele } = reglages();
   if (!jeton) {
     throw new Error(
@@ -118,8 +119,14 @@ async function demander(messages, surMorceau, signal) {
       try {
         const evenement = JSON.parse(donnee);
         if (evenement.error) throw new Error(evenement.error.message || "Erreur du modèle.");
-        const morceau = evenement.choices?.[0]?.delta?.content;
-        if (morceau) surMorceau(morceau);
+        const delta = evenement.choices?.[0]?.delta;
+        /*
+         * La réflexion n'est pas montrée, mais elle est dite : Qwen3 réfléchit
+         * parfois plus de deux minutes avant d'écrire, et la vue n'affichait
+         * que « … » (vu dans VS Code le 29/09/2026).
+         */
+        if (delta?.reasoning_content || delta?.reasoning) surReflexion?.();
+        if (delta?.content) surMorceau(delta.content);
       } catch (err) {
         if (err instanceof Error && !(err instanceof SyntaxError)) throw err;
       }
@@ -468,11 +475,17 @@ class VueChat {
     this.vue?.webview.postMessage({ type: "question", texte, fichier: fichier?.nom });
     this.arret = new AbortController();
     let reponse = "";
+    let dernierSigne = 0;
     try {
       await demander(this.historique, (m) => {
         reponse += m;
         this.vue?.webview.postMessage({ type: "morceau", texte: m });
-      }, this.arret.signal);
+      }, this.arret.signal, () => {
+        // Une fois par seconde au plus : la page compte elle-même les secondes.
+        if (Date.now() - dernierSigne < 1000) return;
+        dernierSigne = Date.now();
+        this.vue?.webview.postMessage({ type: "reflexion" });
+      });
       this.historique.push({ role: "assistant", content: reponse });
       this.vue?.webview.postMessage({ type: "fin" });
     } catch (err) {

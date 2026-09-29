@@ -4168,11 +4168,24 @@ explicite. Pas essayé : la demande affichée pendant une vraie préparation d'a
 le panneau de suivi d'une session rouverte après rechargement repart vide (seule la suite
 s'y inscrit).
 
+**Fait le 29/09/2026 : extension VS Code 0.2.5 et CLI essayées de bout en bout.** CLI :
+`npm run essai:cli` 31/31, avec le modèle de LM Studio (`-- --modele`, qwen3-8b) 49/49.
+Extension : `npm run essai:vscode` (faux module `vscode`, vraie extension, instance
+jetable) 14/14, avec qwen3-8b 14/14 (Helix Code a créé un fichier après la carte
+d'accord). Puis dans un vrai VS Code (profil jetable, `--extensionDevelopmentPath`, un
+pilote qui lance les commandes) : « Améliorer la sélection » a trouvé le `i <=
+liste.length`, et « Insérer » a remplacé la sélection par le code corrigé. Trois défauts
+vus à l'écran et corrigés : pendant la réflexion de Qwen3 (plus de deux minutes), la vue
+n'affichait que « … » (elle dit maintenant « Le modèle réfléchit (N s)… ») ; la question
+perdait l'indentation de son code ; le bouton « Insérer » recouvrait la première ligne.
+**Pas essayé** : la connexion et l'onglet Code dans le vrai VS Code (le mot de passe se
+tape, ce que je ne fais pas dans un éditeur) ; ils le sont par `essai:vscode`.
+
 **Fait le 26/09/2026 : revue de sécurité du poste de travail, corrigée** (SECURITE.md
 § 24). Extension VS Code 0.2.4 (adresse et jeton de portée machine, https hors du poste,
 jeton du poste seulement pour le port de l'application `instance-port`, séance par
 adresse, pas de redirection suivie ; vérifié par un faux `vscode`, pas dans un vrai VS
-Code) ; CLI (texte venu de l'instance nettoyé des séquences de terminal, horloge
+Code : fait le 29/09/2026, voir ci-dessous) ; CLI (texte venu de l'instance nettoyé des séquences de terminal, horloge
 suspendue pendant un accord, destinataires affichés en dernier, `redirect: "error"`,
 jeton seulement pour le port de l'application) ; synchronisation (aucune poussée avant
 une relecture de la séance, modifications en attente notées dans

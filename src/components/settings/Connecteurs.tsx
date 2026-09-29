@@ -408,8 +408,9 @@ export function Connecteurs({ maison = [] }: { maison?: ServiceMaison[] } = {}) 
   };
 
   /** Une ligne de service maison : même dessin que les autres, panneau dessous. */
+  // `id` : une autre ligne peut mener à celle-ci et l'amener à l'écran (Page d'entreprise LinkedIn, 29/09/2026).
   const ligneMaison = (service: ServiceMaison) => (
-    <div key={service.id} className="rounded-xl border border-border">
+    <div key={service.id} id={`connecteur-${service.id}`} className="rounded-xl border border-border">
       <button
         type="button"
         onClick={service.onBasculer}

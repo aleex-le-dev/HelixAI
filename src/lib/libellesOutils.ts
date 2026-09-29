@@ -113,6 +113,7 @@ const LIBELLES_OUTILS: Record<string, string> = {
   linkedin__publications: t("Publications LinkedIn"),
   linkedin__statistiques: t("Statistiques LinkedIn"),
   linkedin__publier: t("Publication sur LinkedIn"),
+  linkedin__publier_page: t("Publication sur une page LinkedIn"),
   facebook__pages: t("Pages Facebook"),
   facebook__publications: t("Publications Facebook"),
   facebook__publier: t("Publication sur Facebook"),

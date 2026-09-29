@@ -254,6 +254,8 @@ export const ECRITURES_NATIVES = new Set([
   "sheets__ecrire",
   "sheets__ajouter_lignes",
   "linkedin__publier",
+  // Au nom d'une page d'entreprise, par la seconde application LinkedIn (29/09/2026).
+  "linkedin__publier_page",
   "facebook__publier",
   "instagram__publier",
   "tiktok__publier_video",
@@ -656,7 +658,9 @@ function resumeNatif(outil: string, args: Record<string, unknown>): string | nul
     case "linkedin__statistiques":
       return "consulter LinkedIn";
     case "linkedin__publier":
-      return `publier sur LinkedIn${page ? `, au nom de la page${page}` : ", au nom du profil connecté"}, le post${extrait(args.texte)} (une publication ne se reprend pas)`;
+      return `publier sur LinkedIn, au nom du profil connecté, le post${extrait(args.texte)} (une publication ne se reprend pas)`;
+    case "linkedin__publier_page":
+      return `publier sur LinkedIn, au nom de la page${page || " ?"}, le post${extrait(args.texte)} (une publication ne se reprend pas)`;
     case "facebook__pages":
     case "facebook__publications":
       return "consulter les pages Facebook";

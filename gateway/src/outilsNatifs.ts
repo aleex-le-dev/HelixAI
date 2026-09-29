@@ -12,10 +12,13 @@ import {
   aChoisi,
   appelerApi,
   charger,
+  CHEMIN_ACL_LINKEDIN,
   connecte,
+  entetesLinkedin,
   envoyer,
   ErreurNatif,
   idsDe,
+  lireAclLinkedin,
   messageUtilisateur,
   preuveMeta,
   secretApplication,
@@ -89,7 +92,18 @@ const PREFIXES: Record<string, IdNatif> = {
 /** Préfixes réservés : aucun connecteur ajouté ne peut les prendre (connecteurs.ts, `IDS_RESERVES`). */
 export const PREFIXES_NATIFS = [...Object.keys(PREFIXES).map((p) => p.slice(0, -2)), ...PREFIXES_COMMERCE];
 
+/*
+ * La Page d'entreprise LinkedIn (29/09/2026) : ses outils gardent leur nom
+ * (`linkedin__pages`, `linkedin__publications`, `linkedin__statistiques`) et
+ * le préfixe réservé `linkedin__`, mais passent par la seconde application,
+ * `linkedinPage` (oauthNatif.ts), avec ses jetons à elle. Par leur nom exact,
+ * avant les préfixes. `linkedin__publier_page` publie au nom d'une page ;
+ * `linkedin__publier` ne publie plus qu'au nom du profil.
+ */
+export const OUTILS_PAGE_LINKEDIN = new Set(["linkedin__pages", "linkedin__publications", "linkedin__statistiques", "linkedin__publier_page"]);
+
 export const serviceDe = (nom: string): IdNatif | commerce.IdCommerce | null => {
+  if (OUTILS_PAGE_LINKEDIN.has(nom)) return "linkedinPage";
   for (const [p, id] of Object.entries(PREFIXES)) if (nom.startsWith(p)) return id;
   return commerce.serviceCommerce(nom);
 };
@@ -172,23 +186,32 @@ export function toolsForModel(): Outil[] {
   }
   if (connecte("linkedin")) {
     outils.push(fn("linkedin__profil", "Donne le profil LinkedIn connecté (nom). LinkedIn ne permet pas de lire les publications d'un profil sans un accès qu'il n'accorde plus."));
-    const page = aChoisi("linkedin", "page");
-    if (page) {
-      outils.push(fn("linkedin__pages", "Liste les pages d'entreprise LinkedIn que le compte connecté administre, avec leur identifiant."));
-      outils.push(fn("linkedin__publications", "Liste les dernières publications d'une page d'entreprise LinkedIn.", { page: P.page, nombre: P.nombre }, ["page"]));
-      outils.push(fn("linkedin__statistiques", "Donne les statistiques de partage d'une page d'entreprise LinkedIn : impressions, clics, réactions, commentaires, partages, taux d'engagement.", { page: P.page }, ["page"]));
-    }
     if (aChoisi("linkedin", "ecriture")) {
       outils.push(
         fn(
           "linkedin__publier",
-          `Publie un post texte sur LinkedIn, ${page ? "au nom du profil connecté, ou d'une page d'entreprise qu'il administre" : "au nom du profil connecté"}. La personne voit le texte entier et doit l'accepter avant ; une publication ne se reprend pas. N'appelle cet outil qu'une fois par post.`,
+          "Publie un post texte sur LinkedIn, au nom du profil connecté. Pour une page d'entreprise, c'est linkedin__publier_page. La personne voit le texte entier et doit l'accepter avant ; une publication ne se reprend pas. N'appelle cet outil qu'une fois par post.",
           {
             texte: { type: "string", description: "Le texte du post, 3000 caractères au plus." },
-            visibilite: { type: "string", enum: ["PUBLIC", "CONNECTIONS"], description: "« PUBLIC » (par défaut) ou « CONNECTIONS » (relations seulement, profil uniquement)." },
-            ...(page ? { page: { ...P.page, description: "Pour publier au nom d'une page d'entreprise : son nom ou son identifiant. À omettre pour publier au nom du profil." } } : {}),
+            visibilite: { type: "string", enum: ["PUBLIC", "CONNECTIONS"], description: "« PUBLIC » (par défaut) ou « CONNECTIONS » (relations seulement)." },
           },
           ["texte"],
+        ),
+      );
+    }
+  }
+  // La Page d'entreprise, par sa propre application (29/09/2026) : rien de ceci tant qu'elle n'est pas branchée.
+  if (connecte("linkedinPage")) {
+    outils.push(fn("linkedin__pages", "Liste les pages d'entreprise LinkedIn que le compte connecté administre, avec leur identifiant."));
+    outils.push(fn("linkedin__publications", "Liste les dernières publications d'une page d'entreprise LinkedIn.", { page: P.page, nombre: P.nombre }, ["page"]));
+    outils.push(fn("linkedin__statistiques", "Donne les statistiques de partage d'une page d'entreprise LinkedIn, sur les douze derniers mois : impressions, clics, réactions, commentaires, partages, taux d'engagement.", { page: P.page }, ["page"]));
+    if (aChoisi("linkedinPage", "ecriture")) {
+      outils.push(
+        fn(
+          "linkedin__publier_page",
+          "Publie un post texte sur une page d'entreprise LinkedIn que le compte connecté administre, au nom de la page. La personne voit le texte entier et doit l'accepter avant ; une publication ne se reprend pas. N'appelle cet outil qu'une fois par post.",
+          { page: P.page, texte: { type: "string", description: "Le texte du post, 3000 caractères au plus." } },
+          ["page", "texte"],
         ),
       );
     }
@@ -367,6 +390,8 @@ async function executer(nom: string, args: Record<string, unknown>): Promise<Res
       return linkedinStatistiques(args);
     case "linkedin__publier":
       return linkedinPublier(args);
+    case "linkedin__publier_page":
+      return linkedinPublierPage(args);
     case "facebook__pages":
       return facebookPages();
     case "facebook__publications":
@@ -567,17 +592,12 @@ async function youtubeVideos(args: Record<string, unknown>): Promise<Resultat> {
 /* ------------------------------ LinkedIn --------------------------------- */
 
 /*
- * Version de l'API « Marketing » de LinkedIn, au format AAAAMM, exigée par
- * chaque appel à `/rest/…` ; LinkedIn en retire une par mois après un an
- * (la 202510 s'éteint le 15/10/2026). À relever à chaque version de Helix.
+ * La version de l'API « Marketing » (`VERSION_LINKEDIN`) et les en-têtes de
+ * `/rest/…` vivent dans oauthNatif.ts depuis le 29/09/2026 : la connexion de
+ * la Page d'entreprise s'en sert pour lire le compte.
  */
-const VERSION_LINKEDIN = "202609";
-const enTetesLinkedin = (acces: string, json = false) => ({
-  ...bearer(acces),
-  "LinkedIn-Version": VERSION_LINKEDIN,
-  "X-Restli-Protocol-Version": "2.0.0",
-  ...(json ? { "Content-Type": "application/json" } : {}),
-});
+// Par une fonction, pas un alias : ce module peut être évalué avant la fin de celui d'oauthNatif.ts (imports croisés).
+const enTetesLinkedin = (acces: string, json = false) => entetesLinkedin(acces, json);
 
 /**
  * Le texte d'un post au format « little » de LinkedIn : ses caractères
@@ -593,16 +613,20 @@ async function linkedinProfil(): Promise<Resultat> {
   return { ok: true, content: `Profil LinkedIn connecté : ${texte(r.json.name, 200) || "(sans nom)"}. LinkedIn n'ouvre la lecture des publications d'un profil qu'à des partenaires qu'il choisit : aucun outil ne peut les lire.` };
 }
 
+/*
+ * Les pages d'entreprise : par la seconde application, `linkedinPage`, et ses
+ * jetons (29/09/2026). Jusque-là, ces appels partaient avec le jeton du
+ * profil, qui ne pouvait pas porter les portées d'organisation (oauthNatif.ts,
+ * définition `linkedin`). La page est lue sous `organization` ou
+ * `organizationTarget` (`lireAclLinkedin`).
+ */
 async function pagesLinkedin(): Promise<{ id: string; nom: string }[]> {
-  const r = await appelerApi("linkedin", (a) => ({ methode: "GET", hote: "api.linkedin.com", chemin: "/rest/organizationAcls?q=roleAssignee&role=ADMINISTRATOR&state=APPROVED&count=20", entetes: enTetesLinkedin(a) }));
+  const r = await appelerApi("linkedinPage", (a) => ({ methode: "GET", hote: "api.linkedin.com", chemin: CHEMIN_ACL_LINKEDIN, entetes: enTetesLinkedin(a) }));
   if (r.statut !== 200) throw erreurApi("LinkedIn", r);
-  const ids = (Array.isArray(r.json.elements) ? (r.json.elements as { organization?: unknown }[]) : [])
-    .map((e) => /^urn:li:organization:(\d{1,20})$/.exec(texte(e.organization, 60))?.[1])
-    .filter((x): x is string => Boolean(x))
-    .slice(0, 10);
+  const ids = lireAclLinkedin(r.json).pages;
   const pages: { id: string; nom: string }[] = [];
   for (const id of ids) {
-    const o = await appelerApi("linkedin", (a) => ({ methode: "GET", hote: "api.linkedin.com", chemin: `/rest/organizations/${id}`, entetes: enTetesLinkedin(a) }));
+    const o = await appelerApi("linkedinPage", (a) => ({ methode: "GET", hote: "api.linkedin.com", chemin: `/rest/organizations/${id}`, entetes: enTetesLinkedin(a) }));
     pages.push({ id, nom: o.statut === 200 ? texte(o.json.localizedName, 200) || id : id });
   }
   return pages;
@@ -644,7 +668,7 @@ async function linkedinPages(): Promise<Resultat> {
 async function linkedinPublications(args: Record<string, unknown>): Promise<Resultat> {
   const page = await pageLinkedin(args.page);
   const n = borner(args.nombre, 10, 50);
-  const r = await appelerApi("linkedin", (a) => ({ methode: "GET", hote: "api.linkedin.com", chemin: `/rest/posts?author=${encodeURIComponent(`urn:li:organization:${page.id}`)}&q=author&count=${n}&sortBy=CREATED`, entetes: { ...enTetesLinkedin(a), "X-RestLi-Method": "FINDER" } }));
+  const r = await appelerApi("linkedinPage", (a) => ({ methode: "GET", hote: "api.linkedin.com", chemin: `/rest/posts?author=${encodeURIComponent(`urn:li:organization:${page.id}`)}&q=author&count=${n}&sortBy=CREATED`, entetes: { ...enTetesLinkedin(a), "X-RestLi-Method": "FINDER" } }));
   if (r.statut !== 200) throw erreurApi("LinkedIn", r);
   const lignes = (Array.isArray(r.json.elements) ? (r.json.elements as Record<string, unknown>[]) : []).map((p) => `- ${quand(p.publishedAt ?? p.createdAt)} (${texte(p.id, 80)}) : ${texte(p.commentary, 1500) || "(sans texte)"}`);
   return { ok: true, content: lignes.length ? assembler(`${lignes.length} publication(s) de la page « ${page.nom} » :`, lignes) : `Aucune publication pour la page « ${page.nom} ».` };
@@ -652,13 +676,14 @@ async function linkedinPublications(args: Record<string, unknown>): Promise<Resu
 
 async function linkedinStatistiques(args: Record<string, unknown>): Promise<Resultat> {
   const page = await pageLinkedin(args.page);
-  const r = await appelerApi("linkedin", (a) => ({ methode: "GET", hote: "api.linkedin.com", chemin: `/rest/organizationalEntityShareStatistics?q=organizationalEntity&organizationalEntity=${encodeURIComponent(`urn:li:organization:${page.id}`)}`, entetes: enTetesLinkedin(a) }));
+  const r = await appelerApi("linkedinPage", (a) => ({ methode: "GET", hote: "api.linkedin.com", chemin: `/rest/organizationalEntityShareStatistics?q=organizationalEntity&organizationalEntity=${encodeURIComponent(`urn:li:organization:${page.id}`)}`, entetes: enTetesLinkedin(a) }));
   if (r.statut !== 200) throw erreurApi("LinkedIn", r);
   const s = ((Array.isArray(r.json.elements) ? r.json.elements[0] : undefined) as { totalShareStatistics?: Record<string, unknown> } | undefined)?.totalShareStatistics ?? {};
   const engagement = typeof s.engagement === "number" ? `${(s.engagement * 100).toFixed(2)} %` : "?";
   return {
     ok: true,
-    content: `Statistiques de partage de la page « ${page.nom} » (depuis sa création) : ${nombre(s.impressionCount)} impressions (${nombre(s.uniqueImpressionsCount)} uniques), ${nombre(s.clickCount)} clics, ${nombre(s.likeCount)} réactions, ${nombre(s.commentCount)} commentaires, ${nombre(s.shareCount)} partages ; taux d'engagement ${engagement}.`,
+    // Douze mois glissants, pas « depuis sa création » : share-statistics, lu le 29/09/2026.
+    content: `Statistiques de partage de la page « ${page.nom} » (douze derniers mois) :${nombre(s.impressionCount)} impressions (${nombre(s.uniqueImpressionsCount)} uniques), ${nombre(s.clickCount)} clics, ${nombre(s.likeCount)} réactions, ${nombre(s.commentCount)} commentaires, ${nombre(s.shareCount)} partages ; taux d'engagement ${engagement}.`,
   };
 }
 
@@ -666,20 +691,30 @@ async function linkedinPublier(args: Record<string, unknown>): Promise<Resultat>
   const brut = typeof args.texte === "string" ? args.texte.trim() : "";
   if (!brut) return refus("Donne « texte », le texte du post.");
   if (brut.length > 3000) return refus("Texte trop long : LinkedIn accepte 3000 caractères au plus.");
-  let auteur: string;
-  let qui: string;
+  /*
+   * Au nom du profil seulement (29/09/2026). Un `page` donné quand même (un
+   * modèle qui a gardé l'ancienne forme de l'outil) n'est pas ignoré : le post
+   * partirait au nom de la personne alors que la carte parlait d'une page.
+   */
   if (args.page !== undefined && args.page !== "") {
-    if (!aChoisi("linkedin", "page")) return refus("Publier au nom d'une page demande l'accès « page d'entreprise », qui n'a pas été accordé.");
-    const page = await pageLinkedin(args.page);
-    auteur = `urn:li:organization:${page.id}`;
-    qui = `la page « ${page.nom} »`;
-  } else {
-    const membre = idsDe("linkedin").membre;
-    if (!membre || !/^[A-Za-z0-9_-]{1,100}$/.test(membre)) return refus("Le profil LinkedIn connecté n'a pas d'identifiant lisible : il faut le reconnecter.");
-    auteur = `urn:li:person:${membre}`;
-    qui = "le profil connecté";
+    return refus("linkedin__publier publie au nom du profil seulement. Pour une page d'entreprise, utilise linkedin__publier_page (il faut que la Page d'entreprise LinkedIn soit branchée dans Réglages, Connecteurs). Rien n'a été publié.");
   }
-  const visibilite = args.visibilite === "CONNECTIONS" && auteur.startsWith("urn:li:person:") ? "CONNECTIONS" : "PUBLIC";
+  const membre = idsDe("linkedin").membre;
+  if (!membre || !/^[A-Za-z0-9_-]{1,100}$/.test(membre)) return refus("Le profil LinkedIn connecté n'a pas d'identifiant lisible : il faut le reconnecter.");
+  const auteur = `urn:li:person:${membre}`;
+  return publierLinkedin("linkedin", auteur, "le profil connecté", brut, args.visibilite === "CONNECTIONS" ? "CONNECTIONS" : "PUBLIC");
+}
+
+/** Au nom d'une page que le compte de la seconde application administre, avec ses jetons à elle (29/09/2026). */
+async function linkedinPublierPage(args: Record<string, unknown>): Promise<Resultat> {
+  const brut = typeof args.texte === "string" ? args.texte.trim() : "";
+  if (!brut) return refus("Donne « texte », le texte du post.");
+  if (brut.length > 3000) return refus("Texte trop long : LinkedIn accepte 3000 caractères au plus.");
+  const page = await pageLinkedin(args.page);
+  return publierLinkedin("linkedinPage", `urn:li:organization:${page.id}`, `la page « ${page.nom} »`, brut, "PUBLIC");
+}
+
+async function publierLinkedin(service: "linkedin" | "linkedinPage", auteur: string, qui: string, brut: string, visibilite: "PUBLIC" | "CONNECTIONS"): Promise<Resultat> {
   const corps = {
     author: auteur,
     commentary: texteLinkedin(brut),
@@ -688,8 +723,8 @@ async function linkedinPublier(args: Record<string, unknown>): Promise<Resultat>
     lifecycleState: "PUBLISHED",
     isReshareDisabledByAuthor: false,
   };
-  return sousGarde("linkedin", `${auteur}|${brut}`, async () => {
-    const r = await appelerApi("linkedin", (a) => ({ methode: "POST", hote: "api.linkedin.com", chemin: "/rest/posts", entetes: enTetesLinkedin(a, true), corps: JSON.stringify(corps) }));
+  return sousGarde(service, `${auteur}|${brut}`, async () => {
+    const r = await appelerApi(service, (a) => ({ methode: "POST", hote: "api.linkedin.com", chemin: "/rest/posts", entetes: enTetesLinkedin(a, true), corps: JSON.stringify(corps) }));
     if (r.statut !== 201 && r.statut !== 200) throw erreurApi("LinkedIn", r);
     const idPost = texte(r.entetes["x-restli-id"], 100);
     return { ok: true, content: `Post publié sur LinkedIn par ${qui}${idPost ? ` (identifiant ${idPost}, https://www.linkedin.com/feed/update/${idPost}/)` : ""}. C'est fait : ne le republie pas.` };

@@ -79,13 +79,19 @@ import { DEFINITION_MICROSOFT, type ServiceMicrosoft } from "./natifs/microsoftB
  */
 
 // Brevo et Mailchimp (28/09/2026, natifs/projetsRegles.ts, SECURITE.md § 48).
-export type IdNatif = "sheets" | "slides" | "youtube" | "linkedin" | "facebook" | "instagram" | "tiktok" | "x" | "docs" | "forms" | "dropbox" | "brevo" | "mailchimp" | "microsoft";
-export const IDS_NATIFS: IdNatif[] = ["sheets", "slides", "youtube", "linkedin", "facebook", "instagram", "tiktok", "x", "docs", "forms", "dropbox", "brevo", "mailchimp", "microsoft"];
+// `linkedinPage` : la Page d'entreprise LinkedIn, par sa propre application (29/09/2026, définition plus bas).
+export type IdNatif = "sheets" | "slides" | "youtube" | "linkedin" | "linkedinPage" | "facebook" | "instagram" | "tiktok" | "x" | "docs" | "forms" | "dropbox" | "brevo" | "mailchimp" | "microsoft";
+export const IDS_NATIFS: IdNatif[] = ["sheets", "slides", "youtube", "linkedin", "linkedinPage", "facebook", "instagram", "tiktok", "x", "docs", "forms", "dropbox", "brevo", "mailchimp", "microsoft"];
 export const estIdNatif = (v: unknown): v is IdNatif => typeof v === "string" && (IDS_NATIFS as string[]).includes(v);
 
 /** Une option cochée à la connexion : des portées de plus, et dit si elles demandent une revue chez le fournisseur. */
 export interface Choix {
-  /** `envoi` : envoyer une campagne (Brevo, Mailchimp) ; Microsoft 365 : un choix par service (natifs/microsoftBase.ts). */
+  /**
+   * `envoi` : envoyer une campagne (Brevo, Mailchimp) ; Microsoft 365 : un choix par service (natifs/microsoftBase.ts).
+   * `page` : l'ancienne case « page d'entreprise » de LinkedIn, retirée le 29/09/2026. Aucune définition ne la
+   * propose plus ; elle reste dans le type parce qu'un compte branché avant peut encore la porter
+   * (`CompteEnregistre.choix`) : elle y est ignorée, et l'écran le dit.
+   */
   id: "ecriture" | "page" | "envoi" | ServiceMicrosoft;
   portees: string[];
   revue: boolean;
@@ -181,6 +187,28 @@ export const GOOGLE_COMMUN = {
 
 const VERSION_META = "v25.0";
 
+/*
+ * Version de l'API « Marketing » de LinkedIn, au format AAAAMM, exigée par
+ * chaque appel à `/rest/…` ; LinkedIn en retire une par mois après un an
+ * (la 202510 s'éteint le 15/10/2026). À relever à chaque version de Helix.
+ * Ici depuis le 29/09/2026 (elle était dans outilsNatifs.ts) : la connexion de
+ * la Page d'entreprise s'en sert déjà pour lire le compte (`identite`), et ce
+ * module ne peut pas importer outilsNatifs.ts, qui l'importe.
+ */
+export const VERSION_LINKEDIN = "202609";
+
+/*
+ * LinkedIn rend les portées accordées « URL-encoded, space-delimited »
+ * (https://learn.microsoft.com/en-us/linkedin/shared/authentication/authorization-code-flow,
+ * lu le 29/09/2026), et son exemple n'en montre qu'une : on ne sait pas si
+ * plusieurs arrivent séparées par une espace, une virgule ou « %20 ». Les
+ * trois sont acceptées ; rien d'autre n'est décodé.
+ */
+const RELECTURE_LINKEDIN: NonNullable<Definition["relecture"]> = {
+  accordees: (brut) => (typeof brut === "string" ? brut.replace(/%20|%2C/gi, " ").split(/[\s,]+/).filter(Boolean) : []),
+  normaliser: (p) => p,
+};
+
 export const DEFINITIONS: Record<IdNatif, Definition> = {
   /*
    * Google Sheets. `spreadsheets.readonly` pour lire ; écrire demande
@@ -232,23 +260,30 @@ export const DEFINITIONS: Record<IdNatif, Definition> = {
     documentation: ["https://developers.google.com/youtube/v3/guides/auth/installed-apps", "https://developers.google.com/youtube/v3/getting-started"],
   },
   /*
-   * LinkedIn (https://learn.microsoft.com/en-us/linkedin/shared/authentication/authorization-code-flow).
+   * LinkedIn, le profil (https://learn.microsoft.com/en-us/linkedin/shared/authentication/authorization-code-flow).
    * Sans revue : les produits « Sign In with LinkedIn using OpenID Connect »
    * (`openid`, `profile`) et « Share on LinkedIn » (`w_member_social`,
    * publier au nom de la personne). Lire ses propres publications demande
    * `r_member_social`, **fermé** par LinkedIn (« We're not accepting access
    * requests at this time ») : aucun outil ne lit donc les publications d'un
-   * profil. La page d'une entreprise (lire, statistiques, publier) passe par le
-   * produit « Community Management API », examiné par LinkedIn (palier de
-   * développement puis palier standard, avec une vidéo de démonstration), et à
-   * demander sur une application neuve qui n'a pas d'autre produit
-   * (https://learn.microsoft.com/en-us/linkedin/marketing/community-management/community-management-overview).
-   * Pas de PKCE sur ce parcours (il existe, mais LinkedIn doit l'ouvrir pour
-   * l'application). Jeton d'accès de 60 jours ; jeton d'actualisation réservé
-   * à certains partenaires. Limites : 150 requêtes par personne et par jour
-   * pour la publication, 100 000 pour l'application
+   * profil. Pas de PKCE sur ce parcours (il existe, mais LinkedIn doit l'ouvrir
+   * pour l'application). Jeton d'accès de 60 jours ; jeton d'actualisation
+   * réservé à certains partenaires. Limites : 150 requêtes par personne et par
+   * jour pour la publication, 100 000 pour l'application
    * (https://learn.microsoft.com/en-us/linkedin/consumer/integrations/self-serve/share-on-linkedin),
    * remises à zéro à minuit UTC.
+   *
+   * La page d'une entreprise n'est plus une case de ce service depuis le
+   * 29/09/2026 (décision de Medhi : « fais au mieux »). LinkedIn n'accorde le
+   * produit « Community Management API » qu'à une application qui n'a aucun
+   * autre produit (FAQ 4 de https://learn.microsoft.com/en-us/linkedin/marketing/community-management/community-management-overview,
+   * relue ce jour-là : « Only request Community Management API Development
+   * Tier access with new developer applications that don't have access to
+   * other API products ») : sur l'application du profil, la case ne pouvait
+   * jamais aboutir. La page a sa propre définition, `linkedinPage`,
+   * ci-dessous. Un compte branché avant avec la case « page » la garde dans
+   * `choix` : rien ne la lit plus, rien n'est réécrit, et l'écran invite à
+   * brancher la Page d'entreprise (ConnecteurNatif.tsx).
    */
   linkedin: {
     id: "linkedin",
@@ -257,11 +292,7 @@ export const DEFINITIONS: Record<IdNatif, Definition> = {
     consentement: "https://www.linkedin.com/oauth/v2/authorization",
     jetons: { hote: "www.linkedin.com", chemin: "/oauth/v2/accessToken", methode: "POST" },
     lecture: ["openid", "profile"],
-    choix: [
-      { id: "ecriture", portees: ["w_member_social"], revue: false },
-      // `r_organization_admin` plutôt que `rw_organization_admin` : lire la liste des pages et leurs statistiques, pas les administrer.
-      { id: "page", portees: ["r_organization_social", "w_organization_social", "r_organization_admin"], revue: true },
-    ],
+    choix: [{ id: "ecriture", portees: ["w_member_social"], revue: false }],
     implicites: [],
     separateur: " ",
     pkce: null,
@@ -270,11 +301,92 @@ export const DEFINITIONS: Record<IdNatif, Definition> = {
     cleClient: "client_id",
     formeIdentifiant: /^[A-Za-z0-9]{8,40}$/,
     extras: {},
+    relecture: RELECTURE_LINKEDIN,
     hotes: ["www.linkedin.com", "api.linkedin.com"],
     documentation: [
       "https://learn.microsoft.com/en-us/linkedin/shared/authentication/authorization-code-flow",
       "https://learn.microsoft.com/en-us/linkedin/consumer/integrations/self-serve/share-on-linkedin",
       "https://learn.microsoft.com/en-us/linkedin/shared/api-guide/concepts/rate-limits",
+    ],
+  },
+  /*
+   * LinkedIn, la Page d'entreprise, par une seconde application qui n'a que le
+   * produit « Community Management API » (29/09/2026). Lu ce jour-là :
+   *
+   *  - https://learn.microsoft.com/en-us/linkedin/marketing/increasing-access :
+   *    ce produit accorde `r_organization_social`, `w_organization_social`,
+   *    `rw_organization_admin` (et d'autres, dont `r_basicprofile` et
+   *    `w_member_social`, que l'on ne demande pas). **Pas `r_organization_admin`**,
+   *    que l'ancienne case demandait : la page ne le liste que pour les
+   *    produits Advertising API et Lead Sync API. On demande donc
+   *    `rw_organization_admin`, plus large (« Manage organizations pages and
+   *    retrieve reporting data »), parce que c'est la seule portée
+   *    d'administration de ce produit ; aucun outil ne modifie la page ;
+   *  - organizationAcls (https://learn.microsoft.com/en-us/linkedin/marketing/community-management/organizations/organization-access-control-by-role) :
+   *    les pages où la personne connectée a un rôle, par `q=roleAssignee`,
+   *    avec `rw_organization_admin` ou `r_organization_admin` ; chaque élément
+   *    porte `roleAssignee` (`urn:li:person:…`) et la page sous `organization`
+   *    ou, dans d'autres exemples de la même page, `organizationTarget` ;
+   *  - les publications d'une page (https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/posts-api) :
+   *    lire, `r_organization_social` ; publier, `w_organization_social`, pour
+   *    les rôles ADMINISTRATOR, DIRECT_SPONSORED_CONTENT_POSTER ou CONTENT_ADMIN ;
+   *  - les statistiques (https://learn.microsoft.com/en-us/linkedin/marketing/community-management/organizations/share-statistics) :
+   *    `rw_organization_admin`, rôle ADMINISTRATOR, douze mois glissants ;
+   *  - le nom d'une page administrée (https://learn.microsoft.com/en-us/linkedin/marketing/community-management/organizations/organization-lookup-api) :
+   *    `rw_organization_admin`, champ `localizedName`.
+   *
+   * Ni `openid` ni `profile` : ils viennent du produit « Sign In with LinkedIn
+   * using OpenID Connect », qu'il faudrait ajouter à l'application, et
+   * LinkedIn refuserait alors le produit des pages. Le compte est reconnu par
+   * les pages qu'il administre (organizationAcls), la personne par le
+   * `roleAssignee` de la réponse. Aucune des pages lues ne dit que `openid`
+   * serait exigé ou interdit sur une telle application : on ne le demande
+   * simplement pas (incertain tant qu'une vraie application ne l'a pas montré).
+   *
+   * Examen : le produit est « vetted » ; un premier palier (« Development
+   * tier ») de 500 appels par jour pour l'application et 100 par personne, à
+   * finir d'intégrer en douze mois, puis un palier standard, sans limite, sur
+   * vidéo de démonstration (https://learn.microsoft.com/en-us/linkedin/marketing/community-management-app-review).
+   * LinkedIn exige une organisation déclarée, une adresse professionnelle
+   * vérifiée, une application vérifiée par un super administrateur de la page,
+   * et aucun « LinkedIn » dans le nom ni le logo de l'application. Aucun délai
+   * d'examen n'est annoncé.
+   *
+   * Jetons : 60 jours ; jeton d'actualisation d'un an pour les partenaires
+   * approuvés (https://learn.microsoft.com/en-us/linkedin/shared/authentication/programmatic-refresh-tokens),
+   * gardé et servi s'il est rendu (champ `refresh_token_expires_in`). Pas de
+   * révocation documentée.
+   *
+   * ⚠ Pas essayé avec une vraie application LinkedIn (29/09/2026) : ni compte
+   * ni produit accordé. Vérifié contre un faux LinkedIn (scripts/essai-natifs.mjs,
+   * section K ; scripts/securite.mjs, section 37).
+   */
+  linkedinPage: {
+    id: "linkedinPage",
+    // Traduit à l'usage, pas au chargement du module : ce n'est pas qu'un nom de marque.
+    get nom() {
+      return t("LinkedIn (Page d'entreprise)");
+    },
+    google: false,
+    consentement: "https://www.linkedin.com/oauth/v2/authorization",
+    jetons: { hote: "www.linkedin.com", chemin: "/oauth/v2/accessToken", methode: "POST" },
+    lecture: ["r_organization_social", "rw_organization_admin"],
+    choix: [{ id: "ecriture", portees: ["w_organization_social"], revue: false }],
+    implicites: [],
+    separateur: " ",
+    pkce: null,
+    retour: "instance",
+    cheminBoucle: "",
+    cleClient: "client_id",
+    formeIdentifiant: /^[A-Za-z0-9]{8,40}$/,
+    extras: {},
+    relecture: RELECTURE_LINKEDIN,
+    hotes: ["www.linkedin.com", "api.linkedin.com"],
+    documentation: [
+      "https://learn.microsoft.com/en-us/linkedin/marketing/community-management/community-management-overview",
+      "https://learn.microsoft.com/en-us/linkedin/marketing/community-management-app-review",
+      "https://learn.microsoft.com/en-us/linkedin/marketing/increasing-access",
+      "https://learn.microsoft.com/en-us/linkedin/marketing/community-management/organizations/organization-access-control-by-role",
     ],
   },
   /*
@@ -767,10 +879,15 @@ for (const id of IDS_NATIFS) {
   });
 }
 
-/** Synchrone : une option (écriture, page d'entreprise) a-t-elle été accordée ? */
+/**
+ * Synchrone : une option (écriture, service Microsoft…) a-t-elle été accordée ?
+ * Seulement si la définition la propose encore : l'ancienne case « page » de
+ * LinkedIn, enregistrée dans un compte branché avant le 29/09/2026, ne vaut
+ * plus rien (la Page d'entreprise a sa propre connexion, `linkedinPage`).
+ */
 export function aChoisi(id: IdNatif, choix: Choix["id"]): boolean {
   const c = connecte(id) ? magasin!.comptes[id] : null;
-  return Boolean(c?.choix.includes(choix));
+  return Boolean(c?.choix.includes(choix)) && DEFINITIONS[id].choix.some((x) => x.id === choix);
 }
 
 export function idsDe(id: IdNatif): Record<string, string> {
@@ -882,6 +999,9 @@ function identification(id: IdNatif, client: { clientId: string; clientSecret: s
   return { entetes: {}, champs: { [def.cleClient]: client.clientId, ...(client.clientSecret ? { client_secret: client.clientSecret } : {}) } };
 }
 
+/** Durée de vie du jeton d'actualisation, en secondes, sous le nom de TikTok ou de LinkedIn ; 0 si absente. */
+const dureeActualisation = (json: Record<string, unknown>): number => Number(json.refresh_expires_in ?? json.refresh_token_expires_in) || 0;
+
 async function rafraichir(id: IdNatif, j: JetonsClairs): Promise<JetonsClairs | null> {
   const client = clientDe(id);
   if (!client.ok) return null;
@@ -911,7 +1031,8 @@ async function rafraichir(id: IdNatif, j: JetonsClairs): Promise<JetonsClairs | 
     expire: r.json.expires_in ? Date.now() + Number(r.json.expires_in) * 1000 : undefined,
     // Certains fournisseurs font tourner le jeton d'actualisation (TikTok le peut).
     actualisation: typeof r.json.refresh_token === "string" ? r.json.refresh_token : j.actualisation,
-    expireActualisation: r.json.refresh_expires_in ? Date.now() + Number(r.json.refresh_expires_in) * 1000 : j.expireActualisation,
+    // TikTok écrit `refresh_expires_in`, LinkedIn `refresh_token_expires_in` (programmatic-refresh-tokens, lu le 29/09/2026).
+    expireActualisation: dureeActualisation(r.json) ? Date.now() + dureeActualisation(r.json) * 1000 : j.expireActualisation,
   };
 }
 
@@ -1081,12 +1202,16 @@ export async function demarrer(brutId: unknown, qui: string, base: string, brutC
   const demandes = Array.isArray(brutChoix) ? brutChoix.filter((c): c is string => typeof c === "string") : [];
   const choix = def.choix.filter((c) => demandes.includes(c.id));
   if (def.choixRequis && !choix.some((c) => c.id !== "ecriture")) return { ok: false, message: tf("Cochez au moins un service de {0} à brancher.", def.nom) };
-  // La page d'une entreprise LinkedIn sans écriture : on lit, on ne publie pas.
-  // Sans doublon : chez Brevo, un brouillon et un envoi demandent la même portée.
+  /*
+   * Sans doublon : chez Brevo, un brouillon et un envoi demandent la même
+   * portée. L'ancienne case « page » de LinkedIn (retirée le 29/09/2026), si
+   * un écran resté ouvert l'envoie encore, n'est dans aucune définition : elle
+   * tombe au filtre ci-dessus, et rien n'est demandé pour elle.
+   */
   const portees = [
     ...new Set([
       ...def.lecture,
-      ...choix.flatMap((c) => (c.id === "page" && !demandes.includes("ecriture") ? c.portees.filter((p) => !p.startsWith("w_")) : c.portees)),
+      ...choix.flatMap((c) => c.portees),
       // Microsoft 365 : les portées d'écriture des services cochés, seulement si « ecriture » l'est aussi.
       ...(demandes.includes("ecriture") ? choix.flatMap((c) => c.ecriture ?? []) : []),
     ]),
@@ -1277,7 +1402,7 @@ async function echanger(f: Flux, code: string, qui: string): Promise<string> {
     acces: json.access_token,
     expire: json.expires_in ? Date.now() + Number(json.expires_in) * 1000 : undefined,
     ...(typeof json.refresh_token === "string" ? { actualisation: json.refresh_token } : {}),
-    ...(json.refresh_expires_in ? { expireActualisation: Date.now() + Number(json.refresh_expires_in) * 1000 } : {}),
+    ...(dureeActualisation(json) ? { expireActualisation: Date.now() + dureeActualisation(json) * 1000 } : {}),
   };
   const ids: Record<string, string> = {};
   if (typeof json.open_id === "string") ids.openId = json.open_id.slice(0, 100);
@@ -1389,6 +1514,63 @@ async function echanger(f: Flux, code: string, qui: string): Promise<string> {
 
 const texteCourt = (v: unknown, max = 200) => (typeof v === "string" ? v.replace(/[\u0000-\u001F\u007F-\u009F]/g, " ").trim().slice(0, max) : "");
 
+/** En-têtes des appels `/rest/…` de LinkedIn (organizationAcls, posts, statistiques). */
+export const entetesLinkedin = (acces: string, json = false): Record<string, string> => ({
+  Authorization: `Bearer ${acces}`,
+  "LinkedIn-Version": VERSION_LINKEDIN,
+  "X-Restli-Protocol-Version": "2.0.0",
+  ...(json ? { "Content-Type": "application/json" } : {}),
+});
+
+/** Les pages administrées que liste organizationAcls, dans l'ordre, dix au plus. */
+export const CHEMIN_ACL_LINKEDIN = "/rest/organizationAcls?q=roleAssignee&role=ADMINISTRATOR&state=APPROVED&count=20";
+
+/**
+ * Les identifiants de page d'une réponse d'organizationAcls, et la personne
+ * (`roleAssignee`). La page est sous `organization`, ou sous
+ * `organizationTarget` dans d'autres exemples de la même documentation
+ * (organization-access-control-by-role, lue le 29/09/2026) : les deux sont
+ * lus. Seules les formes `urn:li:organization:<chiffres>` et
+ * `urn:li:person:<identifiant>` sont gardées.
+ */
+export function lireAclLinkedin(json: Record<string, unknown>): { pages: string[]; membre?: string } {
+  const elements = Array.isArray(json.elements) ? (json.elements as { organization?: unknown; organizationTarget?: unknown; roleAssignee?: unknown }[]) : [];
+  const pages = [
+    ...new Set(
+      elements
+        .map((e) => /^urn:li:organization:(\d{1,20})$/.exec(texteCourt(e.organization ?? e.organizationTarget, 60))?.[1])
+        .filter((x): x is string => Boolean(x)),
+    ),
+  ].slice(0, 10);
+  const membre = elements.map((e) => /^urn:li:person:([A-Za-z0-9_-]{1,100})$/.exec(texteCourt(e.roleAssignee, 120))?.[1]).find(Boolean);
+  return { pages, ...(membre ? { membre } : {}) };
+}
+
+/**
+ * La Page d'entreprise LinkedIn (29/09/2026) : sans `profile`, le compte se
+ * lit par les pages qu'il administre. Aucune page administrée : la connexion
+ * ne servirait à rien, rien n'est gardé. Le nom affiché est celui de la
+ * première page (un appel de plus : le palier de développement de LinkedIn ne
+ * permet que 100 appels par personne et par jour).
+ */
+async function identitePageLinkedin(acces: string): Promise<{ compte: string; ids: Record<string, string> }> {
+  const nom = DEFINITIONS.linkedinPage.nom;
+  const r = await envoyer("linkedinPage", { methode: "GET", hote: "api.linkedin.com", chemin: CHEMIN_ACL_LINKEDIN, entetes: entetesLinkedin(acces) });
+  if (r.statut !== 200) {
+    throw new ErreurNatif(r.statut === 401 || r.statut === 403 ? "acces" : "api", tf("{0} n'a pas laissé lire le compte avec l'accès accordé (code {1}). Rien n'a été enregistré.", nom, r.statut));
+  }
+  const { pages, membre } = lireAclLinkedin(r.json);
+  if (pages.length === 0) {
+    throw new ErreurNatif("acces", t("Le compte LinkedIn connecté n'administre aucune page d'entreprise : rien n'a été enregistré. Connectez-vous avec un compte administrateur de la page."));
+  }
+  const o = await envoyer("linkedinPage", { methode: "GET", hote: "api.linkedin.com", chemin: `/rest/organizations/${pages[0]}`, entetes: entetesLinkedin(acces) }).catch(() => null);
+  const premiere = (o?.statut === 200 ? texteCourt(o.json.localizedName) : "") || pages[0]!;
+  return {
+    compte: pages.length > 1 ? tf("{0} et {1} autre(s) page(s)", premiere, pages.length - 1) : premiere,
+    ids: { ...(membre ? { membre } : {}), page: pages[0]! },
+  };
+}
+
 /** Lit le compte avec le jeton obtenu : c'est l'essai qui précède l'enregistrement. */
 async function identite(id: IdNatif, acces: string, client: { clientId: string; clientSecret: string }): Promise<{ compte: string; ids: Record<string, string> }> {
   const bearer = { Authorization: `Bearer ${acces}` };
@@ -1414,6 +1596,8 @@ async function identite(id: IdNatif, acces: string, client: { clientId: string; 
       if (r.statut !== 200 || typeof r.json.sub !== "string") throw echec(r);
       return { compte: texteCourt(r.json.name) || "LinkedIn", ids: { membre: r.json.sub.slice(0, 100) } };
     }
+    case "linkedinPage":
+      return identitePageLinkedin(acces);
     case "facebook": {
       const r = await envoyer(id, { methode: "GET", hote: "graph.facebook.com", chemin: `/${VERSION_META}/me?${formulaire({ fields: "id,name", access_token: acces, appsecret_proof: preuveMeta(acces, client.clientSecret) })}` });
       if (r.statut !== 200 || typeof r.json.id !== "string") throw echec(r);

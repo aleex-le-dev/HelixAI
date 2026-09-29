@@ -89,7 +89,12 @@ function Revue({ id }: { id: IdNatif }) {
     sheets: t("Aucun examen pour une application interne à votre Google Workspace. Écrire ouvre toutes les feuilles du compte : Google n'a pas d'accès plus étroit pour une application de bureau."),
     slides: t("Aucun examen pour une application interne à votre Google Workspace. Lecture seule."),
     youtube: t("Aucun examen pour une application interne à votre Google Workspace. Lecture seule : chaînes, vidéos, statistiques publiques. 10 000 unités de quota par jour, une lecture en coûte une."),
-    linkedin: t("Sans examen : se connecter et publier au nom de son profil. Impossible : lire les publications d'un profil (LinkedIn n'ouvre plus cet accès). Avec examen : la page d'une entreprise (lire, statistiques, publier) passe par le produit « Community Management API », que LinkedIn examine, à demander sur une application neuve qui n'a aucun autre produit. Limite : 150 publications par personne et par jour."),
+    linkedin: t("Sans examen : se connecter et publier au nom de son profil. Impossible : lire les publications d'un profil (LinkedIn n'ouvre plus cet accès). La page d'une entreprise ne passe pas par cette application : elle se branche à part, ligne « LinkedIn (Page d'entreprise) ». Limite : 150 publications par personne et par jour."),
+    /*
+     * La Page d'entreprise (29/09/2026) : https://learn.microsoft.com/en-us/linkedin/marketing/increasing-access
+     * et https://learn.microsoft.com/en-us/linkedin/marketing/community-management-app-review, lus ce jour-là.
+     */
+    linkedinPage: t("Tout passe par un examen : LinkedIn n'ouvre les pages d'entreprise qu'au produit « Community Management API », qu'il accorde après avoir vérifié l'organisation, et seulement à une application qui n'a aucun autre produit. Premier palier (« Development tier ») : 500 appels par jour pour l'application et 100 par personne, intégration à terminer en douze mois. Palier standard, sans ces limites : une seconde demande, avec une vidéo de l'application. LinkedIn n'annonce pas de délai d'examen. Le compte qui se connecte doit administrer la page."),
     facebook: t("Sans examen (« accès standard ») : seulement pour les personnes qui ont un rôle dans l'application. Pour d'autres personnes : examen de l'application par Meta et vérification de l'entreprise. L'accès dure 60 jours, puis il faut se reconnecter."),
     instagram: t("Sans examen : seulement pour les comptes qui ont un rôle dans l'application (testeur Instagram compris). Pour d'autres comptes : examen par Meta. Publier : une photo JPEG, à une adresse web publique, 100 publications par jour au plus. L'accès dure 60 jours et se renouvelle seul."),
     tiktok: t("Sans examen : le bac à sable, jusqu'à 10 comptes. Tant que l'application n'a pas passé l'audit de TikTok, tout ce qu'elle publie reste privé (visible de vous seul)."),
@@ -102,7 +107,6 @@ function Revue({ id }: { id: IdNatif }) {
 /** Traduit au rendu, pas au chargement du module : la langue n'est pas encore connue à ce moment-là. */
 function libelleChoix(id: IdNatif, c: IdChoix): string {
   if (estNatifProjet(id)) return libelleChoixProjet(c);
-  if (c === "page") return t("Page d'entreprise : lire ses publications et statistiques, et y publier si la case du dessus est cochée.");
   const documents = libelleChoixDocuments(id);
   if (documents) return documents;
   if (id === "sheets") return t("Permettre aussi d'écrire dans les feuilles (remplacer une plage, ajouter des lignes).");
@@ -110,10 +114,45 @@ function libelleChoix(id: IdNatif, c: IdChoix): string {
   if (id === "instagram") return t("Permettre de publier des photos.");
   if (id === "tiktok") return t("Permettre de publier des vidéos du dossier de travail.");
   if (id === "x") return t("Permettre de publier des posts : un texte, et une image du dossier de travail si vous le demandez.");
+  if (id === "linkedinPage") return t("Permettre de publier des posts au nom des pages que le compte administre.");
   return t("Permettre de publier des posts.");
 }
 
-export function ConnecteurNatif({ id, onChange }: { id: IdNatif; onChange?: () => void }) {
+/**
+ * La Page d'entreprise LinkedIn se branche à part (29/09/2026) : le panneau du
+ * profil le dit, et mène à l'autre ligne. `ancienne` : ce compte a été branché
+ * avec l'ancienne case « page », qui n'est plus lue (gateway/src/oauthNatif.ts).
+ */
+function VersPageLinkedin({ ancienne, onOuvrir }: { ancienne: boolean; onOuvrir?: (id: IdNatif) => void }) {
+  return (
+    <InfoBox tone={ancienne ? "warning" : "muted"} leading={ancienne ? <ShieldAlert size={15} strokeWidth={1.75} /> : undefined}>
+      <div className="space-y-2 [overflow-wrap:anywhere]">
+        <p>
+          {ancienne
+            ? t("La case « page d'entreprise » cochée à cette connexion ne sert plus : LinkedIn ne l'accorde pas à l'application du profil. Le profil n'y perd rien. Pour la page, branchez « LinkedIn (Page d'entreprise) », avec sa propre application.")
+            : t("Cette application sert au profil. La Page d'entreprise se branche à part, avec une seconde application : LinkedIn n'accorde pas les deux à la même.")}
+        </p>
+        {onOuvrir && (
+          <Button
+            size="sm"
+            variant="secondary"
+            className="!h-auto min-h-8 max-w-full py-1.5 text-left"
+            icon={Link2}
+            onClick={() => {
+              onOuvrir("linkedinPage");
+              // La ligne de la page est juste en dessous ; on l'amène à l'écran une fois ouverte.
+              window.setTimeout(() => document.getElementById("connecteur-linkedinPage")?.scrollIntoView({ block: "start", behavior: "smooth" }), 60);
+            }}
+          >
+            {t("Brancher la Page d'entreprise")}
+          </Button>
+        )}
+      </div>
+    </InfoBox>
+  );
+}
+
+export function ConnecteurNatif({ id, onChange, onOuvrir }: { id: IdNatif; onChange?: () => void; onOuvrir?: (id: IdNatif) => void }) {
   const [etats, setEtats] = useState<EtatNatifs | null | undefined>(undefined);
   const [client, setClient] = useState<EtatClientGoogle | null>(null);
   const [enCours, setEnCours] = useState(false);
@@ -220,7 +259,6 @@ export function ConnecteurNatif({ id, onChange }: { id: IdNatif; onChange?: () =
             <p className="truncate font-medium text-foreground">{etat.compte}</p>
             <p className="text-sm text-muted-foreground">
               {droitsProjet && droitsProjet.length > 0 ? tf("{0}, lecture et {1}", etat.nom, droitsProjet.join(", ")) : ecrit ? tf("{0}, lecture et publication", etat.nom) : tf("{0}, lecture seule", etat.nom)}
-              {etat.accordes?.includes("page") ? t(", page d'entreprise") : ""}
               {depuis && !Number.isNaN(depuis.getTime()) ? tf(", connecté le {0}", formaterDate(depuis)) : ""}
             </p>
             {expire && !Number.isNaN(expire.getTime()) && (
@@ -234,6 +272,7 @@ export function ConnecteurNatif({ id, onChange }: { id: IdNatif; onChange?: () =
             ? t("Vos agents peuvent lire, et proposer d'écrire ou de publier : chaque écriture et chaque publication vous est montrée en entier et n'a lieu qu'après votre accord, à chaque fois, quel que soit le niveau d'approbation. Seul l'administrateur de l'instance peut publier. L'accès est conservé chiffré sur l'instance et n'en ressort jamais.")
             : t("Lecture seule : vos agents peuvent lire, sans rien modifier ni publier. L'accès est conservé chiffré sur l'instance et n'en ressort jamais.")}
         </InfoBox>
+        {id === "linkedin" && <VersPageLinkedin ancienne={Boolean(etat.accordes?.includes("page"))} onOuvrir={onOuvrir} />}
         {messages}
         {admin && (
           <div className="flex justify-end">
@@ -279,6 +318,8 @@ export function ConnecteurNatif({ id, onChange }: { id: IdNatif; onChange?: () =
                  * empêche une application commune chez X, c'est la facture.
                  */
                 t("Avec l'application que votre organisation crée chez X, une fois. Le logiciel ne peut pas en fournir une commune : X facture chaque appel à l'application qui le fait, sur ses crédits.")
+              : id === "linkedinPage"
+                ? t("Avec une seconde application LinkedIn, que votre organisation crée pour sa Page d'entreprise, une fois. LinkedIn n'ouvre les pages qu'à une application qui ne sert qu'à cela, et l'examine avant.")
               : id === "dropbox"
                 ? t("Avec l'application que votre organisation crée chez Dropbox, une fois. Le logiciel ne peut pas en fournir une commune : Dropbox limite une application à 500 comptes, et l'examine avant d'en relier plus de 50.")
               : estNatifProjet(id)
@@ -291,6 +332,7 @@ export function ConnecteurNatif({ id, onChange }: { id: IdNatif; onChange?: () =
           {tf("{0} n'accepte plus l'accès enregistré (révoqué, expiré, ou application changée). Reconnectez-vous.", etat.nom)}
         </InfoBox>
       )}
+      {id === "linkedin" && <VersPageLinkedin ancienne={Boolean(etat.accordes?.includes("page"))} onOuvrir={onOuvrir} />}
       {etat.google ? (
         client?.disponible && serviceGoogle ? (
           /*

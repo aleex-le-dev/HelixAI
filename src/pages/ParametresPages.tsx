@@ -1031,7 +1031,9 @@ export function McpSettings() {
       ["forms", "Google Forms", t("Lire vos formulaires et leurs réponses"), "googleForms", CATEGORIE],
       ["dropbox", "Dropbox", t("Lister, chercher, lire, et envoyer un fichier après accord"), "dropbox", CATEGORIE],
       ["youtube", "YouTube", t("Vidéos et statistiques d'une chaîne"), "youtubeIcone", t("Réseaux sociaux")],
-      ["linkedin", "LinkedIn", t("Publier après accord, et lire une page d'entreprise"), "linkedin", t("Réseaux sociaux")],
+      ["linkedin", "LinkedIn", t("Profil : publier en son nom après accord"), "linkedin", t("Réseaux sociaux")],
+      // La Page d'entreprise, par sa propre application LinkedIn (29/09/2026) : même logo, ligne à part.
+      ["linkedinPage", t("LinkedIn (Page d'entreprise)"), t("Page : publications, statistiques, publier après accord"), "linkedin", t("Réseaux sociaux")],
       ["facebook", "Facebook", t("Pages : publications, réactions, publier après accord"), "facebook", t("Réseaux sociaux")],
       ["instagram", "Instagram", t("Compte professionnel : publications, statistiques, publier après accord"), "instagram", t("Réseaux sociaux")],
       ["tiktok", "TikTok", t("Vidéos, statistiques, publier après accord"), "tiktok", t("Réseaux sociaux")],
@@ -1049,7 +1051,8 @@ export function McpSettings() {
         connecte: Boolean(e?.configure),
         ouvert: ouvert === id,
         onBasculer: () => basculer(id),
-        panneau: <ConnecteurNatif id={id} onChange={relire} />,
+        // Le profil LinkedIn mène à la ligne de la Page d'entreprise (VersPageLinkedin, ConnecteurNatif.tsx).
+        panneau: <ConnecteurNatif id={id} onChange={relire} onOuvrir={(cible) => setOuvert(cible)} />,
       };
     }),
     // Messageries (28/09/2026, ConnecteurMessagerie.tsx), chacune avec son logo (troisième tournée des logos).

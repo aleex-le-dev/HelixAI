@@ -9,7 +9,8 @@ import { t, tf } from "@/lib/i18n";
  */
 
 // Brevo et Mailchimp : 28/09/2026 (gateway/src/natifs/projetsRegles.ts). `envoi` : envoyer une campagne.
-export type IdNatif = "sheets" | "slides" | "youtube" | "linkedin" | "facebook" | "instagram" | "tiktok" | "x" | "docs" | "forms" | "dropbox" | "brevo" | "mailchimp";
+// `linkedinPage` : la Page d'entreprise LinkedIn, par sa propre application (29/09/2026).
+export type IdNatif = "sheets" | "slides" | "youtube" | "linkedin" | "linkedinPage" | "facebook" | "instagram" | "tiktok" | "x" | "docs" | "forms" | "dropbox" | "brevo" | "mailchimp";
 /**
  * Microsoft 365 (28/09/2026) : une seule connexion pour Outlook, OneDrive,
  * SharePoint, Excel, Word et Teams, avec son propre panneau
@@ -18,6 +19,7 @@ export type IdNatif = "sheets" | "slides" | "youtube" | "linkedin" | "facebook" 
  */
 export type ServiceMicrosoft = "outlook" | "onedrive" | "sharepoint" | "excel" | "word" | "teams";
 export type IdNatifTous = IdNatif | "microsoft";
+/** `page` : l'ancienne case de LinkedIn (retirée le 29/09/2026), qu'un compte branché avant peut encore porter dans `accordes`. */
 export type IdChoix = "ecriture" | "page" | "envoi" | ServiceMicrosoft;
 
 export interface EtatNatif {

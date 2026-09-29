@@ -280,10 +280,16 @@ export function guideCourrierMicrosoft(retour: string, reprise: boolean): GuideA
  * (« Community Management API » : seulement sur une application qui n'a aucun autre produit).
  * La documentation demande https pour l'adresse de retour et ne dit rien de
  * http://localhost : l'écran le dit, et donne la voie en https.
+ *
+ * Depuis le 29/09/2026, cette application ne sert plus qu'au profil : la Page
+ * d'entreprise se branche avec une seconde application (`guideLinkedinPage`
+ * ci-dessous) ; l'introduction le dit, et le panneau mène à l'autre ligne
+ * (ConnecteurNatif.tsx, VersPageLinkedin).
  */
 function guideLinkedin(): GuideAppli {
   return {
     nom: "LinkedIn",
+    introduction: t("Cette application sert au profil LinkedIn : se connecter, et publier en son nom. La Page d'entreprise se branche à part, avec une seconde application (ligne « LinkedIn (Page d'entreprise) »)."),
     consoles: [{ libelle: t("la création d'application LinkedIn"), url: "https://www.linkedin.com/developers/apps/new" }],
     etapes: [
       { texte: t("« Create app » : un nom, la page LinkedIn de votre entreprise (LinkedIn l'exige ; créez-la d'abord s'il n'y en a pas), un logo, cochez l'accord, puis « Create app ».") },
@@ -292,7 +298,7 @@ function guideLinkedin(): GuideAppli {
       { texte: t("Même onglet, « Application credentials » : copiez le « Client ID » et le « Primary Client Secret », pour les champs ci-dessous.") },
     ],
     aEviter: [
-      t("N'ajoutez pas « Community Management API » à cette application : LinkedIn ne l'accorde qu'à une application qui n'a aucun autre produit."),
+      t("N'ajoutez pas « Community Management API » à cette application : LinkedIn ne l'accorde qu'à une application qui n'a aucun autre produit. La Page d'entreprise a sa propre application, sur sa propre ligne."),
       t("N'ajoutez ni « # » ni paramètre à l'adresse de retour : collez-la telle quelle."),
     ],
     erreurs: [
@@ -301,6 +307,63 @@ function guideLinkedin(): GuideAppli {
       { code: "user_cancelled_login · user_cancelled_authorize", texte: t("La connexion ou l'autorisation a été annulée dans la page de LinkedIn : recommencez.") },
     ],
     champs: { identifiant: t("« Client ID », onglet « Auth »."), secret: t("« Primary Client Secret », onglet « Auth ».") },
+  };
+}
+
+/** Les portées de la Page d'entreprise, telles que la passerelle les demande (gateway/src/oauthNatif.ts, `linkedinPage`). */
+export const PORTEES_PAGE_LINKEDIN = ["r_organization_social", "rw_organization_admin", "w_organization_social"];
+
+/**
+ * LinkedIn, la Page d'entreprise, par une seconde application (29/09/2026).
+ * Lu ce jour-là :
+ *  - https://learn.microsoft.com/en-us/linkedin/marketing/community-management/community-management-overview
+ *    (FAQ 4 : « Community Management API » seulement sur une application neuve,
+ *    sans autre produit ; paliers de développement et standard) ;
+ *  - https://learn.microsoft.com/en-us/linkedin/marketing/community-management-app-review
+ *    (organisation déclarée, adresse professionnelle vérifiée, application
+ *    vérifiée par un super administrateur de la page, ni nom ni logo de
+ *    LinkedIn ; une application refusée ne peut pas redemander : il en faut
+ *    une neuve ; vidéo pour le palier standard) ;
+ *  - https://learn.microsoft.com/en-us/linkedin/marketing/increasing-access
+ *    (portées du produit ; 500 appels par jour pour l'application et 100 par
+ *    personne au palier de développement) ;
+ *  - https://www.linkedin.com/help/linkedin/answer/a1665329 (onglet
+ *    « Settings », « Verify », « Generate URL », « Copy URL », lien valable
+ *    30 jours pour le super administrateur de la page).
+ * Aucun délai d'examen n'y est annoncé : le guide n'en promet aucun.
+ */
+function guideLinkedinPage(): GuideAppli {
+  return {
+    nom: "LinkedIn",
+    introduction: t("Une seconde application LinkedIn, distincte de celle du profil, ne sert qu'à la Page d'entreprise : lire ses publications et ses statistiques, et publier en son nom. LinkedIn n'ouvre les pages qu'à une application qui n'a aucun autre produit, et il examine la demande avant."),
+    consoles: [{ libelle: t("la création d'une nouvelle application LinkedIn"), url: "https://www.linkedin.com/developers/apps/new" }],
+    etapes: [
+      { texte: t("« Create app » : une application neuve, pas celle du profil. Un nom et un logo sans « LinkedIn » ni rien qui y ressemble (LinkedIn le refuse), la page LinkedIn de votre entreprise, cochez l'accord, puis « Create app ».") },
+      {
+        texte: t("Onglet « Settings », « Verify », puis « Generate URL » et « Copy URL » : envoyez ce lien à un super administrateur de la page de l'entreprise, qui l'ouvre et approuve. Le lien vaut 30 jours ; LinkedIn exige cette vérification avant d'examiner la demande."),
+        lien: { libelle: t("L'aide de LinkedIn sur cette vérification"), url: "https://www.linkedin.com/help/linkedin/answer/a1665329" },
+      },
+      { texte: t("Onglet « Products » : « Request access » sur « Community Management API », et sur rien d'autre. Le formulaire demande une adresse e-mail professionnelle (LinkedIn la vérifie ; une adresse personnelle est refusée), la raison sociale, l'adresse, le site et la politique de confidentialité de l'entreprise.") },
+      { texte: t("LinkedIn examine la demande. S'il l'accepte, l'application reçoit le premier palier (« Development tier ») : 500 appels par jour pour l'application et 100 par personne, de quoi essayer. Le palier standard, sans ces limites, se demande ensuite dans le même onglet, avec une vidéo de l'application. LinkedIn n'annonce pas de délai.") },
+      { texte: t("Onglet « Auth », « OAuth 2.0 settings », « Authorized redirect URLs for your app » : le crayon, « Add redirect URL », collez l'adresse ci-dessous, puis « Update »."), retour: true },
+      {
+        texte: t("Même onglet, « OAuth 2.0 scopes » : une fois l'accès accordé, ces portées doivent y figurer. C'est tout ce que la connexion demandera ; w_organization_social seulement si vous cochez la publication."),
+        portees: PORTEES_PAGE_LINKEDIN,
+      },
+      { texte: t("Même onglet, « Application credentials » : copiez le « Client ID » et le « Primary Client Secret », pour les champs ci-dessous. Le compte qui se connecte ensuite doit administrer la page.") },
+    ],
+    aEviter: [
+      t("N'ajoutez aucun autre produit à cette application, ni « Sign In with LinkedIn using OpenID Connect » ni « Share on LinkedIn » : LinkedIn n'accorde « Community Management API » qu'à une application qui n'en a aucun autre."),
+      t("Ne réutilisez pas l'application du profil : créez-en une neuve. Si LinkedIn refuse la demande, il faut aussi une application neuve pour la refaire."),
+      t("Ne mettez « LinkedIn », ni un morceau de son nom ou de son logo, dans le nom ou le logo de l'application."),
+      t("N'ajoutez ni « # » ni paramètre à l'adresse de retour : collez-la telle quelle."),
+    ],
+    erreurs: [
+      { code: "unauthorized_scope_error · Invalid scope", texte: t("LinkedIn n'a pas encore accordé « Community Management API » à cette application (examen en cours ou refusé), ou une portée manque dans l'onglet « Auth ». Vérifiez l'onglet « Products ».") },
+      { code: "The redirect_uri does not match the registered value", texte: t("L'adresse de retour n'est pas déclarée à l'identique dans l'onglet « Auth » de cette seconde application. Si LinkedIn refuse une adresse en http, ouvrez l'instance par son adresse en https.") },
+      { code: "user_cancelled_login · user_cancelled_authorize", texte: t("La connexion ou l'autorisation a été annulée dans la page de LinkedIn : recommencez.") },
+    ],
+    champs: { identifiant: t("« Client ID » de la seconde application, onglet « Auth »."), secret: t("« Primary Client Secret » de la seconde application, onglet « Auth ».") },
   };
 }
 
@@ -921,6 +984,8 @@ function guideWhatsapp(): GuideAppli {
 /** Les services dont la connexion part avec une adresse de retour à déclarer chez le fournisseur. */
 export const GUIDES_AVEC_RETOUR = [
   "linkedin",
+  // La Page d'entreprise LinkedIn, sa propre application (29/09/2026).
+  "linkedinPage",
   "facebook",
   "instagram",
   "tiktok",
@@ -950,6 +1015,7 @@ export interface ContexteGuide {
 
 const GUIDES: Record<IdGuide, (c: ContexteGuide) => GuideAppli> = {
   linkedin: guideLinkedin,
+  linkedinPage: guideLinkedinPage,
   facebook: guideFacebook,
   instagram: guideInstagram,
   tiktok: guideTiktok,

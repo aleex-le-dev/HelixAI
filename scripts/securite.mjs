@@ -6475,7 +6475,7 @@ console.log("\n15 bis. Connecteurs réseaux sociaux et Google");
   const { pathToFileURL: versUrl } = await import("node:url");
   const { modifie, demandeToujours, resumerOutil } = await import(versUrl(join(RACINE, "gateway", "src", "approbation.ts")).href);
   const lectures = ["sheets__lire", "slides__lire", "youtube__chaine", "youtube__videos", "linkedin__profil", "linkedin__pages", "linkedin__publications", "linkedin__statistiques", "facebook__pages", "facebook__publications", "instagram__compte", "instagram__publications", "instagram__statistiques", "tiktok__profil", "tiktok__videos"];
-  const ecritures = ["sheets__ecrire", "sheets__ajouter_lignes", "linkedin__publier", "facebook__publier", "instagram__publier", "tiktok__publier_video"];
+  const ecritures = ["sheets__ecrire", "sheets__ajouter_lignes", "linkedin__publier", "linkedin__publier_page", "facebook__publier", "instagram__publier", "tiktok__publier_video"];
   verifier("réseaux et Google : lire ne demande rien au niveau « Demander avant de modifier »", lectures.every((o) => !modifie(o) && !demandeToujours(o)), lectures.filter((o) => modifie(o)).join(", "));
   verifier("réseaux et Google : écrire une feuille et publier demandent une carte à chaque fois, à tout niveau", ecritures.every((o) => modifie(o) && demandeToujours(o)), ecritures.filter((o) => !demandeToujours(o)).join(", "));
   verifier("réseaux et Google : un outil inconnu de ces préfixes est traité comme une modification", ["linkedin__supprimer", "facebook__inconnu", "tiktok__publier_photo"].every((o) => modifie(o)), "laissez-passer");
@@ -6505,7 +6505,7 @@ console.log("\n15 bis. Connecteurs réseaux sociaux et Google");
     const ko = /^\s+✗ (.*?)(?:  —  obtenu : .*)?$/.exec(ligne);
     if (ok) verifier(`natifs : ${ok[1]}`, true, "");
     else if (ko) verifier(`natifs : ${ko[1]}`, false, ligne.split("  —  obtenu : ")[1] ?? "");
-    else if (/^[A-H]\. /.test(ligne)) console.log(`  ${ligne}`);
+    else if (/^[A-K]\. /.test(ligne)) console.log(`  ${ligne}`);
   }
   verifier("natifs : l'essai contre les faux fournisseurs s'est déroulé jusqu'au bout", essai.status === 0 || lignes.some((l) => /vérification\(s\) réussie\(s\)/.test(l)), `${essai.status} ${lignes.slice(-6).join(" ")}`);
 }
@@ -6896,7 +6896,8 @@ console.log("\n16 septies. Connecteurs existants revérifiés : parcours complet
    */
   const outilsSrc = readFileSync(join(RACINE, "gateway", "src", "outilsNatifs.ts"), "utf8");
   const natifSrc = readFileSync(join(RACINE, "gateway", "src", "oauthNatif.ts"), "utf8");
-  const vLinkedin = /VERSION_LINKEDIN = "(\d{6})"/.exec(outilsSrc)?.[1] ?? "";
+  // Dans oauthNatif.ts depuis le 29/09/2026 (la Page d'entreprise s'en sert pour lire le compte) ; outilsNatifs.ts l'importe.
+  const vLinkedin = /VERSION_LINKEDIN = "(\d{6})"/.exec(natifSrc)?.[1] ?? /VERSION_LINKEDIN = "(\d{6})"/.exec(outilsSrc)?.[1] ?? "";
   const moisLinkedin = vLinkedin ? (new Date().getFullYear() - Number(vLinkedin.slice(0, 4))) * 12 + (new Date().getMonth() + 1 - Number(vLinkedin.slice(4))) : 99;
   verifier(`LinkedIn : la version d'API épinglée (${vLinkedin}) a moins de onze mois (LinkedIn retire chaque version après un an)`, moisLinkedin >= 0 && moisLinkedin <= 10, `${vLinkedin} (${moisLinkedin} mois)`);
   const vMeta = /VERSION_META = "(v\d+\.\d)"/.exec(natifSrc)?.[1] ?? "";
@@ -7217,7 +7218,7 @@ process.exit(0);`;
     const ko = /^\s+✗ (.*?)(?:  —  obtenu : .*)?$/.exec(ligne);
     if (ok) verifier(`projets : ${ok[1]}`, true, "");
     else if (ko) verifier(`projets : ${ko[1]}`, false, ligne.split("  —  obtenu : ")[1] ?? "");
-    else if (/^[A-H]\. /.test(ligne)) console.log(`  ${ligne}`);
+    else if (/^[A-K]\. /.test(ligne)) console.log(`  ${ligne}`);
   }
   verifier("projets : l'essai contre les faux services s'est déroulé jusqu'au bout", essai.status === 0 && lignes.some((l) => /vérification\(s\) réussie\(s\)/.test(l)), `${essai.status} ${lignes.slice(-6).join(" ")}`);
 }
@@ -8274,7 +8275,8 @@ console.log("\n36. Connecteurs à application : lien de console, adresse de reto
   const { pathToFileURL: versUrl } = await import("node:url");
   const src = (...p) => readFileSync(join(RACINE, ...p), "utf8");
   const guides = src("src", "lib", "guidesApplications.ts");
-  const liste = (nom) => (guides.match(new RegExp(`export const ${nom} = \\[([\\s\\S]*?)\\] as const`))?.[1] ?? "").match(/"([a-z-]+)"/g)?.map((x) => x.slice(1, -1)) ?? [];
+  // Majuscules admises : `linkedinPage` (29/09/2026).
+  const liste = (nom) => (guides.match(new RegExp(`export const ${nom} = \\[([\\s\\S]*?)\\] as const`))?.[1] ?? "").match(/"([A-Za-z-]+)"/g)?.map((x) => x.slice(1, -1)) ?? [];
   const avecRetour = liste("GUIDES_AVEC_RETOUR");
   const sansRetour = liste("GUIDES_SANS_RETOUR");
   // Le corps de la fonction de chaque guide, retrouvée par la table GUIDES.
@@ -8304,7 +8306,7 @@ console.log("\n36. Connecteurs à application : lien de console, adresse de reto
     .slice(1)
     .filter((b) => /\n    oauth: "appli"/.test(b.split("\n  },")[0]))
     .map((b) => b.slice(0, b.indexOf('"')));
-  const natifs = ["linkedin", "facebook", "instagram", "tiktok", "x", "dropbox", "brevo", "mailchimp"];
+  const natifs = ["linkedin", "linkedinPage", "facebook", "instagram", "tiktok", "x", "dropbox", "brevo", "mailchimp"];
   const commerceOauth = ["salesforce", "pipedrive", "zendesk"];
   const oublies = [...mcpAppli, ...natifs, ...commerceOauth].filter((id) => !avecRetour.includes(id));
   verifier(
@@ -8420,6 +8422,73 @@ console.log("\n36. Connecteurs à application : lien de console, adresse de reto
   verifier("aide intégrée : « Brancher Gmail pas à pas » et « Créer l'application d'un service, pas à pas »", /id: "gmail",\s*titre: t\("Brancher Gmail pas à pas"\)/.test(aide) && /id: "applications",\s*titre: t\("Créer l'application d'un service, pas à pas"\)/.test(aide), "aide.ts");
   // Aucun nom de produit en dur dans les guides (branding.name).
   verifier("guides : aucun nom de produit en dur dans un texte affiché", !/t\("[^"]*Helix[^"]*"\)/.test(guides) && !/--name "Helix"/.test(guides), "guidesApplications.ts");
+}
+
+/*
+ * 37. La Page d'entreprise LinkedIn, par une seconde application (29/09/2026,
+ * décision de Medhi : « fais au mieux »). LinkedIn n'accorde « Community
+ * Management API » qu'à une application qui n'a aucun autre produit
+ * (https://learn.microsoft.com/en-us/linkedin/marketing/community-management/community-management-overview,
+ * FAQ 4) : la case « page » du profil ne pouvait jamais aboutir. De bout en
+ * bout contre un faux LinkedIn dans essai-natifs.mjs (sections C, K et F,
+ * reprises en 15 bis sous « natifs : ») ; ici, les pièces seules.
+ */
+console.log("\n37. Page d'entreprise LinkedIn : seconde application, portées séparées, outils de page, guide (29/09/2026)");
+{
+  const { pathToFileURL: versUrl } = await import("node:url");
+  const src = (...p) => readFileSync(join(RACINE, ...p), "utf8");
+  const natif = await import(versUrl(join(RACINE, "gateway", "src", "oauthNatif.ts")).href);
+  const outils = await import(versUrl(join(RACINE, "gateway", "src", "outilsNatifs.ts")).href);
+  const { demandeToujours, modifie } = await import(versUrl(join(RACINE, "gateway", "src", "approbation.ts")).href);
+  const toutes = (def) => [...def.lecture, ...def.choix.flatMap((c) => [...c.portees, ...(c.ecriture ?? [])])];
+  const page = natif.DEFINITIONS.linkedinPage;
+  const profil = natif.DEFINITIONS.linkedin;
+  const dePage = toutes(page);
+  const duProfil = toutes(profil);
+  // Les portées du produit « Sign In with LinkedIn using OpenID Connect », de « Share on LinkedIn » et du profil de base.
+  const portProfil = ["openid", "profile", "email", "w_member_social", "r_basicprofile", "r_liteprofile", "r_member_social"];
+  verifier(
+    "application de la Page : aucune portée de profil (ni openid, ni profile, ni w_member_social), seulement r_organization_social, rw_organization_admin et w_organization_social",
+    natif.IDS_NATIFS.includes("linkedinPage") && dePage.length === 3 && !dePage.some((p) => portProfil.includes(p)) && ["r_organization_social", "rw_organization_admin", "w_organization_social"].every((p) => dePage.includes(p)),
+    dePage.join(" "),
+  );
+  verifier("application du profil : aucune portée d'organisation, et plus de case « page »", !duProfil.some((p) => /organization/.test(p)) && JSON.stringify(profil.choix.map((c) => c.id)) === '["ecriture"]' && !natif.IDS_NATIFS.some((id) => natif.DEFINITIONS[id].choix.some((c) => c.id === "page")), `${duProfil.join(" ")} | ${profil.choix.map((c) => c.id)}`);
+  verifier(
+    "les deux applications sont séparées : chacune son identifiant, son secret et ses jetons (même forme de stockage chiffré), la même route publique de retour",
+    page.id === "linkedinPage" && profil.id === "linkedin" && page.retour === "instance" && profil.retour === "instance" && natif.adresseDeRetour("linkedinPage", "https://helix.exemple.fr") === "https://helix.exemple.fr/helix/oauth/retour" && /placeSecret = \(id: IdNatif\) => `connecteursNatifs#\$\{id\}#secret`/.test(src("gateway", "src", "oauthNatif.ts")) && /placeJetons = \(id: IdNatif\) => `connecteursNatifs#\$\{id\}#jetons`/.test(src("gateway", "src", "oauthNatif.ts")),
+    `${page.id} ${page.retour}`,
+  );
+  verifier("nom de la Page traduit à l'usage (pas figé au chargement du module)", /get nom\(\) \{\s*return t\("LinkedIn \(Page d'entreprise\)"\);/.test(src("gateway", "src", "oauthNatif.ts")) && typeof page.nom === "string" && page.nom.length > 0, page.nom);
+  verifier("une ancienne case « page » enregistrée n'est plus lue : aChoisi exige que la définition propose encore le choix", /return Boolean\(c\?\.choix\.includes\(choix\)\) && DEFINITIONS\[id\]\.choix\.some\(\(x\) => x\.id === choix\);/.test(src("gateway", "src", "oauthNatif.ts")) && natif.aChoisi("linkedin", "page") === false, "aChoisi");
+
+  // Les outils de page : même nom, aiguillés vers la seconde application ; absents tant qu'elle n'est pas branchée.
+  const nomsPage = ["linkedin__pages", "linkedin__publications", "linkedin__statistiques", "linkedin__publier_page"];
+  verifier("outils de page aiguillés vers la seconde application (linkedinPage), ceux du profil vers la première", nomsPage.every((n) => outils.serviceDe(n) === "linkedinPage") && outils.serviceDe("linkedin__profil") === "linkedin" && outils.serviceDe("linkedin__publier") === "linkedin", nomsPage.map((n) => outils.serviceDe(n)).join(","));
+  await natif.charger();
+  const proposes = outils.toolsForModel().map((o) => o.function.name);
+  const refusPage = await outils.callTool("linkedin__pages", {}, { userId: "personne", groupes: [] });
+  const sourceOutils = src("gateway", "src", "outilsNatifs.ts");
+  verifier(
+    "outils de page absents tant que la Page n'est pas branchée, et refusés si on les appelle quand même ; dans le code, proposés sous connecte(\"linkedinPage\") seulement",
+    !proposes.some((n) => nomsPage.includes(n)) && refusPage.ok === false && /n'est pas disponible/.test(refusPage.content) && /if \(connecte\("linkedinPage"\)\) \{\s*outils\.push\(fn\("linkedin__pages"/.test(sourceOutils) && !/aChoisi\("linkedin", "page"\)/.test(sourceOutils),
+    `${proposes.filter((n) => n.startsWith("linkedin")).join(",")} | ${refusPage.content.slice(0, 80)}`,
+  );
+  verifier("pages, publications, statistiques et publication de page partent avec les jetons de linkedinPage ; plus aucun appel d'organisation avec ceux du profil", (sourceOutils.match(/appelerApi\("linkedinPage"/g) ?? []).length >= 4 && /appelerApi\(service, /.test(sourceOutils) && !/appelerApi\("linkedin", \(a\) => \(\{ methode: "GET", hote: "api\.linkedin\.com", chemin: `?\/rest\/organization/.test(sourceOutils), "outilsNatifs.ts");
+  verifier("publier au nom d'une page : une carte à chaque fois, à tout niveau ; lire une page : libre", modifie("linkedin__publier_page") && demandeToujours("linkedin__publier_page") && ["linkedin__pages", "linkedin__publications", "linkedin__statistiques"].every((n) => !modifie(n)), "approbation.ts");
+  verifier("la version d'API LinkedIn n'est écrite qu'une fois (oauthNatif.ts), outilsNatifs.ts l'importe", /export const VERSION_LINKEDIN = "\d{6}"/.test(src("gateway", "src", "oauthNatif.ts")) && !/VERSION_LINKEDIN = "/.test(sourceOutils), "VERSION_LINKEDIN");
+
+  // Le guide pas à pas de la seconde application, et celui du profil qui y renvoie.
+  const guides = src("src", "lib", "guidesApplications.ts");
+  const corps = guides.slice(guides.indexOf("function guideLinkedinPage("), guides.indexOf("function guideLinkedinPage(") + 6000);
+  const portGuide = JSON.parse((/export const PORTEES_PAGE_LINKEDIN = (\[[^\]]*\]);/.exec(guides)?.[1] ?? "[]"));
+  verifier(
+    "guide de la Page présent : bouton vers https://www.linkedin.com/developers/apps/new, adresse de retour copiable, portées copiables identiques à celles que la passerelle demande",
+    /linkedinPage: guideLinkedinPage,/.test(guides) && /url: "https:\/\/www\.linkedin\.com\/developers\/apps\/new"/.test(corps) && /retour: true/.test(corps) && /portees: PORTEES_PAGE_LINKEDIN/.test(corps) && JSON.stringify([...portGuide].sort()) === JSON.stringify([...dePage].sort()),
+    `${portGuide.join(" ")} | ${dePage.join(" ")}`,
+  );
+  verifier("guide de la Page : « À ne pas faire » dit de n'ajouter aucun autre produit et de créer une application neuve ; l'examen est dit sans promettre de délai", /N'ajoutez aucun autre produit à cette application/.test(corps) && /créez-en une neuve/.test(corps) && /Development tier/.test(corps) && /n'annonce pas de délai/.test(corps) && !/\b\d+\s*(jours|semaines) d'examen/.test(corps), "guidesApplications.ts");
+  verifier("guide du profil : il dit que la Page d'entreprise se branche à part ; le panneau du profil mène à la ligne de la Page", /La Page d'entreprise se branche à part, avec une seconde application/.test(guides) && /onOuvrir\("linkedinPage"\)/.test(src("src", "components", "settings", "ConnecteurNatif.tsx")) && /\["linkedinPage", t\("LinkedIn \(Page d'entreprise\)"\)/.test(src("src", "pages", "ParametresPages.tsx")) && /"linkedinPage"/.test(src("src", "lib", "natifs.ts")), "ConnecteurNatif.tsx, ParametresPages.tsx");
+  verifier("aide intégrée : la Page d'entreprise LinkedIn se branche avec une seconde application", /LinkedIn, à l'inverse, en veut deux/.test(src("src", "lib", "aide.ts")), "aide.ts");
 }
 
 console.log(`\n${reussis} vérification(s) réussie(s), ${echecs.length} échec(s).`);

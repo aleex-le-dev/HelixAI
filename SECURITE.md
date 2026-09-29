@@ -4379,7 +4379,7 @@ professionnel) et TikTok, branchés par l'API de chaque service, sans intermédi
 
 - **Aucune commande, aucune adresse venue de la requête.** Les sept services, leurs portées
   et leurs hôtes sont écrits dans `DEFINITIONS` ; la requête n'apporte qu'un identifiant de
-  service de cette liste, des cases cochées (`ecriture`, `page`) et, pour LinkedIn, Meta et
+  service de cette liste, des cases cochées (`ecriture` ; `page`, retirée le 29/09/2026, § 62) et, pour LinkedIn, Meta et
   TikTok, l'identifiant et le secret de l'application. `envoyer` refuse tout hôte hors de la
   liste du service, avant toute connexion. Les sept préfixes d'outils sont réservés : aucun
   connecteur MCP ne peut les prendre (`IDS_RESERVES`, connecteurs.ts), sinon il hériterait du
@@ -4438,7 +4438,7 @@ renouvelé par un jeton d'un an.
 Aucun vrai compte, aucune vraie application de développeur : les faux serveurs imitent la
 documentation, pas les services. En particulier : l'adresse de retour http sur 127.0.0.1
 chez LinkedIn et Meta (leur documentation demande https) ; les statistiques de page LinkedIn
-avec `r_organization_admin` ; les métriques Instagram (`views`, `reach`…) sur un vrai compte ;
+avec `r_organization_admin` (tranché le 29/09/2026 : le produit des pages ne l'accorde pas, § 62) ; les métriques Instagram (`views`, `reach`…) sur un vrai compte ;
 l'envoi réel d'une vidéo à TikTok ; la révocation chez LinkedIn et Instagram n'est pas
 documentée pour ces parcours (l'écran dit de retirer l'accès dans les réglages du compte).
 Les phrases des cartes restent en français dans les autres langues (même dette que § 35.4).
@@ -6303,3 +6303,48 @@ installation.
 
 Un PC Windows de particulier (antivirus tiers, carte NVIDIA, compte sans droits d'administration),
 l'installateur NSIS, l'écran lui-même, la fermeture par l'icône de la zone de notification.
+
+## 62. Page d'entreprise LinkedIn : une seconde application (29 septembre 2026)
+
+LinkedIn n'accorde le produit « Community Management API » qu'à une application neuve qui n'a
+aucun autre produit (FAQ 4 de
+https://learn.microsoft.com/en-us/linkedin/marketing/community-management/community-management-overview,
+relue le 29/09/2026). La case « page » du connecteur LinkedIn (§ 40), posée sur l'application du
+profil, ne pouvait jamais aboutir. Elle est retirée ; la page a sa connexion à elle,
+`linkedinPage` (`gateway/src/oauthNatif.ts`), et PROJET.md § 3.5 dit le détail. Contrôles :
+`npm run securite`, section 37, et `scripts/essai-natifs.mjs`, sections C, K et F (reprises en
+15 bis).
+
+### 62.1 Ce qui change dans la surface
+
+- **Un fournisseur de plus**, dans la même liste fermée (`IDS_NATIFS`) : son identifiant et son
+  secret d'application, ses jetons, chiffrés et liés à leur place comme les autres
+  (`connecteursNatifs#linkedinPage#secret`, `…#jetons`), jamais rendus à l'écran ni au journal.
+  Mêmes hôtes que LinkedIn (`www.linkedin.com`, `api.linkedin.com`), même route publique de
+  retour, même `state` à usage unique, même relecture des portées (un accès qui déborde, par
+  exemple `openid profile` en plus, est refusé et rien n'est gardé).
+- **Portées séparées** : la page ne demande que `r_organization_social`, `rw_organization_admin`
+  et, cochée, `w_organization_social` ; le profil, que `openid`, `profile` et `w_member_social`.
+  `rw_organization_admin` est plus large que l'ancien `r_organization_admin` (il permet de gérer
+  la page), mais c'est la seule portée d'administration que ce produit accorde
+  (https://learn.microsoft.com/en-us/linkedin/marketing/increasing-access) ; aucun outil ne
+  modifie la page, et les appels sont bornés à ceux écrits dans `outilsNatifs.ts`.
+- **Outils** : `linkedin__pages`, `linkedin__publications`, `linkedin__statistiques` (lectures) et
+  `linkedin__publier_page` (écriture : carte d'accord à chaque fois, à tout niveau, administrateur
+  seul, dix par heure, doublon refusé) partent avec les jetons de la seconde application
+  (aiguillage par nom exact, `OUTILS_PAGE_LINKEDIN`), et n'existent pas tant qu'elle n'est pas
+  branchée. `linkedin__publier` ne publie plus qu'au nom du profil et refuse un `page` plutôt que
+  de l'ignorer (le post serait parti au nom de la personne alors que la carte parlait d'une page).
+  La page visée est prise parmi celles qu'`organizationAcls` rend pour le compte connecté, jamais
+  d'une adresse venue du modèle.
+- **Données existantes** : un compte branché avant avec la case « page » n'est pas réécrit ;
+  `aChoisi` ne compte plus un choix que la définition ne propose pas, et l'écran le dit.
+
+### 62.2 Pas essayé, ou incertain
+
+Aucune vraie application n'a le produit : tout est vérifié contre un faux LinkedIn qui refuse
+les appels de page faits avec le jeton du profil. Incertain : la forme réelle du champ `scope`
+rendu (espace, virgule ou `%20`, les trois sont acceptés) ; si un rôle autre qu'ADMINISTRATOR
+devrait lister la page ; le jeton d'actualisation (partenaires approuvés) ; l'adresse de retour
+en http sur un poste ; aucune révocation n'est documentée : débrancher efface ici et dit de
+retirer l'accès dans les réglages du compte LinkedIn.

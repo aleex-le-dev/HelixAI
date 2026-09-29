@@ -28,6 +28,16 @@
  * Basic`, `state` faux, portées relues, adresse de retour en 127.0.0.1), et
  * ses outils dans les sections E, F et G comme les sept autres. Le faux
  * serveur imite https://docs.x.com (pages citées dans oauthNatif.ts).
+ *
+ * La Page d'entreprise LinkedIn, par sa seconde application (29/09/2026,
+ * `linkedinPage`) : section K pour la connexion (seulement les portées
+ * d'organisation, rien du profil ; compte lu par organizationAcls), sections C
+ * et F pour le reste (le profil n'a plus de case « page » ; les outils de page
+ * partent avec les jetons de la seconde application, jamais avec ceux du
+ * profil ; une ancienne case « page » enregistrée est ignorée). Le faux
+ * LinkedIn refuse les appels de page faits avec le jeton du profil. Les faux
+ * jetons nouveaux sont écrits en morceaux (`"ACCES-" + "lipage"`) : la
+ * protection des secrets de l'hébergeur du dépôt ne doit pas les prendre pour de vrais.
  */
 import { execFileSync, spawn } from "node:child_process";
 import { createHash, createHmac } from "node:crypto";
@@ -81,6 +91,8 @@ const attendre = (ms) => new Promise((r) => setTimeout(r, ms));
 const APPS = {
   google: { id: "123456789012-abcdefghijklmnopqrstuvwxyz012345.apps.googleusercontent.com", secret: "GOCSPX-SECRET-NATIF-DE-TEST" },
   linkedin: { id: "86linkedinessai", secret: "SECRET-LINKEDIN-DE-TEST" },
+  // La seconde application LinkedIn, celle de la Page d'entreprise (section K).
+  linkedinPage: { id: "86pageessai01", secret: "SECRET-" + "LINKEDINPAGE-DE-TEST" },
   facebook: { id: "1234567890123", secret: "SECRET-FACEBOOK-DE-TEST" },
   instagram: { id: "9876543210987", secret: "SECRET-INSTAGRAM-DE-TEST" },
   tiktok: { id: "awtiktokessai01", secret: "SECRET-TIKTOK-DE-TEST" },
@@ -91,6 +103,8 @@ const BASIC_X = Buffer.from(`${APPS.x.id}:${APPS.x.secret}`).toString("base64");
 /** Tout ce qui ne doit jamais apparaître en clair : secrets et jetons, et le secret de X en base 64. */
 const SECRETS = new RegExp(`(ACCES|ACTU|COURT|JETON-PAGE)-[A-Za-z0-9-]+|SECRET-[A-Z]+-DE-TEST|GOCSPX-SECRET-NATIF-DE-TEST|${BASIC_X.replace(/[+/=]/g, (c) => `\\${c}`)}`);
 const X_MOI = "1500000000000000001";
+/** Les jetons de la seconde application LinkedIn (section K), en morceaux. */
+const JETON_PAGE = "ACCES-" + "lipage";
 /** Les services de cet essai (d'autres connexions natives ont leur propre essai). */
 const HUIT = ["sheets", "slides", "youtube", "linkedin", "facebook", "instagram", "tiktok", "x"];
 const G_SCOPES = {
@@ -237,21 +251,52 @@ const faux = serveurHttp(async (req, res) => {
   }
 
   // ---- LinkedIn ----
+  /*
+   * Deux applications depuis le 29/09/2026 : le profil (openid, profile,
+   * w_member_social) et la Page d'entreprise (portées d'organisation seules),
+   * reconnues à leur identifiant. Chacune n'échange que ses propres codes.
+   */
   if (hote === "www.linkedin.com" && p === "/oauth/v2/accessToken") {
-    if (f.get("client_id") !== APPS.linkedin.id || f.get("client_secret") !== APPS.linkedin.secret) return reponse(res, 401, { error: "invalid_client" });
+    const deLaPage = f.get("client_id") === APPS.linkedinPage.id;
+    const app = deLaPage ? APPS.linkedinPage : APPS.linkedin;
+    if (f.get("client_id") !== app.id || f.get("client_secret") !== app.secret) return reponse(res, 401, { error: "invalid_client" });
     const code = f.get("code");
+    if (deLaPage) {
+      const orga = "r_organization_social rw_organization_admin w_organization_social";
+      // Un LinkedIn qui rendrait aussi le profil à cette application : c'est plus que demandé.
+      if (code === "CODE-PAGE-PROFIL") return reponse(res, 200, { access_token: JETON_PAGE + "-profil", expires_in: 5184000, scope: `openid profile ${orga}` });
+      if (code === "CODE-PAGE-AUCUNE") return reponse(res, 200, { access_token: JETON_PAGE + "-vide", expires_in: 5184000, scope: orga });
+      // Portées « URL-encoded, space-delimited », comme l'écrit la documentation ; un jeton d'actualisation d'un an.
+      if (code === "CODE-PAGE") return reponse(res, 200, { access_token: JETON_PAGE + "-1", expires_in: 5184000, refresh_token: "ACTU-" + "lipage", refresh_token_expires_in: 31_536_000, scope: orga.replace(/ /g, "%20") });
+      return reponse(res, 400, { error: "invalid_request" });
+    }
     if (code === "CODE-MOINS") return reponse(res, 200, { access_token: "ACCES-linkedin-moins", expires_in: 5184000, scope: "openid,profile" });
     if (code !== "CODE-linkedin") return reponse(res, 400, { error: "invalid_request" });
-    return reponse(res, 200, { access_token: "ACCES-linkedin-1", expires_in: 5184000, scope: "openid,profile,w_member_social,r_organization_social,w_organization_social,r_organization_admin" });
+    return reponse(res, 200, { access_token: "ACCES-linkedin-1", expires_in: 5184000, scope: "openid,profile,w_member_social" });
   }
   if (hote === "api.linkedin.com") {
-    if (!auth.startsWith("Bearer ACCES-linkedin")) return reponse(res, 401, {});
-    if (p === "/v2/userinfo") return reponse(res, 200, { sub: "abc123", name: "Marie Essai" });
-    if (p === "/rest/organizationAcls") return reponse(res, 200, { elements: [{ organization: "urn:li:organization:777", role: "ADMINISTRATOR", state: "APPROVED" }] });
+    const profil = auth.startsWith("Bearer ACCES-linkedin");
+    const dePage = auth.startsWith(`Bearer ${JETON_PAGE}`);
+    if (!profil && !dePage) return reponse(res, 401, {});
+    if (p === "/v2/userinfo") return profil ? reponse(res, 200, { sub: "abc123", name: "Marie Essai" }) : reponse(res, 403, { status: 403, code: "ACCESS_DENIED" });
+    // Comme le vrai : sans les portées d'organisation (le jeton du profil n'en a pas), les pages sont refusées.
+    const dOrganisation = p === "/rest/organizationAcls" || p.startsWith("/rest/organizations/") || p === "/rest/organizationalEntityShareStatistics" || (p === "/rest/posts" && req.method === "GET");
+    if (dOrganisation && !dePage) return reponse(res, 403, { status: 403, code: "ACCESS_DENIED" });
+    if (p === "/rest/organizationAcls") {
+      if (auth === `Bearer ${JETON_PAGE}-vide`) return reponse(res, 200, { elements: [], paging: { count: 10, start: 0 } });
+      // Les deux formes de la documentation : `organization` et `organizationTarget`.
+      return reponse(res, 200, { elements: [{ organization: "urn:li:organization:777", role: "ADMINISTRATOR", roleAssignee: "urn:li:person:abc123", state: "APPROVED" }, { organizationTarget: "urn:li:organization:888", role: "ADMINISTRATOR", roleAssignee: "urn:li:person:abc123", state: "APPROVED" }] });
+    }
     if (p === "/rest/organizations/777") return reponse(res, 200, { localizedName: "Entreprise Essai" });
+    if (p === "/rest/organizations/888") return reponse(res, 200, { localizedName: "Filiale Essai" });
     if (p === "/rest/posts" && req.method === "GET") return reponse(res, 200, { elements: [{ id: "urn:li:share:1", commentary: "Post ancien", publishedAt: 1_780_000_000_000 }] });
     if (p === "/rest/organizationalEntityShareStatistics") return reponse(res, 200, { elements: [{ totalShareStatistics: { impressionCount: 1000, uniqueImpressionsCount: 800, clickCount: 30, likeCount: 12, commentCount: 3, shareCount: 2, engagement: 0.047 } }] });
-    if (p === "/rest/posts" && req.method === "POST") return reponse(res, 201, {}, { "x-restli-id": "urn:li:share:999" });
+    if (p === "/rest/posts" && req.method === "POST") {
+      // Au nom d'une page : seulement avec le jeton de la page ; au nom de la personne : seulement avec celui du profil.
+      const auteur = String(JSON.parse(corps || "{}").author ?? "");
+      if (auteur.startsWith("urn:li:organization:") ? !dePage : !profil) return reponse(res, 403, { status: 403, code: "ACCESS_DENIED" });
+      return reponse(res, 201, {}, { "x-restli-id": "urn:li:share:999" });
+    }
   }
 
   // ---- Facebook ----
@@ -526,7 +571,7 @@ console.log("\nB. Applications des fournisseurs : le secret n'en ressort jamais"
 {
   const g = await poster("/helix/google/client", A, { clientId: APPS.google.id, clientSecret: APPS.google.secret });
   verifier("application Google enregistrée (partagée avec Sheets, Slides, YouTube)", g.status === 200, g.status);
-  for (const id of ["linkedin", "facebook", "instagram", "tiktok"]) {
+  for (const id of ["linkedin", "linkedinPage", "facebook", "instagram", "tiktok"]) {
     const r = await poster("/helix/natifs/application", A, { service: id, clientId: APPS[id].id, clientSecret: APPS[id].secret });
     const texte = await r.text();
     verifier(`${id} : application enregistrée, et la réponse ne contient pas le secret`, r.status === 200 && !texte.includes(APPS[id].secret), `${r.status} ${texte.slice(0, 160)}`);
@@ -559,8 +604,15 @@ console.log("\nC. Autorisation : portées minimales, PKCE, `state`");
   verifier("YouTube : youtube.readonly seule, même si on demande l'écriture (aucune n'est proposée)", yt.p.get("scope") === "https://www.googleapis.com/auth/youtube.readonly", yt.p.get("scope"));
   const li = await depart("linkedin");
   verifier("LinkedIn, lecture : openid profile, sans rien d'autre, retour sur l'instance, `state` tiré au sort", li.u?.hostname === "www.linkedin.com" && li.p.get("scope") === "openid profile" && li.p.get("redirect_uri") === `${G}/helix/oauth/retour` && /^natif\.[A-Za-z0-9_-]{43}$/.test(li.p.get("state") ?? ""), li.j.url);
-  const liPage = await depart("linkedin", ["page"]);
-  verifier("LinkedIn, page sans publication : r_organization_social et r_organization_admin, pas w_organization_social", liPage.p.get("scope") === "openid profile r_organization_social r_organization_admin", liPage.p.get("scope"));
+  // L'ancienne case « page » (retirée le 29/09/2026), envoyée par un écran resté ouvert : ignorée, rien d'organisation n'est demandé au profil.
+  const liPage = await depart("linkedin", ["ecriture", "page"]);
+  const choixProfil = (await service("linkedin"))?.choix?.map((c) => c.id);
+  verifier("LinkedIn, profil : plus de case « page » ; demandée quand même, elle est ignorée (openid profile w_member_social, aucune portée d'organisation)", liPage.p.get("scope") === "openid profile w_member_social" && JSON.stringify(choixProfil) === '["ecriture"]', `${liPage.p.get("scope")} ${JSON.stringify(choixProfil)}`);
+  const pg = await depart("linkedinPage");
+  verifier("LinkedIn, Page d'entreprise : sa propre application, r_organization_social et rw_organization_admin seulement, retour sur l'instance", pg.u?.hostname === "www.linkedin.com" && pg.p.get("client_id") === APPS.linkedinPage.id && pg.p.get("scope") === "r_organization_social rw_organization_admin" && pg.p.get("redirect_uri") === `${G}/helix/oauth/retour`, pg.j.url);
+  const pgE = await depart("linkedinPage", ["ecriture", "page"]);
+  const portPage = (pgE.p.get("scope") ?? "").split(" ");
+  verifier("LinkedIn, Page d'entreprise, publier : w_organization_social en plus, et aucune portée du profil (ni openid, ni profile, ni w_member_social)", pgE.p.get("scope") === "r_organization_social rw_organization_admin w_organization_social" && !portPage.some((x) => ["openid", "profile", "w_member_social", "r_organization_admin"].includes(x)), pgE.p.get("scope"));
   const fb = await depart("facebook");
   verifier("Facebook, lecture : pages_show_list,pages_read_engagement, dialogue v25.0 de Meta", fb.u?.hostname === "www.facebook.com" && fb.u?.pathname === "/v25.0/dialog/oauth" && fb.p.get("scope") === "pages_show_list,pages_read_engagement", fb.j.url);
   const fbE = await depart("facebook", ["ecriture"]);
@@ -654,6 +706,38 @@ console.log("\nD. Retour vérifié : portée relue, compte lu, puis seulement en
   // Le même code rejoué après coup : la demande est close, il ne mène à rien.
   const rejoue = await appel(`/helix/oauth/retour?state=${encodeURIComponent(li.p.get("state") ?? "")}&code=CODE-linkedin`);
   verifier("un retour rejoué (même `state`, même code) ne vaut plus rien", rejoue.status === 400, rejoue.status);
+}
+
+/*
+ * K. La Page d'entreprise LinkedIn, par sa seconde application (29/09/2026,
+ * `linkedinPage` dans oauthNatif.ts). LinkedIn n'accorde « Community
+ * Management API » qu'à une application qui n'a aucun autre produit : elle ne
+ * demande que les portées d'organisation, et le compte se lit par les pages
+ * qu'il administre (organizationAcls), sans `profile`.
+ */
+console.log("\nK. LinkedIn, Page d'entreprise : seconde application, portées d'organisation seules");
+{
+  const trop = await depart("linkedinPage", ["ecriture"]);
+  const rTrop = await retour(trop, "CODE-PAGE-PROFIL");
+  verifier("Page d'entreprise : un LinkedIn qui rendrait aussi openid et profile à cette application est refusé, rien n'est gardé", rTrop.statut === 400 && (await service("linkedinPage"))?.configure === false, `${rTrop.statut} ${rTrop.page.replace(/<[^>]+>/g, " ").slice(0, 200)}`);
+  const vide = await depart("linkedinPage", ["ecriture"]);
+  const rVide = await retour(vide, "CODE-PAGE-AUCUNE");
+  verifier("Page d'entreprise : un compte qui n'administre aucune page est refusé, avec la raison, et rien n'est gardé", rVide.statut === 400 && /aucune page d(?:'|&#39;)entreprise/.test(rVide.page) && (await service("linkedinPage"))?.configure === false, `${rVide.statut} ${rVide.page.replace(/<[^>]+>/g, " ").slice(0, 200)}`);
+  const avantEchange = recues.length;
+  const bon = await depart("linkedinPage", ["ecriture"]);
+  const rBon = await retour(bon, "CODE-PAGE");
+  const echange = recues.slice(avantEchange).find((x) => x.hote === "www.linkedin.com" && x.chemin === "/oauth/v2/accessToken");
+  const fEchange = new URLSearchParams(echange?.corps ?? "");
+  const pageEtat = await service("linkedinPage");
+  verifier(
+    "Page d'entreprise branchée : code échangé avec l'identifiant et le secret de la seconde application, portées rendues en « %20 » relues, compte nommé par ses pages",
+    rBon.statut === 200 && fEchange.get("client_id") === APPS.linkedinPage.id && fEchange.get("client_secret") === APPS.linkedinPage.secret && pageEtat?.configure === true && pageEtat?.compte === "Entreprise Essai et 1 autre(s) page(s)" && JSON.stringify(pageEtat?.accordes) === '["ecriture"]',
+    `${rBon.statut} ${JSON.stringify(pageEtat).slice(0, 240)}`,
+  );
+  const acl = recues.slice(avantEchange).find((x) => x.hote === "api.linkedin.com" && x.chemin.startsWith("/rest/organizationAcls"));
+  verifier("Page d'entreprise : le compte est lu par organizationAcls (rôle ADMINISTRATOR), avec la version d'API, jamais par /v2/userinfo", /q=roleAssignee&role=ADMINISTRATOR&state=APPROVED/.test(acl?.chemin ?? "") && acl?.entetes["linkedin-version"] === "202609" && !recues.slice(avantEchange).some((x) => x.chemin === "/v2/userinfo"), acl?.chemin);
+  const profil = await service("linkedin");
+  verifier("le profil LinkedIn reste branché à côté, avec sa propre application, sans case « page »", profil?.configure === true && profil?.application?.identifiant === APPS.linkedin.id && pageEtat?.application?.identifiant === APPS.linkedinPage.id && !profil?.choix?.some((c) => c.id === "page"), JSON.stringify(profil?.application));
 }
 
 /** Un POST à l'instance avec un en-tête `Host` choisi (fetch ne le laisse pas changer). */
@@ -955,6 +1039,16 @@ const n = await import(${src("oauthNatif.ts")});
 const ap = await import(${src("approbation.ts")});
 const { chargerClientGoogle } = await import(${src("clientGoogle.ts")});
 await chargerClientGoogle();
+/*
+ * Une instance branchée avant le 29/09/2026 avec l'ancienne case « page » du
+ * profil LinkedIn : la case est posée dans le magasin, avant qu'il soit lu.
+ * Elle doit être ignorée (aucun outil de page par le profil), et l'écran doit
+ * pouvoir le dire (elle reste dans « accordes »).
+ */
+const { db } = await import(${src("db.ts")});
+const brutNatifs = await db().read("connecteursNatifs");
+brutNatifs.comptes.linkedin.choix = [...brutNatifs.comptes.linkedin.choix, "page"];
+await db().write("connecteursNatifs", brutNatifs);
 await n.charger();
 const A = { userId: ${JSON.stringify(idA)}, groupes: [] };
 const B = { userId: ${JSON.stringify(idB)}, groupes: [] };
@@ -962,6 +1056,7 @@ const sortie = {};
 const appeler = (nom, args, pour = A) => o.callTool(nom, args, pour);
 const controle = (q) => fetch("http://127.0.0.1:${PORT_FAUX}/__controle?" + q);
 sortie.outils = o.toolsForModel().map((x) => x.function.name);
+sortie.anciennePage = { choisi: n.aChoisi("linkedin", "page"), accordes: (await n.etat("http://127.0.0.1")).find((s) => s.id === "linkedin")?.accordes ?? [] };
 for (const [nom, args] of [
   ["sheets__lire", { feuille: "https://docs.google.com/spreadsheets/d/1AbCdEfGhIjKlMnOpQrStUvWxYz0123456789/edit" }],
   ["slides__lire", { presentation: "1AbCdEfGhIjKlMnOpQrStUvWxYz0123456789" }],
@@ -1013,7 +1108,10 @@ sortie.signatures = [o.typeImage(Buffer.from([0xff, 0xd8, 0xff, 0xe0])), o.typeI
 sortie.parB = await appeler("linkedin__publier", { texte: "Publié par un collègue" }, B);
 sortie.sansPersonne = await o.callTool("facebook__publier", { page: "Page Essai", message: "Sans personne" });
 sortie.linkedin = await appeler("linkedin__publier", { texte: "Bonjour @[Pierre](urn:li:person:1) *gras* #essai" });
-sortie.linkedinPage = await appeler("linkedin__publier", { texte: "Au nom de la page", page: "Entreprise Essai" });
+// Au nom d'une page : plus par l'outil du profil (29/09/2026), mais par celui de la Page d'entreprise, avec ses jetons.
+sortie.linkedinPageParProfil = await appeler("linkedin__publier", { texte: "Page par l'outil du profil", page: "Entreprise Essai" });
+sortie.linkedinPage = await appeler("linkedin__publier_page", { texte: "Au nom de la page", page: "Entreprise Essai" });
+sortie.linkedinPageParB = await appeler("linkedin__publier_page", { texte: "Page par un collègue", page: "Entreprise Essai" }, B);
 sortie.linkedinDoublon = await appeler("linkedin__publier", { texte: "Bonjour @[Pierre](urn:li:person:1) *gras* #essai" });
 sortie.facebook = await appeler("facebook__publier", { page: "Page Essai", message: "Nouveau post", lien: "https://exemple.fr/article" });
 sortie.facebookLienInterne = await appeler("facebook__publier", { page: "Page Essai", message: "Lien interne", lien: "https://192.168.1.10/" });
@@ -1081,6 +1179,10 @@ sortie.lectureLibre = lecture !== "attente" && lecture.autorise === true;
 // Hors requête, la passerelle parle anglais (langue.ts) : les messages de l'écran sont lus ici en français, comme par une personne qui l'a choisi.
 const { avecLangueDe } = await import(${src("langue.ts")});
 await avecLangueDe({ "x-helix-langue": "fr" }, new URL("http://essai/"), async () => {
+  // La Page d'entreprise débranchée seule : ses outils disparaissent, le profil garde les siens.
+  sortie.oubli_linkedinPage = await n.oublier("linkedinPage", A.userId);
+  sortie.outilsSansPage = o.toolsForModel().map((x) => x.function.name);
+  sortie.pagesSansPage = await appeler("linkedin__pages", {});
   for (const id of ["sheets", "facebook", "tiktok", "linkedin", "instagram", "x"]) sortie["oubli_" + id] = await n.oublier(id, A.userId);
 });
 sortie.apres = (await n.etat("http://127.0.0.1")).filter((s) => s.configure).map((s) => s.id);
@@ -1122,13 +1224,15 @@ process.exit(0);
   verifier("le second processus s'est déroulé jusqu'au bout", Boolean(ligne), `${essai.status} ${essai.signal} ${essai.error?.message ?? ""} ${sortieBrute.slice(-800)}`);
   const apres = recues.slice(avant);
   const lu = (nom, motif) => verifier(`${nom} : lu`, r[nom]?.ok === true && motif.test(r[nom]?.content ?? ""), r[nom]?.content ?? JSON.stringify(r[nom]));
-  verifier("outils proposés : lectures et écritures des huit services, relues des données chiffrées", ["sheets__lire", "sheets__ecrire", "slides__lire", "youtube__videos", "linkedin__publier", "linkedin__statistiques", "facebook__publier", "instagram__publier", "tiktok__publier_video", "x__profil", "x__publications", "x__publier"].every((n) => r.outils?.includes(n)), r.outils?.join(", "));
+  verifier("outils proposés : lectures et écritures des huit services, relues des données chiffrées", ["sheets__lire", "sheets__ecrire", "slides__lire", "youtube__videos", "linkedin__publier", "linkedin__statistiques", "linkedin__publier_page", "facebook__publier", "instagram__publier", "tiktok__publier_video", "x__profil", "x__publications", "x__publier"].every((n) => r.outils?.includes(n)), r.outils?.join(", "));
+  verifier("LinkedIn : une ancienne case « page » enregistrée sur le profil est ignorée (rien ne la lit), et l'écran la voit encore pour inviter à brancher la Page d'entreprise", r.anciennePage?.choisi === false && r.anciennePage?.accordes?.includes("page") && r.outils?.includes("linkedin__profil"), JSON.stringify(r.anciennePage));
   lu("sheets__lire", /Budget essai[\s\S]*Janvier \| 1200/);
   lu("slides__lire", /Bonjour diapositive/);
   lu("youtube__chaine", /Chaîne essai[\s\S]*Abonnés : 12/);
   lu("youtube__videos", /Vidéo essai[\s\S]*100 vues, 5 j.aime/);
   lu("linkedin__profil", /Marie Essai/);
-  lu("linkedin__pages", /Entreprise Essai \(identifiant 777\)/);
+  // Les deux formes d'organizationAcls (`organization`, `organizationTarget`) donnent chacune leur page.
+  lu("linkedin__pages", /Entreprise Essai \(identifiant 777\)[\s\S]*Filiale Essai \(identifiant 888\)/);
   lu("linkedin__publications", /Post ancien/);
   lu("linkedin__statistiques", /1\s000 impressions/);
   lu("facebook__pages", /Page Essai \(identifiant 111\) : 42 abonnés/);
@@ -1149,7 +1253,12 @@ process.exit(0);
   const postLi = apres.filter((x) => x.hote === "api.linkedin.com" && x.methode === "POST" && x.chemin === "/rest/posts" && !(x.corps ?? "").includes("Même texte en parallèle"));
   const corpsLi = postLi[0] ? JSON.parse(postLi[0].corps) : {};
   verifier("LinkedIn : publié au nom du profil, texte échappé (aucune mention glissée), mot-dièse gardé, en-tête de version", r.linkedin?.ok === true && corpsLi.author === "urn:li:person:abc123" && corpsLi.commentary === "Bonjour \\@\\[Pierre\\]\\(urn:li:person:1\\) \\*gras\\* #essai" && postLi[0]?.entetes["linkedin-version"] === "202609", `${r.linkedin?.content} ${postLi[0]?.corps}`);
-  verifier("LinkedIn : au nom d'une page seulement si elle est administrée", r.linkedinPage?.ok === true && postLi.some((x) => JSON.parse(x.corps).author === "urn:li:organization:777"), r.linkedinPage?.content);
+  const JP = "Bearer ACCES-" + "lipage-1";
+  verifier("LinkedIn : au nom d'une page administrée, par linkedin__publier_page, avec le jeton de la seconde application ; au nom du profil, avec le jeton du profil", r.linkedinPage?.ok === true && postLi.some((x) => JSON.parse(x.corps).author === "urn:li:organization:777" && x.entetes.authorization === JP) && postLi.some((x) => JSON.parse(x.corps).author === "urn:li:person:abc123" && x.entetes.authorization === "Bearer ACCES-linkedin-1"), r.linkedinPage?.content);
+  verifier("LinkedIn : linkedin__publier ne publie plus au nom d'une page (renvoie à linkedin__publier_page), et un collègue ne publie pas sur la page ; rien ne part", r.linkedinPageParProfil?.ok === false && /linkedin__publier_page/.test(r.linkedinPageParProfil?.content ?? "") && r.linkedinPageParB?.ok === false && /administrateur/.test(r.linkedinPageParB?.content ?? "") && !apres.some((x) => /Page par l.outil du profil|Page par un collègue/.test(x.corps ?? "")), `${r.linkedinPageParProfil?.content} | ${r.linkedinPageParB?.content}`);
+  const dePages = apres.filter((x) => x.hote === "api.linkedin.com" && (x.chemin.startsWith("/rest/organization") || (x.chemin.startsWith("/rest/posts") && x.methode === "GET")));
+  verifier("LinkedIn : pages, publications et statistiques de page partent toutes avec le jeton de la seconde application, jamais avec celui du profil", dePages.length >= 4 && dePages.every((x) => x.entetes.authorization === JP), `${dePages.length} appel(s) ; ${[...new Set(dePages.map((x) => String(x.entetes.authorization).slice(0, 20)))]}`);
+  verifier("LinkedIn : les statistiques de page sont dites sur douze mois (la durée que donne LinkedIn), pas « depuis sa création »", /douze derniers mois/.test(r.linkedin__statistiques?.content ?? ""), r.linkedin__statistiques?.content);
   verifier("LinkedIn : le même post relancé n'est pas republié", r.linkedinDoublon?.ok === false && /Déjà fait/.test(r.linkedinDoublon?.content ?? "") && postLi.length === 2, `${postLi.length} ${r.linkedinDoublon?.content}`);
   const postFb = apres.find((x) => x.hote === "graph.facebook.com" && x.chemin === "/v25.0/111/feed");
   const fFb = new URLSearchParams(postFb?.corps ?? "");
@@ -1188,6 +1297,8 @@ process.exit(0);
   verifier("Instagram : douze publications lancées en même temps ne dépassent pas dix dans l'heure", publiesIg <= 10 && (r.rafale ?? []).some((x) => x.ok === false && /10 écritures/.test(x.content)), `${publiesIg} publication(s) Instagram`);
   verifier("débrancher : révoqué chez Meta et TikTok", ["oubli_facebook", "oubli_tiktok"].every((k) => r[k]?.ok && /révoqué/.test(r[k]?.message ?? "")) && apres.some((x) => x.methode === "DELETE" && x.chemin.startsWith("/v25.0/me/permissions")) && apres.some((x) => x.chemin === "/v2/oauth/revoke/"), ["oubli_facebook", "oubli_tiktok"].map((k) => r[k]?.message).join(" | "));
   verifier("débrancher LinkedIn, Instagram : sans révocation documentée, l'écran dit où retirer l'accès", /réglages de votre compte/.test(r.oubli_linkedin?.message ?? "") && /réglages de votre compte/.test(r.oubli_instagram?.message ?? ""), r.oubli_linkedin?.message);
+  const outilsPage = ["linkedin__pages", "linkedin__publications", "linkedin__statistiques", "linkedin__publier_page"];
+  verifier("Page d'entreprise débranchée seule : ses quatre outils disparaissent et refusent de servir, le profil garde les siens, et l'écran dit où retirer l'accès", /réglages de votre compte/.test(r.oubli_linkedinPage?.message ?? "") && !r.outilsSansPage?.some((x) => outilsPage.includes(x)) && r.outilsSansPage?.includes("linkedin__profil") && r.outilsSansPage?.includes("linkedin__publier") && r.pagesSansPage?.ok === false, `${r.oubli_linkedinPage?.message} | ${r.pagesSansPage?.content}`);
   verifier("après débranchement : plus de service ni d'outil de ces services", r.apres?.join(",") === "slides,youtube" && !r.outilsApres?.some((x) => /^(sheets|linkedin|facebook|instagram|tiktok|x)__/.test(x)), `${r.apres} ${r.outilsApres}`);
   /*
    * Tournée des connecteurs du 28/09/2026 : chez Google, révoquer retire tout ce

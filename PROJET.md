@@ -12,7 +12,7 @@ refaite à l'envers.
 |---|---|
 | Version | 2026.929.1 (`package.json`) |
 | Dernière mise à jour | 29 septembre 2026 |
-| Vérifié | `npm run securite` : 2068 contrôles, 0 échec (29/09/2026) ; `npm run typecheck` ; traductions à 100 % en anglais, chinois et japonais (interface 3 750 phrases, passerelle 1 444) ; essai Windows sur GitHub Actions |
+| Vérifié | `npm run securite` : 2095 contrôles, 0 échec (29/09/2026) ; `npm run typecheck` ; traductions à 100 % en anglais, chinois et japonais (interface 3 774 phrases, passerelle 1 447) ; essai Windows sur GitHub Actions |
 | Reste à essayer | sur les vraies machines : § 5, « Ce qui reste à essayer sur les postes de Medhi » |
 | Documents liés | [ARCHITECTURE.md](ARCHITECTURE.md), [SECURITE.md](SECURITE.md), [SCREENS.md](SCREENS.md), [SIGNATURE.md](SIGNATURE.md), [README.md](README.md), [docs/GUIDE.md](docs/GUIDE.md) |
 
@@ -637,7 +637,66 @@ redirection vers où je dois aller pour créer l'appli ; tout doit être simple,
   sont pas citées telles quelles par leur documentation. LinkedIn : « Community
   Management API » ne s'accorde qu'à une application sans autre produit, alors que Helix
   demande `openid profile` sur la même application : la case « Page d'entreprise » ne
-  peut donc pas aboutir telle quelle (à revoir : une seconde application LinkedIn).
+  peut donc pas aboutir telle quelle (à revoir : une seconde application LinkedIn ; fait
+  le 29/09/2026, entrée suivante).
+
+**Fait le 29/09/2026 : la Page d'entreprise LinkedIn, par une seconde application.**
+Décision de Medhi : « fais au mieux ». *Pourquoi* : LinkedIn n'accorde le produit
+« Community Management API » (celui des pages) qu'à une application neuve qui n'a aucun
+autre produit (FAQ 4 de la page d'ensemble du produit, relue ce jour-là) ; la case « page »
+du connecteur LinkedIn, posée sur l'application du profil (`openid`, `profile`,
+`w_member_social`), ne pouvait donc jamais marcher. *Fait* :
+- *Un fournisseur de plus*, `linkedinPage` (« LinkedIn (Page d'entreprise) »,
+  `gateway/src/oauthNatif.ts`) : son identifiant, son secret et ses jetons, chiffrés comme
+  les autres (`connecteursNatifs#linkedinPage#…`), la même route publique de retour
+  (`/helix/oauth/retour`). Portées : `r_organization_social` et `rw_organization_admin`
+  pour lire, `w_organization_social` si l'on coche la publication ; rien du profil. Le
+  compte est reconnu par les pages qu'il administre (`organizationAcls`, rôle
+  ADMINISTRATOR) et nommé par la première ; aucune page administrée : refusé, rien gardé.
+- *Lu dans la documentation le 29/09/2026, et corrigé en conséquence* : le produit accorde
+  `rw_organization_admin`, **pas** `r_organization_admin` (que l'ancienne case demandait :
+  la page « increasing-access » ne le liste que pour Advertising API et Lead Sync API) ;
+  `organizationAcls` rend la page sous `organization` ou `organizationTarget` selon les
+  exemples (les deux sont lus) ; les statistiques de partage portent sur douze mois
+  glissants (l'outil disait « depuis sa création ») ; les portées rendues sont « URL-encoded,
+  space-delimited » (espace, virgule et `%20` acceptés) ; le jeton d'actualisation, pour
+  les partenaires approuvés, vit un an (`refresh_token_expires_in`, lu désormais).
+  Pages lues : community-management-overview, community-management-app-review,
+  increasing-access, organization-access-control-by-role, posts-api, share-statistics,
+  organization-lookup-api, authorization-code-flow, programmatic-refresh-tokens
+  (learn.microsoft.com/en-us/linkedin/…), et l'aide LinkedIn a1665329 (vérification de
+  l'application par un super administrateur de la page : « Settings », « Verify »,
+  « Generate URL », lien valable 30 jours).
+- *Outils* (`gateway/src/outilsNatifs.ts`) : `linkedin__pages`, `linkedin__publications`,
+  `linkedin__statistiques` gardent leur nom mais passent par `linkedinPage` et ses jetons
+  (aiguillés par leur nom exact, `OUTILS_PAGE_LINKEDIN`) ; publier au nom d'une page devient
+  `linkedin__publier_page` (carte d'accord à chaque fois, administrateur seul) ;
+  `linkedin__publier` ne publie plus qu'au nom du profil et refuse un `page`, en renvoyant
+  à l'autre outil. Rien de la page tant qu'elle n'est pas branchée. `VERSION_LINKEDIN` vit
+  désormais dans `oauthNatif.ts`.
+- *Instance qui avait coché l'ancienne case* : rien n'est réécrit ; le choix « page » reste
+  dans le compte, `aChoisi` ne le compte plus (la définition ne le propose plus), et le
+  panneau du profil le dit et mène à la ligne de la Page (bouton « Brancher la Page
+  d'entreprise »).
+- *Écran* : une ligne « LinkedIn (Page d'entreprise) » sous LinkedIn, même logo ; son guide
+  pas à pas (`guideLinkedinPage`) : bouton vers `https://www.linkedin.com/developers/apps/new`,
+  application neuve, vérification par le super administrateur, demande du produit (adresse
+  professionnelle, raison sociale, politique de confidentialité), paliers de développement
+  puis standard, sans délai promis (LinkedIn n'en annonce pas), adresse de retour et
+  portées copiables, « À ne pas faire » (aucun autre produit, pas l'application du profil,
+  pas « LinkedIn » dans le nom ni le logo). Le guide et le panneau du profil disent que la
+  page se branche à part. Aide intégrée (« Créer l'application d'un service ») mise à jour.
+- *Vérifié* : `scripts/essai-natifs.mjs` (sections C, K, F : portées de chaque application,
+  jetons de la page pour les outils de page contre un faux LinkedIn qui refuse ceux du
+  profil, ancienne case ignorée, débranchement de la page seule) ; `npm run securite`,
+  section 37. **Pas essayé avec un vrai compte LinkedIn ni une vraie application** (aucune
+  n'a le produit) : l'examen de LinkedIn lui-même et sa durée ; si LinkedIn accepte une
+  demande de portées sans `openid` sur une telle application (aucune page lue ne l'exige ni
+  ne l'interdit) ; la forme réelle du champ `scope` rendu ; si un rôle autre
+  qu'ADMINISTRATOR (CONTENT_ADMINISTRATOR) devrait aussi lister la page ; le jeton
+  d'actualisation (réservé aux partenaires approuvés) ; l'adresse de retour en http sur un
+  poste (LinkedIn écrit « HTTPS »). Au palier de développement, 100 appels par personne et
+  par jour : lister les pages coûte 1 + un appel par page, à chaque outil de page.
 
 **Fait le 28/09/2026 : Google Sheets, Google Slides, YouTube, LinkedIn, Facebook, Instagram
 et TikTok (version 2026.928.2).** Demandé par Medhi : « il manque plein de choses :
@@ -652,7 +711,8 @@ seul : on parle à leur API depuis l'instance, sans intermédiaire, comme pour D
 | Google Sheets | `spreadsheets.readonly` : lire une feuille | `spreadsheets` : écrire une plage, ajouter des lignes | aucun pour une application interne à un Workspace |
 | Google Slides | `presentations.readonly` : lire le texte des diapositives | (rien) | idem |
 | YouTube | `youtube.readonly` : chaîne, vidéos, statistiques | (rien : pas de publication) | idem |
-| LinkedIn | `openid profile` : le profil | `w_member_social` : publier au nom du profil ; page d'entreprise (`r_organization_social`, `w_organization_social`, `r_organization_admin`) : lire, statistiques, publier | publier au nom du profil : aucun ; page d'entreprise : produit « Community Management API », examiné, sur une application neuve sans autre produit ; lire les posts d'un profil : **impossible** (`r_member_social` fermé par LinkedIn) |
+| LinkedIn | `openid profile` : le profil | `w_member_social` : publier au nom du profil | aucun ; lire les posts d'un profil : **impossible** (`r_member_social` fermé par LinkedIn). La page d'entreprise, d'abord une case ici, a sa propre application depuis le 29/09/2026 (ligne suivante) |
+| LinkedIn (Page d'entreprise), 29/09/2026 | `r_organization_social`, `rw_organization_admin` : pages administrées, publications, statistiques | `w_organization_social` : publier au nom d'une page | produit « Community Management API », examiné, sur une application neuve sans autre produit |
 | Facebook (Pages) | `pages_show_list`, `pages_read_engagement` : pages, posts, réactions | `pages_manage_posts` : publier | aucun pour les personnes qui ont un rôle dans l'application (accès standard) ; revue de Meta et vérification de l'entreprise pour les autres |
 | Instagram (compte pro) | `instagram_business_basic`, `instagram_business_manage_insights` | `instagram_business_content_publish` : publier une photo | idem Facebook (testeur Instagram compris) |
 | TikTok | `user.info.basic`, `user.info.stats`, `video.list` | `video.publish` : publier une vidéo du dossier de travail | bac à sable sans examen (10 comptes) ; **tout ce qui est publié reste privé** tant que l'application n'a pas passé l'audit de TikTok |
@@ -677,7 +737,8 @@ documentation lue le 28/09/2026. L'écran le dit. À essayer sur le poste, servi
 service : la connexion, une lecture, une publication. Points incertains à vérifier à ce
 moment-là : LinkedIn et Meta demandent une adresse de retour en https, et l'instance d'un
 poste répond en http sur 127.0.0.1 (peut-être refusée) ; `r_organization_admin` suffit-il
-aux statistiques de page LinkedIn ; la version d'API LinkedIn (`202609`) est à relever
+aux statistiques de page LinkedIn (non : le produit des pages accorde `rw_organization_admin`,
+demandé depuis le 29/09/2026) ; la version d'API LinkedIn (`202609`) est à relever
 chaque mois ; Meta liste aussi `pages_manage_engagement` pour publier, pas demandé.
 
 **Fait le 28/09/2026 : X (ex-Twitter), branche `connecteur-x`.** Demandé par Medhi, « exactement
@@ -3970,6 +4031,15 @@ d'images et de vidéo marqués `verifie: false` (`images.ts`) et les modèles de
 conseillés sans avoir été essayés (`provision.ts`) ; le japonais relu par un locuteur natif.
 Et, depuis le 28/09/2026, les huit connecteurs « projets et rendez-vous » (Trello, Monday,
 ClickUp, Todoist, Calendly, Zoom, Brevo, Mailchimp : § 3.5, SECURITE.md § 48).
+
+**Page d'entreprise LinkedIn (29/09/2026, § 3.5, SECURITE.md § 62)**, jamais essayée avec une
+vraie application : créer la seconde application en suivant le guide du panneau, la faire
+vérifier par le super administrateur de la page, demander « Community Management API » et
+noter la durée de l'examen ; une fois le palier de développement accordé, brancher la ligne
+« LinkedIn (Page d'entreprise) » (le consentement ne doit rien demander du profil), puis
+demander au Chat les pages, les dernières publications, les statistiques, et publier un post
+de page : relever la carte, le post sur LinkedIn, le champ `scope` rendu, et si un
+administrateur de contenu (non « ADMINISTRATOR ») voit la page.
 
 **Messageries (28/09/2026, § 3.5, SECURITE.md § 46)**, jamais essayées avec un vrai service :
 1. **Telegram** : créer un bot avec @BotFather, le brancher (envoi coché), écrire au bot en

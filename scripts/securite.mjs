@@ -8491,6 +8491,169 @@ console.log("\n37. Page d'entreprise LinkedIn : seconde application, portées s�
   verifier("aide intégrée : la Page d'entreprise LinkedIn se branche avec une seconde application", /LinkedIn, à l'inverse, en veut deux/.test(src("src", "lib", "aide.ts")), "aide.ts");
 }
 
+/*
+ * 38. La grille d'abonnement du 29/09/2026 (décision de Medhi, PROJET.md) :
+ * six formules, trois modèles hébergés à Paris, crédit calculé sur le net
+ * du prix normal. Le vrai `src/config/offre.ts`, empaqueté par esbuild comme
+ * en 34 : les jetons retombent sur les chiffres de la décision, aucune
+ * formule ne perd d'argent au pire cas (tout le crédit dépensé) avec le
+ * rabais de lancement, et l'écran n'encaisse toujours rien. Rien n'est
+ * branché à un paiement : ce contrôle garde la page honnête, pas un tarif.
+ */
+console.log("\n38. Abonnement : grille du 29/09/2026, jetons, pire cas au prix de lancement, aucun paiement, module éteint (29/09/2026)");
+{
+  const { build } = await import("esbuild");
+  const { pathToFileURL: versUrl } = await import("node:url");
+  const src = (...p) => readFileSync(join(RACINE, ...p), "utf8");
+  const dossierOffre = mkdtempSync(join(tmpdir(), "helix-offre-"));
+  try {
+    await build({
+      entryPoints: [join(RACINE, "src", "config", "offre.ts")],
+      bundle: true,
+      format: "esm",
+      platform: "browser",
+      outfile: join(dossierOffre, "offre.mjs"),
+      alias: { "@": join(RACINE, "src") },
+      logLevel: "error",
+    });
+    const avantLs = globalThis.localStorage;
+    globalThis.localStorage ??= { getItem: () => "fr", setItem: () => undefined, removeItem: () => undefined };
+    const O = await import(versUrl(join(dossierOffre, "offre.mjs")).href);
+    if (avantLs === undefined) delete globalThis.localStorage;
+    const formule = (id) => O.FORMULES.find((f) => f.id === id);
+    const modele = (id) => O.MODELES_INCLUS.find((m) => m.id === id);
+
+    // Les coûts de Scaleway (29/09/2026), trois lus pour un écrit.
+    const couts = ["rapide", "polyvalent", "expert"].map((id) => O.coutParMillion(modele(id)));
+    verifier(
+      "modèles : Mistral Small 3.2 24B, DeepSeek V4 Flash, Qwen3.5 397B A17B, à Paris ; 0,20 / 0,50 / 1,35 € le million en Chat, crédit ×1 / ×2,5 / ×6,75",
+      O.MODELES_INCLUS.length === 3 && modele("rapide")?.modele === "Mistral Small 3.2 24B" && modele("polyvalent")?.modele === "DeepSeek V4 Flash" && modele("expert")?.modele === "Qwen3.5 397B A17B" &&
+        O.MODELES_INCLUS.every((m) => /Paris/.test(m.heberge)) &&
+        [0.2, 0.5, 1.35].every((c, i) => Math.abs(couts[i] - c) < 1e-9) && [1, 2.5, 6.75].every((x, i) => Math.abs(O.facteur(O.MODELES_INCLUS[i]) - x) < 1e-9),
+      couts.join(" / "),
+    );
+
+    // Les prix : normal, lancement (−30 %, ramené en ,49 ou ,99), annuel (dix mois, en ,99).
+    const attendus = {
+      decouverte: [4.99, 3.49, 49.99],
+      plus: [12.99, 8.99, 129.99],
+      pro: [49.99, 34.99, 499.99],
+      max: [99.99, 69.99, 999.99],
+      equipe: [14.99, 10.49, 149.99],
+      "equipe-premium": [69.99, 48.99, 699.99],
+    };
+    const prix = O.FORMULES.map((f) => `${f.id} ${f.prix} ${O.prixLancement(f)} ${O.prixAnnuel(f)}`);
+    verifier(
+      "grille : six formules (quatre particuliers TTC, deux entreprises HT par poste dès 2 postes), prix normal, de lancement et annuel ceux de la décision",
+      O.FORMULES.length === 6 && O.FORMULES.filter((f) => f.public === "particulier").length === 4 &&
+        O.FORMULES.filter((f) => f.public === "entreprise").every((f) => f.postesMin === 2) &&
+        Object.entries(attendus).every(([id, [normal, lance, an]]) => formule(id)?.prix === normal && O.prixLancement(formule(id)) === lance && O.prixAnnuel(formule(id)) === an) &&
+        O.LANCEMENT.actif === true && O.LANCEMENT.taux === 0.3 && O.LANCEMENT.mois === 6 && O.MOIS_PAYES_PAR_AN === 10 &&
+        JSON.stringify(formule("decouverte").modeles) === '["rapide"]' && O.FORMULES.filter((f) => f.id !== "decouverte").every((f) => f.modeles.length === 3),
+      prix.join(" | "),
+    );
+
+    // Les jetons de la décision (arrondis au plus proche) ; le calcul doit y retomber au dixième près.
+    const jetons = {
+      plus: [30.9, 12.3, 4.6],
+      pro: [120.9, 48.4, 17.9],
+      max: [242.6, 97.1, 35.9],
+      equipe: [43.0, 17.2, 6.4],
+      "equipe-premium": [203.7, 81.5, 30.2],
+    };
+    const calcules = O.FORMULES.map((f) => `${f.id} ${O.MODELES_INCLUS.map((m) => O.jetonsInclus(f, m).toFixed(2)).join("/")}`);
+    verifier(
+      "jetons : Découverte 11 M en rapide ; Plus 30,9 / 12,3 / 4,6 M ; Pro 120,9 / 48,4 / 17,9 ; Max 242,6 / 97,1 / 35,9 ; Équipe 43,0 / 17,2 / 6,4 ; Premium 203,7 / 81,5 / 30,2 (au dixième près)",
+      Math.floor(O.jetonsInclus(formule("decouverte"), modele("rapide"))) === 11 &&
+        Object.entries(jetons).every(([id, valeurs]) => valeurs.every((v, i) => Math.abs(O.jetonsInclus(formule(id), O.MODELES_INCLUS[i]) - v) <= 0.1 + 1e-9)),
+      calcules.join(" | "),
+    );
+    verifier(
+      "jetons affichés arrondis vers le bas, jamais plus que ce qui est payé",
+      O.FORMULES.every((f) => O.MODELES_INCLUS.every((m) => O.arrondiBas(O.jetonsInclus(f, m)) <= O.jetonsInclus(f, m) && O.jetonsInclus(f, m) - O.arrondiBas(O.jetonsInclus(f, m)) < 0.1)),
+      "arrondiBas",
+    );
+
+    // Le crédit : 60 % du net (HT moins les frais de paiement sur le TTC), sur le prix normal.
+    const creditAttendu = (f) => {
+      const ttc = f.public === "particulier" ? f.prix : f.prix * 1.2;
+      const ht = f.public === "particulier" ? f.prix / 1.2 : f.prix;
+      return 0.6 * (ht - (ttc * 0.022 + 0.25));
+    };
+    verifier(
+      "crédit = 60 % de (HT − 1,5 % − 0,7 % du TTC − 0,25 €), calculé sur le prix normal : le rabais ne réduit pas les jetons",
+      O.PART_CALCUL === 0.6 && O.TVA === 0.2 && O.FORMULES.every((f) => Math.abs(O.creditMensuel(f) - creditAttendu(f)) < 1e-9) &&
+        /return PART_CALCUL \* net\(formule, formule\.prix\);/.test(src("src", "config", "offre.ts")),
+      O.FORMULES.map((f) => `${f.id} ${O.creditMensuel(f).toFixed(3)} €`).join(" | "),
+    );
+
+    // Le pire cas : chacun vide son crédit. Au prix de lancement, au prix normal et à l'année, il reste de l'argent.
+    const restes = O.FORMULES.map((f) => ({
+      id: f.id,
+      lancement: O.resteAuPireCas(f, O.prixLancement(f)),
+      normal: O.resteAuPireCas(f, f.prix),
+      annuel: O.net(f, O.prixAnnuel(f)) - 12 * O.creditMensuel(f),
+    }));
+    verifier(
+      "pire cas (tout le crédit dépensé) : aucune formule ne perd d'argent au prix de lancement (crédit ≤ net), ni au prix normal, ni à l'année",
+      restes.every((r) => r.lancement > 0 && r.normal > 0 && r.annuel > 0),
+      restes.map((r) => `${r.id} ${r.lancement.toFixed(2)}`).join(" | "),
+    );
+    // Témoin : à −40 %, Découverte perdrait de l'argent ; le contrôle ci-dessus le verrait.
+    const decouverte = formule("decouverte");
+    verifier("témoin : à −40 %, Découverte perdrait de l'argent au pire cas (le contrôle du pire cas n'est pas creux)", O.resteAuPireCas(decouverte, 2.99) < 0, O.resteAuPireCas(decouverte, 2.99).toFixed(3));
+
+    // Les repères : 3 000 jetons l'échange, 150 000 la tâche.
+    verifier(
+      "équivalences : un échange de Chat ≈ 3 000 jetons, une tâche d'agent ou de Code ≈ 150 000 ; Plus ≈ 342 échanges par jour en rapide, ≈ 82 tâches par mois en polyvalent",
+      O.JETONS_PAR_ECHANGE === 3000 && O.JETONS_PAR_TACHE === 150_000 &&
+        O.echangesParJour(O.jetonsInclus(formule("plus"), modele("rapide"))) === 342 && O.tachesParMois(O.jetonsInclus(formule("plus"), modele("polyvalent"))) === 82,
+      `${O.echangesParJour(O.jetonsInclus(formule("plus"), modele("rapide")))} / ${O.tachesParMois(O.jetonsInclus(formule("plus"), modele("polyvalent")))}`,
+    );
+  } finally {
+    rmSync(dossierOffre, { recursive: true, force: true });
+  }
+
+  // L'écran : aucun bouton de paiement, les boutons écrivent.
+  const ecran = src("src", "components", "settings", "Abonnement.tsx");
+  const phrasesEcran = [...ecran.matchAll(/\bt[f]?\("((?:[^"\\]|\\.)*)"/g)].map((m) => m[1]);
+  const en = JSON.parse(src("src", "i18n", "en.json"));
+  // « sans acheter la carte » est une phrase, pas un bouton : seuls les libellés d'achat qui commencent la phrase comptent.
+  const payer = /S'abonner|Souscrire|^Acheter|^Payer|Passer commande|Ajouter au panier/i;
+  const payerEn = /\bsubscribe\b|\bbuy\b|\bcheckout\b|\bpay now\b|add to cart|upgrade now/i;
+  const boutons = [...ecran.matchAll(/<Button\b[^>]*onClick=\{\(\) => ([a-z]+)\(/g)].map((m) => m[1]);
+  verifier(
+    "écran d'abonnement : ni « S'abonner » ni bouton de paiement (fr et en), aucun lien vers un paiement ; ses deux boutons ouvrent la messagerie",
+    !phrasesEcran.some((p) => payer.test(p)) && !phrasesEcran.some((p) => payerEn.test(en[p] ?? "")) &&
+      !/stripe|checkout|paypal|lemonsqueezy|paddle|\/api\/paiement/i.test(ecran) && !/stripe|checkout|paypal/i.test(src("src", "config", "offre.ts").replace(/Stripe Billing|chez Stripe/g, "")) &&
+      boutons.length === 2 && boutons.every((b) => b === "ecrire") && /window\.location\.href = `mailto:\$\{branding\.urls\.supportEmail\}/.test(ecran),
+    `${boutons.join(",")} | ${phrasesEcran.filter((p) => payer.test(p)).join(",")}`,
+  );
+  verifier("témoin : « S'abonner », « Acheter », « Subscribe » et « Checkout » seraient vus", payer.test("S'abonner") && payer.test("Acheter maintenant") && payerEn.test("Subscribe") && payerEn.test("Go to checkout") && !payer.test("sans acheter la carte") && !payerEn.test("without buying the card"), "motifs");
+  verifier(
+    "écran d'abonnement : il dit que les formules ne sont pas ouvertes, que rien ne se paie ici, et la règle du crédit épuisé (modèle local, sans facture en plus)",
+    phrasesEcran.includes("Ces formules ne sont pas encore ouvertes.") && phrasesEcran.some((p) => /^Aucun paiement n'est possible depuis cet écran/.test(p)) &&
+      phrasesEcran.some((p) => /crédit du mois est épuisé, le Chat passe au modèle local de votre machine, sans rien facturer de plus/.test(p)),
+    "Abonnement.tsx",
+  );
+  verifier(
+    "écran d'abonnement : aucun nombre de prix écrit à la main, aucune couleur hexadécimale, aucun tiret cadratin, aucun nom de produit en dur",
+    !/\d+,\d\d ?€|€ ?\d/.test(ecran) && !/#[0-9a-fA-F]{3,8}\b/.test(ecran) && !phrasesEcran.some((p) => p.includes("—")) && !phrasesEcran.some((p) => /\bHelix\b/.test(p)),
+    "Abonnement.tsx",
+  );
+
+  // Le module reste éteint par défaut, dans les deux éditions ; le menu et la route ne viennent que s'il est allumé.
+  const marque = src("src", "config", "branding.ts");
+  const presets = /export const EDITION_PRESETS[\s\S]*?\n\};/.exec(marque)?.[0] ?? "";
+  verifier(
+    "module d'abonnement éteint par défaut (éditions chat et complète) ; entrée du menu et route seulement sous features.abonnement",
+    (presets.match(/abonnement: false,/g) ?? []).length === 2 && !/abonnement: true/.test(presets) &&
+      /\.\.\.\(features\.abonnement\s*\?\s*\[\{ label: t\("Abonnement"\), path: "\/parametres\/abonnement"/.test(src("src", "components", "settings", "SettingsShell.tsx")) &&
+      /\.\.\.when\(features\.abonnement, \{\s*path: "abonnement"/.test(src("src", "App.tsx")),
+    presets.replace(/\s+/g, " ").slice(0, 160),
+  );
+}
+
 console.log(`\n${reussis} vérification(s) réussie(s), ${echecs.length} échec(s).`);
 if (echecs.length) {
   console.log("Échecs :");

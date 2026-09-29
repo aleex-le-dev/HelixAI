@@ -1248,11 +1248,16 @@ chaque message. « Créer une compétence » ouvre un formulaire de trois champs
 **Réglages, Abonnement (0.24.0)** : écran présent uniquement quand le module est
 allumé, c'est-à-dire chez le prestataire qui héberge les modèles, jamais dans une
 installation en marque blanche. Il commence par dire que le logiciel est gratuit
-et que ce qui se paie est le calcul ; puis les deux modèles proposés, avec leur
-pays d'hébergement ; puis quatre formules (10, 20, 100, 200 € par mois) avec les
-jetons compris et leur équivalent en échanges et en pages. Il se termine par un
-encart d'avertissement : les formules ne sont pas ouvertes, rien n'encaisse, les
-prix sont une proposition. Le seul bouton ouvre la messagerie de la personne.
+et que ce qui se paie est le calcul, avec ce que la plateforme comprend dans chaque
+formule ; puis les trois modèles hébergés à Paris (rapide, polyvalent, expert), avec
+ce qu'ils consomment du crédit ; puis les formules, sous un sélecteur Mensuel /
+Annuel : Particuliers (Découverte, Plus, Pro, Max, TTC) et Entreprises (Équipe,
+Équipe Premium, HT par poste, et Entreprise sur devis), avec le prix de lancement
+barré, les jetons par modèle et leur équivalent en échanges par jour et en tâches
+par mois (refait le 29/09/2026, PROJET.md). Il se termine par un encart
+d'avertissement : les formules ne sont pas ouvertes, rien n'encaisse, les prix sont
+une proposition. Les deux boutons (« Demander un devis », « Écrire pour être
+prévenu ») ouvrent la messagerie de la personne.
 
 **Réglages, Profil → Ouvrir l'instance (0.24.0)** : une fois l'instance ouverte,
 les adresses ne sont plus alignées en vrac. Deux blocs nommés : « Vos collègues sont

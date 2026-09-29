@@ -1148,8 +1148,9 @@ l'agent d'orchestration par défaut. Aucun tiret cadratin dans les textes affich
   l'interface et 650 dans la passerelle ; le 28/09/2026, 2 945 et 966, traduites à
   100 % dans les deux langues (`npm run i18n` le mesure). Ce que vous écrivez n'est
   jamais traduit (0.25.0) ;
-- **Réglages → Abonnement** : l'offre d'hébergement des modèles, quatre
-  formules, avec ce qu'elles comprennent. Éteinte par défaut en marque blanche.
+- **Réglages → Abonnement** : l'offre d'hébergement des modèles en France, pour
+  les particuliers et pour les entreprises, avec ce que chaque formule comprend.
+  Éteinte par défaut en marque blanche.
   Aucun paiement n'y est branché, et l'écran le dit (0.24.0).
 
 **Encore annoncé sans fonctionner, et marqué comme tel à l'écran :**

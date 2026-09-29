@@ -375,7 +375,7 @@ if (process.argv.includes("--installation")) {
   if (vcAbsent) {
     const etape = JSON.parse(/ETAPE_VISUALCPP (.*)/.exec(sortie)?.[1] ?? "null");
     const code = /\[visual-cpp\] installeur terminé : code (\S+)/.exec(sortie)?.[1];
-    verifier("Visual C++ déclaré absent : l'étape « visualcpp » est affichée, avec l'explication de la demande d'autorisation de Windows", etape?.etape === "visualcpp" && /autorisation d'administrateur/.test(etape.message), JSON.stringify(etape));
+    verifier("Visual C++ déclaré absent : l'étape « visualcpp » est affichée, avec l'explication de la demande d'autorisation de Windows", etape?.etape === "visualcpp" && /autorisation d'administrateur|administrator permission/.test(etape.message), JSON.stringify(etape));
     verifier("Visual C++ déclaré absent : paquet vérifié (empreinte, signature) puis installeur réel de Microsoft lancé avec élévation, code 0, 1638 ou 3010", /empreinte et signature de Microsoft vérifiées/.test(sortie) && ["0", "1638", "3010"].includes(code ?? ""), `code ${code} ${sortie.split(/\r?\n/).filter((l) => /visual-cpp/.test(l)).join(" | ").slice(0, 600)}`);
   }
   if (sortieEssai) {

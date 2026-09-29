@@ -474,7 +474,9 @@ que le journal de Windows a montré* :
   abîmé), `node-gyp-build` et `cnoke` se rabattent sur une compilation, qui échoue sur un poste
   sans outils de compilation, avec « code 1 ». Deux modules sans script demandent
   `VCRUNTIME140.dll` (`@openclaw/fs-safe-win32-x64-msvc`, `@ubjs/node-win32-*-msvc`) : présent
-  sur les machines de GitHub ; sans lui, c'est OpenClaw qui ne démarrerait pas, pas npm ;
+  sur les machines de GitHub ; sans lui, ce n'est pas npm qui échoue (on croyait alors qu'OpenClaw
+  ne démarrerait pas : l'essai de l'entrée suivante montre qu'il démarre, et que ces deux modules
+  ne se chargent pas) ;
 - plus long chemin posé : 205 caractères sous le dossier de données ; avec
   `C:\Users\<nom>\.helix\data`, la limite de 260 (chemins longs éteints, réglage d'office de
   Windows) n'est atteinte qu'au-delà de 33 lettres de nom de compte. Les machines de GitHub
@@ -498,6 +500,73 @@ dix minutes par machine, en parallèle, sans construire l'application), lancé �
 chaque poussée sur `main` qui touche l'installation. **À faire chez Medhi** : réessayer avec
 cette version ; si l'échec revient, la phrase à l'écran et `passerelle.log`
 (`%APPDATA%\helix-plateforme\logs\`) diront le paquet et la cause.
+
+**Les bibliothèques Visual C++ de Microsoft, installées par Helix quand elles manquent (décision de
+Medhi, 29/09/2026).** Deux modules d'OpenClaw ont besoin de `VCRUNTIME140.dll`, présente sur les
+Windows de GitHub et sur beaucoup de PC, pas sur tous. **Décision** : quand elle manque, Helix installe
+le « Microsoft Visual C++ Redistributable » officiel, téléchargé chez Microsoft, version épinglée,
+empreinte SHA-256 et signature Authenticode vérifiées, lancé avec l'autorisation d'administrateur que
+Windows demande (UAC). **Exception à la règle des licences**, comme Python (§ 3.9). C'est la seule
+élévation que Helix demande ; OpenClaw lui-même reste sans droits d'administrateur.
+
+*DLL relevées* (table d'import des fichiers PE, `modules-dll.txt` de l'essai de GitHub, 29/09/2026) :
+
+- **Windows x64** : `@openclaw/fs-safe-win32-x64-msvc` (`fs-safe-native.node`, éditeur de liens 14.51)
+  et `@ubjs/node-win32-x64-msvc` (`uniffi-runtime-napi…node`, 14.44) importent `VCRUNTIME140.dll`, plus
+  des `api-ms-win-crt-*` (la CRT universelle, livrée avec Windows 10 et 11). Aucun module n'importe
+  `MSVCP140.dll` ni `VCRUNTIME140_1.dll`. Les autres modules natifs (koffi, node-pty, tree-sitter-bash,
+  pi-tui, cua-driver) n'importent que des DLL de Windows ; `node.exe` (24.21.0) aussi (CRYPT32, WS2_32,
+  USER32, dbghelp, ADVAPI32, IPHLPAPI, USERENV, SHELL32, ole32, WINMM, KERNEL32 : sa bibliothèque
+  d'exécution est liée dedans).
+- **Windows arm64** : seul `@ubjs/node-win32-arm64-msvc` (14.44) importe `VCRUNTIME140.dll` ; OpenClaw
+  n'installe pas de `fs-safe` pour arm64.
+- Les machines de GitHub ont `VCRUNTIME140.dll` 14.51.36247.0 (avec `VCRUNTIME140_1.dll` et
+  `MSVCP140.dll`, même version) mais **pas** la clé de registre `…\VC\Runtimes\<arch>` : la détection
+  lit donc le fichier, pas le registre.
+- **Sans la DLL** (renommée dans System32 le temps de l'essai, PATH réduit à celui que Helix donne à
+  OpenClaw) : les deux modules ne se chargent plus, mais `openclaw --version` répond et la passerelle
+  d'OpenClaw ouvre son port. Ce sont les fonctions qui se servent de ces modules qui échoueraient en
+  cours de route (lesquelles : pas relevé). Avec le PATH complet de la machine de GitHub, les modules se
+  chargeaient encore, par une des copies posées par Python, Java, ImageMagick, l'AWS CLI…
+
+*Épinglé* (`gateway/src/visualCpp.ts`) : version **14.51.36247.0** pour les deux, adresse versionnée vers
+laquelle menait le lien permanent `aka.ms/vc14/vc_redist.<arch>.exe` le 29/09/2026 (par
+`aka.ms/vs/18/release`), jamais le lien permanent :
+
+- x64 : `https://download.visualstudio.microsoft.com/download/pr/ebdab8e5-1d7b-4d9f-a11b-cbb1720c3b12/843068991DAAA1F73AD9F6239BCE4D0F6A07A51F18C37EA2A867E9BECA71295C/VC_redist.x64.exe`,
+  18 731 856 octets, SHA-256 `843068991daaa1f73ad9f6239bce4d0f6a07a51f18c37ea2a867e9beca71295c` ;
+- arm64 : `https://download.visualstudio.microsoft.com/download/pr/ece44298-3977-4f73-ab91-c13fe79cfea8/B70EF586669A620A0A30A1156969C05C6A3831DC8F8BC992DA75779D2A92F944/VC_redist.arm64.exe`,
+  11 870 816 octets, SHA-256 `b70ef586669a620a0a30a1156969c05c6a3831dc8f8bc992da75779d2a92f944` ;
+- signature : `Valid`, `CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington,
+  C=US`, racine « Microsoft Root Certificate Authority 2011 » (`8F43288AD272F3103B6FB1428485EA3014C0BCFE`).
+  Le nom de dossier qui précède le fichier dans l'adresse est son SHA-256 : Microsoft l'écrit lui-même.
+- version minimale acceptée : celle de l'éditeur de liens des modules, suivant la règle de Microsoft
+  (« le paquet installé doit être égal ou plus récent que les outils MSVC qui ont construit
+  l'application ») : x64 14.51, arm64 14.44. Un PC qui a une 14.x plus ancienne reçoit donc aussi le
+  paquet (demande d'UAC comprise). **Monter OpenClaw**, c'est relire `modules-dll.txt` et ces deux
+  nombres ; **changer de paquet**, c'est relever adresse, taille, empreinte, version et racine.
+
+*Parcours* : l'installation d'OpenClaw passe par une étape de plus, avant Node, sous Windows et
+seulement quand la DLL manque ou est trop ancienne : « Installation des bibliothèques de Microsoft
+(Visual C++)… », avec l'avancement du téléchargement et la raison de la demande de Windows (et « si la
+demande n'apparaît pas, regardez la barre des tâches » : l'UAC d'un programme sans fenêtre au premier
+plan peut ne s'annoncer que là). Refus de l'UAC, ou compte sans mot de passe d'administrateur : l'écran
+dit de relancer et d'accepter, ou de demander à l'administrateur du PC, avec la page officielle de
+Microsoft ; « Réessayer » sur la carte de l'agent. Un OpenClaw déjà installé sans la DLL (posé avant
+cette version, ou DLL retirée depuis) : la page Agents le dit, et « Installer les bibliothèques de
+Microsoft » ne fait que cette étape, puis relance l'instance ; un démarrage raté le dit aussi. 3010 :
+« Windows conseille de redémarrer le PC ». Détail et garde-fous : SECURITE.md § 64.
+
+*Essayé sur GitHub* (`essai-openclaw-windows.yml`) : sur x64 et arm64, les deux paquets téléchargés,
+taille, empreinte, version et signature vérifiées ; la détection forcée à « absentes »
+(`HELIX_ESSAI_VISUAL_CPP=absent`, variable réservée aux essais), l'étape affichée, l'installeur réel de
+Microsoft lancé avec élévation (code 0, déjà présent), puis OpenClaw installé, `--version` et sa
+passerelle ; la DLL retirée le temps de l'essai (x64 avec le compte accentué, et arm64) : détection
+« absentes », modules qui ne se chargent plus, détection « présentes » une fois remise. Exécutions :
+https://github.com/medhiclb/HelixAI/actions/runs/36621998206 (relevé : signature et version) et
+EXECUTION_VERTE. **Pas essayé** : un vrai PC sans Visual C++, la demande de l'UAC (les machines de GitHub
+n'en ont pas), son refus, un compte standard, un code 3010, un proxy devant
+`download.visualstudio.microsoft.com`, et ce qui, dans OpenClaw, échoue sans ces deux modules.
 
 Ce qui reste limité sous Windows natif, dit pour cette capacité seulement : **les commandes
 d'un employé Libre passent par PowerShell** (OpenClaw 2026.9.4, `getShellConfig` :
@@ -1416,6 +1485,12 @@ local, conforme à la règle du § 1) :
 | OpenCode 1.18.32 (moteur de l'écran Code) | Anomaly (ex-SST) | MIT | posé d'un clic par Helix quand la machine n'en a pas (`opencodePrive.ts`) | version épinglée, empreintes SHA-256 écrites dans le code (27/09/2026) |
 | Node 24 LTS officiel | OpenJS Foundation | MIT (npm : Artistic 2.0) | npm de l'atelier et `npx` des serveurs d'outils (MCP) quand la machine n'en a pas | même Node que celui d'OpenClaw, déjà en place ; empreinte vérifiée contre `SHASUMS256.txt` |
 | llmster (moteur sans interface de LM Studio) | Element Labs | conditions de LM Studio (acceptées à l'installation, pour soi ou au nom de son organisation) | moteur des modèles sur Mac à puce Apple, Windows et Linux | version 0.0.25-1 épinglée, empreintes SHA-512 écrites dans le code |
+
+**Ajouté le 29/09/2026** :
+
+| Brique | Éditeur | Licence | Usage | Remarque |
+|---|---|---|---|---|
+| Microsoft Visual C++ Redistributable 14.51.36247.0, x64 et arm64 | Microsoft | conditions de licence de Microsoft (logiciel fermé, gratuit) | Windows seulement : les bibliothèques dont deux modules natifs d'OpenClaw ont besoin (`VCRUNTIME140.dll`), quand elles manquent (`visualCpp.ts`) | **accepté par Medhi le 29/09/2026**, exception à la règle Apache 2.0 et MIT, comme Python ; jamais redistribué : téléchargé chez Microsoft (adresse versionnée, empreinte SHA-256 et signature Authenticode vérifiées), installé par Windows avec l'autorisation d'administrateur de la personne (§ 3.4) |
 
 **Relevé le 28/09/2026** (seconde tournée de l'audit, SECURITE.md § 39) : tous les composants
 tiers, avec leur licence et leur compatibilité avec l'AGPL-3.0, sont dans `THIRD_PARTY_NOTICES.md`

@@ -6049,6 +6049,9 @@ comme sur macOS et Linux. Code propre au système : `gateway/src/plateformeOpenC
   `openclaw gateway install` : l'instance est un processus enfant de la passerelle, sur la
   boucle locale et son jeton, dans `<données>\openclaw`. L'OpenClaw personnel
   (`%USERPROFILE%\.openclaw`, port 18789, sa tâche « OpenClaw Gateway ») n'est ni lu ni touché.
+  **Depuis le 29/09/2026, une exception** : quand les bibliothèques Visual C++ de Microsoft manquent,
+  leur paquet officiel est installé avec l'autorisation d'administrateur que Windows demande (§ 64).
+  OpenClaw lui-même reste sans droits d'administrateur.
 - **Environnement fermé, sans tenir compte de la casse.** Les variables transmises à OpenClaw
   (liste fermée depuis le test d'intrusion du 27/09/2026) sont comparées sans la casse sous Windows ;
   ajoutées : où sont les programmes et PowerShell (`ProgramFiles`, `ProgramW6432`, `ProgramData`,
@@ -6429,3 +6432,80 @@ le port (Node ne dit pas quel processus tient une connexion déjà ouverte) ; un
 autre compte de la machine, invisible à `lsof` sans droits, fait dire « fermé » et ne reçoit
 rien. Ce que Palmier Pro fait lui-même de ses données (mesure d'usage, envois à ses services)
 relève de l'éditeur, pas de Helix.
+
+## 64. Bibliothèques Visual C++ de Microsoft pour OpenClaw sous Windows (29 septembre 2026)
+
+Décision de Medhi et relevés : PROJET.md § 3.4 (entrée du 29/09/2026) et § 3.9. Deux modules natifs
+d'OpenClaw 2026.9.4 importent `VCRUNTIME140.dll` ; quand elle manque dans System32, ou qu'elle est
+plus ancienne que l'éditeur de liens de ces modules (x64 14.51, arm64 14.44), Helix installe le
+« Microsoft Visual C++ Redistributable » officiel. C'est la **seule élévation** que Helix demande :
+jusqu'ici, rien ne passait par l'administrateur (§ 57.1). Code : `gateway/src/visualCpp.ts`, appelé par
+`installationOpenClaw.ts` (étape `visualcpp`, avant Node) et par la route `POST /helix/openclaw/installer`
+quand OpenClaw est déjà là sans elles (`reparerVisualCpp`). Contrôles : `npm run securite` § 43,
+`scripts/essai-openclaw-windows.mjs` (section H, et `--installation` sur les Windows de GitHub).
+
+### 64.1 Ce qui est lancé avec les droits d'administrateur, et rien d'autre
+
+- **L'adresse, la taille, l'empreinte et le signataire viennent du code.** `PAQUETS_VISUAL_CPP` : une
+  adresse versionnée de `download.visualstudio.microsoft.com` par processeur (jamais le lien
+  permanent `aka.ms`, qui change de fichier), taille et SHA-256 relevées le 29/09/2026 ; le
+  signataire attendu (`CN=Microsoft Corporation, O=Microsoft Corporation`) et la racine
+  (« Microsoft Root Certificate Authority 2011 », empreinte `8F43288A…C0BCFE`). Ni le profil, ni une
+  requête, ni une variable d'environnement ne les changent : la route ne lit rien de son corps, et
+  `visualCpp.ts` ne fait qu'un `fetch`, sur l'adresse épinglée, **sans suivre de redirection**.
+- **Vérifié avant d'être lancé, lancé d'où il a été vérifié.** Téléchargé dans un dossier à soi sous
+  les données de Helix (`mkdtemp`, fichier créé en `wx`), coupé s'il dépasse la taille attendue ;
+  taille et empreinte comparées ; puis `Get-AuthenticodeSignature` (statut `Valid`, signataire
+  exact champ par champ, racine de la chaîne parmi celles écrites dans le code : une racine ajoutée au
+  magasin de la machine par un tiers ne suffit pas) ; puis l'empreinte **relue sur le disque** juste
+  avant le lancement, par ce même chemin. Tout écart efface le fichier sans le lancer. Le dossier est
+  effacé ensuite, quoi qu'il arrive.
+- **Aucun interpréteur entre les deux.** Trois scripts PowerShell constants (relevé, signature,
+  installation), passés en `-EncodedCommand` à Windows PowerShell de System32 (lu dans `SystemRoot`) :
+  le fichier, son journal et le processeur passent par des variables `HELIX_VC_*`, lues comme des
+  chaînes, jamais dans le texte du script. L'installeur est lancé par `Start-Process -Verb RunAs`
+  (ShellExecute : c'est Windows qui demande l'autorisation, et la demande d'UAC montre l'éditeur
+  vérifié de Microsoft), avec les seuls arguments `/install /quiet /norestart /log <journal>`, jamais
+  par `cmd.exe`. Windows PowerShell est lancé sans le `PSModulePath` hérité (vu sur GitHub : depuis
+  PowerShell 7, `Get-AuthenticodeSignature` ne se chargeait plus, et la vérification échouait fermée).
+- **Codes de sortie** : 0 et 1638 (déjà plus récent) bons, 3010 bon avec redémarrage conseillé (dit à
+  l'écran), 1223 ou un lancement refusé (1223, 740, 5) : « Windows a refusé l'autorisation », quoi
+  faire, l'administrateur du PC et la page officielle de Microsoft ; 1618 : une autre installation en
+  cours ; le reste, le code et la page officielle. Après l'installeur, la détection est refaite : si la
+  DLL manque encore, l'écran dit comment la réparer. La sortie et la fin du journal de l'installeur vont
+  à `passerelle.log` ; l'installation et l'échec au journal d'audit (`visual_cpp.installe`,
+  `visual_cpp.echec`).
+- **Qui peut la déclencher** : toute personne connectée qui met un agent en service, comme
+  l'installation d'OpenClaw elle-même. Elle ne choisit rien : même paquet, même vérification, et
+  c'est Windows qui demande l'autorisation, à la personne devant le poste de l'instance.
+
+### 64.2 Détection
+
+La DLL dans `%SystemRoot%\System32` et sa version de fichier font foi ; la clé
+`HKLM\SOFTWARE\[WOW6432Node\]Microsoft\VisualStudio\14.0\VC\Runtimes\<arch>` ne sert que si le fichier
+ne dit pas la sienne (les machines de GitHub ont la DLL sans la clé). Relevé illisible : rien n'est
+bloqué (null). Gardé dix minutes ; refait après l'installeur et après un démarrage raté d'OpenClaw.
+Sous macOS et Linux : rien.
+
+### 64.3 Variable réservée aux essais
+
+`HELIX_ESSAI_VISUAL_CPP=absent` fait dire « absentes » à la détection jusqu'à ce qu'une installation ait
+tourné dans ce processus, pour faire passer tout le chemin sur une machine qui les a déjà. Elle ne
+donne rien de plus que le chemin normal (même paquet épinglé, mêmes vérifications, même demande de
+Windows). Posée par qui lance la passerelle, jamais par une requête ; ne pas la poser en production.
+
+### 64.4 Vu tenir, et pas essayé
+
+Sur les Windows x64 et arm64 de GitHub (29/09/2026) : les deux paquets téléchargés à leur adresse,
+taille et empreinte égales au code, signature `Valid` de Microsoft Corporation sous la racine 2011,
+version 14.51.36247.0 ; la détection forcée à « absentes », l'installeur réel lancé avec élévation
+(code 0), puis OpenClaw installé et démarré ; `VCRUNTIME140.dll` retirée de System32 le temps de
+l'essai : la détection dit « absentes », les deux modules ne se chargent plus avec le PATH que Helix
+donne à OpenClaw, et la remise est revue. **Pas essayé** : un vrai PC sans Visual C++, la demande
+d'UAC à l'écran (les machines de GitHub n'en ont pas), son refus, un compte standard qui demande le mot
+de passe d'un administrateur, un redémarrage demandé (3010), un proxy qui inspecte les connexions
+vers `download.visualstudio.microsoft.com`. Laissé : entre la relecture de l'empreinte et le
+lancement, quelques millisecondes où un programme **du même compte** pourrait remplacer le fichier ;
+ce compte peut déjà tout faire sous son nom, et la demande d'UAC montrerait alors un autre éditeur que
+Microsoft. Le paquet remplace une version plus ancienne pour toute la machine : d'autres programmes
+en profitent, aucun ne perd sa version (le paquet de Microsoft garde la compatibilité des 14.x).

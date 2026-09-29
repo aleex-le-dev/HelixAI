@@ -656,7 +656,12 @@ Il permet de fixer, par client :
   les versions installées, `chemin` impose un exécutable OpenClaw déjà présent (sous
   Windows, le `openclaw.cmd` posé par npm ou le script `openclaw.mjs` : Helix lance
   Node sur ce script, jamais le `.cmd`), `port` déplace l'instance dédiée (18800 par
-  défaut) ;
+  défaut). Sous Windows, deux modules d'OpenClaw demandent les bibliothèques Visual C++
+  de Microsoft (`VCRUNTIME140.dll`) : quand elles manquent, Helix télécharge et vérifie
+  le paquet officiel de Microsoft, puis Windows demande l'autorisation d'administrateur
+  pour l'installer ; sur un compte sans ce droit, l'administrateur du PC l'installe
+  depuis https://learn.microsoft.com/cpp/windows/latest-supported-vc-redist. Aucun
+  réglage du profil ne change ce paquet ;
 - `journalConservationJours` : durée de conservation du **journal d'audit** (90 jours
   par défaut, de 30 à 3650) ; `journalCopie` en recopie chaque ligne ailleurs.
 
@@ -697,6 +702,7 @@ C'est le cœur de la promesse Helix, et il vaut mieux le dire exactement.
 | `pypi.org` et `huggingface.co` | Installation de la dictée ou de la transcription des réunions, sur demande | Le moteur de transcription, puis le modèle Whisper adapté à la machine, à une révision figée. Ensuite, la transcription tourne hors ligne |
 | `registry.npmjs.org` | Page Agents, au plus deux fois par jour | Lire le numéro de la dernière version publiée d'OpenClaw, pour la dire à l'écran. Rien n'est envoyé |
 | `nodejs.org`, puis `registry.npmjs.org` | Bouton « Installer OpenClaw », ou premier déploiement d'un employé | Un Node.js officiel (archive vérifiée par son empreinte SHA-256 ; `.zip` sous Windows, x64 ou arm64), puis OpenClaw à la version éprouvée, dans `<données>/openclaw-moteur`. Sous Windows, Helix pose et lance OpenClaw en natif, sans WSL ni tâche planifiée (`node.exe openclaw.mjs`) ; les commandes d'un employé, au palier Libre, passent par PowerShell |
+| `download.visualstudio.microsoft.com` | Windows seulement : installation d'OpenClaw (ou bouton « Installer les bibliothèques de Microsoft » de la page Agents) quand `VCRUNTIME140.dll` manque dans System32, ou est plus ancienne que celle qu'OpenClaw demande | Le « Microsoft Visual C++ Redistributable » officiel, x64 ou arm64, à une adresse versionnée écrite dans le code (14.51.36247.0) ; taille, empreinte SHA-256 et signature Authenticode de Microsoft vérifiées avant le lancement. Windows demande l'autorisation d'administrateur (UAC) ; sans elle, rien n'est installé et l'écran donne la page officielle de Microsoft. Rien n'est envoyé |
 | `registry.npmjs.org` | Premier employé au palier Étendu, premier branchement de WhatsApp, Discord, Slack ou Mattermost | Extensions officielles d'OpenClaw (recherche web DuckDuckGo, messageries), installées dans le dossier de l'instance |
 | Le serveur de mise à jour **de l'agence** | Au lancement puis toutes les six heures, si une adresse est inscrite dans le paquet | Savoir si une version plus récente existe, et la télécharger si l'application est signée. Rien d'autre n'est envoyé que la requête du fichier `latest-mac.yml` (SIGNATURE.md § 4) |
 

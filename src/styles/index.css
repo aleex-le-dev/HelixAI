@@ -65,12 +65,16 @@
   }
 
   /*
-   * Focus clavier : discret et aux couleurs de la marque.
-   * `:focus-visible` ne se declenche qu'au clavier, jamais a la souris — un
-   * clic ne doit pas encadrer l'element.
+   * Focus clavier : discret et aux couleurs de la marque, et seulement quand la
+   * personne navigue au clavier (`data-saisie`, lib/modaliteSaisie.ts). Avec
+   * `:focus-visible` seul, un bouton qui reprenait le focus après un menu ou
+   * une fenêtre gardait un cadre vert après un clic (Windows, 29/09/2026).
    */
   :where(a, button, select, [tabindex], input[type="checkbox"], input[type="radio"], input[type="range"], input[type="file"], input[type="color"], input[type="button"], input[type="submit"]):focus-visible {
-    @apply outline-none ring-2 ring-accent/50 ring-offset-1 ring-offset-background;
+    @apply outline-none;
+  }
+  :root[data-saisie="clavier"] :where(a, button, select, [tabindex], input[type="checkbox"], input[type="radio"], input[type="range"], input[type="file"], input[type="color"], input[type="button"], input[type="submit"]):focus-visible {
+    @apply ring-2 ring-accent/50 ring-offset-1 ring-offset-background;
   }
 
   /*

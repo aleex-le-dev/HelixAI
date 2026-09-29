@@ -4,6 +4,7 @@ import "./styles/index.css";
 import App from "./App";
 import { startSync } from "./lib/store/sync";
 import { appliquerReprise, reprendreAnciensSecrets } from "./lib/coffre";
+import { suivreModaliteSaisie } from "./lib/modaliteSaisie";
 
 /*
  * Marque le document quand l'interface tourne dans la fenêtre native : les
@@ -17,6 +18,9 @@ if (new URLSearchParams(window.location.search).has("desktop")) {
 if (new URLSearchParams(window.location.search).get("titre") === "flottant") {
   document.documentElement.dataset.titre = "flottant";
 }
+
+// Le cadre de focus seulement au clavier (lib/modaliteSaisie.ts).
+suivreModaliteSaisie();
 
 /*
  * Déplace dans le trousseau du système ce qu'une version antérieure avait

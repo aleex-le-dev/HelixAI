@@ -792,6 +792,8 @@ async function questionChat(ctx, etat, signal) {
 
   let reponse = "";
   let outil = null;
+  /** Le dernier statut écrit hors terminal, chiffres ôtés : le même, qui ne fait que compter, ne se réécrit pas. */
+  let statutDit = "";
   /*
    * La réflexion, par son canal (`reasoning_content`, `reasoning`) ou écrite
    * dans le texte entre balises : jamais affichée, mais dite sur place avec
@@ -841,8 +843,17 @@ async function questionChat(ctx, etat, signal) {
         h.etapes.forEach((e, i) => ligne(discret(`  ${i + 1}. ${e}`)));
       } else if (h.type === "etape" && typeof h.titre === "string") {
         ligne(gras(T.etape((h.index ?? 0) + 1, h.total ?? "?", h.titre)));
-      } else if (h.type === "statut" && h.message) ligne(discret(h.message));
-      else if (h.type === "error") throw new ErreurCli(h.message || T.refus(500));
+      } else if (h.type === "statut") {
+        /*
+         * L'instance redit chaque seconde où en est le modèle (« … lit la demande (12 s)... »,
+         * 29/09/2026) : réécrit sur place dans un terminal ; ailleurs, une ligne seulement quand
+         * l'étape change, pas une par seconde. Un statut vide : l'attente est finie.
+         */
+        if (!h.message) effacerEtat();
+        else if (surPlace) etatSurPlace(h.message);
+        else if (h.message.replace(/\d+/g, "") !== statutDit) ligne(discret(h.message));
+        statutDit = h.message ? h.message.replace(/\d+/g, "") : statutDit;
+      } else if (h.type === "error") throw new ErreurCli(h.message || T.refus(500));
       continue;
     }
     const delta = ev.choices?.[0]?.delta;

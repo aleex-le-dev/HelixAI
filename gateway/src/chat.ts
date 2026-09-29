@@ -141,6 +141,47 @@ function emitHelix(res: http.ServerResponse, event: Record<string, unknown>): vo
 }
 
 /**
+ * Tant que le modèle n'a rien rendu, l'écran du Chat le dit, avec le temps
+ * écoulé (29/09/2026).
+ *
+ * Vu dans l'essai Windows de GitHub (scripts/essai-reflexion-ci.mjs, machine
+ * sans carte graphique, Qwen3 1.7B) : 50 s pour le tri qui décide s'il faut
+ * découper la demande, puis 36 s de lecture de la demande par le moteur, avant
+ * le premier mot de réflexion. Pendant ces 86 s, l'écran n'avait qu'un curseur
+ * qui clignote : ni « Réflexion en cours… », ni temps. Sur un Mac à puce Apple,
+ * les deux phases tiennent en quelques secondes. Un statut (déjà affiché par
+ * le Chat, avec sa roue) les nomme pour ce qu'elles sont, sans les faire passer
+ * pour de la réflexion ; il s'efface au premier morceau reçu. Rien avant trois
+ * secondes : une réponse rapide n'a pas à clignoter.
+ */
+function attenteAffichee(res: http.ServerResponse, texte: (secondes: number) => string): () => void {
+  const debut = Date.now();
+  let dit = false;
+  let fini = false;
+  const minuterie = setInterval(() => {
+    const secondes = Math.floor((Date.now() - debut) / 1000);
+    if (fini || secondes < 3 || res.writableEnded) return;
+    dit = true;
+    emitHelix(res, { type: "statut", message: texte(secondes) });
+  }, 1000);
+  minuterie.unref?.();
+  return () => {
+    if (fini) return;
+    fini = true;
+    clearInterval(minuterie);
+    if (dit && !res.writableEnded) emitHelix(res, { type: "statut", message: "" });
+  };
+}
+
+/** « 45 s », « 1 min 12 s », dans la langue de l'écran, pour un statut d'attente. */
+function lectureEnCours(modele: string, secondes: number, tri: boolean): string {
+  const m = Math.floor(secondes / 60);
+  const s = secondes % 60;
+  if (tri) return m ? tf("{0} organise le travail ({1} min {2} s)...", modele, m, s) : tf("{0} organise le travail ({1} s)...", modele, s);
+  return m ? tf("{0} lit la demande ({1} min {2} s)...", modele, m, s) : tf("{0} lit la demande ({1} s)...", modele, s);
+}
+
+/**
  * Consomme un flux SSE amont : relaie contenu et raisonnement au client,
  * accumule les appels d'outils demandés par le modèle.
  */
@@ -153,6 +194,8 @@ async function consumeUpstream(
   sortie?: { fin: string },
   /** Le modèle devait réfléchir : une balise `</think>` seule dit alors que ce qui précède était sa réflexion. */
   reflechit = false,
+  /** Appelé au premier morceau du moteur (réflexion, texte ou appel d'outil) : l'attente affichée s'arrête. */
+  surPremierMorceau?: () => void,
 ): Promise<UpstreamResult> {
   const reader = upstream.body!.getReader();
   const decoder = new TextDecoder();
@@ -273,6 +316,7 @@ async function consumeUpstream(
 
         const choice = json.choices?.[0];
         if (!choice) continue;
+        surPremierMorceau?.();
         // Texte et raisonnement dans le dialecte du fournisseur (`reasoning`, morceaux `thinking`…) : modelesCloud.ts.
         const lu = lireDelta(choice.delta);
         const delta = { ...(choice.delta ?? {}), content: lu.texte, reasoning_content: lu.reflexion };
@@ -1652,14 +1696,23 @@ export async function handleChatRequest(
        * l'étape à la première secousse gâchait tout le travail déjà fait, alors
        * qu'un second essai passe presque toujours.
        */
-      let upstream = await callUpstream(backend, payload, arret.signal);
+      // Jusqu'au premier morceau, l'écran dit que le modèle lit la demande (voir `attenteAffichee`).
+      const finAttente = attenteAffichee(res, (secondes) => lectureEnCours(model.id, secondes, false));
+      let upstream = await callUpstream(backend, payload, arret.signal).catch((err: unknown) => {
+        finAttente();
+        throw err;
+      });
       if (upstream.status >= 500) {
         await upstream.body?.cancel().catch(() => {});
         await new Promise((r) => setTimeout(r, 1500));
-        upstream = await callUpstream(backend, payload, arret.signal);
+        upstream = await callUpstream(backend, payload, arret.signal).catch((err: unknown) => {
+          finAttente();
+          throw err;
+        });
       }
 
       if (!upstream.ok || !upstream.body) {
+        finAttente();
         const detail = await upstream.text().catch(() => "");
         emitHelix(res, { type: "error", message: erreurDuMoteur(upstream.status, detail, model.id, backend) });
         return { texte, interrompu: "moteur", modifications, echecs, lectures, derniereErreur, releves, refus };
@@ -1676,7 +1729,10 @@ export async function handleChatRequest(
        * même pour un modèle que son nom ne dit pas raisonneur (OLMo Think,
        * Phi-4 Reasoning, gpt-oss) : c'est justement son gabarit qui ouvre la balise.
        */
-      const result = await consumeUpstream(upstream, res, releve, sortie, niveauEffort(body.effort).raisonner).finally(() => releve.clore());
+      const result = await consumeUpstream(upstream, res, releve, sortie, niveauEffort(body.effort).raisonner, finAttente).finally(() => {
+        finAttente();
+        releve.clore();
+      });
       if (result.content) texte = result.content;
 
       /*
@@ -2167,6 +2223,8 @@ export async function handleChatRequest(
        * découper un travail — et contredire le `/no_think` juste au-dessus.
        */
       const base = basePayload({ ...body, effort: "aucun" }, model, fil);
+      // Sans flux, rien ne dit à l'écran que le modèle travaille : 50 s mesurées au processeur (voir `attenteAffichee`).
+      const finAttente = attenteAffichee(res, (secondes) => lectureEnCours(model.id, secondes, true));
       const brut = await callUpstream(backend, {
         ...base,
         /*
@@ -2180,7 +2238,7 @@ export async function handleChatRequest(
         tools: undefined,
         tool_choice: undefined,
         stream: false,
-      }, arret.signal);
+      }, arret.signal).finally(finAttente);
       if (!brut.ok) {
         await brut.body?.cancel().catch(() => {});
         return "";

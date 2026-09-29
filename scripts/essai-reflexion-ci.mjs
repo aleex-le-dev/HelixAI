@@ -257,6 +257,12 @@ export async function essaiReflexion({ G, entetes, dire, verifier, sortie, model
       chat.statut === 200 && chat.reflexion.trim().length > 0 && (chat.vu.reasoning_content > 0 || chat.vu.requalifiee > 0) && chat.reflexionAvantTexte && chat.dureeReflexion > 0,
       `${chat.statut} ${forme(chat.vu)} ; ${chat.dureeReflexion} ms ; moteur seul : ${forme(vus.lmstudio?.vu ?? {})}`,
     );
+    // Lecture de la demande et tri se disent à l'écran (chat.ts, `attenteAffichee`) : jamais une bulle muette plus de quelques secondes.
+    verifier(
+      `réflexion, ${cle}, Chat de Helix : un premier signe à l'écran (statut, réflexion ou texte) en moins de 8 s`,
+      chat.premierSigne > 0 && chat.premierSigne < 8000,
+      `${chat.premierSigne} ms`,
+    );
     verifier(
       `réflexion, ${cle}, Chat de Helix : une réponse, sans balise <think> ni </think>, et sans erreur`,
       chat.texte.trim().length > 0 && !/<\/?think>/.test(chat.texte) && (chat.vu.erreurs ?? []).length === 0,

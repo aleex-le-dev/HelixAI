@@ -8853,6 +8853,7 @@ console.log("\n40. Réflexion du modèle : canal séparé, `reasoning`, `<think>
     coupe: [{ content: "<thi" }, { content: "nk>\nJe calcule" }, { content: " 17 fois" }, { content: " 23.\n</th" }, { content: "ink>\n\nRépo" }, { content: "nse : 391." }],
     fermante: [...REFLEXION_FLUX.map((r) => ({ content: r })), { content: "\n</think>" }, { content: "\n\n" }, { content: REPONSE }],
     sans: [{ content: "Réponse" }, { content: " : 391." }],
+    lente: [...REFLEXION_FLUX.map((r) => ({ reasoning_content: r })), { content: REPONSE }],
   };
   const { createServer: serveurReflexion } = await import("node:http");
   const { writeFileSync: ecrireReflexion, mkdirSync: dossierReflexion } = await import("node:fs");
@@ -8866,6 +8867,8 @@ console.log("\n40. Réflexion du modèle : canal séparé, `reasoning`, `<think>
       }
       const demande = JSON.parse(corps || "{}");
       if (demande.stream === false) {
+        // « forme-lente » : le tri qui décide du découpage prend quatre secondes, comme au processeur.
+        if (/forme-lente/.test(JSON.stringify(demande.messages ?? []))) await attendre(4000);
         // Essai du modèle au premier chargement (santeModeles.ts), et tout appel sans flux : une phrase.
         res.setHeader("Content-Type", "application/json");
         return res.end(JSON.stringify({ id: "r", object: "chat.completion", choices: [{ index: 0, message: { role: "assistant", content: "Bonjour !" }, finish_reason: "stop" }] }));
@@ -8874,6 +8877,8 @@ console.log("\n40. Réflexion du modèle : canal séparé, `reasoning`, `<think>
       const forme = /forme-(\w+)/.exec(texte)?.[1] ?? "sans";
       res.setHeader("Content-Type", "text/event-stream");
       const morceau = (delta, fin = null) => res.write(`data: ${JSON.stringify({ id: "r", object: "chat.completion.chunk", created: 1, model: "qwen3-essai-reflexion", choices: [{ index: 0, delta, finish_reason: fin }] })}\n\n`);
+      // « lente » : le moteur lit la demande quatre secondes et demie avant son premier morceau (essai Windows : 36 s).
+      if (forme === "lente") await attendre(4500);
       morceau({ role: "assistant" });
       for (const d of FORMES_FLUX[forme] ?? FORMES_FLUX.sans) {
         morceau(d);
@@ -8977,6 +8982,24 @@ console.log("\n40. Réflexion du modèle : canal séparé, `reasoning`, `<think>
         `Chat de bout en bout, forme « ${forme} » : réflexion séparée, réponse sans balise, temps de réflexion mesuré`,
         r.statut === 200 && r.reflexion.trim() === REFLEXION && r.texte.trim() === REPONSE && !/think>/.test(r.texte) && r.duree >= 250,
         `${r.statut} ${JSON.stringify({ texte: r.texte, reflexion: r.reflexion, duree: r.duree })} ${r.brut.slice(-300)}`,
+      );
+    }
+    {
+      // Le tri et la lecture de la demande, muets jusque-là : l'écran les nomme, avec le temps, puis les efface.
+      const r = await fetch(`${GR}/v1/chat/completions`, {
+        method: "POST",
+        headers: seanceR,
+        body: JSON.stringify({ model: modele, effort: "moyen", tools: false, stream: true, messages: [{ role: "user", content: "Explique-moi la multiplication forme-lente." }] }),
+      });
+      const flux = await r.text();
+      const statuts = [...flux.matchAll(/"helix":\{"type":"statut","message":"([^"]*)"\}/g)].map((m) => m[1]);
+      const iReflexion = flux.indexOf('"reasoning_content"');
+      const iLecture = flux.search(/lit la demande \(\d+ s\)/);
+      verifier(
+        "Chat, tri et lecture lents (processeur) : « organise le travail (N s) » puis « lit la demande (N s) » avant la réflexion, effacés ensuite, jamais présentés comme de la réflexion",
+        statuts.some((m) => /qwen3-essai-reflexion organise le travail \(\d+ s\)\.\.\./.test(m)) && statuts.some((m) => /qwen3-essai-reflexion lit la demande \(\d+ s\)\.\.\./.test(m)) && statuts.includes("") &&
+          iLecture >= 0 && iReflexion > iLecture && !/Réflexion/.test(statuts.join(" ")),
+        statuts.join(" | ").slice(0, 400),
       );
     }
     const sans = await poser("sans");

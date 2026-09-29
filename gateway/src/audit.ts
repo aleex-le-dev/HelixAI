@@ -240,6 +240,9 @@ export type AuditAction =
   | "openclaw.installe"
   | "openclaw.mis_a_jour"
   | "openclaw.installation_echouee"
+  /** Windows : le paquet Visual C++ de Microsoft installé pour OpenClaw (version, redémarrage conseillé), ou son échec (29/09/2026). */
+  | "visual_cpp.installe"
+  | "visual_cpp.echec"
   /** Clés de modèles cloud : quel fournisseur, pour qui, jamais la clé. */
   | "fournisseur.ajoute"
   | "fournisseur.modifie"

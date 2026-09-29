@@ -128,6 +128,8 @@ export interface EtatEmployes {
     parue?: string;
     /** Système de la machine de l'instance (`win32` : ses commandes passent par PowerShell). Absent d'une instance plus ancienne. */
     plateforme?: string;
+    /** Windows : OpenClaw installé, mais les bibliothèques Visual C++ de Microsoft manquent (il ne démarre pas sans elles). */
+    visualCpp?: "absent" | "ancien";
   };
   employes: Employe[];
   familles: { id: Famille; disponible: boolean }[];
@@ -135,13 +137,24 @@ export interface EtatEmployes {
 }
 
 export interface EtatInstallation {
-  etape: "repos" | "preparation" | "node" | "openclaw" | "verification" | "termine" | "erreur";
+  /** `visualcpp` : Windows seulement, les bibliothèques de Microsoft qu'OpenClaw demande (29/09/2026). */
+  etape: "repos" | "preparation" | "visualcpp" | "node" | "openclaw" | "verification" | "termine" | "erreur";
   message: string;
+  /** Avancement du téléchargement (Node, ou le paquet de Microsoft), de 0 à 100. */
   avancement?: number;
   version?: string;
   /** Version remplacée, quand c'était une mise à jour. */
   de?: string;
+  /** Windows conseille de redémarrer le PC pour finir l'installation des bibliothèques de Microsoft. */
+  redemarrage?: boolean;
 }
+
+/** Les étapes pendant lesquelles une installation est en cours. */
+export const ETAPES_EN_COURS: readonly EtatInstallation["etape"][] = ["preparation", "visualcpp", "node", "openclaw", "verification"];
+
+/** Le message d'une étape, avec l'avancement du téléchargement quand il y en a un. */
+export const messageEtape = (i: EtatInstallation): string =>
+  `${i.message}${(i.etape === "node" || i.etape === "visualcpp") && i.avancement !== undefined && i.avancement < 100 ? ` ${i.avancement} %` : ""}`;
 
 /** Lance l'installation d'OpenClaw sur la machine de l'instance ; on suit ensuite `moteur.installation`. */
 export async function installerOpenClaw(): Promise<void> {
@@ -154,13 +167,14 @@ export async function installerOpenClaw(): Promise<void> {
  */
 export async function assurerOpenClaw(suivi: (e: EtatInstallation) => void): Promise<void> {
   const etat = await chargerEmployes();
-  if (etat.moteur.installe) return;
+  // Installé mais sans les bibliothèques de Microsoft (Windows) : la même route les installe, puis relance l'instance.
+  if (etat.moteur.installe && !etat.moteur.visualCpp) return;
   await installerOpenClaw();
   for (;;) {
     await new Promise((r) => setTimeout(r, 2000));
     const m = (await chargerEmployes()).moteur;
     suivi(m.installation);
-    if (m.installe && !["preparation", "node", "openclaw", "verification"].includes(m.installation.etape)) return;
+    if (m.installe && !ETAPES_EN_COURS.includes(m.installation.etape)) return;
     if (m.installation.etape === "erreur") throw new Error(m.installation.message);
   }
 }

@@ -96,7 +96,7 @@ import * as bibliotheque from "./bibliotheque.ts";
 import * as connaissances from "./connaissances.ts";
 import * as reunions from "./reunions.ts";
 import { etat as etatAgenda } from "./agenda.ts";
-import { installerOpenClaw, etatInstallation, assurerNodePrive } from "./installationOpenClaw.ts";
+import { installerOpenClaw, etatInstallation, assurerNodePrive, reparerVisualCpp } from "./installationOpenClaw.ts";
 import { canalOuvert, ecouterLApplication, envoyerALApplication, surFinDuCanal } from "./canalApplication.ts";
 import { listerEspace, lireFichierEspace } from "./espace.ts";
 import { consommationDe } from "./usage.ts";
@@ -6158,6 +6158,16 @@ const traiter = (
        * une version plus ancienne ne pourrait plus l'ouvrir).
        */
       const avant = await employes.etatMoteur();
+      /*
+       * Installé, à jour, mais sans les bibliothèques Visual C++ de Microsoft
+       * (Windows) : seule l'étape de Microsoft, puis le redémarrage de
+       * l'instance (29/09/2026). Le paquet est celui épinglé dans visualCpp.ts :
+       * la requête ne choisit rien.
+       */
+      if (avant.installe && !avant.miseAJour && avant.visualCpp) {
+        reparerVisualCpp(qui.userId, employes.crochetsInstallation);
+        return send(res, 202, { installation: etatInstallation() });
+      }
       if (avant.installe && !avant.miseAJour) {
         return send(res, 409, { error: { message: tf("OpenClaw {0} est déjà à jour.", avant.version) } });
       }

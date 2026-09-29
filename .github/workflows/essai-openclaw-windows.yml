@@ -15,12 +15,13 @@ name: Essai OpenClaw sous Windows
 on:
   workflow_dispatch:
   push:
-    branches: [main, essai-openclaw-windows]
+    branches: [main, essai-openclaw-windows, essai-vcredist-windows]
     paths:
       - "gateway/src/installationOpenClaw.ts"
       - "gateway/src/plateformeOpenClaw.ts"
       - "gateway/src/employes.ts"
       - "gateway/src/processus.ts"
+      - "gateway/src/visualCpp.ts"
       - "scripts/essai-openclaw-windows.mjs"
       - ".github/workflows/essai-openclaw-windows.yml"
 
@@ -44,17 +45,17 @@ jobs:
           - id: x64
             nom: Windows x64
             machine: windows-latest
-            options: ""
+            options: "--visual-cpp-absent"
           # Windows x64, comme chez une personne : compte « Hélène Dupont » (espace et accents partout sous son dossier).
           - id: x64-compte-accentue
             nom: Windows x64, compte avec espace et accents
             machine: windows-latest
-            options: "--compte-accentue --deux-fois"
+            options: "--compte-accentue --deux-fois --sans-vcruntime"
           # Windows sur processeur ARM (Snapdragon) : les modules natifs n'y ont pas toujours de binaire précompilé.
           - id: arm64
             nom: Windows arm64
             machine: windows-11-arm
-            options: ""
+            options: "--visual-cpp-absent --sans-vcruntime"
     steps:
       # Fins de ligne telles qu'au dépôt, comme sur la machine qui fabrique les versions.
       - name: Fins de ligne du dépôt

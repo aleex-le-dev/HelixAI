@@ -5,6 +5,7 @@ import {
   assurerOpenClaw,
   deployerEmploye,
   envoyerDocument,
+  messageEtape,
   modifierEmploye,
   prendreFichiers,
   type EtatEmployes,
@@ -74,12 +75,8 @@ export function useMiseEnService(
       const modele = agent.modeleEmploye ?? (servi(agent.modelUid) ? agent.modelUid : undefined);
       try {
         maj({ etape: "installation", message: t("Préparation…") });
-        await assurerOpenClaw((i) =>
-          maj({
-            etape: "installation",
-            message: `${i.message}${i.etape === "node" && i.avancement !== undefined ? ` ${i.avancement} %` : ""}`,
-          }),
-        );
+        // Sous Windows, l'étape « visualcpp » dit pourquoi Windows va demander une autorisation d'administrateur (message de la passerelle).
+        await assurerOpenClaw((i) => maj({ etape: "installation", message: messageEtape(i) }));
         maj({ etape: "deploiement", message: t("Mise en service…") });
         const { employe } = await deployerEmploye({
           nom: agent.name,

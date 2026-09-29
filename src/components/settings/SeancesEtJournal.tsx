@@ -118,6 +118,8 @@ const LIBELLES: Record<string, string> = {
   "openclaw.installe": t("OpenClaw installé"),
   "openclaw.mis_a_jour": t("OpenClaw mis à jour"),
   "openclaw.installation_echouee": t("Installation d'OpenClaw échouée"),
+  "visual_cpp.installe": t("Bibliothèques Visual C++ de Microsoft installées"),
+  "visual_cpp.echec": t("Installation des bibliothèques Visual C++ échouée"),
   "compte.photo_modifiee": t("Photo de profil modifiée"),
   "fournisseur.ajoute": t("Clé de modèle cloud branchée"),
   "fournisseur.modifie": t("Clé de modèle cloud modifiée"),

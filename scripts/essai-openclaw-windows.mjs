@@ -233,6 +233,19 @@ console.log("F. Ce que l'écran et la documentation disent");
   verifier("passerelle : le système de l'instance est donné à l'écran (moteur.plateforme)", /plateforme: process\.platform,/.test(lire("gateway", "src", "employes.ts")), "absent");
 }
 
+console.log("H. Bibliothèques Visual C++ de Microsoft (29/09/2026)");
+{
+  const V = await import(pathToFileURL(join(RACINE, "gateway", "src", "visualCpp.ts")).href);
+  for (const arch of ["x64", "arm64"]) {
+    const p = V.paquetVisualCpp(arch);
+    const m = /^https:\/\/download\.visualstudio\.microsoft\.com\/download\/pr\/[0-9a-f-]{36}\/([0-9A-F]{64})\/VC_redist\.(x64|arm64)\.exe$/.exec(p?.adresse ?? "");
+    verifier(`${arch} : adresse versionnée de Microsoft (pas le lien permanent), empreinte SHA-256 et taille écrites dans le code, égales au nom de dossier de Microsoft`, m && m[2] === arch && m[1].toLowerCase() === p.sha256 && p.octets > 1_000_000 && /^14\.\d+\.\d+\.\d+$/.test(p.version), JSON.stringify(p));
+  }
+  verifier("Windows 32 bits : aucun paquet (Helix n'y pose pas de Node)", V.paquetVisualCpp("ia32") === null, "paquet");
+  const installation = sansCommentaires(lire("gateway", "src", "installationOpenClaw.ts"));
+  verifier("installation : les bibliothèques de Microsoft passent avant Node, sous Windows seulement (la détection rend null ailleurs)", installation.indexOf("await assurerVisualCpp(qui)") > 0 && installation.indexOf("await assurerVisualCpp(qui)") < installation.indexOf("const node = await installerNode()") && /if \(process\.platform !== "win32"\) return null;/.test(lire("gateway", "src", "visualCpp.ts")), "ordre");
+}
+
 /*
  * --installation : la vraie installation, sur ce poste, pour vérifier que le
  * chemin commun (npm par node et npm-cli.js, `--prefix` explicite,
@@ -291,10 +304,66 @@ if (process.argv.includes("--installation")) {
    * (Node déjà posé, OpenClaw déjà dans le préfixe). La dernière fait foi.
    */
   const passes = process.argv.includes("--deux-fois") ? 2 : 1;
+  const V = await import(pathToFileURL(join(RACINE, "gateway", "src", "visualCpp.ts")).href);
+  /*
+   * Windows : le relevé des bibliothèques Visual C++ (29/09/2026). Ce que la
+   * détection de Helix lit sur cette machine (registre, DLL de System32), puis
+   * chaque paquet épinglé (x64 et arm64) téléchargé à son adresse, son
+   * empreinte, sa taille, sa version et sa signature Authenticode, lues ici,
+   * par les scripts PowerShell de visualCpp.ts. Gardé en artefact
+   * (`releve-visual-cpp.json`).
+   */
+  const ps = (script, variables) => {
+    const e = { ...process.env, ...variables };
+    const c = V.commandePowerShell(script, e);
+    const r = spawnSync(c.fichier, c.args, { env: e, encoding: "utf8", timeout: 120_000, windowsHide: true });
+    return { status: r.status, sortie: r.stdout ?? "", erreur: r.stderr ?? "" };
+  };
+  if (windows) {
+    const releve = { machine: process.arch, paquets: {} };
+    const brut = ps(V.SCRIPT_RELEVE, { HELIX_VC_ARCH: process.arch, HELIX_VC_DLL: V.DLL_VISUAL_CPP.join(";") });
+    releve.detection = { brut: brut.sortie, erreur: brut.erreur.slice(0, 500), verdict: V.lireReleve(brut.sortie) ? V.verdictVisualCpp(V.lireReleve(brut.sortie)) : null };
+    // Les autres DLL du Visual C++ que l'on aurait pu attendre : présentes ou non sur cette machine, pour mémoire.
+    releve.autres = V.lireReleve(ps(V.SCRIPT_RELEVE, { HELIX_VC_ARCH: process.arch, HELIX_VC_DLL: "VCRUNTIME140_1.dll;MSVCP140.dll;ucrtbase.dll" }).sortie);
+    verifier(`relevé de cette machine (${process.arch}) : lisible, bibliothèques présentes (machine de GitHub)`, releve.detection.verdict?.etat === "present", JSON.stringify(releve.detection));
+    const { createHash } = await import("node:crypto");
+    const dossierVc = mkdtempSync(join(tmpdir(), "helix-vc-"));
+    for (const arch of ["x64", "arm64"]) {
+      const p = V.PAQUETS_VISUAL_CPP[arch];
+      const r = await fetch(p.adresse, { redirect: "error" });
+      const octets = Buffer.from(await r.arrayBuffer());
+      const f = join(dossierVc, `VC_redist.${arch}.exe`);
+      writeFileSync(f, octets);
+      const sha256 = createHash("sha256").update(octets).digest("hex");
+      const s = ps(V.SCRIPT_SIGNATURE, { HELIX_VC_FICHIER: f });
+      let signature = null;
+      try {
+        signature = JSON.parse(s.sortie.trim());
+      } catch {
+        /* dit plus bas */
+      }
+      releve.paquets[arch] = { adresse: p.adresse, http: r.status, octets: octets.length, sha256, signature, erreurSignature: s.erreur.slice(0, 500) };
+      verifier(`paquet ${arch} : téléchargé à l'adresse épinglée, taille et empreinte SHA-256 égales à celles du code`, r.status === 200 && octets.length === p.octets && sha256 === p.sha256, `${r.status} ${octets.length} ${sha256}`);
+      verifier(`paquet ${arch} : signature Authenticode valide, « Microsoft Corporation », racine de Microsoft ; version du produit égale à celle du code`, V.refusSignature(signature) === null && signature?.version === p.version, `${V.refusSignature(signature)} ${JSON.stringify(signature)}`);
+    }
+    rmSync(dossierVc, { recursive: true, force: true });
+    if (sortieEssai) writeFileSync(join(sortieEssai, "releve-visual-cpp.json"), JSON.stringify(releve, null, 2));
+    console.log(`  (relevé Visual C++ : ${JSON.stringify(releve.detection.verdict)} ; autres DLL : ${JSON.stringify(releve.autres?.dll)})`);
+  }
+  /*
+   * `--visual-cpp-absent` : la détection dit « absentes » (variable réservée
+   * aux essais, visualCpp.ts), et tout le chemin passe : téléchargement,
+   * vérifications, installeur réel de Microsoft (sur la machine de GitHub,
+   * déjà installé : 1638 ou 0 attendu ; pas d'UAC, l'élévation passe), puis
+   * OpenClaw qui s'installe et démarre.
+   */
+  const vcAbsent = windows && process.argv.includes("--visual-cpp-absent");
+  if (vcAbsent) env.HELIX_ESSAI_VISUAL_CPP = "absent";
   const code = `const i = await import("./gateway/src/installationOpenClaw.ts");
     for (let k = 0; k < ${passes}; k++) {
       i.installerOpenClaw("essai", { apres: async () => {} });
-      for (;;) { await new Promise((r) => setTimeout(r, 2000)); const e = i.etatInstallation(); if (e.etape === "termine" || e.etape === "erreur") { console.log("PASSE " + k + " " + JSON.stringify(e)); if (k === ${passes} - 1) { console.log("ETAT " + JSON.stringify(e)); console.log("LANCEMENT " + JSON.stringify(i.lancementGere())); } break; } }
+      let vue = false;
+      for (;;) { await new Promise((r) => setTimeout(r, 500)); const e = i.etatInstallation(); if (e.etape === "visualcpp" && !vue) { vue = true; console.log("ETAPE_VISUALCPP " + JSON.stringify(e)); } if (e.etape === "termine" || e.etape === "erreur") { console.log("PASSE " + k + " " + JSON.stringify(e)); if (k === ${passes} - 1) { console.log("ETAT " + JSON.stringify(e)); console.log("LANCEMENT " + JSON.stringify(i.lancementGere())); } break; } }
     }`;
   const debutInstallation = Date.now();
   const r = spawnSync(process.execPath, ["--experimental-strip-types", "--no-warnings", "--input-type=module", "-e", code], { cwd: RACINE, env, encoding: "utf8", timeout: 30 * 60_000, maxBuffer: 64 * 1024 * 1024 });
@@ -303,6 +372,12 @@ if (process.argv.includes("--installation")) {
   const etat = JSON.parse(/ETAT (.*)/.exec(sortie)?.[1] ?? "null");
   const lancement = JSON.parse(/LANCEMENT (.*)/.exec(sortie)?.[1] ?? "null");
   const reussie = etat?.etape === "termine" && etat.version === "2026.9.4";
+  if (vcAbsent) {
+    const etape = JSON.parse(/ETAPE_VISUALCPP (.*)/.exec(sortie)?.[1] ?? "null");
+    const code = /\[visual-cpp\] installeur terminé : code (\S+)/.exec(sortie)?.[1];
+    verifier("Visual C++ déclaré absent : l'étape « visualcpp » est affichée, avec l'explication de la demande d'autorisation de Windows", etape?.etape === "visualcpp" && /autorisation d'administrateur/.test(etape.message), JSON.stringify(etape));
+    verifier("Visual C++ déclaré absent : paquet vérifié (empreinte, signature) puis installeur réel de Microsoft lancé avec élévation, code 0, 1638 ou 3010", /empreinte et signature de Microsoft vérifiées/.test(sortie) && ["0", "1638", "3010"].includes(code ?? ""), `code ${code} ${sortie.split(/\r?\n/).filter((l) => /visual-cpp/.test(l)).join(" | ").slice(0, 600)}`);
+  }
   if (sortieEssai) {
     writeFileSync(join(sortieEssai, "installation.txt"), sortie);
     // Les journaux de npm : ceux que sa sortie nomme, et tout `_logs` du cache (%LOCALAPPDATA%\npm-cache sous Windows).
@@ -378,16 +453,20 @@ if (process.argv.includes("--installation")) {
       };
       chercher(join(prefixe, "node_modules", "openclaw"));
       const nodePrive = join(prefixe, "node.exe");
-      const lignes = modules.map((m) => {
-        let imports = "?";
+      // L'éditeur de liens (en-tête PE) : la bibliothèque de Microsoft en place doit être au moins de cette version (29/09/2026).
+      const decrire = (f) => {
         try {
-          imports = importsPE(readFileSync(m)).join(", ");
+          const b = readFileSync(f);
+          return `  imports : ${importsPE(b).join(", ")}\n  éditeur de liens : ${lieurPE(b)}`;
         } catch (err) {
-          imports = `illisible (${err instanceof Error ? err.message : err})`;
+          return `  imports : illisible (${err instanceof Error ? err.message : err})`;
         }
+      };
+      const lignes = modules.map((m) => {
         const charge = spawnSync(nodePrive, ["-e", "require(process.argv[1])", m], { encoding: "utf8", timeout: 30_000, windowsHide: true });
-        return `${m.slice(prefixe.length)}\n  imports : ${imports}\n  chargement : ${charge.status === 0 ? "oui" : `non (${String(charge.stderr).trim().split(/\r?\n/).slice(0, 3).join(" | ")})`}`;
+        return `${m.slice(prefixe.length)}\n${decrire(m)}\n  chargement : ${charge.status === 0 ? "oui" : `non (${String(charge.stderr).trim().split(/\r?\n/).slice(0, 3).join(" | ")})`}`;
       });
+      lignes.unshift(`\\node.exe (Node privé)\n${decrire(nodePrive)}`);
       writeFileSync(join(sortieEssai, "modules-dll.txt"), lignes.join("\n"));
       const vc = modules.filter((_, i) => /VCRUNTIME|MSVCP/i.test(lignes[i].split("\n")[1] ?? ""));
       console.log(`  (${modules.length} modules natifs posés ; ${vc.length} demandent le Visual C++ : ${vc.map((m) => m.split(/[\\/]node_modules[\\/]/).pop()).join(", ") || "aucun"})`);
@@ -447,6 +526,74 @@ if (process.argv.includes("--installation")) {
       });
     });
     if (sortieEssai) writeFileSync(join(sortieEssai, "passerelle-openclaw.txt"), journal);
+
+    /*
+     * `--sans-vcruntime` (machine jetable seulement) : `VCRUNTIME140.dll`
+     * retirée de System32 le temps de l'essai (renommée, puis remise), pour
+     * voir de nos yeux ce qu'un PC sans Visual C++ ferait : la détection de
+     * Helix doit dire « absentes », les deux modules qui l'importent ne se
+     * chargent plus, et l'on note si OpenClaw démarre quand même. Un Windows
+     * où le renommage est refusé passe l'essai sans le faire (dit).
+     */
+    if (windows && process.argv.includes("--sans-vcruntime")) {
+      const { renameSync } = await import("node:fs");
+      const dll = join(process.env.SystemRoot ?? "C:\\Windows", "System32", "vcruntime140.dll");
+      const mise = `${dll}.helix-essai`;
+      let retiree = false;
+      try {
+        renameSync(dll, mise);
+        retiree = true;
+      } catch (err) {
+        console.log(`  (VCRUNTIME140.dll non retirée : ${err instanceof Error ? err.message : err} ; essai sans la DLL sauté)`);
+      }
+      if (retiree) {
+        const rapport = [];
+        try {
+          const r = V.lireReleve(ps(V.SCRIPT_RELEVE, { HELIX_VC_ARCH: process.arch, HELIX_VC_DLL: V.DLL_VISUAL_CPP.join(";") }).sortie);
+          const verdict = r ? V.verdictVisualCpp(r) : null;
+          rapport.push(`détection : ${JSON.stringify(verdict)}`);
+          verifier("sans VCRUNTIME140.dll : la détection de Helix dit « absentes » (registre ignoré : c'est la DLL que Windows charge)", verdict?.etat === "absent", JSON.stringify(verdict));
+          const nodePrive = lancement.node;
+          const dependances = join(donnees, "openclaw-moteur", "node", "node_modules", "openclaw", "node_modules");
+          const modulesVc = [join("@openclaw", `fs-safe-win32-${process.arch}-msvc`, "fs-safe-native.node"), join("@ubjs", `node-win32-${process.arch}-msvc`, `uniffi-runtime-napi.win32-${process.arch}-msvc.node`)]
+            .map((m) => join(dependances, m))
+            .filter((m) => existsSync(m));
+          const charges = modulesVc.map((m) => {
+            const c = spawnSync(nodePrive, ["-e", "require(process.argv[1])", m], { encoding: "utf8", timeout: 30_000, windowsHide: true });
+            rapport.push(`${m.slice(dependances.length)} : ${c.status === 0 ? "se charge" : `ne se charge pas (${String(c.stderr).trim().split(/\r?\n/).find((l) => /Error|module/i.test(l)) ?? c.status})`}`);
+            return c.status === 0;
+          });
+          verifier("sans VCRUNTIME140.dll : les modules d'OpenClaw qui l'importent ne se chargent plus", modulesVc.length > 0 && charges.every((c) => !c), rapport.join(" | "));
+          const v = spawnSync(lancement.fichier, [...lancement.prefixe, "--version"], { env: envOc, encoding: "utf8", timeout: 120_000, windowsHide: true });
+          rapport.push(`openclaw --version : code ${v.status}, ${String(v.stdout).trim().slice(0, 80)} ${String(v.stderr).trim().split(/\r?\n/).slice(0, 3).join(" | ").slice(0, 400)}`);
+          const g = spawn(lancement.fichier, [...lancement.prefixe, "gateway", "run", "--port", String(port)], { env: envOc, stdio: ["ignore", "pipe", "pipe"], windowsHide: true });
+          let jg = "";
+          g.stdout.on("data", (b) => (jg += b));
+          g.stderr.on("data", (b) => (jg += b));
+          let ouvre = false;
+          for (let i = 0; i < 120 && !ouvre && g.exitCode === null; i++) {
+            try {
+              await fetch(`http://127.0.0.1:${port}/`, { signal: AbortSignal.timeout(1000) });
+              ouvre = true;
+            } catch {
+              await new Promise((ok) => setTimeout(ok, 500));
+            }
+          }
+          rapport.push(`passerelle OpenClaw sans la DLL : ${ouvre ? "ouvre son port" : `n'ouvre pas son port (code ${g.exitCode})`}\n${jg.slice(-3000)}`);
+          if (g.exitCode === null) {
+            const tk = P.commandeArretArbre(g.pid, process.env);
+            spawnSync(tk.fichier, tk.args, { windowsHide: true });
+          }
+          await new Promise((ok) => setTimeout(ok, 2000));
+        } finally {
+          renameSync(mise, dll);
+        }
+        const apres = V.lireReleve(ps(V.SCRIPT_RELEVE, { HELIX_VC_ARCH: process.arch, HELIX_VC_DLL: V.DLL_VISUAL_CPP.join(";") }).sortie);
+        verifier("VCRUNTIME140.dll remise : la détection redit « présentes »", apres && V.verdictVisualCpp(apres).etat === "present", JSON.stringify(apres));
+        console.log(`  (sans VCRUNTIME140.dll : ${rapport.map((l) => l.split("\n")[0]).join(" ; ")})`);
+        if (sortieEssai) writeFileSync(join(sortieEssai, "sans-vcruntime.txt"), rapport.join("\n"));
+      }
+    }
   }
   try {
     rmSync(racine, { recursive: true, force: true, maxRetries: 10 });
@@ -493,6 +640,13 @@ function importsPE(b) {
     }
   }
   return noms;
+}
+
+/** La version de l'éditeur de liens qui a produit un fichier PE (octets 2 et 3 de l'en-tête optionnel), et sa machine. */
+function lieurPE(b) {
+  const pe = b.readUInt32LE(0x3c);
+  const machine = { 0x8664: "x64", 0xaa64: "arm64", 0x14c: "x86" }[b.readUInt16LE(pe + 4)] ?? b.readUInt16LE(pe + 4).toString(16);
+  return `${b.readUInt8(pe + 24 + 2)}.${String(b.readUInt8(pe + 24 + 3)).padStart(2, "0")} (${machine})`;
 }
 
 /** Les fichiers d'un dossier, sur quelques niveaux (pour voir ce que npm a posé). */

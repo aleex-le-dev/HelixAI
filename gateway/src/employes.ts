@@ -14,6 +14,7 @@ import { DESCRIPTION_FAMILLE, FAMILLES, outilsDeFamille, type Famille } from "./
 import { workspace } from "./mcp.ts";
 import { binaireGere, etatInstallation, plusRecente, versionParue, versionVisee, type Crochets } from "./installationOpenClaw.ts";
 import * as courrier from "./courrier.ts";
+import { detecterVisualCpp, visualCppConnu } from "./visualCpp.ts";
 import { DOCUMENT_MAX, LIBELLE_DOCUMENT_MAX, MESSAGE_DISQUE_PLEIN, placeSuffisante } from "./televersement.ts";
 import { t, tf } from "./langue.ts";
 import { OUTIL_EMPLOYE } from "./connaissances.ts";
@@ -1452,7 +1453,17 @@ async function lancerProcessus(moteur: Moteur): Promise<void> {
       tentatives = 0;
       return;
     }
-    if (processus !== p) throw new Error(t("L'instance de vos agents s'est arrêtée au démarrage. Elle va être relancée : réessayez dans une minute."));
+    if (processus !== p) {
+      /*
+       * Sous Windows, la cause la plus probable d'un arrêt au démarrage sur un
+       * PC où OpenClaw s'était installé : les bibliothèques Visual C++ de
+       * Microsoft absentes (29/09/2026, visualCpp.ts). On le dit, et la page
+       * Agents propose de les installer (`moteur.visualCpp`).
+       */
+      const vc = await detecterVisualCpp(true).catch(() => null);
+      if (vc && vc.etat !== "present") throw new Error(messageVisualCppManquant());
+      throw new Error(t("L'instance de vos agents s'est arrêtée au démarrage. Elle va être relancée : réessayez dans une minute."));
+    }
     await new Promise((r) => setTimeout(r, 500));
   }
   // Toujours fermé après 45 s : arrêté, il sera relancé par la surveillance ci-dessus plutôt que de rester muet.
@@ -2663,15 +2674,29 @@ export async function etatMoteur(): Promise<{
    * PowerShell (28/09/2026).
    */
   plateforme: NodeJS.Platform;
+  /**
+   * Windows : OpenClaw est installé mais les bibliothèques Visual C++ de
+   * Microsoft manquent (ou sont trop anciennes), et il ne démarre pas sans
+   * elles. L'écran propose de les installer (29/09/2026, visualCpp.ts).
+   */
+  visualCpp?: "absent" | "ancien";
 }> {
   const { moteur, raison } = await detecterMoteur();
   const visee = versionVisee();
   const derniere = moteur ? versionParue() : null;
+  const enMarche = Boolean(processus) && !demarrage && (await portOuvert(portOpenClaw()));
+  /*
+   * Relevé seulement sous Windows, OpenClaw installé mais arrêté : une
+   * instance qui tourne a ses bibliothèques. Le relevé (PowerShell) est gardé
+   * dix minutes ; celui d'un démarrage raté (`lancerProcessus`) le remplace.
+   */
+  const vc = process.platform === "win32" && moteur && !enMarche ? (visualCppConnu() ?? (await detecterVisualCpp().catch(() => null))) : null;
   return {
     installe: Boolean(moteur),
     version: moteur?.version,
     // Joignable, pas seulement lancé (voir `demarrerProcessus`).
-    enMarche: Boolean(processus) && !demarrage && (await portOuvert(portOpenClaw())),
+    enMarche,
+    ...(vc && vc.etat !== "present" ? { visualCpp: vc.etat } : {}),
     raison,
     // Installé par Helix, ou trouvé sur la machine (une installation qui existait déjà).
     gere: moteur?.bin === binaireGere(),
@@ -2681,6 +2706,10 @@ export async function etatMoteur(): Promise<{
     plateforme: process.platform,
   };
 }
+
+/** Ce que dit un démarrage raté faute des bibliothèques Visual C++ de Microsoft (Windows). */
+export const messageVisualCppManquant = () =>
+  t("OpenClaw ne peut pas démarrer : les bibliothèques Visual C++ de Microsoft manquent sur ce PC. Installez-les depuis la page Agents (Windows demandera une autorisation d'administrateur).");
 
 /** Après la première installation : oublier la détection en cache, et démarrer si des agents attendent. */
 export const crochetsInstallation: Crochets = {

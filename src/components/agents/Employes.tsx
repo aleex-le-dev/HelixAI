@@ -67,6 +67,8 @@ import {
   supprimerCopieMemoire,
   type CopieMemoire,
   type RaisonElargissement,
+  ETAPES_EN_COURS,
+  messageEtape,
 } from "@/lib/employes";
 import { lireEtat as lireEtatDeuxFacteurs } from "@/lib/deuxFacteurs";
 import { useGroupes } from "@/lib/groupes";
@@ -119,7 +121,7 @@ export function useEmployes() {
 export function MiseAJourOpenClaw({ etat, recharger }: { etat: EtatEmployes; recharger: () => Promise<void> }) {
   const [erreur, setErreur] = useState<string | null>(null);
   const inst = etat.moteur.installation;
-  const enCours = ["preparation", "node", "openclaw", "verification"].includes(inst.etape);
+  const enCours = ETAPES_EN_COURS.includes(inst.etape);
   useEffect(() => {
     if (!enCours) return;
     const t = setInterval(() => void recharger(), 2000);
@@ -129,9 +131,8 @@ export function MiseAJourOpenClaw({ etat, recharger }: { etat: EtatEmployes; rec
   if (enCours && etat.moteur.installe) {
     return (
       <p className="mt-4 flex items-center gap-2 text-sm text-muted-foreground">
-        <Loader2 size={15} strokeWidth={1.75} className="animate-spin" />
-        {inst.message}
-        {inst.etape === "node" && inst.avancement !== undefined && ` ${inst.avancement} %`}
+        <Loader2 size={15} strokeWidth={1.75} className="shrink-0 animate-spin" />
+        {messageEtape(inst)}
       </p>
     );
   }
@@ -139,6 +140,44 @@ export function MiseAJourOpenClaw({ etat, recharger }: { etat: EtatEmployes; rec
     return (
       <InfoBox tone="muted" className="mt-4" leading={<Check size={15} strokeWidth={1.75} />}>
         {inst.message}{" "}{t("Vos agents ont repris leur travail.")}
+      </InfoBox>
+    );
+  }
+  /*
+   * Windows : OpenClaw installé, mais les bibliothèques Visual C++ de
+   * Microsoft manquent, et il ne démarre pas sans elles (29/09/2026). Un
+   * bouton, et l'explication de la demande d'autorisation qui va suivre.
+   */
+  if (etat.moteur.visualCpp) {
+    return (
+      <InfoBox tone="info" className="mt-4" leading={<TriangleAlert size={15} strokeWidth={1.75} />}>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <p className="min-w-0">
+            {etat.moteur.visualCpp === "ancien"
+              ? t("Vos agents ne peuvent pas démarrer : les bibliothèques Visual C++ de Microsoft de ce PC sont trop anciennes pour OpenClaw.")
+              : t("Vos agents ne peuvent pas démarrer : OpenClaw a besoin des bibliothèques Visual C++ de Microsoft, qui manquent sur ce PC.")}{" "}
+            {t("Le paquet officiel de Microsoft est téléchargé et vérifié, puis Windows vous demande une autorisation d'administrateur pour l'installer.")}
+          </p>
+          <Button
+            size="sm"
+            onClick={() => {
+              setErreur(null);
+              void installerOpenClaw()
+                .then(recharger)
+                .catch((err) => setErreur(message(err)));
+            }}
+          >
+            {t("Installer les bibliothèques de Microsoft")}
+          </Button>
+        </div>
+        {(inst.etape === "erreur" || erreur) && <p className="mt-2 text-sm">{erreur ?? inst.message}</p>}
+      </InfoBox>
+    );
+  }
+  if (inst.etape === "termine" && inst.redemarrage) {
+    return (
+      <InfoBox tone="muted" className="mt-4" leading={<Check size={15} strokeWidth={1.75} />}>
+        {inst.message}
       </InfoBox>
     );
   }

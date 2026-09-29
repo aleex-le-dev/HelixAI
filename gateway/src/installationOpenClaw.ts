@@ -20,6 +20,7 @@ import {
   scriptsOpenClaw,
   type Lancement,
 } from "./plateformeOpenClaw.ts";
+import { detecterVisualCpp, installerVisualCpp } from "./visualCpp.ts";
 
 /**
  * Installe OpenClaw pour les employés, depuis l'interface, sans droits
@@ -38,6 +39,12 @@ import {
  *  3. les scripts d'installation d'OpenClaw lui-même, et eux seuls, lancés par
  *     ce Node sans interpréteur de commandes (`scriptsOpenClaw`) ;
  *  4. vérification : `openclaw --version`.
+ *
+ * Sous Windows, avant Node (29/09/2026, décision de Medhi) : les bibliothèques
+ * Visual C++ de Microsoft, dont deux modules natifs d'OpenClaw ont besoin
+ * pour démarrer, installées par le paquet officiel de Microsoft quand elles
+ * manquent, avec l'autorisation d'administrateur que Windows demande
+ * (visualCpp.ts). C'est la seule étape qui en demande une.
  *
  * Tout vit dans `<données>/openclaw-moteur`. Le Node du système, la
  * configuration du shell et toute installation personnelle d'OpenClaw restent
@@ -90,16 +97,18 @@ export const binaireGere = () => dispositionNode(join(racine(), "node"), platfor
 /** Comment lancer l'OpenClaw de Helix (null s'il n'est pas installé). */
 export const lancementGere = (): Lancement | null => lancementOpenClaw(binaireGere(), platform(), existsSync, () => null);
 
-export type Etape = "repos" | "preparation" | "node" | "openclaw" | "verification" | "termine" | "erreur";
+export type Etape = "repos" | "preparation" | "visualcpp" | "node" | "openclaw" | "verification" | "termine" | "erreur";
 
 export interface EtatInstallation {
   etape: Etape;
   message: string;
-  /** Avancement du téléchargement de Node, de 0 à 100. */
+  /** Avancement du téléchargement de Node (ou du paquet de Microsoft, étape `visualcpp`), de 0 à 100. */
   avancement?: number;
   version?: string;
   /** Version remplacée, quand c'était une mise à jour. */
   de?: string;
+  /** Windows conseille de redémarrer le PC pour finir l'installation des bibliothèques de Microsoft (code 3010). */
+  redemarrage?: boolean;
 }
 
 let etat: EtatInstallation = { etape: "repos", message: "" };
@@ -440,6 +449,56 @@ export interface Crochets {
   retablir?: () => Promise<void>;
 }
 
+/** Le message de l'étape `visualcpp` : ce qui se passe, et pourquoi Windows va demander une autorisation. */
+const messageVisualCpp = () =>
+  t("Installation des bibliothèques de Microsoft (Visual C++)… OpenClaw en a besoin pour démarrer, et elles manquent sur ce PC : Windows va demander une autorisation d'administrateur pour les installer (si la demande n'apparaît pas, regardez la barre des tâches).");
+
+/**
+ * Sous Windows, les bibliothèques Visual C++ : relevées, et installées par le
+ * paquet de Microsoft si elles manquent ou sont trop anciennes. Rend `true`
+ * quand Windows conseille un redémarrage. Rien ailleurs, rien quand elles
+ * sont là.
+ */
+async function assurerVisualCpp(qui: string): Promise<boolean> {
+  const avant = await detecterVisualCpp(true);
+  if (!avant || avant.etat === "present") return false;
+  console.log(`[openclaw] bibliothèques Visual C++ : ${JSON.stringify(avant)}, installation du paquet de Microsoft`);
+  etat = { etape: "visualcpp", message: messageVisualCpp(), avancement: 0 };
+  const r = await installerVisualCpp((pourcent) => {
+    if (etat.etape === "visualcpp") etat = { ...etat, avancement: pourcent };
+  });
+  journaliser("visual_cpp.installe", qui, { version: r.version, redemarrage: r.redemarrage, avant: avant.etat });
+  return r.redemarrage;
+}
+
+/**
+ * Un OpenClaw déjà installé qui ne démarre pas faute des bibliothèques Visual
+ * C++ (retirées depuis, ou OpenClaw posé avant le 29/09/2026 sur un PC qui ne
+ * les avait pas) : l'étape de Microsoft seule, puis le redémarrage de
+ * l'instance. Même file que l'installation : une seule à la fois.
+ */
+export function reparerVisualCpp(qui: string, crochets: Crochets): void {
+  if (enCours) return;
+  enCours = (async () => {
+    try {
+      const redemarrage = await assurerVisualCpp(qui);
+      etat = { etape: "verification", message: t("Redémarrage de vos agents…") };
+      await crochets.apres();
+      etat = {
+        etape: "termine",
+        message: t("Les bibliothèques Visual C++ de Microsoft sont installées.") + (redemarrage ? ` ${t("Windows conseille de redémarrer le PC pour finir l'installation des bibliothèques de Microsoft.")}` : ""),
+        ...(redemarrage ? { redemarrage } : {}),
+      };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      etat = { etape: "erreur", message };
+      journaliser("visual_cpp.echec", qui, { raison: message.slice(0, 300) });
+    } finally {
+      enCours = null;
+    }
+  })();
+}
+
 /**
  * Lance l'installation (une seule à la fois) et rend la main aussitôt : l'écran
  * suit `etatInstallation()`.
@@ -459,6 +518,7 @@ export function installerOpenClaw(qui: string, crochets: Crochets, avant?: strin
         etat = { etape: "preparation", message: t("Mise de côté des données de vos agents…") };
         await crochets.preparer();
       }
+      const redemarrage = await assurerVisualCpp(qui);
       etat = { etape: "node", message: t("Téléchargement de Node.js (environ 50 Mo)…"), avancement: 0 };
       const node = await installerNode();
       etat = {
@@ -474,7 +534,9 @@ export function installerOpenClaw(qui: string, crochets: Crochets, avant?: strin
         message: avant ? tf("OpenClaw est passé de {0} à {1}.", avant, version) : tf("OpenClaw {0} est installé.", version),
         version,
         ...(avant ? { de: avant } : {}),
+        ...(redemarrage ? { redemarrage } : {}),
       };
+      if (redemarrage) etat.message += ` ${t("Windows conseille de redémarrer le PC pour finir l'installation des bibliothèques de Microsoft.")}`;
       if (avant) journaliser("openclaw.mis_a_jour", qui, { de: avant, a: version, node });
       else journaliser("openclaw.installe", qui, { version, node, dossier: racine() });
     } catch (err) {

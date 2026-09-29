@@ -245,12 +245,29 @@ if (process.argv.includes("--installation")) {
   const sortieEssai = argument("--sortie") ? join(process.cwd(), argument("--sortie")) : null;
   if (sortieEssai) mkdirSync(sortieEssai, { recursive: true });
   const racine = mkdtempSync(join(tmpdir(), "helix-oc-win-"));
-  const maison = join(racine, "maison");
-  const donnees = join(racine, "donnees");
+  /*
+   * `--compte-accentue` : un compte Windows nommé « Hélène Dupont », comme
+   * chez une vraie personne (espace et accents dans tout ce qui est rangé sous
+   * son dossier : données de Helix, dossier temporaire, cache de npm). Sur la
+   * machine de GitHub, le compte est `runneradmin` et le dossier temporaire
+   * un nom court sans espace (`RUNNER~1`) : c'est ce qui les distingue le plus
+   * d'un poste ordinaire. Le nom est écrit ici plutôt que passé en argument :
+   * PowerShell l'aurait transmis dans un autre encodage.
+   */
+  const accentue = process.argv.includes("--compte-accentue");
+  const maison = accentue ? join(racine, "Users", "H\u00e9l\u00e8ne Dupont") : join(racine, "maison");
+  const donnees = accentue ? join(maison, ".helix", "data") : join(racine, "donnees");
   mkdirSync(maison, { recursive: true });
   mkdirSync(donnees, { recursive: true });
   writeFileSync(join(racine, "profil.json"), JSON.stringify({ chiffrement: "fichier" }));
   const env = { ...process.env, HOME: maison, USERPROFILE: maison, HELIX_DATA_DIR: donnees, HELIX_CONFIG: join(racine, "profil.json") };
+  if (accentue && windows) {
+    const local = join(maison, "AppData", "Local");
+    for (const d of [join(local, "Temp"), join(maison, "AppData", "Roaming")]) mkdirSync(d, { recursive: true });
+    for (const k of Object.keys(env)) if (/^(temp|tmp|localappdata|appdata)$/i.test(k)) delete env[k];
+    Object.assign(env, { TEMP: join(local, "Temp"), TMP: join(local, "Temp"), LOCALAPPDATA: local, APPDATA: join(maison, "AppData", "Roaming") });
+  }
+  console.log(`  (dossier personnel : ${maison})`);
   const code = `const i = await import("./gateway/src/installationOpenClaw.ts");
     i.installerOpenClaw("essai", { apres: async () => {} });
     for (;;) { await new Promise((r) => setTimeout(r, 2000)); const e = i.etatInstallation(); if (e.etape === "termine" || e.etape === "erreur") { console.log("ETAT " + JSON.stringify(e)); console.log("LANCEMENT " + JSON.stringify(i.lancementGere())); break; } }`;
@@ -275,6 +292,13 @@ if (process.argv.includes("--installation")) {
     }
     const prefixe = join(donnees, "openclaw-moteur", "node");
     if (existsSync(prefixe)) writeFileSync(join(sortieEssai, "prefixe.txt"), lister(prefixe, 3).join("\n"));
+    // Les modules natifs (binaire précompilé trouvé, ou compilé sur place : `build\Release`) et les scripts d'installation d'OpenClaw.
+    const dependances = join(prefixe, "node_modules", "openclaw", "node_modules");
+    const natifs = ["tree-sitter-bash", "koffi", "@lydell", "protobufjs", "@google"].flatMap((m) => [`== ${m}`, ...lister(join(dependances, m), 3).filter((l) => !/\.(d\.ts|md|ts|map)$/.test(l))]);
+    writeFileSync(join(sortieEssai, "modules-natifs.txt"), natifs.join("\n"));
+    const scripts = join(prefixe, "node_modules", "openclaw", "scripts");
+    mkdirSync(join(sortieEssai, "scripts-openclaw"), { recursive: true });
+    for (const f of ["preinstall-package-manager-warning.mjs", "postinstall-bundled-plugins.mjs"]) if (existsSync(join(scripts, f))) cpSync(join(scripts, f), join(sortieEssai, "scripts-openclaw", f));
   }
   // Toute la sortie à l'écran quand l'installation échoue : c'est elle qu'on lit dans le journal de GitHub.
   if (!reussie) console.log(sortie.split(/\r?\n/).map((l) => `    | ${l}`).join("\n"));

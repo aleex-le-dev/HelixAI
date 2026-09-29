@@ -416,6 +416,73 @@ export function commandeArretArbre(pid: number, env: Env): { fichier: string; ar
 }
 
 /**
+ * Ce que npm a dit, en une phrase : ses messages bruts portent des chemins de
+ * la machine et un jargon qui n'apprend rien à qui installe.
+ *
+ * 29/09/2026 : sous Windows, Medhi ne voyait que « npm a échoué (code 1) ».
+ * Quand le script d'installation d'un paquet échoue, npm écrit d'abord
+ * `code 1`, `path <dossier du paquet>`, `command failed`, `command <la
+ * commande>`, puis ce que le script a dit, et enfin le chemin de son journal :
+ * on gardait la première ligne, la seule qui ne dit rien. On nomme maintenant
+ * le paquet et la cause (la première ligne du script qui l'explique), ou ce
+ * qui manque à la machine (outils de compilation, git), toujours sans
+ * chemins. La sortie entière va dans le journal de la passerelle
+ * (installationOpenClaw.ts, `journaliserNpm`).
+ */
+export function raisonNpm(sortie: string, version: string): string {
+  if (/notarget|No matching version/i.test(sortie)) return tf("la version {0} d'OpenClaw n'est pas publiée", version);
+  if (/ENOTFOUND|EAI_AGAIN|ETIMEDOUT|ECONNREFUSED|ECONNRESET|network|UNABLE_TO_GET_ISSUER_CERT|SELF_SIGNED_CERT|CERT_/i.test(sortie)) {
+    if (/UNABLE_TO_GET_ISSUER_CERT|SELF_SIGNED_CERT|CERT_/i.test(sortie)) {
+      return t("le registre npm répond avec un certificat que Node ne reconnaît pas (proxy ou antivirus qui inspecte les connexions) : autorisez registry.npmjs.org, ou demandez le certificat de votre proxy à votre service informatique");
+    }
+    return t("le registre npm est injoignable : vérifiez l'accès à internet de cette machine");
+  }
+  if (/ENOSPC/i.test(sortie)) return t("il n'y a plus assez de place sur le disque");
+  // Windows : un fichier tenu par un autre programme, le plus souvent l'antivirus qui analyse ce que npm vient d'écrire.
+  if (/EBUSY|EPERM[^\n]*(rename|unlink|rmdir)|operation not permitted, (rename|unlink|rmdir)/i.test(sortie)) {
+    return t("un fichier du dossier d'installation est tenu par un autre programme (souvent l'antivirus) : réessayez dans un instant, ou excluez le dossier de données de Helix de l'analyse");
+  }
+  if (/EACCES|EPERM/i.test(sortie)) return t("le dossier d'installation n'est pas accessible en écriture");
+  // Windows : un chemin trop long pour l'outil qui l'ouvre.
+  if (/ENAMETOOLONG/i.test(sortie)) return t("un chemin du dossier d'installation est trop long pour cette machine");
+
+  const lignes = sortie
+    .split(/\r?\n/)
+    .map((l) => l.replace(/^npm (error|ERR!)\s?/i, "").trim())
+    .filter(Boolean);
+  // Le paquet dont le script a échoué : `path …\node_modules\<paquet>` (ou `@portée\paquet`).
+  const chemin = lignes.find((l) => /^path\s/i.test(l)) ?? "";
+  const paquet = /node_modules[\\/]((?:@[^\\/\s]+[\\/])?[^\\/\s]+)[\\/]?\s*$/.exec(chemin)?.[1]?.replace(/\\/g, "/");
+  const compilation = /gyp ERR!|node-gyp|Visual Studio|find Python|MSBuild|cl\.exe|make: /i;
+  if (compilation.test(sortie)) {
+    return paquet
+      ? tf("le module « {0} » doit être compilé sur cette machine, et les outils de compilation n'y sont pas", paquet)
+      : t("un module doit être compilé sur cette machine, et les outils de compilation n'y sont pas");
+  }
+  if (/spawn git ENOENT|'git' n'est pas reconnu|'git' is not recognized|git: (command )?not found|not found: git/i.test(sortie)) {
+    return t("npm a besoin de git pour une dépendance, et git n'est pas installé sur cette machine");
+  }
+  const bruit = (l: string) =>
+    /^(code|errno|syscall|signal)\s+\S+$|^path\s|^command( failed)?(\s|$)|^cwd\s|complete log of this run|log of this run|[\\/]_logs[\\/]|^at\s|^node:internal|^\^+$|^Node\.js v\d/i.test(l);
+  /*
+   * La cause : parmi ce qu'a dit le script (après `command …`), la première
+   * ligne qui ressemble à une erreur, sinon la première tout court ; hors
+   * script, la première ligne qui n'est pas du bruit.
+   */
+  const apres = lignes.findIndex((l) => /^command\s+(?!failed\b)/i.test(l));
+  const candidates = (apres >= 0 ? lignes.slice(apres + 1) : lignes).filter((l) => !bruit(l));
+  const erreur = /\b(error|erreur|ERR_[A-Z_]+|E[A-Z]{3,}|cannot|failed|échou|not found|introuvable|refus|denied|unsupported)\b/i;
+  const ligne = candidates.find((l) => erreur.test(l)) ?? candidates[0];
+  const propre = ligne ? sansChemins(ligne).replace(/\s+/g, " ").slice(0, 200) : "";
+  if (paquet && apres >= 0) {
+    return propre
+      ? tf("le script d'installation du paquet « {0} » a échoué ({1})", paquet, propre)
+      : tf("le script d'installation du paquet « {0} » a échoué", paquet);
+  }
+  return propre ? tf("npm a échoué ({0})", propre) : t("npm a échoué");
+}
+
+/**
  * Un message de npm sans les chemins de la machine : ceux d'Unix (`/Users/…`)
  * et ceux de Windows (`C:\Users\…`, `\\serveur\partage`).
  */

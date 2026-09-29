@@ -22,9 +22,28 @@ concurrency:
 
 jobs:
   installation:
-    name: Installation d'OpenClaw comme Helix la fait
-    runs-on: windows-latest
+    name: Installation d'OpenClaw comme Helix la fait (${{ matrix.nom }})
+    runs-on: ${{ matrix.machine }}
     timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Windows x64, compte de la machine de GitHub (runneradmin, dossier temporaire en nom court).
+          - id: x64
+            nom: Windows x64
+            machine: windows-latest
+            options: ""
+          # Windows x64, comme chez une personne : compte « Hélène Dupont » (espace et accents partout sous son dossier).
+          - id: x64-compte-accentue
+            nom: Windows x64, compte avec espace et accents
+            machine: windows-latest
+            options: "--compte-accentue"
+          # Windows sur processeur ARM (Snapdragon) : les modules natifs n'y ont pas toujours de binaire précompilé.
+          - id: arm64
+            nom: Windows arm64
+            machine: windows-11-arm
+            options: ""
     steps:
       # Fins de ligne telles qu'au dépôt, comme sur la machine qui fabrique les versions.
       - name: Fins de ligne du dépôt
@@ -47,13 +66,13 @@ jobs:
         run: npm ci
 
       - name: Installation réelle d'OpenClaw (chemin de Helix)
-        run: node scripts/essai-openclaw-windows.mjs --installation --sortie essai-openclaw-windows-sortie
+        run: node scripts/essai-openclaw-windows.mjs --installation --sortie essai-openclaw-windows-sortie ${{ matrix.options }}
 
       - name: Garder les journaux
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: essai-openclaw-windows-journaux
+          name: essai-openclaw-windows-journaux-${{ matrix.id }}
           path: essai-openclaw-windows-sortie
           if-no-files-found: warn
           retention-days: 14

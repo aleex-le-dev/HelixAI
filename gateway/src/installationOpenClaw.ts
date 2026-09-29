@@ -16,7 +16,7 @@ import {
   dispositionNode,
   envInstallation,
   lancementOpenClaw,
-  sansChemins,
+  raisonNpm,
   type Lancement,
 } from "./plateformeOpenClaw.ts";
 
@@ -412,27 +412,6 @@ export interface Crochets {
   apres: () => Promise<void>;
   /** La mise à jour a échoué : remettre les données mises de côté et relancer. */
   retablir?: () => Promise<void>;
-}
-
-/**
- * Ce que npm a dit, en une phrase : ses messages bruts portent des chemins de
- * la machine et un jargon qui n'apprend rien à qui installe.
- */
-function raisonNpm(sortie: string, version: string): string {
-  if (/notarget|No matching version/i.test(sortie)) return tf("la version {0} d'OpenClaw n'est pas publiée", version);
-  if (/ENOTFOUND|EAI_AGAIN|ETIMEDOUT|ECONNREFUSED|ECONNRESET|network/i.test(sortie)) {
-    return t("le registre npm est injoignable : vérifiez l'accès à internet de cette machine");
-  }
-  if (/ENOSPC/i.test(sortie)) return t("il n'y a plus assez de place sur le disque");
-  if (/EACCES|EPERM|EBUSY/i.test(sortie)) return t("le dossier d'installation n'est pas accessible en écriture");
-  // Windows : un chemin trop long pour l'outil qui l'ouvre.
-  if (/ENAMETOOLONG/i.test(sortie)) return t("un chemin du dossier d'installation est trop long pour cette machine");
-  const ligne = sortie
-    .split(/\r?\n/)
-    .map((l) => l.replace(/^npm (error|ERR!)\s*/i, "").trim())
-    .find((l) => l && !/log of this run|^A complete log|[\\/]_logs[\\/]/i.test(l));
-  // Sans les chemins de la machine, ceux de Windows compris (`C:\Users\…`).
-  return ligne ? tf("npm a échoué ({0})", sansChemins(ligne).slice(0, 160)) : t("npm a échoué");
 }
 
 /**

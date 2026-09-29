@@ -110,6 +110,25 @@ de « … » : partie 2 sur 5... »). Un Chat long dont les premiers messages n'
 le dit aussi en tête de la réponse. Vu dans le navigateur contre une instance jetable et un
 faux modèle (cartes, CSV en UTF-16, lecture en 5 parties) ; pas avec un vrai modèle.
 
+**File d'attente du composeur (29/09/2026)** (`FileAttente.tsx`, `lib/fileAttente.ts`, aussi
+dans Cowork) : pendant une réponse, la zone de saisie reste utilisable. En bas à droite, deux
+boutons ronds : « Arrêter » (carré, en retrait, bordé) puis, à la place habituelle de l'envoi,
+**« Mettre en file »** (icône de liste avec un « + », infobulle « votre message partira quand la
+réponse en cours sera finie »). Entrée met aussi en file. Au-dessus des pastilles, dans la carte
+du composeur, un cadre : « 2 messages en attente » (horloge), « Ils partiront l'un après
+l'autre… », puis la liste numérotée (texte sur deux lignes au plus, pièces jointes ou « Image à
+créer » en dessous), chacun avec **« Modifier »** (le texte devient un champ ; Entrée ou
+« Enregistrer », Échap ou « Annuler ») et **« Retirer »** ; dans un champ étroit (375 px),
+ces deux boutons n'ont plus que leur icône. La liste défile au-delà de 30 % de la hauteur.
+Après une erreur ou « Arrêter », l'icône devient une pause, la ligne dit « En pause : la
+réponse… Rien ne part tout seul. » et un bouton **« Envoyer maintenant »** (« Reprendre » si
+une autre réponse s'écrit déjà) relance la file. Au-delà de dix, une ligne rouge dit que la
+file est pleine et le texte reste dans le champ. Une file par Chat, gardée en changeant de
+Chat ou de page, perdue au rechargement. Vu dans le navigateur (instance jetable, faux modèle
+de 10 s par réponse) : envoi pendant une réponse, départs l'un après l'autre (y compris
+pendant qu'un autre Chat ou la page Agents était affiché), arrêt puis pause, modification
+puis « Envoyer maintenant », panne simulée puis pause, file pleine à 375 px.
+
 **Bulle d'erreur (29/09/2026)** : une réponse en échec se termine par un cadre d'alerte
 (`role="alert"`, icône d'avertissement, `MessageList.tsx`) qui porte le message. Un refus
 long d'un fournisseur cloud y arrive abrégé par la passerelle (`abreger`,

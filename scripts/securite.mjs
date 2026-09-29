@@ -8715,6 +8715,92 @@ console.log("\n39. Palmier Pro : application locale reconnue avant de lui parler
   verifier("logo de Palmier Pro : l'icône de son site, empreinte notée, relié à la fiche", /"palmier": \{/.test(src("scripts", "marques", "sources.json")) && /palmier: "palmier",/.test(src("src", "components", "settings", "marquesConnecteurs.ts")), "sources.json, marquesConnecteurs.ts");
 }
 
+console.log("\n40. File d'attente du Chat : un message écrit pendant une réponse attend, part à la fin normale, pas après une erreur ni un arrêt (29/09/2026)");
+{
+  const { pathToFileURL: versUrlFile } = await import("node:url");
+  const { creerFiles, LIMITE_FILE } = await import(versUrlFile(join(RACINE, "src", "lib", "fileAttente.ts")).href);
+  const files = creerFiles();
+  let notifs = 0;
+  const desabonner = files.abonner(() => notifs++);
+
+  // Mise en file pendant une réponse, dans l'ordre, avec ce qui était choisi à ce moment.
+  const a = files.ajouter("chat-A", { texte: "premier", options: { model: "m1", web: true } });
+  const b = files.ajouter("chat-A", { texte: "second", options: { model: "m2" } });
+  verifier("deux messages entrent dans la file du Chat, dans l'ordre, et l'écran est prévenu", a.ok && b.ok && files.lire("chat-A").messages.map((m) => m.contenu.texte).join(",") === "premier,second" && notifs === 2, JSON.stringify(files.lire("chat-A")));
+  verifier("une file par Chat : le Chat B n'a rien, le Chat A garde ses deux messages", files.lire("chat-B").messages.length === 0 && files.lire("chat-A").messages.length === 2, "");
+
+  // Fin normale : le premier part, avec ses propres options ; le suivant attend la fin de sa réponse.
+  const parti = files.apresReponse("chat-A", "terminee");
+  verifier("fin normale de la réponse : le premier message part (avec le modèle et le web choisis à la mise en file), le second attend", parti?.contenu.texte === "premier" && parti.contenu.options.model === "m1" && parti.contenu.options.web === true && files.lire("chat-A").messages.length === 1, JSON.stringify(parti));
+  const parti2 = files.apresReponse("chat-A", "terminee");
+  verifier("fin de la réponse suivante : le second part, la file est vide", parti2?.contenu.texte === "second" && files.lire("chat-A").messages.length === 0, JSON.stringify(parti2));
+  verifier("file vide : une fin de réponse ne rend rien", files.apresReponse("chat-A", "terminee") === null, "");
+
+  // Erreur : pause, rien ne part, même à la fin normale d'une réponse suivante.
+  files.ajouter("chat-A", { texte: "après une erreur", options: {} });
+  verifier("réponse échouée : rien ne part, la file est en pause « erreur »", files.apresReponse("chat-A", "erreur") === null && files.lire("chat-A").pause === "erreur" && files.lire("chat-A").messages.length === 1, JSON.stringify(files.lire("chat-A")));
+  verifier("en pause, une réponse suivante finie normalement ne fait rien partir non plus", files.apresReponse("chat-A", "terminee") === null && files.lire("chat-A").messages.length === 1, "");
+  const relance = files.reprendre("chat-A", false);
+  verifier("« Envoyer maintenant » : la pause est levée et le premier part", relance?.contenu.texte === "après une erreur" && files.lire("chat-A").messages.length === 0 && files.lire("chat-A").pause === null, JSON.stringify(relance));
+
+  // Arrêt : pause « arret » ; « Reprendre » pendant une autre réponse : il partira à la fin de celle-ci.
+  files.ajouter("chat-A", { texte: "après un arrêt", options: {} });
+  verifier("réponse arrêtée par la personne : rien ne part, la file est en pause « arret »", files.apresReponse("chat-A", "arretee") === null && files.lire("chat-A").pause === "arret", JSON.stringify(files.lire("chat-A")));
+  verifier("« Reprendre » pendant une réponse : rien ne part tout de suite, la pause est levée", files.reprendre("chat-A", true) === null && files.lire("chat-A").pause === null && files.lire("chat-A").messages.length === 1, "");
+  verifier("… et le message part à la fin normale de cette réponse", files.apresReponse("chat-A", "terminee")?.contenu.texte === "après un arrêt", "");
+
+  // Modifier et retirer.
+  const x = files.ajouter("chat-A", { texte: "à corriger", options: {} });
+  const y = files.ajouter("chat-A", { texte: "à retirer", options: {} });
+  files.retirer("chat-A", y.id);
+  files.commencerEdition("chat-A", x.id);
+  verifier("un message en cours de modification ne part pas à la fin de la réponse (départ retenu)", files.apresReponse("chat-A", "terminee") === null && files.lire("chat-A").departRetenu === true && files.lire("chat-A").messages.length === 1, JSON.stringify(files.lire("chat-A")));
+  const corrige = files.finirEdition("chat-A", x.id, { texte: "corrigé", options: {} }, false);
+  verifier("fin de la modification, rien en cours : il part, avec le texte corrigé ; « Retirer » a bien retiré l'autre", corrige?.contenu.texte === "corrigé" && files.lire("chat-A").messages.length === 0, JSON.stringify(corrige));
+
+  // Limite.
+  for (let i = 0; i < LIMITE_FILE; i++) files.ajouter("chat-C", { texte: `m${i}`, options: {} });
+  const refus = files.ajouter("chat-C", { texte: "de trop", options: {} });
+  verifier(`limite : ${LIMITE_FILE} messages en attente au plus, le suivant est refusé (« pleine »), rien n'est perdu`, LIMITE_FILE === 10 && refus.ok === false && refus.raison === "pleine" && files.lire("chat-C").messages.length === LIMITE_FILE, JSON.stringify(refus));
+
+  // Chat supprimé.
+  files.oublier("chat-C");
+  verifier("un Chat supprimé emporte sa file", files.lire("chat-C").messages.length === 0 && !files.cles().includes("chat-C"), files.cles().join(","));
+  desabonner();
+
+  const src = (...p) => readFileSync(join(RACINE, ...p), "utf8");
+  const fileSrc = src("src", "lib", "fileAttente.ts");
+  const chatSrc = src("src", "hooks", "useChat.ts");
+  const composeur = src("src", "components", "chat", "Composer.tsx");
+  const accueil = src("src", "pages", "HomePage.tsx");
+  const cowork = src("src", "pages", "CoworkPage.tsx");
+  verifier(
+    "la file reste sur ce poste : fileAttente.ts n'importe rien (ni stockage, ni réseau) et la synchronisation ne la connaît pas",
+    !/^import /m.test(fileSrc) && !/localStorage|sessionStorage|fetch\(/.test(fileSrc) && !/fileAttente|filesDesChats/.test(src("src", "lib", "store", "sync.ts")) && !/fileAttente|filesDesChats/.test(src("src", "lib", "store", "storage.ts")),
+    "fileAttente.ts, sync.ts, storage.ts",
+  );
+  verifier(
+    "useChat.ts : à la fin d'une réponse, la file ne repart que sur une fin normale, pas si une autre réponse s'écrit déjà, et un Chat supprimé perd sa file",
+    /if \(!toujours\) filesDesChats\.oublier\(session\.id\);\s*else if \(issue !== "terminee"\) filesDesChats\.apresReponse\(session\.id, issue\);/.test(chatSrc) &&
+      /else if \(!reponsesEnCours\.has\(session\.id\)\) \{\s*const suivant = filesDesChats\.apresReponse\(session\.id, issue\);\s*if \(suivant\) lancerEnvoi\(toujours, enCours\.history, suivant\.contenu\);/.test(chatSrc) &&
+      /issue = controller\.signal\.aborted \? "arretee" : "erreur";/.test(chatSrc) &&
+      /\?\.error\) issue = "erreur";/.test(chatSrc) &&
+      /window\.addEventListener\(SESSIONS_CHANGED, \(\) => \{\s*for \(const cle of filesDesChats\.cles\(\)\) if \(!getSession\(cle\)\) filesDesChats\.oublier\(cle\);/.test(chatSrc),
+    "useChat.ts",
+  );
+  verifier(
+    "composeur : pendant une réponse, Entrée et le bouton d'envoi mettent en file ; « Arrêter » reste un bouton à part ; sans file (écran Code), rien ne change",
+    /else if \(canQueue\) onMettreEnFile\?\.\(\);/.test(composeur) && /aria-label=\{t\("Mettre en file"\)\}/.test(composeur) && /\{enFile \? \([\s\S]*?aria-label=\{t\("Arrêter la génération"\)\}[\s\S]*?\) : busy \? \(/.test(composeur) && !/onMettreEnFile/.test(src("src", "pages", "CodePage.tsx")),
+    "Composer.tsx, CodePage.tsx",
+  );
+  verifier(
+    "Chat et Cowork : pendant une réponse, l'envoi passe par la file, et la file s'affiche au-dessus du champ",
+    [accueil, cowork].every((p) => /if \(chat\.busy\) \{\s*mettreEnFile\(\);\s*return;\s*\}/.test(p) && /onMettreEnFile=\{mettreEnFile\}/.test(p) && /<FileAttente/.test(p)),
+    "HomePage.tsx, CoworkPage.tsx",
+  );
+  verifier("aide intégrée : l'article sur les Chats parle de la file d'attente", /file d'attente du Chat/.test(src("src", "lib", "aide.ts")), "aide.ts");
+}
+
 console.log(`\n${reussis} vérification(s) réussie(s), ${echecs.length} échec(s).`);
 if (echecs.length) {
   console.log("Échecs :");

@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { streamChat, type ChatTurn } from "@/lib/gateway";
-import { notifySessionsChanged } from "./useSessions";
+import { notifySessionsChanged, SESSIONS_CHANGED } from "./useSessions";
 import { contexteTexte, documentsDe, images, type Attachment, type DocumentEnvoye } from "@/lib/attachments";
 import { currentUser } from "@/lib/store/identity";
 import { t, tf } from "@/lib/i18n";
@@ -10,6 +10,7 @@ import type { Citation } from "@/lib/connaissances";
 import type { SourceWeb } from "@/lib/rechercheWeb";
 import {
   createSession,
+  getSession,
   updateSession,
   deriveTitle,
   type Session,
@@ -18,6 +19,7 @@ import {
 } from "@/lib/store/sessions";
 import { aleatoire } from "@/lib/store/storage";
 import { cibleAffichee } from "@/lib/libellesOutils";
+import { creerFiles, type Ajout, type IssueReponse } from "@/lib/fileAttente";
 
 /** Trace d'un outil utilisé par l'agent pendant sa réponse. */
 export interface ToolTrace {
@@ -197,6 +199,13 @@ function contenuPourLeModele(m: Message): string {
  * et la réponse continue, puis s'enregistre dans son Chat. Seul le bouton
  * « Arrêter » l'arrête. Une page rechargée ou l'application fermée, elle, la
  * coupe : ce qui était écrit n'est gardé qu'à la fin de la réponse.
+ *
+ * Depuis le 29/09/2026, la réponse elle-même s'écrit ici aussi (`repondre`,
+ * `creer`), hors du crochet : un message mis en file (`filesDesChats`) doit
+ * pouvoir partir à la fin de la réponse précédente même quand l'écran montre
+ * un autre Chat, ou une autre page. L'écran suit par l'évènement
+ * `CHATS_EN_COURS` : une réponse qui naît dans le Chat affiché, il s'y abonne ;
+ * une réponse qui finit, il rend la main.
  */
 interface ReponseEnCours {
   history: Message[];
@@ -216,6 +225,39 @@ function signalerEnCours() {
 /** Arrête la réponse en cours d'un Chat, par exemple quand il est supprimé. */
 export function arreterReponse(sessionId: string) {
   reponsesEnCours.get(sessionId)?.controller.abort();
+}
+
+/**
+ * Un message mis en file pendant une réponse (29/09/2026), avec ce qui était
+ * choisi **au moment où il y est entré** : pièces jointes, modèle, niveau,
+ * outils, bases, agent, recherche sur le web, ou création d'une image. Changer
+ * de modèle ensuite ne change pas ce qu'il emportera.
+ */
+export interface EnvoiEnFile {
+  texte: string;
+  pieces: Attachment[];
+  options: Options;
+  /** Le menu « + » demandait une image ou une vidéo plutôt qu'une réponse. */
+  creation?: { format: Format; video: boolean };
+}
+
+/*
+ * Une file par Chat (lib/fileAttente.ts), en mémoire de cette page : ni
+ * enregistrée ni synchronisée. Les messages qui en partent, eux, suivent le
+ * chemin ordinaire (enregistrés dans leur Chat, synchronisés comme les autres).
+ */
+export const filesDesChats = creerFiles<EnvoiEnFile>();
+
+/*
+ * Un Chat supprimé emporte sa file, qu'il soit affiché ou non (supprimé depuis
+ * la barre latérale, ou sur un autre poste et arrivé par la synchronisation).
+ * On n'arrête pas de réponse ici : le Chat affiché s'en charge (HomePage), et
+ * une réponse d'un Chat disparu ne relance rien à sa fin (`terminer`).
+ */
+if (typeof window !== "undefined") {
+  window.addEventListener(SESSIONS_CHANGED, () => {
+    for (const cle of filesDesChats.cles()) if (!getSession(cle)) filesDesChats.oublier(cle);
+  });
 }
 
 /**
@@ -251,11 +293,428 @@ interface Options {
   web?: boolean;
 }
 
+/** Enregistre l'historique d'un Chat : celui de l'écran, ou celui d'une réponse qui a continué sans lui. */
+function persisterDans(session: Session, history: Message[], model: string | undefined) {
+  const stored: StoredMessage[] = history
+    .filter((m) => !m.error && m.content.trim().length > 0)
+    .map((m) => ({
+      id: m.id,
+      role: m.role,
+      content: m.content,
+      reasoning: m.reasoning,
+      ...(m.image ? { image: m.image } : {}),
+      // Les pièces jointes restent visibles quand on rouvre le Chat : nom, poids, lu en entier ou non (pas le contenu).
+      ...(m.pieces && m.pieces.length > 0 ? { pieces: m.pieces } : {}),
+      // Les citations restent avec la réponse : rouvert, le Chat dit encore d'où elle venait.
+      ...(m.sources && m.sources.citations.length > 0 ? { sources: m.sources.citations } : {}),
+      ...(m.sourcesWeb && m.sourcesWeb.length > 0 ? { sourcesWeb: m.sourcesWeb } : {}),
+      /*
+       * Les durées et les étapes restent avec la réponse (27/09/2026) : rouvert,
+       * ou relu sur un autre poste après synchronisation, le Chat dit encore
+       * combien de temps chaque chose a pris. Des étapes, on garde ce qui
+       * s'affiche (nom, cible, issue, durée), pas les arguments ni l'aperçu :
+       * un fichier écrit par l'agent n'a pas à se recopier dans le Chat.
+       */
+      ...(dureesGardees(m.durees) ? { durees: dureesGardees(m.durees) } : {}),
+      ...(m.tools && m.tools.length > 0 ? { outils: m.tools.map(etapeGardee) } : {}),
+      createdAt: new Date().toISOString(),
+    }));
+  updateSession(session.id, { messages: stored, modelUid: model });
+  notifySessionsChanged();
+}
+
+/** Ouvre la réponse d'un Chat : enregistrée hors de l'écran, suivie par qui s'y abonne. */
+function ouvrirReponse(session: Session, base: Message[], model: string | undefined) {
+  const controller = new AbortController();
+  const enCours: ReponseEnCours = { history: base, controller, abonnes: new Set() };
+  reponsesEnCours.set(session.id, enCours);
+  // Tout passe par la réponse en cours ; l'écran la suit tant qu'il montre ce Chat.
+  const ecrire = (next: Message[]) => {
+    enCours.history = next;
+    for (const f of enCours.abonnes) f(next);
+  };
+  const patch = (id: string, changes: Partial<Message> | ((actuel: Message) => Partial<Message>)) =>
+    ecrire(enCours.history.map((m) => (m.id === id ? { ...m, ...(typeof changes === "function" ? changes(m) : changes) } : m)));
+  const persist = () => persisterDans(session, enCours.history, model);
+  return { enCours, controller, ecrire, patch, persist };
+}
+
+/**
+ * La réponse d'un Chat est finie : l'écran rend la main, et si elle s'est
+ * finie normalement, le message suivant de la file part (29/09/2026). Pas
+ * après une erreur ni un arrêt : la file se met en pause (lib/fileAttente.ts).
+ */
+function terminer(session: Session, enCours: ReponseEnCours, issue: IssueReponse) {
+  if (reponsesEnCours.get(session.id) === enCours) reponsesEnCours.delete(session.id);
+  const toujours = getSession(session.id);
+  // Un Chat supprimé entre-temps n'a plus de file, et rien ne part.
+  if (!toujours) filesDesChats.oublier(session.id);
+  else if (issue !== "terminee") filesDesChats.apresReponse(session.id, issue);
+  /*
+   * Une autre réponse s'écrit déjà dans ce Chat (arrêtée puis renvoyée
+   * aussitôt) : c'est à sa fin à elle que la file partira, pas maintenant.
+   */
+  else if (!reponsesEnCours.has(session.id)) {
+    const suivant = filesDesChats.apresReponse(session.id, issue);
+    if (suivant) lancerEnvoi(toujours, enCours.history, suivant.contenu);
+  }
+  signalerEnCours();
+}
+
+/** Envoie un message sorti de la file, sur l'historique où il arrive. */
+function lancerEnvoi(session: Session, base: Message[], envoi: EnvoiEnFile) {
+  // La partie synchrone ouvre la réponse (`reponsesEnCours`) avant que l'écran ne soit prévenu.
+  if (envoi.creation) void creer(session, base, envoi.texte, envoi.creation.format, envoi.creation.video, envoi.options);
+  else void repondre(session, base, envoi.texte, envoi.pieces, envoi.options);
+}
+
+/** Une question envoyée au modèle, et sa réponse écrite au fil du flux dans le Chat. */
+async function repondre(
+  session: Session,
+  base: Message[],
+  text: string,
+  pieces: Attachment[],
+  options: Options,
+): Promise<void> {
+  const prompt = text.trim();
+
+  /*
+   * Le contenu des documents joints part avec la question, mais n'encombre
+   * pas la conversation affichée : on garde à l'écran ce que la personne a
+   * écrit, plus le nom des pièces.
+   */
+  const documents = documentsDe(pieces);
+  const vues = images(pieces);
+
+  const userMsg: Message = {
+    id: newId(),
+    role: "user",
+    content: prompt || (pieces.length > 0 ? etiquetteDes(pieces) : ""),
+    pieces:
+      pieces.length > 0
+        ? pieces.map((p) => ({ nom: p.nom, type: p.type, taille: p.taille, ...(p.type === "texte" && p.tronque ? { tronque: true } : {}) }))
+        : undefined,
+    ...(documents.length > 0 ? { documents } : {}),
+  };
+  const replyId = newId();
+
+  // Historique envoyé : message système du profil + tours valides.
+  const turns: ChatTurn[] = [...base, userMsg]
+    .filter((m) => !m.error && m.content.trim().length > 0)
+    /*
+     * Une question restée sans réponse (arrêtée, ou refusée par une
+     * erreur) n'est pas renvoyée. Elle suivait la précédente sans réponse
+     * entre les deux, et le modèle répondait à la première : arrêté sur
+     * « écris un essai de 2000 mots », puis « réponds seulement OK »,
+     * il a écrit l'essai dans un fichier (essai réel, qwen3-8b). Deux
+     * questions de suite, c'est la dernière qui compte.
+     */
+    .filter((m, i, liste) => !(m.role === "user" && liste[i + 1]?.role === "user"))
+    // Chaque question garde ses documents, tant que le Chat est ouvert : l'instance mesure la place et décide (documentsJoints.ts).
+    .map((m) => ({ role: m.role, content: m.role === "user" ? contenuPourLeModele(m) : m.content }));
+
+  // Le dernier tour porte les images de cette question.
+  if (turns.length > 0 && vues.length > 0) {
+    const dernier = turns[turns.length - 1];
+    const texte = typeof dernier.content === "string" ? dernier.content : "";
+    turns[turns.length - 1] = {
+      role: "user",
+      content: [
+        ...(texte.trim() ? [{ type: "text" as const, text: texte }] : []),
+        ...vues.map((v) => ({
+          type: "image_url" as const,
+          image_url: { url: v.dataUrl },
+        })),
+      ],
+    };
+  }
+
+  const payload: ChatTurn[] = options.systemPrompt
+    ? [{ role: "system", content: options.systemPrompt }, ...turns]
+    : turns;
+
+  const { enCours, controller, ecrire, patch, persist } = ouvrirReponse(session, base, options.model);
+  ecrire([...enCours.history, userMsg, { id: replyId, role: "assistant", content: "", streaming: true }]);
+  /*
+   * La question est gardée dès l'envoi, pas seulement à la fin de la
+   * réponse (parcours du 28/09/2026) : une page rechargée pendant que le
+   * modèle écrivait laissait un Chat dont le titre était dans la liste et
+   * qui s'ouvrait vide, question comprise, ici comme sur l'instance. La
+   * réponse vide en cours d'écriture n'est pas enregistrée (persisterDans).
+   */
+  persist();
+  // L'écran qui montre ce Chat s'y abonne (réponse partie de la file sans lui).
+  signalerEnCours();
+
+  /** Comment la réponse s'est finie : seule une fin normale fait partir la file. */
+  let issue: IssueReponse = "terminee";
+
+  let content = "";
+  let reasoning = "";
+  const traces: ToolTrace[] = [];
+  let plan: EtapePlan[] = [];
+
+  /*
+   * Durées de la réponse (27/09/2026), prises à l'arrivée de chaque
+   * morceau du flux. La réflexion se compte par phases : un modèle à
+   * outils réfléchit avant chaque appel, et le texte ou l'outil qui suit
+   * clôt la phase. Sa fin est le dernier morceau de réflexion reçu, pas
+   * l'arrivée de ce qui suit : l'écriture des arguments d'un outil, qui ne
+   * se voit pas, n'est pas de la réflexion.
+   */
+  const debut = Date.now();
+  const durees: DureesReponse = { debut };
+  let dernierMorceauReflexion = debut;
+  const finirReflexion = () => {
+    if (durees.reflexionDepuis === undefined) return;
+    durees.reflexion = (durees.reflexion ?? 0) + Math.max(0, dernierMorceauReflexion - durees.reflexionDepuis);
+    durees.reflexionDepuis = undefined;
+  };
+  patch(replyId, { durees: { ...durees } });
+
+  try {
+    await streamChat(
+      {
+        messages: payload,
+        model: options.model,
+        effort: options.effort,
+        tools: options.tools,
+        connaissances: options.connaissances,
+        agent: options.agent,
+        web: options.web,
+        signal: controller.signal,
+      },
+      {
+        onContent: (chunk) => {
+          content += chunk;
+          finirReflexion();
+          /*
+           * Le premier mot, pas le premier morceau : la passerelle glisse
+           * des sauts de ligne entre deux étapes, et un moteur qui ne
+           * sépare pas la réflexion la livre entre balises dans le texte
+           * (retirée à l'affichage, voir MessageList).
+           */
+          if (durees.premierMot === undefined && content.replace(/<think>[\s\S]*?(?:<\/think>|$)/g, "").trim()) {
+            durees.premierMot = Date.now() - debut;
+          }
+          patch(replyId, { content, durees: { ...durees } });
+        },
+        onReasoning: (chunk) => {
+          reasoning += chunk;
+          dernierMorceauReflexion = Date.now();
+          durees.reflexionDepuis ??= dernierMorceauReflexion;
+          patch(replyId, { reasoning, durees: { ...durees } });
+        },
+        onEvent: (event) => {
+          if (event.type === "plan") {
+            plan = event.etapes.map((titre, i) => ({ titre, etat: "attente" as const, chemin: String(i + 1), profondeur: 0 }));
+            patch(replyId, { plan: [...plan] });
+          } else if (event.type === "plan_sous") {
+            // Les parties d'une étape redécoupée s'insèrent juste après elle.
+            const i = plan.findIndex((e) => e.chemin === event.chemin);
+            if (i >= 0) {
+              const parent = plan[i]!;
+              parent.etat = "decoupee";
+              const parties = event.etapes.map((titre, k) => ({
+                titre,
+                etat: "attente" as const,
+                chemin: `${event.chemin}.${k + 1}`,
+                profondeur: (parent.profondeur ?? 0) + 1,
+              }));
+              plan.splice(i + 1, 0, ...parties);
+              patch(replyId, { plan: [...plan] });
+            }
+          } else if (event.type === "etape") {
+            const e = etapeDe(plan, event);
+            if (e) e.etat = "encours";
+            patch(replyId, { plan: [...plan] });
+          } else if (event.type === "plan_ajout") {
+            plan.push(
+              { titre: event.titre, etat: "decoupee" as const, chemin: event.chemin, profondeur: 0 },
+              ...event.etapes.map((titre, k) => ({ titre, etat: "attente" as const, chemin: `${event.chemin}.${k + 1}`, profondeur: 1 })),
+            );
+            patch(replyId, { plan: [...plan] });
+          } else if (event.type === "revue") {
+            patch(replyId, { revue: event.etat });
+          } else if (event.type === "etape_verification") {
+            const e = etapeDe(plan, event);
+            if (e) e.controlee = true;
+            patch(replyId, { plan: [...plan] });
+          } else if (event.type === "etape_reprise") {
+            const e = etapeDe(plan, event);
+            if (e) e.reprise = true;
+            patch(replyId, { plan: [...plan] });
+          } else if (event.type === "etape_fin") {
+            const e = etapeDe(plan, event);
+            if (e) e.etat = event.ok ? "fait" : "echec";
+            patch(replyId, { plan: [...plan] });
+          } else if (event.type === "tool_start") {
+            finirReflexion();
+            traces.push({ name: event.name, args: event.args, running: true, debut: Date.now() });
+            patch(replyId, { tools: [...traces], durees: { ...durees } });
+          } else if (event.type === "tool_end") {
+            const last = [...traces].reverse().find((t) => t.name === event.name && t.running);
+            if (last) {
+              last.running = false;
+              last.ok = event.ok;
+              last.preview = event.preview;
+              if (last.debut !== undefined) last.duree = Date.now() - last.debut;
+            }
+            patch(replyId, { tools: traces.map((trace) => ({ ...trace })) });
+          } else if (event.type === "sources_web") {
+            patch(replyId, { sourcesWeb: event.sources ?? [] });
+          } else if (event.type === "sources") {
+            patch(replyId, {
+              sources: { citations: event.sources ?? [], ignorees: event.ignorees, aReindexer: event.aReindexer, erreur: event.erreur },
+            });
+          } else if (event.type === "error") {
+            patch(replyId, { error: event.message });
+          } else if (event.type === "statut") {
+            patch(replyId, { statut: event.message || undefined });
+          }
+        },
+      },
+    );
+    /*
+     * Une réponse vide, sans erreur, sans rien : c'est « il n'a jamais
+     * répondu ». La cause la plus fréquente était un modèle qui épuisait
+     * son budget à réfléchir (gateway/src/chat.ts, `basePayload`) ; il en
+     * reste d'autres, et aucune ne doit laisser une bulle blanche. On le
+     * dit, avec ce qu'on peut y faire.
+     */
+    finirReflexion();
+    patch(replyId, (actuel) =>
+      !actuel.content.trim() && !actuel.error && !(actuel.plan && actuel.plan.length > 0)
+        ? {
+            streaming: false,
+            statut: undefined,
+            durees: { ...durees },
+            error: t(
+              "Le modèle n'a rien répondu. Réessayez ; si cela recommence, baissez le niveau de raisonnement ou choisissez un autre modèle.",
+            ),
+          }
+        : {
+            streaming: false,
+            statut: undefined,
+            // La durée de la réponse entière, seulement pour une réponse allée à son terme.
+            durees: actuel.error ? { ...durees } : { ...durees, reponse: Date.now() - debut },
+          },
+    );
+    persist();
+    // Une erreur dite par la passerelle, ou « le modèle n'a rien répondu » : la file ne part pas dessus.
+    if (enCours.history.find((m) => m.id === replyId)?.error) issue = "erreur";
+  } catch (err) {
+    // Coupée : la réflexion déjà faite est une mesure réelle ; la réponse entière, elle, n'a pas de durée.
+    finirReflexion();
+    patch(replyId, { durees: { ...durees } });
+    issue = controller.signal.aborted ? "arretee" : "erreur";
+    if (controller.signal.aborted) {
+      /*
+       * Arrêtée avant le premier mot : la bulle restait blanche, sans
+       * rien qui dise pourquoi. Elle le dit. Ce qui était déjà écrit,
+       * lui, reste tel quel, et est gardé dans le Chat.
+       */
+      patch(replyId, (actuel) => ({
+        // Un outil en cours ne recevra plus sa fin : sa roue tournait pour toujours (Cowork).
+        tools: actuel.tools?.map((trace) =>
+          trace.running ? { ...trace, running: false, ok: false, preview: t("Interrompu à votre demande.") } : trace,
+        ),
+        ...(!actuel.content.trim() && !actuel.error
+          ? { streaming: false, statut: undefined, error: t("Réponse arrêtée à votre demande, avant d'avoir été écrite.") }
+          : { streaming: false, statut: undefined }),
+      }));
+    } else {
+      patch(replyId, {
+        streaming: false,
+        statut: undefined,
+        error: messageDErreur(err),
+      });
+    }
+    /*
+     * Gardé dans tous les cas, erreur comprise : la question de la
+     * personne n'était enregistrée qu'en cas de succès. Un modèle
+     * inconnu ou un moteur éteint laissait un Chat dont le titre
+     * existait dans la liste, et qui s'ouvrait vide.
+     */
+    persist();
+  } finally {
+    /*
+     * Le plan ne doit pas continuer de tourner à l'écran une fois le flux
+     * fini. Arrêté par la personne ou coupé par une erreur, l'étape en
+     * cours ne recevra jamais sa fin : sa roue tournait pour toujours,
+     * comme si l'agent travaillait encore. Arrêtée, elle redevient « à
+     * faire » ; coupée par une panne, elle est marquée en échec.
+     */
+    patch(replyId, (actuel) =>
+      actuel.plan?.some((e) => e.etat === "encours") || actuel.revue === "encours"
+        ? {
+            plan: actuel.plan?.map((e) =>
+              e.etat === "encours" ? { ...e, etat: controller.signal.aborted ? ("attente" as const) : ("echec" as const) } : e,
+            ),
+            revue: actuel.revue === "encours" ? undefined : actuel.revue,
+          }
+        : {},
+    );
+    terminer(session, enCours, issue);
+  }
+}
+
+/**
+ * Crée une image au lieu de répondre (bouton « Image »). La demande et
+ * l'image restent dans le Chat, comme un échange ordinaire ; la réponse
+ * garde une phrase de texte, pour que la suite de la conversation sache
+ * qu'une image a été faite, et de quoi.
+ *
+ * `video` : une courte vidéo plutôt qu'une image, par le même moteur (27/09/2026).
+ */
+async function creer(
+  session: Session,
+  base: Message[],
+  texte: string,
+  format: Format,
+  video: boolean,
+  options: Options,
+): Promise<void> {
+  const userMsg: Message = { id: newId(), role: "user", content: texte };
+  const replyId = newId();
+  const { enCours, controller, ecrire, patch, persist } = ouvrirReponse(session, base, options.model);
+  ecrire([
+    ...enCours.history,
+    userMsg,
+    { id: replyId, role: "assistant", content: "", streaming: true, statut: t("Préparation de la description...") },
+  ]);
+  signalerEnCours();
+  let issue: IssueReponse = "terminee";
+  // Le temps de la création, de la demande à l'image reçue (27/09/2026) : sur un processeur, c'est long, et bon à savoir.
+  const debut = Date.now();
+  try {
+    const creerLa = video ? creerVideoSurLaMachine : creerSurLaMachine;
+    const image = await creerLa(texte, format, (tr) => patch(replyId, { statut: tr.message }), controller.signal, session.id);
+    patch(replyId, {
+      content: video ? tf("Vidéo créée : « {0} »", texte) : tf("Image créée : « {0} »", texte),
+      image,
+      streaming: false,
+      statut: undefined,
+      durees: { reponse: Date.now() - debut },
+    });
+    persist();
+  } catch (err) {
+    if (controller.signal.aborted) {
+      issue = "arretee";
+      patch(replyId, { streaming: false, statut: undefined, error: video ? t("Suivi arrêté : la vidéo se termine quand même sur la machine, mais n'apparaîtra pas ici.") : t("Suivi arrêté : l'image se termine quand même sur la machine, mais n'apparaîtra pas ici.") });
+    } else {
+      issue = "erreur";
+      patch(replyId, { streaming: false, statut: undefined, error: messageDErreur(err) });
+    }
+  } finally {
+    terminer(session, enCours, issue);
+  }
+}
+
 /** État d'une conversation branchée sur la passerelle, persistée en session. */
 export function useChat(options: Options) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [busy, setBusy] = useState(false);
-  const abortRef = useRef<AbortController | null>(null);
   const sessionRef = useRef<Session | null>(null);
   /**
    * Miroir synchrone de `messages`. Les mises à jour d'état React ne sont pas
@@ -263,42 +722,17 @@ export function useChat(options: Options) {
    * depuis l'intérieur d'un updater.
    */
   const historyRef = useRef<Message[]>([]);
-
-  /** Enregistre l'historique d'un Chat : celui de l'écran, ou celui d'une réponse qui a continué sans lui. */
-  const persisterDans = useCallback((session: Session, history: Message[]) => {
-    const stored: StoredMessage[] = history
-      .filter((m) => !m.error && m.content.trim().length > 0)
-      .map((m) => ({
-        id: m.id,
-        role: m.role,
-        content: m.content,
-        reasoning: m.reasoning,
-        ...(m.image ? { image: m.image } : {}),
-        // Les pièces jointes restent visibles quand on rouvre le Chat : nom, poids, lu en entier ou non (pas le contenu).
-        ...(m.pieces && m.pieces.length > 0 ? { pieces: m.pieces } : {}),
-        // Les citations restent avec la réponse : rouvert, le Chat dit encore d'où elle venait.
-        ...(m.sources && m.sources.citations.length > 0 ? { sources: m.sources.citations } : {}),
-        ...(m.sourcesWeb && m.sourcesWeb.length > 0 ? { sourcesWeb: m.sourcesWeb } : {}),
-        /*
-         * Les durées et les étapes restent avec la réponse (27/09/2026) : rouvert,
-         * ou relu sur un autre poste après synchronisation, le Chat dit encore
-         * combien de temps chaque chose a pris. Des étapes, on garde ce qui
-         * s'affiche (nom, cible, issue, durée), pas les arguments ni l'aperçu :
-         * un fichier écrit par l'agent n'a pas à se recopier dans le Chat.
-         */
-        ...(dureesGardees(m.durees) ? { durees: dureesGardees(m.durees) } : {}),
-        ...(m.tools && m.tools.length > 0 ? { outils: m.tools.map(etapeGardee) } : {}),
-        createdAt: new Date().toISOString(),
-      }));
-    updateSession(session.id, { messages: stored, modelUid: options.model });
-    notifySessionsChanged();
-  }, [options.model]);
+  // Les choix du moment, lus à la mise en file : c'est eux que le message emportera.
+  const optionsRef = useRef(options);
+  optionsRef.current = options;
 
   /** L'abonnement de l'écran à la réponse en cours du Chat affiché. */
   const detacherRef = useRef<(() => void) | null>(null);
+  const attacheA = useRef<ReponseEnCours | null>(null);
   const detacher = useCallback(() => {
     detacherRef.current?.();
     detacherRef.current = null;
+    attacheA.current = null;
   }, []);
   const attacher = useCallback((sessionId: string) => {
     detacher();
@@ -309,6 +743,7 @@ export function useChat(options: Options) {
       setMessages(history);
     };
     r.abonnes.add(suivre);
+    attacheA.current = r;
     detacherRef.current = () => r.abonnes.delete(suivre);
     suivre(r.history);
     setBusy(true);
@@ -317,362 +752,71 @@ export function useChat(options: Options) {
   // L'écran qui disparaît se détache ; la réponse, elle, continue.
   useEffect(() => detacher, [detacher]);
 
-  /**
-   * Une réponse terminée pendant que l'écran montrait ce même Chat : il reprend
-   * la main. Terminée ailleurs : rien à faire ici, elle est déjà enregistrée.
+  /*
+   * L'écran suit les réponses de son Chat (29/09/2026) : une réponse qui
+   * finit lui rend la main, et celle qui part ensuite de la file, qu'il n'a
+   * pas lancée lui-même, il s'y abonne. Terminée ailleurs : rien à faire ici,
+   * elle est déjà enregistrée.
    */
-  const finirReponse = useCallback((sessionId: string, r: ReponseEnCours) => {
-    if (reponsesEnCours.get(sessionId) === r) reponsesEnCours.delete(sessionId);
-    signalerEnCours();
-    if (sessionRef.current?.id === sessionId) {
-      detacher();
-      setBusy(false);
-    }
-  }, [detacher]);
+  useEffect(() => {
+    const suivreLeChat = () => {
+      const id = sessionRef.current?.id;
+      if (!id) return;
+      const r = reponsesEnCours.get(id);
+      if (r) {
+        if (attacheA.current !== r) attacher(id);
+      } else if (attacheA.current) {
+        detacher();
+        setBusy(false);
+      }
+    };
+    window.addEventListener(CHATS_EN_COURS, suivreLeChat);
+    return () => window.removeEventListener(CHATS_EN_COURS, suivreLeChat);
+  }, [attacher, detacher]);
 
   const commit = useCallback((next: Message[]) => {
     historyRef.current = next;
     setMessages(next);
   }, []);
 
-  /** « Arrêter » : la réponse du Chat affiché, et elle seule. */
+  /** « Arrêter » : la réponse du Chat affiché, et elle seule. Sa file, elle, se met en pause. */
   const stop = useCallback(() => {
     const id = sessionRef.current?.id;
     if (id) reponsesEnCours.get(id)?.controller.abort();
-    abortRef.current?.abort();
-    abortRef.current = null;
     setBusy(false);
   }, []);
+
+  /** Ouvre une session à la première question. */
+  const sessionPour = useCallback((titre: string) => {
+    if (!sessionRef.current) {
+      sessionRef.current = createSession({
+        owner: currentUser(),
+        title: deriveTitle(titre),
+        origin: options.origin ?? "local",
+        modelUid: options.model,
+      });
+      notifySessionsChanged();
+    }
+    return sessionRef.current;
+  }, [options.origin, options.model]);
 
   const send = useCallback(
     async (text: string, pieces: Attachment[] = []) => {
       const prompt = text.trim();
       if ((!prompt && pieces.length === 0) || busy) return;
-
-      /*
-       * Le contenu des documents joints part avec la question, mais n'encombre
-       * pas la conversation affichée : on garde à l'écran ce que la personne a
-       * écrit, plus le nom des pièces.
-       */
-      const documents = documentsDe(pieces);
-      const vues = images(pieces);
-
-      const userMsg: Message = {
-        id: newId(),
-        role: "user",
-        content: prompt || (pieces.length > 0 ? etiquetteDes(pieces) : ""),
-        pieces:
-          pieces.length > 0
-            ? pieces.map((p) => ({ nom: p.nom, type: p.type, taille: p.taille, ...(p.type === "texte" && p.tronque ? { tronque: true } : {}) }))
-            : undefined,
-        ...(documents.length > 0 ? { documents } : {}),
-      };
-      const replyId = newId();
-
-      // Ouvre une session à la première question.
-      if (!sessionRef.current) {
-        sessionRef.current = createSession({
-          owner: currentUser(),
-          title: deriveTitle(prompt),
-          origin: options.origin ?? "local",
-          modelUid: options.model,
-        });
-        notifySessionsChanged();
-      }
-
-      // Historique envoyé : message système du profil + tours valides.
-      const turns: ChatTurn[] = [...historyRef.current, userMsg]
-        .filter((m) => !m.error && m.content.trim().length > 0)
-        /*
-         * Une question restée sans réponse (arrêtée, ou refusée par une
-         * erreur) n'est pas renvoyée. Elle suivait la précédente sans réponse
-         * entre les deux, et le modèle répondait à la première : arrêté sur
-         * « écris un essai de 2000 mots », puis « réponds seulement OK »,
-         * il a écrit l'essai dans un fichier (essai réel, qwen3-8b). Deux
-         * questions de suite, c'est la dernière qui compte.
-         */
-        .filter((m, i, liste) => !(m.role === "user" && liste[i + 1]?.role === "user"))
-        // Chaque question garde ses documents, tant que le Chat est ouvert : l'instance mesure la place et décide (documentsJoints.ts).
-        .map((m) => ({ role: m.role, content: m.role === "user" ? contenuPourLeModele(m) : m.content }));
-
-      // Le dernier tour porte les images de cette question.
-      if (turns.length > 0 && vues.length > 0) {
-        const dernier = turns[turns.length - 1];
-        const texte = typeof dernier.content === "string" ? dernier.content : "";
-        turns[turns.length - 1] = {
-          role: "user",
-          content: [
-            ...(texte.trim() ? [{ type: "text" as const, text: texte }] : []),
-            ...vues.map((v) => ({
-              type: "image_url" as const,
-              image_url: { url: v.dataUrl },
-            })),
-          ],
-        };
-      }
-
-      const payload: ChatTurn[] = options.systemPrompt
-        ? [{ role: "system", content: options.systemPrompt }, ...turns]
-        : turns;
-
-      const session = sessionRef.current!;
-      const controller = new AbortController();
-      const enCours: ReponseEnCours = { history: historyRef.current, controller, abonnes: new Set() };
-      reponsesEnCours.set(session.id, enCours);
-      signalerEnCours();
-      // Tout passe par la réponse en cours ; l'écran la suit tant qu'il montre ce Chat.
-      const ecrire = (next: Message[]) => {
-        enCours.history = next;
-        for (const f of enCours.abonnes) f(next);
-      };
-      const patch = (id: string, changes: Partial<Message> | ((actuel: Message) => Partial<Message>)) =>
-        ecrire(enCours.history.map((m) => (m.id === id ? { ...m, ...(typeof changes === "function" ? changes(m) : changes) } : m)));
-      const persist = () => persisterDans(session, enCours.history);
+      const session = sessionPour(prompt);
+      const reponse = repondre(session, historyRef.current, text, pieces, { ...options });
+      // La réponse est ouverte (partie synchrone de `repondre`) : l'écran la suit.
       attacher(session.id);
-      ecrire([...enCours.history, userMsg, { id: replyId, role: "assistant", content: "", streaming: true }]);
-      /*
-       * La question est gardée dès l'envoi, pas seulement à la fin de la
-       * réponse (parcours du 28/09/2026) : une page rechargée pendant que le
-       * modèle écrivait laissait un Chat dont le titre était dans la liste et
-       * qui s'ouvrait vide, question comprise, ici comme sur l'instance. La
-       * réponse vide en cours d'écriture n'est pas enregistrée (persisterDans).
-       */
-      persist();
-      abortRef.current = controller;
-
-      let content = "";
-      let reasoning = "";
-      const traces: ToolTrace[] = [];
-      let plan: EtapePlan[] = [];
-
-      /*
-       * Durées de la réponse (27/09/2026), prises à l'arrivée de chaque
-       * morceau du flux. La réflexion se compte par phases : un modèle à
-       * outils réfléchit avant chaque appel, et le texte ou l'outil qui suit
-       * clôt la phase. Sa fin est le dernier morceau de réflexion reçu, pas
-       * l'arrivée de ce qui suit : l'écriture des arguments d'un outil, qui ne
-       * se voit pas, n'est pas de la réflexion.
-       */
-      const debut = Date.now();
-      const durees: DureesReponse = { debut };
-      let dernierMorceauReflexion = debut;
-      const finirReflexion = () => {
-        if (durees.reflexionDepuis === undefined) return;
-        durees.reflexion = (durees.reflexion ?? 0) + Math.max(0, dernierMorceauReflexion - durees.reflexionDepuis);
-        durees.reflexionDepuis = undefined;
-      };
-      patch(replyId, { durees: { ...durees } });
-
-      try {
-        await streamChat(
-          {
-            messages: payload,
-            model: options.model,
-            effort: options.effort,
-            tools: options.tools,
-            connaissances: options.connaissances,
-            agent: options.agent,
-            web: options.web,
-            signal: controller.signal,
-          },
-          {
-            onContent: (chunk) => {
-              content += chunk;
-              finirReflexion();
-              /*
-               * Le premier mot, pas le premier morceau : la passerelle glisse
-               * des sauts de ligne entre deux étapes, et un moteur qui ne
-               * sépare pas la réflexion la livre entre balises dans le texte
-               * (retirée à l'affichage, voir MessageList).
-               */
-              if (durees.premierMot === undefined && content.replace(/<think>[\s\S]*?(?:<\/think>|$)/g, "").trim()) {
-                durees.premierMot = Date.now() - debut;
-              }
-              patch(replyId, { content, durees: { ...durees } });
-            },
-            onReasoning: (chunk) => {
-              reasoning += chunk;
-              dernierMorceauReflexion = Date.now();
-              durees.reflexionDepuis ??= dernierMorceauReflexion;
-              patch(replyId, { reasoning, durees: { ...durees } });
-            },
-            onEvent: (event) => {
-              if (event.type === "plan") {
-                plan = event.etapes.map((titre, i) => ({ titre, etat: "attente" as const, chemin: String(i + 1), profondeur: 0 }));
-                patch(replyId, { plan: [...plan] });
-              } else if (event.type === "plan_sous") {
-                // Les parties d'une étape redécoupée s'insèrent juste après elle.
-                const i = plan.findIndex((e) => e.chemin === event.chemin);
-                if (i >= 0) {
-                  const parent = plan[i]!;
-                  parent.etat = "decoupee";
-                  const parties = event.etapes.map((titre, k) => ({
-                    titre,
-                    etat: "attente" as const,
-                    chemin: `${event.chemin}.${k + 1}`,
-                    profondeur: (parent.profondeur ?? 0) + 1,
-                  }));
-                  plan.splice(i + 1, 0, ...parties);
-                  patch(replyId, { plan: [...plan] });
-                }
-              } else if (event.type === "etape") {
-                const e = etapeDe(plan, event);
-                if (e) e.etat = "encours";
-                patch(replyId, { plan: [...plan] });
-              } else if (event.type === "plan_ajout") {
-                plan.push(
-                  { titre: event.titre, etat: "decoupee" as const, chemin: event.chemin, profondeur: 0 },
-                  ...event.etapes.map((titre, k) => ({ titre, etat: "attente" as const, chemin: `${event.chemin}.${k + 1}`, profondeur: 1 })),
-                );
-                patch(replyId, { plan: [...plan] });
-              } else if (event.type === "revue") {
-                patch(replyId, { revue: event.etat });
-              } else if (event.type === "etape_verification") {
-                const e = etapeDe(plan, event);
-                if (e) e.controlee = true;
-                patch(replyId, { plan: [...plan] });
-              } else if (event.type === "etape_reprise") {
-                const e = etapeDe(plan, event);
-                if (e) e.reprise = true;
-                patch(replyId, { plan: [...plan] });
-              } else if (event.type === "etape_fin") {
-                const e = etapeDe(plan, event);
-                if (e) e.etat = event.ok ? "fait" : "echec";
-                patch(replyId, { plan: [...plan] });
-              } else if (event.type === "tool_start") {
-                finirReflexion();
-                traces.push({ name: event.name, args: event.args, running: true, debut: Date.now() });
-                patch(replyId, { tools: [...traces], durees: { ...durees } });
-              } else if (event.type === "tool_end") {
-                const last = [...traces].reverse().find((t) => t.name === event.name && t.running);
-                if (last) {
-                  last.running = false;
-                  last.ok = event.ok;
-                  last.preview = event.preview;
-                  if (last.debut !== undefined) last.duree = Date.now() - last.debut;
-                }
-                patch(replyId, { tools: traces.map((trace) => ({ ...trace })) });
-              } else if (event.type === "sources_web") {
-                patch(replyId, { sourcesWeb: event.sources ?? [] });
-              } else if (event.type === "sources") {
-                patch(replyId, {
-                  sources: { citations: event.sources ?? [], ignorees: event.ignorees, aReindexer: event.aReindexer, erreur: event.erreur },
-                });
-              } else if (event.type === "error") {
-                patch(replyId, { error: event.message });
-              } else if (event.type === "statut") {
-                patch(replyId, { statut: event.message || undefined });
-              }
-            },
-          },
-        );
-        /*
-         * Une réponse vide, sans erreur, sans rien : c'est « il n'a jamais
-         * répondu ». La cause la plus fréquente était un modèle qui épuisait
-         * son budget à réfléchir (gateway/src/chat.ts, `basePayload`) ; il en
-         * reste d'autres, et aucune ne doit laisser une bulle blanche. On le
-         * dit, avec ce qu'on peut y faire.
-         */
-        finirReflexion();
-        patch(replyId, (actuel) =>
-          !actuel.content.trim() && !actuel.error && !(actuel.plan && actuel.plan.length > 0)
-            ? {
-                streaming: false,
-                statut: undefined,
-                durees: { ...durees },
-                error: t(
-                  "Le modèle n'a rien répondu. Réessayez ; si cela recommence, baissez le niveau de raisonnement ou choisissez un autre modèle.",
-                ),
-              }
-            : {
-                streaming: false,
-                statut: undefined,
-                // La durée de la réponse entière, seulement pour une réponse allée à son terme.
-                durees: actuel.error ? { ...durees } : { ...durees, reponse: Date.now() - debut },
-              },
-        );
-        persist();
-      } catch (err) {
-        // Coupée : la réflexion déjà faite est une mesure réelle ; la réponse entière, elle, n'a pas de durée.
-        finirReflexion();
-        patch(replyId, { durees: { ...durees } });
-        if (controller.signal.aborted) {
-          /*
-           * Arrêtée avant le premier mot : la bulle restait blanche, sans
-           * rien qui dise pourquoi. Elle le dit. Ce qui était déjà écrit,
-           * lui, reste tel quel, et est gardé dans le Chat.
-           */
-          patch(replyId, (actuel) => ({
-            // Un outil en cours ne recevra plus sa fin : sa roue tournait pour toujours (Cowork).
-            tools: actuel.tools?.map((trace) =>
-              trace.running ? { ...trace, running: false, ok: false, preview: t("Interrompu à votre demande.") } : trace,
-            ),
-            ...(!actuel.content.trim() && !actuel.error
-              ? { streaming: false, statut: undefined, error: t("Réponse arrêtée à votre demande, avant d'avoir été écrite.") }
-              : { streaming: false, statut: undefined }),
-          }));
-        } else {
-          patch(replyId, {
-            streaming: false,
-            statut: undefined,
-            error: messageDErreur(err),
-          });
-        }
-        /*
-         * Gardé dans tous les cas, erreur comprise : la question de la
-         * personne n'était enregistrée qu'en cas de succès. Un modèle
-         * inconnu ou un moteur éteint laissait un Chat dont le titre
-         * existait dans la liste, et qui s'ouvrait vide.
-         */
-        persist();
-      } finally {
-        /*
-         * Le plan ne doit pas continuer de tourner à l'écran une fois le flux
-         * fini. Arrêté par la personne ou coupé par une erreur, l'étape en
-         * cours ne recevra jamais sa fin : sa roue tournait pour toujours,
-         * comme si l'agent travaillait encore. Arrêtée, elle redevient « à
-         * faire » ; coupée par une panne, elle est marquée en échec.
-         */
-        patch(replyId, (actuel) =>
-          actuel.plan?.some((e) => e.etat === "encours") || actuel.revue === "encours"
-            ? {
-                plan: actuel.plan?.map((e) =>
-                  e.etat === "encours" ? { ...e, etat: controller.signal.aborted ? ("attente" as const) : ("echec" as const) } : e,
-                ),
-                revue: actuel.revue === "encours" ? undefined : actuel.revue,
-              }
-            : {},
-        );
-        /*
-         * Seulement si c'est encore cette demande-ci qui est en cours : après
-         * « Arrêter » puis un nouvel envoi, la fin tardive de l'ancienne
-         * effaçait le contrôleur de la nouvelle, qui ne pouvait plus être
-         * arrêtée, et rendait la main alors qu'elle tournait encore.
-         */
-        if (abortRef.current === controller) abortRef.current = null;
-        finirReponse(session.id, enCours);
-      }
+      await reponse;
     },
-    [
-      busy,
-      options.model,
-      options.effort,
-      options.systemPrompt,
-      options.origin,
-      options.tools,
-      options.connaissances,
-      options.web,
-      attacher,
-      finirReponse,
-      persisterDans,
-    ],
+    [busy, options, sessionPour, attacher],
   );
 
   /** Nouvelle conversation : la session courante est close, pas supprimée. */
   const reset = useCallback(() => {
-    // Nouvelle conversation : la réponse en cours de l'autre Chat continue.
+    // Nouvelle conversation : la réponse en cours de l'autre Chat continue, et sa file aussi.
     detacher();
-    abortRef.current = null;
     setBusy(false);
     sessionRef.current = null;
     commit([]);
@@ -682,7 +826,6 @@ export function useChat(options: Options) {
   const open = useCallback(
     (session: Session) => {
       detacher();
-      abortRef.current = null;
       setBusy(false);
       sessionRef.current = session;
       // Une réponse s'écrit encore dans ce Chat : on la suit en direct.
@@ -717,73 +860,76 @@ export function useChat(options: Options) {
     [detacher, attacher, commit],
   );
 
-  /**
-   * Crée une image au lieu de répondre (bouton « Image »). La demande et
-   * l'image restent dans le Chat, comme un échange ordinaire ; la réponse
-   * garde une phrase de texte, pour que la suite de la conversation sache
-   * qu'une image a été faite, et de quoi.
-   */
+  /** Crée une image au lieu de répondre (bouton « Image »), ou une courte vidéo. */
   const creerImage = useCallback(
-    /** `video` : une courte vidéo plutôt qu'une image, par le même moteur (27/09/2026). */
     async (description: string, format: Format, video = false) => {
       const texte = description.trim();
       if (!texte || busy) return;
-      const userMsg: Message = { id: newId(), role: "user", content: texte };
-      const replyId = newId();
-      if (!sessionRef.current) {
-        sessionRef.current = createSession({
-          owner: currentUser(),
-          title: deriveTitle(texte),
-          origin: options.origin ?? "local",
-          modelUid: options.model,
-        });
-        notifySessionsChanged();
-      }
-      const session = sessionRef.current!;
-      const controller = new AbortController();
-      const enCours: ReponseEnCours = { history: historyRef.current, controller, abonnes: new Set() };
-      reponsesEnCours.set(session.id, enCours);
-      signalerEnCours();
-      const ecrire = (next: Message[]) => {
-        enCours.history = next;
-        for (const f of enCours.abonnes) f(next);
-      };
-      const patch = (id: string, changes: Partial<Message>) =>
-        ecrire(enCours.history.map((m) => (m.id === id ? { ...m, ...changes } : m)));
-      const persist = () => persisterDans(session, enCours.history);
+      const session = sessionPour(texte);
+      const creation = creer(session, historyRef.current, texte, format, video, { ...options });
       attacher(session.id);
-      ecrire([
-        ...enCours.history,
-        userMsg,
-        { id: replyId, role: "assistant", content: "", streaming: true, statut: t("Préparation de la description...") },
-      ]);
-      abortRef.current = controller;
-      // Le temps de la création, de la demande à l'image reçue (27/09/2026) : sur un processeur, c'est long, et bon à savoir.
-      const debut = Date.now();
-      try {
-        const creer = video ? creerVideoSurLaMachine : creerSurLaMachine;
-        const image = await creer(texte, format, (tr) => patch(replyId, { statut: tr.message }), controller.signal, sessionRef.current?.id);
-        patch(replyId, {
-          content: video ? tf("Vidéo créée : « {0} »", texte) : tf("Image créée : « {0} »", texte),
-          image,
-          streaming: false,
-          statut: undefined,
-          durees: { reponse: Date.now() - debut },
-        });
-        persist();
-      } catch (err) {
-        if (controller.signal.aborted) {
-          patch(replyId, { streaming: false, statut: undefined, error: video ? t("Suivi arrêté : la vidéo se termine quand même sur la machine, mais n'apparaîtra pas ici.") : t("Suivi arrêté : l'image se termine quand même sur la machine, mais n'apparaîtra pas ici.") });
-        } else {
-          patch(replyId, { streaming: false, statut: undefined, error: messageDErreur(err) });
-        }
-      } finally {
-        if (abortRef.current === controller) abortRef.current = null;
-        finirReponse(session.id, enCours);
-      }
+      await creation;
     },
-    [busy, options.origin, options.model, attacher, finirReponse, persisterDans],
+    [busy, options, sessionPour, attacher],
   );
+
+  /* --- File d'attente (29/09/2026) -------------------------------------- */
+
+  const file = useSyncExternalStore(filesDesChats.abonner, () => filesDesChats.lire(sessionRef.current?.id));
+
+  /**
+   * Pendant une réponse : le message entre dans la file de ce Chat, avec les
+   * choix du moment. Il n'y a de file que dans un Chat qui existe déjà (une
+   * réponse s'y écrit), jamais pour le premier message.
+   */
+  const mettreEnFile = useCallback(
+    (texte: string, pieces: Attachment[] = [], creation?: EnvoiEnFile["creation"]): Ajout | null => {
+      const id = sessionRef.current?.id;
+      if (!id) return null;
+      if (creation ? !texte.trim() : !texte.trim() && pieces.length === 0) return null;
+      return filesDesChats.ajouter(id, {
+        texte,
+        pieces,
+        options: { ...optionsRef.current, connaissances: [...(optionsRef.current.connaissances ?? [])] },
+        ...(creation ? { creation } : {}),
+      });
+    },
+    [],
+  );
+
+  /** Envoie un message que la file vient de rendre, sur l'historique affiché. */
+  const partir = useCallback((sorti: { contenu: EnvoiEnFile } | null) => {
+    const session = sessionRef.current;
+    if (!sorti || !session) return;
+    lancerEnvoi(session, historyRef.current, sorti.contenu);
+    attacher(session.id);
+  }, [attacher]);
+
+  const retirerDeFile = useCallback((idMessage: string) => {
+    const id = sessionRef.current?.id;
+    if (id) filesDesChats.retirer(id, idMessage);
+  }, []);
+
+  const commencerEdition = useCallback((idMessage: string) => {
+    const id = sessionRef.current?.id;
+    if (id) filesDesChats.commencerEdition(id, idMessage);
+  }, []);
+
+  /** Fin de « Modifier » : `texte` absent, la modification est abandonnée. */
+  const finirEdition = useCallback((idMessage: string, texte?: string) => {
+    const id = sessionRef.current?.id;
+    if (!id) return;
+    const actuel = filesDesChats.lire(id).messages.find((m) => m.id === idMessage);
+    if (!actuel) return;
+    const contenu = texte !== undefined ? { ...actuel.contenu, texte } : undefined;
+    partir(filesDesChats.finirEdition(id, idMessage, contenu, reponsesEnCours.has(id)));
+  }, [partir]);
+
+  /** « Envoyer maintenant » (rien ne s'écrit) ou « Reprendre » (le premier partira à la fin de la réponse en cours). */
+  const reprendreFile = useCallback(() => {
+    const id = sessionRef.current?.id;
+    if (id) partir(filesDesChats.reprendre(id, reponsesEnCours.has(id)));
+  }, [partir]);
 
   return {
     messages,
@@ -794,5 +940,11 @@ export function useChat(options: Options) {
     reset,
     open,
     session: sessionRef.current,
+    file,
+    mettreEnFile,
+    retirerDeFile,
+    commencerEdition,
+    finirEdition,
+    reprendreFile,
   };
 }

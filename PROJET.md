@@ -4391,6 +4391,43 @@ explicite. Pas essayé : la demande affichée pendant une vraie préparation d'a
 le panneau de suivi d'une session rouverte après rechargement repart vide (seule la suite
 s'y inscrit).
 
+**Fait le 29/09/2026 : file d'attente dans le Chat (et Cowork).** Demandé par Medhi : « il y
+a des gens impatients : ça évite que le message se coupe pendant une réponse ». Constaté
+avant : pendant une réponse, Entrée ne faisait rien (`canSend` faux), et le bouton d'envoi
+devenait « Arrêter » **à la même place** : qui cliquait pour envoyer la suite coupait la
+réponse, et son message restait dans le champ. Maintenant, pendant une réponse, Entrée et le
+bouton d'envoi (« Mettre en file », tout à droite) mettent le message dans la file du Chat ;
+« Arrêter » devient un bouton à part, à gauche. La file s'affiche en haut du composeur
+(`FileAttente.tsx`) : compteur, « Modifier » (sur place, le message ne part pas pendant qu'on
+le modifie) et « Retirer ». À la fin **normale** d'une réponse, le premier part seul, avec les
+pièces jointes et les choix du moment de sa mise en file (modèle, niveau, outils, bases, agent,
+web, image ou vidéo) ; puis le suivant. Une réponse en erreur (y compris « le modèle n'a rien
+répondu ») ou arrêtée met la file en pause : « Envoyer maintenant » la relance (« Reprendre »
+si une autre réponse s'écrit déjà). Dix messages au plus par Chat, au-delà une ligne le dit et
+le texte reste dans le champ. La logique est un module pur (`src/lib/fileAttente.ts`, sécurité
+section 40) ; pour qu'un message parte même quand l'écran montre un autre Chat ou une autre
+page, la réponse s'écrit désormais hors du crochet (`repondre`, `creer`, `terminer` dans
+`useChat.ts`), et l'écran suit ses réponses par `CHATS_EN_COURS`. L'écran Code garde l'ancien
+bouton (sa conversation vient d'OpenCode, pas de `useChat`). **Décidé : la file reste en
+mémoire**, ni enregistrée ni synchronisée : la déconnexion recharge la page, et une file
+gardée au-delà serait vue et envoyée par la personne suivante sur le poste ; les pièces jointes
+pèsent aussi jusqu'à plusieurs Mo. Une page rechargée ou l'application fermée la perd donc
+(comme elles coupent déjà la réponse en cours) ; un Chat supprimé l'emporte. Vérifié : `npm run
+typecheck`, i18n à 100 %, `npm run securite` 2167 contrôles, 0 échec ; dans le navigateur
+contre une instance jetable et un faux modèle qui écrit pendant 10 s (1280 et 375 px, clair et
+sombre) : deux messages mis en file pendant une réponse, partis l'un après l'autre ; un départ
+pendant que la page Agents puis un autre Chat étaient affichés (réponse enregistrée dans son
+Chat) ; une file par Chat en passant de l'un à l'autre ; « Arrêter » puis file en pause ;
+« Modifier » puis « Envoyer maintenant » ; panne simulée du modèle puis pause ; file pleine à
+375 px. **Pas essayé** : avec un vrai modèle, avec une carte d'accord en attente (la réponse
+reste alors en cours, la file attend), dans Cowork à l'écran (même code, contrôlé par la
+section 40), une image ou une vidéo mise en file, l'application de bureau. Vu et corrigé en essayant : au
+premier envoi d'un Chat neuf, le composeur change de place (accueil puis conversation) et
+perdait le curseur, si bien que la suite tapée aussitôt se perdait ; né pendant une réponse,
+il reprend maintenant la main (vu : la suite tapée sans recliquer entre dans la file). Et le
+champ vidé par un envoi de plusieurs lignes reprend sa hauteur. Relevé, pas corrigé : le
+brouillon du champ suit quand on change de Chat (il n'est pas rattaché au Chat).
+
 **Fait le 29/09/2026 : extension VS Code 0.2.5 et CLI essayées de bout en bout.** CLI :
 `npm run essai:cli` 31/31, avec le modèle de LM Studio (`-- --modele`, qwen3-8b) 49/49.
 Extension : `npm run essai:vscode` (faux module `vscode`, vraie extension, instance

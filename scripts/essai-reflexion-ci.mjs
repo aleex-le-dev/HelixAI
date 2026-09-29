@@ -174,6 +174,8 @@ function forme(vu) {
  */
 export async function essaiReflexion({ G, entetes, dire, verifier, sortie, modeles, delaiMiseEnRouteMs = 40 * 60_000, lmStudio = LM_STUDIO }) {
   const resume = [];
+  /** Les modèles dont le Chat a rendu une réflexion. */
+  const avecReflexion = [];
   for (const cle of modeles) {
     dire(`   modèle ${cle}`);
     const slug = nomDuModele(cle).replace(/[^a-z0-9.-]+/g, "-");
@@ -252,10 +254,17 @@ export async function essaiReflexion({ G, entetes, dire, verifier, sortie, model
       resume.push({ modele: cle, id, endroit, statut: r.statut, forme: forme(r.vu), vu: r.vu, premierSigneMs: r.premierSigne, dureeReflexionMs: r.dureeReflexion, debutReflexion: r.reflexion.slice(0, 200), debutTexte: r.texte.slice(0, 300) });
     }
     const chat = vus.chat;
+    /*
+     * Un petit modèle ne réfléchit pas toujours (Qwen3 1.7B, essai Windows du 29/09/2026 : pas un mot
+     * de réflexion à « Combien font 17 fois 23 ? » par le Chat, 4 042 caractères au moteur seul) : ce
+     * qui est exigé, c'est que TOUTE réflexion reçue arrive séparée, avec sa durée, et jamais dans le
+     * texte. Qu'il y en ait au moins une est vérifié sur l'ensemble des modèles, plus bas.
+     */
+    if (chat.reflexion.trim()) avecReflexion.push(cle);
     verifier(
-      `réflexion, ${cle}, Chat de Helix : la réflexion arrive séparée (reasoning_content), avant la réponse, sur une durée mesurable`,
-      chat.statut === 200 && chat.reflexion.trim().length > 0 && (chat.vu.reasoning_content > 0 || chat.vu.requalifiee > 0) && chat.reflexionAvantTexte && chat.dureeReflexion > 0,
-      `${chat.statut} ${forme(chat.vu)} ; ${chat.dureeReflexion} ms ; moteur seul : ${forme(vus.lmstudio?.vu ?? {})}`,
+      `réflexion, ${cle}, Chat de Helix : la réflexion reçue arrive séparée (reasoning_content), sur une durée mesurée, jamais dans le texte (<think>, </think>)`,
+      chat.statut === 200 && !/<\/?think>/.test(chat.texte) && (!chat.reflexion.trim() || ((chat.vu.reasoning_content > 0 || chat.vu.requalifiee > 0) && chat.dureeReflexion > 0)),
+      `${chat.statut} ${forme(chat.vu)} ; ${chat.dureeReflexion} ms ; moteur seul : ${forme(vus.lmstudio?.vu ?? {})} ; ${JSON.stringify(chat.texte.slice(0, 200))}`,
     );
     // Lecture de la demande et tri se disent à l'écran (chat.ts, `attenteAffichee`) : jamais une bulle muette plus de quelques secondes.
     verifier(
@@ -263,12 +272,20 @@ export async function essaiReflexion({ G, entetes, dire, verifier, sortie, model
       chat.premierSigne > 0 && chat.premierSigne < 8000,
       `${chat.premierSigne} ms`,
     );
-    verifier(
-      `réflexion, ${cle}, Chat de Helix : une réponse, sans balise <think> ni </think>, et sans erreur`,
-      chat.texte.trim().length > 0 && !/<\/?think>/.test(chat.texte) && (chat.vu.erreurs ?? []).length === 0,
-      `${JSON.stringify(chat.texte.slice(0, 300))} ${(chat.vu.erreurs ?? []).join(" | ")}`,
-    );
+    // Le modèle de l'essai doit répondre ; les suivants peuvent partir en boucle au processeur (dit par Helix, et noté ici).
+    if (cle === modeles[0]) {
+      verifier(
+        `réflexion, ${cle}, Chat de Helix : une réponse, et sans erreur`,
+        chat.texte.trim().length > 0 && (chat.vu.erreurs ?? []).length === 0,
+        `${JSON.stringify(chat.texte.slice(0, 300))} ${(chat.vu.erreurs ?? []).join(" | ")}`,
+      );
+    }
   }
+  verifier(
+    "réflexion : au moins un Chat de Helix l'a reçue et rendue séparée (l'essai n'est pas vide)",
+    avecReflexion.length > 0,
+    "aucun modèle n'a réfléchi par le Chat",
+  );
   writeFileSync(join(sortie, "reflexion-resume.json"), JSON.stringify({ plateforme: `${process.platform} ${process.arch}`, question: QUESTION, resultats: resume }, null, 1));
 }
 

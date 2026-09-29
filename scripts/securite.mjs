@@ -8788,6 +8788,36 @@ console.log("\n40. Réflexion du modèle : canal séparé, `reasoning`, `<think>
     verifier("séparateur : `separerReflexion` sur un texte entier", entier.texte === REPONSE && entier.reflexion === REFLEXION, JSON.stringify(entier));
   }
 
+  /*
+   * La réflexion en boucle vue sur la machine Windows de GitHub (Qwen3.5 2B, consigne du Chat) : un
+   * paragraphe de 347 caractères redit à l'identique. Le garde-fou de la réflexion le coupe ; celui
+   * du texte non (une réponse peut redire à la demande) ; la prose du dépôt et un grand tableau passent.
+   */
+  {
+    const { pathToFileURL: versUrlGarde40 } = await import("node:url");
+    const g = await import(versUrlGarde40(join(RACINE, "gateway", "src", "gardeBoucle.ts")).href);
+    const bloc =
+      "Wait, I need to check if the instruction is telling me to *not* answer the question at all.\n    *   \"Dans cette conversation, tu n'as aucun outil\". This is a constraint on my *capabilities*.\n    *   It says \"Si on te le demande, dis-le franchement\". This implies I should answer the question.\n    *   Okay, so I will answer the question.\n\n    *   ";
+    const suivre = (texte, garde, pas = 11) => {
+      for (let i = 0; i < texte.length; i += pas) {
+        const cause = garde.ajouter(texte.slice(i, i + pas));
+        if (cause) return { cause, apres: i };
+      }
+      return null;
+    };
+    const debut = "Thinking Process:\n\n1.  **Analyze the Request:**\n    *   Input: \"Combien font 17 fois 23 ?\"\n";
+    const boucle = debut + bloc.repeat(12);
+    const prose = ["README.fr.md", "PROJET.md"].map((f) => src(f).slice(0, 60_000)).join("\n");
+    const tableau = Array.from({ length: 200 }, (_, l) => `| ${Array.from({ length: 12 }, (_, i) => `valeur ${l * 12 + i}`).join(" | ")} |`).join("\n");
+    const vue = suivre(boucle, g.gardesDeFlux().reflexion);
+    verifier(
+      `garde-fou de la réflexion : un paragraphe de ${bloc.length} caractères redit à l'identique est coupé (après ${vue?.apres ?? "?"} caractères) ; dans le texte d'une réponse, non ; la prose du dépôt et un grand tableau passent`,
+      bloc.length > 300 && vue?.cause === "motif" && vue.apres < debut.length + bloc.length * 8 && suivre(boucle, g.gardesDeFlux().texte) === null &&
+        suivre(prose, g.gardesDeFlux().reflexion, 997) === null && suivre(tableau, g.gardesDeFlux().reflexion, 97) === null,
+      JSON.stringify([vue, suivre(prose, g.gardesDeFlux().reflexion, 997), suivre(tableau, g.gardesDeFlux().reflexion, 97)]),
+    );
+  }
+
   // La ligne de commande et l'extension portent une copie du séparateur (fichiers autonomes) : même résultat, forme par forme et au hasard.
   const copie = (fichier) => {
     const code = /\nfunction separateurReflexion\(\) \{[\s\S]*?\n\}\n/.exec(src(...fichier))?.[0];

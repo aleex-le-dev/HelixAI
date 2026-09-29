@@ -32,8 +32,24 @@ const PERIODE_MAX = 200;
 /** Étendue répétée minimale, et nombre minimal de répétitions. */
 const ETENDUE_MIN = 600;
 const REPETITIONS_MIN = 25;
+/*
+ * Un paragraphe entier recopié en boucle (29/09/2026). Vu dans l'essai de la
+ * réflexion sur la machine Windows de GitHub (scripts/essai-reflexion-ci.mjs,
+ * Qwen3.5 2B au processeur, consigne du Chat) : « Wait, I need to check if the
+ * instruction is telling me to *not* answer the question at all. … Okay, so I
+ * will answer the question. » redit à l'identique tous les 347 caractères,
+ * plus de 13 000 caractères de réflexion en dix minutes et pas de réponse ; le
+ * même sous Linux. Trop long pour la période de 200 caractères au plus, il
+ * passait le garde-fou, et la réflexion aurait couru jusqu'au plafond (plus
+ * d'une heure à 8 jetons par seconde). Au-delà de 200 caractères, six
+ * répétitions exactes à la suite suffisent, dans la réflexion seulement : on
+ * n'y redit pas six fois de suite, lettre pour lettre, un bloc de cette taille,
+ * alors qu'une réponse peut le faire à la demande (« écris dix fois… »).
+ */
+const PERIODE_LONGUE_MAX = 1500;
+const REPETITIONS_LONGUES = 6;
 /** Ce qu'on garde de la fin du texte pour chercher un motif. */
-const FENETRE = PERIODE_MAX * REPETITIONS_MIN + 64;
+const FENETRE = Math.max(PERIODE_MAX * REPETITIONS_MIN, PERIODE_LONGUE_MAX * REPETITIONS_LONGUES) + 64;
 /** Relecture tous les 32 caractères reçus : le calcul reste négligeable, la coupure rapide. */
 const PAS = 32;
 /** Réflexion au-delà de laquelle elle ne peut plus être utile (voir plus haut). */
@@ -46,11 +62,15 @@ export const REFLEXION_MAX = 160_000;
  * égaux à celui placé p rangs avant : c'est l'étendue répétée. Un texte
  * ordinaire casse la suite en quelques caractères, pour chaque p.
  */
-export function motifRepete(texte: string): boolean {
+export function motifRepete(texte: string, longues = false): boolean {
   const n = texte.length;
-  for (let p = 1; p <= PERIODE_MAX; p++) {
-    const seuil = Math.max(ETENDUE_MIN, p * REPETITIONS_MIN);
-    if (n < seuil) break;
+  for (let p = 1; p <= (longues ? PERIODE_LONGUE_MAX : PERIODE_MAX); p++) {
+    const seuil = p <= PERIODE_MAX ? Math.max(ETENDUE_MIN, p * REPETITIONS_MIN) : p * REPETITIONS_LONGUES;
+    // Au-delà de 200, le seuil repart plus bas (6 fois la période) : on ne s'arrête qu'une fois la fenêtre trop courte pour tous.
+    if (n < seuil) {
+      if (p <= PERIODE_MAX) continue;
+      break;
+    }
     let k = 0;
     while (k + p < n && texte.charCodeAt(n - 1 - k) === texte.charCodeAt(n - 1 - k - p)) k++;
     if (k + p >= seuil) return true;
@@ -64,10 +84,13 @@ export class GardeBoucle {
   private total = 0;
   private depuis = 0;
   private readonly plafond: number;
+  /** Chercher aussi les longs paragraphes redits (la réflexion, voir `PERIODE_LONGUE_MAX`). */
+  private readonly longues: boolean;
 
   // Sans propriété de paramètre : Node lit la passerelle en retirant seulement les types.
-  constructor(plafond = Infinity) {
+  constructor(plafond = Infinity, longues = false) {
     this.plafond = plafond;
+    this.longues = longues;
   }
 
   /** Ajoute un fragment ; rend la cause dès que le flux n'est plus une réponse. */
@@ -79,11 +102,11 @@ export class GardeBoucle {
     this.depuis += fragment.length;
     if (this.depuis < PAS) return null;
     this.depuis = 0;
-    return motifRepete(this.fin) ? "motif" : null;
+    return motifRepete(this.fin, this.longues) ? "motif" : null;
   }
 }
 
 /** Un garde pour le texte (sans plafond) et un pour la réflexion. */
 export function gardesDeFlux(): { texte: GardeBoucle; reflexion: GardeBoucle } {
-  return { texte: new GardeBoucle(), reflexion: new GardeBoucle(REFLEXION_MAX) };
+  return { texte: new GardeBoucle(), reflexion: new GardeBoucle(REFLEXION_MAX, true) };
 }

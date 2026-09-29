@@ -49,7 +49,13 @@ import { fileURLToPath } from "node:url";
 const attendre = (ms) => new Promise((r) => setTimeout(r, ms));
 /** Nom comparable d'un modèle, sans source ni éditeur (« lmstudio/qwen/qwen3-1.7b » → « qwen3-1.7b »), comme santeModeles.ts. */
 const nomDuModele = (id) => (String(id).toLowerCase().split("/").pop() ?? "").replace(/:\d+$/, "");
-const QUESTION = "Combien font 17 fois 23 ? Réfléchis, puis donne le résultat en une phrase.";
+/*
+ * Une question courte qui finit par « ? » : l'écran la pose telle quelle au modèle, sans le tri
+ * qui découpe les travaux (plan.ts, `estQuestionSimple`). Premier essai du 29/09/2026 avec
+ * « …, puis donne le résultat en une phrase. » : un plan en deux étapes, plus de vingt minutes
+ * au processeur de la machine d'essai pour Qwen3.5 2B.
+ */
+const QUESTION = "Combien font 17 fois 23 ?";
 const LM_STUDIO = "http://127.0.0.1:1234/v1";
 
 /**
@@ -65,11 +71,22 @@ async function lireFlux(reponse, t0) {
   let premiereReflexion = 0;
   let derniereReflexion = 0;
   let premierTexte = 0;
+  /** Premier signe visible à l'écran : un statut, de la réflexion ou du texte. */
+  let premierSigne = 0;
   const lecteur = reponse.body.getReader();
   const decodeur = new TextDecoder();
   let tampon = "";
+  let interrompu = "";
   for (;;) {
-    const { done, value } = await lecteur.read();
+    let lu;
+    try {
+      lu = await lecteur.read();
+    } catch (err) {
+      // Délai dépassé ou connexion coupée : ce qui est déjà arrivé est gardé, et la coupure dite.
+      interrompu = String(err?.name ?? err);
+      break;
+    }
+    const { done, value } = lu;
     if (done) break;
     const morceau = decodeur.decode(value, { stream: true });
     brut.push(morceau);
@@ -93,6 +110,8 @@ async function lireFlux(reponse, t0) {
         continue;
       }
       if (json.error) vu.erreurs.push(JSON.stringify(json.error).slice(0, 300));
+      // Un statut non vide (« Chargement… », « Le modèle lit la demande… ») est déjà un signe à l'écran.
+      if (json.helix?.type === "statut" && json.helix.message) premierSigne ||= maintenant;
       if (json.helix?.type === "error") vu.erreurs.push(String(json.helix.message).slice(0, 300));
       // Ce que l'écran fait de cet évènement (useChat.ts) : les derniers caractères du texte étaient la réflexion.
       if (json.helix?.type === "reflexion_requalifiee") {
@@ -111,17 +130,20 @@ async function lireFlux(reponse, t0) {
           reflexion += delta[champ];
           premiereReflexion ||= maintenant;
           derniereReflexion = maintenant;
+          premierSigne ||= maintenant;
         }
       }
       if (typeof delta.content === "string" && delta.content) {
         vu.content += delta.content.length;
         texte += delta.content;
         if (!premierTexte && texte.trim()) premierTexte = maintenant;
+        if (texte.trim()) premierSigne ||= maintenant;
       }
     }
   }
   vu.ouvrante = /<think>/.test(texte);
   vu.fermante = /<\/think>/.test(texte);
+  if (interrompu) vu.erreurs.push(`flux interrompu au bout de ${Date.now() - t0} ms : ${interrompu}`);
   return {
     brut: brut.join(""),
     temps: temps.join("\n"),
@@ -130,6 +152,7 @@ async function lireFlux(reponse, t0) {
     reflexion,
     // Comme l'écran : du premier au dernier morceau de réflexion reçu.
     dureeReflexion: premiereReflexion ? derniereReflexion - premiereReflexion : 0,
+    premierSigne,
     reflexionAvantTexte: Boolean(premiereReflexion) && (!premierTexte || premiereReflexion <= premierTexte),
   };
 }
@@ -215,7 +238,7 @@ export async function essaiReflexion({ G, entetes, dire, verifier, sortie, model
       const t0 = Date.now();
       let r;
       try {
-        const reponse = await fetch(url, { method: "POST", headers: en, body: JSON.stringify(corps), signal: AbortSignal.timeout(20 * 60_000) });
+        const reponse = await fetch(url, { method: "POST", headers: en, body: JSON.stringify(corps), signal: AbortSignal.timeout(10 * 60_000) });
         r = { statut: reponse.status, ...(reponse.body ? await lireFlux(reponse, t0) : { brut: await reponse.text(), temps: "", vu: {}, texte: "", reflexion: "" }) };
       } catch (err) {
         r = { statut: 0, brut: String(err?.stack ?? err), temps: "", vu: { erreurs: [String(err)] }, texte: "", reflexion: "", dureeReflexion: 0 };
@@ -224,9 +247,9 @@ export async function essaiReflexion({ G, entetes, dire, verifier, sortie, model
       writeFileSync(join(sortie, `reflexion-${slug}-${endroit}.temps.txt`), r.temps);
       vus[endroit] = r;
       dire(
-        `     ${endroit.padEnd(8)} ${r.statut}, ${((Date.now() - t0) / 1000).toFixed(1)} s : ${forme(r.vu)} ; réflexion ${r.dureeReflexion ?? 0} ms ; réponse ${JSON.stringify(r.texte.trim()).slice(0, 160)}`,
+        `     ${endroit.padEnd(8)} ${r.statut}, ${((Date.now() - t0) / 1000).toFixed(1)} s : ${forme(r.vu)} ; premier signe à ${r.premierSigne ?? 0} ms ; réflexion ${r.dureeReflexion ?? 0} ms ; réponse ${JSON.stringify(r.texte.trim()).slice(0, 160)}${(r.vu.erreurs ?? []).length ? ` ; ${r.vu.erreurs.join(" | ").slice(0, 300)}` : ""}`,
       );
-      resume.push({ modele: cle, id, endroit, statut: r.statut, forme: forme(r.vu), vu: r.vu, dureeReflexionMs: r.dureeReflexion, debutReflexion: r.reflexion.slice(0, 200), debutTexte: r.texte.slice(0, 300) });
+      resume.push({ modele: cle, id, endroit, statut: r.statut, forme: forme(r.vu), vu: r.vu, premierSigneMs: r.premierSigne, dureeReflexionMs: r.dureeReflexion, debutReflexion: r.reflexion.slice(0, 200), debutTexte: r.texte.slice(0, 300) });
     }
     const chat = vus.chat;
     verifier(

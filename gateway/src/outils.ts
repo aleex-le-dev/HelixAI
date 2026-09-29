@@ -14,6 +14,7 @@ import * as controleWeb from "./controleWeb.ts";
 import { definirEspaceDeTravail } from "./approbation.ts";
 import { estAdministrateur } from "./roles.ts";
 import { estEcritureMcpProjet } from "./natifs/projetsRegles.ts";
+import { estEcriturePalmier } from "./palmierRegles.ts";
 
 // La barrière juge un déplacement « vers un dossier » comme `adapterFichiers` l'exécute, depuis le même dossier de travail.
 definirEspaceDeTravail(workspace);
@@ -69,7 +70,8 @@ export function outilsDeFamille(famille: Famille): DefinitionOutil[] {
     case "fichiers": {
       // Les serveurs MCP de l'instance : le serveur de fichiers, et ceux du catalogue ; plus le contrôle du code web.
       // Sans les écritures de Trello, Monday, ClickUp, Todoist, Calendly et Zoom : un employé ne parle pas au nom de l'organisation (SECURITE.md § 48).
-      const mcp = outilsMcp().filter((o) => !estEcritureMcpProjet(o.function.name));
+      // Ni celles de Palmier Pro (29/09/2026) : il tourne sous le compte de qui l'a ouvert, avec ses crédits.
+      const mcp = outilsMcp().filter((o) => !estEcritureMcpProjet(o.function.name) && !estEcriturePalmier(o.function.name));
       return mcp.length > 0 ? [...mcp, ...controleWeb.toolsForModel()] : mcp;
     }
   }
@@ -131,6 +133,16 @@ export async function executerOutil(
        */
       if (estEcritureMcpProjet(nom) && !(pour?.userId && (await estAdministrateur(pour.userId)))) {
         return { ok: false, content: "Refusé : écrire par ce connecteur, au nom de l'organisation, est réservé à l'administrateur de l'instance. Dis-le à l'utilisateur ; rien n'a été fait." };
+      }
+      /*
+       * Palmier Pro (29/09/2026, SECURITE.md § 63) : il tourne sur la machine
+       * de l'instance, sous le compte de la personne qui l'a ouvert, et ses
+       * générations se paient avec les crédits de son compte Palmier. Sur une
+       * instance partagée, un collègue ne doit pas pouvoir les dépenser ni
+       * modifier ses projets : l'administrateur seul, vérifié au moment d'agir.
+       */
+      if (estEcriturePalmier(nom) && !(pour?.userId && (await estAdministrateur(pour.userId)))) {
+        return { ok: false, content: "Refusé : faire modifier un projet ou générer par Palmier Pro, ouvert sur la machine de l'instance avec le compte Palmier de la personne qui l'a lancé, est réservé à l'administrateur de l'instance. Dis-le à l'utilisateur ; rien n'a été fait." };
       }
       return appelerMcp(nom, adapterFichiers(nom, args));
   }

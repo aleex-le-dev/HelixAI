@@ -629,6 +629,17 @@
         "airtable.png": "8020f46841434ab3782fa38d6b8d6c47b3ea69fc025ba8f8d3608e87c36c9aa3"
       }
     },
+    "palmier": {
+      "titre": "Palmier Pro",
+      "clair": "palmier.png",
+      "source": "https://www.palmier.io/icon.png (icône du site, relevée le 29/09/2026 ; empreinte du fichier servi : dacdb9c394b15a86419545eb1e05984dc169bf6c16971ab751e96e88b816f9ba)",
+      "page": "https://www.palmier.io/",
+      "regle": "Décision de Medhi du 28/09/2026 : le vrai logo, en couleur, sans attendre l'accord de la marque. Palmier ne publie ni kit ni charte de marque ; l'icône est celle que son site sert (link rel=icon), la même que l'icône de l'application. Le P blanc et le point rouge sur fond noir. Ajouté le 29/09/2026 avec le connecteur Palmier Pro.",
+      "retouche": "Servie en PNG de 1024 pixels (78 Ko) : réduite à 128 pixels par sips (macOS), dessin et couleurs inchangés, pour ne pas alourdir l'interface comme les autres icônes publiées seulement en image.",
+      "empreintes": {
+        "palmier.png": "310f38442cbf71628a0512ffb141800e92a624fd035d5301927b72e299248bda"
+      }
+    },
     "square": {
       "titre": "Square",
       "clair": "square.svg",

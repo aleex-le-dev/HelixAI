@@ -78,6 +78,8 @@ export const MARQUE_DU_CONNECTEUR: Record<string, CleMarquePetite> = {
   monday: "monday",
   calendly: "calendly",
   zoom: "zoom",
+  // Palmier Pro (29/09/2026) : l'icône de son site, scripts/marques/sources.json.
+  palmier: "palmier",
 };
 
 /**

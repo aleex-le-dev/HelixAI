@@ -42,6 +42,7 @@ import {
   stopServer,
   arreterTousEnPartant as arreterServeursMcp,
   status as mcpStatus,
+  statusFrais as mcpStatusFrais,
   workspace,
   setWorkspace,
   workspaces,
@@ -3674,7 +3675,8 @@ async function handleMcpStatus(res: http.ServerResponse): Promise<void> {
     // L'écran doit pouvoir dire « tout votre poste » plutôt que d'aligner des
     // chemins : la portée se reconnaît au dossier personnel en tête.
     toutLePoste: espaces.length > 1 && espaces[0] === homedirDeLHote(),
-    servers: mcpStatus(),
+    // Une application locale arrêtée (Palmier Pro) dit sa raison du moment, dans la langue de qui lit.
+    servers: await mcpStatusFrais(),
   });
 }
 

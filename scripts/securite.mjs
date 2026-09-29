@@ -8491,6 +8491,67 @@ console.log("\n37. Page d'entreprise LinkedIn : seconde application, portées s�
   verifier("aide intégrée : la Page d'entreprise LinkedIn se branche avec une seconde application", /LinkedIn, à l'inverse, en veut deux/.test(src("src", "lib", "aide.ts")), "aide.ts");
 }
 
+/*
+ * 38. Palmier Pro, connecteur local (29/09/2026, SECURITE.md § 63) : un serveur
+ * MCP sans authentification sur la boucle, ouvert seulement au programme
+ * reconnu (signature de Palmier, Inc.), et la carte d'accord pour tout ce qui
+ * n'est pas une lecture pure. scripts/essai-palmier.mjs, repris sous
+ * « palmier : », contre un faux Palmier Pro sur un port libre ; puis le code.
+ */
+console.log("\n38. Palmier Pro : application locale reconnue avant de lui parler, aucune autre adresse locale, génération derrière la carte (29/09/2026)");
+{
+  const essai = await new Promise((fin) => {
+    const e = spawn(process.execPath, [join(RACINE, "scripts", "essai-palmier.mjs")], { stdio: ["ignore", "pipe", "pipe"] });
+    let sortie = "";
+    e.stdout.on("data", (b) => (sortie += b));
+    e.stderr.on("data", (b) => (sortie += b));
+    const minuterie = setTimeout(() => e.kill(), 5 * 60_000);
+    e.on("close", (status) => {
+      clearTimeout(minuterie);
+      fin({ status, sortie });
+    });
+  });
+  const lignes = essai.sortie.split("\n");
+  for (const ligne of lignes) {
+    const ok = /^\s+✓ (.*)$/.exec(ligne);
+    const ko = /^\s+✗ (.*?)(?:  —  obtenu : .*)?$/.exec(ligne);
+    if (ok) verifier(`palmier : ${ok[1]}`, true, "");
+    else if (ko) verifier(`palmier : ${ko[1]}`, false, ligne.split("  —  obtenu : ")[1] ?? "");
+    else if (/^[A-B]\. /.test(ligne)) console.log(`  ${ligne}`);
+  }
+  verifier("palmier : l'essai s'est déroulé jusqu'au bout", essai.status === 0, `${essai.status} ${lignes.slice(-6).join(" ")}`);
+
+  const src = (...p) => readFileSync(join(RACINE, ...p), "utf8");
+  const mcpSrc = src("gateway", "src", "mcp.ts");
+  const palmierSrc = src("gateway", "src", "palmier.ts");
+  const outilsSrc = src("gateway", "src", "outils.ts");
+  const codeSrc = src("gateway", "src", "outilsCode.ts");
+  const approSrc = src("gateway", "src", "approbation.ts");
+  const ecran = src("src", "components", "settings", "Connecteurs.tsx");
+  verifier(
+    "mcp.ts : toute adresse passe par adresseServeurPermise avant la connexion ; une application locale n'est jointe que par fetchLocal (écouteur reconnu avant chaque requête, aucune redirection)",
+    /const refus = adresseServeurPermise\(entry\.config\);/.test(mcpSrc) && /const refus = await local\.reconnaitre\(\);\s*if \(refus\) throw new Error\(refus\);\s*return fetch\(entree, \{ \.\.\.init, redirect: "error" \}\);/.test(mcpSrc) && /entry\.config\.local\s*\? \{ fetch: fetchLocal\(entry\.config\.local\) \}/.test(mcpSrc) && !/const locale = adresse\.hostname === "127\.0\.0\.1" \|\| adresse\.hostname === "localhost";/.test(mcpSrc),
+    "mcp.ts",
+  );
+  verifier(
+    "palmier.ts : l'écouteur est lu au système (lsof), la signature du processus vérifiée par codesign contre l'exigence, l'exécutable dans Applications ; les variables d'essai ne viennent que de l'environnement",
+    /"\/usr\/sbin\/lsof", \["-nP", "-a", `-iTCP:\$\{port\}`, "-sTCP:LISTEN", "-t"\]/.test(palmierSrc) && /"\/usr\/bin\/codesign", \["--verify", `-R=\$\{EXIGENCE_PALMIER\}`, String\(pid\)\]/.test(palmierSrc) && /dansApplications\(executable\)/.test(palmierSrc) && /process\.env\.HELIX_ESSAI_PALMIER_PORT/.test(palmierSrc) && /process\.env\.HELIX_ESSAI_PALMIER_EXECUTABLE/.test(palmierSrc) && !/req\.|body\./.test(palmierSrc),
+    "palmier.ts",
+  );
+  verifier(
+    "écritures et générations de Palmier Pro : carte à chaque appel (toujoursConfirmer), administrateur seul au moment d'agir, absentes des outils des employés et de l'agent de code",
+    /toujoursConfirmer = \(outil: string\) => [^\n]*estEcriturePalmier\(outil\)/.test(approSrc) && /estEcriturePalmier\(nom\) && !\(pour\?\.userId && \(await estAdministrateur\(pour\.userId\)\)\)/.test(outilsSrc) && /!estEcritureMcpProjet\(o\.function\.name\) && !estEcriturePalmier\(o\.function\.name\)/.test(outilsSrc) && /!estEcritureMcpProjet\(o\.function\.name\) && !estEcriturePalmier\(o\.function\.name\)/.test(codeSrc),
+    "approbation.ts, outils.ts, outilsCode.ts",
+  );
+  verifier(
+    "écran : « Brancher » pour une application locale (ni navigateur, ni jeton), « Réessayer » quand elle a été fermée, le pas à pas avec la page de téléchargement officielle ; carte d'accord : ce qui sort de la machine, dans la langue de l'écran",
+    /\) : local \? \(/.test(ecran) && /\{t\("Brancher"\)\}/.test(ecran) && /\{t\("Réessayer"\)\}/.test(ecran) && /guideApplicationLocale\(entree\.id\)/.test(ecran) && /url: "https:\/\/github\.com\/palmier-io\/palmier-pro\/releases\/latest"/.test(src("src", "lib", "guidesApplications.ts")) && /horsMachine === "generation"/.test(src("src", "components", "cowork", "ToolApproval.tsx")),
+    "Connecteurs.tsx, guidesApplications.ts, ToolApproval.tsx",
+  );
+  verifier("aide intégrée : « Monter des vidéos avec Palmier Pro »", /id: "palmier",/.test(src("src", "lib", "aide.ts")) && /Monter des vidéos avec Palmier Pro/.test(src("src", "lib", "aide.ts")), "aide.ts");
+  verifier("logo de Palmier Pro : l'icône de son site, empreinte notée, relié à la fiche", /"palmier": \{/.test(src("scripts", "marques", "sources.json")) && /palmier: "palmier",/.test(src("src", "components", "settings", "marquesConnecteurs.ts")), "sources.json, marquesConnecteurs.ts");
+}
+
 console.log(`\n${reussis} vérification(s) réussie(s), ${echecs.length} échec(s).`);
 if (echecs.length) {
   console.log("Échecs :");

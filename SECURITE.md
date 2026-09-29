@@ -6348,3 +6348,75 @@ rendu (espace, virgule ou `%20`, les trois sont acceptés) ; si un rôle autre q
 devrait lister la page ; le jeton d'actualisation (partenaires approuvés) ; l'adresse de retour
 en http sur un poste ; aucune révocation n'est documentée : débrancher efface ici et dit de
 retirer l'accès dans les réglages du compte LinkedIn.
+
+## 63. Palmier Pro : un serveur MCP local, sans authentification (29 septembre 2026)
+
+Palmier Pro (monteur vidéo pour macOS 26 sur puce Apple, https://github.com/palmier-io/palmier-pro)
+sert, quand il est ouvert, un serveur MCP en HTTP sur `http://127.0.0.1:19789/mcp`, sans
+authentification (README ; `MCPService.swift`, `MCPHTTPServer.swift` de la branche
+`last-gpl-source`, lus le 29/09/2026 : écoute sur la boucle IPv4 seulement, refus d'un en-tête
+`Origin` non local). Helix s'y branche comme à une application ouverte sur la machine de
+l'instance : entrée `local` du catalogue (`gateway/src/connecteurs.ts`), reconnaissance
+(`gateway/src/palmier.ts`), classement des outils (`gateway/src/palmierRegles.ts`). PROJET.md § 3.5
+dit le détail ; contrôles : `npm run essai:palmier`, repris par `npm run securite`, section 38.
+
+### 63.1 Ce qui change dans la surface
+
+- **Un port connu, sans mot de passe.** N'importe quel programme de la machine peut prendre le
+  port 19789 avant Palmier Pro (ou après sa fermeture) et recevoir ce que les agents lui
+  enverraient (prompts, contenu du projet), ou leur rendre de faux résultats. Rien ne part tant
+  que le programme à l'écoute n'est pas reconnu : `lsof` donne le ou les processus, `codesign
+  --verify -R='anchor apple generic and identifier "io.palmier.pro" and certificate
+  leaf[subject.OU] = "MMFLRC7562"' <pid>` vérifie la signature **du processus en cours
+  d'exécution**, et son exécutable doit être dans /Applications ou ~/Applications. Tous les
+  processus à l'écoute doivent être reconnus. La vérification est refaite avant **chaque**
+  requête HTTP (`fetchLocal`, mcp.ts) ; la signature d'un processus déjà reconnu est gardée tant
+  qu'il garde le même numéro. Aucune redirection n'est suivie. Rien d'autre n'est envoyé :
+  ni jeton, ni cookie, ni en-tête `Authorization` (l'essai le vérifie).
+- **Aucune autre adresse locale.** Jusqu'ici, mcp.ts acceptait tout serveur en http sur
+  127.0.0.1 ou `localhost`, et tout hôte en https. `adresseServeurPermise` : en http, seulement
+  un serveur déclaré `local` par le catalogue, sur 127.0.0.1 exactement et le port que son entrée
+  déclare (pas `localhost`, pas `::1`, pas un autre port, pas d'identifiants dans l'adresse) ; en
+  https, jamais `localhost` ni une adresse IP interne (même liste que `interne`, sortieReseau.ts :
+  boucle, réseaux privés, lien local, métadonnées, CGNAT, IPv6 locale et « mappée »). L'adresse
+  d'une entrée `local` n'est ni reçue d'une requête (la route l'ignore, l'essai envoie un autre
+  port et une commande : rien n'y arrive) ni relue du magasin (`aligner` recompose l'entrée depuis
+  le catalogue et oublie adresse, commande et secrets glissés sous cet identifiant). Un nom d'hôte
+  qui se résoudrait vers une adresse interne n'est pas résolu ici : le catalogue n'a que des
+  noms publics, et aucune adresse distante ne vient d'une requête.
+- **Des générations hors de la machine, payantes.** `generate_video`, `generate_image`,
+  `generate_audio`, `upscale_media` partent chez Palmier (Seedance, Kling, Nano Banana Pro…),
+  sur l'abonnement ou les crédits du compte Palmier de la personne, et ne se reprennent pas ;
+  `get_transcript` et `add_captions` peuvent passer par le service de transcription de Palmier ;
+  `send_feedback` écrit à son équipe. Carte d'accord à chaque appel, à tout niveau (même « Tout
+  approuver », même un employé « autonome »), arguments montrés en entier, et la carte dit, dans
+  la langue de l'écran, ce qui sort de la machine (`horsMachine`). Comme tout ce qui n'est pas
+  l'une des neuf lectures pures reconnues par leur nom exact : un outil inconnu, ou ajouté par
+  une version propriétaire, passe par la carte (échec fermé).
+- **Le compte de quelqu'un d'autre.** Palmier Pro tourne sous le compte macOS et le compte
+  Palmier de la personne qui l'a ouvert. Sur une instance partagée, un collègue ne peut ni
+  modifier ses projets ni dépenser ses crédits : écritures et générations réservées à
+  l'administrateur, vérifié au moment d'agir (`outils.ts`) ; les employés et l'agent de code ne
+  reçoivent que les lectures. Les lectures restent ouvertes à qui a une séance, comme pour tout
+  connecteur branché (« branché pour toute l'instance »).
+- **Seulement là où il peut tourner** : la fiche n'est servie que si la passerelle tourne sur
+  un Mac à puce Apple (Rosetta compris, `hw.optional.arm64`).
+
+### 63.2 Variables réservées aux essais
+
+`HELIX_ESSAI_PALMIER_PORT` remplace le port ; `HELIX_ESSAI_PALMIER_EXECUTABLE` (chemin absolu)
+remplace la vérification de signature par l'égalité du chemin de l'exécutable à l'écoute, lu par
+`lsof`. Posées dans l'environnement de la passerelle par qui la lance, jamais par une requête ; qui
+peut les poser peut déjà lancer n'importe quel programme sous ce compte. Ne pas les poser en
+production.
+
+### 63.3 Pas essayé, ou laissé
+
+La vraie application n'a pas été installée : la signature réelle (identifiant et équipe relevés
+dans le dépôt, pas sur un binaire), le nom du paquet installé et la réponse de son serveur au
+client MCP de Helix n'ont pas été vus. Laissé : quelques millisecondes entre la lecture de `lsof`
+et la connexion, pendant lesquelles Palmier Pro pourrait se fermer et un autre programme prendre
+le port (Node ne dit pas quel processus tient une connexion déjà ouverte) ; un programme d'un
+autre compte de la machine, invisible à `lsof` sans droits, fait dire « fermé » et ne reçoit
+rien. Ce que Palmier Pro fait lui-même de ses données (mesure d'usage, envois à ses services)
+relève de l'éditeur, pas de Helix.

@@ -17,6 +17,7 @@ import { cheminProtegeDans, filtrerResultat } from "./zonesProtegees.ts";
 import { assurerNodePrive, DEPENDANCES_NPM_AVANT, nodePriveInstallable, npxPrive } from "./installationOpenClaw.ts";
 import { retenirOutils } from "./natifs/projetsRegles.ts";
 import { arreterPidArbre } from "./processus.ts";
+import { interne } from "./sortieReseau.ts";
 
 /**
  * Gestionnaire de serveurs MCP auto-hébergés (ARCHITECTURE.md, ADR-004).
@@ -40,12 +41,22 @@ export interface McpServerConfig {
    *
    * C'est ce que publient les services qui offrent un branchement en un clic :
    * rien à installer sur la machine du client, et l'autorisation se fait dans
-   * le navigateur de la personne (voir oauthMcp.ts). HTTPS exigé, sauf sur la
-   * boucle locale pour les essais : un jeton d'accès part à chaque appel.
+   * le navigateur de la personne (voir oauthMcp.ts). HTTPS exigé : un jeton
+   * d'accès part à chaque appel. En http, seulement avec `local` ci-dessous.
    */
   url?: string;
   /** Fournisseur d'autorisation OAuth, pour un serveur distant qui en demande. */
   auth?: unknown;
+  /**
+   * Serveur d'une application ouverte sur cette machine, en HTTP sur la boucle
+   * (Palmier Pro, 29/09/2026) : `url` doit être `http://127.0.0.1:<port>/…`,
+   * ce port et aucun autre, et `reconnaitre` est appelé avant **chaque**
+   * requête (connexion, liste d'outils, appel) : il rend la raison d'un refus
+   * quand le programme à l'écoute n'est pas l'application attendue, et rien
+   * n'est alors envoyé. Posé par le catalogue (connecteurs.ts), jamais par une
+   * requête.
+   */
+  local?: { port: number; reconnaitre: () => Promise<string | null> };
   /**
    * Variables d'environnement du processus serveur.
    *
@@ -439,15 +450,68 @@ const fetchAutorisation = async (entree: string | URL | Request, init?: RequestI
   return new Response(r.texte, { status: r.statut, headers: r.entetes });
 };
 
+/**
+ * L'adresse d'un serveur HTTP est-elle permise ? (29/09/2026, Palmier Pro)
+ *
+ * Jusqu'ici, toute adresse en http sur 127.0.0.1 ou `localhost` passait, « pour
+ * les essais ». Le catalogue ne donnait que des adresses publiques en https,
+ * mais une adresse glissée dans le magasin (son hôte PostgreSQL compte parmi
+ * les menaces, SECURITE.md § 3) aurait fait parler l'instance à n'importe quel
+ * service de la machine ou du réseau interne. Désormais :
+ *  - en https, jamais un hôte interne écrit en adresse IP, ni `localhost`
+ *    (même règle que pour les modèles ajoutés par clé, sortieReseau.ts) ;
+ *  - en http, seulement un serveur déclaré `local` : 127.0.0.1 exactement, et
+ *    le port que son entrée du catalogue déclare, aucun autre.
+ */
+export function adresseServeurPermise(config: Pick<McpServerConfig, "url" | "local">): string | null {
+  let adresse: URL;
+  try {
+    adresse = new URL(config.url ?? "");
+  } catch {
+    return t("Adresse de serveur illisible.");
+  }
+  const hote = adresse.hostname.replace(/^\[|\]$/g, "");
+  if (adresse.protocol === "https:") {
+    if (hote === "localhost" || hote.endsWith(".localhost") || interne(hote)) return t("Adresse de serveur refusée : une adresse interne n'est permise qu'à une application locale déclarée par le catalogue.");
+    return null;
+  }
+  if (adresse.protocol !== "http:" || !config.local) return t("Adresse de serveur distant refusée : https est exigé.");
+  if (hote !== "127.0.0.1" || Number(adresse.port) !== config.local.port || adresse.username || adresse.password) {
+    return tf("Adresse de serveur local refusée : seul http://127.0.0.1:{0} est permis.", config.local.port);
+  }
+  return null;
+}
+
+/**
+ * Chaque requête vers une application locale : l'adresse redite (127.0.0.1 et
+ * son port), l'écouteur reconnu juste avant, et aucune redirection suivie. Un
+ * refus lève une erreur sans rien envoyer.
+ */
+function fetchLocal(local: NonNullable<McpServerConfig["local"]>): typeof fetch {
+  return (async (entree: string | URL | Request, init?: RequestInit): Promise<Response> => {
+    const adresse = new URL(entree instanceof Request ? entree.url : String(entree));
+    if (adresse.protocol !== "http:" || adresse.hostname !== "127.0.0.1" || Number(adresse.port) !== local.port) {
+      throw new Error(tf("Adresse de serveur local refusée : seul http://127.0.0.1:{0} est permis.", local.port));
+    }
+    const refus = await local.reconnaitre();
+    if (refus) throw new Error(refus);
+    return fetch(entree, { ...init, redirect: "error" });
+  }) as typeof fetch;
+}
+
 async function demarrerDistant(id: string, entry: Live): Promise<{ ok: boolean; error?: string }> {
-  const adresse = new URL(entry.config.url!);
-  const locale = adresse.hostname === "127.0.0.1" || adresse.hostname === "localhost";
-  if (adresse.protocol !== "https:" && !locale) {
-    entry.error = "Adresse de serveur distant refusée : https est exigé.";
+  const refus = adresseServeurPermise(entry.config);
+  if (refus) {
+    entry.error = refus;
     return { ok: false, error: entry.error };
   }
+  const adresse = new URL(entry.config.url!);
 
-  const autorisation = entry.config.auth ? { authProvider: entry.config.auth as never, fetch: fetchAutorisation } : {};
+  const autorisation = entry.config.local
+    ? { fetch: fetchLocal(entry.config.local) }
+    : entry.config.auth
+      ? { authProvider: entry.config.auth as never, fetch: fetchAutorisation }
+      : {};
   let client = nouveauClient(id);
   try {
     await client.connect(new StreamableHTTPClientTransport(adresse, autorisation));
@@ -777,6 +841,16 @@ export function declarer(config: McpServerConfig): void {
 export const estDeclare = (id: string): boolean => servers.has(id);
 
 /**
+ * Un serveur déclaré, arrêté, que la passerelle n'a pas arrêté elle-même
+ * (bascule, retrait) et qui ne démarre pas déjà : on peut retenter de le
+ * brancher (une application locale ouverte après la passerelle, 29/09/2026).
+ */
+export function relancable(id: string): boolean {
+  const s = servers.get(id);
+  return Boolean(s && !s.client && !s.arrete && !s.demarrage);
+}
+
+/**
  * Arrête un serveur et le retire complètement.
  *
  * `stopServer` seul laisserait l'entrée en place : le connecteur retiré
@@ -820,6 +894,24 @@ export function status(): McpServerStatus[] {
           : s.error,
     tools: s.tools.map((t) => ({ name: t.toolName, description: t.description })),
   }));
+}
+
+/**
+ * `status()`, avec la raison d'une application locale arrêtée relue maintenant
+ * (Palmier Pro, 29/09/2026) : celle que garde `error` date souvent du
+ * démarrage de la passerelle, hors de toute requête, donc dans la langue par
+ * défaut, et l'application a pu être ouverte ou fermée depuis.
+ */
+export async function statusFrais(): Promise<McpServerStatus[]> {
+  const liste = status();
+  return Promise.all(
+    liste.map(async (s) => {
+      const local = servers.get(s.id)?.config.local;
+      if (!local || s.running || !s.error) return s;
+      const refus = await local.reconnaitre().catch(() => null);
+      return refus ? { ...s, error: refus } : s;
+    }),
+  );
 }
 
 /** Tous les outils disponibles, au format « fonction » attendu par le modèle. */

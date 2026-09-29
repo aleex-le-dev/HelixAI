@@ -1138,6 +1138,65 @@ traduits (134 phrases). Chaque défaut a son contrôle dans l'essai du service ;
 batterie. **Pas essayé** : les vrais services (ligne vide de XOAUTH2 chez Microsoft, renouvellement
 d'Instagram, Telegram sans `offset`). SECURITE.md § 59.
 
+**Palmier Pro, une application ouverte sur la machine (29/09/2026).** Demandé par Medhi : brancher
+Palmier Pro (https://github.com/palmier-io/palmier-pro, https://palmier.io), monteur vidéo pour
+macOS 26 sur puce Apple, avec génération de vidéos et d'images par l'IA (Seedance, Kling, Nano
+Banana Pro, chez Palmier), pour que les agents de Helix montent sur sa timeline. Quand il est
+ouvert, il sert un serveur MCP en HTTP sur `http://127.0.0.1:19789/mcp`, sans authentification.
+*Pourquoi une troisième famille de connecteurs* : le catalogue ne connaissait que des `url`
+publiques en https avec OAuth et des `command` locales ; ici ni l'un ni l'autre. Le catalogue a
+désormais des entrées `local` (`gateway/src/connecteurs.ts`) : port et chemin écrits dans le
+catalogue, adresse jamais reçue d'une requête ni relue du magasin (`aligner` oublie une adresse ou
+une commande glissée sous cet identifiant). *Ce qui est fait* :
+- **Reconnaître l'application avant de lui parler** (`gateway/src/palmier.ts`, sur le modèle
+  d'`ecouteurReconnu` de llamaCpp.ts) : `lsof` donne le processus à l'écoute, `codesign --verify
+  -R=…` vérifie sa signature en cours d'exécution (Developer ID d'Apple, identifiant
+  `io.palmier.pro`, équipe `MMFLRC7562`, relevés dans `Info.plist` et `scripts/bundle.sh` de la
+  branche `last-gpl-source`), l'exécutable doit être dans /Applications ou ~/Applications. Refait
+  avant chaque requête HTTP (mcp.ts, `fetchLocal`). Fermé : « Ouvrez Palmier Pro, puis
+  réessayez », avec la page de téléchargement officielle, rien n'est téléchargé à la place de la
+  personne ; un autre programme sur le port : refus, et rien ne lui est envoyé.
+- **Aucune autre adresse locale** : mcp.ts acceptait toute adresse en http sur 127.0.0.1 ou
+  `localhost` « pour les essais ». Désormais (`adresseServeurPermise`) : en http, seulement un
+  serveur déclaré `local`, sur 127.0.0.1 et son port ; en https, jamais un hôte interne écrit en
+  adresse IP ni `localhost`.
+- **Seulement sur un Mac à puce Apple** : la fiche n'est pas servie ailleurs ; sur un macOS plus
+  ancien que 26, elle dit de le mettre à jour.
+- **Cartes d'accord** (`gateway/src/palmierRegles.ts`) : neuf lectures pures passent sans carte
+  (`get_timeline`, `inspect_timeline`, `get_media`, `inspect_media`, `get_multicam`,
+  `detect_beats`, `inspect_color`, `list_models`, `read_skill`) ; tout le reste, et tout outil
+  inconnu, se confirme à chaque appel, à tout niveau, y compris pour un employé « autonome ». Les
+  générations (`generate_video`, `generate_image`, `generate_audio`, `upscale_media`) disent sur
+  la carte qu'elles partent chez Palmier, hors de la machine, sur les crédits du compte ; de même
+  `get_transcript` et `add_captions` (transcription possible par le service de Palmier) et
+  `send_feedback` (message à l'équipe de Palmier). Écrire et générer : administrateur seul, au
+  moment d'agir ; les employés et l'agent de code ne voient que les lectures.
+- **Écran** : ligne « Palmier Pro » (rubrique « Documents et données », avec Canva et Figma),
+  bouton « Brancher » (un clic, sans navigateur ni jeton), « Réessayer » quand l'application a
+  été fermée, pas à pas (`guideApplicationLocale`), logo tiré de l'icône de son site ; article
+  d'aide « Monter des vidéos avec Palmier Pro ». L'écran des connecteurs et le menu « Outils »
+  relancent la connexion d'une application locale arrêtée, au plus toutes les quinze secondes.
+- **Essai** : `npm run essai:palmier` (32 vérifications, repris par `npm run securite`, section
+  38), contre un faux Palmier Pro sur un port libre (`HELIX_ESSAI_PALMIER_PORT`,
+  `HELIX_ESSAI_PALMIER_EXECUTABLE`, variables réservées aux essais) et `nc` comme « autre
+  programme ».
+
+*Licences* : Palmier Pro était sous GPLv3 jusqu'à la version 0.7.6 ; les versions suivantes
+sont propriétaires (licence binaire de Palmier, Inc.). Helix n'en reprend aucun code et n'en
+distribue rien : il parle au serveur MCP de l'application que la personne a installée elle-même.
+Seuls les noms des outils ont été lus dans la source publiée, pour les classer. Le logo est
+l'icône du site, sous la décision du 28/09/2026 (§ 3.18, THIRD_PARTY_NOTICES.md § 4 bis).
+
+**Pas essayé** : la vraie application (ni installée ni téléchargée : pas de Palmier Pro sur la
+machine de travail). Donc pas vu : sa signature réelle (l'identifiant et l'équipe viennent du
+dépôt, pas d'un binaire signé ; si l'éditeur change d'équipe ou d'identifiant, la reconnaissance
+refusera, ce qui échoue fermé), le nom réel du paquet installé (`PalmierPro.app` dans l'image
+disque de 0.7.6), sa réponse au client MCP de Helix (en-tête `Origin` absent, version de
+protocole, flux GET), ni la liste d'outils des versions propriétaires récentes (un outil nouveau
+passe par la carte). Incertain : si `inspect_media` transcrit toujours sur la machine dans les
+versions récentes (vrai dans la 0.7.6) ; où se coupe son serveur MCP dans ses réglages. SECURITE.md
+§ 63.
+
 ### 3.6 Découpage des tâches lourdes
 
 Ajouté en septembre 2026, après mesure. Un modèle de 8 milliards de paramètres perd le
@@ -3838,6 +3897,13 @@ valeur, « clair ».
 des 26 et 27/09 plus bas, qui gardent le détail. Tout ce qui suit est écrit et vérifié ici
 contre des doublures (faux moteur, faux fournisseurs, faux `codex`, faux OpenCode, Windows
 simulé) ; rien de cela n'a tourné sur la vraie machine.*
+
+**Palmier Pro (29/09/2026, § 3.5)** : sur un Mac à puce Apple en macOS 26, installer Palmier Pro
+dans Applications, l'ouvrir avec un projet, cliquer « Brancher » dans Connecteurs. À voir :
+la reconnaissance par la signature réelle (identifiant `io.palmier.pro`, équipe `MMFLRC7562`),
+le nombre d'outils listés, une lecture de la timeline sans carte, un ajout de plan avec carte,
+une génération (carte « hors de cette machine », crédits du compte), Palmier Pro fermé puis
+rouvert et « Réessayer ».
 
 **Parcours à l'écran du 28/09/2026 (2026.928.6)**, interface en serveur de développement
 contre une instance jetable et un faux modèle compatible OpenAI (flux, réflexion, appels

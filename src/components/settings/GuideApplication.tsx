@@ -125,7 +125,8 @@ export function GuideApplication({
           </details>
         )}
 
-        <p className="text-xs">{t("Les libellés des consoles changent parfois : cherchez l'équivalent.")}</p>
+        {/* Pas pour une application ouverte sur la machine (Palmier Pro, 29/09/2026) : il n'y a pas de console. */}
+        {!guide.sansConsole && <p className="text-xs">{t("Les libellés des consoles changent parfois : cherchez l'équivalent.")}</p>}
       </div>
     </InfoBox>
   );

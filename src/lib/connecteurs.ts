@@ -42,6 +42,14 @@ export interface EntreeCatalogue {
   console?: string;
   /** Lecture seule par défaut, l'écriture se coche à la connexion (Trello, Monday… : ConnecteurProjets.tsx). */
   ecritureAuChoix?: true;
+  /**
+   * Application ouverte sur la machine de l'instance (Palmier Pro, 29/09/2026) :
+   * « Brancher » la relie d'un clic, sans navigateur ni jeton. L'adresse n'en
+   * vient jamais d'ici : l'instance la tire de son catalogue.
+   */
+  local?: { port: number; chemin: string };
+  /** Page officielle où la personne télécharge l'application elle-même. */
+  telechargement?: string;
   /** Livré avec Helix : déjà là, ne s'ajoute ni ne se retire. */
   integre?: true;
 }
@@ -60,6 +68,8 @@ export interface ConnecteurInstalle {
   /** Branché par autorisation dans le navigateur. */
   distant?: boolean;
   autoriseDepuis?: string;
+  /** Application ouverte sur la machine de l'instance : « Réessayer » la rebranche après qu'elle a été fermée. */
+  local?: true;
 }
 
 export interface EtatConnecteurs {
@@ -183,7 +193,9 @@ export async function ajouter(
 }
 
 /**
- * Lance l'autorisation d'un service distant.
+ * Lance l'autorisation d'un service distant, ou branche une application
+ * ouverte sur la machine de l'instance (`local` : Palmier Pro, qui rend `pret`
+ * ou dit pourquoi elle n'a pas pu l'être).
  *
  * Rend soit `pret` (l'instance était déjà autorisée), soit `adresse`, la page
  * du service à ouvrir dans le navigateur. Cette page est celle du service,

@@ -213,6 +213,13 @@ export interface DemandeApprobation {
     destinataire?: string;
     /** Modèle WhatsApp : le texte final, rempli, tel qu'il partira. */
     texteFinal?: string;
+    /**
+     * Palmier Pro (29/09/2026) : ce qui sort de la machine avec cet appel, dit
+     * sur la carte dans la langue de l'écran. Une génération (chez Palmier, sur
+     * les crédits du compte), une transcription par son service, un message à
+     * son équipe.
+     */
+    horsMachine?: "generation" | "transcription" | "retour";
   };
   createdAt: number;
 }

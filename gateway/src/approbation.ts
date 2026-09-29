@@ -8,6 +8,8 @@ import { ECRITURES_COMMERCE, LECTURES_COMMERCE, resumeCommerce } from "./natifs/
 import { APERCU_REQUIS, ECRITURES_PROJETS, estEcritureMcpProjet, estLectureMcpProjet, LECTURES_PROJETS, resumeProjet } from "./natifs/projetsRegles.ts";
 // Microsoft 365 (28/09/2026) : noms et phrases des cartes, dans un fichier sans autre dépendance que langue.ts.
 import { ECRITURES_MICROSOFT, LECTURES_MICROSOFT, resumeMicrosoft } from "./natifs/microsoftBase.ts";
+// Palmier Pro (29/09/2026) : ses lectures pures, par leur nom exact ; tout le reste se confirme à chaque appel.
+import { estEcriturePalmier, estLecturePalmier, horsMachinePalmier, resumePalmier } from "./palmierRegles.ts";
 
 /**
  * Approbation des actions de l'agent.
@@ -294,7 +296,13 @@ const TOUJOURS_CONFIRMER = new Set(["agenda__supprimer", "taches__programmer", .
  * liste de ses outils se confirme à chaque fois, à tout niveau. Reconnu par
  * préfixe, donc même barrière chargée seule : elle échoue fermé.
  */
-const toujoursConfirmer = (outil: string) => TOUJOURS_CONFIRMER.has(outil) || estEcritureMcpProjet(outil);
+/*
+ * Et Palmier Pro (29/09/2026, SECURITE.md § 63) : ce qui n'est pas une lecture
+ * reconnue (modifier la timeline, et surtout générer une vidéo ou une image,
+ * payée sur les crédits de la personne chez Palmier) se confirme à chaque
+ * appel, à tout niveau, y compris pour un employé « autonome ».
+ */
+const toujoursConfirmer = (outil: string) => TOUJOURS_CONFIRMER.has(outil) || estEcritureMcpProjet(outil) || estEcriturePalmier(outil);
 
 export const demandeToujours = (outil: string) => toujoursConfirmer(outil) || (ENVOI.has(outil) && !envoiSansAccord());
 
@@ -383,6 +391,8 @@ export function modifie(outil: string): boolean {
   if (LECTURES_NATIVES.has(outil)) return false;
   // Lectures reconnues des serveurs MCP de la famille « projets » (natifs/projetsRegles.ts, `classer`).
   if (estLectureMcpProjet(outil)) return false;
+  // Lectures pures de Palmier Pro, par leur nom exact (palmierRegles.ts).
+  if (estLecturePalmier(outil)) return false;
   if (DRIVE_LECTURE.has(outil) || SLACK_LECTURE.has(outil) || BIBLIOTHEQUE_LECTURE.has(outil) || CONNAISSANCES_LECTURE.has(outil) || CONTROLE_LECTURE.has(outil) || WEB_LECTURE.has(outil)) return false;
   if (outil.startsWith("bureau__")) return !BUREAU_LECTURE.has(outil.slice("bureau__".length));
 
@@ -568,6 +578,8 @@ export function resumerOutil(outil: string, args: Record<string, unknown>): stri
 
   const natif = resumeNatif(outil, args);
   if (natif) return natif;
+  const palmier = resumePalmier(outil, args);
+  if (palmier) return palmier;
 
   /*
    * Outil d'un connecteur ajouté. On ne sait pas ce qu'il fait, mais on sait
@@ -1176,7 +1188,8 @@ export async function verifierOutil(
   }
   const toujours = toujoursConfirmer(outil);
   // Les écritures des serveurs MCP de la famille « projets » : même carte, arguments entiers (SECURITE.md § 48).
-  const native = ECRITURES_NATIVES.has(outil) || estEcritureMcpProjet(outil);
+  // Et celles de Palmier Pro : arguments montrés en entier, ou refusés s'ils ne tiennent pas sur la carte.
+  const native = ECRITURES_NATIVES.has(outil) || estEcritureMcpProjet(outil) || estEcriturePalmier(outil);
   /*
    * Brevo et Mailchimp : la carte d'une campagne est préparée par projets.ts
    * (campagne relue chez le service, destinataires comptés). Sans cet aperçu,
@@ -1258,6 +1271,8 @@ export async function verifierOutil(
           return a ? { destinataire: a.destinataire, ...(a.texteFinal ? { texteFinal: a.texteFinal } : {}) } : {};
         })(),
         ...(tacheEnCours ? { tache: tacheEnCours } : {}),
+        // Ce qui sort de la machine (une génération chez Palmier…) : la carte le dit dans la langue de l'écran.
+        ...(horsMachinePalmier(outil) ? { horsMachine: horsMachinePalmier(outil) } : {}),
       },
     },
     surCarte,

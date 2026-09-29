@@ -251,6 +251,15 @@ const ARTICLES: Article[] = [
     corps: t("Ces six services se branchent dans Réglages, Connecteurs, par le serveur que leur éditeur publie : rien ne s'installe sur la machine, et l'accord se donne dans la page du service. Zoom demande en plus une application, créée une fois sur le Zoom App Marketplace : l'écran dit comment.\n\n- Seul l'administrateur de l'instance branche ces services : un compte branché vaut pour toute l'organisation.\n- Sans rien cocher, vos agents lisent seulement : tâches, tableaux, projets, disponibilités, réunions et leurs résumés.\n- Si l'administrateur coche l'écriture à la connexion, les agents peuvent proposer de créer ou de modifier. Chaque écriture est montrée en entier et n'a lieu qu'après votre accord, à chaque fois, quel que soit le niveau d'approbation, et seul l'administrateur peut l'accepter.\n- Les employés et l'agent de code lisent, mais n'écrivent jamais dans ces services.\n\nSi le service accorde plus que ce qui a été demandé (l'écriture sans que la case soit cochée, par exemple), rien n'est enregistré."),
   },
   {
+    // Palmier Pro, 29/09/2026 : gateway/src/palmier.ts, palmierRegles.ts, SECURITE.md § 63.
+    id: "palmier",
+    titre: t("Monter des vidéos avec Palmier Pro"),
+    resume: t("Brancher Palmier Pro, ouvert sur ce Mac, pour que vos agents montent sur sa timeline."),
+    motsCles: ["palmier", "palmier pro", "video", "montage", "timeline", "generation", "seedance", "kling", "clip"],
+    lien: "/parametres/mcp",
+    corps: t("Palmier Pro est un monteur vidéo pour Mac, d'un autre éditeur. Il se branche dans Réglages, Connecteurs, rubrique « Documents et données », sur la machine de l'instance seulement : un Mac à puce Apple, avec macOS 26 (Tahoe) ou plus récent. La ligne n'apparaît pas ailleurs.\n\n- Installez Palmier Pro depuis sa page officielle, dans le dossier Applications, et ouvrez-le avec un projet.\n- Cliquez « Brancher ». L'instance vérifie d'abord que le programme qui répond est bien Palmier Pro, signé par son éditeur ; sinon, rien ne lui est envoyé et l'écran le dit.\n- Palmier Pro fermé : ses outils ne répondent plus. Rouvrez-le, puis « Réessayer ».\n\nCe que vos agents peuvent faire :\n- lire le projet, la timeline et la bibliothèque, sans rien demander (au niveau « Demander pour tout », avec votre accord) ;\n- tout le reste (ajouter, couper, déplacer des plans, des textes, des sous-titres, exporter, générer) seulement après votre accord, à chaque fois, quel que soit le niveau d'approbation. Seul l'administrateur de l'instance peut l'accepter ; les employés et l'agent de code ne font que lire.\n\nGénérer une vidéo, une image ou du son (Seedance, Kling, Nano Banana Pro…) se fait chez Palmier, hors de cette machine, avec l'abonnement ou les crédits de votre compte Palmier, et ne se reprend pas : la carte d'accord le rappelle. Pour la transcription, Palmier Pro peut aussi passer par ses services quand votre compte a des crédits."),
+  },
+  {
     // Brevo et Mailchimp, 28/09/2026 : gateway/src/natifs/projets.ts, SECURITE.md § 48.
     id: "campagnes",
     titre: t("Connecter Brevo ou Mailchimp"),

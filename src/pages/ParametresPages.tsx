@@ -696,7 +696,13 @@ export function PersonnalisationSettings() {
             />
           </div>
           <p className="mt-1 text-sm text-muted-foreground">
-            {t("Permet à l'IA de se souvenir de vos conversations précédentes")}
+            {/*
+              * Ce que fait vraiment l'interrupteur (29/09/2026) : les éléments ajoutés
+              * ci-dessous accompagnent chaque demande (store/profile.ts). Rien ne les
+              * tire tout seul des conversations ; l'écran disait « se souvenir de vos
+              * conversations précédentes ».
+              */}
+            {t("Les éléments ajoutés ci-dessous accompagnent chacune de vos demandes à l'IA. Rien n'est retenu de vos conversations sans que vous l'ajoutiez.")}
           </p>
 
           <div className="mt-4 rounded-xl border border-border p-4">

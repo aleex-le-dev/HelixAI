@@ -22,7 +22,7 @@ export const MODES: { valeur: ModeApparence; nom: string; detail: string }[] = [
   { valeur: "soleil", nom: t("Au coucher du soleil"), detail: t("Sombre la nuit, clair le jour") },
   { valeur: "clair", nom: t("Clair"), detail: t("Toujours clair") },
   { valeur: "sombre", nom: t("Sombre"), detail: t("Toujours sombre") },
-  { valeur: "systeme", nom: t("Réglage du système"), detail: t("Suit l'apparence de macOS") },
+  { valeur: "systeme", nom: t("Réglage du système"), detail: t("Suit l'apparence de l'ordinateur") },
 ];
 
 export function lireMode(): ModeApparence {

@@ -158,10 +158,10 @@ export function OuvrirInstance() {
                   onClick={() => void appliquer(confirmation)}
                 >
                   {occupe
-                    ? "Application..."
+                    ? t("Application...")
                     : confirmation
-                      ? "Ouvrir l'instance"
-                      : "Refermer l'instance"}
+                      ? t("Ouvrir l'instance")
+                      : t("Refermer l'instance")}
                 </Button>
                 <Button variant="ghost" onClick={() => setConfirmation(null)}>
                   {t("Annuler")}

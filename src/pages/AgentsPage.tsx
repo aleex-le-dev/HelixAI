@@ -157,8 +157,14 @@ export function AgentsPage() {
               onPhoto={(photo) => update(agent.id, { photo: photo ?? undefined })}
               onMasquer={(masquer) => update(agent.id, { hidePrompt: masquer })}
               onDelete={async () => {
+                /*
+                 * L'agent toujours actif d'abord, et son échec dit (29/09/2026, vu par
+                 * Medhi) : l'erreur était avalée, la carte disparaissait quand même, et
+                 * l'agent restait dans l'instance, revenu ensuite sans bouton pour le
+                 * retirer. On ne retire la fiche que s'il n'y a plus rien derrière.
+                 */
                 const e = employeDe(agent.id);
-                if (e && e.estProprietaire) await supprimerEmploye(e.id).catch(() => undefined);
+                if (e && e.estProprietaire) await supprimerEmploye(e.id);
                 remove(agent.id);
                 await recharger();
               }}
@@ -190,6 +196,9 @@ export function AgentsPage() {
           onChange={recharger}
           onRetire={() => {
             if (panneau.agentId) remove(panneau.agentId);
+            // Le panneau d'un agent retiré ne reste pas ouvert sur lui.
+            setOuvert(null);
+            void recharger();
           }}
         />
       )}
@@ -301,7 +310,19 @@ function AgentCard({
   onDelete: () => Promise<void>;
 }) {
   const [confirmer, setConfirmer] = useState(false);
+  const [retrait, setRetrait] = useState<{ occupe: boolean; erreur?: string }>({ occupe: false });
   const [bases, setBases] = useState<string[] | null>(null);
+  const supprimer = async () => {
+    setRetrait({ occupe: true });
+    try {
+      await onDelete();
+    } catch (err) {
+      setRetrait({ occupe: false, erreur: tf("Le retrait n'a pas abouti : {0}", err instanceof Error ? err.message : String(err)) });
+      return;
+    }
+    setRetrait({ occupe: false });
+    setConfirmer(false);
+  };
   const nombreBases = agent.connaissances?.length ?? 0;
   return (
     <li className="group relative flex flex-col gap-2 rounded-2xl border border-border bg-card p-4 transition-shadow hover:shadow-sm">
@@ -416,24 +437,36 @@ function AgentCard({
       )}
       {canDelete &&
         (confirmer ? (
-          <span className="absolute right-3 top-3 flex items-center gap-1 rounded-lg bg-card px-1">
-            <Button variant="destructive" size="sm" onClick={() => void onDelete()}>
-              {t("Supprimer")}
+          <span className="absolute right-3 top-3 flex items-center gap-1 rounded-lg bg-card px-1 shadow-sm">
+            <Button variant="destructive" size="sm" icon={retrait.occupe ? Loader2 : undefined} disabled={retrait.occupe} onClick={() => void supprimer()}>
+              {retrait.occupe ? t("Retrait…") : t("Supprimer")}
             </Button>
-            <Button variant="ghost" size="sm" onClick={() => setConfirmer(false)}>
+            <Button variant="ghost" size="sm" disabled={retrait.occupe} onClick={() => { setConfirmer(false); setRetrait({ occupe: false }); }}>
               {t("Annuler")}
             </Button>
           </span>
         ) : (
+          /*
+           * Toujours visible, discrète (29/09/2026) : cachée tant que la souris ne
+           * survolait pas la carte, la corbeille était introuvable au clavier, sur un
+           * écran tactile, et pour qui ne savait pas qu'elle existait.
+           */
           <button
             type="button"
             aria-label={tf("Supprimer {0}", agent.name)}
+            title={tf("Supprimer {0}", agent.name)}
             onClick={() => setConfirmer(true)}
-            className="absolute right-3 top-3 hidden rounded p-1 text-muted-foreground transition-colors hover:text-destructive group-hover:block"
+            className="absolute right-3 top-3 rounded p-1 text-muted-foreground/60 transition-colors hover:text-destructive focus-visible:text-destructive"
           >
             <Trash2 size={15} strokeWidth={1.75} />
           </button>
         ))}
+      {retrait.erreur && (
+        <p role="alert" className="flex items-start gap-1.5 text-xs text-destructive">
+          <TriangleAlert size={13} strokeWidth={2} className="mt-0.5 shrink-0" />
+          <span className="min-w-0">{retrait.erreur}</span>
+        </p>
+      )}
     </li>
   );
 }

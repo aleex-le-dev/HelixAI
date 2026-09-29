@@ -239,8 +239,8 @@ seulement.
 
 ### Extension VS Code
 
-`extensions/vscode/` (version 0.2.5, sans dépendance) : le Chat de l'instance et Helix Code
-dans VS Code. **Installation** : le paquet `helix-ai-0.2.5.vsix` est joint à chaque version
+`extensions/vscode/` (version 0.2.6, sans dépendance) : le Chat de l'instance et Helix Code
+dans VS Code. **Installation** : le paquet `helix-ai-0.2.6.vsix` est joint à chaque version
 GitHub (https://github.com/medhiclb/HelixAI/releases/latest) ; dans VS Code, vue Extensions,
 menu « … » en haut de la vue, « Install from VSIX… », puis le fichier. Une version plus
 récente s'installe de la même façon, par-dessus. Le paquet se refait avec `vsce package` dans
@@ -1139,7 +1139,7 @@ l'agent d'orchestration par défaut. Aucun tiret cadratin dans les textes affich
   et n'est jamais réimporté ni écrasé ; s'il a grandi dans un export plus récent,
   on peut en ajouter une copie complète à côté. Code : `src/lib/importGemini.ts`,
   essai `node scripts/essai-import-gemini.mjs` ;
-- Extension VS Code (`extensions/vscode/`, 0.2.5) : Chat, Helix Code sur le dossier
+- Extension VS Code (`extensions/vscode/`, 0.2.6) : Chat, Helix Code sur le dossier
   ouvert, expliquer ou améliorer une sélection ; paquet `.vsix` joint à chaque version
   GitHub (voir « Extension VS Code » plus haut) ;
 - **Bases de connaissances** (RAG, 25/09/2026) : dans Fichiers, onglet « Bases de

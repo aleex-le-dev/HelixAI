@@ -11,6 +11,10 @@ Le Chat de votre instance Helix dans VS Code : vos modèles (locaux d'abord), vo
 
 Le paquet `helix-ai-<version>.vsix` est joint à chaque version de Helix, sur https://github.com/medhiclb/HelixAI/releases/latest. Téléchargez-le, puis dans VS Code : vue Extensions, menu « … » en haut de la vue, « Install from VSIX… », et choisissez le fichier. Pour une version plus récente, refaites la même chose : elle remplace l'ancienne.
 
+## Nouveautés de la 0.2.6
+
+- Une réflexion que le modèle écrit dans sa réponse (entre `<think>` et `</think>`, selon le moteur ou le modèle) est reconnue : la vue dit que le modèle réfléchit, et la réponse s'affiche sans les balises.
+
 ## Nouveautés de la 0.2.5
 
 - Pendant que le modèle réfléchit avant de répondre, la vue dit « Le modèle réfléchit (N s)… » au lieu de « … ».

@@ -2,7 +2,7 @@
   "name": "helix-ai",
   "displayName": "Helix AI",
   "description": "Le Chat de votre instance Helix dans VS Code : vos modèles, sur votre machine ou celle de votre entreprise.",
-  "version": "0.2.5",
+  "version": "0.2.6",
   "publisher": "helix-agence",
   "license": "AGPL-3.0-only",
   "repository": {

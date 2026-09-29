@@ -2676,8 +2676,9 @@ export async function etatMoteur(): Promise<{
   plateforme: NodeJS.Platform;
   /**
    * Windows : OpenClaw est installé mais les bibliothèques Visual C++ de
-   * Microsoft manquent (ou sont trop anciennes), et il ne démarre pas sans
-   * elles. L'écran propose de les installer (29/09/2026, visualCpp.ts).
+   * Microsoft manquent (ou sont trop anciennes) : deux de ses modules ne se
+   * chargent pas sans elles. L'écran propose de les installer (29/09/2026,
+   * visualCpp.ts).
    */
   visualCpp?: "absent" | "ancien";
 }> {
@@ -2686,11 +2687,12 @@ export async function etatMoteur(): Promise<{
   const derniere = moteur ? versionParue() : null;
   const enMarche = Boolean(processus) && !demarrage && (await portOuvert(portOpenClaw()));
   /*
-   * Relevé seulement sous Windows, OpenClaw installé mais arrêté : une
-   * instance qui tourne a ses bibliothèques. Le relevé (PowerShell) est gardé
-   * dix minutes ; celui d'un démarrage raté (`lancerProcessus`) le remplace.
+   * Relevé sous Windows, OpenClaw installé, qu'il tourne ou non : sans la
+   * DLL, OpenClaw démarre quand même (vu sur GitHub le 29/09/2026), ce sont
+   * ses modules qui échouent ensuite. Le relevé (PowerShell) est gardé dix
+   * minutes ; celui d'un démarrage raté (`lancerProcessus`) le remplace.
    */
-  const vc = process.platform === "win32" && moteur && !enMarche ? (visualCppConnu() ?? (await detecterVisualCpp().catch(() => null))) : null;
+  const vc = process.platform === "win32" && moteur ? (visualCppConnu() ?? (await detecterVisualCpp().catch(() => null))) : null;
   return {
     installe: Boolean(moteur),
     version: moteur?.version,
@@ -2709,7 +2711,7 @@ export async function etatMoteur(): Promise<{
 
 /** Ce que dit un démarrage raté faute des bibliothèques Visual C++ de Microsoft (Windows). */
 export const messageVisualCppManquant = () =>
-  t("OpenClaw ne peut pas démarrer : les bibliothèques Visual C++ de Microsoft manquent sur ce PC. Installez-les depuis la page Agents (Windows demandera une autorisation d'administrateur).");
+  t("L'instance de vos agents s'est arrêtée au démarrage, et les bibliothèques Visual C++ de Microsoft manquent sur ce PC. Installez-les depuis la page Agents (Windows demandera une autorisation d'administrateur).");
 
 /** Après la première installation : oublier la détection en cache, et démarrer si des agents attendent. */
 export const crochetsInstallation: Crochets = {

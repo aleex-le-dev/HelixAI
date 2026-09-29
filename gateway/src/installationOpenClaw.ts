@@ -41,8 +41,8 @@ import { detecterVisualCpp, installerVisualCpp } from "./visualCpp.ts";
  *  4. vérification : `openclaw --version`.
  *
  * Sous Windows, avant Node (29/09/2026, décision de Medhi) : les bibliothèques
- * Visual C++ de Microsoft, dont deux modules natifs d'OpenClaw ont besoin
- * pour démarrer, installées par le paquet officiel de Microsoft quand elles
+ * Visual C++ de Microsoft, sans lesquelles deux modules natifs d'OpenClaw ne
+ * se chargent pas, installées par le paquet officiel de Microsoft quand elles
  * manquent, avec l'autorisation d'administrateur que Windows demande
  * (visualCpp.ts). C'est la seule étape qui en demande une.
  *
@@ -451,7 +451,7 @@ export interface Crochets {
 
 /** Le message de l'étape `visualcpp` : ce qui se passe, et pourquoi Windows va demander une autorisation. */
 const messageVisualCpp = () =>
-  t("Installation des bibliothèques de Microsoft (Visual C++)… OpenClaw en a besoin pour démarrer, et elles manquent sur ce PC : Windows va demander une autorisation d'administrateur pour les installer (si la demande n'apparaît pas, regardez la barre des tâches).");
+  t("Installation des bibliothèques de Microsoft (Visual C++)… OpenClaw en a besoin, et elles manquent sur ce PC : Windows va demander une autorisation d'administrateur pour les installer (si la demande n'apparaît pas, regardez la barre des tâches).");
 
 /**
  * Sous Windows, les bibliothèques Visual C++ : relevées, et installées par le
@@ -472,9 +472,9 @@ async function assurerVisualCpp(qui: string): Promise<boolean> {
 }
 
 /**
- * Un OpenClaw déjà installé qui ne démarre pas faute des bibliothèques Visual
- * C++ (retirées depuis, ou OpenClaw posé avant le 29/09/2026 sur un PC qui ne
- * les avait pas) : l'étape de Microsoft seule, puis le redémarrage de
+ * Un OpenClaw déjà installé sans les bibliothèques Visual C++ (retirées
+ * depuis, ou OpenClaw posé avant le 29/09/2026 sur un PC qui ne les avait
+ * pas) : l'étape de Microsoft seule, puis le redémarrage de
  * l'instance. Même file que l'installation : une seule à la fois.
  */
 export function reparerVisualCpp(qui: string, crochets: Crochets): void {

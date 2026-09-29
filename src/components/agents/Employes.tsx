@@ -145,8 +145,9 @@ export function MiseAJourOpenClaw({ etat, recharger }: { etat: EtatEmployes; rec
   }
   /*
    * Windows : OpenClaw installé, mais les bibliothèques Visual C++ de
-   * Microsoft manquent, et il ne démarre pas sans elles (29/09/2026). Un
-   * bouton, et l'explication de la demande d'autorisation qui va suivre.
+   * Microsoft manquent, et deux de ses modules ne se chargent pas sans elles
+   * (29/09/2026). Un bouton, et l'explication de la demande d'autorisation
+   * qui va suivre.
    */
   if (etat.moteur.visualCpp) {
     return (
@@ -154,8 +155,8 @@ export function MiseAJourOpenClaw({ etat, recharger }: { etat: EtatEmployes; rec
         <div className="flex flex-wrap items-center justify-between gap-3">
           <p className="min-w-0">
             {etat.moteur.visualCpp === "ancien"
-              ? t("Vos agents ne peuvent pas démarrer : les bibliothèques Visual C++ de Microsoft de ce PC sont trop anciennes pour OpenClaw.")
-              : t("Vos agents ne peuvent pas démarrer : OpenClaw a besoin des bibliothèques Visual C++ de Microsoft, qui manquent sur ce PC.")}{" "}
+              ? t("Les bibliothèques Visual C++ de Microsoft de ce PC sont plus anciennes que celles qu'OpenClaw demande : sans une version à jour, certains de ses modules ne se chargent pas.")
+              : t("OpenClaw a besoin des bibliothèques Visual C++ de Microsoft, qui manquent sur ce PC : sans elles, certains de ses modules ne se chargent pas.")}{" "}
             {t("Le paquet officiel de Microsoft est téléchargé et vérifié, puis Windows vous demande une autorisation d'administrateur pour l'installer.")}
           </p>
           <Button

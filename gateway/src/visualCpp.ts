@@ -26,10 +26,14 @@ import { t, tf } from "./langue.ts";
  * `@openclaw/fs-safe-win32-x64-msvc` (x64 seulement : pas de paquet arm64) et
  * `@ubjs/node-win32-{x64,arm64}-msvc`. Les autres DLL qu'ils importent
  * (`api-ms-win-crt-*`, la CRT universelle) font partie de Windows 10 et 11 ;
- * `node.exe` n'importe rien du Visual C++ (bibliothèque liée statiquement).
+ * `node.exe` n'importe rien du Visual C++ (bibliothèque liée statiquement),
+ * ni les autres modules natifs. Ni `MSVCP140.dll` ni `VCRUNTIME140_1.dll`.
  * La DLL est là sur les machines de GitHub (Visual Studio y est installé) et
  * sur la plupart des PC (beaucoup de programmes l'installent), mais pas sur
- * tous : sans elle, OpenClaw s'installerait sans démarrer.
+ * tous. Vu sur GitHub le 29/09/2026, la DLL retirée de System32 le temps de
+ * l'essai, avec le PATH que Helix donne à OpenClaw : `openclaw --version`
+ * répond et la passerelle d'OpenClaw ouvre son port, mais les deux modules
+ * ne se chargent plus ; ce qui s'en sert échoue alors en cours de route.
  *
  * Ce qui est épinglé ici, et nulle part ailleurs : l'adresse **versionnée** de
  * chaque paquet sur download.visualstudio.microsoft.com (celle vers laquelle
@@ -62,23 +66,24 @@ export interface PaquetVisualCpp {
 /*
  * Relevés le 29/09/2026 : adresse de destination du lien permanent de
  * Microsoft (aka.ms/vc14 → aka.ms/vs/18/release → download.visualstudio.
- * microsoft.com), taille annoncée par le serveur, empreinte et version lues
- * sur le fichier téléchargé par la machine Windows de GitHub
- * (essai-openclaw-windows.yml, `releve-visual-cpp.json` en artefact). Le nom
- * de dossier qui précède le fichier dans l'adresse est son empreinte SHA-256,
- * en majuscules : Microsoft l'écrit lui-même.
+ * microsoft.com), taille annoncée par le serveur ; empreinte, taille, version
+ * du produit et signature lues sur le fichier téléchargé par les machines
+ * Windows x64 et arm64 de GitHub (essai-openclaw-windows.yml,
+ * `releve-visual-cpp.json` en artefact). Le nom de dossier qui précède le
+ * fichier dans l'adresse est son empreinte SHA-256, en majuscules : Microsoft
+ * l'écrit lui-même, et c'est bien celle du fichier.
  */
 export const PAQUETS_VISUAL_CPP: Record<ArchVisualCpp, PaquetVisualCpp> = {
   x64: {
     arch: "x64",
-    version: "14.50.35719.0",
+    version: "14.51.36247.0",
     adresse: "https://download.visualstudio.microsoft.com/download/pr/ebdab8e5-1d7b-4d9f-a11b-cbb1720c3b12/843068991DAAA1F73AD9F6239BCE4D0F6A07A51F18C37EA2A867E9BECA71295C/VC_redist.x64.exe",
     octets: 18_731_856,
     sha256: "843068991daaa1f73ad9f6239bce4d0f6a07a51f18c37ea2a867e9beca71295c",
   },
   arm64: {
     arch: "arm64",
-    version: "14.50.35719.0",
+    version: "14.51.36247.0",
     adresse: "https://download.visualstudio.microsoft.com/download/pr/ece44298-3977-4f73-ab91-c13fe79cfea8/B70EF586669A620A0A30A1156969C05C6A3831DC8F8BC992DA75779D2A92F944/VC_redist.arm64.exe",
     octets: 11_870_816,
     sha256: "b70ef586669a620a0a30a1156969c05c6a3831dc8f8bc992da75779d2a92f944",
@@ -89,26 +94,31 @@ export const PAQUETS_VISUAL_CPP: Record<ArchVisualCpp, PaquetVisualCpp> = {
 export const DLL_VISUAL_CPP = ["VCRUNTIME140.dll"] as const;
 
 /**
- * Version minimale de la bibliothèque en place. Microsoft : « la version du
- * paquet installé doit être égale ou supérieure à celle des outils MSVC qui
- * ont construit l'application ». Les deux modules ont été liés par l'éditeur
- * de liens 14.44 (en-tête PE, relevé du 29/09/2026) : en dessous, on installe
- * la version épinglée par-dessus (le paquet remplace une 14.x plus ancienne).
+ * Version minimale de la bibliothèque en place, par processeur. Microsoft
+ * (page du paquet, lue le 29/09/2026) : « la version du paquet installé doit
+ * être égale ou supérieure à celle des outils MSVC qui ont construit
+ * l'application ». Éditeur de liens relevé dans l'en-tête PE des modules qui
+ * importent `VCRUNTIME140.dll` : `fs-safe` x64 14.51, `ubjs` x64 et arm64
+ * 14.44. En dessous, la version épinglée (14.51.36247) est installée
+ * par-dessus : le paquet remplace une 14.x plus ancienne. Monter OpenClaw,
+ * c'est relever ces deux nombres (`modules-dll.txt` de l'essai de GitHub).
  */
-export const VERSION_MINIMALE_VISUAL_CPP = "14.44";
+export const VERSION_MINIMALE_VISUAL_CPP: Record<ArchVisualCpp, string> = { x64: "14.51", arm64: "14.44" };
 
 /** Le sujet du certificat qui signe les paquets de Microsoft. */
 export const SIGNATAIRE_MICROSOFT = "CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US";
 
 /**
- * Racines de Microsoft auxquelles la chaîne du signataire doit remonter, par
+ * Racine de Microsoft à laquelle la chaîne du signataire doit remonter, par
  * empreinte SHA-1 (celle que Windows affiche) : « Microsoft Root Certificate
- * Authority 2011 » (sous laquelle signe « Microsoft Code Signing PCA 2011 »)
- * et « Microsoft Root Certificate Authority 2010 ». Une signature valide pour
+ * Authority 2011 », relevée sur les deux paquets épinglés le 29/09/2026
+ * (statut `Valid`, « Signature verified. »). Une signature valide pour
  * Windows, mais qui remonte à une autre racine (une racine ajoutée au
- * magasin de la machine par un tiers, par exemple), est refusée.
+ * magasin de la machine par un tiers, par exemple), est refusée. Un nouveau
+ * paquet signé sous une autre racine de Microsoft demandera de l'ajouter ici,
+ * après l'avoir relevée.
  */
-export const RACINES_MICROSOFT = ["8F43288AD272F3103B6FB1428485EA3014C0BCFE", "3B1EFD3A66EA28B16697394703A72CA340A05BD5"] as const;
+export const RACINES_MICROSOFT = ["8F43288AD272F3103B6FB1428485EA3014C0BCFE"] as const;
 
 /** Le paquet pour ce processeur, ou null (Windows 32 bits : Helix n'y pose pas de Node). */
 export function paquetVisualCpp(arch: string): PaquetVisualCpp | null {
@@ -145,22 +155,23 @@ export type VerdictVisualCpp =
 
 /**
  * Présentes ou non : toutes les DLL nécessaires dans `System32`, et une
- * version au moins égale à la minimale (celle du registre si le paquet l'a
- * écrite, sinon celle du fichier : une DLL posée par un autre programme, sans
- * le paquet, compte aussi). Une DLL absente l'emporte sur le registre : c'est
- * elle que Windows charge.
+ * version au moins égale à la minimale de ce processeur. La version est celle
+ * du fichier, c'est lui que Windows charge (une DLL posée par un autre
+ * programme, sans le paquet, compte aussi) ; celle du registre ne sert que si
+ * le fichier ne dit pas la sienne. Une DLL absente l'emporte sur le registre.
+ * Les machines de GitHub ont la DLL (14.51.36247) sans la clé du registre
+ * (relevé du 29/09/2026) : le registre seul aurait dit « absentes ».
  */
-export function verdictVisualCpp(r: ReleveVisualCpp): VerdictVisualCpp {
+export function verdictVisualCpp(r: ReleveVisualCpp, arch: ArchVisualCpp): VerdictVisualCpp {
   const manque = DLL_VISUAL_CPP.filter((nom) => !r.dll.some((d) => d.nom.toLowerCase() === nom.toLowerCase() && d.present));
   if (manque.length) return { etat: "absent", manque };
-  const versions = [
-    ...r.registre.filter((k) => k.installe === 1 && k.version).map((k) => String(k.version)),
-    ...r.dll.filter((d) => d.version).map((d) => String(d.version)),
-  ].filter((v) => /^v?\d+\.\d+/.test(v));
+  const valable = (v: string) => /^v?\d+\.\d+/.test(v) && !/^v?0\./.test(v);
+  const duFichier = r.dll.map((d) => String(d.version ?? "")).filter(valable);
+  const versions = (duFichier.length ? duFichier : r.registre.filter((k) => k.installe === 1 && k.version).map((k) => String(k.version))).filter(valable);
   const meilleure = versions.sort((a, b) => (versionAuMoins(a, b) ? -1 : 1))[0];
   if (!meilleure) return { etat: "ancien", version: "?" };
   const propre = meilleure.replace(/^v/i, "");
-  return versionAuMoins(propre, VERSION_MINIMALE_VISUAL_CPP) ? { etat: "present", version: propre } : { etat: "ancien", version: propre };
+  return versionAuMoins(propre, VERSION_MINIMALE_VISUAL_CPP[arch]) ? { etat: "present", version: propre } : { etat: "ancien", version: propre };
 }
 
 /** Lit la sortie JSON de `SCRIPT_RELEVE` ; null si elle est illisible. */
@@ -374,7 +385,7 @@ export async function detecterVisualCpp(forcer = false): Promise<VerdictVisualCp
   const r = await powershell(SCRIPT_RELEVE, { HELIX_VC_ARCH: paquet.arch, HELIX_VC_DLL: DLL_VISUAL_CPP.join(";") }, 30_000);
   const releve = r.ok ? lireReleve(r.sortie) : null;
   if (!releve) console.warn(`[visual-cpp] relevé illisible : ${(r.erreur || r.sortie).slice(0, 300)}`);
-  const verdict = releve ? verdictVisualCpp(releve) : null;
+  const verdict = releve ? verdictVisualCpp(releve, paquet.arch) : null;
   cache = { verdict, at: Date.now() };
   return verdict;
 }

@@ -9245,14 +9245,17 @@ console.log("\n43. Bibliothèques Visual C++ de Microsoft sous Windows : détect
   // La détection, fonction pure.
   const dll = (present, version) => ({ nom: "VCRUNTIME140.dll", present, version });
   const min = V.VERSION_MINIMALE_VISUAL_CPP;
-  const present = V.verdictVisualCpp({ registre: [{ installe: 1, version: "v14.50.35719.00" }], dll: [dll(true, "14.50.35719.0")] });
-  const absent = V.verdictVisualCpp({ registre: [], dll: [dll(false)] });
-  const registreSeul = V.verdictVisualCpp({ registre: [{ installe: 1, version: "v14.50.35719.00" }], dll: [dll(false)] });
-  const ancien = V.verdictVisualCpp({ registre: [{ installe: 1, version: "v14.29.30139.00" }], dll: [dll(true, "14.29.30139.0")] });
-  const fichierSeul = V.verdictVisualCpp({ registre: [], dll: [dll(true, "14.50.35719.0")] });
-  verifier("détection : présentes (registre et DLL à jour)", present.etat === "present" && present.version.startsWith("14.50.35719"), JSON.stringify(present));
+  const present = V.verdictVisualCpp({ registre: [{ installe: 1, version: "v14.51.36247.00" }], dll: [dll(true, "14.51.36247.0")] }, "x64");
+  const absent = V.verdictVisualCpp({ registre: [], dll: [dll(false)] }, "x64");
+  const registreSeul = V.verdictVisualCpp({ registre: [{ installe: 1, version: "v14.51.36247.00" }], dll: [dll(false)] }, "x64");
+  const ancien = V.verdictVisualCpp({ registre: [{ installe: 1, version: "v14.29.30139.00" }], dll: [dll(true, "14.29.30139.0")] }, "x64");
+  const fichierSeul = V.verdictVisualCpp({ registre: [], dll: [dll(true, "14.51.36247.0")] }, "x64");
+  const fichierAncien = V.verdictVisualCpp({ registre: [{ installe: 1, version: "v14.51.36247.00" }], dll: [dll(true, "14.44.35211.0")] }, "x64");
+  const armOk = V.verdictVisualCpp({ registre: [], dll: [dll(true, "14.44.35211.0")] }, "arm64");
+  verifier("détection : présentes (DLL de System32 à jour)", present.etat === "present" && present.version === "14.51.36247.0", JSON.stringify(present));
   verifier("détection : DLL absente de System32 → absentes, même si le registre dit « installé » (c'est la DLL que Windows charge)", absent.etat === "absent" && registreSeul.etat === "absent" && absent.manque.includes("VCRUNTIME140.dll"), JSON.stringify([absent, registreSeul]));
-  verifier(`détection : version sous la minimale (${min}) → trop anciennes ; une DLL à jour posée sans le paquet compte`, ancien.etat === "ancien" && fichierSeul.etat === "present", JSON.stringify([ancien, fichierSeul]));
+  verifier(`détection : minimale par processeur (x64 ${min.x64}, arm64 ${min.arm64}, éditeur de liens des modules) ; la version du fichier fait foi, pas celle du registre ; une DLL à jour sans le paquet compte (machines de GitHub)`, min.x64 === "14.51" && min.arm64 === "14.44" && ancien.etat === "ancien" && fichierAncien.etat === "ancien" && fichierSeul.etat === "present" && armOk.etat === "present", JSON.stringify([ancien, fichierAncien, fichierSeul, armOk]));
+  verifier("la version épinglée du paquet satisfait la minimale de chaque processeur (sinon, installer ne réglerait rien)", ["x64", "arm64"].every((a) => V.versionAuMoins(V.PAQUETS_VISUAL_CPP[a].version, min[a])), JSON.stringify(V.PAQUETS_VISUAL_CPP));
   verifier("comparaison des versions nombre par nombre (14.9 < 14.44 < 14.50)", !V.versionAuMoins("14.9", "14.44") && V.versionAuMoins("14.44.35211.0", "14.44") && V.versionAuMoins("v14.50", "14.44"), "texte");
   verifier("relevé illisible : null (on ne bloque pas une installation sur un doute)", V.lireReleve("pas du json") === null && V.lireReleve('{"registre":{"installe":1,"version":"v14.50.1.0"},"dll":{"nom":"VCRUNTIME140.dll","present":true,"version":"14.50.1.0"}}')?.dll.length === 1, "autre");
 
@@ -9278,7 +9281,7 @@ console.log("\n43. Bibliothèques Visual C++ de Microsoft sous Windows : détect
   };
   const { spawnSync } = await import("node:child_process");
   const json = (registre, d) => JSON.stringify({ registre, dll: [d] });
-  const wPresent = simuler(json([{ installe: 1, version: "v14.50.35719.00" }], dll(true, "14.50.35719.0")));
+  const wPresent = simuler(json([{ installe: 1, version: "v14.51.36247.00" }], dll(true, "14.51.36247.0")));
   const wAbsent = simuler(json([], dll(false)));
   const wAncien = simuler(json([{ installe: 1, version: "v14.16.27012.00" }], dll(true, "14.16.27012.0")));
   verifier("Windows (simulé) : présentes, absentes, trop anciennes, selon ce que PowerShell relève", wPresent.d?.etat === "present" && wAbsent.d?.etat === "absent" && wAncien.d?.etat === "ancien", JSON.stringify([wPresent.d, wAbsent.d, wAncien.d, wPresent.erreur]));
@@ -9288,7 +9291,7 @@ console.log("\n43. Bibliothèques Visual C++ de Microsoft sous Windows : détect
     appel && appel.f === "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" && appel.a.includes("-NoProfile") && appel.env.arch === "x64" && appel.env.dll === "VCRUNTIME140.dll" && appel.cache && wPresent.script === V.SCRIPT_RELEVE && !/x64|VCRUNTIME/.test(V.SCRIPT_RELEVE),
     JSON.stringify(appel),
   );
-  const wForce = simuler(json([{ installe: 1, version: "v14.50.35719.00" }], dll(true, "14.50.35719.0")), `\n      process.env.HELIX_ESSAI_VISUAL_CPP = "absent";`);
+  const wForce = simuler(json([{ installe: 1, version: "v14.51.36247.00" }], dll(true, "14.51.36247.0")), `\n      process.env.HELIX_ESSAI_VISUAL_CPP = "absent";`);
   verifier("variable réservée aux essais (HELIX_ESSAI_VISUAL_CPP=absent) : la détection dit « absentes » sans rien relever", wForce.d?.etat === "absent" && wForce.vus?.length === 0, JSON.stringify(wForce));
   verifier("hors de Windows : rien à faire (null), aucune commande lancée", (await V.detecterVisualCpp(true)) === null, "relevé");
 
@@ -9346,11 +9349,12 @@ console.log("\n43. Bibliothèques Visual C++ de Microsoft sous Windows : détect
     "étape absente",
   );
   const cles = [
-    ["gateway", "Installation des bibliothèques de Microsoft (Visual C++)… OpenClaw en a besoin pour démarrer, et elles manquent sur ce PC : Windows va demander une autorisation d'administrateur pour les installer (si la demande n'apparaît pas, regardez la barre des tâches)."],
+    ["gateway", "Installation des bibliothèques de Microsoft (Visual C++)… OpenClaw en a besoin, et elles manquent sur ce PC : Windows va demander une autorisation d'administrateur pour les installer (si la demande n'apparaît pas, regardez la barre des tâches)."],
     ["gateway", "Windows a refusé l'autorisation d'administrateur. Relancez et acceptez la demande de Windows (si elle n'apparaît pas, regardez la barre des tâches). Si ce compte n'a pas le mot de passe d'un administrateur, demandez à la personne qui gère ce PC d'installer le « Microsoft Visual C++ Redistributable » depuis"],
-    ["gateway", "OpenClaw ne peut pas démarrer : les bibliothèques Visual C++ de Microsoft manquent sur ce PC. Installez-les depuis la page Agents (Windows demandera une autorisation d'administrateur)."],
+    ["gateway", "L'instance de vos agents s'est arrêtée au démarrage, et les bibliothèques Visual C++ de Microsoft manquent sur ce PC. Installez-les depuis la page Agents (Windows demandera une autorisation d'administrateur)."],
     ["src", "Le paquet officiel de Microsoft est téléchargé et vérifié, puis Windows vous demande une autorisation d'administrateur pour l'installer."],
     ["src", "Installer les bibliothèques de Microsoft"],
+    ["src", "OpenClaw a besoin des bibliothèques Visual C++ de Microsoft, qui manquent sur ce PC : sans elles, certains de ses modules ne se chargent pas."],
   ];
   const manquantes = cles.filter(([ou, cle]) => !["en", "zh", "ja"].every((l) => (JSON.parse(src(ou, "i18n", `${l}.json`))[cle] ?? "").length > 10));
   verifier("l'étape, le refus de l'UAC, le démarrage raté et le bandeau : traduits en anglais, chinois et japonais", manquantes.length === 0, manquantes.map(([, c]) => c.slice(0, 60)).join(" | "));

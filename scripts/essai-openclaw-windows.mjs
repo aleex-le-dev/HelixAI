@@ -322,7 +322,7 @@ if (process.argv.includes("--installation")) {
   if (windows) {
     const releve = { machine: process.arch, paquets: {} };
     const brut = ps(V.SCRIPT_RELEVE, { HELIX_VC_ARCH: process.arch, HELIX_VC_DLL: V.DLL_VISUAL_CPP.join(";") });
-    releve.detection = { brut: brut.sortie, erreur: brut.erreur.slice(0, 500), verdict: V.lireReleve(brut.sortie) ? V.verdictVisualCpp(V.lireReleve(brut.sortie)) : null };
+    releve.detection = { brut: brut.sortie, erreur: brut.erreur.slice(0, 500), verdict: V.lireReleve(brut.sortie) ? V.verdictVisualCpp(V.lireReleve(brut.sortie), process.arch) : null };
     // Les autres DLL du Visual C++ que l'on aurait pu attendre : présentes ou non sur cette machine, pour mémoire.
     releve.autres = V.lireReleve(ps(V.SCRIPT_RELEVE, { HELIX_VC_ARCH: process.arch, HELIX_VC_DLL: "VCRUNTIME140_1.dll;MSVCP140.dll;ucrtbase.dll" }).sortie);
     verifier(`relevé de cette machine (${process.arch}) : lisible, bibliothèques présentes (machine de GitHub)`, releve.detection.verdict?.etat === "present", JSON.stringify(releve.detection));
@@ -550,7 +550,7 @@ if (process.argv.includes("--installation")) {
         const rapport = [];
         try {
           const r = V.lireReleve(ps(V.SCRIPT_RELEVE, { HELIX_VC_ARCH: process.arch, HELIX_VC_DLL: V.DLL_VISUAL_CPP.join(";") }).sortie);
-          const verdict = r ? V.verdictVisualCpp(r) : null;
+          const verdict = r ? V.verdictVisualCpp(r, process.arch) : null;
           rapport.push(`détection : ${JSON.stringify(verdict)}`);
           verifier("sans VCRUNTIME140.dll : la détection de Helix dit « absentes » (registre ignoré : c'est la DLL que Windows charge)", verdict?.etat === "absent", JSON.stringify(verdict));
           const nodePrive = lancement.node;
@@ -601,7 +601,7 @@ if (process.argv.includes("--installation")) {
           renameSync(mise, dll);
         }
         const apres = V.lireReleve(ps(V.SCRIPT_RELEVE, { HELIX_VC_ARCH: process.arch, HELIX_VC_DLL: V.DLL_VISUAL_CPP.join(";") }).sortie);
-        verifier("VCRUNTIME140.dll remise : la détection redit « présentes »", apres && V.verdictVisualCpp(apres).etat === "present", JSON.stringify(apres));
+        verifier("VCRUNTIME140.dll remise : la détection redit « présentes »", apres && V.verdictVisualCpp(apres, process.arch).etat === "present", JSON.stringify(apres));
         console.log(`  (sans VCRUNTIME140.dll : ${rapport.map((l) => l.split("\n")[0]).join(" ; ")})`);
         if (sortieEssai) writeFileSync(join(sortieEssai, "sans-vcruntime.txt"), rapport.join("\n"));
       }

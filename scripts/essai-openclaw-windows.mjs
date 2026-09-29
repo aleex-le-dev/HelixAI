@@ -335,6 +335,46 @@ if (process.argv.includes("--installation")) {
     const scripts = join(prefixe, "node_modules", "openclaw", "scripts");
     mkdirSync(join(sortieEssai, "scripts-openclaw"), { recursive: true });
     for (const f of ["preinstall-package-manager-warning.mjs", "postinstall-bundled-plugins.mjs"]) if (existsSync(join(scripts, f))) cpSync(join(scripts, f), join(sortieEssai, "scripts-openclaw", f));
+    if (existsSync(join(dependances, "koffi", "cnoke.cjs"))) cpSync(join(dependances, "koffi", "cnoke.cjs"), join(sortieEssai, "scripts-openclaw", "koffi-cnoke.cjs"));
+    /*
+     * Chaque module natif (`.node`) posé : les DLL dont il a besoin (table
+     * d'import du fichier PE), et s'il se charge dans le Node privé. Une DLL
+     * du Visual C++ (`VCRUNTIME140.dll`, `MSVCP140.dll`) est là sur la machine
+     * de GitHub (Visual Studio y est installé), pas forcément chez une
+     * personne ; et un module qui ne se charge pas fait recompiler
+     * (node-gyp-build, cnoke), ce qui échoue sans outils de compilation.
+     */
+    if (windows) {
+      const modules = [];
+      const chercher = (d) => {
+        let entrees = [];
+        try {
+          entrees = readdirSync(d, { withFileTypes: true });
+        } catch {
+          return;
+        }
+        for (const e of entrees) {
+          const f = join(d, e.name);
+          if (e.isDirectory() && !e.isSymbolicLink()) chercher(f);
+          else if (e.name.endsWith(".node")) modules.push(f);
+        }
+      };
+      chercher(join(prefixe, "node_modules", "openclaw"));
+      const nodePrive = join(prefixe, "node.exe");
+      const lignes = modules.map((m) => {
+        let imports = "?";
+        try {
+          imports = importsPE(readFileSync(m)).join(", ");
+        } catch (err) {
+          imports = `illisible (${err instanceof Error ? err.message : err})`;
+        }
+        const charge = spawnSync(nodePrive, ["-e", "require(process.argv[1])", m], { encoding: "utf8", timeout: 30_000, windowsHide: true });
+        return `${m.slice(prefixe.length)}\n  imports : ${imports}\n  chargement : ${charge.status === 0 ? "oui" : `non (${String(charge.stderr).trim().split(/\r?\n/).slice(0, 3).join(" | ")})`}`;
+      });
+      writeFileSync(join(sortieEssai, "modules-dll.txt"), lignes.join("\n"));
+      const vc = modules.filter((_, i) => /VCRUNTIME|MSVCP/i.test(lignes[i].split("\n")[1] ?? ""));
+      console.log(`  (${modules.length} modules natifs posés ; ${vc.length} demandent le Visual C++ : ${vc.map((m) => m.split(/[\\/]node_modules[\\/]/).pop()).join(", ") || "aucun"})`);
+    }
   }
   // Toute la sortie à l'écran quand l'installation échoue : c'est elle qu'on lit dans le journal de GitHub.
   if (!reussie) console.log(sortie.split(/\r?\n/).map((l) => `    | ${l}`).join("\n"));
@@ -397,6 +437,45 @@ if (process.argv.includes("--installation")) {
     // Windows : un fichier encore tenu (antivirus, processus qui finit de s'arrêter) ; le dossier temporaire de la machine jetable part avec elle.
     console.log(`  (dossier jetable non effacé : ${err instanceof Error ? err.message : err})`);
   }
+}
+
+/**
+ * Les DLL qu'un fichier PE (un `.node` de Windows) importe : table d'import
+ * (répertoire 1) et imports différés (répertoire 13), lus dans le fichier.
+ */
+function importsPE(b) {
+  const pe = b.readUInt32LE(0x3c);
+  if (b.readUInt32LE(pe) !== 0x4550) throw new Error("pas un fichier PE");
+  const sections = b.readUInt16LE(pe + 6);
+  const tailleOptionnel = b.readUInt16LE(pe + 20);
+  const optionnel = pe + 24;
+  const pe32plus = b.readUInt16LE(optionnel) === 0x20b;
+  const repertoires = optionnel + (pe32plus ? 112 : 96);
+  const table = optionnel + tailleOptionnel;
+  const versFichier = (rva) => {
+    for (let i = 0; i < sections; i++) {
+      const s = table + i * 40;
+      const va = b.readUInt32LE(s + 12);
+      const taille = Math.max(b.readUInt32LE(s + 8), b.readUInt32LE(s + 16));
+      if (rva >= va && rva < va + taille) return rva - va + b.readUInt32LE(s + 20);
+    }
+    return -1;
+  };
+  const chaine = (rva) => {
+    const o = versFichier(rva);
+    return o < 0 ? "?" : b.toString("latin1", o, b.indexOf(0, o));
+  };
+  const noms = [];
+  for (const [rep, pas, champ] of [[1, 20, 12], [13, 32, 4]]) {
+    const rva = b.readUInt32LE(repertoires + rep * 8);
+    if (!rva) continue;
+    for (let o = versFichier(rva); o >= 0 && o + pas <= b.length; o += pas) {
+      const nom = b.readUInt32LE(o + champ);
+      if (!nom) break;
+      noms.push(rep === 13 ? `${chaine(nom)} (différé)` : chaine(nom));
+    }
+  }
+  return noms;
 }
 
 /** Les fichiers d'un dossier, sur quelques niveaux (pour voir ce que npm a posé). */

@@ -60,6 +60,8 @@ export interface GuideAppli {
   erreurs?: { code: string; texte: string }[];
   /** Où trouver, dans la console, ce qu'on colle dans les champs de l'écran. */
   champs?: { identifiant?: string; secret?: string; annuaire?: string };
+  /** Pas de console de développeur (une application à ouvrir, Palmier Pro) : la note sur ses libellés n'a pas lieu d'être. */
+  sansConsole?: true;
 }
 
 /* ------------------------------------------------------------------ */
@@ -1039,6 +1041,43 @@ const GUIDES: Record<IdGuide, (c: ContexteGuide) => GuideAppli> = {
   discord: guideDiscord,
   whatsapp: guideWhatsapp,
 };
+
+/* ------------------------------------------------------------------ */
+/* Applications ouvertes sur la machine de l'instance                   */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Palmier Pro (29/09/2026) : rien à créer chez l'éditeur, une application à
+ * ouvrir sur la machine de l'instance. Lu le 29/09/2026 : le README de
+ * https://github.com/palmier-io/palmier-pro (macOS 26 sur puce Apple, serveur
+ * MCP quand l'application est ouverte) et, dans la branche `last-gpl-source`,
+ * `MCPService.swift` (le serveur démarre avec l'application, sauf s'il a été
+ * coupé dans ses réglages) et `ToolDefinitions.swift` (« sign in to Palmier and
+ * subscribe » pour générer). L'application elle-même n'a pas été ouverte.
+ */
+function guidePalmier(): GuideAppli {
+  return {
+    nom: "Palmier Pro",
+    sansConsole: true,
+    introduction: tf("Palmier Pro est un monteur vidéo pour Mac, d'un autre éditeur que {0}. Il doit être installé et ouvert sur la machine de cette instance : {0} parle à l'application ouverte, sans rien installer à votre place.", branding.name),
+    consoles: [{ libelle: t("la page de téléchargement de Palmier Pro"), url: "https://github.com/palmier-io/palmier-pro/releases/latest" }],
+    etapes: [
+      { texte: t("Pas encore installé : téléchargez Palmier Pro sur sa page officielle, puis glissez-le dans le dossier Applications. Il demande macOS 26 (Tahoe) ou plus récent, sur un Mac à puce Apple.") },
+      { texte: t("Ouvrez Palmier Pro, puis un projet. Son serveur d'outils démarre avec l'application, sauf s'il a été coupé dans ses réglages.") },
+      { texte: tf("Revenez ici et cliquez « Brancher ». {0} vérifie que c'est bien Palmier Pro, signé par son éditeur, qui répond, avant de lui envoyer quoi que ce soit.", branding.name) },
+      { texte: t("Pour générer des vidéos, des images ou du son, connectez-vous à votre compte Palmier dans l'application : la génération se fait chez Palmier, avec l'abonnement ou les crédits de ce compte, et chaque demande vous est montrée avant de partir.") },
+    ],
+    aEviter: [
+      t("Ne lancez pas Palmier Pro depuis l'image disque ou le dossier Téléchargements : il doit être dans Applications, sinon il n'est pas reconnu."),
+      t("Ne fermez pas Palmier Pro pendant qu'un agent monte : ses outils ne répondent que tant que l'application est ouverte. Rouvert, « Réessayer » le rebranche."),
+    ],
+  };
+}
+
+/** Le pas à pas d'une application ouverte sur la machine de l'instance (`local` au catalogue), ou `null`. */
+export function guideApplicationLocale(id: string): GuideAppli | null {
+  return id === "palmier" ? guidePalmier() : null;
+}
 
 /** Le guide d'un service, ou `null` s'il n'en a pas (il se branche d'un clic, ou par un simple jeton). */
 export function guideApplication(id: string, contexte: ContexteGuide = {}): GuideAppli | null {

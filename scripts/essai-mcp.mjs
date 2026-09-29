@@ -438,8 +438,14 @@ if (SANS_RESEAU) {
     aArreter.push(http);
     const sse = await everythingHttp("sse", portS);
     aArreter.push(sse);
-    mcp.declarer({ id: "http", label: "HTTP", description: "", url: `http://127.0.0.1:${portH}/mcp`, autoStart: false });
-    mcp.declarer({ id: "sse", label: "SSE", description: "", url: `http://127.0.0.1:${portS}/sse`, autoStart: false });
+    /*
+     * En http sur la boucle, un serveur doit être déclaré `local`, avec son port
+     * (mcp.ts, `adresseServeurPermise`, 29/09/2026) ; ici, tout écouteur est
+     * accepté : c'est le serveur de référence lancé juste au-dessus.
+     */
+    const reconnu = async () => null;
+    mcp.declarer({ id: "http", label: "HTTP", description: "", url: `http://127.0.0.1:${portH}/mcp`, local: { port: portH, reconnaitre: reconnu }, autoStart: false });
+    mcp.declarer({ id: "sse", label: "SSE", description: "", url: `http://127.0.0.1:${portS}/sse`, local: { port: portS, reconnaitre: reconnu }, autoStart: false });
     const rh = await mcp.startServer("http");
     const rs = await mcp.startServer("sse");
     verifier("HTTP « streamable » : branché, outils listés", rh.ok && (statut("http")?.toolCount ?? 0) >= 10, JSON.stringify(rh));

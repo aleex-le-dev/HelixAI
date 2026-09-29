@@ -8,11 +8,14 @@ import { journaliser } from "./audit.ts";
 import {
   declarer,
   estDeclare,
+  relancable,
   retirerServeur,
   startServer,
   status as mcpStatus,
+  stopServer,
   type McpServerConfig,
 } from "./mcp.ts";
+import { ecouteurPalmier, palmierProposable, portPalmier, PORT_PALMIER, TELECHARGEMENT_PALMIER, type VerdictEcouteur } from "./palmier.ts";
 import * as bureau from "./bureau.ts";
 import * as courrier from "./courrier.ts";
 import * as agenda from "./agenda.ts";
@@ -91,6 +94,17 @@ export interface EntreeCatalogue {
    * et l'autorisation se donne dans le navigateur (voir oauthMcp.ts).
    */
   url?: string;
+  /**
+   * Serveur MCP d'une **application ouverte sur cette machine**, en HTTP sur la
+   * boucle, sans OAuth ni jeton (Palmier Pro, 29/09/2026). L'adresse n'est
+   * jamais écrite ni reçue : elle est `http://127.0.0.1:<port><chemin>`, avec
+   * le port déclaré ici (`APPLICATIONS_LOCALES` le donne, et seul un essai le
+   * change), et le programme à l'écoute est reconnu avant chaque requête
+   * (mcp.ts, `local`). Aucune autre adresse locale n'est ouverte par là.
+   */
+  local?: { port: number; chemin: string };
+  /** Page officielle où la personne télécharge l'application elle-même (Helix ne la télécharge pas). */
+  telechargement?: string;
   /**
    * Comment l'autorisation se fait :
    *  - `auto` : le service accepte que l'instance s'enregistre elle-même
@@ -484,6 +498,24 @@ export const CATALOGUE: EntreeCatalogue[] = [
     documentation: "https://developer.box.com/guides/box-mcp/remote/",
     secrets: [],
   },
+  /*
+   * Palmier Pro (29/09/2026, demande de Medhi) : un monteur vidéo pour Mac,
+   * dont le serveur MCP n'existe que sur la machine où l'application est
+   * ouverte. Rangé avec Canva et Figma, les autres outils de création. Les
+   * versions récentes sont propriétaires : Helix ne les distribue pas, il parle
+   * à celle que la personne a installée (palmier.ts, PROJET.md § 3.5).
+   */
+  {
+    id: "palmier",
+    label: "Palmier Pro",
+    description:
+      "Monter des vidéos sur la timeline de Palmier Pro, ouvert sur cette machine (Mac à puce Apple, macOS 26). Lire le projet est libre ; chaque modification et chaque génération demande votre accord, et la génération de vidéos ou d'images part vers les services de Palmier, sur les crédits de votre compte Palmier.",
+    categorie: "Documents et données",
+    local: { port: PORT_PALMIER, chemin: "/mcp" },
+    telechargement: TELECHARGEMENT_PALMIER,
+    documentation: "https://github.com/palmier-io/palmier-pro#mcp-server",
+    secrets: [],
+  },
   {
     id: "airtable-mcp",
     label: "Airtable",
@@ -693,6 +725,29 @@ export const entreeCatalogue = (id: string): EntreeCatalogue | undefined =>
   CATALOGUE.find((e) => e.id === id);
 
 /**
+ * Les applications locales du catalogue (`local`), et ce qui les concerne sur
+ * cette machine : peut-elle y tourner (la fiche n'est montrée que là), sur
+ * quel port elle écoute, et comment la reconnaître avant de lui parler
+ * (palmier.ts). Une entrée `local` sans ligne ici n'est jamais branchée.
+ */
+const APPLICATIONS_LOCALES: Record<string, { proposable: () => boolean; port: () => number; reconnaitre: (port: number) => Promise<VerdictEcouteur> }> = {
+  palmier: { proposable: palmierProposable, port: portPalmier, reconnaitre: ecouteurPalmier },
+};
+
+/** L'application locale d'une entrée, si elle en est une et que Helix sait la reconnaître. */
+function applicationLocale(entree: EntreeCatalogue | undefined) {
+  return entree?.local ? APPLICATIONS_LOCALES[entree.id] : undefined;
+}
+
+/** L'adresse d'une application locale : 127.0.0.1, son port, son chemin, rien venu d'ailleurs. */
+function adresseLocale(entree: EntreeCatalogue, port: number): string {
+  return `http://127.0.0.1:${port}${entree.local!.chemin}`;
+}
+
+/** Une entrée qui ne peut pas servir sur cette machine (Palmier Pro hors d'un Mac à puce Apple) n'est pas montrée. */
+const visibleIci = (e: EntreeCatalogue): boolean => !e.local || applicationLocale(e)?.proposable() === true;
+
+/**
  * Une commande libre est-elle permise sur cette instance ?
  *
  * Non par défaut, et le défaut est le seul réglage que la plupart des
@@ -732,6 +787,11 @@ interface ConnecteurEnregistre {
   args?: string[];
   /** Serveur MCP du service lui-même, autorisé par OAuth (oauthMcp.ts). */
   url?: string;
+  /**
+   * Application ouverte sur cette machine (Palmier Pro) : ni adresse ni port
+   * enregistrés, ils sont relus au catalogue à chaque démarrage (`aligner`).
+   */
+  local?: true;
   /** Enveloppes produites par `chiffrer()`, par nom de variable. Jamais de clair. */
   secrets: Record<string, unknown>;
   depuis: string;
@@ -765,7 +825,8 @@ async function lire(): Promise<ConnecteurEnregistre[]> {
       c !== null &&
       typeof (c as ConnecteurEnregistre).id === "string" &&
       (typeof (c as ConnecteurEnregistre).command === "string" ||
-        typeof (c as ConnecteurEnregistre).url === "string"),
+        typeof (c as ConnecteurEnregistre).url === "string" ||
+        (c as ConnecteurEnregistre).local === true),
   );
 }
 
@@ -845,6 +906,18 @@ const sansVersion = (a: string) => /^(@[a-z0-9._-]+\/)?[a-z0-9._-]+$/i.test(a);
 export function aligner(c: ConnecteurEnregistre): ConnecteurEnregistre {
   const e = CATALOGUE.find((x) => x.id === c.id);
   /*
+   * Une application locale (Palmier Pro, 29/09/2026) : son entrée du catalogue
+   * seule, et rien de ce que l'enregistrement porterait d'autre (une adresse ou
+   * une commande glissées dans le magasin sont oubliées). Sans entrée locale
+   * au catalogue, elle n'est pas déclarée.
+   */
+  if (c.local === true || (e?.local && !c.url && !c.command)) {
+    if (!applicationLocale(e)) throw new Error(tf("connecteur « {0} » hors catalogue, ignoré (les connecteurs libres ne sont pas autorisés sur cette instance)", c.id));
+    return { id: c.id, label: e!.label, description: e!.description, local: true, secrets: {}, depuis: c.depuis };
+  }
+  // Une adresse ou une commande enregistrées sous l'identifiant d'une application locale : refusées.
+  if (e?.local) throw new Error(tf("connecteur « {0} » hors catalogue, ignoré (les connecteurs libres ne sont pas autorisés sur cette instance)", c.id));
+  /*
    * Hors régime libre, un connecteur local lance la commande du catalogue, et
    * elle seule, relue ici à chaque démarrage (revue du 26/09/2026) : le
    * chiffrement au repos accepte encore une valeur en clair (migration), et
@@ -918,6 +991,25 @@ function envPublic(id: string): { envPublic?: Record<string, string> } {
 
 const versConfig = (brut: ConnecteurEnregistre): McpServerConfig => {
   const c = aligner(brut);
+  if (c.local) {
+    const entree = entreeCatalogue(c.id)!;
+    const appli = applicationLocale(entree)!;
+    const port = appli.port();
+    return {
+      id: c.id,
+      label: c.label,
+      description: c.description,
+      url: adresseLocale(entree, port),
+      local: {
+        port,
+        reconnaitre: async () => {
+          const v = await appli.reconnaitre(port);
+          return v.ok ? null : v.message;
+        },
+      },
+      autoStart: true,
+    };
+  }
   return c.url
     ? {
         id: c.id,
@@ -1030,6 +1122,8 @@ export interface ConnecteurInstalle {
   distant?: boolean;
   /** Date de l'autorisation, pour un service distant. */
   autoriseDepuis?: string;
+  /** Application ouverte sur cette machine (Palmier Pro) : « Réessayer » la rebranche quand elle a été fermée. */
+  local?: true;
 }
 
 export interface EtatConnecteurs {
@@ -1073,7 +1167,7 @@ export const adresseDeRetour = (base: string, entree?: EntreeCatalogue): string 
  * service restent tels quels : ce sont eux qui disent quoi exécuter.
  */
 function catalogueTraduit(): EntreeCatalogue[] {
-  return CATALOGUE.map((e) => ({
+  return CATALOGUE.filter(visibleIci).map((e) => ({
     ...e,
     label: t(e.label),
     description: e.description.includes("{0}") ? tf(e.description, nomProduit()) : t(e.description),
@@ -1086,6 +1180,7 @@ function catalogueTraduit(): EntreeCatalogue[] {
 export async function etat(base?: string): Promise<EtatConnecteurs> {
   await charger();
   const serveurs = mcpStatus();
+  relancerLocaux();
 
   return {
     catalogue: catalogueTraduit(),
@@ -1093,6 +1188,14 @@ export async function etat(base?: string): Promise<EtatConnecteurs> {
     installes: await Promise.all(
       enMemoire.map(async (c) => {
         const vivant = serveurs.find((s) => s.id === c.id);
+        /*
+         * Une application locale arrêtée : sa raison est relue maintenant, dans la
+         * langue de qui regarde (fermée, un autre programme sur son port…). Celle
+         * que mcp.ts a gardée date du démarrage de la passerelle, souvent hors de
+         * toute requête, donc dans la langue par défaut (vu à l'écran le 29/09/2026).
+         */
+        const appli = c.local && vivant && !vivant.running ? applicationLocale(entreeCatalogue(c.id)) : undefined;
+        const raison = appli ? await appli.reconnaitre(appli.port()) : null;
         return {
           id: c.id,
           label: t(c.label),
@@ -1102,8 +1205,9 @@ export async function etat(base?: string): Promise<EtatConnecteurs> {
           libre: c.libre === true,
           running: vivant?.running ?? false,
           toolCount: vivant?.toolCount ?? 0,
-          error: vivant?.error,
+          error: raison && !raison.ok ? raison.message : vivant?.error,
           ...(c.url ? { distant: true as const, autoriseDepuis: await oauthDepuis(c.id) } : {}),
+          ...(c.local ? { local: true as const } : {}),
         };
       }),
     ),
@@ -1186,6 +1290,12 @@ function resoudreCommande(
   const entree = entreeCatalogue(id);
 
   if (entree) {
+    if (entree.local) {
+      return {
+        ok: false,
+        message: tf("« {0} » se branche d'un clic, quand l'application est ouverte sur cette machine : utilisez « Brancher ».", entree.label),
+      };
+    }
     if (entree.url) {
       return {
         ok: false,
@@ -1489,6 +1599,11 @@ export async function connecter(
 ): Promise<{ ok: true; pret?: true; adresse?: string; message: string } | { ok: false; message: string }> {
   await charger();
   const entree = entreeCatalogue(id);
+  // Une application ouverte sur cette machine : ni navigateur, ni jeton à garder (Palmier Pro, 29/09/2026).
+  if (entree?.local) {
+    const r = await brancherLocal(entree, qui);
+    return r.ok ? { ok: true, pret: true, message: r.message } : r;
+  }
   if (!entree?.url) {
     return { ok: false, message: t("Ce connecteur ne se branche pas par le navigateur.") };
   }
@@ -1719,6 +1834,75 @@ async function brancherDistant(
   };
 }
 
+/**
+ * Branche une application ouverte sur cette machine (Palmier Pro).
+ *
+ * Dans l'ordre, et rien n'est envoyé au port avant la fin du deuxième point :
+ *  1. la machine peut-elle la faire tourner (Mac à puce Apple, macOS 26) ;
+ *  2. le programme qui écoute sur son port est-il l'application, signée par
+ *     son éditeur (palmier.ts) : fermée, on dit de l'ouvrir ; un autre
+ *     programme, on le dit, sans lui parler ;
+ *  3. le serveur démarre et liste ses outils, puis seulement on enregistre.
+ * Déjà branchée (l'application avait été fermée) : la connexion est rouverte.
+ */
+async function brancherLocal(
+  entree: EntreeCatalogue,
+  qui: string,
+): Promise<{ ok: true; message: string } | { ok: false; message: string }> {
+  const appli = applicationLocale(entree);
+  if (!appli || !appli.proposable()) {
+    return { ok: false, message: tf("{0} ne peut pas tourner sur la machine de cette instance.", t(entree.label)) };
+  }
+  const verdict = await appli.reconnaitre(appli.port());
+  if (!verdict.ok) return { ok: false, message: verdict.message };
+
+  const deja = enMemoire.find((c) => c.id === entree.id);
+  const enregistre: ConnecteurEnregistre = deja ?? {
+    id: entree.id,
+    label: entree.label,
+    description: entree.description,
+    local: true,
+    secrets: {},
+    depuis: new Date().toISOString(),
+  };
+  if (deja) await stopServer(entree.id);
+  declarer(versConfig(enregistre));
+  const demarrage = await startServer(entree.id);
+  if (!demarrage.ok) {
+    if (!deja) await retirerServeur(entree.id);
+    return { ok: false, message: tf("{0} est ouvert, mais son serveur d'outils n'a pas répondu : {1}", t(entree.label), demarrage.error ?? t("cause inconnue")) };
+  }
+  if (!deja) await ecrire([...enMemoire, enregistre]);
+  const outils = mcpStatus().find((s) => s.id === entree.id)?.toolCount ?? 0;
+  journaliser("connecteur.ajoute", qui, { connecteur: entree.id, local: true, outils, ...(deja ? { etape: "rebranché" } : {}) });
+  return {
+    ok: true,
+    message:
+      outils > 1
+        ? tf("{0} est branché : {1} outils disponibles.", t(entree.label), outils)
+        : tf("{0} est branché : {1} outil disponible.", t(entree.label), outils),
+  };
+}
+
+/**
+ * Une application locale branchée mais arrêtée (fermée au démarrage de la
+ * passerelle, ou depuis) : l'écran des connecteurs et le menu « Outils »
+ * relancent sa connexion en passant, au plus une fois par quinze secondes.
+ * Sans cela, Palmier Pro ouvert après la passerelle restait sans outils
+ * jusqu'à « Réessayer ». Un serveur éteint par sa bascule ne l'est pas
+ * (`relancable`, mcp.ts).
+ */
+const derniereRelance = new Map<string, number>();
+function relancerLocaux(): void {
+  const maintenant = Date.now();
+  for (const c of enMemoire) {
+    if (!c.local || !relancable(c.id)) continue;
+    if (maintenant - (derniereRelance.get(c.id) ?? 0) < 15_000) continue;
+    derniereRelance.set(c.id, maintenant);
+    void startServer(c.id).catch(() => undefined);
+  }
+}
+
 /* ------------------------------------------------------------------ */
 /* Groupes d'outils, pour le composeur                                 */
 /* ------------------------------------------------------------------ */
@@ -1751,6 +1935,7 @@ export interface GroupeOutils {
  */
 export async function groupes(): Promise<GroupeOutils[]> {
   await charger();
+  relancerLocaux();
 
   const serveurs = mcpStatus();
   const liste: GroupeOutils[] = [];

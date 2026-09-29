@@ -56,6 +56,20 @@ const LIBELLES_OUTILS: Record<string, string> = {
   // Recherche sur le web du Chat (gateway/src/rechercheWeb.ts) et web gardé des employés : mêmes noms.
   web__chercher: t("Recherche sur le web"),
   web__lire: t("Lecture d'une page web"),
+  /*
+   * Palmier Pro (29/09/2026, gateway/src/palmierRegles.ts) : ceux dont la carte
+   * doit se comprendre hors du français, parce qu'ils sortent de la machine ou
+   * coûtent des crédits. Les autres gardent leur nom.
+   */
+  palmier__generate_video: t("Génération d'une vidéo (Palmier Pro)"),
+  palmier__generate_image: t("Génération d'une image (Palmier Pro)"),
+  palmier__generate_audio: t("Génération d'un son (Palmier Pro)"),
+  palmier__upscale_media: t("Amélioration d'une vidéo ou d'une image par l'IA (Palmier Pro)"),
+  palmier__get_transcript: t("Transcription de la timeline (Palmier Pro)"),
+  palmier__add_captions: t("Sous-titres de la timeline (Palmier Pro)"),
+  palmier__send_feedback: t("Message à l'équipe de Palmier"),
+  palmier__get_timeline: t("Lecture de la timeline (Palmier Pro)"),
+  palmier__add_clips: t("Ajout de plans à la timeline (Palmier Pro)"),
   // Outils livrés de l'agent de code, quand ils demandent un accord (gateway/src/permissionsCode.ts).
   code__bash: t("Commande de l'agent de code"),
   code__edit: t("Modification d'un fichier du projet"),

@@ -1,4 +1,4 @@
-import { FileCog, Mail, Send, ShieldCheck, Terminal } from "lucide-react";
+import { FileCog, Globe, Mail, Send, ShieldCheck, Terminal } from "lucide-react";
 import { CarteApprobation } from "@/components/cowork/CarteApprobation";
 import { useApprobation } from "@/hooks/useApprobation";
 import { langue, t, tf } from "@/lib/i18n";
@@ -129,10 +129,29 @@ export function ToolApproval() {
    * programmée ce qu'elle fera seule chaque jour. Et tous les fichiers visés,
    * pas seulement le premier.
    */
-  const { arguments: donnees, cibles, tache, unique, destinataire, texteFinal } = demande.detail ?? {};
+  const { arguments: donnees, cibles, tache, unique, destinataire, texteFinal, horsMachine } = demande.detail ?? {};
+  /*
+   * Palmier Pro (29/09/2026) : ce qui part hors de la machine, dit avant le
+   * clic et dans la langue de l'écran (la phrase française de l'instance ne
+   * s'affiche qu'en français).
+   */
+  const dehors =
+    horsMachine === "generation"
+      ? t("Cette génération part vers les services de Palmier, hors de cette machine, et se paie avec les crédits de votre compte Palmier. Elle ne se reprend pas.")
+      : horsMachine === "transcription"
+        ? t("Palmier Pro peut envoyer le son à ses services pour le transcrire, hors de cette machine, avec les crédits de votre compte Palmier.")
+        : horsMachine === "retour"
+          ? t("Ce message part vers l'équipe de Palmier, hors de cette machine.")
+          : null;
   const contenu =
-    donnees || (cibles && cibles.length > 1) ? (
+    donnees || dehors || (cibles && cibles.length > 1) ? (
       <div className="space-y-2">
+        {dehors && (
+          <p className="flex items-start gap-1.5 break-words text-sm text-foreground">
+            <Globe size={14} strokeWidth={1.75} className="mt-0.5 shrink-0" />
+            <span className="min-w-0">{dehors}</span>
+          </p>
+        )}
         {/* Messageries (28/09/2026) : le destinataire résolu, et le texte final d'un modèle WhatsApp, dans la langue de l'écran. */}
         {destinataire && (
           <p className="break-words text-sm text-foreground">{tf("Destinataire : {0}", destinataire)}</p>

@@ -6,9 +6,12 @@ import {
   ExternalLink,
   Globe,
   Info,
+  Laptop,
   Loader2,
   Lock,
+  Plug,
   Plus,
+  RotateCw,
   ShieldAlert,
   Terminal,
   Trash2,
@@ -38,7 +41,7 @@ import {
 import type { CleMarquePetite } from "@/components/ui/marques";
 import { AideMcpProjet } from "@/components/settings/ConnecteurProjets";
 import { GuideApplication } from "@/components/settings/GuideApplication";
-import { guideApplication } from "@/lib/guidesApplications";
+import { guideApplication, guideApplicationLocale } from "@/lib/guidesApplications";
 import { branding } from "@/config/branding";
 import { cn } from "@/lib/cn";
 import { formaterDate } from "@/lib/formats";
@@ -55,7 +58,11 @@ import { t, tf } from "@/lib/i18n";
  *    jeton à trouver. La page d'autorisation est celle du service : Helix ne
  *    voit jamais le mot de passe ;
  *  - **par jeton** : le service n'offre pas cette voie. On colle un jeton, et
- *    un serveur tourne sur la machine de l'instance.
+ *    un serveur tourne sur la machine de l'instance ;
+ *  - **Brancher** (29/09/2026) : une application ouverte sur la machine de
+ *    l'instance (Palmier Pro) sert ses outils sur la boucle locale. Un clic,
+ *    sans navigateur ni jeton ; l'instance reconnaît l'application avant de
+ *    lui parler, et l'écran dit quoi faire quand elle est fermée.
  *
  * Ce que l'écran ne propose pas compte autant : il n'y a **aucun champ de
  * commande**. Un serveur MCP local est un programme exécuté sur la machine de
@@ -271,7 +278,9 @@ export function Connecteurs({ maison = [] }: { maison?: ServiceMaison[] } = {}) 
     setSaisie(
       entree.oauth === "appli"
         ? { clientId: "", clientSecret: "" }
-        : Object.fromEntries(entree.secrets.map((s) => [s.nom, ""])),
+        : entree.local
+          ? {}
+          : Object.fromEntries(entree.secrets.map((s) => [s.nom, ""])),
     );
     setEcriture(false);
     setErreur(null);
@@ -346,8 +355,9 @@ export function Connecteurs({ maison = [] }: { maison?: ServiceMaison[] } = {}) 
     );
     setEnCours(false);
     if (!resultat.ok) {
-      // Un service qui réclame une application : on ouvre le formulaire.
-      if (entree.oauth === "appli" && ouvert !== entree.id) ouvrir(entree);
+      // Un service qui réclame une application, ou une application locale fermée : on ouvre le panneau et son pas à pas.
+      // Déjà branchée (« Réessayer ») : le message seul, en tête de l'écran ; la ligne n'a pas de panneau à refermer.
+      if ((entree.oauth === "appli" || (entree.local && !installe(entree.id))) && ouvert !== entree.id) ouvrir(entree);
       /*
        * Après `ouvrir`, qui efface le message (revérification du 28/09/2026) :
        * posé avant, il disparaissait aussitôt, et avec lui l'adresse de retour
@@ -444,6 +454,8 @@ export function Connecteurs({ maison = [] }: { maison?: ServiceMaison[] } = {}) 
     const branche = entree.integre || Boolean(vivant);
     const actif = entree.integre ? true : (vivant?.running ?? false);
     const distant = Boolean(entree.url);
+    // Une application ouverte sur la machine de l'instance (Palmier Pro, 29/09/2026).
+    const local = Boolean(entree.local);
 
     return (
       <div key={entree.id} className="rounded-xl border border-border">
@@ -465,11 +477,15 @@ export function Connecteurs({ maison = [] }: { maison?: ServiceMaison[] } = {}) 
                   title={
                     distant
                       ? t("Service distant : rien ne s'installe sur cette machine.")
-                      : t("Serveur exécuté sur la machine de l'instance.")
+                      : local
+                        ? t("Application ouverte sur la machine de l'instance, reliée par la boucle locale.")
+                        : t("Serveur exécuté sur la machine de l'instance.")
                   }
                 >
                   {distant ? (
                     <Globe size={12} strokeWidth={1.75} />
+                  ) : local ? (
+                    <Laptop size={12} strokeWidth={1.75} />
                   ) : (
                     <Terminal size={12} strokeWidth={1.75} />
                   )}
@@ -489,6 +505,11 @@ export function Connecteurs({ maison = [] }: { maison?: ServiceMaison[] } = {}) 
                 {t("Un clic : vous autorisez chez")}{" "}{entree.label}{t(", rien n'est à installer.")}
               </p>
             )}
+            {!vivant && local && (
+              <p className="mt-1 text-xs text-muted-foreground">
+                {t("Un clic, quand l'application est ouverte sur la machine de l'instance.")}
+              </p>
+            )}
             {!vivant && entree.oauth === "appli" && (
               <p className="mt-1 text-xs text-muted-foreground">
                 {t("Demande une application déclarée chez")}{" "}{entree.label}{t(", une seule fois.")}
@@ -501,15 +522,29 @@ export function Connecteurs({ maison = [] }: { maison?: ServiceMaison[] } = {}) 
               {t("Livré avec")}{" "}{branding.name}
             </span>
           ) : vivant ? (
-            <Button
-              variant="ghost"
-              size="sm"
-              icon={retrait === entree.id ? Loader2 : Trash2}
-              disabled={retrait === entree.id}
-              onClick={() => void retirerConnecteur(entree.id)}
-            >
-              {retrait === entree.id ? t("Retrait...") : t("Retirer")}
-            </Button>
+            <span className="flex shrink-0 flex-wrap items-center gap-1">
+              {/* L'application a été fermée, puis rouverte : un clic la rebranche, sans la retirer. */}
+              {local && !vivant.running && (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  icon={enCours ? Loader2 : RotateCw}
+                  disabled={enCours}
+                  onClick={() => void seConnecter(entree)}
+                >
+                  {t("Réessayer")}
+                </Button>
+              )}
+              <Button
+                variant="ghost"
+                size="sm"
+                icon={retrait === entree.id ? Loader2 : Trash2}
+                disabled={retrait === entree.id}
+                onClick={() => void retirerConnecteur(entree.id)}
+              >
+                {retrait === entree.id ? t("Retrait...") : t("Retirer")}
+              </Button>
+            </span>
           ) : attente === entree.id ? (
             <Button variant="ghost" size="sm" icon={Loader2} disabled>
               {t("En attente de votre accord...")}
@@ -517,6 +552,17 @@ export function Connecteurs({ maison = [] }: { maison?: ServiceMaison[] } = {}) 
           ) : ouvert === entree.id ? (
             <Button variant="ghost" size="sm" icon={X} onClick={fermer}>
               {t("Annuler")}
+            </Button>
+          ) : local ? (
+            // Ni navigateur ni jeton : rien à chiffrer, le bouton ne dépend pas du trousseau.
+            <Button
+              variant="secondary"
+              size="sm"
+              icon={enCours ? Loader2 : Plug}
+              disabled={enCours}
+              onClick={() => void seConnecter(entree)}
+            >
+              {t("Brancher")}
             </Button>
           ) : distant ? (
             <Button
@@ -541,12 +587,16 @@ export function Connecteurs({ maison = [] }: { maison?: ServiceMaison[] } = {}) 
             className="space-y-3 border-t border-border p-3.5 max-sm:p-2"
             onSubmit={(event) => {
               event.preventDefault();
-              if (entree.oauth === "appli" || entree.ecritureAuChoix) void seConnecter(entree);
+              if (entree.oauth === "appli" || entree.ecritureAuChoix || local) void seConnecter(entree);
               else void soumettreJeton(entree);
             }}
           >
             {entree.ecritureAuChoix && <AideMcpProjet id={entree.id} nom={entree.label} />}
-            {entree.oauth === "appli" ? (
+            {local ? (
+              guideApplicationLocale(entree.id) && (
+                <GuideApplication guide={guideApplicationLocale(entree.id)!} titre={tf("Brancher {0}, pas à pas", entree.label)} />
+              )
+            ) : entree.oauth === "appli" ? (
               <>
                 {/*
                  * 28/09/2026 (Medhi : « tout doit être simple, pour tout ») : l'adresse de
@@ -626,9 +676,9 @@ export function Connecteurs({ maison = [] }: { maison?: ServiceMaison[] } = {}) 
                 type="submit"
                 size="sm"
                 icon={enCours ? Loader2 : Check}
-                disabled={enCours || !etat.chiffrementDonnees}
+                disabled={enCours || (!local && !etat.chiffrementDonnees)}
               >
-                {enCours ? t("Connexion...") : entree.ecritureAuChoix ? t("Se connecter") : t("Connecter")}
+                {enCours ? t("Connexion...") : local ? t("Brancher") : entree.ecritureAuChoix ? t("Se connecter") : t("Connecter")}
               </Button>
               {(entree.console ?? entree.documentation) && (
                 <a
@@ -775,8 +825,17 @@ export function Connecteurs({ maison = [] }: { maison?: ServiceMaison[] } = {}) 
       </Card>
 
       <InfoBox className="mt-4" leading={<Lock size={15} strokeWidth={1.75} />}>
-        {t("Deux façons de brancher, et aucune ne passe par un tiers.")}{" "}
+        {/* Une troisième façon depuis le 29/09/2026 (Palmier Pro), dite seulement là où elle est proposée. */}
+        {etat.catalogue.some((e) => e.local)
+          ? t("Trois façons de brancher, et aucune ne passe par un tiers.")
+          : t("Deux façons de brancher, et aucune ne passe par un tiers.")}{" "}
         <strong className="font-medium">{t("Se connecter")}</strong>{" "}{t("vous envoie chez le service, qui vous demande votre accord ; le jeton revient chiffré dans l'instance et n'en sort plus.")}{" "}<strong className="font-medium">{t("Par jeton")}</strong>{" "}{t("lance un serveur sur la machine de l'instance :")}{" "}{branding.name}{" "}{t("ne lance que les commandes de son catalogue, jamais une commande venue de cet écran, et le jeton est transmis par l'environnement, sans jamais apparaître dans la liste des processus.")}
+        {etat.catalogue.some((e) => e.local) && (
+          <>
+            {" "}
+            <strong className="font-medium">{t("Brancher")}</strong>{" "}{t("relie une application ouverte sur la machine de l'instance, par la boucle locale, après avoir vérifié que c'est bien elle qui répond.")}
+          </>
+        )}
         {etat.commandeLibre && (
           <>
             {" "}

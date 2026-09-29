@@ -14,6 +14,7 @@ import type { Format } from "@/lib/images";
 import { InfoBox } from "@/components/ui/InfoBox";
 import { SuggestionList } from "@/components/chat/SuggestionList";
 import { MessageList } from "@/components/chat/MessageList";
+import { FileAttente } from "@/components/chat/FileAttente";
 import { FirstRun } from "@/components/onboarding/FirstRun";
 import { ProjectSelector, AgentSelector } from "@/components/chat/ContextSelectors";
 import { arreterReponse, useChat } from "@/hooks/useChat";
@@ -263,7 +264,35 @@ export function HomePage() {
     />
   ) : null;
 
+  /** Un message refusé par une file pleine : on le dit, et son texte reste dans le champ. */
+  const [fileRefusee, setFileRefusee] = useState(false);
+  useEffect(() => setFileRefusee(false), [idEnCours]);
+
+  /*
+   * Pendant une réponse, le message entre dans la file de ce Chat
+   * (29/09/2026), avec les pièces jointes et les choix du moment (modèle,
+   * outils, web, image) ; il part seul à la fin normale de la réponse.
+   */
+  const mettreEnFile = () => {
+    const creation = modeImage
+      ? { format: modeVideo && formatImage === "carre" ? ("paysage" as const) : formatImage, video: modeVideo }
+      : undefined;
+    const ajout = chat.mettreEnFile(draft, creation ? [] : jointes.pieces, creation);
+    if (!ajout) return;
+    if (!ajout.ok) {
+      setFileRefusee(true);
+      return;
+    }
+    setFileRefusee(false);
+    setDraft("");
+    if (!creation) jointes.vider();
+  };
+
   const submit = () => {
+    if (chat.busy) {
+      mettreEnFile();
+      return;
+    }
     const text = draft;
     const pieces = jointes.pieces;
     setDraft("");
@@ -347,6 +376,18 @@ export function HomePage() {
       onSubmit={submit}
       busy={chat.busy}
       onStop={chat.stop}
+      onMettreEnFile={mettreEnFile}
+      enTete={
+        <FileAttente
+          file={chat.file}
+          occupe={chat.busy}
+          refusee={fileRefusee}
+          onRetirer={chat.retirerDeFile}
+          onCommencerEdition={chat.commencerEdition}
+          onFinirEdition={chat.finirEdition}
+          onReprendre={chat.reprendreFile}
+        />
+      }
       pieces={jointes.pieces}
       piecesEnLecture={jointes.enLecture}
       onAjouterFichiers={(f) => void jointes.ajouter(f)}

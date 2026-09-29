@@ -5,6 +5,7 @@ import { IconButton } from "@/components/ui/IconButton";
 import { Composer } from "@/components/chat/Composer";
 import { InfoBox } from "@/components/ui/InfoBox";
 import { MessageList } from "@/components/chat/MessageList";
+import { FileAttente } from "@/components/chat/FileAttente";
 import { ApprovalSelector } from "@/components/chat/CoworkSelectors";
 import { DossierTravailChip } from "@/components/chat/DossierTravailChip";
 import { ScreenAccessChip } from "@/components/chat/ScreenAccessChip";
@@ -356,7 +357,29 @@ export function CoworkPage() {
     for (const d of demandesOutils) if (!d.detail?.employe && d.detail?.surface !== "code") void repondreOutil(d.id, false);
   };
 
+  /*
+   * Pendant que l'agent travaille, le message suivant entre dans la file de
+   * ce Chat (29/09/2026), comme dans le Chat : il part à la fin normale du
+   * travail en cours, pas après une erreur ni après « Arrêter ».
+   */
+  const [fileRefusee, setFileRefusee] = useState(false);
+  const mettreEnFile = () => {
+    const ajout = chat.mettreEnFile(draft, jointes.pieces);
+    if (!ajout) return;
+    if (!ajout.ok) {
+      setFileRefusee(true);
+      return;
+    }
+    setFileRefusee(false);
+    setDraft("");
+    jointes.vider();
+  };
+
   const submit = () => {
+    if (chat.busy) {
+      mettreEnFile();
+      return;
+    }
     const text = draft;
     const pieces = jointes.pieces;
     setDraft("");
@@ -413,6 +436,18 @@ export function CoworkPage() {
       onSubmit={submit}
       busy={chat.busy}
       onStop={arreter}
+      onMettreEnFile={mettreEnFile}
+      enTete={
+        <FileAttente
+          file={chat.file}
+          occupe={chat.busy}
+          refusee={fileRefusee}
+          onRetirer={chat.retirerDeFile}
+          onCommencerEdition={chat.commencerEdition}
+          onFinirEdition={chat.finirEdition}
+          onReprendre={chat.reprendreFile}
+        />
+      }
       pieces={jointes.pieces}
       piecesEnLecture={jointes.enLecture}
       onAjouterFichiers={(f) => void jointes.ajouter(f)}

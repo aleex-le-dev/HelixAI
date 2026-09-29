@@ -12,6 +12,7 @@ import { Film,
   Paperclip,
   Globe,
   Check,
+  ListPlus,
 } from "lucide-react";
 import { ACCEPT, type Attachment } from "@/lib/attachments";
 import type { EtatRechercheWeb } from "@/lib/rechercheWeb";
@@ -34,9 +35,18 @@ interface ComposerProps {
   value?: string;
   onChange?: (value: string) => void;
   onSubmit?: () => void;
-  /** Génération en cours : le bouton d'envoi devient un bouton d'arrêt. */
+  /** Génération en cours : le bouton d'envoi devient un bouton d'arrêt (sauf file d'attente, ci-dessous). */
   busy?: boolean;
   onStop?: () => void;
+  /**
+   * File d'attente du Chat (29/09/2026) : pendant une réponse, Entrée et le
+   * bouton d'envoi mettent le message en file au lieu de ne rien faire, et
+   * « Arrêter » devient un bouton à part, à gauche. Absent (écran Code) : le
+   * bouton d'envoi devient « Arrêter », comme avant.
+   */
+  onMettreEnFile?: () => void;
+  /** Ce qui s'affiche au-dessus du champ, dans la carte : la file d'attente. */
+  enTete?: ReactNode;
   /** Modèle sélectionné (uid passerelle) et changement de sélection. */
   modelUid?: string;
   /** `undefined` veut dire « Auto » : c'est l'instance qui choisit. */
@@ -91,6 +101,8 @@ export function Composer({
   rechercheWeb,
   accessoire,
   sansModele = false,
+  onMettreEnFile,
+  enTete,
 }: ComposerProps) {
   const [menuPlus, setMenuPlus] = useState(false);
   const areaRef = useRef<HTMLTextAreaElement>(null);
@@ -103,7 +115,16 @@ export function Composer({
    * sans lui si l'on appuyait sur Entrée entre-temps. Le modèle répondait
    * alors qu'il ne voyait aucun document.
    */
-  const canSend = controlled && (value.trim().length > 0 || pieces.length > 0) && !busy && piecesEnLecture.length === 0;
+  const pret = controlled && (value.trim().length > 0 || pieces.length > 0) && piecesEnLecture.length === 0;
+  const canSend = pret && !busy;
+  /*
+   * Pendant une réponse, le message part dans la file du Chat. Avant le
+   * 29/09/2026, Entrée ne faisait rien et le bouton d'envoi devenait
+   * « Arrêter » à la même place : on coupait la réponse en voulant envoyer
+   * la suite (demande de Medhi : « il y a des gens impatients »).
+   */
+  const enFile = Boolean(busy && onMettreEnFile);
+  const canQueue = pret && enFile;
 
   /*
    * La transcription prend quelques secondes, pendant lesquelles on peut avoir
@@ -189,17 +210,38 @@ export function Composer({
     el.style.height = "auto";
     el.style.height = `${Math.min(el.scrollHeight, 208)}px`;
   };
+  /*
+   * Le champ vidé par l'envoi ou la mise en file reprend sa hauteur d'une
+   * ligne (29/09/2026) : après un message de plusieurs lignes, il restait
+   * haut et vide, et poussait la file et la conversation vers le haut.
+   */
+  useEffect(() => {
+    if (value === "" && areaRef.current) areaRef.current.style.height = "";
+  }, [value]);
+  /*
+   * Au premier envoi d'un Chat neuf, l'écran passe de l'accueil à la
+   * conversation et le composeur renaît ailleurs, sans le curseur : ce que la
+   * personne tapait aussitôt pour la file se perdait (vu le 29/09/2026). Né
+   * pendant une réponse, sans rien d'autre qui ait la main, il la reprend.
+   */
+  useEffect(() => {
+    if (busy && onMettreEnFile && document.activeElement === document.body) areaRef.current?.focus();
+    // Seulement à la naissance du composeur.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       if (canSend) onSubmit?.();
+      else if (canQueue) onMettreEnFile?.();
     }
   };
 
   return (
     <div className={cn("w-full", className)}>
       <div className="rounded-2xl bg-muted/50 p-1.5">
+        {enTete}
         {contextBar && (
           /*
            * Une seule ligne : quand la place manque, les libellés des puces se
@@ -387,7 +429,36 @@ export function Composer({
               )}
               {/* Sans champ contrôlé, il n'y aurait nulle part où écrire la dictée. */}
               {controlled && onChange && <BoutonDictee onTexte={insererDictee} />}
-              {busy ? (
+              {enFile ? (
+                <>
+                  {/*
+                    « Arrêter » à part, en retrait, et l'envoi à sa place habituelle, tout à
+                    droite : c'est là que la personne clique pour envoyer la suite.
+                  */}
+                  <button
+                    type="button"
+                    aria-label={t("Arrêter la génération")}
+                    title={t("Arrêter la génération")}
+                    onClick={onStop}
+                    className="ml-1 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-border bg-card text-foreground transition-colors hover:bg-muted"
+                  >
+                    <Square size={13} strokeWidth={2} className="fill-current" />
+                  </button>
+                  <button
+                    type="button"
+                    aria-label={t("Mettre en file")}
+                    title={t("Mettre en file : votre message partira quand la réponse en cours sera finie")}
+                    onClick={() => canQueue && onMettreEnFile?.()}
+                    disabled={!canQueue}
+                    className={cn(
+                      "inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground transition-opacity",
+                      canQueue ? "hover:opacity-90" : "opacity-40",
+                    )}
+                  >
+                    <ListPlus size={18} strokeWidth={2} />
+                  </button>
+                </>
+              ) : busy ? (
                 <button
                   type="button"
                   aria-label={t("Arrêter la génération")}

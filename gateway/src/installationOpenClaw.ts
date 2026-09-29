@@ -105,12 +105,27 @@ export function etatInstallation(): EtatInstallation {
   return etat;
 }
 
-function executer(bin: string, args: string[], env: NodeJS.ProcessEnv, delaiMs: number): Promise<{ ok: boolean; sortie: string; erreur: string }> {
+function executer(bin: string, args: string[], env: NodeJS.ProcessEnv, delaiMs: number): Promise<{ ok: boolean; sortie: string; erreur: string; code: string }> {
   return new Promise((resolve) => {
-    execFile(bin, args, { env, timeout: delaiMs, maxBuffer: 32 * 1024 * 1024 }, (err, sortie, erreur) =>
-      resolve({ ok: !err, sortie: String(sortie), erreur: String(erreur) || (err ? err.message : "") }),
-    );
+    execFile(bin, args, { env, timeout: delaiMs, maxBuffer: 32 * 1024 * 1024, windowsHide: true }, (err, sortie, erreur) => {
+      const e = err as (Error & { code?: unknown; signal?: unknown; killed?: boolean }) | null;
+      const code = !e ? "0" : e.killed ? `arrêté après ${Math.round(delaiMs / 1000)} s` : String(e.code ?? e.signal ?? "?");
+      resolve({ ok: !err, sortie: String(sortie), erreur: String(erreur) || (err ? err.message : ""), code });
+    });
   });
+}
+
+/**
+ * Ce que npm a dit, en entier, dans le journal de la passerelle
+ * (`passerelle.log` dans l'application) : l'écran n'en montre qu'une phrase,
+ * et « npm a échoué (code 1) », seul, ne permettait pas de savoir chez la
+ * personne ce qui s'était arrêté (29/09/2026). Les chemins de la machine
+ * restent : ce journal ne quitte pas le poste. Borné, pour une sortie folle.
+ */
+function journaliserNpm(quoi: string, r: { code: string; sortie: string; erreur: string }): void {
+  const tout = `${r.sortie}\n${r.erreur}`.trim();
+  const journal = /complete log of this run can be found in:\s*(.+?)\s*$/im.exec(tout)?.[1];
+  console.error(`[openclaw] ${quoi} (code ${r.code})${journal ? `, journal complet de npm : ${journal}` : ""}\n${tout.slice(-64_000)}`);
 }
 
 /**
@@ -338,10 +353,16 @@ async function installerPaquet(version: string): Promise<string> {
   });
   const r = await npm(args, 20 * 60_000);
   const lancement = lancementGere();
-  if (!r.ok || !existsSync(binaireGere()) || !lancement) throw new Error(tf("OpenClaw ne s'est pas installé : {0}", raisonNpm(r.erreur || r.sortie, version)));
+  if (!r.ok || !existsSync(binaireGere()) || !lancement) {
+    journaliserNpm(`npm install openclaw@${version} a échoué`, r);
+    throw new Error(tf("OpenClaw ne s'est pas installé : {0}", raisonNpm(`${r.erreur}\n${r.sortie}`, version)));
+  }
   const verif = await executer(lancement.fichier, [...lancement.prefixe, "--version"], env, 60_000);
   const trouvee = /(\d{4}\.\d+\.\d+)/.exec(verif.sortie)?.[1];
-  if (!verif.ok || !trouvee) throw new Error(t("OpenClaw s'est installé mais ne démarre pas."));
+  if (!verif.ok || !trouvee) {
+    journaliserNpm("openclaw --version ne répond pas après l'installation", verif);
+    throw new Error(t("OpenClaw s'est installé mais ne démarre pas."));
+  }
   return trouvee;
 }
 

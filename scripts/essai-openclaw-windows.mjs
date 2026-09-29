@@ -19,7 +19,7 @@
  * libre, arrêtée par son numéro.
  */
 import { spawnSync, spawn } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
+import { cpSync, existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -217,15 +217,33 @@ console.log("F. Ce que l'écran et la documentation disent");
 }
 
 /*
- * --installation : la vraie installation, sur ce poste (macOS ou Linux), pour
- * vérifier que le chemin commun (npm par node et npm-cli.js, `--prefix`
- * explicite, vérification par le lancement) n'a rien cassé. Données et
- * dossier personnel jetables, réseau requis (nodejs.org, registry.npmjs.org),
- * plusieurs minutes. Puis une passerelle OpenClaw jetable sur un port libre,
- * arrêtée par son numéro. Jamais lancé par la batterie.
+ * --installation : la vraie installation, sur ce poste, pour vérifier que le
+ * chemin commun (npm par node et npm-cli.js, `--prefix` explicite,
+ * vérification par le lancement) n'a rien cassé. Données et dossier personnel
+ * jetables, réseau requis (nodejs.org, registry.npmjs.org), plusieurs minutes.
+ * Puis une passerelle OpenClaw jetable sur un port libre, arrêtée par son
+ * numéro (sous Windows, par taskkill sur tout l'arbre, comme Helix). Jamais
+ * lancé par la batterie.
+ *
+ * Sur un vrai Windows depuis le 29/09/2026 (GitHub Actions,
+ * .github/workflows/essai-openclaw-windows.yml), après « npm a échoué
+ * (code 1) » chez Medhi : c'est `installerOpenClaw` de installationOpenClaw.ts
+ * lui-même qui tourne (Node privé téléchargé et vérifié, mêmes arguments de
+ * npm, même `envInstallation`), rien n'est refait à côté. Avec
+ * `--sortie <dossier>`, tout ce qu'il faut pour comprendre un échec y est
+ * copié avant l'effacement du dossier jetable : la sortie complète de
+ * l'installation (ce que la passerelle écrit dans passerelle.log), les
+ * journaux de npm (`_logs` de son cache) et la liste du préfixe.
  */
+const argument = (nom) => {
+  const i = process.argv.indexOf(nom);
+  return i > 0 ? process.argv[i + 1] : undefined;
+};
 if (process.argv.includes("--installation")) {
   console.log("G. Installation réelle sur ce poste (jetable)");
+  const windows = process.platform === "win32";
+  const sortieEssai = argument("--sortie") ? join(process.cwd(), argument("--sortie")) : null;
+  if (sortieEssai) mkdirSync(sortieEssai, { recursive: true });
   const racine = mkdtempSync(join(tmpdir(), "helix-oc-win-"));
   const maison = join(racine, "maison");
   const donnees = join(racine, "donnees");
@@ -236,11 +254,31 @@ if (process.argv.includes("--installation")) {
   const code = `const i = await import("./gateway/src/installationOpenClaw.ts");
     i.installerOpenClaw("essai", { apres: async () => {} });
     for (;;) { await new Promise((r) => setTimeout(r, 2000)); const e = i.etatInstallation(); if (e.etape === "termine" || e.etape === "erreur") { console.log("ETAT " + JSON.stringify(e)); console.log("LANCEMENT " + JSON.stringify(i.lancementGere())); break; } }`;
-  const r = spawnSync(process.execPath, ["--experimental-strip-types", "--no-warnings", "--input-type=module", "-e", code], { cwd: RACINE, env, encoding: "utf8", timeout: 30 * 60_000 });
+  const debutInstallation = Date.now();
+  const r = spawnSync(process.execPath, ["--experimental-strip-types", "--no-warnings", "--input-type=module", "-e", code], { cwd: RACINE, env, encoding: "utf8", timeout: 30 * 60_000, maxBuffer: 64 * 1024 * 1024 });
   const sortie = `${r.stdout ?? ""}${r.stderr ?? ""}`;
+  console.log(`  (installation : ${Math.round((Date.now() - debutInstallation) / 1000)} s)`);
   const etat = JSON.parse(/ETAT (.*)/.exec(sortie)?.[1] ?? "null");
   const lancement = JSON.parse(/LANCEMENT (.*)/.exec(sortie)?.[1] ?? "null");
-  verifier("installation réelle : Node épinglé, puis openclaw@2026.9.4 par npm-cli.js avec --prefix, vérifié", etat?.etape === "termine" && etat.version === "2026.9.4", sortie.slice(-600));
+  const reussie = etat?.etape === "termine" && etat.version === "2026.9.4";
+  if (sortieEssai) {
+    writeFileSync(join(sortieEssai, "installation.txt"), sortie);
+    // Les journaux de npm : ceux que sa sortie nomme, et tout `_logs` du cache (%LOCALAPPDATA%\npm-cache sous Windows).
+    const journaux = new Set([...sortie.matchAll(/complete log of this run can be found in:\s*(\S.*?)\s*$/gim)].map((m) => dirname(m[1].trim())));
+    const cache = spawnSync(process.execPath, [join(donnees, "openclaw-moteur", "node", ...(windows ? [] : ["lib"]), "node_modules", "npm", "bin", "npm-cli.js"), "config", "get", "cache"], { env, encoding: "utf8" });
+    if (cache.status === 0 && cache.stdout.trim()) journaux.add(join(cache.stdout.trim(), "_logs"));
+    if (process.env.LOCALAPPDATA) journaux.add(join(process.env.LOCALAPPDATA, "npm-cache", "_logs"));
+    let n = 0;
+    for (const d of journaux) {
+      if (!existsSync(d)) continue;
+      cpSync(d, join(sortieEssai, "npm-logs", String(n++)), { recursive: true });
+    }
+    const prefixe = join(donnees, "openclaw-moteur", "node");
+    if (existsSync(prefixe)) writeFileSync(join(sortieEssai, "prefixe.txt"), lister(prefixe, 3).join("\n"));
+  }
+  // Toute la sortie à l'écran quand l'installation échoue : c'est elle qu'on lit dans le journal de GitHub.
+  if (!reussie) console.log(sortie.split(/\r?\n/).map((l) => `    | ${l}`).join("\n"));
+  verifier("installation réelle : Node épinglé, puis openclaw@2026.9.4 par npm-cli.js avec --prefix, vérifié", reussie, sortie.slice(-600));
   verifier("installation réelle : rien hors du dossier de données jetable (dossier personnel vide de .openclaw et de .npm-global)", !existsSync(join(maison, ".openclaw")) && !existsSync(join(maison, ".npm-global")), "écrit hors du dossier");
   if (lancement) {
     const port = await new Promise((ok) => {
@@ -252,16 +290,22 @@ if (process.argv.includes("--installation")) {
     });
     const etatOc = join(racine, "etat-openclaw");
     mkdirSync(etatOc, { recursive: true });
-    writeFileSync(join(etatOc, "openclaw.json"), JSON.stringify({ gateway: { mode: "local", bind: "loopback", port, auth: { mode: "token", token: "jeton-essai-" + port } }, discovery: { mdns: { mode: "off" } }, telemetry: { enabled: false }, update: { checkOnStart: false } }));
-    const p = spawn(lancement.fichier, [...lancement.prefixe, "gateway", "run", "--port", String(port)], {
-      env: { PATH: `${dirname(lancement.node)}:/usr/bin:/bin`, HOME: maison, OPENCLAW_STATE_DIR: etatOc, OPENCLAW_CONFIG_PATH: join(etatOc, "openclaw.json"), TMPDIR: tmpdir() },
-      stdio: ["ignore", "pipe", "pipe"],
-    });
+    writeFileSync(join(etatOc, "openclaw.json"), JSON.stringify({ gateway: { mode: "local", bind: "loopback", port, auth: { mode: "token", token: "jeton-" + "essai-" + port } }, discovery: { mdns: { mode: "off" } }, telemetry: { enabled: false }, update: { checkOnStart: false } }));
+    // L'environnement que Helix donne à OpenClaw (employes.ts, envOpenClaw), en plus court : sous Windows, SystemRoot, ComSpec, TEMP et le PATH en `;`.
+    const plateforme = process.platform;
+    const envOc = windows
+      ? P.garderVariables(process.env, ["SystemRoot", "windir", "ComSpec", "PATHEXT", "TEMP", "TMP", "APPDATA", "LOCALAPPDATA", "ProgramFiles", "ProgramFiles(x86)", "ProgramW6432", "ProgramData", "SystemDrive", "PSModulePath", "USERNAME", "COMPUTERNAME", "OS", "PROCESSOR_ARCHITECTURE", "NUMBER_OF_PROCESSORS"], [], plateforme)
+      : { TMPDIR: tmpdir() };
+    P.poserPath(envOc, P.joindrePath([dirname(lancement.node), P.pathSysteme(plateforme, process.env)], plateforme), plateforme);
+    Object.assign(envOc, { HOME: maison, USERPROFILE: maison, OPENCLAW_STATE_DIR: etatOc, OPENCLAW_CONFIG_PATH: join(etatOc, "openclaw.json") });
+    const version = spawnSync(lancement.fichier, [...lancement.prefixe, "--version"], { env: envOc, encoding: "utf8", timeout: 120_000, windowsHide: true });
+    verifier("OpenClaw installé répond à --version, lancé comme Helix le lance (node.exe openclaw.mjs sous Windows)", /2026\.9\.4/.test(version.stdout ?? ""), `${version.status} ${version.stdout} ${version.stderr}`);
+    const p = spawn(lancement.fichier, [...lancement.prefixe, "gateway", "run", "--port", String(port)], { env: envOc, stdio: ["ignore", "pipe", "pipe"], windowsHide: true });
     let journal = "";
     p.stdout.on("data", (b) => (journal += b));
     p.stderr.on("data", (b) => (journal += b));
     let ouvert = false;
-    for (let i = 0; i < 120 && !ouvert; i++) {
+    for (let i = 0; i < 240 && !ouvert && p.exitCode === null; i++) {
       try {
         await fetch(`http://127.0.0.1:${port}/`, { signal: AbortSignal.timeout(1000) });
         ouvert = true;
@@ -270,7 +314,11 @@ if (process.argv.includes("--installation")) {
       }
     }
     verifier(`OpenClaw jetable lancé comme Helix le lance (port ${port}, jamais 18789 ni 18800) : il ouvre son port`, ouvert, journal.slice(-600));
-    p.kill("SIGTERM");
+    // Arrêt par son numéro : sous Windows, taskkill de System32 sur tout l'arbre, comme processus.ts.
+    if (windows) {
+      const tk = P.commandeArretArbre(p.pid, process.env);
+      spawnSync(tk.fichier, tk.args, { windowsHide: true });
+    } else p.kill("SIGTERM");
     await new Promise((ok) => {
       const m = setTimeout(() => {
         p.kill("SIGKILL");
@@ -281,8 +329,26 @@ if (process.argv.includes("--installation")) {
         ok();
       });
     });
+    if (sortieEssai) writeFileSync(join(sortieEssai, "passerelle-openclaw.txt"), journal);
   }
-  rmSync(racine, { recursive: true, force: true, maxRetries: 5 });
+  try {
+    rmSync(racine, { recursive: true, force: true, maxRetries: 10 });
+  } catch (err) {
+    // Windows : un fichier encore tenu (antivirus, processus qui finit de s'arrêter) ; le dossier temporaire de la machine jetable part avec elle.
+    console.log(`  (dossier jetable non effacé : ${err instanceof Error ? err.message : err})`);
+  }
+}
+
+/** Les fichiers d'un dossier, sur quelques niveaux (pour voir ce que npm a posé). */
+function lister(dossier, profondeur, prefixe = "") {
+  if (profondeur < 0) return [];
+  let entrees = [];
+  try {
+    entrees = readdirSync(dossier, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+  return entrees.flatMap((e) => [`${prefixe}${e.name}${e.isDirectory() ? "/" : ""}`, ...(e.isDirectory() ? lister(join(dossier, e.name), profondeur - 1, `${prefixe}${e.name}/`) : [])]);
 }
 
 console.log(`\n${reussis} vérification(s) réussie(s), ${echecs.length} échec(s).`);

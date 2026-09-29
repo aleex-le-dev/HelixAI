@@ -268,9 +268,17 @@ if (process.argv.includes("--installation")) {
     Object.assign(env, { TEMP: join(local, "Temp"), TMP: join(local, "Temp"), LOCALAPPDATA: local, APPDATA: join(maison, "AppData", "Roaming") });
   }
   console.log(`  (dossier personnel : ${maison})`);
+  /*
+   * `--deux-fois` : une seconde installation par-dessus la première, comme
+   * quand la personne clique « Réessayer » ou qu'une mise à jour réinstalle
+   * (Node déjà posé, OpenClaw déjà dans le préfixe). La dernière fait foi.
+   */
+  const passes = process.argv.includes("--deux-fois") ? 2 : 1;
   const code = `const i = await import("./gateway/src/installationOpenClaw.ts");
-    i.installerOpenClaw("essai", { apres: async () => {} });
-    for (;;) { await new Promise((r) => setTimeout(r, 2000)); const e = i.etatInstallation(); if (e.etape === "termine" || e.etape === "erreur") { console.log("ETAT " + JSON.stringify(e)); console.log("LANCEMENT " + JSON.stringify(i.lancementGere())); break; } }`;
+    for (let k = 0; k < ${passes}; k++) {
+      i.installerOpenClaw("essai", { apres: async () => {} });
+      for (;;) { await new Promise((r) => setTimeout(r, 2000)); const e = i.etatInstallation(); if (e.etape === "termine" || e.etape === "erreur") { console.log("PASSE " + k + " " + JSON.stringify(e)); if (k === ${passes} - 1) { console.log("ETAT " + JSON.stringify(e)); console.log("LANCEMENT " + JSON.stringify(i.lancementGere())); } break; } }
+    }`;
   const debutInstallation = Date.now();
   const r = spawnSync(process.execPath, ["--experimental-strip-types", "--no-warnings", "--input-type=module", "-e", code], { cwd: RACINE, env, encoding: "utf8", timeout: 30 * 60_000, maxBuffer: 64 * 1024 * 1024 });
   const sortie = `${r.stdout ?? ""}${r.stderr ?? ""}`;
@@ -284,7 +292,8 @@ if (process.argv.includes("--installation")) {
     const journaux = new Set([...sortie.matchAll(/complete log of this run can be found in:\s*(\S.*?)\s*$/gim)].map((m) => dirname(m[1].trim())));
     const cache = spawnSync(process.execPath, [join(donnees, "openclaw-moteur", "node", ...(windows ? [] : ["lib"]), "node_modules", "npm", "bin", "npm-cli.js"), "config", "get", "cache"], { env, encoding: "utf8" });
     if (cache.status === 0 && cache.stdout.trim()) journaux.add(join(cache.stdout.trim(), "_logs"));
-    if (process.env.LOCALAPPDATA) journaux.add(join(process.env.LOCALAPPDATA, "npm-cache", "_logs"));
+    for (const e of [env, process.env]) if (e.LOCALAPPDATA) journaux.add(join(e.LOCALAPPDATA, "npm-cache", "_logs"));
+    console.log(`  (journaux de npm cherchés : ${[...journaux].map((d) => `${d} ${existsSync(d) ? "présent" : "absent"}`).join(" ; ")} ; cache : ${cache.status} ${cache.stdout.trim()} ${String(cache.stderr ?? "").trim().slice(0, 200)})`);
     let n = 0;
     for (const d of journaux) {
       if (!existsSync(d)) continue;
@@ -296,6 +305,33 @@ if (process.argv.includes("--installation")) {
     const dependances = join(prefixe, "node_modules", "openclaw", "node_modules");
     const natifs = ["tree-sitter-bash", "koffi", "@lydell", "protobufjs", "@google"].flatMap((m) => [`== ${m}`, ...lister(join(dependances, m), 3).filter((l) => !/\.(d\.ts|md|ts|map)$/.test(l))]);
     writeFileSync(join(sortieEssai, "modules-natifs.txt"), natifs.join("\n"));
+    /*
+     * Le plus long chemin posé, compté depuis le dossier de données : sans
+     * « chemins longs » activés (réglage de Windows, éteint d'office), un
+     * chemin de plus de 260 caractères ne s'ouvre pas. Chez une personne, le
+     * dossier de données est `C:\Users\<nom>\.helix\data`.
+     */
+    let plusLong = "";
+    const parcourir = (d) => {
+      let entrees = [];
+      try {
+        entrees = readdirSync(d, { withFileTypes: true });
+      } catch {
+        return;
+      }
+      for (const e of entrees) {
+        const f = join(d, e.name);
+        if (f.length > plusLong.length) plusLong = f;
+        if (e.isDirectory() && !e.isSymbolicLink()) parcourir(f);
+      }
+    };
+    // Par la jonction `node`, comme npm y écrit (le dossier réel porte la version, 17 caractères de plus).
+    parcourir(prefixe);
+    const relatif = plusLong.slice(donnees.length);
+    const chezUnePersonne = "C:\\Users\\Jean-Baptiste Dupont\\.helix\\data".length + relatif.length;
+    const mesure = `plus long chemin posé : ${plusLong.length} caractères ici, ${relatif.length} sous le dossier de données, soit ${chezUnePersonne} pour « C:\\Users\\Jean-Baptiste Dupont\\.helix\\data »\n${relatif}`;
+    console.log(`  (${mesure.split("\n")[0]})`);
+    writeFileSync(join(sortieEssai, "chemins.txt"), mesure);
     const scripts = join(prefixe, "node_modules", "openclaw", "scripts");
     mkdirSync(join(sortieEssai, "scripts-openclaw"), { recursive: true });
     for (const f of ["preinstall-package-manager-warning.mjs", "postinstall-bundled-plugins.mjs"]) if (existsSync(join(scripts, f))) cpSync(join(scripts, f), join(sortieEssai, "scripts-openclaw", f));

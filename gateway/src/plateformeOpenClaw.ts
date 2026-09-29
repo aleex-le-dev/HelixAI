@@ -487,8 +487,15 @@ export function raisonNpm(sortie: string, version: string): string {
  * et ceux de Windows (`C:\Users\…`, `\\serveur\partage`).
  */
 export function sansChemins(texte: string): string {
+  /*
+   * Un dossier du chemin peut contenir des espaces (`C:\Users\Jean Dupont\…`,
+   * le cas ordinaire sous Windows) : on avale chaque dossier suivi d'un
+   * séparateur, espaces compris, et le dernier morceau jusqu'au premier blanc
+   * (29/09/2026 ; avant, « Dupont\.helix\… » restait à l'écran). Quitte à
+   * avaler quelques mots de plus : mieux vaut perdre un mot qu'un nom.
+   */
   return texte
-    .replace(/\b[A-Za-z]:[\\/][^\s"']*/g, "…")
-    .replace(/\\\\[^\s"']+/g, "…")
-    .replace(/(^|[\s"'(=])\/[^\s"')]+/g, "$1…");
+    .replace(/\b[A-Za-z]:[\\/](?:[^\\/"'\n]*[\\/])*[^\s"'\\/]*/g, "…")
+    .replace(/\\\\(?:[^\\/"'\n]*[\\/])*[^\s"'\\/]*/g, "…")
+    .replace(/(^|[\s"'(=])\/(?:[^/"'\n)]*\/)*[^\s"')/]*/g, "$1…");
 }

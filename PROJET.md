@@ -12,7 +12,7 @@ refaite à l'envers.
 |---|---|
 | Version | 2026.929.4 (`package.json`) |
 | Dernière mise à jour | 30 septembre 2026 |
-| Vérifié | `npm run securite` : 2241 contrôles, 0 échec (29/09/2026) ; `npm run typecheck` ; traductions à 100 % en anglais, chinois et japonais (interface 3 925 phrases, passerelle 1 503) ; essai Windows sur GitHub Actions ; `essai:cli`, `essai:vscode`, `essai:palmier` |
+| Vérifié | `npm run securite` : 2288 contrôles, 0 échec (30/09/2026) ; `npm run typecheck` ; relevés à 100 % dans les six catalogues (interface 3 928 phrases, passerelle 1 503 ; es, de, ar en copies provisoires de l'anglais tant que les traductions ne sont pas posées) ; essai Windows sur GitHub Actions ; `essai:cli`, `essai:vscode`, `essai:palmier` |
 | Reste à essayer | sur les vraies machines : § 5, « Ce qui reste à essayer sur les postes de Medhi » |
 | Documents liés | [ARCHITECTURE.md](ARCHITECTURE.md), [SECURITE.md](SECURITE.md), [SCREENS.md](SCREENS.md), [SIGNATURE.md](SIGNATURE.md), [README.md](README.md), [docs/GUIDE.md](docs/GUIDE.md) |
 

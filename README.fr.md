@@ -18,14 +18,17 @@
   <a href="README.md">English</a> ·
   <strong>Français</strong> ·
   <a href="README.zh.md">中文</a> ·
-  <a href="README.ja.md">日本語</a>
+  <a href="README.ja.md">日本語</a> ·
+  <a href="README.es.md">Español</a> ·
+  <a href="README.de.md">Deutsch</a> ·
+  <a href="README.ar.md">العربية</a>
 </p>
 
 <p align="center">
   <a href="LICENSE"><img alt="Licence : AGPL-3.0" src="https://img.shields.io/badge/licence-AGPL--3.0-blue" /></a>
   <a href="https://github.com/medhiclb/HelixAI/releases/latest"><img alt="Dernière version" src="https://img.shields.io/github/v/release/medhiclb/HelixAI?label=version" /></a>
   <img alt="Systèmes : macOS, Windows, Linux" src="https://img.shields.io/badge/syst%C3%A8mes-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey" />
-  <img alt="Interface : anglais, français, chinois, japonais" src="https://img.shields.io/badge/interface-EN%20%C2%B7%20FR%20%C2%B7%20ZH%20%C2%B7%20JA-success" />
+  <img alt="Interface : anglais, français, chinois, japonais, espagnol, allemand, arabe" src="https://img.shields.io/badge/interface-EN%20%C2%B7%20FR%20%C2%B7%20ZH%20%C2%B7%20JA%20%C2%B7%20ES%20%C2%B7%20DE%20%C2%B7%20AR-success" />
   <a href="https://github.com/medhiclb/HelixAI/discussions"><img alt="Discussions" src="https://img.shields.io/badge/discussions-bienvenue-8a63d2" /></a>
 </p>
 
@@ -66,7 +69,7 @@
 - **Open source, rien à acheter.** AGPL-3.0, aucun compte chez nous, aucune télémétrie. Chaque
   organisation installe et fait tourner sa propre instance.
 - **macOS, Windows et Linux.** Une même application pour les trois systèmes, en anglais, en
-  français, en chinois et en japonais.
+  français, en chinois, en japonais, en espagnol, en allemand et en arabe.
 - **Des agents qui continuent de travailler.** Des agents avec leurs propres bases de
   connaissances et des missions programmées tournent fenêtre fermée et laissent un compte rendu
   de chaque passage ; ce qui modifie quelque chose attend l'accord d'une personne, sauf si vous

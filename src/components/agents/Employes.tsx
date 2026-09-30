@@ -1459,7 +1459,7 @@ function Reglages({
         {confirmer ? (
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-sm text-foreground">
-              {t("Retirer")}{" "}{employe.nom}{" "}{t("? Ses missions, son espace et les conversations de chacun avec lui disparaissent.")}
+              {tf("Retirer {0} ? Ses missions, son espace et les conversations de chacun avec lui disparaissent.", employe.nom)}
             </span>
             <Button
               variant="destructive"
@@ -1480,7 +1480,7 @@ function Reglages({
           </div>
         ) : (
           <Button variant="ghost" size="sm" icon={Trash2} onClick={() => setConfirmer(true)}>
-            {t("Retirer")}{" "}{employe.nom}
+            {tf("Retirer {0}", employe.nom)}
           </Button>
         )}
         <Button

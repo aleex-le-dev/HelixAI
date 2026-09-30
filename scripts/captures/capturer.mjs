@@ -9,7 +9,7 @@
  *   node scripts/captures/capturer.mjs --langue zh --sortie /tmp/essai
  *   … --explorer                                              garde le dossier temporaire (journaux, écrans d'échec)
  *
- * Langues : en, fr, zh, ja (scenes/<langue>.mjs). Sorties : agents, chat,
+ * Langues : en, fr, zh, ja, es, de, ar (scenes/<langue>.mjs). Sorties : agents, chat,
  * code, compare, home, knowledge, training, usage (PNG 2560 × 1600, fenêtre
  * 1280 × 800 en densité 2, thème clair) et demo (GIF 1280 × 800, 18,6 s,
  * moins de 500 Ko, avec ffmpeg). Il faut Google Chrome (ou `CHROME`), ffmpeg
@@ -58,11 +58,8 @@ const arg = (nom, defaut) => {
   return i > 0 ? process.argv[i + 1] : defaut;
 };
 const LANGUE = arg("langue", "en");
-// es, de, ar (30/09/2026) : langues de l'interface, mais leurs scènes (scenes/<langue>.mjs) restent à écrire.
-const LANGUES_INTERFACE = ["en", "fr", "zh", "ja", "es", "de", "ar"];
-const LANGUES_AVEC_SCENES = ["en", "fr", "zh", "ja"];
-if (!LANGUES_INTERFACE.includes(LANGUE)) throw new Error(`Langue inconnue : ${LANGUE} (${LANGUES_INTERFACE.join(", ")})`);
-if (!LANGUES_AVEC_SCENES.includes(LANGUE)) throw new Error(`Pas encore de scènes pour « ${LANGUE} » : écrire scripts/captures/scenes/${LANGUE}.mjs sur le modèle de en.mjs (scènes existantes : ${LANGUES_AVEC_SCENES.join(", ")})`);
+const LANGUES = ["en", "fr", "zh", "ja", "es", "de", "ar"];
+if (!LANGUES.includes(LANGUE)) throw new Error(`Langue inconnue : ${LANGUE} (${LANGUES.join(", ")})`);
 const SORTIE = arg("sortie", join(RACINE, "docs", "images", ...(LANGUE === "en" ? [] : [LANGUE])));
 const TOUTES = ["home", "chat", "compare", "knowledge", "agents", "code", "training", "usage", "demo"];
 const SEULEMENT = arg("seulement", TOUTES.join(",")).split(",").map((s) => s.trim()).filter(Boolean);

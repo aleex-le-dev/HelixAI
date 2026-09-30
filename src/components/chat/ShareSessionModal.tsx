@@ -87,7 +87,7 @@ export function ShareSessionModal({
             <div className="flex gap-2">
               <Input
                 type="email"
-                placeholder="collegue@entreprise.fr"
+                placeholder={t("collegue@entreprise.fr")}
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 onKeyDown={(e) => {
@@ -217,7 +217,7 @@ export function ShareSessionModal({
               {isOwner && (
                 <button
                   type="button"
-                  aria-label={`Retirer ${person.email}`}
+                  aria-label={tf("Retirer {0}", person.email)}
                   onClick={() => {
                     unshareSession(sessionId, person.email);
                     refresh();

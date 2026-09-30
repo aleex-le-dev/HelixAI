@@ -89,7 +89,7 @@ export function CreerCompte() {
           <Input value={nom} autoComplete="off" onChange={(e) => setNom(e.target.value)} />
         </Field>
         <Field label={t("Adresse email")}>
-          <Input type="email" autoComplete="off" placeholder="collegue@entreprise.fr" value={email} onChange={(e) => setEmail(e.target.value)} />
+          <Input type="email" autoComplete="off" placeholder={t("collegue@entreprise.fr")} value={email} onChange={(e) => setEmail(e.target.value)} />
         </Field>
         <Field label={t("Mot de passe provisoire")}>
           <div className="flex gap-2">

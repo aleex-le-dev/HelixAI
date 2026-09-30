@@ -15,7 +15,7 @@ import { PanelCard } from "@/components/ui/PanelCard";
 import { IconButton } from "@/components/ui/IconButton";
 import { dureeCourte } from "@/lib/code";
 import { enArrierePlan, type ActionCode, type FichierCode, type SuiviCode, type TacheCode } from "@/lib/suiviCode";
-import { locale, t, tf } from "@/lib/i18n";
+import { enumerer, locale, t, tf } from "@/lib/i18n";
 
 /**
  * Le panneau de suivi de l'écran Code : ce que l'agent fait en ce moment, sa
@@ -123,13 +123,11 @@ function EnCeMoment({ suivi, maintenant }: { suivi: SuiviCode; maintenant: numbe
             </div>
           )}
           <p className="text-xs text-muted-foreground">
-            {[
+            {enumerer([
               p.progression !== undefined ? tf("{0} % lus", p.progression) : undefined,
               p.jetons ? tf("environ {0} jetons", (p.jetons >= 1000 ? Math.round(p.jetons / 1000) * 1000 : p.jetons).toLocaleString(locale())) : undefined,
               p.file ? tf("{0} en file chez le modèle", p.file) : undefined,
-            ]
-              .filter(Boolean)
-              .join(" · ")}
+            ])}
           </p>
           {maintenant - p.depuis > 20_000 && (
             <p className="text-[11px] leading-relaxed text-muted-foreground">
@@ -193,7 +191,7 @@ function Actions({ actions, maintenant }: { actions: ActionCode[]; maintenant: n
               {a.sous.slice(-6).map((x) => (
                 <li key={x.callID} className="flex items-start gap-1.5 text-muted-foreground">
                   <IconeEtat etat={x.etat} className="mt-0.5" />
-                  <span className="min-w-0 flex-1 truncate" title={[x.libelle, x.cible].filter(Boolean).join(" · ")}>
+                  <span className="min-w-0 flex-1 truncate" title={enumerer([x.libelle, x.cible])}>
                     {x.libelle}
                     {x.cible && <span className="opacity-80"> · {x.cible}</span>}
                   </span>

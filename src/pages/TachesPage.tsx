@@ -75,7 +75,7 @@ import {
 import { useFormats } from "@/lib/formats";
 import { features } from "@/config/branding";
 import { libelleOutil } from "@/lib/libellesOutils";
-import { t, tf } from "@/lib/i18n";
+import { locale, sens, t, tf } from "@/lib/i18n";
 import { TachesProgrammees } from "@/components/taches/TachesProgrammees";
 
 /* ========================================================================== */
@@ -320,7 +320,16 @@ const priorityClass: Record<TaskPriority, string> = {
   haute: "bg-destructive/15 text-destructive",
 };
 
-const dayNames = ["LUN", "MAR", "MER", "JEU", "VEN", "SAM", "DIM"];
+/*
+ * Les jours de la semaine, du lundi au dimanche, dans la langue affichée : ils
+ * étaient écrits en français (« LUN », « MAR ») et le restaient dans les six
+ * autres langues (vu à l'écran le 30/09/2026, en arabe). Le 1er janvier 2024
+ * est un lundi. En arabe, l'abréviation n'existe pas : le petit calendrier
+ * prend la lettre du jour, le grand son nom entier.
+ */
+const nomsDesJours = (forme: "short" | "narrow"): string[] =>
+  Array.from({ length: 7 }, (_, i) => new Date(2024, 0, 1 + i).toLocaleDateString(locale(), { weekday: forme }).replace(/\.$/, ""));
+const joursCourts = (): string[] => (sens() === "rtl" ? nomsDesJours("narrow") : nomsDesJours("short").map((n) => n.slice(0, 2)));
 
 /* ========================================================================== */
 /* Calendrier : calculs de jours                                               */
@@ -434,9 +443,9 @@ function MiniCalendrier({
         />
       </div>
       <div className="grid grid-cols-7 gap-0.5 text-center">
-        {dayNames.map((n) => (
-          <span key={n} className="py-1 text-[10px] font-medium text-muted-foreground">
-            {n.slice(0, 2)}
+        {joursCourts().map((n, i) => (
+          <span key={i} className="py-1 text-[10px] font-medium uppercase text-muted-foreground">
+            {n}
           </span>
         ))}
         {jours.map((d) => {
@@ -945,7 +954,7 @@ function TaskCard({
         </button>
         <button
           type="button"
-          aria-label={`Supprimer ${task.title}`}
+          aria-label={tf("Supprimer {0}", task.title)}
           onClick={onDelete}
           className="hidden shrink-0 rounded p-0.5 text-muted-foreground transition-colors hover:text-destructive group-hover:block"
         >
@@ -1274,7 +1283,7 @@ function CalendarView({
           />
           <IconButton
             icon={ChevronRight}
-            label={mode === "semaine" ? "Semaine suivante" : t("Mois suivant")}
+            label={mode === "semaine" ? t("Semaine suivante") : t("Mois suivant")}
             size={30}
             iconSize={16}
             onClick={() => avancer(1)}
@@ -1307,9 +1316,9 @@ function CalendarView({
       )}
 
       <div className="grid grid-cols-7 rounded-t-xl border border-b-0 border-border">
-        {dayNames.map((n, i) => (
+        {nomsDesJours("short").map((n, i) => (
           <span
-            key={n}
+            key={i}
             className={cn(
               "py-2 text-center text-[11px] font-medium uppercase tracking-wide text-muted-foreground",
               i < 6 && "border-e border-border",

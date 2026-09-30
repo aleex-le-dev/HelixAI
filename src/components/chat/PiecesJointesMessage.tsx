@@ -1,6 +1,6 @@
 import { FileCode, FileImage, FileSpreadsheet, FileText, Presentation } from "lucide-react";
 import type { PieceMontree } from "@/hooks/useChat";
-import { t, taille } from "@/lib/i18n";
+import { enumerer, t, taille } from "@/lib/i18n";
 
 /**
  * Les fichiers joints à une question, montrés dans le message de la personne.
@@ -35,7 +35,7 @@ export function PiecesJointesMessage({ pieces }: { pieces: PieceMontree[] }) {
       {pieces.map((piece, i) => {
         const etat =
           piece.type === "image" ? t("image") : piece.tronque ? t("début seulement") : t("lu en entier");
-        const details = [typeof piece.taille === "number" ? taille(piece.taille) : "", etat].filter(Boolean).join(" · ");
+        const details = enumerer([typeof piece.taille === "number" ? taille(piece.taille) : "", etat]);
         return (
           <li
             key={`${piece.nom}-${i}`}

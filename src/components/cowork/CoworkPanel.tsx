@@ -12,7 +12,7 @@ import { useMcp } from "@/hooks/useMcp";
 import { PreparerCowork } from "@/components/cowork/PreparerCowork";
 import { Competences } from "@/components/cowork/Competences";
 import { libelleOutil } from "@/lib/libellesOutils";
-import { t } from "@/lib/i18n";
+import { isolerLtr, t } from "@/lib/i18n";
 import { useComputer } from "@/hooks/useComputer";
 import { ecranMachine } from "@/lib/machine";
 import { Modal } from "@/components/ui/Modal";
@@ -138,7 +138,8 @@ export function CoworkPanel({ files }: { files: TouchedFile[] }) {
         )}
         {workspace && (
           <p className="mt-2 truncate text-[11px] text-muted-foreground" title={workspace}>
-            {t("Dossier :")}{" "}{workspace}
+            {/* Le chemin reste d'un seul tenant, de gauche à droite : en arabe, sa barre de tête se détachait du reste (30/09/2026). */}
+            {t("Dossier :")}{" "}{isolerLtr(workspace)}
           </p>
         )}
       </PanelCard>

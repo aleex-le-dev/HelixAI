@@ -81,7 +81,7 @@ export function InviterCollegue() {
           <div className="flex gap-2">
             <Input
               type="email"
-              placeholder="collegue@entreprise.fr"
+              placeholder={t("collegue@entreprise.fr")}
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               onKeyDown={(e) => {

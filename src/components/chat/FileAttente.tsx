@@ -4,7 +4,7 @@ import type { EnvoiEnFile } from "@/hooks/useChat";
 import { LIMITE_FILE, type EtatFile } from "@/lib/fileAttente";
 import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/cn";
-import { t, tf } from "@/lib/i18n";
+import { enumerer, t, tf } from "@/lib/i18n";
 
 interface FileAttenteProps {
   file: EtatFile<EnvoiEnFile>;
@@ -189,7 +189,7 @@ function MessageEnAttente({
           {details.length > 0 && (
             <p className="mt-0.5 flex min-w-0 items-center gap-1 text-xs text-muted-foreground">
               <Icone size={12} strokeWidth={1.75} className="shrink-0" />
-              <span className="truncate">{details.join(" · ")}</span>
+              <span className="truncate">{enumerer(details)}</span>
             </p>
           )}
         </div>

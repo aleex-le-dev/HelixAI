@@ -309,7 +309,7 @@ function DocumentsAgent({ employe }: { employe: Employe }) {
               </span>
               <button
                 type="button"
-                aria-label={`Retirer ${d.nom}`}
+                aria-label={tf("Retirer {0}", d.nom)}
                 disabled={Boolean(occupe)}
                 onClick={() => {
                   setErreur(null);

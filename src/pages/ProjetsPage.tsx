@@ -145,7 +145,7 @@ export function ProjetsPage() {
                   {project.ownerId === me.id && (
                     <button
                       type="button"
-                      aria-label={`Supprimer ${project.name}`}
+                      aria-label={tf("Supprimer {0}", project.name)}
                       onClick={() => remove(project.id)}
                       className="hidden shrink-0 rounded p-1 text-muted-foreground transition-colors hover:text-destructive group-hover:block"
                     >
@@ -476,7 +476,7 @@ function MembersModal({
             <div className="flex gap-2">
               <Input
                 type="email"
-                placeholder="collegue@entreprise.fr"
+                placeholder={t("collegue@entreprise.fr")}
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 onKeyDown={(e) => {
@@ -556,7 +556,7 @@ function MembersModal({
             {canManage && member.role !== "proprietaire" && (
               <button
                 type="button"
-                aria-label={`Retirer ${member.email}`}
+                aria-label={tf("Retirer {0}", member.email)}
                 onClick={() => onRevoke(member.email)}
                 className="shrink-0 rounded p-1 text-muted-foreground transition-colors hover:text-destructive"
               >

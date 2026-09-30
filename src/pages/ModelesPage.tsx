@@ -13,7 +13,7 @@ import { marqueDuModele } from "@/components/settings/marquesConnecteurs";
 import { SOURCE_NOTES } from "../../gateway/src/notesModeles.ts";
 import { formaterDate } from "@/lib/formats";
 import { cn } from "@/lib/cn";
-import { t, tf, locale } from "@/lib/i18n";
+import { enumerer, locale, t, tf } from "@/lib/i18n";
 import {
   demanderInstallation,
   lireCatalogue,
@@ -151,14 +151,14 @@ export function ModelesPage() {
 
   const machine = donnees?.machine;
   const resumeMachine = machine
-    ? [
+    ? enumerer([
         tf("{0} Go de mémoire", nombre(machine.totalMemoryGb)),
         machine.appleSilicon
           ? t("puce Apple (mémoire partagée avec la carte graphique)")
           : machine.gpuVramGb !== undefined
             ? tf("carte graphique de {0} Go", nombre(machine.gpuVramGb))
             : t("sans carte graphique NVIDIA"),
-      ].join(" · ")
+      ])
     : "";
 
   const modeleEnCours = etat && EN_COURS.includes(etat.phase) ? modeles.find((m) => m.key === etat.model) : undefined;
@@ -380,16 +380,16 @@ function FicheModele({
               <span className="rounded-full bg-accent/15 px-1.5 py-0.5 text-[10px] font-medium text-accent">{t("Recommandé")}</span>
             )}
           </p>
-          <p className="text-xs text-muted-foreground">{[m.editeur, pays].filter(Boolean).join(" · ")}</p>
+          <p className="text-xs text-muted-foreground">{enumerer([m.editeur, pays])}</p>
         </div>
       </div>
 
       <p className="text-xs text-muted-foreground">
-        {[
+        {enumerer([
           m.licence,
           tf("{0} Go", nombre(m.downloadGb)),
           m.eci !== undefined ? tf("Note ECI {0}", m.eci.toLocaleString(locale())) : t("sans note publiée"),
-        ].join(" · ")}
+        ])}
       </p>
 
       <div className="flex flex-wrap gap-1.5">

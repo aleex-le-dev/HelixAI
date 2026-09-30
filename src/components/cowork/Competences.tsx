@@ -58,7 +58,7 @@ export function Competences() {
               </span>
               <button
                 type="button"
-                aria-label={`Modifier ${c.nom}`}
+                aria-label={tf("Modifier {0}", c.nom)}
                 className="ms-auto shrink-0 text-muted-foreground opacity-0 transition-opacity hover:text-foreground focus-visible:opacity-100 group-hover:opacity-100"
                 onClick={() => setOuverte(c)}
               >

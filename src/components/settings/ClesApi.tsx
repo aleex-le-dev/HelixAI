@@ -20,7 +20,7 @@ import {
 import { listerBases, type Base } from "@/lib/connaissances";
 import { fetchModels } from "@/lib/gateway";
 import { formaterDate, formaterMomentCourt, useFormats } from "@/lib/formats";
-import { t, tf } from "@/lib/i18n";
+import { enumerer, t, tf } from "@/lib/i18n";
 import { copierTexte, selectionner } from "@/lib/pressePapiers";
 
 /**
@@ -237,7 +237,7 @@ function LigneCle({ cle, onChange }: { cle: CleApi; onChange: () => void }) {
         )}
       </div>
       <p className="mt-2 text-xs text-muted-foreground">
-        {[
+        {enumerer([
           tf("Créée le {0}", formaterDate(cle.creee)),
           cle.derniereUtilisation ? tf("dernière utilisation : {0}", formaterMomentCourt(cle.derniereUtilisation)) : t("jamais utilisée"),
           cle.expire === null
@@ -245,7 +245,7 @@ function LigneCle({ cle, onChange }: { cle: CleApi; onChange: () => void }) {
             : cle.expiree
               ? tf("expirée le {0}", formaterDate(cle.expire))
               : tf("expire le {0}", formaterDate(cle.expire)),
-        ].join(" · ")}
+        ])}
       </p>
       <div className="mt-3 flex flex-wrap items-center justify-end gap-2">
         {renommer !== null ? (

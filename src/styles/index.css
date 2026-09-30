@@ -98,6 +98,19 @@
   }
 
   /*
+   * Les en-têtes de tableau suivent l'alignement de leur ligne. Le navigateur
+   * les centre tant que la ligne ne demande pas autre chose, et `text-start`,
+   * qui est la valeur par défaut, ne compte pas pour lui : depuis le passage
+   * de `text-left` à `text-start` (sens d'écriture), « Nom », « Modèle » ou
+   * « Document » flottaient au milieu de leur colonne, dans toutes les langues
+   * (vu à l'écran le 30/09/2026 : Fichiers, bases de connaissances, Mon usage,
+   * comparaison des modèles).
+   */
+  :where(th) {
+    text-align: inherit;
+  }
+
+  /*
    * Sens d'écriture (30/09/2026). L'arabe s'écrit de droite à gauche :
    * `dir="rtl"` est posé sur <html> par src/lib/i18n.ts, et la mise en page
    * suit parce qu'elle est écrite en propriétés logiques (ms-, pe-, start-,

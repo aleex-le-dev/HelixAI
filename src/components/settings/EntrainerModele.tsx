@@ -40,6 +40,7 @@ import {
   type Projet,
   type Travail,
 } from "@/lib/entrainement";
+import { formaterDate } from "@/lib/formats";
 import { locale, t, tf, taille } from "@/lib/i18n";
 
 /**
@@ -556,7 +557,7 @@ function EtapeEntrainer({ projet, etat, occupe, agir }: { projet: Projet; etat: 
       {e && (
         <InfoBox tone={e.etat === "fini" ? "info" : "warning"} leading={<Info size={15} strokeWidth={1.75} />}>
           {e.etat === "fini"
-            ? tf("Entraîné le {0} en {1} : {2} exemples appris, {3} pas.", new Date(e.date).toLocaleDateString(), duree(e.secondes), e.exemplesAppris, e.pas)
+            ? tf("Entraîné le {0} en {1} : {2} exemples appris, {3} pas.", formaterDate(e.date), duree(e.secondes), e.exemplesAppris, e.pas)
             : e.etat === "arrete"
               ? t("Entraînement arrêté avant la fin : rien n'a été gardé.")
               : tf("L'entraînement a échoué : {0}", e.message ?? "")}
@@ -631,7 +632,7 @@ function EtapeInstaller({ projet, occupe, agir }: { projet: Projet; occupe: bool
       {p ? (
         <>
           <p className="text-sm text-foreground">
-            {tf("Installé le {0} sous le nom « {1} » ({2}).", new Date(p.date).toLocaleDateString(), p.cle ?? p.nom, taille(p.octets))}
+            {tf("Installé le {0} sous le nom « {1} » ({2}).", formaterDate(p.date), p.cle ?? p.nom, taille(p.octets))}
           </p>
           {!p.cle && <p className="text-sm text-muted-foreground">{t("LM Studio ne l'a pas encore listé : il peut falloir rouvrir LM Studio.")}</p>}
           <Button variant="secondary" icon={Trash2} disabled={occupe} onClick={() => void agir(() => retirerModele(projet.id))}>

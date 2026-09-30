@@ -14,7 +14,7 @@ import { currentUser } from "@/lib/store/identity";
 import { newId } from "@/lib/store/storage";
 import { notifySessionsChanged } from "@/hooks/useSessions";
 import { creerDossier, importerDocument } from "@/lib/bibliotheque";
-import { t, tf, locale } from "@/lib/i18n";
+import { enumerer, locale, t, tf } from "@/lib/i18n";
 
 /**
  * Place que les Chats peuvent occuper sur ce poste, en caractères.
@@ -459,12 +459,10 @@ export function ImporterChats() {
                   <span className="min-w-0">
                     <span className="text-foreground">{p.nom}</span>
                     <span className="ms-2 text-xs text-muted-foreground">
-                      {[
+                      {enumerer([
                         p.instructions ? t("instructions") : "",
                         p.documents.length ? tf("{0} document(s)", p.documents.length) : "",
-                      ]
-                        .filter(Boolean)
-                        .join(" · ")}
+                      ])}
                     </span>
                   </span>
                 </label>

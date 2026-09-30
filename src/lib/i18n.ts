@@ -147,6 +147,19 @@ export function isolerLtr(texte: string): string {
   return sens() === "rtl" && texte ? `\u2066${texte}\u2069` : texte;
 }
 
+/**
+ * Des mentions courtes mises bout \u00e0 bout : \u00ab Apache 2.0 \u00b7 7 Go \u00b7 Note ECI 139 \u00bb.
+ * Les mentions vides sont \u00e9cart\u00e9es. En arabe, chacune est isol\u00e9e (U+2068 et
+ * U+2069) et garde son propre sens : sans cela, le \u00ab 7 \u00bb de \u00ab 7 Go \u00bb partait
+ * avec \u00ab Apache 2.0 \u00bb \u00e0 l'autre bout de la ligne, loin de son unit\u00e9 (vu \u00e0
+ * l'\u00e9cran le 30/09/2026, fiches des mod\u00e8les). Rien n'est ajout\u00e9 dans les six
+ * langues qui s'\u00e9crivent de gauche \u00e0 droite.
+ */
+export function enumerer(morceaux: readonly (string | false | null | undefined)[], separateur = " \u00b7 "): string {
+  const dits = morceaux.filter((m): m is string => Boolean(m));
+  return sens() === "rtl" ? dits.map((m) => `\u2068${m}\u2069`).join(separateur) : dits.join(separateur);
+}
+
 /** Une langue a-t-elle été choisie, ou suit-on encore le système ? */
 export const langueChoisie = (): boolean => langueEnregistree() !== null;
 

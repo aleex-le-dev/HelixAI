@@ -121,7 +121,13 @@ function LigneSession({
         ) : (
           <HardDrive size={14} strokeWidth={1.75} className="shrink-0" />
         )}
-        <span className="min-w-0 flex-1 truncate">{session.title}</span>
+        {/*
+         * `dir="auto"` : un titre trop long se coupe à sa fin, dans son propre
+         * sens. Sans lui, un titre en anglais dans l'interface en arabe perdait
+         * son début (« …t in English please, with », vu le 30/09/2026). Il reste
+         * rangé du côté où commence la liste.
+         */}
+        <span dir="auto" className="min-w-0 flex-1 truncate ltr:text-left rtl:text-right">{session.title}</span>
         {(session.visibility !== "prive" || (session.sharedWith ?? []).length > 0) && (
           <Users2 size={13} strokeWidth={1.75} className="shrink-0 text-accent" aria-label={t("Partagé")} />
         )}

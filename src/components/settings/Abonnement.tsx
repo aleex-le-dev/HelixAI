@@ -291,9 +291,12 @@ function CarteFormule({ formule, periode }: { formule: Formule; periode: Periode
           ))}
         </dl>
         <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
-          {tf("Environ {0} échanges de Chat par jour avec le modèle polyvalent", entier(echangesParJour(jetonsInclus(formule, repere))))}
-          {", "}
-          {tf("ou environ {0} tâches d'agent ou de Code par mois.", entier(tachesParMois(jetonsInclus(formule, repere))))}
+          {/* Une seule phrase : la virgule collée entre deux moitiés restait latine en arabe, en chinois et en japonais (30/09/2026). */}
+          {tf(
+            "Environ {0} échanges de Chat par jour avec le modèle polyvalent, ou environ {1} tâches d'agent ou de Code par mois.",
+            entier(echangesParJour(jetonsInclus(formule, repere))),
+            entier(tachesParMois(jetonsInclus(formule, repere))),
+          )}
         </p>
       </div>
 

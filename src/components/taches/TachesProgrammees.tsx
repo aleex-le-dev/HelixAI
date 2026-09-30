@@ -22,7 +22,7 @@ import { Button } from "@/components/ui/Button";
 import { Field, Input } from "@/components/ui/Field";
 import { InfoBox } from "@/components/ui/InfoBox";
 import { formaterDate } from "@/lib/formats";
-import { t, tf } from "@/lib/i18n";
+import { locale, t, tf } from "@/lib/i18n";
 
 /**
  * Les tâches programmées : une consigne, un rythme, et l'instance l'exécute
@@ -44,7 +44,7 @@ function rythmeDe(f: typeof vide): Rythme {
 
 const quandLisible = (iso: string) => {
   const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? "" : d.toLocaleString(undefined, { weekday: "long", day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" });
+  return Number.isNaN(d.getTime()) ? "" : d.toLocaleString(locale(), { weekday: "long", day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" });
 };
 
 

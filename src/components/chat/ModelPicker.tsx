@@ -30,7 +30,7 @@ import { cn } from "@/lib/cn";
 import { useModels } from "@/hooks/useModels";
 import { lieuDuModele } from "@/lib/fournisseurs";
 import type { GatewayModel } from "@/lib/gateway";
-import { t, tf, taille, locale } from "@/lib/i18n";
+import { enumerer, locale, t, taille, tf } from "@/lib/i18n";
 import {
   installerModele,
   lireInstallables,
@@ -434,15 +434,13 @@ export function ModelBehaviorPicker({
                                 >
                                   {celuiCi
                                     ? installation?.message
-                                    : [
+                                    : enumerer([
                                         m.eci !== undefined
                                           ? tf("Note ECI {0}", m.eci.toLocaleString(locale()))
                                           : t("sans note publiée"),
                                         tf("{0} Go", m.downloadGb.toLocaleString(locale())),
                                         m.vision ? t("images") : "",
-                                      ]
-                                        .filter(Boolean)
-                                        .join(" · ")}
+                                      ])}
                                 </p>
                               </div>
                               <button

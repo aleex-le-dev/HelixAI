@@ -70,7 +70,7 @@ import {
   type Segment,
   type Visibilite,
 } from "@/lib/reunions";
-import { t, tf } from "@/lib/i18n";
+import { enumerer, t, tf } from "@/lib/i18n";
 import { nomDuPays } from "@/lib/fournisseurs";
 import { copierTexte } from "@/lib/pressePapiers";
 
@@ -206,7 +206,8 @@ export function ReunionsPage() {
             {t("Envoyer le bot")}
           </Button>
           <Button variant="secondary" icon={Mic} onClick={() => void demarrerMicro()} disabled={Boolean(enregistrement) || !etat}>
-            {t("Enregistrer")}
+            {/* Pas « Enregistrer » seul : cette phrase sert aux boutons de sauvegarde, et se lisait « Save », « Speichern », « حفظ » ici (30/09/2026). */}
+            {t("Enregistrer au micro")}
           </Button>
           <Button variant="secondary" icon={Upload} onClick={() => choixFichier.current?.click()} disabled={Boolean(import_) || !etat}>
             {t("Importer")}
@@ -677,13 +678,11 @@ function DetailReunion({ id, onRetour }: { id: string; onRetour: () => void }) {
           )}
           <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
             <span>
-              {[
+              {enumerer([
                 formaterDateHeure(r.createdAt),
                 dureePlaisante(r.dureeSecondes),
                 r.source === "bot" ? t("Bot de réunion") : r.source === "import" ? t("Importée") : t("Micro"),
-              ]
-                .filter(Boolean)
-                .join(" · ")}
+              ])}
             </span>
             <span className="inline-flex items-center gap-1">
               {r.visibilite === "organisation" ? (

@@ -299,7 +299,14 @@ export function BibliothequePage() {
           }
         />
       ) : (
-        <div className="mt-4 overflow-x-auto">
+        /*
+         * La marge du bas, reprise aussitôt (`pb-56 -mb-56`) : une zone qui
+         * défile en largeur coupe aussi en hauteur, et le menu « … » d'une des
+         * dernières lignes s'ouvrait à moitié, à faire défiler dans le tableau
+         * (vu à l'écran le 30/09/2026, trois fichiers : « Déplacer » et
+         * « Supprimer » hors de vue). Le menu a maintenant la place de s'ouvrir.
+         */
+        <div className="-mb-56 mt-4 overflow-x-auto pb-56">
           <table className="w-full min-w-[640px] text-sm">
             <thead>
               <tr className="border-b border-border text-start text-xs text-muted-foreground">
@@ -455,7 +462,7 @@ function Ligne({
         <div className="flex items-center gap-2.5">
           <button
             type="button"
-            aria-label={e.favori ? tf("Retirer {0} des favoris", e.nom) : `Mettre ${e.nom} en favori`}
+            aria-label={e.favori ? tf("Retirer {0} des favoris", e.nom) : tf("Mettre {0} en favori", e.nom)}
             onClick={onFavori}
             className={cn(
               "rounded p-0.5 transition-colors",

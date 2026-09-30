@@ -682,7 +682,7 @@ export function LoginPage({ onSignedIn }: { onSignedIn: () => void }) {
               <Input
                 type="email"
                 value={email}
-                placeholder="marie.durand@entreprise.fr"
+                placeholder={t("marie.durand@entreprise.fr")}
                 /*
                  * Sur invitation, l'adresse est celle du code : l'instance la
                  * refuserait de toute façon différente, autant ne pas laisser

@@ -1157,7 +1157,7 @@ function Activite({ employe }: { employe: Employe }) {
                 <p className="text-sm font-medium text-foreground">{x.mission}</p>
                 <p className="text-xs text-muted-foreground">
                   {STATUT_EXECUTION[x.statut] ?? x.statut} · {x.quand ? formaterDateHeure(x.quand) : ""}
-                  {x.dureeMs ? ` · ${Math.round(x.dureeMs / 1000)} s` : ""}
+                  {x.dureeMs ? ` · ${tf("{0} s", Math.round(x.dureeMs / 1000))}` : ""}
                 </p>
               </div>
               {x.resume && <TexteRiche texte={x.resume} className="mt-2 text-sm text-muted-foreground" />}

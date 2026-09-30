@@ -295,6 +295,7 @@
   "{0} fichiers dépassent": "{0} 个文件超过",
   "{0} Go": "{0} GB",
   "{0} Go de mémoire": "{0} GB 内存",
+  "{0} h {1}": "{0} 小时 {1} 分",
   "{0} h {1} min": "{0} 小时 {1} 分钟",
   "{0} invités": "{0} 位受邀者",
   "{0} jetons économisés sur cette session": "本次会话已节省 {0} 个 token",

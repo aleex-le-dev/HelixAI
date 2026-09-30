@@ -146,7 +146,7 @@ export function dureePlaisante(secondes?: number): string {
   if (!secondes) return "";
   const h = Math.floor(secondes / 3600);
   const m = Math.round((secondes % 3600) / 60);
-  return h > 0 ? `${h} h ${String(m).padStart(2, "0")}` : `${Math.max(1, m)} min`;
+  return h > 0 ? tf("{0} h {1}", h, String(m).padStart(2, "0")) : tf("{0} min", Math.max(1, m));
 }
 
 export function horodatage(secondes: number): string {

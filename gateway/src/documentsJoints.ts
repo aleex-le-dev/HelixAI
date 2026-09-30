@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { t, tf } from "./langue.ts";
+import { lister, t, tf } from "./langue.ts";
 import { phraseLangue } from "./plan.ts";
 
 /**
@@ -397,7 +397,7 @@ export async function integrerDocuments(messages: unknown[], c: Contexte): Promi
     place = placeSansQuestion;
     placeAnciens = placeSans;
     const noms = [...(actuel?.documents ?? []), ...anciens.flatMap((a) => a.documents)].map((d) => d.nom);
-    annonces.push(tf("Pour lire « {0} », {1} répond cette fois sans outils : ils prenaient la place du document.", [...new Set(noms)].join(", "), c.modele));
+    annonces.push(tf("Pour lire « {0} », {1} répond cette fois sans outils : ils prenaient la place du document.", lister([...new Set(noms)]), c.modele));
   }
 
   if (actuel) {
@@ -522,7 +522,7 @@ export async function integrerDocuments(messages: unknown[], c: Contexte): Promi
     }
   }
   if (oublies.length > 0) {
-    annonces.push(tf("Faute de place, {0} ne relit pas {1}, joint plus haut : joignez-le de nouveau pour une question qui en dépend.", c.modele, oublies.map((n) => `« ${n} »`).join(", ")));
+    annonces.push(tf("Faute de place, {0} ne relit pas {1}, joint plus haut : joignez-le de nouveau pour une question qui en dépend.", c.modele, lister(oublies.map((n) => `« ${n} »`))));
     journal.push(`${oublies.length} document(s) d'avant non repris`);
   }
   if (repris.length > 0) journal.push(`${repris.length} document(s) d'avant repris`);

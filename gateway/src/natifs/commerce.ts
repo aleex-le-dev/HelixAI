@@ -7,7 +7,7 @@ import { estAdministrateur } from "../roles.ts";
 import { lookup } from "node:dns/promises";
 import { interne } from "../sortieReseau.ts";
 import { ErreurNatif, messageUtilisateur } from "../oauthNatif.ts";
-import { avecLangueDe, langue, t, tf, type Langue } from "../langue.ts";
+import { avecLangueDe, langue, lister, t, tf, type Langue } from "../langue.ts";
 import { refusLisible } from "../refusOauth.ts";
 
 /**
@@ -916,7 +916,7 @@ async function essayer(id: IdCommerce, qui: string): Promise<Compte> {
       if (r.statut === 403) manquent.push(ressource);
       else if (r.statut !== 200) throw new ErreurNatif("api", tf("{0} a refusé la requête (code {1}).", nom, r.statut), r.statut >= 500);
     }
-    if (manquent.length) throw new ErreurNatif("portee", tf("Cette clé ne permet pas de lire : {0}. Donnez-lui « Lecture » sur ces ressources dans le Dashboard Stripe, puis recommencez.", manquent.join(", ")));
+    if (manquent.length) throw new ErreurNatif("portee", tf("Cette clé ne permet pas de lire : {0}. Donnez-lui « Lecture » sur ces ressources dans le Dashboard Stripe, puis recommencez.", lister(manquent)));
     // Le nom du compte, si la clé permet de le lire ; sinon le mode suffit.
     const moi = await lire("/v1/account");
     const profil = (moi.json.business_profile ?? {}) as { name?: unknown };

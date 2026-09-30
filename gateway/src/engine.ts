@@ -7,7 +7,7 @@ import { homedir } from "node:os";
 import { isAbsolute, join, resolve, sep } from "node:path";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
-import { t, tf } from "./langue.ts";
+import { lister, t, tf } from "./langue.ts";
 import { workspace } from "./mcp.ts";
 import { tarDuSysteme } from "./pythonPrive.ts";
 
@@ -585,7 +585,7 @@ async function installerLlmster(onProgress: (p: EngineProgress) => void): Promis
     throw new Error(
       tf(
         "Il manque au système une bibliothèque dont le moteur a besoin ({0}). Installez-la, puis réessayez : sudo apt-get install -y libatomic1 libgomp1 (Debian, Ubuntu), ou sudo dnf install -y libatomic libgomp (Fedora).",
-        manquantes.join(", "),
+        lister(manquantes),
       ),
     );
   }

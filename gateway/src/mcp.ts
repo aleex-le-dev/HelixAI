@@ -12,7 +12,7 @@ import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
 import { UnauthorizedError } from "@modelcontextprotocol/sdk/client/auth.js";
 import { ErrorCode, McpError } from "@modelcontextprotocol/sdk/types.js";
 import { deployment } from "./deployment.ts";
-import { t, tf } from "./langue.ts";
+import { lister, t, tf } from "./langue.ts";
 import { cheminProtegeDans, filtrerResultat } from "./zonesProtegees.ts";
 import { assurerNodePrive, DEPENDANCES_NPM_AVANT, nodePriveInstallable, npxPrive } from "./installationOpenClaw.ts";
 import { retenirOutils } from "./natifs/projetsRegles.ts";
@@ -882,7 +882,7 @@ export function status(): McpServerStatus[] {
      */
     description:
       s.config.id === "fichiers"
-        ? tf("Lecture et écriture dans {0}", espacesCourants.join(", "))
+        ? tf("Lecture et écriture dans {0}", lister(espacesCourants))
         : t(s.config.description),
     running: Boolean(s.client),
     toolCount: s.tools.length,

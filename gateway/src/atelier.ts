@@ -1508,7 +1508,7 @@ segments, _ = modele.transcribe(numpy.zeros(16000, dtype=numpy.float32), languag
 list(segments)
 sys.stdout.write("@@HELIX@@" + json.dumps({"ok": True}))
 `;
-import { t, tf } from "./langue.ts";
+import { lister, t, tf } from "./langue.ts";
 
 /** Empreinte SHA-256 d'un fichier, lu par morceaux (un modèle pèse plus d'un Go). */
 async function sha256Fichier(chemin: string): Promise<string> {
@@ -1663,7 +1663,7 @@ async function executerDictee(onProgres: (p: ProgresDictee) => void): Promise<Bi
   }
   if (differents.length) {
     await rm(dossierChoisi, { recursive: true, force: true });
-    throw new Error(tf("Le modèle téléchargé ne correspond pas à la version attendue ({0}) : il a été effacé. Réessayez.", differents.join(", ")));
+    throw new Error(tf("Le modèle téléchargé ne correspond pas à la version attendue ({0}) : il a été effacé. Réessayez.", lister(differents)));
   }
 
   /* ------------------------------ essai --------------------------------------- */

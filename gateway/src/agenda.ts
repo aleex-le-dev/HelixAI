@@ -3,7 +3,7 @@ import type { IncomingMessage } from "node:http";
 import { db, type StoredCollection } from "./db.ts";
 import { chiffrer, dechiffrer, chiffrementActif } from "./secret.ts";
 import { nomProduit, NomProduit } from "./marque.ts";
-import { t, tf } from "./langue.ts";
+import { lister, t, tf } from "./langue.ts";
 import * as agendaGoogle from "./agendaGoogle.ts";
 
 /**
@@ -1800,7 +1800,7 @@ export async function configurer(
     return {
       ok: false,
       message:
-        tf("Ces agendas n'existent pas sur le serveur : {0}. Agendas disponibles : {1}.", inconnus.join(", "), calendriers.map((c) => c.nom).join(", ")),
+        tf("Ces agendas n'existent pas sur le serveur : {0}. Agendas disponibles : {1}.", lister(inconnus), lister(calendriers.map((c) => c.nom))),
     };
   }
 

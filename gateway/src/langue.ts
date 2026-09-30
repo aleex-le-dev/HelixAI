@@ -129,3 +129,26 @@ export function tf(modele: string, ...valeurs: unknown[]): string {
     return valeur === undefined ? brut : String(valeur);
   });
 }
+
+/**
+ * Une liste de noms dans une phrase que la personne lit : « Slack, Teams » en
+ * français, en anglais, en espagnol et en allemand, « Slack، Teams » en arabe,
+ * « Slack、Teams » en chinois et en japonais. La même règle que `lister` côté
+ * écran (`src/lib/i18n.ts`, 30/09/2026) : la virgule latine restait dans ces
+ * trois langues au milieu d'une phrase traduite. Les noms vides sont écartés.
+ *
+ * En arabe, chaque nom est isolé (U+2068 et U+2069) et garde son propre sens :
+ * sans cela, un nom latin suivi d'un chiffre part à l'autre bout de la ligne.
+ * Rien n'est ajouté dans les six autres langues.
+ *
+ * La langue est celle de la requête en cours, lue comme le font `t` et `tf`.
+ * Pas pour ce que lit un modèle (consignes, résultats d'outils), ni pour un
+ * journal, ni pour une valeur technique (portées OAuth, identifiants).
+ */
+const VIRGULE: Partial<Record<Langue, string>> = { ar: "، ", zh: "、", ja: "、" };
+export function lister(noms: readonly (string | false | null | undefined)[]): string {
+  const courante = langue();
+  const dits = noms.filter((n): n is string => Boolean(n));
+  const virgule = VIRGULE[courante] ?? ", ";
+  return courante === "ar" ? dits.map((n) => `⁨${n}⁩`).join(virgule) : dits.join(virgule);
+}

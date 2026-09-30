@@ -2,7 +2,7 @@ import { db } from "./db.ts";
 import { chiffrer, dechiffrer } from "./secret.ts";
 import { deployment } from "./deployment.ts";
 import { journaliser } from "./audit.ts";
-import { t, tf } from "./langue.ts";
+import { lister, t, tf } from "./langue.ts";
 
 /**
  * Le client OAuth Google de l'instance, partagé par Google Drive (drive.ts) et
@@ -141,6 +141,6 @@ export function messageSansRevocationGoogle(service: string, autres: string[]): 
   return tf(
     "{0} a été débranché de cette instance, et son accès effacé. Il n'est pas révoqué chez Google, qui le retirerait aussi à ce qui reste branché avec la même application Google : {1}. Il le sera au débranchement du dernier service Google.",
     service,
-    autres.join(", "),
+    lister(autres),
   );
 }

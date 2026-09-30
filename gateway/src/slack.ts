@@ -10,7 +10,7 @@ import {
   normaliser,
   dateFrancaise,
 } from "./clientHttps.ts";
-import { t, tf } from "./langue.ts";
+import { lister, t, tf } from "./langue.ts";
 
 /**
  * Connecteur Slack de Helix, en lecture seule.
@@ -681,7 +681,7 @@ export async function configurer(
 
     const salonsTexte =
       liste.length > 0
-        ? tf("Salons lisibles : {0}.", liste.map(nomSalon).join(", "))
+        ? tf("Salons lisibles : {0}.", lister(liste.map(nomSalon)))
         : t("L'application n'est encore membre d'aucun salon.");
     const sansNoms = essai.portees.includes("users:read")
       ? ""

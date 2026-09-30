@@ -87,6 +87,15 @@ machine :
 | Écran Code | OpenCode : celui que Helix pose seul, en arrière-plan, depuis le 27/09/2026 (1.18.32, empreinte SHA-256 écrite dans le code, `<données>/opencode/`), sinon `HELIX_OPENCODE_BIN`, `~/.opencode/bin/opencode` ou le `PATH`. Codex, second moteur facultatif, n'est jamais installé par Helix | Hors ligne, ou sur un poste rattaché : l'écran Code propose « Installer OpenCode » (administrateur), et rappelle la commande manuelle |
 | Modèles locaux | LM Studio | L'écran de mise en route l'installe, sans intervention : son moteur sans interface (llmster 0.0.25-1, empreinte SHA-512 écrite dans le code) sur Mac à puce Apple, Windows et Linux ; sur un Mac où l'application LM Studio a déjà servi, c'est elle qui sert ; sur Mac Intel, llama.cpp à la place (moteur ouvert, MIT, b11146, `<données>/llamacpp/`, modèles Qwen3 GGUF épinglés ; `HELIX_MOTEUR=llamacpp` le choisit ailleurs sur macOS). L'emplacement se choisit (voir « Emplacement du moteur et des modèles ») |
 
+Dans le Chat et dans Cowork, un message envoyé pendant qu'une réponse s'écrit ne la coupe
+pas : il entre dans la file d'attente de ce Chat, affichée au-dessus de la zone de saisie
+(« Modifier », « Retirer »), et part seul à la fin de la réponse, avec ses pièces jointes et
+les options du moment où il a été écrit. Après une erreur ou « Arrêter », la file se met en
+pause jusqu'à « Envoyer maintenant ». Dix messages au plus par Chat ; la file n'est pas gardée
+au rechargement de la page. Avant le premier mot, le Chat dit ce que fait le modèle, avec le
+temps écoulé (« … organise le travail », « … lit la demande »), puis sa réflexion et sa durée,
+sur macOS, Windows et Linux.
+
 Avec un modèle local, l'écran Code peut attendre une ou deux minutes avant le premier
 mot : le modèle lit d'abord toute la demande, et la relit s'il l'a perdue parce qu'un
 autre programme s'en est servi entre-temps (LM Studio ne sert souvent qu'une demande à

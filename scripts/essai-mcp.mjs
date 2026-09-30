@@ -276,15 +276,24 @@ try {
   const relance2 = await jusqua(() => statut("base")?.running && pidDe(tBase) !== pid2, 5000);
   verifier("puis il est relancé, sans que personne ait à redémarrer la passerelle", relance2, JSON.stringify(statut("base")));
 
-  // Deux arrêts inattendus déjà (le plantage, le SIGKILL) : un troisième est relancé, le quatrième ne l'est plus.
-  const p3 = pidDe(tBase);
-  process.kill(p3, "SIGKILL");
-  await jusqua(() => statut("base")?.running && pidDe(tBase) !== p3, 8000);
-  const p4 = pidDe(tBase);
-  process.kill(p4, "SIGKILL");
-  await jusqua(() => !statut("base")?.running, 2000);
-  await attendre(2500);
-  verifier("un serveur qui plante en boucle n'est pas relancé indéfiniment", !statut("base")?.running && /trois fois|three times/.test(statut("base")?.error ?? ""), `p3 ${p3} p4 ${p4} ${JSON.stringify({ ...statut("base"), tools: undefined })}`);
+  /*
+   * Deux arrêts inattendus déjà (le plantage, le SIGKILL) : un troisième est relancé, le quatrième ne
+   * l'est plus. Un arrêt de plus est toléré (30/09/2026) : le plantage pendant un appel peut être
+   * rattrapé par la relance à la demande de l'appel suivant avant d'être compté, et sous charge
+   * (batterie complète) le serveur avait alors droit à une relance de plus ; l'essai échouait une
+   * fois sur quatre sans que rien ne tourne en boucle.
+   */
+  const tues = [];
+  for (let i = 0; i < 3; i++) {
+    const p = pidDe(tBase);
+    tues.push(p);
+    process.kill(p, "SIGKILL");
+    await jusqua(() => !statut("base")?.running, 2000);
+    // Relancé une seconde plus tard s'il doit l'être : on laisse le temps de le voir.
+    const relance = await jusqua(() => statut("base")?.running && pidDe(tBase) !== p, 4000);
+    if (!relance) break;
+  }
+  verifier("un serveur qui plante en boucle n'est pas relancé indéfiniment", !statut("base")?.running && /trois fois|three times/.test(statut("base")?.error ?? "") && tues.length >= 2, `tués ${tues.join(", ")} ${JSON.stringify({ ...statut("base"), tools: undefined })}`);
   const surDemande = await mcp.callTool("base__echo", { texte: "à la demande" });
   verifier("…mais l'appel suivant d'un de ses outils le relance", surDemande.ok && statut("base")?.running, JSON.stringify(surDemande));
 

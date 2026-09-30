@@ -87,7 +87,7 @@ export function InstallerOpencode({ status, onPret }: { status: CodeStatus; onPr
           <div className="h-full rounded-full bg-primary transition-[width]" style={{ width: `${pourcent}%` }} />
         </div>
         <p className="mt-2 text-xs text-muted-foreground">
-          {branding.name}{" "}{t("l'installe lui-même : OpenCode (licence MIT), version épinglée, empreinte vérifiée, environ 60 Mo, pour ce compte seulement.")}
+          {tf("{0} l'installe lui-même : OpenCode (licence MIT), version épinglée, empreinte vérifiée, environ 60 Mo, pour ce compte seulement.", branding.name)}
         </p>
       </div>
     );
@@ -102,7 +102,7 @@ export function InstallerOpencode({ status, onPret }: { status: CodeStatus; onPr
       <>
         {!erreur && (
           <p className="text-sm text-muted-foreground">
-            {branding.name}{" "}{t("l'installe lui-même : OpenCode (licence MIT), version épinglée, empreinte vérifiée, environ 60 Mo, pour ce compte seulement.")}
+            {tf("{0} l'installe lui-même : OpenCode (licence MIT), version épinglée, empreinte vérifiée, environ 60 Mo, pour ce compte seulement.", branding.name)}
           </p>
         )}
         <Button icon={erreur ? RotateCcw : Download} onClick={() => void lancer(false)}>

@@ -1,5 +1,5 @@
 import { branding } from "@/config/branding";
-import { t } from "@/lib/i18n";
+import { t, tf } from "@/lib/i18n";
 
 export interface AiModel {
   id: string;
@@ -37,7 +37,7 @@ export const behaviors: Behavior[] = [
   {
     id: "auto",
     label: t("Auto"),
-    description: `${branding.name} choisit selon votre demande`,
+    description: tf("{0} choisit selon votre demande", branding.name),
     recommended: true,
   },
   { id: "rapide", label: t("Rapide"), description: t("Pour écrire, résumer et répondre vite") },

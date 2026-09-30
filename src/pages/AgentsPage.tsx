@@ -122,7 +122,7 @@ export function AgentsPage() {
       {!etat?.moteur.installe && (installation?.etape === "node" || installation?.etape === "openclaw") && (
         <p className="mt-4 flex items-center gap-2 text-sm text-muted-foreground">
           <Loader2 size={15} strokeWidth={1.75} className="animate-spin" />
-          {t("Première mise en service :")}{" "}{branding.name}{" "}{t("installe ce qu'il faut à vos agents. C'est une fois pour toutes, et quelques minutes.")}
+          {tf("Première mise en service : {0} installe ce qu'il faut à vos agents. C'est une fois pour toutes, et quelques minutes.", branding.name)}
         </p>
       )}
 

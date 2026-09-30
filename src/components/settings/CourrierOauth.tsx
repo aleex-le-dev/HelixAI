@@ -242,7 +242,7 @@ export function CourrierOauth({
       {attente && (
         <div className="space-y-2">
           <InfoBox tone="muted">
-            {t("Une fenêtre s'est ouverte chez")}{" "}{nom}{t(". Vous y saisissez votre mot de passe, chez eux :")}{" "}{branding.name}{" "}{t("ne le voit pas, et ne le conserve pas. Revenez ici quand la page vous dit que la boîte est branchée.")}
+            {tf("Une fenêtre s'est ouverte chez {0}. Vous y saisissez votre mot de passe, chez eux : {1} ne le voit pas, et ne le conserve pas. Revenez ici quand la page vous dit que la boîte est branchée.", nom, branding.name)}
           </InfoBox>
           {lien && (
             <p className="text-sm text-muted-foreground">

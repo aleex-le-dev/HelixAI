@@ -41,8 +41,7 @@ export function ConfirmationMemoire({
         {tf("{0} a pu lire des documents qui ne sont pas ouverts à toute l'équipe, et sa mémoire peut en garder la trace. Avec ce changement ({1}), d'autres personnes pourraient la lui faire répéter.", nom, liste)}
       </p>
       <p className="mt-1">
-        {t("Avant qu'il prenne effet,")}{" "}{branding.name}{" "}
-        {t("met ses notes de côté (une copie chiffrée, que vous pourrez restaurer s'il redevient aussi fermé qu'aujourd'hui), puis vide sa mémoire : ses notes, les conversations de chacun avec lui chez l'agent, et l'index de sa mémoire. Les échanges affichés dans l'onglet Chat restent.")}
+        {tf("Avant qu'il prenne effet, {0} met ses notes de côté (une copie chiffrée, que vous pourrez restaurer s'il redevient aussi fermé qu'aujourd'hui), puis vide sa mémoire : ses notes, les conversations de chacun avec lui chez l'agent, et l'index de sa mémoire. Les échanges affichés dans l'onglet Chat restent.", branding.name)}
       </p>
       <p className="mt-1">{t("Si sa mémoire ne peut pas être vidée entièrement, le changement n'est pas fait, et c'est dit ici.")}</p>
       <div className="mt-3 flex flex-wrap gap-2">

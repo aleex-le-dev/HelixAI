@@ -519,7 +519,7 @@ export function Connecteurs({ maison = [] }: { maison?: ServiceMaison[] } = {}) 
 
           {entree.integre ? (
             <span className="shrink-0 rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
-              {t("Livré avec")}{" "}{branding.name}
+              {tf("Livré avec {0}", branding.name)}
             </span>
           ) : vivant ? (
             <span className="flex shrink-0 flex-wrap items-center gap-1">
@@ -720,8 +720,7 @@ export function Connecteurs({ maison = [] }: { maison?: ServiceMaison[] } = {}) 
           className="mb-4"
           leading={<ShieldAlert size={15} strokeWidth={1.75} />}
         >
-          {t("Le chiffrement des données n'est pas actif sur cette instance :")}{" "}
-          {branding.name}{" "}{t("refusera d'enregistrer un jeton d'accès. Déverrouillez le trousseau du compte hôte, ou réglez « chiffrement » sur « fichier » dans le profil de déploiement.")}
+          {tf("Le chiffrement des données n'est pas actif sur cette instance : {0} refusera d'enregistrer un jeton d'accès. Déverrouillez le trousseau du compte hôte, ou réglez « chiffrement » sur « fichier » dans le profil de déploiement.", branding.name)}
         </InfoBox>
       )}
 
@@ -829,7 +828,7 @@ export function Connecteurs({ maison = [] }: { maison?: ServiceMaison[] } = {}) 
         {etat.catalogue.some((e) => e.local)
           ? t("Trois façons de brancher, et aucune ne passe par un tiers.")
           : t("Deux façons de brancher, et aucune ne passe par un tiers.")}{" "}
-        <strong className="font-medium">{t("Se connecter")}</strong>{" "}{t("vous envoie chez le service, qui vous demande votre accord ; le jeton revient chiffré dans l'instance et n'en sort plus.")}{" "}<strong className="font-medium">{t("Par jeton")}</strong>{" "}{t("lance un serveur sur la machine de l'instance :")}{" "}{branding.name}{" "}{t("ne lance que les commandes de son catalogue, jamais une commande venue de cet écran, et le jeton est transmis par l'environnement, sans jamais apparaître dans la liste des processus.")}
+        <strong className="font-medium">{t("Se connecter")}</strong>{" "}{t("vous envoie chez le service, qui vous demande votre accord ; le jeton revient chiffré dans l'instance et n'en sort plus.")}{" "}<strong className="font-medium">{t("Par jeton")}</strong>{" "}{tf("lance un serveur sur la machine de l'instance : {0} ne lance que les commandes de son catalogue, jamais une commande venue de cet écran, et le jeton est transmis par l'environnement, sans jamais apparaître dans la liste des processus.", branding.name)}
         {etat.catalogue.some((e) => e.local) && (
           <>
             {" "}

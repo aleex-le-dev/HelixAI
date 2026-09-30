@@ -23,7 +23,7 @@ import {
   retenirInvitation,
   type InvitationRecue,
 } from "@/lib/invitations";
-import { t } from "@/lib/i18n";
+import { t, tf } from "@/lib/i18n";
 
 /**
  * Premier lancement : à quoi ce poste est-il rattaché ?
@@ -155,7 +155,7 @@ export function InstanceSetupPage({
         <div className="mb-8 flex flex-col items-center gap-3 text-center">
           <LogoMark size={52} animated />
           <h1 className="text-2xl font-semibold tracking-tight text-foreground">
-            {t("Bienvenue dans")}{" "}{branding.name}
+            {tf("Bienvenue dans {0}", branding.name)}
           </h1>
           <p className="text-sm text-muted-foreground">
             {mode === "choix"

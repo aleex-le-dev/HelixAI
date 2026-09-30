@@ -110,7 +110,7 @@ export function SlackConnecteur({ onChange }: { onChange?: () => void } = {}) {
   if (etat === null) {
     return (
       <InfoBox tone="warning" leading={<ShieldAlert size={15} strokeWidth={1.75} />}>
-        {t("L'instance")}{" "}{branding.name}{" "}{t("ne répond pas. Slack se branche depuis cet écran dès qu'elle est joignable.")}
+        {tf("L'instance {0} ne répond pas. Slack se branche depuis cet écran dès qu'elle est joignable.", branding.name)}
       </InfoBox>
     );
   }
@@ -152,7 +152,7 @@ export function SlackConnecteur({ onChange }: { onChange?: () => void } = {}) {
           {t("Lecture seule. Vos agents lisent les messages des salons où l'application a été invitée, et rien d'autre : ni messages privés, ni autres salons. Ils ne peuvent ni écrire, ni réagir, ni supprimer. Pour ouvrir un salon aux agents, un membre y tape « /invite @")}{etat.application}{" "}{t("» dans Slack ; pour le fermer, il en retire l'application.")}
         </InfoBox>
         <InfoBox tone="muted" leading={<Info size={15} strokeWidth={1.75} />}>
-          {t("Slack est branché pour toute l'instance : chaque compte")}{" "}{branding.name}{" "}{t("peut faire lire ces salons à ses agents. Le jeton est conservé chiffré sur l'instance et n'est transmis qu'à Slack.")}
+          {tf("Slack est branché pour toute l'instance : chaque compte {0} peut faire lire ces salons à ses agents. Le jeton est conservé chiffré sur l'instance et n'est transmis qu'à Slack.", branding.name)}
         </InfoBox>
 
         {messages}
@@ -177,8 +177,7 @@ export function SlackConnecteur({ onChange }: { onChange?: () => void } = {}) {
     <div className="space-y-3">
       {!etat.chiffrementDonnees && (
         <InfoBox tone="warning" leading={<ShieldAlert size={15} strokeWidth={1.75} />}>
-          {t("Le chiffrement des données n'est pas actif sur cette instance.")}{" "}{branding.name}{" "}
-          {t("refusera d'enregistrer un jeton Slack tant que ce sera le cas.")}
+          {tf("Le chiffrement des données n'est pas actif sur cette instance. {0} refusera d'enregistrer un jeton Slack tant que ce sera le cas.", branding.name)}
         </InfoBox>
       )}
       {etat.aReconnecter && (
@@ -190,7 +189,7 @@ export function SlackConnecteur({ onChange }: { onChange?: () => void } = {}) {
       <Card className="space-y-3 text-sm text-foreground">
         <p className="font-medium">{t("Créer l'application Slack de votre entreprise")}</p>
         <p className="text-muted-foreground">
-          {t("Cinq minutes, avec un compte autorisé à installer des applications dans votre espace Slack. L'application reste la vôtre :")}{" "}{branding.name}{" "}{t("lit Slack directement, sans intermédiaire.")}
+          {tf("Cinq minutes, avec un compte autorisé à installer des applications dans votre espace Slack. L'application reste la vôtre : {0} lit Slack directement, sans intermédiaire.", branding.name)}
         </p>
         {/*
          * 28/09/2026 (Medhi : « tout doit être simple, pour tout ») : un bouton qui ouvre

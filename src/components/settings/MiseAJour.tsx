@@ -108,13 +108,11 @@ export function MiseAJour() {
         <>
           {etat.plateforme && etat.plateforme !== "darwin" ? (
             <p className="text-xs text-muted-foreground">
-              {t("Sur Windows et Linux, la mise à jour se fait à la main :")}{" "}{branding.name}{" "}
-              {t("ne contacte aucun serveur de mise à jour. Pour changer de version, installez le nouveau paquet fourni par votre prestataire, par-dessus celui-ci : vos données restent en place.")}
+              {tf("Sur Windows et Linux, la mise à jour se fait à la main : {0} ne contacte aucun serveur de mise à jour. Pour changer de version, installez le nouveau paquet fourni par votre prestataire, par-dessus celui-ci : vos données restent en place.", branding.name)}
             </p>
           ) : (
             <p className="text-xs text-muted-foreground">
-              {t("Aucune adresse de mise à jour n'est inscrite dans cette installation :")}{" "}{branding.name}{" "}
-              {t("ne contacte aucun serveur de mise à jour. Pour changer de version, installez le paquet fourni par votre prestataire.")}
+              {tf("Aucune adresse de mise à jour n'est inscrite dans cette installation : {0} ne contacte aucun serveur de mise à jour. Pour changer de version, installez le paquet fourni par votre prestataire.", branding.name)}
             </p>
           )}
           {etat.message && (
@@ -187,7 +185,7 @@ export function MiseAJour() {
             {t("Version")}{" "}{etat.versionDisponible}{" "}{t("téléchargée et vérifiée.")}
           </p>
           <p className="text-xs text-muted-foreground">
-            {t("Elle s'installera à la prochaine fermeture de")}{" "}{branding.name}{t(", ou tout de suite :")}
+            {tf("Elle s'installera à la prochaine fermeture de {0}, ou tout de suite :", branding.name)}
           </p>
           <Button size="sm" icon={RotateCw} onClick={() => void api.installer()}>
             {t("Redémarrer pour installer")}

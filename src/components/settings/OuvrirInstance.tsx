@@ -82,7 +82,7 @@ export function OuvrirInstance() {
         <Network size={18} strokeWidth={1.75} />{" "}{t("Ouvrir l'instance à mes collègues")}
       </h3>
       <p className="mt-1 text-sm text-muted-foreground">
-        {t("Tant qu'elle est fermée,")}{" "}{branding.name}{" "}{t("ne répond qu'à cette machine. Ouverte, vos collègues peuvent y rattacher leur poste et travailler avec vous, sans rien installer d'autre.")}
+        {tf("Tant qu'elle est fermée, {0} ne répond qu'à cette machine. Ouverte, vos collègues peuvent y rattacher leur poste et travailler avec vous, sans rien installer d'autre.", branding.name)}
       </p>
 
       {/*
@@ -127,7 +127,7 @@ export function OuvrirInstance() {
             <div className="mt-4 space-y-3 rounded-xl border border-border p-3">
               {confirmation ? (
                 <InfoBox tone="warning" leading={<ShieldAlert size={15} strokeWidth={1.75} />}>
-                  {t("Votre machine va répondre sur le réseau local.")}{" "}{branding.name}{" "}{t("chiffrera alors ses échanges : son adresse passe en https, pour vous comme pour vos collègues, et votre système vous demandera peut-être d'autoriser la connexion. Le jeton d'instance reste exigé : ouvrir l'écoute n'ouvre pas l'accès.")}
+                  {tf("Votre machine va répondre sur le réseau local. {0} chiffrera alors ses échanges : son adresse passe en https, pour vous comme pour vos collègues, et votre système vous demandera peut-être d'autoriser la connexion. Le jeton d'instance reste exigé : ouvrir l'écoute n'ouvre pas l'accès.", branding.name)}
                 </InfoBox>
               ) : (
                 <InfoBox tone="muted">
@@ -269,14 +269,13 @@ function Chemins({ etat }: { etat: EtatReseau }) {
           </>
         ) : (
           <p className="mt-0.5 text-xs text-muted-foreground">
-            {t("Il leur faut alors un lien privé entre vos deux réseaux : le VPN de votre entreprise, ou un réseau privé que vous montez entre vos machines.")}{" "}
-            {branding.name}{" "}{t("le détectera tout seul et affichera l'adresse ici, sans réglage de votre part. N'ouvrez pas de port sur votre box pour y arriver plus vite : vous exposeriez votre poste à tout Internet.")}
+            {tf("Il leur faut alors un lien privé entre vos deux réseaux : le VPN de votre entreprise, ou un réseau privé que vous montez entre vos machines. {0} le détectera tout seul et affichera l'adresse ici, sans réglage de votre part. N'ouvrez pas de port sur votre box pour y arriver plus vite : vous exposeriez votre poste à tout Internet.", branding.name)}
           </p>
         )}
       </div>
 
       <InfoBox tone="muted">
-        {t("Dans les deux cas, cette machine doit être allumée et")}{" "}{branding.name}{" "}{t("ouvert : c'est elle qui répond. Pour une équipe qui travaille à toute heure, installez l'instance sur une machine qui ne s'éteint pas.")}
+        {tf("Dans les deux cas, cette machine doit être allumée et {0} ouvert : c'est elle qui répond. Pour une équipe qui travaille à toute heure, installez l'instance sur une machine qui ne s'éteint pas.", branding.name)}
       </InfoBox>
     </div>
   );

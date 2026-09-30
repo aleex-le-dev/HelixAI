@@ -1389,6 +1389,9 @@ async function demarrerProcessus(moteur: Moteur): Promise<void> {
   return demarrage;
 }
 
+/** Le temps laissé à OpenClaw pour ouvrir son port : 480 essais espacés d'une demi-seconde, quatre minutes. */
+const OUVERTURE_ESSAIS = 480;
+
 async function lancerProcessus(moteur: Moteur): Promise<void> {
   if (await portOuvert(portOpenClaw())) await arreterOrphelin();
   if (await portOuvert(portOpenClaw())) {
@@ -1401,6 +1404,8 @@ async function lancerProcessus(moteur: Moteur): Promise<void> {
   const p = spawn(moteur.lancement.fichier, [...moteur.lancement.prefixe, "gateway", "run", "--port", String(portOpenClaw())], {
     env: envOpenClaw(moteur),
     stdio: ["ignore", "pipe", "pipe"],
+    // Sous Windows, pas de fenêtre de console qui s'ouvre derrière Helix.
+    windowsHide: true,
   });
   processus = p;
   if (p.pid) writeFileSync(join(dossier(), ".pid"), String(p.pid), { mode: 0o600 });
@@ -1448,7 +1453,19 @@ async function lancerProcessus(moteur: Moteur): Promise<void> {
   });
   minuterieJournal ??= setInterval(() => void synchroniserJournal().catch(() => undefined), 5 * 60_000);
   minuterieJournal.unref?.();
-  for (let i = 0; i < 90; i++) {
+  /*
+   * Quatre minutes pour ouvrir son port, tant que le processus vit
+   * (30/09/2026). La limite était de 45 s. Sur le PC Windows de Medhi, l'écran
+   * a dit plusieurs fois « ne s'est pas ouverte à temps » avant que l'agent
+   * soit en service : à chaque fois Helix arrêtait OpenClaw en plein
+   * démarrage et le relançait, l'essai repartant de zéro. Cause supposée, pas
+   * mesurée sur ce PC : un premier démarrage lent (des milliers de fichiers
+   * lus pour la première fois, l'antivirus qui les regarde). L'essai sous
+   * Windows attendait déjà plus de deux minutes, et affiche maintenant le
+   * temps mesuré. Un processus qui s'arrête de lui-même est vu tout
+   * de suite, plus bas : attendre plus longtemps ne retarde que ce cas-ci.
+   */
+  for (let i = 0; i < OUVERTURE_ESSAIS; i++) {
     if (await portOuvert(portOpenClaw())) {
       tentatives = 0;
       return;
@@ -1466,7 +1483,7 @@ async function lancerProcessus(moteur: Moteur): Promise<void> {
     }
     await new Promise((r) => setTimeout(r, 500));
   }
-  // Toujours fermé après 45 s : arrêté, il sera relancé par la surveillance ci-dessus plutôt que de rester muet.
+  // Toujours fermé après quatre minutes : arrêté, il sera relancé par la surveillance ci-dessus plutôt que de rester muet.
   arreterArbre(p);
   throw new Error(t("L'instance de vos agents ne s'est pas ouverte à temps. Elle va être relancée : réessayez dans une minute."));
 }

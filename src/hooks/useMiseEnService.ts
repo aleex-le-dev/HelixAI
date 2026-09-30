@@ -77,7 +77,8 @@ export function useMiseEnService(
         maj({ etape: "installation", message: t("Préparation…") });
         // Sous Windows, l'étape « visualcpp » dit pourquoi Windows va demander une autorisation d'administrateur (message de la passerelle).
         await assurerOpenClaw((i) => maj({ etape: "installation", message: messageEtape(i) }));
-        maj({ etape: "deploiement", message: t("Mise en service…") });
+        // Le premier démarrage de l'instance des agents peut être long, sous Windows surtout (employes.ts, OUVERTURE_ESSAIS).
+        maj({ etape: "deploiement", message: t("Mise en service… Le premier démarrage peut prendre quelques minutes.") });
         const { employe } = await deployerEmploye({
           nom: agent.name,
           poste: posteDe(agent),

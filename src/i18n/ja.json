@@ -2592,7 +2592,7 @@
   "Mise à jour du moteur des agents : {0}": "エージェントのエンジンのアップデート：{0}",
   "Mise à jour manuelle : l'application n'est pas encore signée. Elle vérifie qu'une version plus récente existe, et l'installe sur votre clic.": "手動アップデート：アプリケーションはまだ署名されていません。新しいバージョンがあるかを確認し、クリックするとインストールします。",
   "Mise de côté…": "退避しています…",
-  "Mise en service…": "稼働させています…",
+  "Mise en service… Le premier démarrage peut prendre quelques minutes.": "稼働を開始しています… 初回の起動には数分かかることがあります。",
   "Mission lancée à la main": "手動で開始したミッション",
   "Missions ({0})": "ミッション ({0})",
   "Missions enregistrées.": "ミッションを保存しました。",

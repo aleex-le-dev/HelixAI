@@ -501,6 +501,7 @@ if (process.argv.includes("--installation")) {
     p.stdout.on("data", (b) => (journal += b));
     p.stderr.on("data", (b) => (journal += b));
     let ouvert = false;
+    const debutOuverture = Date.now();
     for (let i = 0; i < 240 && !ouvert && p.exitCode === null; i++) {
       try {
         await fetch(`http://127.0.0.1:${port}/`, { signal: AbortSignal.timeout(1000) });
@@ -510,6 +511,8 @@ if (process.argv.includes("--installation")) {
       }
     }
     verifier(`OpenClaw jetable lancé comme Helix le lance (port ${port}, jamais 18789 ni 18800) : il ouvre son port`, ouvert, journal.slice(-600));
+    // Mesuré pour régler l'attente de Helix (employes.ts, OUVERTURE_ESSAIS) : 45 s ne suffisaient pas sur un vrai PC.
+    console.log(`   port ouvert en ${Math.round((Date.now() - debutOuverture) / 1000)} s (premier démarrage)`);
     // Arrêt par son numéro : sous Windows, taskkill de System32 sur tout l'arbre, comme processus.ts.
     if (windows) {
       const tk = P.commandeArretArbre(p.pid, process.env);

@@ -2592,7 +2592,7 @@
   "Mise à jour du moteur des agents : {0}": "智能体引擎更新：{0}",
   "Mise à jour manuelle : l'application n'est pas encore signée. Elle vérifie qu'une version plus récente existe, et l'installe sur votre clic.": "手动更新：应用尚未签名。它会检查是否有更新的版本，并在您点击后安装。",
   "Mise de côté…": "正在保存…",
-  "Mise en service…": "正在部署…",
+  "Mise en service… Le premier démarrage peut prendre quelques minutes.": "正在启用… 首次启动可能需要几分钟。",
   "Mission lancée à la main": "手动启动的任务",
   "Missions ({0})": "任务（{0}）",
   "Missions enregistrées.": "任务已保存。",

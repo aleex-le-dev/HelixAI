@@ -5,10 +5,11 @@ import { t, tf } from "@/lib/i18n";
 
 /**
  * Logos Helix (assets pilotes par branding.ts — rebrander = changer branding.ts).
- * Les visuels sont des traces filaires noires sur fond blanc opaque : c'est la
- * classe `.logo-marque` (voir styles/index.css) qui efface ce blanc, et qui
- * inverse le trace en theme sombre — sans quoi un trace noir sur fond sombre
- * ne se verrait plus du tout.
+ * Le mark est un trace filaire noir sur fond transparent : la classe
+ * `.logo-marque` (voir styles/index.css) l'inverse en blanc en theme sombre,
+ * sans quoi un trace noir sur fond sombre ne se verrait plus du tout. Un logo
+ * livre sur fond blanc opaque se prepare une fois avec
+ * `scripts/icones/marque-transparente.mjs`.
  */
 
 interface LogoMarkProps {

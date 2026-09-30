@@ -5802,6 +5802,30 @@ de cette section) ; ce qui est dit plus bas des « phrases encore en anglais » 
   « Toujours autoriser ») sont traduits sans avoir été lus sur un système dans ces langues ;
   relecture par des personnes dont c'est la langue.
 
+**Fait le 30/09/2026, après la 2026.930.1 : retours de Medhi sur son PC Windows.**
+- **« L'instance de vos agents ne s'est pas ouverte à temps »**, plusieurs « Réessayer » avant que
+  l'agent soit en service. Helix laissait 45 s à OpenClaw pour ouvrir son port, puis l'arrêtait et
+  le relançait de zéro. Il a maintenant quatre minutes tant que le processus vit
+  (`employes.ts`, `OUVERTURE_ESSAIS`) ; un processus qui s'arrête de lui-même est toujours vu tout
+  de suite. L'écran dit « Le premier démarrage peut prendre quelques minutes ». La fenêtre de
+  console est cachée (`windowsHide`). **Cause supposée, pas mesurée sur ce PC** : premier démarrage
+  lent (fichiers lus pour la première fois, antivirus). L'essai OpenClaw sous Windows affiche
+  désormais le temps d'ouverture du port : à lire au prochain passage pour régler la limite.
+- **Carré gris autour du logo** (Windows, thème sombre). Le logo était un tracé noir sur blanc
+  opaque, effacé par `mix-blend-mode` ; l'animation (`will-change: transform`) isole le calque, et
+  le mélange ne se fait plus avec le fond. `src/assets/helix-mark.png` a maintenant un vrai fond
+  transparent (`scripts/icones/marque-transparente.mjs`, sans dépendance), et le thème sombre
+  l'inverse simplement. Vu à l'écran sur Mac, clair et sombre ; pas revu sous Windows.
+- **« Pas de réflexion comme sur Mac »** : le Chat de la capture tournait avec
+  `mistralai/ministral-3-3b`, qui ne raisonne pas (le catalogue le dit, `provision.ts`), alors que
+  le Mac sert Qwen3.5, qui raisonne. L'écran montrait bien l'attente (« organise le travail
+  (18 s)... »). Rien changé. **À décider** : ce tri avant la réponse coûte 18 s et plus à un petit
+  modèle sur processeur pour une phrase de conversation de plus de quinze mots.
+- **Un agent qui ne répond pas après cinq minutes** : pas reproduit, pas corrigé. Un message à un
+  agent passe par OpenClaw, sans flux, avec une consigne longue ; sur processeur avec un modèle de
+  3 milliards de paramètres, la lecture seule peut durer des minutes (limite : 15 min). À mesurer
+  sur le PC : le journal `journaux/console.log` de l'instance des agents, et la durée réelle.
+
 **Fait le 27/09/2026 : parcours complet de l'interface, contre une instance jetable.** Passerelle
 jetable (dossier de données temporaire, clé des données en fichier, LM Studio éteint), faux
 fournisseur compatible OpenAI (réponses, réflexion, 429, 500, flux coupé, réponse lente), faux

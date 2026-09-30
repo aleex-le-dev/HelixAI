@@ -2592,7 +2592,7 @@
   "Mise à jour du moteur des agents : {0}": "Agent engine update: {0}",
   "Mise à jour manuelle : l'application n'est pas encore signée. Elle vérifie qu'une version plus récente existe, et l'installe sur votre clic.": "Manual update: the app is not signed yet. It checks whether a newer version exists, and installs it when you click.",
   "Mise de côté…": "Setting aside…",
-  "Mise en service…": "Deploying…",
+  "Mise en service… Le premier démarrage peut prendre quelques minutes.": "Putting into service… The first start can take a few minutes.",
   "Mission lancée à la main": "Assignment started by hand",
   "Missions ({0})": "Missions ({0})",
   "Missions enregistrées.": "Missions saved.",

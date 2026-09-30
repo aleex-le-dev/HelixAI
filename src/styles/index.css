@@ -295,21 +295,15 @@
   }
 
   /*
-   * Logo de marque : les visuels livrés sont des tracés noirs sur fond blanc
-   * OPAQUE (pas de canal alpha). Il faut donc effacer ce blanc au montage.
-   *
-   * En clair, `multiply` suffit : le blanc disparaît, le tracé noir reste.
-   * En sombre, multiplier ne peut qu'assombrir — le tracé noir se fondrait
-   * dans le fond et le logo deviendrait invisible. On inverse alors l'image
-   * (tracé blanc sur noir) et on efface le noir avec `screen` : même geste,
-   * résultat lisible dans les deux thèmes.
+   * Logo de marque : un tracé noir sur fond transparent (le visuel livré était
+   * sur blanc opaque ; `scripts/icones/marque-transparente.mjs` en a fait de la
+   * vraie transparence le 30/09/2026). En thème sombre, le tracé est inversé
+   * en blanc. Avant, le blanc était effacé par un mélange de calques
+   * (`multiply`, puis `screen` en sombre) : un carré gris restait autour du
+   * logo sous Windows en thème sombre, là où le navigateur isole le calque.
    */
-  .logo-marque {
-    mix-blend-mode: multiply;
-  }
   :root[data-theme="sombre"] .logo-marque {
     filter: invert(1);
-    mix-blend-mode: screen;
   }
 
   /*

@@ -2592,7 +2592,7 @@
   "Mise à jour du moteur des agents : {0}": "Actualización del motor de los agentes: {0}",
   "Mise à jour manuelle : l'application n'est pas encore signée. Elle vérifie qu'une version plus récente existe, et l'installe sur votre clic.": "Actualización manual: la aplicación todavía no está firmada. Comprueba si existe una versión más reciente, y la instala cuando haces clic.",
   "Mise de côté…": "Apartando…",
-  "Mise en service…": "Poniendo en servicio…",
+  "Mise en service… Le premier démarrage peut prendre quelques minutes.": "Poniendo en servicio… El primer arranque puede tardar unos minutos.",
   "Mission lancée à la main": "Misión lanzada a mano",
   "Missions ({0})": "Misiones ({0})",
   "Missions enregistrées.": "Misiones guardadas.",

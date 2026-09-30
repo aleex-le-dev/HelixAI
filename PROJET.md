@@ -12,7 +12,7 @@ refaite à l'envers.
 |---|---|
 | Version | 2026.929.4 (`package.json`) |
 | Dernière mise à jour | 30 septembre 2026 |
-| Vérifié | `npm run securite` : 2290 contrôles, 0 échec (30/09/2026, sur le code fusionné avec les vrais catalogues) ; `npm run typecheck` ; relevés à 100 % dans les six catalogues (interface 3 931 phrases, passerelle 1 503) ; essai Windows sur GitHub Actions ; `essai:cli`, `essai:vscode`, `essai:palmier` |
+| Vérifié | `npm run securite` : 2290 contrôles, 0 échec (30/09/2026, sur le code fusionné avec les vrais catalogues) ; `npm run typecheck` ; relevés à 100 % dans les six catalogues (interface 3 893 phrases, passerelle 1 503) ; essai Windows sur GitHub Actions ; `essai:cli`, `essai:vscode`, `essai:palmier` |
 | Reste à essayer | sur les vraies machines : § 5, « Ce qui reste à essayer sur les postes de Medhi » |
 | Documents liés | [ARCHITECTURE.md](ARCHITECTURE.md), [SECURITE.md](SECURITE.md), [SCREENS.md](SCREENS.md), [SIGNATURE.md](SIGNATURE.md), [README.md](README.md), [docs/GUIDE.md](docs/GUIDE.md) |
 
@@ -5745,7 +5745,7 @@ de cette section) ; ce qui est dit plus bas des « phrases encore en anglais » 
   copies provisoires, il disparaît avec les phrases arabes.
 
 **Suite du 30/09/2026 : les vrais catalogues, les README, les captures.**
-- **Catalogues** : `src/i18n/{es,de,ar}.json` (3 931 phrases) et `gateway/i18n/{es,de,ar}.json`
+- **Catalogues** : `src/i18n/{es,de,ar}.json` (3 893 phrases) et `gateway/i18n/{es,de,ar}.json`
   (1 503) sont de vraies traductions, harmonisées par langue sur un glossaire (espagnol au « tú »,
   « Ajustes », « agentes siempre activos » ; allemand au « Sie », « Einstellungen », « dauerhaft
   aktive Agenten » ; arabe standard, « الإعدادات », « الوكلاء الدائمو العمل », noms de produits et
@@ -5778,10 +5778,19 @@ de cette section) ; ce qui est dit plus bas des « phrases encore en anglais » 
   « a · b · c » (le « 7 » de « 7 Go » partait à l'autre bout) ; titre de Chat latin coupé par le
   début dans la barre latérale ; « {0}% » recollé. Traductions fausses : « Depuis {0} » (sens
   temporel en allemand et en arabe).
-- **Vu, laissé** : une cinquantaine de phrases assemblées autour de `branding.name`
-  (`{t(...)} {branding.name} {t(...)}`), lisibles mais à reprendre en clés entières ; une vingtaine
-  de listes jointes par « , » (virgule latine en arabe, chinois, japonais) ; adresses d'exemple
-  techniques en `.exemple.fr` ; date et heure sur deux lignes dans le journal d'activité.
+- **Phrases entières autour du nom du produit** (demandé par Medhi le 30/09/2026) : 54 endroits
+  assemblés par morceaux (`{t(...)} {branding.name} {t(...)}`) sont réunis en 51 clés à trou dans
+  19 fichiers (`FirstRun.tsx`, `ParametresPages.tsx`, `DriveGoogle.tsx`, `SlackConnecteur.tsx`…),
+  traduites en entier dans les six catalogues (verbe en deuxième position en allemand, verbe en
+  tête en arabe) ; le texte français affiché ne change pas. Dans « À propos », la licence garde sa
+  mise en valeur : la phrase traduite est coupée sur un marqueur mis à la place du trou.
+- **Listes de noms** : `lister()` (`src/lib/i18n.ts` et `gateway/src/langue.ts`) joint par « ، »
+  en arabe (chaque nom isolé), « 、 » en chinois et en japonais, « , » ailleurs : une vingtaine de
+  listes à l'écran, 10 dans les messages de la passerelle. Laissées en virgule latine : les valeurs
+  techniques (portées OAuth), les journaux, ce qui est écrit pour le modèle.
+- **Vu, laissé** : « Version X téléchargée et vérifiée. » (`MiseAJour.tsx`) et une phrase de
+  `SlackConnecteur.tsx` restent assemblées (sans nom de produit) ; adresses d'exemple techniques
+  en `.exemple.fr` ; date et heure sur deux lignes dans le journal d'activité.
 - **Pas atteints dans cette tournée** : la file d'attente du Chat et une réponse en cours (il faut
   un modèle), une séance de Code, les fiches d'agents toujours actifs (vues dans les captures),
   l'installation d'une instance distante, la double authentification, les connecteurs une fois

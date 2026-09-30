@@ -12,7 +12,7 @@ refaite à l'envers.
 |---|---|
 | Version | 2026.929.4 (`package.json`) |
 | Dernière mise à jour | 30 septembre 2026 |
-| Vérifié | `npm run securite` : 2288 contrôles, 0 échec (30/09/2026) ; `npm run typecheck` ; relevés à 100 % dans les six catalogues (interface 3 928 phrases, passerelle 1 503 ; es, de, ar en copies provisoires de l'anglais tant que les traductions ne sont pas posées) ; essai Windows sur GitHub Actions ; `essai:cli`, `essai:vscode`, `essai:palmier` |
+| Vérifié | `npm run securite` : 2290 contrôles, 0 échec (30/09/2026, sur le code fusionné avec les vrais catalogues) ; `npm run typecheck` ; relevés à 100 % dans les six catalogues (interface 3 931 phrases, passerelle 1 503) ; essai Windows sur GitHub Actions ; `essai:cli`, `essai:vscode`, `essai:palmier` |
 | Reste à essayer | sur les vraies machines : § 5, « Ce qui reste à essayer sur les postes de Medhi » |
 | Documents liés | [ARCHITECTURE.md](ARCHITECTURE.md), [SECURITE.md](SECURITE.md), [SCREENS.md](SCREENS.md), [SIGNATURE.md](SIGNATURE.md), [README.md](README.md), [docs/GUIDE.md](docs/GUIDE.md) |
 
@@ -5657,8 +5657,8 @@ que fait un vrai 3B du contexte rendu.
 par Medhi : sept langues (français, la source ; anglais, chinois, japonais, espagnol, allemand,
 arabe). Le travail est coupé en deux : les catalogues (`src/i18n/{es,de,ar}.json`,
 `gateway/i18n/{es,de,ar}.json`) sont traduits à part et posés à la fusion ; ce qui suit est tout le
-reste. **Tant que les vrais catalogues ne sont pas posés, ces six fichiers sont des copies de
-`en.json`** (mêmes clés, phrases anglaises) : les relevés disent 100 %, l'écran est en anglais.
+reste. **Les vrais catalogues sont posés depuis le 30/09/2026** (voir « Suite du 30/09 » à la fin
+de cette section) ; ce qui est dit plus bas des « phrases encore en anglais » décrit l'état d'avant.
 - **Décision : de droite à gauche par propriétés logiques, pas par une seconde feuille de style.**
   `dir="rtl"` et `lang="ar"` sont posés sur `<html>` par `src/lib/i18n.ts`, au chargement du
   module, donc avant le premier rendu (`ltr` est écrit aussi, pour les six autres langues). La mise
@@ -5730,8 +5730,7 @@ reste. **Tant que les vrais catalogues ne sont pas posés, ces six fichiers sont
   textes d'Electron) ; **la ligne de commande (`cli/`) et l'extension VS Code
   (`extensions/vscode/`) restent en français seulement** ; pas de sélecteur de langue sur l'écran
   de première ouverture ni sur l'écran de connexion (la langue du système y est suivie, comme
-  avant) ; les scènes des captures du README (`scripts/captures/scenes/{es,de,ar}.mjs`) ne sont
-  pas écrites ; **pas regardés en arabe** : l'écran de première ouverture et le choix de
+  avant) ; **pas regardés en arabe** : l'écran de première ouverture et le choix de
   l'instance, Bibliothèque, Réunions, Groupes, Projets, Modèles, les autres pages de Réglages,
   les cartes d'accord de Cowork et de Code, la file d'attente du Chat, le panneau de suivi de
   Code, le comparateur de modèles, les fenêtres autres que « Nouvelle tâche », l'aide, le thème
@@ -5744,6 +5743,55 @@ reste. **Tant que les vrais catalogues ne sont pas posés, ces six fichiers sont
   une vraie réponse de modèle dans ces langues pas essayée. Les phrases anglaises affichées dans
   une page arabe montrent leur point final à gauche (« .Choose your account ») : c'est l'effet des
   copies provisoires, il disparaît avec les phrases arabes.
+
+**Suite du 30/09/2026 : les vrais catalogues, les README, les captures.**
+- **Catalogues** : `src/i18n/{es,de,ar}.json` (3 931 phrases) et `gateway/i18n/{es,de,ar}.json`
+  (1 503) sont de vraies traductions, harmonisées par langue sur un glossaire (espagnol au « tú »,
+  « Ajustes », « agentes siempre activos » ; allemand au « Sie », « Einstellungen », « dauerhaft
+  aktive Agenten » ; arabe standard, « الإعدادات », « الوكلاء الدائمو العمل », noms de produits et
+  code en caractères latins). Les 18 textes de la zone de notification (`electron/zoneNotification.cjs`)
+  disaient « empleados », « Mitarbeiter », « الموظفون » : alignés sur ce glossaire.
+- **Phrases assemblées** : « Retirer X ? Ses missions… » (`Employes.tsx`) était collée de trois
+  morceaux, ce qui donnait un ordre faux en allemand, en japonais et en arabe : une seule clé
+  `Retirer {0} ? …`. La durée d'une mission (« 38 s », `Employes.tsx`) et celle d'une réunion
+  (« 1 h 05 », `reunions.ts`) étaient écrites en dur : elles passent par `tf()` (vu à l'écran en
+  arabe : « s 38 » avant, « 38 ث » après).
+- **README** : `README.es.md`, `README.de.md`, `README.ar.md` (ce dernier enveloppé dans
+  `<div dir="rtl">`, blocs de code et badges en `dir="ltr"`), mêmes titres, liens, images et blocs
+  de code que `README.md` ; le sélecteur des sept langues est dans les sept README.
+- **Captures** : `scripts/captures/scenes/{es,de,ar}.mjs` (mêmes scores de recherche que la scène
+  anglaise : 0,77 et 0,58 pour la question seule, le reste à 0), 9 images par langue dans
+  `docs/images/{es,de,ar}/`, refaites par `node scripts/captures/capturer.mjs --langue <l>`.
+  Regardées à l'œil : Chat, Agents, Code et Mon usage en arabe, Chat en allemand, Chat et Agents
+  en espagnol.
+- **Tournée des écrans avec les vraies phrases** (instance jetable, arabe à l'œil ; allemand et
+  espagnol par relevé automatique des débordements et des phrases françaises) : premier lancement,
+  connexion, Projets, Fichiers, Réunions, Groupes, Tâches (kanban, tableau, calendrier, création),
+  Agents, Chat et ses menus, partage, aide, notifications, Cowork, Modèles, les 17 pages des
+  Réglages. Corrigé, **dans les sept langues** : les en-têtes de tableau s'étaient centrés depuis
+  le passage de `text-left` à `text-start` (`th { text-align: inherit }`, `styles/index.css`) ; le
+  menu « … » d'un fichier coupé quand la liste est courte ; les jours du calendrier des Tâches
+  écrits en français ; des dates dans la langue du système (`TachesProgrammees.tsx`,
+  `EntrainerModele.tsx`) ; le bouton micro des Réunions traduit « Save » (clé « Enregistrer au
+  micro ») ; une dizaine de libellés de lecteur d'écran et les adresses d'exemple des champs restés
+  en français. **En arabe** : `enumerer()` (`src/lib/i18n.ts`) isole chaque mention d'une ligne
+  « a · b · c » (le « 7 » de « 7 Go » partait à l'autre bout) ; titre de Chat latin coupé par le
+  début dans la barre latérale ; « {0}% » recollé. Traductions fausses : « Depuis {0} » (sens
+  temporel en allemand et en arabe).
+- **Vu, laissé** : une cinquantaine de phrases assemblées autour de `branding.name`
+  (`{t(...)} {branding.name} {t(...)}`), lisibles mais à reprendre en clés entières ; une vingtaine
+  de listes jointes par « , » (virgule latine en arabe, chinois, japonais) ; adresses d'exemple
+  techniques en `.exemple.fr` ; date et heure sur deux lignes dans le journal d'activité.
+- **Pas atteints dans cette tournée** : la file d'attente du Chat et une réponse en cours (il faut
+  un modèle), une séance de Code, les fiches d'agents toujours actifs (vues dans les captures),
+  l'installation d'une instance distante, la double authentification, les connecteurs une fois
+  branchés, la fenêtre de mise à jour, les fenêtres modales en allemand et en espagnol.
+- **Reste** : le rendu de `README.ar.md` sur GitHub (pas vu avant la poussée) ; dans un compte
+  rendu d'agent en arabe, une parenthèse qui mêle noms latins, références et montants se range
+  mal (« INV-0917، 342.60) Harbour Café يورو ») : c'est le texte de la donnée, pas l'interface ;
+  les libellés de macOS et de Windows cités dans les trois README (« Ouvrir quand même »,
+  « Toujours autoriser ») sont traduits sans avoir été lus sur un système dans ces langues ;
+  relecture par des personnes dont c'est la langue.
 
 **Fait le 27/09/2026 : parcours complet de l'interface, contre une instance jetable.** Passerelle
 jetable (dossier de données temporaire, clé des données en fichier, LM Studio éteint), faux

@@ -17,14 +17,17 @@
   <a href="README.md">English</a> ·
   <a href="README.fr.md">Français</a> ·
   <a href="README.zh.md">中文</a> ·
-  <strong>日本語</strong>
+  <strong>日本語</strong> ·
+  <a href="README.es.md">Español</a> ·
+  <a href="README.de.md">Deutsch</a> ·
+  <a href="README.ar.md">العربية</a>
 </p>
 
 <p align="center">
   <a href="LICENSE"><img alt="License: AGPL-3.0" src="https://img.shields.io/badge/license-AGPL--3.0-blue" /></a>
   <a href="https://github.com/medhiclb/HelixAI/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/medhiclb/HelixAI?label=release" /></a>
   <img alt="Platforms: macOS, Windows, Linux" src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey" />
-  <img alt="インターフェース：英語、フランス語、中国語、日本語" src="https://img.shields.io/badge/interface-EN%20%C2%B7%20FR%20%C2%B7%20ZH%20%C2%B7%20JA-success" />
+  <img alt="インターフェース：英語、フランス語、中国語、日本語、スペイン語、ドイツ語、アラビア語" src="https://img.shields.io/badge/interface-EN%20%C2%B7%20FR%20%C2%B7%20ZH%20%C2%B7%20JA%20%C2%B7%20ES%20%C2%B7%20DE%20%C2%B7%20AR-success" />
   <a href="https://github.com/medhiclb/HelixAI/discussions"><img alt="Discussions" src="https://img.shields.io/badge/discussions-welcome-8a63d2" /></a>
 </p>
 
@@ -63,8 +66,8 @@
   新しいバージョンの確認（Helix AI は GitHub、OpenClaw は npm）のときだけです。
 - **オープンソースで、購入するものはありません。** AGPL-3.0。私たちのアカウントは不要で、テレメトリーも
   ありません。各組織が自分のインスタンスをインストールして運用します。
-- **macOS、Windows、Linux。** 3 つのシステムで同じ 1 つのアプリが動き、英語、フランス語、中国語、日本語に
-  対応しています。
+- **macOS、Windows、Linux。** 3 つのシステムで同じ 1 つのアプリが動き、英語、フランス語、中国語、日本語、
+  スペイン語、ドイツ語、アラビア語に対応しています。
 - **働き続けるエージェント。** 独自のナレッジベースとスケジュールされたミッションを持つエージェントは、
   ウィンドウを閉じていても動作し、実行ごとにレポートを残します。何かを変更する操作は、別の設定にしない限り、
   人の承認を待ちます。

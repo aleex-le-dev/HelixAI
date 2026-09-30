@@ -14,7 +14,7 @@ import {
   type Invitation,
   type InvitationCreee,
 } from "@/lib/invitations";
-import { t } from "@/lib/i18n";
+import { t, tf } from "@/lib/i18n";
 
 /**
  * Inviter un collègue sur l'instance.
@@ -174,7 +174,7 @@ export function InviterCollegue() {
       )}
 
       <p className="mt-4 text-xs leading-relaxed text-muted-foreground">
-        {t("Le code ne quitte pas votre organisation : c'est votre instance qui l'envoie, depuis la boîte aux lettres que vous y avez branchée.")}{" "}{branding.name}{" "}{t("ne contacte aucun service tiers pour cela.")}
+        {tf("Le code ne quitte pas votre organisation : c'est votre instance qui l'envoie, depuis la boîte aux lettres que vous y avez branchée. {0} ne contacte aucun service tiers pour cela.", branding.name)}
       </p>
     </Card>
   );

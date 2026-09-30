@@ -356,7 +356,7 @@ export function CourrierIMAP({ onChange }: { onChange?: () => void } = {}) {
   if (etat === null) {
     return (
       <InfoBox tone="warning" leading={<ShieldAlert size={15} strokeWidth={1.75} />}>
-        {t("L'instance")}{" "}{branding.name}{" "}{t("ne répond pas. Le courrier se configure depuis cet écran dès qu'elle est joignable.")}
+        {tf("L'instance {0} ne répond pas. Le courrier se configure depuis cet écran dès qu'elle est joignable.", branding.name)}
       </InfoBox>
     );
   }
@@ -430,8 +430,7 @@ export function CourrierIMAP({ onChange }: { onChange?: () => void } = {}) {
     <div className="space-y-3">
       {!etat.chiffrementDonnees && (
         <InfoBox tone="warning" leading={<ShieldAlert size={15} strokeWidth={1.75} />}>
-          {t("Le chiffrement des données n'est pas actif sur cette instance.")}{" "}{branding.name}{" "}
-          {t("refusera d'enregistrer un mot de passe de messagerie tant que ce sera le cas.")}
+          {tf("Le chiffrement des données n'est pas actif sur cette instance. {0} refusera d'enregistrer un mot de passe de messagerie tant que ce sera le cas.", branding.name)}
         </InfoBox>
       )}
 
@@ -590,7 +589,7 @@ export function CourrierIMAP({ onChange }: { onChange?: () => void } = {}) {
       </Card>
 
       <InfoBox tone="muted" leading={<Lock size={15} strokeWidth={1.75} />}>
-        {branding.name}{" "}{t("se connecte directement à votre serveur, sans passer par l'API d'un fournisseur ni par un service tiers. Les agents lisent vos messages sans les marquer comme lus, et peuvent préparer des brouillons. Une fois la boîte connectée, vous pourrez aussi leur permettre d'envoyer : chaque mail vous sera alors montré en entier et ne partira qu'après votre accord. Rien n'est jamais supprimé. Le certificat du serveur est vérifié : une messagerie au certificat inconnu sera refusée plutôt que d'exposer votre mot de passe.")}
+        {tf("{0} se connecte directement à votre serveur, sans passer par l'API d'un fournisseur ni par un service tiers. Les agents lisent vos messages sans les marquer comme lus, et peuvent préparer des brouillons. Une fois la boîte connectée, vous pourrez aussi leur permettre d'envoyer : chaque mail vous sera alors montré en entier et ne partira qu'après votre accord. Rien n'est jamais supprimé. Le certificat du serveur est vérifié : une messagerie au certificat inconnu sera refusée plutôt que d'exposer votre mot de passe.", branding.name)}
       </InfoBox>
     </div>
   );

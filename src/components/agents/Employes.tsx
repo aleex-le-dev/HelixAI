@@ -186,7 +186,7 @@ export function MiseAJourOpenClaw({ etat, recharger }: { etat: EtatEmployes; rec
     if (!etat.moteur.parue) return null;
     return (
       <p className="mt-4 text-xs text-muted-foreground">
-        {t("OpenClaw")}{" "}{etat.moteur.parue}{" "}{t("est paru. Vos agents restent sur la")}{" "}{etat.moteur.version}{t(", la version éprouvée avec")}{" "}{branding.name}{" "}{t(": une prochaine mise à jour de")}{" "}{branding.name}{" "}{t("les y fera passer, une fois vérifiée.")}
+        {tf("OpenClaw {0} est paru. Vos agents restent sur la {1}, la version éprouvée avec {2} : une prochaine mise à jour de {2} les y fera passer, une fois vérifiée.", etat.moteur.parue, etat.moteur.version, branding.name)}
       </p>
     );
   }
@@ -194,7 +194,7 @@ export function MiseAJourOpenClaw({ etat, recharger }: { etat: EtatEmployes; rec
     <InfoBox tone="info" className="mt-4" leading={<RefreshCw size={15} strokeWidth={1.75} />}>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p>
-          {t("Mise à jour d'OpenClaw disponible :")}{" "}{tf("{0} vers {1}", etat.moteur.version ?? "", etat.moteur.miseAJour)}{t(", la version éprouvée avec cette version de")}{" "}{branding.name}{t(". Vos agents s'interrompent une à deux minutes, le temps de l'installer. Si elle ne démarre pas, tout revient comme avant.")}
+          {tf("Mise à jour d'OpenClaw disponible : {0} vers {1}, la version éprouvée avec cette version de {2}. Vos agents s'interrompent une à deux minutes, le temps de l'installer. Si elle ne démarre pas, tout revient comme avant.", etat.moteur.version ?? "", etat.moteur.miseAJour, branding.name)}
         </p>
         <Button
           size="sm"
@@ -432,7 +432,7 @@ function ChoixLiberte({
       </div>
       {valeur === "libre" && (
         <InfoBox tone="warning" leading={<TriangleAlert size={15} strokeWidth={1.75} />}>
-          {t("Au palier Libre, il peut lancer n'importe quelle commande sur la machine de l'instance, avec les droits de")}{" "}{branding.name}{" "}{t(": installer, modifier, supprimer. Chaque outil qu'il utilise est inscrit au journal d'activité, mais pas le détail de la commande.")}
+          {tf("Au palier Libre, il peut lancer n'importe quelle commande sur la machine de l'instance, avec les droits de {0} : installer, modifier, supprimer. Chaque outil qu'il utilise est inscrit au journal d'activité, mais pas le détail de la commande.", branding.name)}
           {/*
            * Windows natif : OpenClaw y lance ses commandes par PowerShell, pas
            * par un shell Unix (plateformeOpenClaw.ts). Dit ici, pour ce seul
@@ -747,8 +747,7 @@ function EditeurMissions({
       )}
       {valeur.length > 0 && (
         <p className="text-xs text-muted-foreground">
-          {t("Les missions tournent tant que l'instance fonctionne : ordinateur allumé et")}{" "}
-          {branding.name}{" "}{t("ouvert (la fenêtre peut être fermée), ou serveur hébergé.")}
+          {tf("Les missions tournent tant que l'instance fonctionne : ordinateur allumé et {0} ouvert (la fenêtre peut être fermée), ou serveur hébergé.", branding.name)}
         </p>
       )}
     </div>

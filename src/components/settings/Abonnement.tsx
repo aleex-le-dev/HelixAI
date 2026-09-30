@@ -99,7 +99,7 @@ export function Abonnement() {
           {t("Le logiciel est gratuit. Ce qui se paie, c'est le calcul.")}
         </h3>
         <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-          {branding.name}{" "}{t("est un logiciel libre : vous pouvez l'installer sur vos machines, gratuitement et pour toujours, et y faire tourner vos propres modèles. C'est le cas aujourd'hui sur ce poste, et rien ne vous oblige à en changer.")}
+          {tf("{0} est un logiciel libre : vous pouvez l'installer sur vos machines, gratuitement et pour toujours, et y faire tourner vos propres modèles. C'est le cas aujourd'hui sur ce poste, et rien ne vous oblige à en changer.", branding.name)}
         </p>
         <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
           {t("Un modèle vraiment puissant demande une carte graphique à plusieurs milliers d'euros, et quelqu'un pour l'entretenir. L'abonnement vous donne accès à ces modèles sans acheter la carte : ils tournent sur des serveurs en Europe, et vos demandes ne quittent pas l'Europe.")}

@@ -48,10 +48,10 @@ export function FirstRun({ onReady }: { onReady: () => void }) {
         {isDesktopApp() ? (
           <>
             <p className="max-w-md text-sm leading-relaxed text-muted-foreground">
-              {t("Le moteur de")}{" "}{branding.name}{" "}{t("ne répond pas. Il est relancé automatiquement : patientez quelques secondes, puis réessayez.")}
+              {tf("Le moteur de {0} ne répond pas. Il est relancé automatiquement : patientez quelques secondes, puis réessayez.", branding.name)}
             </p>
             <p className="max-w-md text-xs leading-relaxed text-muted-foreground">
-              {t("S'il ne revient pas, c'est le plus souvent qu'un autre")}{" "}{branding.name}{" "}{t("est déjà ouvert sur cette machine, ou qu'un programme occupe son port. Fermez l'autre fenêtre, puis réessayez.")}
+              {tf("S'il ne revient pas, c'est le plus souvent qu'un autre {0} est déjà ouvert sur cette machine, ou qu'un programme occupe son port. Fermez l'autre fenêtre, puis réessayez.", branding.name)}
             </p>
             <Button icon={RefreshCw} onClick={() => window.location.reload()}>
               {t("Réessayer")}
@@ -60,7 +60,7 @@ export function FirstRun({ onReady }: { onReady: () => void }) {
         ) : (
           <>
             <p className="max-w-md text-sm text-muted-foreground">
-              {t("Le service")}{" "}{branding.name}{" "}{t("n'est pas joignable à cette adresse. Vérifiez qu'il est démarré, puis rechargez la page.")}
+              {tf("Le service {0} n'est pas joignable à cette adresse. Vérifiez qu'il est démarré, puis rechargez la page.", branding.name)}
             </p>
             <code className="rounded-lg bg-muted px-3 py-1.5 text-xs text-foreground">
               {t("npm run gateway")}
@@ -113,18 +113,16 @@ export function FirstRun({ onReady }: { onReady: () => void }) {
       <Shell>
         <LogoMark size={52} animated />
         <h1 className="text-2xl font-semibold tracking-tight text-foreground">
-          {t("Préparation de")}{" "}{branding.name}
+          {tf("Préparation de {0}", branding.name)}
         </h1>
         <p className="max-w-md text-sm leading-relaxed text-muted-foreground">
           {ouvert ? (
             <>
-              {t("Il manque le moteur qui fait tourner les modèles : llama.cpp, un logiciel libre.")}
-              {" "}{branding.name}{" "}{t("l'installe lui-même, puis le modèle adapté à ce Mac : rien à télécharger ni à glisser. Comptez quelques minutes selon votre connexion (11 Mo pour le moteur, 2 à 19 Go pour le modèle selon la machine). Les modèles tournent ensuite sur cette machine, sans rien envoyer à personne.")}
+              {tf("Il manque le moteur qui fait tourner les modèles : llama.cpp, un logiciel libre. {0} l'installe lui-même, puis le modèle adapté à ce Mac : rien à télécharger ni à glisser. Comptez quelques minutes selon votre connexion (11 Mo pour le moteur, 2 à 19 Go pour le modèle selon la machine). Les modèles tournent ensuite sur cette machine, sans rien envoyer à personne.", branding.name)}
             </>
           ) : (
             <>
-              {t("Il manque le moteur qui fait tourner les modèles : LM Studio, d'Element Labs.")}
-              {" "}{branding.name}{" "}{t("l'installe lui-même : rien à télécharger ni à glisser. Comptez quelques minutes selon votre connexion (0,3 à 1,3 Go selon le système). Les modèles tournent ensuite sur cette machine, sans rien envoyer à l'éditeur.")}
+              {tf("Il manque le moteur qui fait tourner les modèles : LM Studio, d'Element Labs. {0} l'installe lui-même : rien à télécharger ni à glisser. Comptez quelques minutes selon votre connexion (0,3 à 1,3 Go selon le système). Les modèles tournent ensuite sur cette machine, sans rien envoyer à l'éditeur.", branding.name)}
             </>
           )}
         </p>
@@ -216,7 +214,7 @@ export function FirstRun({ onReady }: { onReady: () => void }) {
         )}
 
         <p className="max-w-md text-xs leading-relaxed text-muted-foreground">
-          {t("Le paquet vient de l'éditeur, et son empreinte est vérifiée avant installation. Vous n'aurez jamais à le lancer vous-même :")}{" "}{branding.name}{" "}{t("le démarre quand il en a besoin et, en partant, décharge les modèles qu'il a chargés.")}
+          {tf("Le paquet vient de l'éditeur, et son empreinte est vérifiée avant installation. Vous n'aurez jamais à le lancer vous-même : {0} le démarre quand il en a besoin et, en partant, décharge les modèles qu'il a chargés.", branding.name)}
         </p>
       </Shell>
     );
@@ -250,10 +248,10 @@ export function FirstRun({ onReady }: { onReady: () => void }) {
     <Shell>
       <LogoMark size={52} animated />
       <h1 className="text-2xl font-semibold tracking-tight text-foreground">
-        {t("Bienvenue dans")}{" "}{branding.name}
+        {tf("Bienvenue dans {0}", branding.name)}
       </h1>
       <p className="max-w-md text-sm text-muted-foreground">
-        {branding.name}{" "}{t("fonctionne entièrement sur votre machine. Nous allons installer un modèle adapté à votre matériel. Vos données ne quittent pas cet ordinateur.")}
+        {tf("{0} fonctionne entièrement sur votre machine. Nous allons installer un modèle adapté à votre matériel. Vos données ne quittent pas cet ordinateur.", branding.name)}
       </p>
 
       {/* Profil machine */}

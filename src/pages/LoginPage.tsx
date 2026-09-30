@@ -716,7 +716,7 @@ export function LoginPage({ onSignedIn }: { onSignedIn: () => void }) {
         )}
 
         <p className="mt-8 text-center text-xs leading-relaxed text-muted-foreground">
-          {t("Les comptes restent sur cette instance.")}{" "}{branding.name}{" "}{t("ne contacte aucun service d'authentification. Le mot de passe sépare les comptes entre collègues ; ce n'est pas lui qui chiffre les données de l'instance.")}
+          {tf("Les comptes restent sur cette instance. {0} ne contacte aucun service d'authentification. Le mot de passe sépare les comptes entre collègues ; ce n'est pas lui qui chiffre les données de l'instance.", branding.name)}
         </p>
       </div>
     </div>

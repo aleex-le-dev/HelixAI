@@ -523,7 +523,7 @@ export function PreferencesSettings() {
       </Card>
 
       <Card className="mt-6">
-        <h3 className="text-lg font-semibold text-foreground">{t("À propos de")}{" "}{branding.name}</h3>
+        <h3 className="text-lg font-semibold text-foreground">{tf("À propos de {0}", branding.name)}</h3>
         {/*
          * Le badge vert « À jour » disait autrefois un fait que personne ne
          * mesurait. Depuis 0.10.0, l'état vient de la vérification réelle
@@ -544,8 +544,25 @@ export function PreferencesSettings() {
         */}
         <div className="mt-4 border-t border-border pt-4 text-sm text-muted-foreground">
           <p>
-            {branding.name}{" "}{t("est un logiciel libre, publié sous licence")}{" "}
-            <span className="font-medium text-foreground">{t("GNU AGPL-3.0")}</span>{t(". Vous pouvez le lire, l'installer, le modifier et le redistribuer. Qui le distribue ou le propose comme service en ligne doit publier le code de sa version.")}
+            {/*
+              Une seule phrase à trous : chaque langue place le nom du produit et
+              celui de la licence où elle veut. La licence garde sa mise en valeur :
+              on coupe la phrase traduite sur un marqueur mis à la place du trou {1}.
+            */}
+            {(() => {
+              const [avant, apres = ""] = tf(
+                "{0} est un logiciel libre, publié sous licence {1}. Vous pouvez le lire, l'installer, le modifier et le redistribuer. Qui le distribue ou le propose comme service en ligne doit publier le code de sa version.",
+                branding.name,
+                "\u0000",
+              ).split("\u0000");
+              return (
+                <>
+                  {avant}
+                  <span className="font-medium text-foreground">{t("GNU AGPL-3.0")}</span>
+                  {apres}
+                </>
+              );
+            })()}
           </p>
           <a
             href={branding.urls.sourceCode}
@@ -553,7 +570,7 @@ export function PreferencesSettings() {
             rel="noreferrer"
             className="mt-2 inline-flex items-center gap-1.5 text-foreground underline underline-offset-4 hover:no-underline"
           >
-            <Code2 size={14} strokeWidth={1.75} />{" "}{t("Code source de")}{" "}{branding.name}
+            <Code2 size={14} strokeWidth={1.75} />{" "}{tf("Code source de {0}", branding.name)}
           </a>
         </div>
       </Card>
@@ -836,7 +853,7 @@ export function BotRecorderSettings() {
               </Field>
               {!pont && (
                 <InfoBox tone="muted">
-                  {t("Le bot tourne dans l'application de bureau")}{" "}{branding.name}{" "}{t(": depuis un navigateur, on peut enregistrer au micro et importer des fichiers, pas envoyer le bot.")}
+                  {tf("Le bot tourne dans l'application de bureau {0} : depuis un navigateur, on peut enregistrer au micro et importer des fichiers, pas envoyer le bot.", branding.name)}
                 </InfoBox>
               )}
               {pont && (
@@ -1400,7 +1417,7 @@ export function ConfidentialiteSettings() {
             <ShieldCheck size={18} strokeWidth={1.75} />{" "}{t("Protection de vos données")}
           </p>
           <p className="mt-1 text-sm text-muted-foreground">
-            {branding.name}{" "}{t("respecte votre vie privée et vos droits en matière de protection des données")}
+            {tf("{0} respecte votre vie privée et vos droits en matière de protection des données", branding.name)}
           </p>
           <InfoBox tone="muted" className="mt-4" leading={<Info size={15} strokeWidth={1.75} />}>
             {t("Vous bénéficiez de plusieurs droits concernant vos données personnelles : droit d'accès, de rectification, d'effacement, de limitation du traitement, de portabilité et d'opposition.")}
@@ -1428,7 +1445,7 @@ export function ConfidentialiteSettings() {
             <FileText size={18} strokeWidth={1.75} />{" "}{t("Exporter mes données")}
           </p>
           <p className="mt-1 text-sm text-muted-foreground">
-            {t("Obtenez une copie complète de toutes vos données personnelles stockées dans")}{" "}{branding.name}.
+            {tf("Obtenez une copie complète de toutes vos données personnelles stockées dans {0}.", branding.name)}
           </p>
           <p className="mt-3 text-sm font-medium text-foreground">{t("L'export comprendra les éléments suivants :")}</p>
           <ul className="mt-1 space-y-0.5 text-sm text-muted-foreground">

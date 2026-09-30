@@ -158,7 +158,7 @@ export function DriveGoogle({ onChange }: { onChange?: () => void } = {}) {
   if (etat === null) {
     return (
       <InfoBox tone="warning" leading={<ShieldAlert size={15} strokeWidth={1.75} />}>
-        {t("L'instance")}{" "}{branding.name}{" "}{t("ne répond pas. Google Drive se branche depuis cet écran dès qu'elle est joignable.")}
+        {tf("L'instance {0} ne répond pas. Google Drive se branche depuis cet écran dès qu'elle est joignable.", branding.name)}
       </InfoBox>
     );
   }
@@ -220,7 +220,7 @@ export function DriveGoogle({ onChange }: { onChange?: () => void } = {}) {
           {t("Lecture seule. Vos agents peuvent chercher et lire les fichiers auxquels ce compte Google a accès ; ils ne peuvent ni créer, ni modifier, ni partager, ni supprimer quoi que ce soit. Les documents, feuilles de calcul et présentations Google se lisent, ainsi que les fichiers texte ; les PDF et les fichiers Word ou Excel déposés tels quels sont seulement listés.")}
         </InfoBox>
         <InfoBox tone="muted" leading={<Info size={15} strokeWidth={1.75} />}>
-          {t("Ce Drive est branché pour toute l'instance : chaque compte")}{" "}{branding.name}{" "}{t("peut en faire lire les fichiers à ses agents. L'accès est conservé chiffré sur l'instance et n'est transmis qu'à Google.")}
+          {tf("Ce Drive est branché pour toute l'instance : chaque compte {0} peut en faire lire les fichiers à ses agents. L'accès est conservé chiffré sur l'instance et n'est transmis qu'à Google.", branding.name)}
         </InfoBox>
 
         {messages}
@@ -245,8 +245,7 @@ export function DriveGoogle({ onChange }: { onChange?: () => void } = {}) {
     <div className="space-y-3">
       {!etat.chiffrementDonnees && (
         <InfoBox tone="warning" leading={<ShieldAlert size={15} strokeWidth={1.75} />}>
-          {t("Le chiffrement des données n'est pas actif sur cette instance.")}{" "}{branding.name}{" "}
-          {t("refusera d'enregistrer l'accès au Drive tant que ce sera le cas.")}
+          {tf("Le chiffrement des données n'est pas actif sur cette instance. {0} refusera d'enregistrer l'accès au Drive tant que ce sera le cas.", branding.name)}
         </InfoBox>
       )}
       {etat.aReconnecter && !attente && (
@@ -259,8 +258,7 @@ export function DriveGoogle({ onChange }: { onChange?: () => void } = {}) {
         {!attente ? (
           <>
             <p className="text-sm text-foreground">
-              {t("Vous allez vous connecter à Google dans votre navigateur, puis accepter que")}{" "}
-              {branding.name}{" "}{t("lise votre Drive. Seule la lecture est demandée.")}
+              {tf("Vous allez vous connecter à Google dans votre navigateur, puis accepter que {0} lise votre Drive. Seule la lecture est demandée.", branding.name)}
             </p>
             {messages}
             <div className="flex flex-wrap justify-end gap-2">
@@ -341,7 +339,7 @@ export function DriveGoogle({ onChange }: { onChange?: () => void } = {}) {
       </Card>
 
       <InfoBox tone="muted" leading={<Lock size={15} strokeWidth={1.75} />}>
-        {branding.name}{" "}{t("parle directement à Google, sans intermédiaire, avec l'autorisation que votre entreprise a créée. Le certificat de Google est vérifié à chaque échange. Au débranchement, l'accès est aussi révoqué chez Google.")}
+        {tf("{0} parle directement à Google, sans intermédiaire, avec l'autorisation que votre entreprise a créée. Le certificat de Google est vérifié à chaque échange. Au débranchement, l'accès est aussi révoqué chez Google.", branding.name)}
       </InfoBox>
     </div>
   );

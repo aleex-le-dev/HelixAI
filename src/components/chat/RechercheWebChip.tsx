@@ -28,7 +28,7 @@ export function RechercheWebChip({ moteur, onFermer }: { moteur: string; onFerme
             type="button"
             onClick={p.onClick}
             aria-expanded={p["aria-expanded"]}
-            className="inline-flex h-8 min-w-0 items-center gap-1.5 rounded-full pl-3 pr-1.5 font-medium hover:bg-primary/10"
+            className="inline-flex h-8 min-w-0 items-center gap-1.5 rounded-full ps-3 pe-1.5 font-medium hover:bg-primary/10"
             title={tf("Recherche sur le web active : vos questions partent à {0}.", moteur)}
           >
             <Globe size={15} strokeWidth={1.75} className="shrink-0" />
@@ -61,7 +61,7 @@ export function RechercheWebChip({ moteur, onFermer }: { moteur: string; onFerme
         onClick={onFermer}
         aria-label={t("Arrêter la recherche sur le web")}
         title={t("Arrêter la recherche sur le web")}
-        className="mr-1 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full hover:bg-primary/15"
+        className="me-1 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full hover:bg-primary/15"
       >
         <X size={13} strokeWidth={2} />
       </button>

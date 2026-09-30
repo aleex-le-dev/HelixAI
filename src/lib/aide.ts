@@ -489,14 +489,15 @@ Sur l'application de bureau, Claude Code, Codex et Cursor installés sur ce post
   {
     id: "langue",
     titre: t("Changer la langue"),
-    resume: t("Français, anglais, chinois, japonais."),
-    motsCles: ["langue", "anglais", "chinois", "japonais", "english", "japanese", "traduction", "language", "中文", "日本語"],
+    resume: t("Français, anglais, chinois, japonais, espagnol, allemand, arabe."),
+    motsCles: ["langue", "anglais", "chinois", "japonais", "espagnol", "allemand", "arabe", "english", "japanese", "spanish", "german", "arabic", "traduction", "language", "中文", "日本語", "español", "deutsch", "العربية", "droite à gauche"],
     lien: "/parametres/preferences",
-    corps: t(`L'interface se lit en français, en anglais, en chinois ou en japonais. Le choix se fait dans Réglages, Préférences, rubrique Langue.
+    corps: t(`L'interface se lit en français, en anglais, en chinois, en japonais, en espagnol, en allemand ou en arabe. Le choix se fait dans Réglages, Préférences, rubrique Langue.
 
 - Le choix vaut pour ce poste, pas pour toute l'instance : chacun peut lire dans sa langue, sur la même instance.
 - La page se recharge aussitôt, pour que tout l'écran change d'un coup plutôt qu'à moitié.
 - Sans choix de votre part, la langue de votre système est suivie, si elle est servie.
+- En arabe, l'écran se lit de droite à gauche : la barre latérale passe à droite, et le code, les adresses et les chemins restent de gauche à droite.
 
 Ce qui n'est jamais traduit : ce que vous écrivez. Vos chats, vos documents, vos procédures et les réponses des modèles restent tels quels. Certains messages venus de l'instance peuvent aussi rester en français.`),
   },

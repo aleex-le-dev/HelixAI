@@ -93,8 +93,10 @@ export function ACopier({
       <span className="min-w-0 flex-1">
         <span
           ref={valeurRef}
+          // Une adresse, un code, un jeton : de gauche à droite, même dans une page écrite de droite à gauche (30/09/2026).
+          dir="ltr"
           // Entière, à la ligne s'il le faut : à 375 px, l'adresse de l'API se lisait « http://localhost:1… » (28/09/2026).
-          className="block font-mono text-[13px] text-foreground [overflow-wrap:anywhere]"
+          className="block font-mono text-[13px] text-foreground [overflow-wrap:anywhere] rtl:text-right"
           title={valeur}
         >
           {valeur}

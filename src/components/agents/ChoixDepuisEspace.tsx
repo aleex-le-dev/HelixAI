@@ -129,7 +129,7 @@ export function ChoixDepuisEspace({ onChoisis, onFermer }: { onChoisis: (f: File
                         coche ? l.filter((c) => !(c.source === source && c.cle === e.cle)) : [...l, { ...e, source }],
                       )
                 }
-                className={`flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm hover:bg-muted ${coche ? "bg-muted" : ""}`}
+                className={`flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-start text-sm hover:bg-muted ${coche ? "bg-muted" : ""}`}
               >
                 {e.dossier ? (
                   <Folder size={15} strokeWidth={1.75} className="shrink-0 text-muted-foreground" />
@@ -149,7 +149,7 @@ export function ChoixDepuisEspace({ onChoisis, onFermer }: { onChoisis: (f: File
       {erreur && <p className="mt-2 text-xs text-destructive">{erreur}</p>}
       <div className="mt-4 flex items-center justify-end gap-2">
         {choisis.length > 0 && (
-          <span className="mr-auto text-xs text-muted-foreground">
+          <span className="me-auto text-xs text-muted-foreground">
             {choisis.length === 1 ? t("1 document choisi") : tf("{0} documents choisis", choisis.length)}
           </span>
         )}

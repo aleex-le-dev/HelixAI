@@ -147,7 +147,7 @@ export function EmplacementModeles({
      * Les chemins sont longs et sans espace : ils passent à la ligne n'importe
      * où plutôt que d'élargir la page (vu à 375 px de large, 28/09/2026).
      */
-    <div className={cn("w-full min-w-0 text-left [overflow-wrap:anywhere]", !reglages && "max-w-md rounded-2xl border border-border bg-card p-4")}>
+    <div className={cn("w-full min-w-0 text-start [overflow-wrap:anywhere]", !reglages && "max-w-md rounded-2xl border border-border bg-card p-4")}>
       <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{titre}</p>
       <div className="mt-1.5 flex items-start gap-2">
         <HardDrive size={15} strokeWidth={1.75} className="mt-0.5 shrink-0 text-muted-foreground" />
@@ -263,7 +263,7 @@ export function EmplacementModeles({
             {t("Changer")}
           </Button>
           {etat.revenir && !etat.parDefaut && (
-            <Button size="sm" variant="ghost" className="h-auto min-h-8 py-1.5 text-left" icon={RotateCcw} disabled={occupe} onClick={() => void appliquer(null)}>
+            <Button size="sm" variant="ghost" className="h-auto min-h-8 py-1.5 text-start" icon={RotateCcw} disabled={occupe} onClick={() => void appliquer(null)}>
               {t("Revenir à l'emplacement habituel")}
             </Button>
           )}
@@ -272,7 +272,7 @@ export function EmplacementModeles({
       {/* LM Studio posé ailleurs que choisi : revenir reste possible même si le choix n'est plus libre. */}
       {etat.admin && etat.changement === "manuel" && etat.revenir && !etat.parDefaut && !reglages && (
         <div className="mt-3">
-          <Button size="sm" variant="ghost" className="h-auto min-h-8 py-1.5 text-left" icon={RotateCcw} disabled={occupe} onClick={() => void appliquer(null)}>
+          <Button size="sm" variant="ghost" className="h-auto min-h-8 py-1.5 text-start" icon={RotateCcw} disabled={occupe} onClick={() => void appliquer(null)}>
             {t("Revenir à l'emplacement habituel")}
           </Button>
         </div>
@@ -305,7 +305,7 @@ function MarcheLmStudio({ etat, windows, occupe, revenir }: { etat: EtatEmplacem
       <p className="text-foreground">
         {tf("LM Studio est déjà installé dans {0}. {1} ne déplace pas le dossier d'un LM Studio en marche : ce qu'il écrit pourrait être abîmé. Pour le mettre sur un autre disque :", m.dossier, branding.name)}
       </p>
-      <ol className="list-decimal space-y-2 pl-5 text-muted-foreground">
+      <ol className="list-decimal space-y-2 ps-5 text-muted-foreground">
         <li>{tf("Quittez {0}, et l'application LM Studio si elle est ouverte.", branding.name)}</li>
         <li>
           {windows
@@ -330,7 +330,7 @@ function MarcheLmStudio({ etat, windows, occupe, revenir }: { etat: EtatEmplacem
         <p className="text-xs text-muted-foreground">{tf("Les modèles de LM Studio sont rangés dans {0} (réglage de LM Studio).", m.modeles)}</p>
       )}
       {etat.admin && etat.revenir && !etat.parDefaut && (
-        <Button size="sm" variant="ghost" className="h-auto min-h-8 py-1.5 text-left" icon={RotateCcw} disabled={occupe} onClick={revenir}>
+        <Button size="sm" variant="ghost" className="h-auto min-h-8 py-1.5 text-start" icon={RotateCcw} disabled={occupe} onClick={revenir}>
           {t("Revenir à l'emplacement habituel")}
         </Button>
       )}

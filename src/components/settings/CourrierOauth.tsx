@@ -224,7 +224,7 @@ export function CourrierOauth({
       {(!google || applicationGoogle) && (
         <div className="flex flex-wrap items-center gap-2">
           <Button
-            className="!h-auto min-h-10 max-w-full py-2 text-left"
+            className="!h-auto min-h-10 max-w-full py-2 text-start"
             icon={occupe || attente ? Loader2 : ExternalLink}
             disabled={occupe || attente || !adresse.includes("@") || (!parInstance && !clientId.trim())}
             onClick={() => void lancer()}

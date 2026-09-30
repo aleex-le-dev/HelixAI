@@ -97,6 +97,59 @@
     @apply outline-none ring-0;
   }
 
+  /*
+   * Sens d'écriture (30/09/2026). L'arabe s'écrit de droite à gauche :
+   * `dir="rtl"` est posé sur <html> par src/lib/i18n.ts, et la mise en page
+   * suit parce qu'elle est écrite en propriétés logiques (ms-, pe-, start-,
+   * text-start). Restent trois choses que les propriétés logiques ne règlent
+   * pas, toutes sous `[dir="rtl"]` : rien ne change dans les six langues qui
+   * s'écrivent de gauche à droite.
+   *
+   * 1. Ce qui est technique reste de gauche à droite : code, chemins,
+   *    commandes, adresses, jetons, numéros de version. Un chemin lu à l'envers
+   *    (« Helix/Application Support/~ ») ne se recopie pas.
+   */
+  /*
+   * Un bloc préformaté sans police de code (trace d'un outil, rapport à
+   * envoyer) mêle des phrases et du technique : chaque ligne prend le sens de
+   * son premier mot (`plaintext`), une ligne arabe part de la droite, une
+   * commande de la gauche.
+   */
+  [dir="rtl"] :where(pre:not([dir])) {
+    direction: ltr;
+    unicode-bidi: plaintext;
+    text-align: start;
+  }
+  [dir="rtl"] :where(code, kbd, samp, .font-mono) {
+    direction: ltr;
+    unicode-bidi: isolate;
+  }
+  [dir="rtl"] :where(pre.font-mono, pre[dir="ltr"]) {
+    text-align: left;
+  }
+  /* Adresses, mots de passe, numéros : tapés de gauche à droite, rangés du côté où la ligne commence. */
+  [dir="rtl"] :where(input:is([type="url"], [type="email"], [type="password"], [type="tel"], [type="number"])) {
+    direction: ltr;
+    text-align: right;
+  }
+  /* 2. Les icônes qui montrent une direction : plus bas, hors de `@layer` (voir « Icônes directionnelles »). */
+  /*
+   * Les graphiques restent de gauche à droite : le temps s'y lit ainsi, et
+   * `text-anchor` suit le sens de la page (vu à l'écran le 30/09/2026 : les
+   * dates de l'axe de « Mon usage » sortaient du cadre, coupées).
+   */
+  [dir="rtl"] :where(svg) {
+    direction: ltr;
+  }
+  /*
+   * 3. L'écriture arabe est liée : un espacement entre les lettres
+   *    (`tracking-wide` des petits titres en capitales) la découpe en lettres
+   *    isolées. Les capitales n'y existent pas non plus.
+   */
+  :root:lang(ar) * {
+    letter-spacing: 0 !important;
+  }
+
   /* Barres de defilement discretes. */
   ::-webkit-scrollbar {
     width: 10px;
@@ -112,6 +165,21 @@
     background-clip: padding-box;
     border: 3px solid transparent;
   }
+}
+
+/*
+ * Icônes directionnelles, de droite à gauche (30/09/2026). Hors de `@layer` :
+ * Tailwind y retire les règles dont les classes ne figurent pas dans le code,
+ * et `lucide-chevron-left` n'y figure pas (c'est lucide-react qui la pose).
+ * Les icônes qui montrent une direction se retournent : « retour » pointe
+ * vers la droite, « suivant » vers la gauche, la barre latérale se dessine
+ * à droite. Par `scale`, et non `transform` : un chevron qui tourne quand
+ * sa rubrique s'ouvre (`rotate-90`) garde sa rotation. Les icônes sans
+ * direction (coche, croix, engrenage, flèche d'envoi vers le haut) ne sont
+ * pas touchées.
+ */
+[dir="rtl"] :where(.lucide-chevron-left, .lucide-chevron-right, .lucide-arrow-left, .lucide-arrow-right, .lucide-send, .lucide-log-in, .lucide-log-out, .lucide-panel-left, .lucide-panel-left-close, .lucide-panel-left-open, .lucide-panel-right, .lucide-corner-left-up, .lucide-list-tree) {
+  scale: -1 1;
 }
 
 @keyframes popover {

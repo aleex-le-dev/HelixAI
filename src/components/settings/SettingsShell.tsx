@@ -121,7 +121,7 @@ function SettingsNav() {
   return (
     <aside
       ref={liste}
-      className="flex shrink-0 gap-1 overflow-x-auto border-b border-border px-3 py-2 md:w-[248px] md:flex-col md:overflow-y-auto md:overflow-x-hidden md:border-b-0 md:border-r"
+      className="flex shrink-0 gap-1 overflow-x-auto border-b border-border px-3 py-2 md:w-[248px] md:flex-col md:overflow-y-auto md:overflow-x-hidden md:border-b-0 md:border-e"
     >
       <div className="mb-2 hidden items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-muted-foreground md:flex">
         <Search size={15} strokeWidth={1.75} />

@@ -355,7 +355,7 @@ function PastilleStatut({ reunion: r }: { reunion: Reunion }) {
 function LigneReunion({ reunion: r, onOuvrir }: { reunion: Reunion; onOuvrir: () => void }) {
   return (
     <li>
-      <button type="button" onClick={onOuvrir} className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-muted/40">
+      <button type="button" onClick={onOuvrir} className="flex w-full items-center gap-3 px-4 py-3 text-start hover:bg-muted/40">
         <IconeSource source={r.source} />
         <span className="min-w-0 flex-1">
           <span className="block truncate font-medium text-foreground">{r.titre}</span>
@@ -809,7 +809,7 @@ function DetailReunion({ id, onRetour }: { id: string; onRetour: () => void }) {
       )}
       {confirmer && (
         <Modal open onClose={() => setConfirmer(false)} size="sm">
-          <h2 className="pr-8 text-lg font-semibold text-foreground">{t("Supprimer cette réunion ?")}</h2>
+          <h2 className="pe-8 text-lg font-semibold text-foreground">{t("Supprimer cette réunion ?")}</h2>
           <p className="mt-2 text-sm text-muted-foreground">
             {t("Le compte rendu, la transcription et l'audio éventuel disparaissent, pour tous ceux qui y avaient accès.")}
           </p>
@@ -883,7 +883,7 @@ function CompteRenduVue({
       {cr.points.length > 0 && (
         <section>
           <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">{t("Points clés")}</h2>
-          <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-foreground">
+          <ul className="mt-2 list-disc space-y-1 ps-5 text-sm text-foreground">
             {cr.points.map((p, i) => (
               <li key={i}>{p}</li>
             ))}
@@ -993,7 +993,7 @@ function TranscriptionVue({ segments }: { segments: Segment[] }) {
       <ol className="mt-3 space-y-2">
         {visibles.map((s, i) => (
           <li key={i} className="flex gap-3 text-sm">
-            <span className="w-14 shrink-0 pt-px text-right tabular-nums text-muted-foreground">{horodatage(s.debut)}</span>
+            <span className="w-14 shrink-0 pt-px text-end tabular-nums text-muted-foreground">{horodatage(s.debut)}</span>
             <span className="text-foreground">{s.texte}</span>
           </li>
         ))}
@@ -1024,7 +1024,7 @@ function PartageReunion({
   ];
   return (
     <Modal open onClose={onFermer} size="md">
-      <h2 className="pr-8 text-lg font-semibold text-foreground">{t("Qui peut voir cette réunion")}</h2>
+      <h2 className="pe-8 text-lg font-semibold text-foreground">{t("Qui peut voir cette réunion")}</h2>
       <p className="mt-1 text-sm text-muted-foreground">{t("Compte rendu et transcription ; seul vous pouvez la modifier ou la supprimer.")}</p>
       <div className="mt-4 grid gap-2 sm:grid-cols-3">
         {options.map((o) => (

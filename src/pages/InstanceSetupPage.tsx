@@ -171,7 +171,7 @@ export function InstanceSetupPage({
             <button
               type="button"
               onClick={standalone}
-              className="flex w-full items-start gap-3 rounded-xl border border-border bg-card p-4 text-left transition-colors hover:bg-muted"
+              className="flex w-full items-start gap-3 rounded-xl border border-border bg-card p-4 text-start transition-colors hover:bg-muted"
             >
               <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-muted">
                 <Laptop size={18} strokeWidth={1.75} className="text-foreground" />
@@ -188,7 +188,7 @@ export function InstanceSetupPage({
             <button
               type="button"
               onClick={() => setMode("rejoindre")}
-              className="flex w-full items-start gap-3 rounded-xl border border-border bg-card p-4 text-left transition-colors hover:bg-muted"
+              className="flex w-full items-start gap-3 rounded-xl border border-border bg-card p-4 text-start transition-colors hover:bg-muted"
             >
               <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-muted">
                 <Server size={18} strokeWidth={1.75} className="text-foreground" />

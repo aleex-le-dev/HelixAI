@@ -51,7 +51,7 @@ export function SuggestionList({
                       ? onBase?.(s.base)
                       : onDemander?.(s.question, s.outils)
                 }
-                className="flex w-full items-center gap-3 rounded-lg px-2 py-2 text-left text-sm text-foreground transition-colors hover:bg-muted"
+                className="flex w-full items-center gap-3 rounded-lg px-2 py-2 text-start text-sm text-foreground transition-colors hover:bg-muted"
               >
                 <Icone size={17} strokeWidth={1.5} className="shrink-0 text-muted-foreground" />
                 <span>{s.libelle}</span>

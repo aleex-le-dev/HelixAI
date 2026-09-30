@@ -75,13 +75,27 @@ export interface Plan {
  * Le japonais d'abord (28/09/2026) : il s'écrit aussi avec des idéogrammes, et
  * une demande japonaise passait pour du chinois, la réponse avec. Les kana
  * (hiragana, katakana) n'existent qu'en japonais : deux suffisent à trancher.
+ *
+ * L'arabe, l'espagnol et l'allemand depuis le 30/09/2026. L'arabe se reconnaît
+ * à son écriture. L'espagnol et l'allemand se comptent comme le français et
+ * l'anglais, par leurs mots courants et leurs lettres propres (ñ, ¿, ä, ß), et
+ * ne l'emportent que s'ils battent **nettement** les trois autres : « de »,
+ * « la », « un », « que » sont aussi français, et une demande française ne doit
+ * pas changer de langue. Les mots qui commencent ou finissent par une lettre
+ * accentuée ne sont pas dans les listes (`\b` ne les borne pas) : leurs
+ * lettres comptent dans la seconde moitié.
  */
-export function langueDe(texte: string): "fr" | "en" | "zh" | "ja" | null {
+export function langueDe(texte: string): "fr" | "en" | "zh" | "ja" | "es" | "de" | "ar" | null {
   const t = texte.toLowerCase();
   if ((texte.match(/[\u3040-\u30ff]/g) ?? []).length >= 2) return "ja";
   if ((texte.match(/[\u3400-\u9fff]/g) ?? []).length >= 4) return "zh";
+  if ((texte.match(/[\u0600-\u06ff\u0750-\u077f]/g) ?? []).length >= 4) return "ar";
   const fr = (t.match(/\b(le|la|les|un|une|des|du|de|et|pour|avec|qui|que|dans|sur|est|fais|ajoute|écris|ecris|peux|mon|mes|demain|aujourd'hui)\b/g) ?? []).length + (t.match(/[éèêàçùâîô]/g) ?? []).length;
   const en = (t.match(/\b(the|a|an|and|for|with|that|which|in|on|is|make|write|add|build|create|my|please|tomorrow|today)\b/g) ?? []).length;
+  const es = (t.match(/\b(el|la|los|las|un|una|unos|unas|y|de|del|al|para|con|por|que|como|es|son|hay|haz|escribe|crea|resume|busca|puedes|quiero|necesito|mi|mis|hoy|mañana|reunión|correo|favor)\b/g) ?? []).length + (t.match(/[áíóúñ¿¡]/g) ?? []).length;
+  const de = (t.match(/\b(der|die|das|den|dem|des|ein|eine|einen|einer|und|oder|für|mit|von|zu|auf|ist|sind|nicht|ich|bitte|mach|mache|schreib|schreibe|erstelle|fasse|kannst|mein|meine|meinen|heute|morgen|zusammen)\b/g) ?? []).length + (t.match(/[äöüß]/g) ?? []).length;
+  if (es > fr && es > en && es > de) return "es";
+  if (de > fr && de > en && de > es) return "de";
   if (fr > en) return "fr";
   if (en > fr) return "en";
   return null;
@@ -104,6 +118,12 @@ export function phraseLangue(texte: string, verbe: "Réponds" | "Écris" = "Rép
       return `${verbe} en chinois : la demande est en chinois.`;
     case "ja":
       return `${verbe} en japonais : la demande est en japonais.`;
+    case "es":
+      return `${verbe} en espagnol : la demande est en espagnol.`;
+    case "de":
+      return `${verbe} en allemand : la demande est en allemand.`;
+    case "ar":
+      return `${verbe} en arabe : la demande est en arabe.`;
     default:
       return `${verbe} dans la langue de la demande.`;
   }

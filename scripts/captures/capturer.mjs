@@ -58,7 +58,11 @@ const arg = (nom, defaut) => {
   return i > 0 ? process.argv[i + 1] : defaut;
 };
 const LANGUE = arg("langue", "en");
-if (!["en", "fr", "zh", "ja"].includes(LANGUE)) throw new Error(`Langue inconnue : ${LANGUE} (en, fr, zh ou ja)`);
+// es, de, ar (30/09/2026) : langues de l'interface, mais leurs scènes (scenes/<langue>.mjs) restent à écrire.
+const LANGUES_INTERFACE = ["en", "fr", "zh", "ja", "es", "de", "ar"];
+const LANGUES_AVEC_SCENES = ["en", "fr", "zh", "ja"];
+if (!LANGUES_INTERFACE.includes(LANGUE)) throw new Error(`Langue inconnue : ${LANGUE} (${LANGUES_INTERFACE.join(", ")})`);
+if (!LANGUES_AVEC_SCENES.includes(LANGUE)) throw new Error(`Pas encore de scènes pour « ${LANGUE} » : écrire scripts/captures/scenes/${LANGUE}.mjs sur le modèle de en.mjs (scènes existantes : ${LANGUES_AVEC_SCENES.join(", ")})`);
 const SORTIE = arg("sortie", join(RACINE, "docs", "images", ...(LANGUE === "en" ? [] : [LANGUE])));
 const TOUTES = ["home", "chat", "compare", "knowledge", "agents", "code", "training", "usage", "demo"];
 const SEULEMENT = arg("seulement", TOUTES.join(",")).split(",").map((s) => s.trim()).filter(Boolean);

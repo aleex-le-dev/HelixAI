@@ -193,7 +193,7 @@ function LigneCanal({
         >
           {etatCanal === undefined ? t("État inconnu") : etatCanal.enMarche ? t("Connecté") : type === "whatsapp" ? t("À lier") : t("Arrêté")}
         </span>
-        <span className="ml-auto text-xs text-muted-foreground">
+        <span className="ms-auto text-xs text-muted-foreground">
           {c.acces === "liste" ? tf("{0} personne(s) autorisée(s)", c.autorises?.length ?? 0) : t("Sur acceptation")}
           {c.outilsEntreprise ? t(" · outils de l'entreprise ouverts") : ""}
         </span>
@@ -334,7 +334,7 @@ function AjoutCanal({
               key={t}
               type="button"
               onClick={() => setType(t)}
-              className="flex items-center gap-2.5 rounded-xl border border-border px-3 py-2.5 text-left text-sm font-medium text-foreground transition-colors hover:bg-muted"
+              className="flex items-center gap-2.5 rounded-xl border border-border px-3 py-2.5 text-start text-sm font-medium text-foreground transition-colors hover:bg-muted"
             >
               {/* gap-2.5 et py-2.5 : 10 px libres autour du logo. */}
               <LogoMarque marque={MARQUE_DU_CANAL[t]} icone={MessageCircle} taille={18} degagement={10} />

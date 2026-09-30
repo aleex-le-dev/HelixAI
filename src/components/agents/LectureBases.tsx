@@ -93,7 +93,7 @@ export function LectureBases({ employe, bases }: { employe?: Employe; bases: str
       ) : (
         <>
           <p>{t("Depuis sa fiche, ses missions et ses messageries, il ne lit que ce qui est ouvert à toute l'équipe, parce que :")}</p>
-          <ul className="space-y-0.5 pl-4">
+          <ul className="space-y-0.5 ps-4">
             {autres.map((r) => (
               <li key={r}>{`• ${RAISON[r]()}`}</li>
             ))}

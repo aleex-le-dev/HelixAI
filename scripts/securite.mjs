@@ -5378,11 +5378,12 @@ console.log("\n15 ter. Japonais : la passerelle répond en japonais, les catalog
   const i18n = code("src", "lib", "i18n.ts");
   verifier(
     "interface : « 日本語 » dans le sélecteur, système japonais suivi, dates et nombres en ja-JP",
-    /code: "ja", nom: "Japonais", natif: "日本語"/.test(i18n) && /base === "ja"\) return "ja"/.test(i18n) && /ja: "ja-JP"/.test(i18n),
+    // Depuis le 30/09/2026, la langue du système se cherche dans LANGUES (sept langues) et plus par une suite de `if`.
+    /code: "ja", nom: "Japonais", natif: "日本語"/.test(i18n) && /LANGUES\.find\(\(l\) => l\.code === base\)/.test(i18n) && /ja: "ja-JP"/.test(i18n),
     "i18n.ts",
   );
   const main = code("electron", "main.cjs");
-  verifier("application de bureau : `helix:langue` et la langue du système acceptent « ja »", (main.match(/\["fr", "en", "zh", "ja"\]/g) ?? []).length >= 2, "main.cjs");
+  verifier("application de bureau : `helix:langue` et la langue du système acceptent « ja »", /const LANGUES = \["fr", "en", "zh", "ja"/.test(main) && (main.match(/LANGUES\.includes\(/g) ?? []).length >= 2, "main.cjs");
   const { createRequire } = await import("node:module");
   const textes = createRequire(import.meta.url)(join(RACINE, "electron", "textesMiseAJour.cjs"));
   const clesMaj = [...code("electron", "textesMiseAJour.cjs").matchAll(/^ {4}(\w+): "/gm)].map((m) => m[1]);
@@ -5403,6 +5404,24 @@ console.log("\n15 ter. Japonais : la passerelle répond en japonais, les catalog
     langueDe("明日の会議の資料をまとめてください") === "ja" && langueDe("请把明天会议的资料整理一下") === "zh" && /japonais/.test(phraseLangue("来週の予定を教えてください")),
     `${langueDe("明日の会議の資料をまとめてください")} / ${langueDe("请把明天会议的资料整理一下")}`,
   );
+}
+
+console.log("\n15 ter bis. Espagnol, allemand, arabe : la passerelle répond dans la langue de la requête (30/09/2026 ; le reste en section 44)");
+{
+  // En-tête de l'application, adresse (flux d'évènements), langue du navigateur (page de retour d'une autorisation).
+  const inconnue = "Collection inconnue : {0}";
+  const lire = async (chemin, entetes) => {
+    const r = await appel(chemin, { headers: { ...avecJeton, ...entetes } });
+    return (await r.json().catch(() => ({}))).error?.message ?? "";
+  };
+  for (const l of ["es", "de", "ar"]) {
+    const attendu = (JSON.parse(readFileSync(join(RACINE, "gateway", "i18n", l + ".json"), "utf8"))[inconnue] ?? "").replace("{0}", "essai-" + l);
+    const region = { es: "es-MX,es;q=0.9", de: "de-AT,de;q=0.9", ar: "ar-SA,ar;q=0.9" }[l];
+    const parEntete = await lire("/helix/data/essai-" + l, { "X-Helix-Langue": l });
+    const parAdresse = await lire("/helix/data/essai-" + l + "?langue=" + l, {});
+    const parNavigateur = await lire("/helix/data/essai-" + l, { "Accept-Language": region });
+    verifier("passerelle : « " + l + " » par X-Helix-Langue, par ?langue= et par Accept-Language (" + region + ") donne la phrase de son catalogue", attendu.length > 5 && parEntete === attendu && parAdresse === attendu && parNavigateur === attendu, [parEntete, parAdresse, parNavigateur].join(" | "));
+  }
 }
 
 /*
@@ -6574,6 +6593,16 @@ const MENTION_LANGUES = {
   // « Google 尚未验证此应用 », « 尚未经过 Google 验证 » (Google n'a pas validé l'application) et « 尚未经过 Apple 签名 » ne sont pas visés.
   zh: /尚未(?:在|用|经(?!过?\s*(?:Google|Apple|谷歌|苹果))).{0,20}(?:试用|试过|测试|验证)|(应该|应当)[^。]{0,20}不作保证|模拟服务器/,
   ja: /まだ.{0,8}(試して|動作確認|未検証)|はずですが、?保証はあ/,
+  /*
+   * L'espagnol, l'allemand et l'arabe (30/09/2026). Seule une tournure sans
+   * sujet vise l'essai du logiciel (« aún no se ha probado », « noch nicht mit
+   * … getestet », le passif arabe « لم يُختبر بعد ») : « aún no has probado »,
+   * « Sie haben … noch nicht ausprobiert » et « لم تجرّب … بعد » parlent de la
+   * personne, et passent.
+   */
+  es: /(?:aún|todavía) no (?:se ha |ha sido |se han |han sido )?(?:probad|verificado con)|debería funcionar[^.]{0,20}sin garantía|servidores (?:falsos|simulados)/i,
+  de: /noch nicht (?:mit|in|an|auf|unter) [^.]{0,40}(?:ausprobiert|getestet|erprobt|geprüft)|^noch nicht (?:ausprobiert|getestet|erprobt)|sollte funktionieren[^.]{0,20}ohne (?:Gewähr|Garantie)|(?:Schein|Attrappen)servern?/i,
+  ar: /لم ي[\u064B-\u0652]*(?:ختبر|جر[\u064B-\u0652]*ب)[^.]{0,4}بعد|لم (?:يتم|تتم) (?:اختبار|تجربة)[^.]{0,40}بعد|خوادم (?:وهمية|زائفة|مزيفة)/,
 };
 console.log("\n15 quinquies. Écran : plus de « pas encore essayé » (28/09/2026)");
 {
@@ -6588,7 +6617,7 @@ console.log("\n15 quinquies. Écran : plus de « pas encore essayé » (28/09/20
       }
     }
   }
-  verifier("aucune phrase affichée (interface, passerelle, aide ; fr, en, zh, ja) ne dit « pas encore essayé » ni « pas encore éprouvé »", fautifs.length === 0, [...new Set(fautifs)].slice(0, 4).join(" | "));
+  verifier("aucune phrase affichée (interface, passerelle, aide ; fr, en, zh, ja, es, de, ar) ne dit « pas encore essayé » ni « pas encore éprouvé »", fautifs.length === 0, [...new Set(fautifs)].slice(0, 4).join(" | "));
   verifier(
     "témoin : les anciennes phrases seraient vues, un « réessayez » ou « essayé : refusé » ne l'est pas",
     francais.test("Pas encore essayé avec un vrai compte {0}") && francais.test("Pas encore éprouvé de bout en bout") && parLangue.en.test("Not yet tried with {0}") &&
@@ -7416,7 +7445,7 @@ console.log("\n18 bis. Tournée finale des écrans : aide, rubriques des connect
     ["hubspot", "intercom", "square", "paypal", "box"].map((id) => `${id}=${categorieDe(id)}`).join(" "),
   );
   const ecartsTraduction = [];
-  for (const langue of ["en", "zh", "ja"]) {
+  for (const langue of ["en", "zh", "ja", "es", "de", "ar"]) {
     const passerelle = JSON.parse(readFileSync(join(RACINE, "gateway", "i18n", `${langue}.json`), "utf8"));
     const ecran = JSON.parse(readFileSync(join(RACINE, "src", "i18n", `${langue}.json`), "utf8"));
     for (const r of rubriquesCatalogue) if (r in ecran && ecran[r] !== passerelle[r]) ecartsTraduction.push(`${langue} « ${r} » : ${passerelle[r]} / ${ecran[r]}`);
@@ -7472,7 +7501,7 @@ console.log("\n18 bis. Tournée finale des écrans : aide, rubriques des connect
     /<textarea[\s\S]{0,900}placeholder:whitespace-nowrap/.test(sourceComposer),
     "Composer.tsx",
   );
-  verifier("Chat, sources du web : « N autre(s) résultat(s)… » aligné à gauche quand il passe sur deux lignes", /className="inline-flex items-center gap-1 text-left text-xs text-muted-foreground hover:text-foreground"/.test(sourceMessages), "MessageList.tsx");
+  verifier("Chat, sources du web : « N autre(s) résultat(s)… » aligné au début de la ligne quand il passe sur deux lignes", /className="inline-flex items-center gap-1 text-start text-xs text-muted-foreground hover:text-foreground"/.test(sourceMessages), "MessageList.tsx");
 }
 
 console.log("\n19. Moteur ouvert llama.cpp (Mac Intel) : épinglé, local, sous clé, sans les secrets de la passerelle");
@@ -7920,7 +7949,7 @@ console.log("\n28. Tournée à l'écran : mise en route, Chat, réglages, écran
   const chip = lire("src", "components", "ui", "Chip.tsx");
   const picker = lire("src", "components", "chat", "ModelPicker.tsx");
   verifier("375 px : le niveau de raisonnement se replie en icône, sans chevron, et laisse sa place au nom du modèle", /!chevronEtroit && "max-sm:hidden"/.test(chip) && /<Gauge[^>]*\/>\}[\s\S]{0,600}compacte\s+chevronEtroit=\{false\}/.test(picker), "Chip.tsx, ModelPicker.tsx");
-  verifier("375 px : un chemin ou une adresse sans espace passe à la ligne dans la bulle de la personne", /<p className="whitespace-pre-wrap \[overflow-wrap:anywhere\]">\{texte\}<\/p>/.test(lire("src", "components", "chat", "MessageList.tsx")), "MessageList.tsx");
+  verifier("375 px : un chemin ou une adresse sans espace passe à la ligne dans la bulle de la personne", /<p dir="auto" className="whitespace-pre-wrap \[overflow-wrap:anywhere\]">\{texte\}<\/p>/.test(lire("src", "components", "chat", "MessageList.tsx")), "MessageList.tsx");
   verifier("375 px : les onglets pilule ne dépassent plus leur place (Installer les apps, Agents)", /max-w-full items-center gap-1 overflow-x-auto/.test(lire("src", "components", "ui", "SegmentedTabs.tsx")), "SegmentedTabs.tsx");
   verifier("japonais : les pastilles Chat, Cowork, Code gagnent 6 px (écart de 2 px entre l'icône et le mot)", /\[:lang\(ja\)_&\]:gap-0\.5/.test(lire("src", "components", "layout", "Sidebar.tsx")), "Sidebar.tsx");
   const params = lire("src", "pages", "ParametresPages.tsx");
@@ -9387,8 +9416,8 @@ console.log("\n43. Bibliothèques Visual C++ de Microsoft sous Windows : détect
     ["src", "Installer les bibliothèques de Microsoft"],
     ["src", "OpenClaw a besoin des bibliothèques Visual C++ de Microsoft, qui manquent sur ce PC : sans elles, certains de ses modules ne se chargent pas."],
   ];
-  const manquantes = cles.filter(([ou, cle]) => !["en", "zh", "ja"].every((l) => (JSON.parse(src(ou, "i18n", `${l}.json`))[cle] ?? "").length > 10));
-  verifier("l'étape, le refus de l'UAC, le démarrage raté et le bandeau : traduits en anglais, chinois et japonais", manquantes.length === 0, manquantes.map(([, c]) => c.slice(0, 60)).join(" | "));
+  const manquantes = cles.filter(([ou, cle]) => !["en", "zh", "ja", "es", "de", "ar"].every((l) => (JSON.parse(src(ou, "i18n", `${l}.json`))[cle] ?? "").length > 10));
+  verifier("l'étape, le refus de l'UAC, le démarrage raté et le bandeau : traduits dans les six catalogues (en, zh, ja, es, de, ar)", manquantes.length === 0, manquantes.map(([, c]) => c.slice(0, 60)).join(" | "));
 
   // L'essai sur une vraie machine.
   const flux = src(".github", "workflows", "essai-openclaw-windows.yml");
@@ -9397,6 +9426,199 @@ console.log("\n43. Bibliothèques Visual C++ de Microsoft sous Windows : détect
     /id: x64\n[\s\S]{0,200}options: "--visual-cpp-absent"/.test(flux) && /id: arm64\n[\s\S]{0,200}options: "--visual-cpp-absent --sans-vcruntime"/.test(flux) && /--sans-vcruntime/.test(flux) && /gateway\/src\/visualCpp\.ts/.test(flux),
     "essai-openclaw-windows.yml",
   );
+}
+
+console.log("\n44. Sept langues, et l'arabe de droite à gauche : déclarations, catalogues, sens d'écriture, classes logiques (30/09/2026)");
+{
+  /*
+   * L'espagnol, l'allemand et l'arabe, demandés par Medhi le 30/09/2026. Une
+   * langue oubliée à un seul endroit ne casse rien : la passerelle répond en
+   * anglais, le menu reste en anglais, la date s'écrit à l'américaine, et
+   * personne ne le voit avant un poste dans cette langue. Et l'arabe ajoute un
+   * second risque, silencieux lui aussi : une classe « gauche » ou « droite »
+   * remise dans un composant partagé, que seul un écran arabe montrerait.
+   */
+  const NOUVELLES = ["es", "de", "ar"];
+  const CATALOGUES = ["en", "zh", "ja", ...NOUVELLES];
+  const SEPT = ["fr", ...CATALOGUES];
+  const texte = (...p) => readFileSync(join(RACINE, ...p), "utf8");
+  const json = (...p) => JSON.parse(texte(...p));
+  const memes = (a, b) => JSON.stringify([...a].sort()) === JSON.stringify([...b].sort());
+
+  // 1. Les sept langues sont déclarées partout où elles s'énumèrent.
+  const i18n = texte("src", "lib", "i18n.ts");
+  const declarees = [...i18n.slice(i18n.indexOf("export const LANGUES"), i18n.indexOf("] as const")).matchAll(/code: "(\w+)", nom: "[^"]+", natif: "([^"]+)"/g)];
+  verifier("interface : sept langues au sélecteur, chacune sous son nom à elle (Español, Deutsch, العربية)", memes(declarees.map((m) => m[1]), SEPT) && ["Español", "Deutsch", "العربية", "English", "Français", "中文", "日本語"].every((n) => declarees.some((m) => m[2] === n)), declarees.map((m) => m[1] + "=" + m[2]).join(" "));
+  verifier(
+    "interface : les trois catalogues sont embarqués, la langue du système est suivie pour toute langue servie, dates et nombres ont leur locale",
+    NOUVELLES.every((l) => i18n.includes('import ' + l + ' from "@/i18n/' + l + '.json"') && new RegExp("\\b" + l + ": " + l + " as Record").test(i18n)) &&
+      /LANGUES\.find\(\(l\) => l\.code === base\)/.test(i18n) && /es: "es-ES", de: "de-DE", ar: "ar-u-nu-latn"/.test(i18n),
+    "i18n.ts",
+  );
+  const passerelleLangue = texte("gateway", "src", "langue.ts");
+  const declareesPasserelle = /export const LANGUES = \[([^\]]+)\] as const/.exec(passerelleLangue)?.[1].match(/\w+/g) ?? [];
+  verifier("passerelle : les sept langues, leurs catalogues et leurs locales", memes(declareesPasserelle, SEPT) && NOUVELLES.every((l) => passerelleLangue.includes('import ' + l + ' from "../i18n/' + l + '.json"')) && /es: "es-ES", de: "de-DE", ar: "ar-u-nu-latn"/.test(passerelleLangue), declareesPasserelle.join(" "));
+  const mainCjs = texte("electron", "main.cjs");
+  const declareesBureau = /const LANGUES = \[([^\]]+)\];/.exec(mainCjs)?.[1].match(/\w+/g) ?? [];
+  verifier("application de bureau : `helix:langue` et la langue du système acceptent les sept langues", memes(declareesBureau, SEPT) && (mainCjs.match(/LANGUES\.includes\(/g) ?? []).length >= 2, declareesBureau.join(" "));
+  verifier(
+    "relevés : les six catalogues sont comptés (i18n.mjs, i18n-passerelle.mjs)",
+    ["i18n.mjs", "i18n-passerelle.mjs"].every((f) => /const LANGUES = \["en", "zh", "ja", "es", "de", "ar"\];/.test(texte("scripts", f))),
+    "scripts/i18n*.mjs",
+  );
+  for (const [releve, nom] of [["i18n.mjs", "interface"], ["i18n-passerelle.mjs", "passerelle"]]) {
+    const sortie = execFileSync(process.execPath, [join(RACINE, "scripts", releve)], { cwd: RACINE, encoding: "utf8" });
+    const incompletes = CATALOGUES.filter((l) => {
+      const ligne = new RegExp("  " + l + " : (\\d+)/(\\d+) tradui").exec(sortie);
+      return !ligne || ligne[1] !== ligne[2] || Number(ligne[2]) < 500;
+    });
+    verifier("catalogues (" + nom + ") : les six langues à 100 %", incompletes.length === 0, incompletes.join(", "));
+  }
+
+  // 2. La passerelle répond dans chacune des trois langues : essayé plus haut, à la suite de « 15 ter », tant que l'instance d'essai tourne.
+
+  // 3. Les catalogues : les clés d'en.json, ni plus ni moins ; les trous {n} de la source ; pas de caractère de direction en arabe.
+  const DIRECTION = /[\u061C\u200E\u200F\u202A-\u202E\u2066-\u2069]/;
+  for (const cote of ["src", "gateway"]) {
+    const reference = Object.keys(json(cote, "i18n", "en.json"));
+    for (const l of NOUVELLES) {
+      const cat = json(cote, "i18n", l + ".json");
+      const cles = new Set(Object.keys(cat));
+      const manquantes = reference.filter((c) => !cles.has(c));
+      const enTrop = [...cles].filter((c) => !reference.includes(c));
+      verifier(cote + "/i18n/" + l + ".json : exactement les clés d'en.json", manquantes.length === 0 && enTrop.length === 0, "manquent " + manquantes.length + ", en trop " + enTrop.length + " : " + [...manquantes, ...enTrop].slice(0, 2).map((c) => c.slice(0, 50)).join(" | "));
+      const trous = [];
+      for (const [fr, trad] of Object.entries(cat)) {
+        // Même règle que pour le japonais (15 ter) : un {0} collé à un mot français (« {0}s ») peut disparaître, aucun trou ne s'invente.
+        const requis = fr.match(/(?<![A-Za-zÀ-ÿ])\{\d+\}/g) ?? [];
+        const presents = new Set(String(trad).match(/\{\d+\}/g) ?? []);
+        const tous = new Set(fr.match(/\{\d+\}/g) ?? []);
+        // Un tiret cadratin n'est admis que si la phrase française en porte un (un titre de fenêtre, « {0} — revenir au Chat »).
+        if (requis.some((r) => !presents.has(r)) || [...presents].some((r) => !tous.has(r)) || (String(trad).includes("—") && !fr.includes("—"))) trous.push(fr.slice(0, 50));
+      }
+      verifier(cote + "/i18n/" + l + ".json : chaque {n} de la phrase française est gardé, aucun inventé, aucun tiret cadratin ajouté", trous.length === 0, trous.slice(0, 3).join(" | "));
+    }
+    const fautifs = Object.entries(json(cote, "i18n", "ar.json")).filter(([, v]) => DIRECTION.test(String(v))).map(([k]) => k.slice(0, 50));
+    verifier(cote + "/i18n/ar.json : aucun caractère de contrôle de direction (la page et dir=\"auto\" s'en chargent)", fautifs.length === 0, fautifs.slice(0, 3).join(" | "));
+  }
+  verifier("témoin : un caractère de direction caché dans une phrase arabe serait vu", DIRECTION.test("مرحبا\u200F") && DIRECTION.test("\u2067abc\u2069") && !DIRECTION.test("مرحبًا، Helix 2026.929.4"));
+
+  // 4. Electron : mise à jour, zone de notification et menu, dans les trois langues.
+  const { createRequire } = await import("node:module");
+  const sourceMaj = texte("electron", "textesMiseAJour.cjs");
+  const textesMaj = createRequire(import.meta.url)(join(RACINE, "electron", "textesMiseAJour.cjs"));
+  const clesMaj = [...new Set([...sourceMaj.matchAll(/^ {4}(\w+): "/gm)].map((m) => m[1]))];
+  textesMaj.changerLangue("fr");
+  const majFr = clesMaj.map((c) => textesMaj.tx(c));
+  const raisonsFr = [...sourceMaj.matchAll(/^ {2}"([^"]+)": \{ en:/gm)].map((m) => m[1]);
+  const zone = texte("electron", "zoneNotification.cjs");
+  const blocZone = (l) => zone.slice(zone.indexOf("  " + l + ": {"), zone.indexOf("},", zone.indexOf("  " + l + ": {")));
+  const nombreZone = (l) => (blocZone(l).match(/^ {4}\w+:/gm) ?? []).length;
+  for (const l of NOUVELLES) {
+    textesMaj.changerLangue(l);
+    // tx() sans valeur efface le trou : on passe une valeur témoin, qui doit ressortir là où le français a un {0}.
+    const restes = clesMaj.filter((c, i) => textesMaj.tx(c) === majFr[i] || (textesMaj.tx(c, "TEMOIN").includes("TEMOIN") !== /\{0\}/.test(new RegExp("^ {4}" + c + ": \"(.*)\",$", "m").exec(sourceMaj)?.[1] ?? "")));
+    const raisonsRestees = raisonsFr.filter((r) => textesMaj.raison(r) === r);
+    verifier("messages de mise à jour : chacun a sa phrase en « " + l + " », avec son {0}, et chaque raison de refus aussi", clesMaj.length >= 20 && restes.length === 0 && raisonsFr.length >= 10 && raisonsRestees.length === 0, [...restes, ...raisonsRestees].slice(0, 4).join(", "));
+    verifier(
+      "zone de notification et menu : autant de textes en « " + l + " » qu'en français, le nom du produit gardé",
+      zone.includes("  " + l + ": {") && nombreZone(l) === nombreZone("fr") && nombreZone(l) >= 15 && (blocZone(l).match(/\{0\}/g) ?? []).length === (blocZone("fr").match(/\{0\}/g) ?? []).length,
+      nombreZone(l) + " / " + nombreZone("fr"),
+    );
+  }
+  textesMaj.changerLangue("en");
+  const blocMajAr = sourceMaj.slice(sourceMaj.indexOf("  ar: {"), sourceMaj.indexOf("  },", sourceMaj.indexOf("  ar: {")));
+  verifier("Electron, arabe : écrit en arabe, chiffres et noms de produits en caractères latins, aucun caractère de direction", /[\u0600-\u06ff]{3}/.test(blocMajAr) && /[\u0600-\u06ff]{3}/.test(blocZone("ar")) && /GitHub/.test(blocMajAr) && /HTTPS/.test(blocMajAr) && !DIRECTION.test(blocMajAr + blocZone("ar")) && !/[\u0660-\u0669]/.test(blocMajAr + blocZone("ar")), "textesMiseAJour.cjs, zoneNotification.cjs");
+
+  // 5. Le sens d'écriture : posé sur <html> avant le premier rendu, et ce que les propriétés logiques ne règlent pas.
+  verifier(
+    "sens d'écriture : l'arabe seul est de droite à gauche, `dir` est posé sur <html> au chargement du module (avant le premier rendu) et au changement de langue, `ltr` compris",
+    /const LANGUES_RTL: readonly Langue\[\] = \["ar"\];/.test(i18n) && /document\.documentElement\.lang = courante;[\s\S]{0,700}document\.documentElement\.dir = sensDe\(courante\);/.test(i18n) && /document\.documentElement\.dir = sensDe\(nouvelle\);/.test(i18n) && !/createRoot|useEffect/.test(i18n),
+    "i18n.ts",
+  );
+  const feuille = texte("src", "styles", "index.css");
+  const avantCouches = feuille.slice(0, feuille.indexOf("@keyframes popover {"));
+  const regleIcones = /\n\[dir="rtl"\] :where\(([^)]+)\) \{\n {2}scale: -1 1;\n\}/.exec(feuille);
+  verifier(
+    "feuille de style : en arabe, le code et les champs techniques restent de gauche à droite, les graphiques aussi, l'espacement des lettres est retiré",
+    /\[dir="rtl"\] :where\(code, kbd, samp, \.font-mono\) \{\s*direction: ltr;\s*unicode-bidi: isolate;/.test(feuille) && /\[dir="rtl"\] :where\(pre:not\(\[dir\]\)\) \{\s*direction: ltr;\s*unicode-bidi: plaintext;/.test(feuille) &&
+      /\[dir="rtl"\] :where\(input:is\(\[type="url"\], \[type="email"\], \[type="password"\], \[type="tel"\], \[type="number"\]\)\) \{\s*direction: ltr;/.test(feuille) && /\[dir="rtl"\] :where\(svg\) \{\s*direction: ltr;/.test(feuille) && /:root:lang\(ar\) \* \{\s*letter-spacing: 0 !important;/.test(feuille),
+    "index.css",
+  );
+  verifier(
+    "feuille de style : les icônes directionnelles se retournent en arabe (chevrons, flèches, envoi, barre latérale), par une règle hors de @layer (Tailwind l'y retirait : vu à l'écran le 30/09/2026)",
+    regleIcones && ["chevron-left", "chevron-right", "arrow-left", "arrow-right", "send", "panel-left"].every((n) => regleIcones[1].split(", ").includes(".lucide-" + n)) && !/lucide-(check|x|arrow-up)\b/.test(regleIcones[1]) &&
+      (avantCouches.match(/\{/g) ?? []).length === (avantCouches.match(/\}/g) ?? []).length,
+    regleIcones?.[1]?.slice(0, 120) ?? "règle absente",
+  );
+  verifier("témoin : tout ce qui retourne l'écran est sous [dir=\"rtl\"] ou :lang(ar), rien ne vise les six autres langues", !/\[dir="ltr"\]\s*[:{.\w]/.test(feuille.replace(/pre\[dir="ltr"\]/g, "")) && (feuille.match(/\[dir="rtl"\]/g) ?? []).length >= 6, "index.css");
+  const jetons = texte("src", "styles", "tokens.css");
+  const pileArabe = /:root:lang\(ar\)\s*\{[^}]*--font-body: ([^;]+);/.exec(jetons)?.[1] ?? "";
+  verifier(
+    "police : une pile arabe sous :lang(ar), polices du système seulement (Geeza Pro, Segoe UI, Noto Sans Arabic, Tahoma), avant le repli calé sur Arial",
+    ["Geeza Pro", "Segoe UI", "Noto Sans Arabic", "Tahoma"].every((p) => pileArabe.includes(p)) && pileArabe.indexOf("Tahoma") < pileArabe.indexOf("Plus Jakarta Sans Fallback") && pileArabe.startsWith('"Plus Jakarta Sans"') && !/url\([^)]*(arab|naskh|kufi)/i.test(jetons + feuille),
+    pileArabe.slice(0, 160),
+  );
+  verifier("nombres : la locale arabe garde les chiffres occidentaux et le calendrier grégorien", /^[0-9.,\s]+$/.test((1234567.5).toLocaleString("ar-u-nu-latn")) && /2026/.test(new Date(2026, 8, 30).toLocaleDateString("ar-u-nu-latn", { month: "long", year: "numeric" })), (1234567.5).toLocaleString("ar-u-nu-latn"));
+  const formats = texte("src", "lib", "formats.ts");
+  verifier("dates : la date avant l'heure, et « 2:05 PM » dans cet ordre, même dans une ligne arabe (isolés, sans rien ajouter aux autres langues)", /return isolerLtr\(`\$\{formaterDate\(d, prefs\)\} \$\{formaterHeure\(d, prefs\)\}`/.test(formats) && /isolerLtr\(`\$\{h % 12 \|\| 12\}/.test(formats) && /return sens\(\) === "rtl" && texte \? /.test(i18n), "formats.ts");
+
+  // 6. Le contenu : ce que la personne écrit et ce que le modèle répond s'alignent selon leur propre langue ; le technique reste de gauche à droite.
+  const riche = texte("src", "components", "ui", "TexteRiche.tsx");
+  const messages = texte("src", "components", "chat", "MessageList.tsx");
+  const composeur = texte("src", "components", "chat", "Composer.tsx");
+  verifier(
+    "Chat : dir=\"auto\" sur la bulle de la personne, sur chaque bloc de la réponse et sur la zone de saisie ; dir=\"ltr\" sur le code",
+    /<p dir="auto" className="whitespace-pre-wrap \[overflow-wrap:anywhere\]">\{texte\}<\/p>/.test(messages) && (riche.match(/dir="auto"/g) ?? []).length >= 4 && /<pre key=\{i\} dir="ltr"/.test(riche) && /<code key=\{n\+\+\} dir="ltr"/.test(riche) && /dir=\{value \? "auto" : undefined\}/.test(composeur),
+    "MessageList.tsx, TexteRiche.tsx, Composer.tsx",
+  );
+  verifier("valeur à copier (adresse, code, jeton) : de gauche à droite", /dir="ltr"\s*\n\s*\/\/ Entière/.test(texte("src", "components", "ui", "ACopier.tsx")), "ACopier.tsx");
+  const menu = texte("src", "components", "ui", "Popover.tsx");
+  verifier(
+    "menus : le placement se calcule en pixels d'écran, le sens d'écriture y entre une seule fois (début = bord droit en arabe) ; l'interrupteur glisse vers la gauche",
+    /const physique = \(align: Align\): Align => \(sens\(\) === "rtl" \?/.test(menu) && /const align = physique\(alignDemande\);/.test(menu) && /rtl:-translate-x-\[22px\]/.test(texte("src", "components", "ui", "Switch.tsx")),
+    "Popover.tsx, Switch.tsx",
+  );
+
+  // 7. Pas de classe physique réintroduite dans les composants partagés convertis.
+  // Une classe physique derrière `rtl:` ou `ltr:` est un choix écrit pour un sens précis : elle passe.
+  const PHYSIQUE = /(?<=[\s"'`:!])(?<!(?:rtl|ltr):)-?(?:(?:ml|mr|pl|pr)-(?=[0-9\[ap])|(?:left|right)-(?=[0-9\[ap])(?!1\/2)|text-(?:left|right)(?=[\s"'`])|border-[lr](?=[-\s"'`])|rounded-(?:l|r|tl|tr|bl|br)(?=[-\s"'`])|space-x-|divide-x(?=[-\s"'`]))[\w./\[\]-]*/g;
+  const CONVERTIS = [
+    ["ui", "Modal.tsx"], ["ui", "PanelCard.tsx"], ["ui", "Select.tsx"], ["ui", "TexteRiche.tsx"], ["ui", "AvatarAgent.tsx"], ["ui", "ACopier.tsx"], ["ui", "Field.tsx"], ["ui", "Button.tsx"], ["ui", "SegmentedTabs.tsx"],
+    ["layout", "Sidebar.tsx"], ["layout", "Notifications.tsx"], ["layout", "Aide.tsx"], ["layout", "PageHeader.tsx"], ["layout", "MainArea.tsx"],
+    ["chat", "Composer.tsx"], ["chat", "MessageList.tsx"], ["chat", "FileAttente.tsx"], ["chat", "ModelPicker.tsx"],
+    ["settings", "SettingsShell.tsx"], ["settings", "ChoixLangue.tsx"], ["settings", "Connecteurs.tsx"], ["settings", "Abonnement.tsx"],
+  ];
+  const revenues = CONVERTIS.flatMap((p) => (texte("src", "components", ...p).replace(/\/\*[\s\S]*?\*\/|\/\/[^\n]*/g, "").match(PHYSIQUE) ?? []).map((c) => p.join("/") + " : " + c));
+  verifier("composants partagés convertis (" + CONVERTIS.length + " fichiers) : aucune classe physique (ml-, pr-, left-, text-right, border-l, rounded-br…), seulement ms-, pe-, start-, text-end, border-s, rounded-ee", revenues.length === 0, revenues.slice(0, 5).join(" | "));
+  verifier(
+    "témoin : une classe physique remise serait vue, une classe logique ou un centrage (left-1/2) ne l'est pas",
+    ['className="ml-auto flex"', 'className="absolute right-4 top-4"', '"py-2 pl-2.5 pr-7 text-left"', 'className="border-l-2 rounded-br-md"', 'className="md:border-r -ml-2"'].every((c) => (c.match(PHYSIQUE) ?? []).length >= 1) &&
+      ['className="ms-auto flex"', 'className="absolute end-4 top-4"', '"py-2 ps-2.5 pe-7 text-start"', 'className="border-s-2 rounded-ee-md rounded-lg border-border"', 'className="left-1/2 -translate-x-1/2"', 'className="html-5 impl-2 upright-3"', 'className="block rtl:text-right rtl:-translate-x-2"'].every((c) => (c.match(PHYSIQUE) ?? []).length === 0),
+  );
+
+  // 8. La passerelle reconnaît une demande écrite dans une des trois langues, sans changer ce qu'elle disait du français et de l'anglais.
+  const { pathToFileURL } = await import("node:url");
+  const { langueDe, phraseLangue } = await import(pathToFileURL(join(RACINE, "gateway", "src", "plan.ts")).href);
+  const demandes = [
+    ["لخّص لي اجتماع الغد من فضلك", "ar"], ["Haz un resumen de la reunión de mañana, por favor", "es"], ["Bitte fasse die Besprechung von morgen für mich zusammen", "de"],
+    ["Fais un résumé de la réunion de demain", "fr"], ["Écris un mail pour le client de la société", "fr"], ["Write a summary of the meeting for my boss", "en"], ["Add the file in the folder and make a list", "en"],
+    ["明日の会議の資料をまとめてください", "ja"], ["请把明天会议的资料整理一下", "zh"],
+  ];
+  const ratees = demandes.filter(([q, l]) => langueDe(q) !== l).map(([q, l]) => l + "≠" + langueDe(q) + " « " + q.slice(0, 30) + " »");
+  verifier("demande en arabe, en espagnol ou en allemand : reconnue, et la réponse demandée dans cette langue ; français, anglais, japonais et chinois inchangés", ratees.length === 0 && /en arabe/.test(phraseLangue("اكتب رسالة إلى العميل")) && /en espagnol/.test(phraseLangue("Escribe un correo para el cliente, por favor")) && /en allemand/.test(phraseLangue("Schreibe bitte eine E-Mail für den Kunden")), ratees.join(" | "));
+
+  // 9. « Pas encore essayé » (15 quinquies) : les trois langues sont regardées aussi.
+  verifier(
+    "§ 15 quinquies : les motifs existent en espagnol, allemand et arabe, voient une mention d'essai et laissent passer ce que la personne n'a pas essayé",
+    MENTION_LANGUES.es.test("Aún no se ha probado con una cuenta real de {0}.") && MENTION_LANGUES.de.test("Noch nicht mit einem echten {0}-Konto getestet.") && MENTION_LANGUES.ar.test("لم يُختبر بعد مع حساب {0} حقيقي.") &&
+      !MENTION_LANGUES.es.test("Aún no has probado este modelo: hazle una pregunta.") && !MENTION_LANGUES.de.test("Sie haben dieses Modell noch nicht ausprobiert: Stellen Sie ihm eine Frage.") && !MENTION_LANGUES.ar.test("لم تجرّب هذا النموذج بعد: اطرح عليه سؤالًا.") &&
+      !MENTION_LANGUES.es.test("Vuelve a intentarlo en un minuto.") && !MENTION_LANGUES.de.test("Ihre E-Mail-Adresse ist noch nicht bestätigt."),
+  );
+
+  // 10. L'aide intégrée dit les sept langues, dans les six catalogues.
+  const cleAide = "Français, anglais, chinois, japonais, espagnol, allemand, arabe.";
+  verifier("aide intégrée : « Changer la langue » cite les sept langues et le sens d'écriture de l'arabe, traduit dans les six catalogues", texte("src", "lib", "aide.ts").includes(cleAide) && /en espagnol, en allemand ou en arabe/.test(texte("src", "lib", "aide.ts")) && /de droite à gauche/.test(texte("src", "lib", "aide.ts")) && CATALOGUES.every((l) => (json("src", "i18n", l + ".json")[cleAide] ?? "").length > 10), "aide.ts");
 }
 
 console.log(`\n${reussis} vérification(s) réussie(s), ${echecs.length} échec(s).`);

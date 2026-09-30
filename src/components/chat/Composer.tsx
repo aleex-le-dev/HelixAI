@@ -311,7 +311,7 @@ export function Composer({
                     type="button"
                     aria-label={tf("Retirer {0}", piece.nom)}
                     onClick={() => onRetirerPiece?.(i)}
-                    className="-mr-0.5 shrink-0 rounded p-0.5 text-muted-foreground transition-colors hover:text-foreground"
+                    className="-me-0.5 shrink-0 rounded p-0.5 text-muted-foreground transition-colors hover:text-foreground"
                   >
                     <X size={12} strokeWidth={2} />
                   </button>
@@ -337,6 +337,13 @@ export function Composer({
              * bout de lettre coupé). Le texte tapé, lui, passe toujours à la ligne.
              */
             className="block max-h-52 w-full resize-none bg-transparent px-4 pb-2 pt-3.5 text-[15px] leading-relaxed text-foreground placeholder:overflow-hidden placeholder:text-ellipsis placeholder:whitespace-nowrap placeholder:text-muted-foreground focus:outline-none"
+            /*
+             * Le texte tapé s'aligne selon sa langue (30/09/2026) : de l'arabe
+             * dans une interface française part de la droite, du français dans
+             * une interface arabe de la gauche. Vide, le champ suit l'interface
+             * (l'invite est dans sa langue).
+             */
+            dir={value ? "auto" : undefined}
           />
           {/*
             Relevé le 27/09/2026 (Code et Cowork, en français) : le libellé du
@@ -377,7 +384,7 @@ export function Composer({
                     setMenuPlus(false);
                     fichierRef.current?.click();
                   }}
-                  className="flex w-full items-center gap-3 rounded-lg px-2.5 py-2 text-left hover:bg-muted"
+                  className="flex w-full items-center gap-3 rounded-lg px-2.5 py-2 text-start hover:bg-muted"
                 >
                   <Paperclip size={16} strokeWidth={1.75} className="shrink-0 text-foreground" />
                   <span className="shrink-0 whitespace-nowrap text-sm text-foreground">{t("Ajouter des photos et fichiers")}</span>
@@ -389,7 +396,7 @@ export function Composer({
                     setMenuPlus(false);
                     onCreerImage();
                   }}
-                  className="flex w-full items-center gap-3 rounded-lg px-2.5 py-2 text-left hover:bg-muted"
+                  className="flex w-full items-center gap-3 rounded-lg px-2.5 py-2 text-start hover:bg-muted"
                 >
                   <ImageIcon size={16} strokeWidth={1.75} className="shrink-0 text-foreground" />
                   <span className="shrink-0 whitespace-nowrap text-sm text-foreground">{t("Créer une image")}</span>
@@ -402,7 +409,7 @@ export function Composer({
                       setMenuPlus(false);
                       onCreerVideo();
                     }}
-                    className="flex w-full items-center gap-3 rounded-lg px-2.5 py-2 text-left hover:bg-muted"
+                    className="flex w-full items-center gap-3 rounded-lg px-2.5 py-2 text-start hover:bg-muted"
                   >
                     <Film size={16} strokeWidth={1.75} className="shrink-0 text-foreground" />
                     <span className="shrink-0 whitespace-nowrap text-sm text-foreground">{t("Créer une vidéo")}</span>
@@ -419,7 +426,7 @@ export function Composer({
               />
             )}
             {accessoire && <div className="flex min-w-0 cq-md:shrink-0">{accessoire}</div>}
-            <div className="ml-auto flex min-w-0 items-center gap-0.5">
+            <div className="ms-auto flex min-w-0 items-center gap-0.5">
               {!sansModele && <ModelBehaviorPicker value={modelUid} onChange={onModelChange} />}
               {/* Le niveau de réflexion garde son mot court : c'est le nom du modèle qui se raccourcit. */}
               {!sansModele && (
@@ -440,7 +447,7 @@ export function Composer({
                     aria-label={t("Arrêter la génération")}
                     title={t("Arrêter la génération")}
                     onClick={onStop}
-                    className="ml-1 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-border bg-card text-foreground transition-colors hover:bg-muted"
+                    className="ms-1 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-border bg-card text-foreground transition-colors hover:bg-muted"
                   >
                     <Square size={13} strokeWidth={2} className="fill-current" />
                   </button>
@@ -463,7 +470,7 @@ export function Composer({
                   type="button"
                   aria-label={t("Arrêter la génération")}
                   onClick={onStop}
-                  className="ml-1 inline-flex shrink-0 h-9 w-9 items-center justify-center rounded-full bg-primary text-primary-foreground transition-opacity hover:opacity-90"
+                  className="ms-1 inline-flex shrink-0 h-9 w-9 items-center justify-center rounded-full bg-primary text-primary-foreground transition-opacity hover:opacity-90"
                 >
                   <Square size={14} strokeWidth={2} className="fill-current" />
                 </button>
@@ -474,7 +481,7 @@ export function Composer({
                   onClick={() => canSend && onSubmit?.()}
                   disabled={controlled && !canSend}
                   className={cn(
-                    "ml-1 inline-flex shrink-0 h-9 w-9 items-center justify-center rounded-full bg-primary text-primary-foreground transition-opacity",
+                    "ms-1 inline-flex shrink-0 h-9 w-9 items-center justify-center rounded-full bg-primary text-primary-foreground transition-opacity",
                     controlled && !canSend
                       ? "opacity-40"
                       : "hover:opacity-90",
@@ -529,7 +536,7 @@ function EntreeRechercheWeb({
         fermer();
         onChange(!actif);
       }}
-      className="flex w-full items-center gap-3 rounded-lg px-2.5 py-2 text-left hover:bg-muted disabled:cursor-not-allowed disabled:hover:bg-transparent"
+      className="flex w-full items-center gap-3 rounded-lg px-2.5 py-2 text-start hover:bg-muted disabled:cursor-not-allowed disabled:hover:bg-transparent"
     >
       <Globe size={16} strokeWidth={1.75} className={cn("shrink-0", possible ? "text-foreground" : "text-muted-foreground")} />
       <span className="min-w-0 flex-1">

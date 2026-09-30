@@ -157,7 +157,7 @@ export function OutilsChip({
                   >
                     {g.label}
                     {g.actif && (
-                      <span className="ml-1.5 text-xs text-muted-foreground">
+                      <span className="ms-1.5 text-xs text-muted-foreground">
                         {g.outils === 1 ? t("1 outil") : tf("{0} outils", g.outils)}
                       </span>
                     )}
@@ -185,7 +185,7 @@ export function OutilsChip({
           setOpen(false);
           naviguer("/parametres/mcp");
         }}
-        className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-sm text-foreground transition-colors hover:bg-muted"
+        className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-start text-sm text-foreground transition-colors hover:bg-muted"
       >
         <Plus size={15} strokeWidth={1.75} className="shrink-0 text-muted-foreground" />
         {t("Connecter un service...")}

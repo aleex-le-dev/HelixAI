@@ -97,7 +97,7 @@ export function ImageChip({
             type="button"
             onClick={p.onClick}
             aria-expanded={p["aria-expanded"]}
-            className="inline-flex h-8 items-center gap-1.5 rounded-full pl-3 pr-1.5 font-medium hover:bg-primary/10"
+            className="inline-flex h-8 items-center gap-1.5 rounded-full ps-3 pe-1.5 font-medium hover:bg-primary/10"
             title={video ? t("Réglages de la vidéo") : t("Réglages de l'image")}
           >
             {video ? <Film size={15} strokeWidth={1.75} /> : <ImageIcon size={15} strokeWidth={1.75} />}
@@ -145,7 +145,7 @@ export function ImageChip({
                             type="button"
                             disabled={!m.installe}
                             onClick={() => void agir(() => choisir(m.id))}
-                            className="min-w-0 flex-1 text-left disabled:cursor-default"
+                            className="min-w-0 flex-1 text-start disabled:cursor-default"
                           >
                             <span className="flex flex-wrap items-center gap-1.5 text-sm font-medium text-foreground">
                               {m.nom}
@@ -202,7 +202,7 @@ export function ImageChip({
         type="button"
         onClick={onFermer}
         aria-label={video ? t("Ne plus créer de vidéo") : t("Ne plus créer d'image")}
-        className="mr-1 inline-flex h-6 w-6 items-center justify-center rounded-full hover:bg-primary/15"
+        className="me-1 inline-flex h-6 w-6 items-center justify-center rounded-full hover:bg-primary/15"
       >
         <X size={13} strokeWidth={2} />
       </button>

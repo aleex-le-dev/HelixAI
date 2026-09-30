@@ -50,7 +50,7 @@ export function Apparence() {
               onClick={() => choisir(m.valeur)}
               aria-pressed={actif}
               className={cn(
-                "flex items-start gap-3 rounded-lg border px-3.5 py-3 text-left transition-colors",
+                "flex items-start gap-3 rounded-lg border px-3.5 py-3 text-start transition-colors",
                 actif
                   ? "border-accent bg-accent/10"
                   : "border-border hover:bg-muted",

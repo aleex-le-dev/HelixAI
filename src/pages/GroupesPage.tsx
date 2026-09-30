@@ -138,12 +138,12 @@ function Visages({ membres }: { membres: Personne[] }) {
   return (
     <span className="flex items-center">
       {montres.map((m, i) => (
-        <span key={m.id} className={cn("rounded-full ring-2 ring-card", i > 0 && "-ml-2")}>
+        <span key={m.id} className={cn("rounded-full ring-2 ring-card", i > 0 && "-ms-2")}>
           <Avatar size={26} initials={m.initiales} photo={photoDe(m.id)} nom={m.nom} />
         </span>
       ))}
       {membres.length > montres.length && (
-        <span className="-ml-2 inline-flex h-[26px] min-w-[26px] items-center justify-center rounded-full bg-muted px-1.5 text-[11px] font-medium text-muted-foreground ring-2 ring-card">
+        <span className="-ms-2 inline-flex h-[26px] min-w-[26px] items-center justify-center rounded-full bg-muted px-1.5 text-[11px] font-medium text-muted-foreground ring-2 ring-card">
           +{membres.length - montres.length}
         </span>
       )}
@@ -156,7 +156,7 @@ function CarteGroupe({ groupe, onOuvrir }: { groupe: Groupe; onOuvrir: () => voi
     <button
       type="button"
       onClick={onOuvrir}
-      className="flex h-full w-full flex-col gap-3 rounded-2xl border border-border bg-card p-4 text-left transition-shadow hover:shadow-sm"
+      className="flex h-full w-full flex-col gap-3 rounded-2xl border border-border bg-card p-4 text-start transition-shadow hover:shadow-sm"
     >
       <div className="flex w-full items-start justify-between gap-3">
         <div className="min-w-0">
@@ -227,7 +227,7 @@ function ChoixMembres({
               <button
                 type="button"
                 onClick={() => onChange(coche ? valeur.filter((x) => x !== p.id) : [...valeur, p.id])}
-                className={cn("flex w-full items-center gap-3 rounded-lg px-2.5 py-2 text-left hover:bg-muted", coche && "bg-muted")}
+                className={cn("flex w-full items-center gap-3 rounded-lg px-2.5 py-2 text-start hover:bg-muted", coche && "bg-muted")}
               >
                 <Avatar size={28} initials={p.initiales} photo={photoDe(p.id)} nom={p.nom} />
                 <span className="min-w-0 flex-1">
@@ -364,7 +364,7 @@ function DetailGroupe({
     <Modal open onClose={onFermer} size="md">
       {edition ? (
         <form
-          className="space-y-3 pr-8"
+          className="space-y-3 pe-8"
           onSubmit={(e) => {
             e.preventDefault();
             void agir(() => modifierGroupe(groupe.id, { nom, description })).then((ok) => ok && setEdition(false));
@@ -386,7 +386,7 @@ function DetailGroupe({
           </div>
         </form>
       ) : (
-        <div className="pr-8">
+        <div className="pe-8">
           <div className="flex items-center gap-2">
             <h2 className="truncate text-lg font-semibold text-foreground">{groupe.nom}</h2>
             {groupe.estResponsable && (

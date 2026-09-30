@@ -179,11 +179,11 @@ export function PreparerCowork() {
       <button
         type="button"
         onClick={() => setOuvert((o) => !o)}
-        className="flex w-full items-center gap-2 px-3.5 py-3 text-left"
+        className="flex w-full items-center gap-2 px-3.5 py-3 text-start"
         aria-expanded={ouvert}
       >
         <span className="text-sm font-semibold text-foreground">{t("Préparer Cowork")}</span>
-        <span className="ml-auto flex items-center gap-2 text-muted-foreground">
+        <span className="ms-auto flex items-center gap-2 text-muted-foreground">
           {!charge ? (
             <Loader2 size={13} className="animate-spin" />
           ) : (

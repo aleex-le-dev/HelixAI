@@ -12,6 +12,11 @@ import { cn } from "@/lib/cn";
  * Aucun HTML n'est interprété : tout passe par des nœuds texte, un modèle ne
  * peut donc rien injecter dans la page. Les liens restent du texte : un lien
  * cliquable écrit par un modèle est une invitation à l'hameçonnage.
+ *
+ * Sens d'écriture (30/09/2026) : chaque bloc porte `dir="auto"`. Une réponse en
+ * arabe dans une interface française s'aligne à droite, une réponse en français
+ * dans une interface arabe à gauche, paragraphe par paragraphe. Le code, lui,
+ * reste de gauche à droite (`dir="ltr"`), quelle que soit la langue autour.
  */
 
 type Bloc =
@@ -79,7 +84,7 @@ function enLigne(texte: string): ReactNode[] {
   while ((m = motif.exec(texte))) {
     if (m.index > dernier) morceaux.push(texte.slice(dernier, m.index));
     const brut = m[0];
-    if (m[1]) morceaux.push(<code key={n++} className="rounded bg-muted px-1 py-0.5 text-[0.9em]">{brut.slice(1, -1)}</code>);
+    if (m[1]) morceaux.push(<code key={n++} dir="ltr" className="rounded bg-muted px-1 py-0.5 text-[0.9em]">{brut.slice(1, -1)}</code>);
     else if (m[2] || m[3]) morceaux.push(<strong key={n++} className="font-semibold text-foreground">{brut.slice(2, -2)}</strong>);
     else morceaux.push(<em key={n++}>{brut.slice(1, -1)}</em>);
     dernier = m.index + brut.length;
@@ -95,14 +100,14 @@ export function TexteRiche({ texte, className }: { texte: string; className?: st
         switch (b.type) {
           case "titre":
             return (
-              <p key={i} className="font-semibold text-foreground">
+              <p key={i} dir="auto" className="font-semibold text-foreground">
                 {enLigne(b.texte)}
               </p>
             );
           case "liste": {
             const Liste = b.ordonnee ? "ol" : "ul";
             return (
-              <Liste key={i} className={cn("space-y-0.5 pl-5", b.ordonnee ? "list-decimal" : "list-disc")}>
+              <Liste key={i} dir="auto" className={cn("space-y-0.5 ps-5", b.ordonnee ? "list-decimal" : "list-disc")}>
                 {b.elements.map((e, j) => (
                   <li key={j}>{enLigne(e)}</li>
                 ))}
@@ -111,7 +116,7 @@ export function TexteRiche({ texte, className }: { texte: string; className?: st
           }
           case "citation":
             return (
-              <blockquote key={i} className="border-l-2 border-border pl-3 text-muted-foreground">
+              <blockquote key={i} dir="auto" className="border-s-2 border-border ps-3 text-muted-foreground">
                 {b.lignes.map((l, j) => (
                   <Fragment key={j}>
                     {j > 0 && <br />}
@@ -122,13 +127,13 @@ export function TexteRiche({ texte, className }: { texte: string; className?: st
             );
           case "code":
             return (
-              <pre key={i} className="overflow-x-auto rounded-lg bg-muted px-3 py-2 text-[0.85em] leading-relaxed">
+              <pre key={i} dir="ltr" className="overflow-x-auto rounded-lg bg-muted px-3 py-2 text-[0.85em] leading-relaxed">
                 {b.texte}
               </pre>
             );
           default:
             return (
-              <p key={i}>
+              <p key={i} dir="auto">
                 {b.lignes.map((l, j) => (
                   <Fragment key={j}>
                     {j > 0 && <br />}

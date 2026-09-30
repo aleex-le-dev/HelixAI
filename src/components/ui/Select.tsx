@@ -144,7 +144,7 @@ export function Select({
                   onChange(o.value);
                   setOpen(false);
                 }}
-                className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-sm text-foreground transition-colors hover:bg-muted"
+                className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-start text-sm text-foreground transition-colors hover:bg-muted"
               >
                 <span className="flex-1">{o.label}</span>
                 {o.value === value && <Check size={15} strokeWidth={2} className="text-foreground" />}

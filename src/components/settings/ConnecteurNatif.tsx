@@ -136,7 +136,7 @@ function VersPageLinkedin({ ancienne, onOuvrir }: { ancienne: boolean; onOuvrir?
           <Button
             size="sm"
             variant="secondary"
-            className="!h-auto min-h-8 max-w-full py-1.5 text-left"
+            className="!h-auto min-h-8 max-w-full py-1.5 text-start"
             icon={Link2}
             onClick={() => {
               onOuvrir("linkedinPage");
@@ -443,7 +443,7 @@ export function ConnecteurNatif({ id, onChange, onOuvrir }: { id: IdNatif; onCha
                 </>
               )}
             </p>
-            <Button size="sm" className="!h-auto min-h-8 max-w-full py-1.5 text-left" icon={enCours || attente ? Loader2 : Link2} disabled={enCours || attente} onClick={() => void lancer()}>
+            <Button size="sm" className="!h-auto min-h-8 max-w-full py-1.5 text-start" icon={enCours || attente ? Loader2 : Link2} disabled={enCours || attente} onClick={() => void lancer()}>
               {attente ? t("En attente de votre accord…") : tf("Se connecter à {0}", etat.nom)}
             </Button>
           </div>

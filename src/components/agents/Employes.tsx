@@ -421,7 +421,7 @@ function ChoixLiberte({
             type="button"
             onClick={() => onChange(p)}
             className={cn(
-              "flex flex-col items-start gap-1 rounded-xl border px-3 py-2.5 text-left transition-colors",
+              "flex flex-col items-start gap-1 rounded-xl border px-3 py-2.5 text-start transition-colors",
               valeur === p ? "border-foreground/30 bg-muted/50" : "border-border hover:bg-muted/40",
             )}
           >
@@ -783,7 +783,7 @@ export function PanneauEmploye({
   ];
   return (
     <Modal open onClose={onFermer} size="xl">
-      <div className="flex items-start gap-3 pr-8">
+      <div className="flex items-start gap-3 pe-8">
         {/* La photo de son agent, s'il en a une (27/09/2026) ; sinon ses initiales. */}
         {photoValide(employe.agentId ? getAgent(employe.agentId)?.photo : undefined) ? (
           <AvatarAgent photo={getAgent(employe.agentId!)?.photo} nom={employe.nom} size={44} />
@@ -916,7 +916,7 @@ function Conversation({ employe }: { employe: Employe }) {
 
   return (
     <div className="flex h-[420px] flex-col">
-      <div className="flex-1 space-y-4 overflow-y-auto pr-1">
+      <div className="flex-1 space-y-4 overflow-y-auto pe-1">
         {echanges.length === 0 && !attente && (
           <p className="pt-10 text-center text-sm text-muted-foreground">
             {t("Demandez-lui ce que vous voulez dans le cadre de son poste.")}

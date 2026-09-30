@@ -196,7 +196,7 @@ export function Aide({ open, onClose }: { open: boolean; onClose: () => void }) 
                 <button
                   type="button"
                   onClick={() => setOuvert(a.id)}
-                  className="w-full rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-muted"
+                  className="w-full rounded-xl px-3 py-2.5 text-start transition-colors hover:bg-muted"
                 >
                   <span className="block text-sm font-medium text-foreground">{a.titre}</span>
                   <span className="mt-0.5 block text-xs text-muted-foreground">{a.resume}</span>

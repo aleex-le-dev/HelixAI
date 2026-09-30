@@ -159,7 +159,7 @@ export function FirstRun({ onReady }: { onReady: () => void }) {
           <div className="flex w-full max-w-md flex-col items-center gap-3">
             {/* Où iront le moteur et les modèles, avant de rien télécharger (28/09/2026). */}
             <EmplacementModeles onChange={refresh} />
-            <label className="flex items-start gap-2 text-left text-sm text-foreground">
+            <label className="flex items-start gap-2 text-start text-sm text-foreground">
               <input
                 type="checkbox"
                 className="mt-0.5"
@@ -188,7 +188,7 @@ export function FirstRun({ onReady }: { onReady: () => void }) {
         {state.phase === "error" && (
           <InfoBox
             tone="warning"
-            className="mt-2 w-full max-w-md text-left"
+            className="mt-2 w-full max-w-md text-start"
             leading={<TriangleAlert size={15} strokeWidth={1.75} />}
           >
             <p className="font-medium text-foreground">{state.message}</p>
@@ -271,7 +271,7 @@ export function FirstRun({ onReady }: { onReady: () => void }) {
       </div>
 
       {/* Modèle recommandé */}
-      <div className="mt-4 w-full max-w-md rounded-2xl border border-border bg-card p-4 text-left">
+      <div className="mt-4 w-full max-w-md rounded-2xl border border-border bg-card p-4 text-start">
         <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
           {affiche.key === recommended.key ? t("Recommandé pour votre machine") : t("Modèle choisi")}
         </p>
@@ -326,7 +326,7 @@ export function FirstRun({ onReady }: { onReady: () => void }) {
 
       {/* Choisir un autre modèle : seulement ceux qui tiennent sur la machine. */}
       {!busy && !pret && possibles.length > 1 && (
-        <div className="w-full max-w-md text-left">
+        <div className="w-full max-w-md text-start">
           <button
             type="button"
             className="text-sm text-muted-foreground underline underline-offset-2 hover:text-foreground"
@@ -341,7 +341,7 @@ export function FirstRun({ onReady }: { onReady: () => void }) {
                 {t("Seuls les modèles que cette machine fait tourner sans ralentir sont proposés. Un modèle plus léger répond plus vite, avec des réponses plus simples.")}
               </p>
               {/* Le catalogue élargi du 28/09/2026 (une quarantaine de modèles sur une grosse machine) : la liste défile dans sa hauteur. */}
-              <div className="max-h-72 space-y-1.5 overflow-y-auto pr-1">
+              <div className="max-h-72 space-y-1.5 overflow-y-auto pe-1">
               {possibles.map((m) => (
                 <label
                   key={m.key}

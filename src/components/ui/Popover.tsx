@@ -7,6 +7,7 @@ import {
   type ReactNode,
 } from "react";
 import { cn } from "@/lib/cn";
+import { sens } from "@/lib/i18n";
 
 type Align = "start" | "center" | "end";
 
@@ -36,11 +37,23 @@ interface PopoverProps {
   panelClassName?: string;
 }
 
+/*
+ * Classes **physiques**, et c'est voulu (30/09/2026) : le placement se calcule
+ * en pixels d'écran (`getBoundingClientRect`), où « start » veut dire le bord
+ * gauche du bouton et « end » son bord droit. Le sens d'écriture est pris en
+ * compte une fois, à l'entrée (`physique`) : en arabe, un menu demandé au
+ * « début » s'aligne sur le bord droit de son bouton, et le reste du calcul
+ * (changement de côté faute de place, retour dans la zone visible) n'a pas à
+ * le savoir.
+ */
 const alignClass: Record<Align, string> = {
   start: "left-0",
   center: "left-1/2 -translate-x-1/2",
   end: "right-0",
 };
+
+/** L'alignement demandé (début, fin de ligne), en bord d'écran (gauche, droite). */
+const physique = (align: Align): Align => (sens() === "rtl" ? (align === "start" ? "end" : align === "end" ? "start" : align) : align);
 
 /**
  * Popover accessible : ferme sur clic exterieur et touche Echap.
@@ -51,7 +64,7 @@ export function Popover({
   children,
   open: controlledOpen,
   onOpenChange,
-  align = "start",
+  align: alignDemande = "start",
   side = "bottom",
   coteFixe = false,
   width,
@@ -62,6 +75,8 @@ export function Popover({
   const isControlled = controlledOpen !== undefined;
   const open = isControlled ? controlledOpen : uncontrolled;
   const id = useId();
+  // À partir d'ici, `align` parle de bords d'écran (voir `alignClass`).
+  const align = physique(alignDemande);
   const rootRef = useRef<HTMLDivElement>(null);
   /*
    * Où ouvrir, et jusqu'où.

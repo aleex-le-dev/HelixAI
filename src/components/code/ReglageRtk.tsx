@@ -52,7 +52,7 @@ export function ReglageRtkCode({
         onChange(v);
         setOpen(false);
       }}
-      className={cn("flex w-full flex-col rounded-lg px-2.5 py-2 text-left transition-colors hover:bg-muted", valeur === v && "bg-muted/60")}
+      className={cn("flex w-full flex-col rounded-lg px-2.5 py-2 text-start transition-colors hover:bg-muted", valeur === v && "bg-muted/60")}
     >
       <span className="text-sm font-medium text-foreground">{titre}</span>
       <span className="text-xs text-muted-foreground">{description}</span>

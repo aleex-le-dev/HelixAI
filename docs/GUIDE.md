@@ -3,8 +3,8 @@
 Plateforme d'agents IA **open source**, en marque blanche, en logiciel de bureau :
 chaque organisation installe sa propre instance, chez elle. Elle réunit une interface
 React, une **passerelle modèles** locale (`gateway/`) et une enveloppe **Electron** qui
-lance la passerelle au démarrage. Interface en **français, anglais, chinois et japonais**, au
-choix de chacun (Réglages, Préférences).
+lance la passerelle au démarrage. Interface en **sept langues** (français, anglais, chinois, japonais,
+espagnol, allemand, arabe), au choix de chacun (Réglages, Préférences) ; en arabe, l'écran se lit de droite à gauche.
 
 Contributions : [CONTRIBUTING.md](../CONTRIBUTING.md) et [CLA.md](../CLA.md).
 
@@ -1269,7 +1269,13 @@ l'agent d'orchestration par défaut. Aucun tiret cadratin dans les textes affich
   saisir. Demande une préparation unique par l'administrateur de
   l'organisation ; un compte personnel garde le mot de passe d'application, et
   l'écran le dit (0.24.0) ;
-- **quatre langues** : français, anglais, chinois, japonais. Le choix se fait dans
+- **sept langues** : français, anglais, chinois, japonais, et depuis le 30/09/2026
+  espagnol, allemand et arabe. En arabe, l'écran se lit de droite à gauche : la barre
+  latérale passe à droite, les flèches se retournent, et le code, les chemins, les
+  adresses et les numéros de version restent de gauche à droite ; les chiffres restent
+  occidentaux. Ce que vous écrivez et ce que le modèle répond s'alignent selon leur
+  propre langue, quelle que soit celle de l'interface. La ligne de commande et
+  l'extension VS Code sont en français. Le choix se fait dans
   Réglages, Préférences, vaut pour ce poste, et recharge la page pour que tout
   change d'un coup. 1 842 phrases en 0.25.0 ; le 25/09/2026, 2 301 dans
   l'interface et 650 dans la passerelle ; le 28/09/2026, 2 945 et 966, traduites à

@@ -405,7 +405,7 @@ export function ComparerModeles({
           type="button"
           onClick={() => setVue((v) => (v === "nuage" ? "tableau" : "nuage"))}
           title={vue === "nuage" ? t("Voir le tableau") : t("Voir le graphique")}
-          className="mr-10 inline-flex shrink-0 items-center gap-1.5 rounded-lg px-2 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          className="me-10 inline-flex shrink-0 items-center gap-1.5 rounded-lg px-2 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
         >
           {vue === "nuage" ? <Table2 size={15} strokeWidth={1.75} /> : <ChartScatter size={15} strokeWidth={1.75} />}
           {/* À 375 px, l'icône seule : le libellé repoussait « Comparer les modèles » sur trois lignes. */}
@@ -594,12 +594,12 @@ export function ComparerModeles({
         <div className="mt-4 max-h-[420px] overflow-auto">
           <table className="w-full text-sm">
             <thead className="sticky top-0 bg-card">
-              <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-muted-foreground">
-                <th className="py-2 pr-3 font-semibold">{t("Modèle")}</th>
-                <th className="py-2 pr-3 font-semibold">{t("Éditeur")}</th>
-                <th className="py-2 pr-3 text-right font-semibold">{t("Note ECI")}</th>
-                <th className="py-2 pr-3 text-right font-semibold">{t("Entrée")}</th>
-                <th className="py-2 text-right font-semibold">{t("Sortie")}</th>
+              <tr className="border-b border-border text-start text-xs uppercase tracking-wide text-muted-foreground">
+                <th className="py-2 pe-3 font-semibold">{t("Modèle")}</th>
+                <th className="py-2 pe-3 font-semibold">{t("Éditeur")}</th>
+                <th className="py-2 pe-3 text-end font-semibold">{t("Note ECI")}</th>
+                <th className="py-2 pe-3 text-end font-semibold">{t("Entrée")}</th>
+                <th className="py-2 text-end font-semibold">{t("Sortie")}</th>
               </tr>
             </thead>
             <tbody>
@@ -610,28 +610,28 @@ export function ComparerModeles({
                 const enCours = actuel?.note === m;
                 return (
                   <tr key={m.nom} className={cn("border-b border-border/60", enCours ? "bg-info/10" : servi && "bg-muted/60")}>
-                    <td className="py-2 pr-3 text-foreground">
-                      <span className="mr-2 inline-flex align-[-3px]">
+                    <td className="py-2 pe-3 text-foreground">
+                      <span className="me-2 inline-flex align-[-3px]">
                         {/* Le nom d'abord ; sinon l'éditeur (« Muse Spark », de Meta, ne dit pas « Llama »). */}
                         <LogoMarque marque={marqueDuModele(m.nom) ?? marqueDuModele(m.editeur ?? "")} icone={Cpu} taille={16} degagement={8} />
                       </span>
                       {m.nom}
                       {enCours ? (
-                        <span className="ml-2 rounded-full bg-info/15 px-1.5 py-0.5 text-[10px] font-medium text-foreground">
+                        <span className="ms-2 rounded-full bg-info/15 px-1.5 py-0.5 text-[10px] font-medium text-foreground">
                           {t("Modèle en cours")}
                         </span>
                       ) : (
                         servi && (
-                          <span className="ml-2 rounded-full bg-accent/15 px-1.5 py-0.5 text-[10px] font-medium text-foreground">
+                          <span className="ms-2 rounded-full bg-accent/15 px-1.5 py-0.5 text-[10px] font-medium text-foreground">
                             {t("chez vous")}
                           </span>
                         )
                       )}
                     </td>
-                    <td className="py-2 pr-3 text-muted-foreground">{m.editeur || "?"}</td>
-                    <td className="py-2 pr-3 text-right tabular-nums text-foreground">{nombre(m.eci)}</td>
-                    <td className="py-2 pr-3 text-right tabular-nums text-muted-foreground">{p ? dollars(p.tarif.entree) : "?"}</td>
-                    <td className="py-2 text-right tabular-nums text-muted-foreground">{p ? dollars(p.tarif.sortie) : "?"}</td>
+                    <td className="py-2 pe-3 text-muted-foreground">{m.editeur || "?"}</td>
+                    <td className="py-2 pe-3 text-end tabular-nums text-foreground">{nombre(m.eci)}</td>
+                    <td className="py-2 pe-3 text-end tabular-nums text-muted-foreground">{p ? dollars(p.tarif.entree) : "?"}</td>
+                    <td className="py-2 text-end tabular-nums text-muted-foreground">{p ? dollars(p.tarif.sortie) : "?"}</td>
                   </tr>
                 );
               })}

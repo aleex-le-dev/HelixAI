@@ -64,7 +64,7 @@ export function FileAttente({
           <span role="status">{n === 1 ? t("1 message en attente") : tf("{0} messages en attente", n)}</span>
         </p>
         {file.pause && (
-          <Button size="sm" variant="secondary" className="ml-auto h-7 px-2.5" onClick={onReprendre}>
+          <Button size="sm" variant="secondary" className="ms-auto h-7 px-2.5" onClick={onReprendre}>
             {occupe ? t("Reprendre") : t("Envoyer maintenant")}
           </Button>
         )}
@@ -173,6 +173,7 @@ function MessageEnAttente({
           {enEdition ? (
             <textarea
               ref={zone}
+              dir="auto"
               value={brouillon}
               onChange={(e) => setBrouillon(e.target.value)}
               onKeyDown={touches}
@@ -181,7 +182,7 @@ function MessageEnAttente({
               className="block w-full resize-none rounded-md border border-border bg-card px-2 py-1.5 text-sm text-foreground focus:border-foreground/20 focus:outline-none"
             />
           ) : (
-            <p className="line-clamp-2 whitespace-pre-wrap break-words text-sm text-foreground">
+            <p dir="auto" className="line-clamp-2 whitespace-pre-wrap break-words text-sm text-foreground">
               {envoi.texte.trim() || <span className="text-muted-foreground">{t("(sans texte)")}</span>}
             </p>
           )}
@@ -193,7 +194,7 @@ function MessageEnAttente({
           )}
         </div>
       </div>
-      <div className="ml-auto flex shrink-0 flex-wrap justify-end gap-1">
+      <div className="ms-auto flex shrink-0 flex-wrap justify-end gap-1">
         {enEdition ? (
           <>
             <Button size="sm" variant="ghost" className="h-7 px-2" onClick={() => onFinir(undefined)}>

@@ -495,7 +495,7 @@ export function CoworkPage() {
         icon={PanelRight}
         label={panelOpen ? t("Masquer le panneau") : t("Afficher le panneau")}
         onClick={() => setPanelOpen((o) => !o)}
-        className="absolute right-4 top-4 z-20"
+        className="absolute end-4 top-4 z-20"
       />
 
       <section className="relative flex min-w-0 flex-1 flex-col overflow-hidden bg-dotted">

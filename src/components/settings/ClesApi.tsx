@@ -302,7 +302,12 @@ function BlocCode({ code, libelle }: { code: string; libelle: string }) {
   useEffect(() => () => window.clearTimeout(minuterie.current), []);
   return (
     <div className="relative">
-      <pre ref={bloc} className="overflow-x-auto rounded-xl border border-border bg-muted/40 p-3 pr-11 font-mono text-[12.5px] leading-relaxed text-foreground">
+      {/*
+        Classes physiques, voulues (30/09/2026) : un bloc de code reste de gauche
+        à droite dans une page arabe, son bouton de copie reste donc à sa droite,
+        là où la marge lui est réservée.
+      */}
+      <pre ref={bloc} dir="ltr" className="overflow-x-auto rounded-xl border border-border bg-muted/40 p-3 pr-11 font-mono text-[12.5px] leading-relaxed text-foreground">
         {code}
       </pre>
       <IconButton
@@ -477,7 +482,7 @@ function Documentation({ etat }: { etat: EtatClesApi }) {
 
       <section className="space-y-2">
         <h4 className="text-sm font-medium text-foreground">{t("Ce qu'une clé ne permet pas")}</h4>
-        <ul className="list-disc space-y-1 pl-5 text-sm text-muted-foreground">
+        <ul className="list-disc space-y-1 ps-5 text-sm text-muted-foreground">
           <li>{t("Aucune autre route de l'instance : ni les comptes, ni les Chats, ni les fichiers, ni les agents, ni les réglages, ni Code.")}</li>
           <li>{t("Aucun outil exécuté par l'instance (tools: true), ni vos connecteurs. Les outils que votre programme déclare et exécute lui-même restent possibles.")}</li>
           <li>{t("Créer une autre clé : cela se fait ici, avec votre séance.")}</li>

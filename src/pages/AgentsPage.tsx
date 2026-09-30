@@ -330,10 +330,10 @@ function AgentCard({
         type="button"
         disabled={!employe}
         onClick={() => employe && onOuvrir(employe.id)}
-        className="flex flex-1 flex-col gap-2 text-left disabled:cursor-default"
+        className="flex flex-1 flex-col gap-2 text-start disabled:cursor-default"
         aria-label={employe ? tf("Ouvrir {0}", agent.name) : undefined}
       >
-        <div className="flex w-full items-start gap-3 pr-6">
+        <div className="flex w-full items-start gap-3 pe-6">
           {/* La place de l'avatar : il est posé par-dessus, hors du bouton, pour que son propriétaire puisse y choisir une photo. */}
           <span className="h-10 w-10 shrink-0" aria-hidden />
           <div className="min-w-0 flex-1">
@@ -373,7 +373,7 @@ function AgentCard({
           )}
         </div>
       )}
-      <div className="absolute left-4 top-4">
+      <div className="absolute start-4 top-4">
         {canDelete ? <ChoixPhotoAgent photo={agent.photo} nom={agent.name} onChange={onPhoto} /> : <AvatarAgent photo={agent.photo} nom={agent.name} />}
       </div>
       {/*
@@ -409,7 +409,7 @@ function AgentCard({
       )}
       {bases && (
         <Modal open onClose={() => setBases(null)} size="md">
-          <h2 className="pr-8 text-lg font-semibold text-foreground">{tf("Connaissances de {0}", agent.name)}</h2>
+          <h2 className="pe-8 text-lg font-semibold text-foreground">{tf("Connaissances de {0}", agent.name)}</h2>
           <p className="mt-1 text-sm text-muted-foreground">
             {t("Dans le Chat, avec cet agent, les passages utiles de ces bases sont donnés au modèle avant chaque réponse, et cités sous la réponse. Chaque personne n'y lit que ce qu'elle a le droit de voir.")}
           </p>
@@ -437,7 +437,7 @@ function AgentCard({
       )}
       {canDelete &&
         (confirmer ? (
-          <span className="absolute right-3 top-3 flex items-center gap-1 rounded-lg bg-card px-1 shadow-sm">
+          <span className="absolute end-3 top-3 flex items-center gap-1 rounded-lg bg-card px-1 shadow-sm">
             <Button variant="destructive" size="sm" icon={retrait.occupe ? Loader2 : undefined} disabled={retrait.occupe} onClick={() => void supprimer()}>
               {retrait.occupe ? t("Retrait…") : t("Supprimer")}
             </Button>
@@ -456,7 +456,7 @@ function AgentCard({
             aria-label={tf("Supprimer {0}", agent.name)}
             title={tf("Supprimer {0}", agent.name)}
             onClick={() => setConfirmer(true)}
-            className="absolute right-3 top-3 rounded p-1 text-muted-foreground/60 transition-colors hover:text-destructive focus-visible:text-destructive"
+            className="absolute end-3 top-3 rounded p-1 text-muted-foreground/60 transition-colors hover:text-destructive focus-visible:text-destructive"
           >
             <Trash2 size={15} strokeWidth={1.75} />
           </button>
@@ -488,7 +488,7 @@ function CarteEmploye({
       <button
         type="button"
         onClick={onOuvrir}
-        className="flex h-full w-full flex-col gap-2 rounded-2xl border border-border bg-card p-4 text-left transition-shadow hover:shadow-sm"
+        className="flex h-full w-full flex-col gap-2 rounded-2xl border border-border bg-card p-4 text-start transition-shadow hover:shadow-sm"
       >
         <div className="flex w-full items-start gap-3">
           <AvatarAgent photo={employe.agentId ? getAgent(employe.agentId)?.photo : undefined} nom={employe.nom} />
@@ -609,7 +609,7 @@ function AgentModal({
 
       <div className="mt-5 grid gap-6 md:grid-cols-[220px_1fr]">
         {/* Colonne gauche : avatar + fichiers */}
-        <div className="flex flex-col items-center gap-3 border-b border-border pb-5 md:border-b-0 md:border-r md:pb-0 md:pr-6">
+        <div className="flex flex-col items-center gap-3 border-b border-border pb-5 md:border-b-0 md:border-e md:pb-0 md:pe-6">
           <ChoixPhotoAgent photo={photo ?? undefined} nom={name.trim() || t("Agent sans nom")} size={96} onChange={setPhoto} />
           <span className="text-sm font-medium text-foreground">
             {name.trim() || t("Agent sans nom")}

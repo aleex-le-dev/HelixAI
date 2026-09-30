@@ -40,7 +40,7 @@ function LigneSessionCode({
         title={titre}
         aria-current={actif ? "page" : undefined}
         className={cn(
-          "flex w-full items-center gap-2 rounded-lg px-2 py-1.5 pr-7 text-left text-sm transition-colors",
+          "flex w-full items-center gap-2 rounded-lg px-2 py-1.5 pe-7 text-start text-sm transition-colors",
           actif ? "bg-muted font-medium text-foreground" : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
         )}
       >
@@ -67,7 +67,7 @@ function LigneSessionCode({
           onClick={onRetirer}
           aria-label={tf("Retirer « {0} » de la liste", titre)}
           title={t("Retirer de la liste (la session reste chez l'agent de code)")}
-          className="absolute right-1 top-1/2 hidden h-6 w-6 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground group-hover:flex focus-visible:flex"
+          className="absolute end-1 top-1/2 hidden h-6 w-6 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground group-hover:flex focus-visible:flex"
         >
           <X size={13} strokeWidth={1.75} />
         </button>

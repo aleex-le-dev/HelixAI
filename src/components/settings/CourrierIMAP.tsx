@@ -473,7 +473,7 @@ export function CourrierIMAP({ onChange }: { onChange?: () => void } = {}) {
               <Button
                 variant="ghost"
                 size="sm"
-                className="ml-auto"
+                className="ms-auto"
                 onClick={() => setParAutorisation((v) => !v)}
               >
                 {parAutorisation ? t("Revenir au mot de passe") : t("Essayer")}

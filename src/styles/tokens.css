@@ -130,6 +130,21 @@
   --font-display: "Plus Jakarta Sans", "Plus Jakarta Sans Fallback", "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic UI", "Yu Gothic", YuGothic, Meiryo, "Noto Sans JP", "Noto Sans CJK JP", ui-sans-serif, system-ui, sans-serif;
 }
 
+/*
+ * Arabe (30/09/2026) : Plus Jakarta Sans n'a pas l'alphabet arabe. Aucune
+ * police n'est embarquee ni telechargee : on nomme celles que chaque systeme
+ * installe deja. Geeza Pro (macOS), Segoe UI (Windows, qui dessine l'arabe),
+ * Noto Sans Arabic et Noto Naskh Arabic (Linux, ou installees a part), Tahoma
+ * en dernier recours. Elles passent AVANT le repli cale sur Arial : Arial a des
+ * lettres arabes, et les aurait prises a leur place. Le latin reste en Plus
+ * Jakarta Sans. Seulement quand la page est en arabe (`lang="ar"`, pose par
+ * src/lib/i18n.ts).
+ */
+:root:lang(ar) {
+  --font-body: "Plus Jakarta Sans", "Geeza Pro", "Segoe UI", "Noto Sans Arabic", "Noto Naskh Arabic", Tahoma, "Plus Jakarta Sans Fallback", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Plus Jakarta Sans", "Geeza Pro", "Segoe UI", "Noto Sans Arabic", "Noto Naskh Arabic", Tahoma, "Plus Jakarta Sans Fallback", ui-sans-serif, system-ui, sans-serif;
+}
+
 /* =============================================================================
  * THEME SOMBRE
  * Aucune couleur n'est ecrite ailleurs que dans ce fichier : basculer le theme

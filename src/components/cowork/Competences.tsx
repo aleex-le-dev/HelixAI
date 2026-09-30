@@ -59,7 +59,7 @@ export function Competences() {
               <button
                 type="button"
                 aria-label={`Modifier ${c.nom}`}
-                className="ml-auto shrink-0 text-muted-foreground opacity-0 transition-opacity hover:text-foreground focus-visible:opacity-100 group-hover:opacity-100"
+                className="ms-auto shrink-0 text-muted-foreground opacity-0 transition-opacity hover:text-foreground focus-visible:opacity-100 group-hover:opacity-100"
                 onClick={() => setOuverte(c)}
               >
                 <Pencil size={13} strokeWidth={1.75} />
@@ -206,7 +206,7 @@ function EditeurCompetence({
             <Button
               variant="ghost"
               icon={Trash2}
-              className="ml-auto text-destructive hover:text-destructive"
+              className="ms-auto text-destructive hover:text-destructive"
               onClick={() => {
                 onSupprimer(competence.id);
                 onFermer();

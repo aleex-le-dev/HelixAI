@@ -1,7 +1,7 @@
 import { useMemo, useSyncExternalStore } from "react";
 import { currentUser, IDENTITE_CHANGEE } from "@/lib/store/identity";
 import { loadProfile, saveProfile, type UserProfile } from "@/lib/store/profile";
-import { langue, locale, t } from "@/lib/i18n";
+import { isolerLtr, langue, locale, t } from "@/lib/i18n";
 
 /**
  * Formats de date et d'heure : le seul endroit de l'application qui transforme
@@ -58,7 +58,8 @@ export const FORMATS_HEURE: { valeur: FormatHeure; nom: string }[] = [
 /**
  * Ce qu'affiche une installation neuve : l'usage français. En japonais, l'année
  * d'abord (2026-09-28), l'ordre qu'on y lit ; le jour en premier y serait pris
- * pour une erreur (28/09/2026).
+ * pour une erreur (28/09/2026). L'espagnol, l'allemand et l'arabe gardent le
+ * jour en premier, leur ordre à eux aussi (30/09/2026).
  */
 const DEFAUT: PreferencesFormats = { date: langue() === "ja" ? "iso" : "eu", heure: "24" };
 
@@ -179,7 +180,8 @@ export function formaterHeure(valeur: Instant, prefs: PreferencesFormats = lireF
   const minutes = deux(d.getMinutes());
   if (prefs.heure === "12") {
     const h = d.getHours();
-    return `${h % 12 || 12}:${minutes} ${h < 12 ? "AM" : "PM"}`;
+    // En arabe, « 2:05 PM » reste dans cet ordre (sinon « PM 2:05 », voir `isolerLtr`).
+    return isolerLtr(`${h % 12 || 12}:${minutes} ${h < 12 ? "AM" : "PM"}`);
   }
   return `${deux(d.getHours())}:${minutes}`;
 }
@@ -191,7 +193,12 @@ export function formaterDateHeure(
 ): string {
   const d = enDate(valeur);
   if (!d) return "";
-  return `${formaterDate(d, prefs)} ${formaterHeure(d, prefs)}`;
+  /*
+   * En arabe (30/09/2026), la date reste avant l'heure : deux suites de
+   * chiffres séparées par une espace s'échangeaient dans une ligne écrite de
+   * droite à gauche. Les chiffres restent occidentaux, comme partout à l'écran.
+   */
+  return isolerLtr(`${formaterDate(d, prefs)} ${formaterHeure(d, prefs)}`.replace(/[\u2066\u2069]/g, ""));
 }
 
 /**

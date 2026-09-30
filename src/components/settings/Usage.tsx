@@ -326,13 +326,13 @@ export function Usage() {
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="text-left text-xs text-muted-foreground">
+                <tr className="text-start text-xs text-muted-foreground">
                   <th className="pb-2 font-medium">{t("Modèle")}</th>
                   <th className="pb-2 font-medium">{t("Où")}</th>
-                  <th className="pb-2 text-right font-medium">{t("Requêtes")}</th>
-                  <th className="pb-2 text-right font-medium">{t("Entrée")}</th>
-                  <th className="pb-2 text-right font-medium">{t("Sortie")}</th>
-                  <th className="pb-2 text-right font-medium">{t("Coût")}</th>
+                  <th className="pb-2 text-end font-medium">{t("Requêtes")}</th>
+                  <th className="pb-2 text-end font-medium">{t("Entrée")}</th>
+                  <th className="pb-2 text-end font-medium">{t("Sortie")}</th>
+                  <th className="pb-2 text-end font-medium">{t("Coût")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -340,13 +340,13 @@ export function Usage() {
                   const cout = libelleCout(m.cout);
                   return (
                     <tr key={m.uid} className="border-t border-border">
-                      <td className="max-w-[14rem] py-2 pr-2">
+                      <td className="max-w-[14rem] py-2 pe-2">
                         <NomModele modele={m} />
                       </td>
                       <td className="py-2 text-xs text-muted-foreground">{m.local ? t("Local") : t("Distant")}</td>
-                      <td className="py-2 text-right tabular-nums">{m.requetes.toLocaleString(locale())}</td>
-                      <td className="py-2 text-right tabular-nums">{jetons(m.entree)}</td>
-                      <td className="py-2 text-right tabular-nums">
+                      <td className="py-2 text-end tabular-nums">{m.requetes.toLocaleString(locale())}</td>
+                      <td className="py-2 text-end tabular-nums">{jetons(m.entree)}</td>
+                      <td className="py-2 text-end tabular-nums">
                         {jetons(m.sortie)}
                         {m.raisonnement > 0 && (
                           <span
@@ -358,7 +358,7 @@ export function Usage() {
                         )}
                       </td>
                       <td
-                        className={cn("py-2 text-right", cout.atenue ? "text-muted-foreground" : "text-foreground")}
+                        className={cn("py-2 text-end", cout.atenue ? "text-muted-foreground" : "text-foreground")}
                         title={cout.aide}
                       >
                         {cout.texte}

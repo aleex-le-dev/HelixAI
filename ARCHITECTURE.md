@@ -2078,6 +2078,16 @@ Pour Code, la passerelle sert elle-même ses connecteurs à OpenCode, par MCP, s
 
 **Conséquences.** Les personnes qui naviguent au clavier gardent leur cadre ; les autres ne le voient plus.
 
+### ADR-076 : Sept langues, et l'arabe de droite à gauche par propriétés logiques ✅ implémenté, application de bureau pas vue en arabe (30/09/2026)
+
+**Contexte.** L'interface se lisait en quatre langues, toutes de gauche à droite. L'espagnol, l'allemand et l'arabe s'ajoutent (PROJET.md, entrée du 30/09/2026), et l'arabe s'écrit de droite à gauche : la barre latérale, les marges, les alignements, les icônes de direction, tout ce qui disait « gauche » ou « droite » est faux dans cette langue.
+
+**Décision.** Une seule mise en page, écrite en propriétés logiques. `src/lib/i18n.ts` pose `lang` et `dir` sur `<html>` au chargement du module (avant le premier rendu) ; les classes de Tailwind disent `ms-`, `me-`, `ps-`, `pe-`, `start-`, `end-`, `text-start`, `text-end`, `border-s`, `border-e`, `rounded-ee`. Ce que les propriétés logiques ne règlent pas tient en quelques règles de `src/styles/index.css`, toutes sous `[dir="rtl"]` ou `:lang(ar)` : le code et les champs techniques restent de gauche à droite, les icônes directionnelles de lucide se retournent (`scale: -1 1`, hors de `@layer`), les graphiques SVG gardent leur sens, l'espacement des lettres est annulé. Le contenu écrit par la personne ou par le modèle porte `dir="auto"`. Le placement des menus (`Popover.tsx`) reste calculé en pixels d'écran, le sens d'écriture y entrant une fois. La liste des langues vit à trois endroits, chacun avec sa propre liste parce qu'ils ne partagent pas de code : `LANGUES` dans `src/lib/i18n.ts`, dans `gateway/src/langue.ts` et dans `electron/main.cjs` ; `npm run securite` (section 44) vérifie qu'elles disent la même chose. Les chiffres restent occidentaux en arabe (`ar-u-nu-latn`).
+
+**Écarté.** Une feuille de style retournée (`rtlcss`) : deux mises en page à tenir, et rien pour le contenu mêlé. La variante `rtl:` de Tailwind sur chaque classe physique : deux classes là où une suffit. Embarquer une police arabe : celles des systèmes suffisent, et chaque police ajoutée est une licence à suivre.
+
+**Conséquences.** Rien ne change dans les six langues de gauche à droite (mesuré : positions et tailles identiques sur 27 écrans, à 1280 et 375 px), sauf un texte arabe écrit dans une interface non arabe, qui s'aligne désormais à droite. Une classe physique remise dans un composant partagé ferait échouer `npm run securite`. Ajouter une langue : CONTRIBUTING.md, « Adding a language ».
+
 ## 7. Roadmap
 
 | Phase | Contenu | État |

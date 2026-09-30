@@ -248,7 +248,7 @@ export function TuileService({
       title={indisponible ? motif : undefined}
       aria-pressed={actif}
       className={cn(
-        "flex w-full items-center gap-3 rounded-xl border px-3.5 py-3 text-left transition-colors",
+        "flex w-full items-center gap-3 rounded-xl border px-3.5 py-3 text-start transition-colors",
         indisponible
           ? "cursor-not-allowed border-border opacity-55"
           : actif

@@ -109,7 +109,7 @@ function EnCeMoment({ suivi, maintenant }: { suivi: SuiviCode; maintenant: numbe
         </span>
       </div>
       {!fini && lecture && (
-        <div className="space-y-1.5 pl-[23px]">
+        <div className="space-y-1.5 ps-[23px]">
           {p.progression !== undefined && (
             <div
               className="h-1.5 overflow-hidden rounded-full bg-muted"
@@ -189,7 +189,7 @@ function Actions({ actions, maintenant }: { actions: ActionCode[]; maintenant: n
             </span>
           </div>
           {a.sous && a.sous.length > 0 && (
-            <ul className="ml-[18px] mt-1 space-y-0.5 border-l border-border pl-2">
+            <ul className="ms-[18px] mt-1 space-y-0.5 border-s border-border ps-2">
               {a.sous.slice(-6).map((x) => (
                 <li key={x.callID} className="flex items-start gap-1.5 text-muted-foreground">
                   <IconeEtat etat={x.etat} className="mt-0.5" />
@@ -254,7 +254,7 @@ function TacheDeFond({
         )}
       </div>
       {ouvert && (
-        <div className="ml-[18px] mt-1 space-y-1.5 border-l border-border pl-2 text-muted-foreground">
+        <div className="ms-[18px] mt-1 space-y-1.5 border-s border-border ps-2 text-muted-foreground">
           {action.detail && (
             <pre className="max-h-40 overflow-auto whitespace-pre-wrap break-words rounded-md bg-muted/50 px-2 py-1.5 font-mono text-[11px] text-foreground">
               {action.detail}
@@ -369,7 +369,7 @@ export function SuiviCodePanel({
   return (
     <aside
       aria-label={t("Suivi de l'agent de code")}
-      className={cn("flex w-[300px] max-w-full shrink-0 flex-col gap-3 overflow-y-auto border-l border-border bg-background p-3", className)}
+      className={cn("flex w-[300px] max-w-full shrink-0 flex-col gap-3 overflow-y-auto border-s border-border bg-background p-3", className)}
     >
       <div className="flex items-center gap-2 px-1">
         <h2 className="text-sm font-semibold text-foreground">{t("Suivi")}</h2>
@@ -378,7 +378,7 @@ export function SuiviCodePanel({
             {total}
           </span>
         )}
-        <IconButton icon={X} label={t("Masquer le suivi")} onClick={onFermer} size={28} iconSize={15} className="ml-auto" />
+        <IconButton icon={X} label={t("Masquer le suivi")} onClick={onFermer} size={28} iconSize={15} className="ms-auto" />
       </div>
 
       {!suivi ? (

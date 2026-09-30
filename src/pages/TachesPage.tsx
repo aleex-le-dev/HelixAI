@@ -615,7 +615,7 @@ function ChoixPrerequis({
             <CaseFiltre key={tache.id} coche={valeur.includes(tache.id)} onClick={() => onChange(basculer(valeur, tache.id))}>
               {tache.title}
               {tache.status !== "a-faire" && (
-                <span className="ml-1.5 text-[11px] text-muted-foreground">
+                <span className="ms-1.5 text-[11px] text-muted-foreground">
                   {STATUSES.find((s) => s.id === tache.status)?.label.toLowerCase()}
                 </span>
               )}
@@ -667,7 +667,7 @@ function CaseFiltre({
       role="menuitemcheckbox"
       aria-checked={coche}
       onClick={onClick}
-      className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-sm text-foreground transition-colors hover:bg-muted"
+      className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-start text-sm text-foreground transition-colors hover:bg-muted"
     >
       <span
         className={cn(
@@ -806,7 +806,7 @@ function ProjectsPanel({
      */
     <aside
       className={cn(
-        "flex shrink-0 gap-1 overflow-x-auto border-b border-border px-2 py-2 md:flex-col md:overflow-y-auto md:overflow-x-hidden md:border-b-0 md:border-r md:p-0 md:transition-[width]",
+        "flex shrink-0 gap-1 overflow-x-auto border-b border-border px-2 py-2 md:flex-col md:overflow-y-auto md:overflow-x-hidden md:border-b-0 md:border-e md:p-0 md:transition-[width]",
         reduite ? "md:w-[56px]" : "md:w-[236px]",
       )}
     >
@@ -833,7 +833,7 @@ function ProjectsPanel({
               title={reduite ? r.label : undefined}
             >
               <Icon size={16} strokeWidth={1.75} className="shrink-0" />
-              <span className={cn("min-w-0 flex-1 truncate text-left", cache)}>{r.label}</span>
+              <span className={cn("min-w-0 flex-1 truncate text-start", cache)}>{r.label}</span>
               {n > 0 && <span className={cn("text-xs text-muted-foreground", cache)}>{n}</span>}
             </button>
           );
@@ -846,7 +846,7 @@ function ProjectsPanel({
           title={reduite ? t("Programmées") : undefined}
         >
           <CalendarClock size={16} strokeWidth={1.75} className="shrink-0" />
-          <span className={cn("min-w-0 flex-1 truncate text-left", cache)}>{t("Programmées")}</span>
+          <span className={cn("min-w-0 flex-1 truncate text-start", cache)}>{t("Programmées")}</span>
         </button>
       </nav>
 
@@ -887,7 +887,7 @@ function ProjectsPanel({
                     title={reduite ? p.name : undefined}
                   >
                     <Folder size={16} strokeWidth={1.75} className="shrink-0" />
-                    <span className={cn("min-w-0 flex-1 truncate text-left", cache)}>{p.name}</span>
+                    <span className={cn("min-w-0 flex-1 truncate text-start", cache)}>{p.name}</span>
                     {n > 0 && <span className={cn("text-xs text-muted-foreground", cache)}>{n}</span>}
                   </button>
                 );
@@ -939,7 +939,7 @@ function TaskCard({
         <button
           type="button"
           onClick={onOpen}
-          className="min-w-0 flex-1 text-left text-sm font-medium text-foreground"
+          className="min-w-0 flex-1 text-start text-sm font-medium text-foreground"
         >
           {task.title}
         </button>
@@ -1061,7 +1061,7 @@ function KanbanView(props: ViewProps) {
               <Icon size={15} strokeWidth={1.75} className={meta.color} />
               <span className="text-sm font-medium text-foreground">{col.label}</span>
               <span className="text-sm text-muted-foreground">{items.length}</span>
-              <span className="ml-auto flex items-center gap-0.5">
+              <span className="ms-auto flex items-center gap-0.5">
                 <IconButton
                   icon={Plus}
                   label={t("Ajouter une tâche")}
@@ -1132,7 +1132,7 @@ function TableView({
       <div className="overflow-x-auto rounded-xl border border-border">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-border bg-muted/30 text-left text-muted-foreground">
+            <tr className="border-b border-border bg-muted/30 text-start text-muted-foreground">
               {colonnes.map((c) => (
                 <th
                   key={c.label}
@@ -1279,7 +1279,7 @@ function CalendarView({
             iconSize={16}
             onClick={() => avancer(1)}
           />
-          <span className="ml-1 text-sm font-semibold capitalize text-foreground">
+          <span className="ms-1 text-sm font-semibold capitalize text-foreground">
             {moisAnnee(reference)}
           </span>
         </div>
@@ -1312,7 +1312,7 @@ function CalendarView({
             key={n}
             className={cn(
               "py-2 text-center text-[11px] font-medium uppercase tracking-wide text-muted-foreground",
-              i < 6 && "border-r border-border",
+              i < 6 && "border-e border-border",
             )}
           >
             {n}
@@ -1335,7 +1335,7 @@ function CalendarView({
               key={jour}
               className={cn(
                 "group flex min-h-0 flex-col border-border",
-                i % 7 < 6 && "border-r",
+                i % 7 < 6 && "border-e",
                 i < jours.length - 7 && "border-b",
                 estAujourdhui && "bg-muted/40",
                 mode === "mois" ? "min-h-[96px]" : "min-h-[200px]",
@@ -1373,7 +1373,7 @@ function CalendarView({
                       onClick={() => onOpen(t)}
                       title={s === "retard" ? `En retard : ${t.title}` : t.title}
                       className={cn(
-                        "flex w-full items-center gap-1 truncate rounded-md border px-1.5 py-1 text-left text-[11px] transition-colors hover:bg-muted",
+                        "flex w-full items-center gap-1 truncate rounded-md border px-1.5 py-1 text-start text-[11px] transition-colors hover:bg-muted",
                         s === "retard"
                           ? "border-destructive/40 bg-destructive/[0.06] text-destructive"
                           : "border-border bg-card text-foreground",
@@ -1773,7 +1773,7 @@ export function TachesPage() {
                 role="menuitemradio"
                 aria-checked={prefs.tri === c.id}
                 onClick={() => regler({ tri: c.id })}
-                className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-sm text-foreground transition-colors hover:bg-muted"
+                className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-start text-sm text-foreground transition-colors hover:bg-muted"
               >
                 <span className="flex-1">{c.label}</span>
                 {prefs.tri === c.id && <Check size={15} strokeWidth={2} />}
@@ -1789,7 +1789,7 @@ export function TachesPage() {
                 role="menuitemradio"
                 aria-checked={prefs.sens === s}
                 onClick={() => regler({ sens: s })}
-                className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-sm text-foreground transition-colors hover:bg-muted"
+                className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-start text-sm text-foreground transition-colors hover:bg-muted"
               >
                 {s === "asc" ? (
                   <ArrowUp size={15} strokeWidth={1.75} />
@@ -1887,7 +1887,7 @@ export function TachesPage() {
         }}
       >
         <input
-          className="w-full bg-transparent pr-8 text-xl font-semibold text-foreground placeholder:text-muted-foreground/70 focus:outline-none"
+          className="w-full bg-transparent pe-8 text-xl font-semibold text-foreground placeholder:text-muted-foreground/70 focus:outline-none"
           placeholder={t("Entrez le titre de la tâche...")}
           aria-label={t("Titre de la tâche")}
           value={draftTitle}
@@ -2005,7 +2005,7 @@ export function TachesPage() {
       <Modal open={Boolean(liveDetail)} onClose={() => setDetail(null)} size="lg">
         {liveDetail && (
           <>
-            <h2 className="pr-8 text-lg font-semibold text-foreground">{liveDetail.title}</h2>
+            <h2 className="pe-8 text-lg font-semibold text-foreground">{liveDetail.title}</h2>
             <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
               <span className="inline-flex items-center gap-1">
                 <Bot size={13} strokeWidth={2} /> {agentName(liveDetail.agentId)}
@@ -2180,7 +2180,7 @@ export function TachesPage() {
                   <TexteRiche texte={liveDetail.result} />
                 </div>
                 <Modal open={compteRenduGrand} onClose={() => setCompteRenduGrand(false)} size="xl">
-                  <div className="flex items-start justify-between gap-4 pr-10">
+                  <div className="flex items-start justify-between gap-4 pe-10">
                     <div className="min-w-0">
                       <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{t("Compte rendu")}</p>
                       <h2 className="mt-1 text-lg font-semibold text-foreground">{liveDetail.title}</h2>

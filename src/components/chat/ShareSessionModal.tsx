@@ -74,7 +74,7 @@ export function ShareSessionModal({
 
   return (
     <Modal open onClose={onClose} size="md">
-      <h2 className="flex items-center gap-2 pr-8 text-lg font-semibold text-foreground">
+      <h2 className="flex items-center gap-2 pe-8 text-lg font-semibold text-foreground">
         <Users2 size={19} strokeWidth={1.75} />{" "}{t("Partager la conversation")}
       </h2>
       <p className="mt-1 truncate text-sm text-muted-foreground" title={session.title}>

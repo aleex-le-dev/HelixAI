@@ -73,7 +73,7 @@ export function GuideApplication({
           ))}
         </div>
 
-        <ol className="list-decimal space-y-2 pl-5 max-sm:pl-4">
+        <ol className="list-decimal space-y-2 ps-5 max-sm:ps-4">
           {guide.etapes.map((e, i) => (
             <li key={i} className="space-y-1.5">
               <p>{e.texte}</p>
@@ -103,7 +103,7 @@ export function GuideApplication({
               <TriangleAlert size={14} strokeWidth={1.75} className="shrink-0" />
               {t("À ne pas faire")}
             </p>
-            <ul className="mt-1 list-disc space-y-1 pl-5">
+            <ul className="mt-1 list-disc space-y-1 ps-5">
               {guide.aEviter.map((x) => (
                 <li key={x}>{x}</li>
               ))}

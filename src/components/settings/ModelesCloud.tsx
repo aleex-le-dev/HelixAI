@@ -139,7 +139,7 @@ function LigneCle({ cle, onChange }: { cle: CleModele; onChange: () => void }) {
         <span className="font-medium text-foreground">{cle.nom}</span>
         <Pays pays={cle.pays} />
         <span className="text-xs text-muted-foreground">•••• {cle.fin}</span>
-        <span className="ml-auto inline-flex items-center gap-1 text-xs text-muted-foreground">
+        <span className="ms-auto inline-flex items-center gap-1 text-xs text-muted-foreground">
           {cle.portee === "equipe" ? <Users size={13} strokeWidth={1.75} /> : <User size={13} strokeWidth={1.75} />}
           {cle.portee === "equipe" ? t("Pour toute l'équipe") : t("Pour vous seulement")}
         </span>
@@ -245,7 +245,7 @@ function AjoutCle({ catalogue, onFini }: { catalogue: Fournisseur[]; onFini: () 
               key={f.id}
               type="button"
               onClick={() => setChoix(f)}
-              className="flex items-center gap-3 rounded-xl border border-border px-3 py-2.5 text-left transition-colors hover:bg-muted"
+              className="flex items-center gap-3 rounded-xl border border-border px-3 py-2.5 text-start transition-colors hover:bg-muted"
             >
               <LogoMarque marque={MARQUE_DU_FOURNISSEUR[f.id]} icone={KeyRound} taille={22} degagement={10} />
               <span className="flex min-w-0 flex-col items-start gap-1">
@@ -277,7 +277,7 @@ function AjoutCle({ catalogue, onFini }: { catalogue: Fournisseur[]; onFini: () 
             href={choix.cles}
             target="_blank"
             rel="noreferrer"
-            className="ml-auto inline-flex items-center gap-1 text-xs text-muted-foreground underline underline-offset-2"
+            className="ms-auto inline-flex items-center gap-1 text-xs text-muted-foreground underline underline-offset-2"
           >
             {t("Où créer une clé")}{" "}<ExternalLink size={12} strokeWidth={1.75} />
           </a>

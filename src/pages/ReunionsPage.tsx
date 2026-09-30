@@ -70,7 +70,7 @@ import {
   type Segment,
   type Visibilite,
 } from "@/lib/reunions";
-import { enumerer, t, tf } from "@/lib/i18n";
+import { enumerer, t, tf, lister } from "@/lib/i18n";
 import { nomDuPays } from "@/lib/fournisseurs";
 import { copierTexte } from "@/lib/pressePapiers";
 
@@ -691,7 +691,7 @@ function DetailReunion({ id, onRetour }: { id: string; onRetour: () => void }) {
                 </>
               ) : r.visibilite === "groupes" ? (
                 <>
-                  <Users size={13} strokeWidth={1.75} /> {r.groupes.map((g) => groupes?.groupes.find((x) => x.id === g)?.nom ?? t("Groupe supprimé")).join(", ")}
+                  <Users size={13} strokeWidth={1.75} /> {lister(r.groupes.map((g) => groupes?.groupes.find((x) => x.id === g)?.nom ?? t("Groupe supprimé")))}
                 </>
               ) : (
                 <>
@@ -921,7 +921,7 @@ function CompteRenduVue({
                   {(a.qui || a.echeance) && (
                     <span className="block text-xs text-muted-foreground">
                       {/* L'échéance traduite (relevé du 28/09/2026 : « pour … » restait en français). */}
-                      {[a.qui, a.echeance ? tf("pour {0}", a.echeance) : ""].filter(Boolean).join(", ")}
+                      {lister([a.qui, a.echeance ? tf("pour {0}", a.echeance) : ""].filter(Boolean))}
                     </span>
                   )}
                 </span>

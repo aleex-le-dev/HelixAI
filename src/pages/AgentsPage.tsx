@@ -23,7 +23,7 @@ import { LectureBases } from "@/components/agents/LectureBases";
 import { ChoixVisibilite } from "@/pages/BibliothequePage";
 import { useGroupes, type Groupe } from "@/lib/groupes";
 import { features } from "@/config/branding";
-import { t, tf } from "@/lib/i18n";
+import { t, tf, lister } from "@/lib/i18n";
 
 /**
  * Page Agents + modale de création (captures 12 à 14).
@@ -211,7 +211,7 @@ function libelleVisibilite(visibilite: AgentVisibility | undefined, ids: string[
   if (visibilite === "personnel") return t("Personnel");
   if (visibilite === "groupes") {
     const noms = (ids ?? []).map((id) => groupes.find((g) => g.id === id)?.nom ?? t("Groupe supprimé"));
-    return noms.length > 0 ? tf("Groupes : {0}", noms.join(", ")) : t("Groupes");
+    return noms.length > 0 ? tf("Groupes : {0}", lister(noms)) : t("Groupes");
   }
   return t("Organisation");
 }
@@ -354,7 +354,7 @@ function AgentCard({
             </span>
           )}
           {employe && (employe.canaux?.length ?? 0) > 0 && (
-            <span className="text-[11px] text-muted-foreground">{t("Aussi sur")}{" "}{employe.canaux?.map((c) => c.nom).join(", ")}</span>
+            <span className="text-[11px] text-muted-foreground">{t("Aussi sur")}{" "}{lister(employe.canaux?.map((c) => c.nom) ?? [])}</span>
           )}
         </div>
       </button>

@@ -21,7 +21,7 @@ import { GuideApplication } from "@/components/settings/GuideApplication";
 import { guideMicrosoft } from "@/lib/guidesApplications";
 import { branding } from "@/config/branding";
 import { formaterDate } from "@/lib/formats";
-import { t, tf } from "@/lib/i18n";
+import { t, tf, lister } from "@/lib/i18n";
 
 /**
  * Microsoft 365 : Outlook, OneDrive, SharePoint, Excel, Word et Teams, par
@@ -223,7 +223,7 @@ export function ConnecteurMicrosoft({ service, onChange }: { service: ServiceMic
           <div className="min-w-[9rem] flex-1">
             <p className="break-all font-medium text-foreground">{etat.compte}</p>
             <p className="text-sm text-muted-foreground">
-              {coches.map((s) => NOMS[s]).join(", ")}
+              {lister(coches.map((s) => NOMS[s]))}
               {ecrit ? t(" ; lecture et écriture") : t(" ; lecture seule")}
               {depuis && !Number.isNaN(depuis.getTime()) ? tf(", connecté le {0}", formaterDate(depuis)) : ""}
             </p>

@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/Button";
 import { InfoBox } from "@/components/ui/InfoBox";
 import { branding } from "@/config/branding";
 import type { RaisonElargissement } from "@/lib/employes";
-import { t, tf } from "@/lib/i18n";
+import { t, tf, lister } from "@/lib/i18n";
 
 const RAISON: Record<RaisonElargissement, () => string> = {
   visibilite: () => t("sa visibilité s'élargit"),
@@ -33,7 +33,7 @@ export function ConfirmationMemoire({
   onConfirmer: () => void;
   onAnnuler: () => void;
 }) {
-  const liste = raisons.map((r) => RAISON[r]?.() ?? r).join(", ");
+  const liste = lister(raisons.map((r) => RAISON[r]?.() ?? r));
   return (
     <InfoBox tone="warning" leading={<Eraser size={16} strokeWidth={1.75} />}>
       <p className="font-medium">{t("Vider sa mémoire d'abord")}</p>

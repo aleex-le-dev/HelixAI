@@ -24,7 +24,7 @@ import { GuideApplication } from "@/components/settings/GuideApplication";
 import { activerApisGoogle, API_GOOGLE, guideApplication, type ServiceGoogle } from "@/lib/guidesApplications";
 import { branding } from "@/config/branding";
 import { formaterDate } from "@/lib/formats";
-import { t, tf } from "@/lib/i18n";
+import { t, tf, lister } from "@/lib/i18n";
 // Google Docs, Google Forms, Dropbox (28/09/2026) : leurs textes vivent à part.
 import { libelleChoixDocuments, revueDocuments } from "@/components/settings/ConnecteurNatifDocuments";
 
@@ -258,7 +258,7 @@ export function ConnecteurNatif({ id, onChange, onOuvrir }: { id: IdNatif; onCha
           <div className="min-w-0 flex-1">
             <p className="truncate font-medium text-foreground">{etat.compte}</p>
             <p className="text-sm text-muted-foreground">
-              {droitsProjet && droitsProjet.length > 0 ? tf("{0}, lecture et {1}", etat.nom, droitsProjet.join(", ")) : ecrit ? tf("{0}, lecture et publication", etat.nom) : tf("{0}, lecture seule", etat.nom)}
+              {droitsProjet && droitsProjet.length > 0 ? tf("{0}, lecture et {1}", etat.nom, lister(droitsProjet)) : ecrit ? tf("{0}, lecture et publication", etat.nom) : tf("{0}, lecture seule", etat.nom)}
               {depuis && !Number.isNaN(depuis.getTime()) ? tf(", connecté le {0}", formaterDate(depuis)) : ""}
             </p>
             {expire && !Number.isNaN(expire.getTime()) && (

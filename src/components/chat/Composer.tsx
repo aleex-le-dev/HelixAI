@@ -24,7 +24,7 @@ import { ModelBehaviorPicker, ReasoningPicker } from "./ModelPicker";
 import { cn } from "@/lib/cn";
 import { instance } from "@/lib/instance";
 import * as dictee from "@/lib/dictee";
-import { t, tf } from "@/lib/i18n";
+import { t, tf, lister } from "@/lib/i18n";
 
 interface ComposerProps {
   placeholder: string;
@@ -771,7 +771,7 @@ function BoutonDictee({ onTexte }: { onTexte: (texte: string) => void }) {
               {provenance.length > 0 && (
                 <>
                   <dt className="text-muted-foreground">{t("Provenance")}</dt>
-                  <dd className="text-foreground">{provenance.join(", ")}</dd>
+                  <dd className="text-foreground">{lister(provenance)}</dd>
                 </>
               )}
               <dt className="text-muted-foreground">{t("Dossier")}</dt>

@@ -21,7 +21,7 @@ import {
   type EtatEmployes,
   type TypeCanal,
 } from "@/lib/employes";
-import { t, tf } from "@/lib/i18n";
+import { t, tf, lister } from "@/lib/i18n";
 import { LogoMarque } from "@/components/settings/TuileService";
 import type { CleMarquePetite } from "@/components/ui/marques";
 
@@ -78,7 +78,7 @@ export function CanauxEmploye({
       <p className="pt-10 text-center text-sm text-muted-foreground">
         {canaux.length === 0
           ? tf("{0} n'est joignable que depuis {1}.", employe.nom, branding.name)
-          : tf("On peut aussi écrire à {0} sur {1}. Seule la personne qui l'a créé gère ses canaux.", employe.nom, canaux.map((c) => c.nom).join(", "))}
+          : tf("On peut aussi écrire à {0} sur {1}. Seule la personne qui l'a créé gère ses canaux.", employe.nom, lister(canaux.map((c) => c.nom)))}
       </p>
     );
   }

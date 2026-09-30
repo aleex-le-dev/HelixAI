@@ -5,7 +5,7 @@ import { Field, Input } from "@/components/ui/Field";
 import { InfoBox } from "@/components/ui/InfoBox";
 import { useUtilisateurCourant, clearCurrentUser } from "@/lib/store/identity";
 import { apercuEffacement, effacerMonCompte, oublierSurCePoste, type Apercu } from "@/lib/effacement";
-import { t, tf } from "@/lib/i18n";
+import { t, tf, lister } from "@/lib/i18n";
 
 /**
  * « Supprimer mon compte » : le seul geste vraiment irréversible de la zone de
@@ -101,12 +101,12 @@ export function SupprimerCompte() {
             {(apercu.employes?.length ?? 0) > 0 && (
               <li>
                 {apercu.employes?.length === 1
-                  ? tf("• l'agent que vous avez mis en service : {0}", apercu.employes.join(", "))
-                  : tf("• les agents que vous avez mis en service : {0}", apercu.employes?.join(", ") ?? "")}
+                  ? tf("• l'agent que vous avez mis en service : {0}", lister(apercu.employes))
+                  : tf("• les agents que vous avez mis en service : {0}", lister(apercu.employes ?? []))}
               </li>
             )}
             {(apercu.clesModeles?.length ?? 0) > 0 && (
-              <li>{t("• vos clés de modèles cloud :")}{" "}{apercu.clesModeles?.join(", ")}</li>
+              <li>{t("• vos clés de modèles cloud :")}{" "}{lister(apercu.clesModeles ?? [])}</li>
             )}
             {apercu.bibliotheque && apercu.bibliotheque.documents + apercu.bibliotheque.dossiers > 0 && (
               <li>
@@ -125,7 +125,7 @@ export function SupprimerCompte() {
               </li>
             )}
             {apercu.projetsSupprimes.length > 0 && (
-              <li>{t("• les projets sans autre membre :")}{" "}{apercu.projetsSupprimes.join(", ")}</li>
+              <li>{t("• les projets sans autre membre :")}{" "}{lister(apercu.projetsSupprimes)}</li>
             )}
             {apercu.mentionsRetirees > 0 && (
               <li>

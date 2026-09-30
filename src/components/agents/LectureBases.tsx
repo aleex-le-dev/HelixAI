@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { BookOpenText, Loader2 } from "lucide-react";
 import { LIBELLE_FAMILLE, lectureDesBases, type Employe, type LectureDesBases, type RaisonEquipeSeulement } from "@/lib/employes";
-import { t, tf } from "@/lib/i18n";
+import { t, tf, lister } from "@/lib/i18n";
 
 const RAISON: Record<Exclude<RaisonEquipeSeulement, "outils">, () => string> = {
   organisation: () => t("il est ouvert à toute l'organisation : plusieurs personnes lui parlent ;"),
@@ -99,7 +99,7 @@ export function LectureBases({ employe, bases }: { employe?: Employe; bases: str
             ))}
             {lecture.raisons.includes("outils") && (
               <li>
-                {`• ${tf("il a des outils qui écrivent ou envoient là où d'autres les lisent : {0}.", lecture.outilsQuiSortent.map((f) => LIBELLE_FAMILLE[f]).join(", "))}`}
+                {`• ${tf("il a des outils qui écrivent ou envoient là où d'autres les lisent : {0}.", lister(lecture.outilsQuiSortent.map((f) => LIBELLE_FAMILLE[f])))}`}
               </li>
             )}
           </ul>

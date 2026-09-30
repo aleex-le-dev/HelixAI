@@ -26,7 +26,7 @@ import {
   type Recherche,
 } from "@/lib/connaissances";
 import { ChoixVisibilite } from "@/pages/BibliothequePage";
-import { locale, t, tf } from "@/lib/i18n";
+import { locale, t, tf, lister } from "@/lib/i18n";
 
 /**
  * Bases de connaissances, dans la Bibliothèque : on y rassemble des documents
@@ -51,8 +51,8 @@ function PastilleBase({ base, groupes }: { base: Pick<Base, "visibilite" | "grou
   if (base.visibilite === "groupes") {
     const noms = base.groupes.map((id) => groupes.find((g) => g.id === id)?.nom ?? t("Groupe supprimé"));
     return (
-      <span className="inline-flex max-w-[240px] items-center gap-1 truncate" title={noms.join(", ")}>
-        <Users size={13} strokeWidth={1.75} className="shrink-0" /> <span className="truncate">{noms.join(", ")}</span>
+      <span className="inline-flex max-w-[240px] items-center gap-1 truncate" title={lister(noms)}>
+        <Users size={13} strokeWidth={1.75} className="shrink-0" /> <span className="truncate">{lister(noms)}</span>
       </span>
     );
   }

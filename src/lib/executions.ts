@@ -1,7 +1,7 @@
 import { runTask } from "./taskRunner";
 import { etatPrerequis, getTask, suitesDe, visibleTo, type Task } from "./store/tasks";
 import { currentUser } from "./store/identity";
-import { t, tf } from "@/lib/i18n";
+import { t, tf, lister } from "@/lib/i18n";
 
 /**
  * Exécutions des tâches déléguées, tenues pour toute l'application.
@@ -96,7 +96,7 @@ export async function lancerTache(task: Task, modelUid?: string): Promise<{ ok: 
   if (enCours.has(task.id)) return { ok: false, message: t("Elle est déjà en cours.") };
   const etat = etatPrerequis(task, visibleTo(currentUser()));
   if (!etat.pret) {
-    const noms = [...etat.bloque, ...etat.attend].map((t) => `« ${t.title} »`).join(", ");
+    const noms = lister([...etat.bloque, ...etat.attend].map((t) => `« ${t.title} »`));
     return { ok: false, message: tf("Elle attend {0}.", noms) };
   }
   await executer(task, modelUid);

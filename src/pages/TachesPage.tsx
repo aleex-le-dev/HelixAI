@@ -75,7 +75,7 @@ import {
 import { useFormats } from "@/lib/formats";
 import { features } from "@/config/branding";
 import { libelleOutil } from "@/lib/libellesOutils";
-import { locale, sens, t, tf } from "@/lib/i18n";
+import { locale, sens, t, tf, lister } from "@/lib/i18n";
 import { TachesProgrammees } from "@/components/taches/TachesProgrammees";
 
 /* ========================================================================== */
@@ -2126,7 +2126,7 @@ export function TachesPage() {
                   {attente && <p>{attente}{t(". Son agent recevra le compte rendu de ce qui la précède.")}</p>}
                   {suites.length > 0 && (
                     <p>
-                      {t("Attendue par")}{" "}{suites.map((t) => `« ${t.title} »`).join(", ")}
+                      {t("Attendue par")}{" "}{lister(suites.map((t) => `« ${t.title} »`))}
                       {(() => {
                         const partiront = suites.filter((t) => t.autoStart && t.status === "a-faire").length;
                         if (partiront === 0) return ".";

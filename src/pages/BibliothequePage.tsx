@@ -52,7 +52,7 @@ import {
   type Visibilite,
 } from "@/lib/bibliotheque";
 import { BasesConnaissances } from "@/components/bibliotheque/BasesConnaissances";
-import { t, tf } from "@/lib/i18n";
+import { t, tf, lister } from "@/lib/i18n";
 
 /**
  * Bibliothèque de l'équipe : dossiers et documents gardés par l'instance,
@@ -416,8 +416,8 @@ function PastilleVisibilite({ element, groupes }: { element: ElementBibliotheque
   if (element.visibilite === "groupes") {
     const noms = element.groupes.map((id) => groupes.find((g) => g.id === id)?.nom ?? t("Groupe supprimé"));
     return (
-      <span className="inline-flex max-w-[220px] items-center gap-1 truncate text-muted-foreground" title={noms.join(", ")}>
-        <Users size={13} strokeWidth={1.75} className="shrink-0" /> <span className="truncate">{noms.join(", ")}</span>
+      <span className="inline-flex max-w-[220px] items-center gap-1 truncate text-muted-foreground" title={lister(noms)}>
+        <Users size={13} strokeWidth={1.75} className="shrink-0" /> <span className="truncate">{lister(noms)}</span>
       </span>
     );
   }

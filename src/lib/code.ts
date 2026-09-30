@@ -5,7 +5,7 @@
  */
 
 import { apiFetch } from "@/lib/endpoint";
-import { locale, t, tf } from "@/lib/i18n";
+import { lister, locale, t, tf } from "@/lib/i18n";
 import { libelleOutil } from "@/lib/libellesOutils";
 import { dureeCourte } from "@/lib/durees";
 
@@ -458,13 +458,11 @@ export function texteAttente(
   if (e.etat === "chargement") return tf("Le modèle se charge en mémoire ({0})...", duree);
   if (e.etat === "attente") return tf("Le modèle termine une autre demande avant celle-ci ({0})...", duree);
   if (e.etat === "fin") return t("Le modèle commence à répondre...");
-  const detail = [
+  const detail = lister([
     duree,
     e.progression !== undefined ? tf("{0} %", e.progression) : undefined,
     e.jetons ? tf("environ {0} jetons", environ(e.jetons)) : undefined,
-  ]
-    .filter(Boolean)
-    .join(", ");
+  ]);
   return e.sousTache ? tf("Le modèle lit la demande de la sous-tâche ({0})...", detail) : tf("Le modèle lit la demande ({0})...", detail);
 }
 

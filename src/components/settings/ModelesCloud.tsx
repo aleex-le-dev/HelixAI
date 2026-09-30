@@ -18,7 +18,7 @@ import {
   type Fournisseur,
   nomDuPays,
 } from "@/lib/fournisseurs";
-import { t, tf } from "@/lib/i18n";
+import { t, tf, lister } from "@/lib/i18n";
 
 /**
  * Modèles cloud branchés par une clé : pour soi, ou pour toute l'équipe.
@@ -144,7 +144,7 @@ function LigneCle({ cle, onChange }: { cle: CleModele; onChange: () => void }) {
           {cle.portee === "equipe" ? t("Pour toute l'équipe") : t("Pour vous seulement")}
         </span>
       </div>
-      <p className="mt-2 text-sm text-muted-foreground">{cle.modeles.join(", ")}</p>
+      <p className="mt-2 text-sm text-muted-foreground">{lister(cle.modeles)}</p>
       {cle.estProprietaire ? (
         <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
           <label className="flex items-center gap-2 text-sm text-foreground">

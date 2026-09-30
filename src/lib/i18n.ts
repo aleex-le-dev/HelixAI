@@ -160,6 +160,17 @@ export function enumerer(morceaux: readonly (string | false | null | undefined)[
   return sens() === "rtl" ? dits.map((m) => `\u2068${m}\u2069`).join(separateur) : dits.join(separateur);
 }
 
+/**
+ * Une liste de noms dans une phrase : « Slack, Teams » en français, « Slack، Teams »
+ * en arabe, « Slack、Teams » en chinois et en japonais (30/09/2026 : la virgule
+ * latine restait dans ces trois langues). Chaque nom est isolé en arabe, comme
+ * dans `enumerer`. Pas pour une valeur technique (portées OAuth, identifiants).
+ */
+const VIRGULE: Partial<Record<Langue, string>> = { ar: "\u060c ", zh: "\u3001", ja: "\u3001" };
+export function lister(noms: readonly (string | false | null | undefined)[]): string {
+  return enumerer(noms, VIRGULE[courante] ?? ", ");
+}
+
 /** Une langue a-t-elle été choisie, ou suit-on encore le système ? */
 export const langueChoisie = (): boolean => langueEnregistree() !== null;
 

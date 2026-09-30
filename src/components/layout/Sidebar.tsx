@@ -94,7 +94,7 @@ function LigneSession({
               setEdition(null);
             }
           }}
-          className="w-full rounded-lg border border-border bg-background py-[7px] pl-2.5 pr-2 text-sm text-foreground outline-none focus:border-foreground/30 focus-visible:ring-0"
+          className="w-full rounded-lg border border-border bg-background py-[7px] ps-2.5 pe-2 text-sm text-foreground outline-none focus:border-foreground/30 focus-visible:ring-0"
         />
       </li>
     );
@@ -108,7 +108,7 @@ function LigneSession({
         onClick={onOuvrir}
         onDoubleClick={() => setEdition(session.title)}
         className={cn(
-          "flex w-full items-center gap-2 rounded-lg py-2 pl-2.5 pr-7 text-left text-sm transition-colors",
+          "flex w-full items-center gap-2 rounded-lg py-2 ps-2.5 pe-7 text-start text-sm transition-colors",
           actif
             ? "bg-muted font-medium text-foreground"
             : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
@@ -126,7 +126,7 @@ function LigneSession({
           <Users2 size={13} strokeWidth={1.75} className="shrink-0 text-accent" aria-label={t("Partagé")} />
         )}
       </button>
-      <span className="absolute right-1 top-1/2 hidden -translate-y-1/2 items-center gap-0.5 rounded-md bg-muted group-hover:flex">
+      <span className="absolute end-1 top-1/2 hidden -translate-y-1/2 items-center gap-0.5 rounded-md bg-muted group-hover:flex">
         <button
           type="button"
           aria-label={tf("Renommer {0}", session.title)}
@@ -305,7 +305,7 @@ function SessionList({ recherche = "" }: { recherche?: string }) {
 
 function Badge({ children }: { children: string }) {
   return (
-    <span className="ml-auto rounded-full bg-accent/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-accent">
+    <span className="ms-auto rounded-full bg-accent/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-accent">
       {children}
     </span>
   );
@@ -392,7 +392,7 @@ function useEnregistrementEnCours(): boolean {
 
 function PastilleEnregistrement() {
   return (
-    <span className="ml-auto h-2 w-2 shrink-0 animate-pulse rounded-full bg-destructive" role="img" aria-label={t("Enregistrement en cours")} />
+    <span className="ms-auto h-2 w-2 shrink-0 animate-pulse rounded-full bg-destructive" role="img" aria-label={t("Enregistrement en cours")} />
   );
 }
 
@@ -431,7 +431,7 @@ function ExpandedSidebar({ onToggle }: { onToggle: () => void }) {
   const [recherche, setRecherche] = useState("");
   const [aide, setAide] = useState(false);
   return (
-    <aside className="flex h-full w-[248px] shrink-0 flex-col border-r border-sidebar-border bg-sidebar">
+    <aside className="flex h-full w-[248px] shrink-0 flex-col border-e border-sidebar-border bg-sidebar">
       {/* En-tete : marque + repli */}
       <div className="titlebar-inset titlebar-drag flex shrink-0 items-center justify-between px-4 pb-3">
         <LogoHome height={30} />
@@ -501,7 +501,7 @@ function ExpandedSidebar({ onToggle }: { onToggle: () => void }) {
         >
           <Avatar size={32} />
         </button>
-        <div className="ml-auto flex items-center gap-0.5">
+        <div className="ms-auto flex items-center gap-0.5">
           <BasculeTheme />
           <Notifications />
           <NavLink
@@ -559,7 +559,7 @@ function RailItem({ item, primaire }: { item: NavItem; primaire?: boolean }) {
       }
     >
       <Icon size={18} strokeWidth={1.75} />
-      {enregistre && <span className="absolute right-1 top-1 h-2 w-2 animate-pulse rounded-full bg-destructive" aria-hidden />}
+      {enregistre && <span className="absolute end-1 top-1 h-2 w-2 animate-pulse rounded-full bg-destructive" aria-hidden />}
     </NavLink>
   );
 }
@@ -575,7 +575,7 @@ function CollapsedSidebar({ onToggle }: { onToggle: () => void }) {
      * pastilles de fenêtre macOS à ses bords — elles occupent 52 px à elles
      * seules.
      */
-    <aside className="flex h-full w-[77px] shrink-0 flex-col items-center border-r border-sidebar-border bg-sidebar">
+    <aside className="flex h-full w-[77px] shrink-0 flex-col items-center border-e border-sidebar-border bg-sidebar">
       <div className="titlebar-inset titlebar-drag flex shrink-0 flex-col items-center gap-1">
         <IconButton icon={PanelLeft} label={t("Déplier le panneau")} onClick={onToggle} />
         <LogoHome height={26} withWordmark={false} className="my-1" />

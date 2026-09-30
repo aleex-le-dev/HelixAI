@@ -116,7 +116,7 @@ export function InstallerOpencode({ status, onPret }: { status: CodeStatus; onPr
     <div className="flex w-full max-w-md flex-col items-center gap-3">
       {corps}
       {erreur && administrateur && !enCours && (
-        <InfoBox tone="warning" className="w-full text-left" leading={<TriangleAlert size={15} strokeWidth={1.75} />}>
+        <InfoBox tone="warning" className="w-full text-start" leading={<TriangleAlert size={15} strokeWidth={1.75} />}>
           {erreur}
         </InfoBox>
       )}

@@ -4,7 +4,7 @@ import { readdirSync, statSync, type Dirent } from "node:fs";
 import { join } from "node:path";
 import { backendById, ensureLmStudioServer, faireLaPlace, findLms, lmStudioRepond, optionsDeChargement } from "./backends.ts";
 import { nomProduit } from "./marque.ts";
-import { langue, t, tf } from "./langue.ts";
+import { locale, t, tf } from "./langue.ts";
 import { noteDuModele } from "./notesModeles.ts";
 import { diagnosticInstallation, dossierLmStudio, dossierModelesLmStudio, moteurAPoser, preparerDossiersLlmster } from "./engine.ts";
 import { aEssayer, essayerModele, estDefaillant, nomDuModele, noterCoupure, noterEssai, type Verdict } from "./santeModeles.ts";
@@ -334,7 +334,7 @@ function decrire(f: Fiche, ecran = false): CatalogEntry {
             : t("Conversation et rédaction.");
       const note =
         eci !== undefined
-          ? tf("Note ECI d'Epoch AI : {0}.", eci.toLocaleString(({ fr: "fr-FR", zh: "zh-CN", ja: "ja-JP" } as Record<string, string>)[langue()] ?? "en-US"))
+          ? tf("Note ECI d'Epoch AI : {0}.", eci.toLocaleString(locale()))
           : t("Pas de note publiée par Epoch AI pour ce modèle.");
       const rapide = f.moe ? ` ${t("Rapide, même sans carte graphique.")}` : "";
       // La note sur sa propre ligne (Medhi, 27/09/2026) : collée à la phrase, elle se coupait au milieu.
@@ -573,7 +573,7 @@ export function recommendVision(hw: Hardware): CatalogEntry {
 
 /** Un nombre de gigaoctets, écrit comme on l'écrit dans la langue de la demande. */
 function go(n: number): string {
-  return n.toLocaleString(({ fr: "fr-FR", zh: "zh-CN", ja: "ja-JP" } as Record<string, string>)[langue()] ?? "en-US", { maximumFractionDigits: 1 });
+  return n.toLocaleString(locale(), { maximumFractionDigits: 1 });
 }
 
 /** La raison, en une phrase, pour laquelle ce modèle n'est pas proposé ici. */

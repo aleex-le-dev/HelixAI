@@ -222,14 +222,14 @@ console.log("E. Lancer, piloter, arrêter l'instance de Helix");
 
 console.log("F. Ce que l'écran et la documentation disent");
 {
-  const catalogues = ["en", "zh", "ja"].map((l) => lire("gateway", "i18n", `${l}.json`)).join("") + lire("gateway", "src", "installationOpenClaw.ts") + lire("gateway", "src", "plateformeOpenClaw.ts").replace(/\/\*[\s\S]*?\*\//g, "");
-  verifier("plus aucun message qui dit que Windows demande WSL (passerelle, catalogues)", !/demande WSL|requires WSL|需要 WSL|WSL が必要/.test(catalogues), "reste un texte WSL");
+  const catalogues = ["en", "zh", "ja", "es", "de", "ar"].map((l) => lire("gateway", "i18n", `${l}.json`)).join("") + lire("gateway", "src", "installationOpenClaw.ts") + lire("gateway", "src", "plateformeOpenClaw.ts").replace(/\/\*[\s\S]*?\*\//g, "");
+  verifier("plus aucun message qui dit que Windows demande WSL (passerelle, catalogues)", !/demande WSL|requires WSL|需要 WSL|WSL が必要|(requiere|necesita) WSL|(erfordert|benötigt|verlangt) WSL|(يتطلب|يحتاج إلى) WSL/.test(catalogues), "reste un texte WSL");
   const public_ = ["README.md", "README.fr.md", "README.zh.md", "README.ja.md", "docs/GUIDE.md"].map((f) => lire(f)).join("\n");
   verifier("vitrine et guide : plus de « OpenClaw y demande WSL »", !/OpenClaw (y demande|needs) WSL|OpenClaw 在 Windows 上需要 WSL|OpenClaw に WSL が必要/.test(public_), "reste un texte WSL");
   const ecran = lire("src", "components", "agents", "Employes.tsx");
   verifier("écran : au palier Libre, sur une instance Windows, il est dit que les commandes passent par PowerShell (cette capacité seulement)", /windows && <>\{" "\}\{t\("Sur cette instance \(Windows\), ses commandes passent par PowerShell/.test(ecran) && /windows=\{etat\.moteur\.plateforme === "win32"\}/.test(ecran), "absent");
   const cle = "Sur cette instance (Windows), ses commandes passent par PowerShell : une commande écrite pour macOS ou Linux peut ne pas y marcher.";
-  verifier("écran : cette phrase est traduite en anglais, chinois et japonais", ["en", "zh", "ja"].every((l) => (JSON.parse(lire("src", "i18n", `${l}.json`))[cle] ?? "").length > 10), "traduction manquante");
+  verifier("écran : cette phrase est traduite dans les six catalogues (en, zh, ja, es, de, ar)", ["en", "zh", "ja", "es", "de", "ar"].every((l) => (JSON.parse(lire("src", "i18n", `${l}.json`))[cle] ?? "").length > 10), "traduction manquante");
   verifier("passerelle : le système de l'instance est donné à l'écran (moteur.plateforme)", /plateforme: process\.platform,/.test(lire("gateway", "src", "employes.ts")), "absent");
 }
 

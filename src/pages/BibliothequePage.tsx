@@ -302,12 +302,12 @@ export function BibliothequePage() {
         <div className="mt-4 overflow-x-auto">
           <table className="w-full min-w-[640px] text-sm">
             <thead>
-              <tr className="border-b border-border text-left text-xs text-muted-foreground">
-                <th className="py-2 pl-2 font-medium">{t("Nom")}</th>
+              <tr className="border-b border-border text-start text-xs text-muted-foreground">
+                <th className="py-2 ps-2 font-medium">{t("Nom")}</th>
                 <th className="py-2 font-medium">{t("Visibilité")}</th>
                 <th className="py-2 font-medium">{t("Propriétaire")}</th>
-                <th className="py-2 text-right font-medium">{t("Taille")}</th>
-                <th className="py-2 pr-2 text-right font-medium">{t("Modifié")}</th>
+                <th className="py-2 text-end font-medium">{t("Taille")}</th>
+                <th className="py-2 pe-2 text-end font-medium">{t("Modifié")}</th>
                 <th className="w-10" />
               </tr>
             </thead>
@@ -451,7 +451,7 @@ function Ligne({
   ];
   return (
     <tr className="group border-b border-border/60 hover:bg-muted/40">
-      <td className="py-2 pl-2">
+      <td className="py-2 ps-2">
         <div className="flex items-center gap-2.5">
           <button
             type="button"
@@ -464,7 +464,7 @@ function Ligne({
           >
             <Star size={15} strokeWidth={1.75} fill={e.favori ? "currentColor" : "none"} />
           </button>
-          <button type="button" onClick={onOuvrir} className="flex min-w-0 items-center gap-2 text-left">
+          <button type="button" onClick={onOuvrir} className="flex min-w-0 items-center gap-2 text-start">
             {e.type === "dossier" ? (
               e.emoji ? (
                 <span className="w-[18px] text-center text-base leading-none">{e.emoji}</span>
@@ -485,9 +485,9 @@ function Ligne({
         <PastilleVisibilite element={e} groupes={groupes} />
       </td>
       <td className="py-2 text-muted-foreground">{proprietaire}</td>
-      <td className="py-2 text-right tabular-nums text-muted-foreground">{e.type === "document" ? taillePlaisante(e.taille) : ""}</td>
-      <td className="py-2 pr-2 text-right tabular-nums text-muted-foreground">{formaterDate(e.updatedAt)}</td>
-      <td className="py-1 pr-1 text-right">
+      <td className="py-2 text-end tabular-nums text-muted-foreground">{e.type === "document" ? taillePlaisante(e.taille) : ""}</td>
+      <td className="py-2 pe-2 text-end tabular-nums text-muted-foreground">{formaterDate(e.updatedAt)}</td>
+      <td className="py-1 pe-1 text-end">
         {actions.length > 0 && (
           <Popover
             align="end"
@@ -515,7 +515,7 @@ function Ligne({
                   onAction(a.id);
                 }}
                 className={cn(
-                  "flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-sm hover:bg-muted",
+                  "flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-start text-sm hover:bg-muted",
                   a.danger ? "text-destructive" : "text-foreground",
                 )}
               >
@@ -560,7 +560,7 @@ export function ChoixVisibilite({
             title={o.id === "groupes" && mesGroupes.length === 0 ? t("Vous n'êtes membre d'aucun groupe : créez-en un dans Groupes.") : undefined}
             onClick={() => onChange(o.id, o.id === "groupes" ? groupes : [])}
             className={cn(
-              "flex flex-col items-start gap-0.5 rounded-xl border px-3 py-2.5 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-50",
+              "flex flex-col items-start gap-0.5 rounded-xl border px-3 py-2.5 text-start transition-colors disabled:cursor-not-allowed disabled:opacity-50",
               visibilite === o.id ? "border-ring bg-muted" : "border-border hover:bg-muted/60",
             )}
           >
@@ -862,7 +862,7 @@ function EditionModal({
 
   return (
     <Modal open onClose={onFermer} size="md">
-      <h2 className="pr-8 text-lg font-semibold text-foreground">{titre}</h2>
+      <h2 className="pe-8 text-lg font-semibold text-foreground">{titre}</h2>
       <p className="mt-1 truncate text-sm text-muted-foreground">{element.nom}</p>
       <div className="mt-5 space-y-4">
         {mode === "renommer" && (
@@ -954,7 +954,7 @@ function ChoixDestination({
                 setPile([...pile, ici]);
                 setIci({ id: d.id, nom: d.nom });
               }}
-              className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-sm hover:bg-muted"
+              className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-start text-sm hover:bg-muted"
             >
               {d.emoji ? <span>{d.emoji}</span> : <Folder size={15} strokeWidth={1.75} className={classeCouleur(d.couleur)} />}
               <span className="min-w-0 flex-1 truncate text-foreground">{d.nom}</span>
@@ -983,7 +983,7 @@ function SuppressionModal({
   const [erreur, setErreur] = useState<string | null>(null);
   return (
     <>
-      <h2 className="pr-8 text-lg font-semibold text-foreground">
+      <h2 className="pe-8 text-lg font-semibold text-foreground">
         {t("Supprimer")}{" "}{element.type === "dossier" ? "le dossier" : "le document"} ?
       </h2>
       <p className="mt-2 text-sm text-muted-foreground">

@@ -262,7 +262,7 @@ export function EntrainerModele() {
             <ul className="mt-4 divide-y divide-border">
               {etat.projets.map((p) => (
                 <li key={p.id}>
-                  <button type="button" className="flex w-full items-center justify-between gap-3 py-3 text-left hover:bg-muted/40" onClick={() => setOuvert(p.id)}>
+                  <button type="button" className="flex w-full items-center justify-between gap-3 py-3 text-start hover:bg-muted/40" onClick={() => setOuvert(p.id)}>
                     <span className="min-w-0">
                       <span className="block truncate font-medium text-foreground">{p.nom}</span>
                       <span className="block text-xs text-muted-foreground">

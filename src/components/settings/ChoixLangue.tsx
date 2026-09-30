@@ -8,9 +8,12 @@ import { LANGUES, changerLangue, langue, t } from "@/lib/i18n";
  * ── Ce que l'écran dit, et qui n'est pas cosmétique ─────────────────────────
  *
  * Chaque langue porte son nom **dans cette langue** : quelqu'un qui ne lit pas
- * le français doit pouvoir trouver la sienne. « English », « 中文 » et
- * « 日本語 » se reconnaissent sans traduction ; « Anglais » et « Chinois » ne
- * servent qu'à celui qui lit déjà le français.
+ * le français doit pouvoir trouver la sienne. « English », « 中文 »,
+ * « 日本語 », « Español », « Deutsch » et « العربية » se reconnaissent sans
+ * traduction ; « Anglais » et « Chinois » ne servent qu'à celui qui lit déjà
+ * le français. Sept langues depuis le 30/09/2026 : quatre par rangée sur un
+ * écran large, deux à 375 px. Choisir l'arabe retourne tout l'écran, de droite
+ * à gauche (`dir` posé par `src/lib/i18n.ts`).
  *
  * L'écran annonce aussi que **le choix recharge la page**. Le rechargement est
  * assumé (voir `src/lib/i18n.ts`) : il garantit qu'aucun morceau d'écran ne
@@ -56,7 +59,7 @@ export function ChoixLangue() {
                 if (!active) changerLangue(l.code);
               }}
               className={cn(
-                "flex items-center gap-3 rounded-xl border px-3 py-2.5 text-left transition-colors",
+                "flex items-center gap-3 rounded-xl border px-3 py-2.5 text-start transition-colors",
                 active
                   ? "border-foreground/40 bg-muted"
                   : "border-border hover:bg-muted",

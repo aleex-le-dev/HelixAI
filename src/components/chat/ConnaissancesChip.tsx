@@ -84,7 +84,7 @@ export function ConnaissancesChip({
                 type="button"
                 disabled={Boolean(heritee)}
                 onClick={() => onChange(coche ? choisies.filter((x) => x !== b.id) : [...choisies, b.id])}
-                className="flex w-full items-start gap-2 rounded-lg px-2.5 py-2 text-left text-sm transition-colors hover:bg-muted disabled:cursor-default disabled:hover:bg-transparent"
+                className="flex w-full items-start gap-2 rounded-lg px-2.5 py-2 text-start text-sm transition-colors hover:bg-muted disabled:cursor-default disabled:hover:bg-transparent"
               >
                 <BookOpenText size={16} strokeWidth={1.75} className="mt-0.5 shrink-0 text-muted-foreground" />
                 <span className="min-w-0 flex-1">

@@ -120,6 +120,8 @@ let quitterVraiment = false;
 /** Langue de l'écran, que l'interface donne au démarrage : pour les quelques textes de ce processus. */
 // Relue une fois l'application prête (sous Windows, `getLocale` n'est fiable qu'ensuite), puis donnée par l'interface.
 let langueEcran = "en";
+// Les langues de l'interface (src/lib/i18n.ts) ; l'espagnol, l'allemand et l'arabe depuis le 30/09/2026.
+const LANGUES = ["fr", "en", "zh", "ja", "es", "de", "ar"];
 /*
  * Le nom affiché : `app.getName()` vaut « helix-plateforme » sous Windows et
  * Linux (le nom du paquet npm ; sur macOS, celui du paquet de l'application).
@@ -536,7 +538,7 @@ app.on("second-instance", (_evenement, argv) => {
 ipcMain.on("helix:langue", (evenement, code) => {
   // Comme les autres canaux : la fenêtre principale seulement, pas celle d'un bot de réunion qui partage le monde de Google Meet (28/09/2026).
   if (!depuisLaFenetre(evenement)) return;
-  if (!["fr", "en", "zh", "ja"].includes(code)) return;
+  if (!LANGUES.includes(code)) return;
   langueEcran = code;
   zone?.changerLangue(code);
   changerLangueMaj(code);
@@ -1247,7 +1249,7 @@ app.whenReady().then(async () => {
   if (etapeTrousseau && transfererCle(app, safeStorage, etapeTrousseau, { dossier: DONNEES_POSTE })) return;
   {
     const l = app.getLocale().slice(0, 2);
-    if (["fr", "en", "zh", "ja"].includes(l) && langueEcran === "en") langueEcran = l;
+    if (LANGUES.includes(l) && langueEcran === "en") langueEcran = l;
     changerLangueMaj(langueEcran);
   }
   /*

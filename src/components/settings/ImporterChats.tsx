@@ -328,11 +328,11 @@ export function ImporterChats() {
         </ul>
         <details className="rounded-xl border border-border p-3 text-sm text-muted-foreground">
           <summary className="cursor-pointer font-medium text-foreground">{t("Exporter ses Chats de Gemini, pas à pas")}</summary>
-          <ol className="mt-2 list-decimal space-y-1.5 pl-5">
+          <ol className="mt-2 list-decimal space-y-1.5 ps-5">
             <li>
               <a className="underline" href={TAKEOUT_GEMINI} target="_blank" rel="noreferrer noopener">
                 {t("Ouvrez Google Takeout")}
-                <ExternalLink size={12} className="ml-1 inline" />
+                <ExternalLink size={12} className="ms-1 inline" />
               </a>{" "}
               {t("avec le compte Google de Gemini.")}
             </li>
@@ -458,7 +458,7 @@ export function ImporterChats() {
                   <FolderKanban size={15} strokeWidth={1.75} className="mt-0.5 shrink-0 text-muted-foreground" />
                   <span className="min-w-0">
                     <span className="text-foreground">{p.nom}</span>
-                    <span className="ml-2 text-xs text-muted-foreground">
+                    <span className="ms-2 text-xs text-muted-foreground">
                       {[
                         p.instructions ? t("instructions") : "",
                         p.documents.length ? tf("{0} document(s)", p.documents.length) : "",

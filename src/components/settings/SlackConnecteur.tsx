@@ -207,7 +207,7 @@ export function SlackConnecteur({ onChange }: { onChange?: () => void } = {}) {
           <ExternalLink size={14} strokeWidth={1.75} className="shrink-0" />
           <span className="min-w-0">{tf("Ouvrir {0}", guideSlack?.consoles[0]?.libelle ?? t("la création d'application Slack"))}</span>
         </a>
-        <ol className="list-decimal space-y-2 pl-5">
+        <ol className="list-decimal space-y-2 ps-5">
           <li>
             {t("Le bouton ouvre la création d'application avec le manifeste ci-dessous déjà rempli : choisissez votre espace de travail, vérifiez, puis « Create ». Sinon : « Create New App », « From a manifest », et collez-le.")}
           </li>
@@ -222,7 +222,8 @@ export function SlackConnecteur({ onChange }: { onChange?: () => void } = {}) {
           </li>
         </ol>
         <div className="relative">
-          <pre className="max-h-56 overflow-auto rounded-lg bg-muted px-3 py-2 text-xs text-foreground">
+          {/* Le manifeste est du code : de gauche à droite, et son bouton reste à sa droite (classe physique voulue, 30/09/2026). */}
+          <pre dir="ltr" className="max-h-56 overflow-auto rounded-lg bg-muted px-3 py-2 text-xs text-foreground">
             {texteManifeste}
           </pre>
           <Button

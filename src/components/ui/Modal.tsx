@@ -66,7 +66,7 @@ export function Modal({
             type="button"
             aria-label={t("Fermer")}
             onClick={onClose}
-            className="absolute right-4 top-4 rounded-lg p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            className="absolute end-4 top-4 rounded-lg p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
           >
             <X size={18} strokeWidth={1.75} />
           </button>

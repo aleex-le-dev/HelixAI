@@ -425,7 +425,7 @@ export function Connecteurs({ maison = [] }: { maison?: ServiceMaison[] } = {}) 
         type="button"
         onClick={service.onBasculer}
         aria-expanded={service.ouvert}
-        className="flex w-full flex-wrap items-center gap-3 rounded-xl p-3.5 text-left transition-colors hover:bg-muted"
+        className="flex w-full flex-wrap items-center gap-3 rounded-xl p-3.5 text-start transition-colors hover:bg-muted"
       >
         <Pastille
           etat={service.connecte ? "actif" : "eteint"}

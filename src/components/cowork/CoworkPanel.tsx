@@ -110,7 +110,7 @@ export function CoworkPanel({ files }: { files: TouchedFile[] }) {
   const running = servers.filter((s) => s.running);
 
   return (
-    <aside className="flex w-[320px] shrink-0 flex-col gap-3 overflow-y-auto border-l border-border bg-background/60 p-3 pt-14">
+    <aside className="flex w-[320px] shrink-0 flex-col gap-3 overflow-y-auto border-s border-border bg-background/60 p-3 pt-14">
       <EcranMachine />
       <PanelCard title={t("Fichiers")}>
         {files.length === 0 ? (
@@ -177,7 +177,7 @@ export function CoworkPanel({ files }: { files: TouchedFile[] }) {
                   <FileText size={15} strokeWidth={1.5} className="shrink-0 text-muted-foreground" />
                   {/* À la ligne plutôt que coupé : en japonais, « ファイルの読み取り（旧ツール） » perdait sa fin (28/09/2026). */}
                   <span className="min-w-0 [overflow-wrap:anywhere]">{prettyTool(outil.name)}</span>
-                  <span className="ml-auto shrink-0 text-[11px] text-muted-foreground">
+                  <span className="ms-auto shrink-0 text-[11px] text-muted-foreground">
                     {t(s.label).toLowerCase()}
                   </span>
                 </li>

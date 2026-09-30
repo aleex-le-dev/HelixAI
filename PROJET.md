@@ -11,7 +11,7 @@ refaite à l'envers.
 | | |
 |---|---|
 | Version | 2026.929.4 (`package.json`) |
-| Dernière mise à jour | 29 septembre 2026 |
+| Dernière mise à jour | 30 septembre 2026 |
 | Vérifié | `npm run securite` : 2241 contrôles, 0 échec (29/09/2026) ; `npm run typecheck` ; traductions à 100 % en anglais, chinois et japonais (interface 3 925 phrases, passerelle 1 503) ; essai Windows sur GitHub Actions ; `essai:cli`, `essai:vscode`, `essai:palmier` |
 | Reste à essayer | sur les vraies machines : § 5, « Ce qui reste à essayer sur les postes de Medhi » |
 | Documents liés | [ARCHITECTURE.md](ARCHITECTURE.md), [SECURITE.md](SECURITE.md), [SCREENS.md](SCREENS.md), [SIGNATURE.md](SIGNATURE.md), [README.md](README.md), [docs/GUIDE.md](docs/GUIDE.md) |
@@ -5622,6 +5622,98 @@ que fait un vrai 3B du contexte rendu.
   codes de secours restants, « , et N autre(s) » d'une tâche bloquée, « interne » dans l'écran
   Courrier ; l'application de bureau, la zone de notification et le menu en japonais ne sont pas
   vus (pas d'Electron lancé) ; une vraie réponse de modèle en japonais pas essayée.
+
+**Fait le 30/09/2026 : l'espagnol, l'allemand et l'arabe ; l'arabe de droite à gauche.** Demandé
+par Medhi : sept langues (français, la source ; anglais, chinois, japonais, espagnol, allemand,
+arabe). Le travail est coupé en deux : les catalogues (`src/i18n/{es,de,ar}.json`,
+`gateway/i18n/{es,de,ar}.json`) sont traduits à part et posés à la fusion ; ce qui suit est tout le
+reste. **Tant que les vrais catalogues ne sont pas posés, ces six fichiers sont des copies de
+`en.json`** (mêmes clés, phrases anglaises) : les relevés disent 100 %, l'écran est en anglais.
+- **Décision : de droite à gauche par propriétés logiques, pas par une seconde feuille de style.**
+  `dir="rtl"` et `lang="ar"` sont posés sur `<html>` par `src/lib/i18n.ts`, au chargement du
+  module, donc avant le premier rendu (`ltr` est écrit aussi, pour les six autres langues). La mise
+  en page suit parce que les classes disent « début » et « fin » de ligne (`ms-`, `pe-`, `start-`,
+  `end-`, `text-start`, `border-s`, `rounded-ee`) et non « gauche » et « droite » : environ 240 classes
+  converties dans 70 fichiers environ de `src/`, toutes celles que la recherche a trouvées, pas seulement
+  les écrans principaux. ADR-076.
+- **Ce qui reste physique, et pourquoi** : `Popover.tsx` (le placement se calcule en pixels
+  d'écran ; le sens d'écriture y entre une fois, « début » devenant le bord droit du bouton en
+  arabe) ; l'interrupteur (`Switch.tsx`, un glissement, retourné par `rtl:-translate-x-…`) ; les
+  centrages `left-1/2 -translate-x-1/2` (symétriques) ; le bouton de copie d'un bloc de code
+  (`ClesApi.tsx`, `SlackConnecteur.tsx` : le bloc reste de gauche à droite, son bouton reste à sa
+  droite) ; `Select.tsx` (liste posée en pixels sous son bouton, de la même largeur) ; les
+  graphiques SVG (le temps se lit de gauche à droite ; sans `direction: ltr`, `text-anchor`
+  suivait la page et les dates de l'axe de « Mon usage » sortaient du cadre, vu à l'écran).
+- **Ce qui reste de gauche à droite dans une page arabe** (`styles/index.css`, règles sous
+  `[dir="rtl"]` seulement) : `code`, `kbd`, `samp`, tout ce qui porte `font-mono` (chemins,
+  commandes, jetons, versions, noms de modèles), les champs `url`, `email`, `password`, `tel`,
+  `number`, la valeur d'`ACopier`. Un `<pre>` sans police de code (trace d'outil, rapport à
+  envoyer) prend le sens de chaque ligne (`unicode-bidi: plaintext`). Les icônes qui montrent une
+  direction se retournent (chevrons, flèches retour et suivant, envoi en avion, connexion,
+  barre latérale), par `scale: -1 1` pour ne pas écraser une rotation ; la règle est **hors de
+  `@layer`**, où Tailwind la retirait (les classes `lucide-…` ne figurent pas dans le code : vu à
+  l'écran, les flèches ne se retournaient pas). L'espacement des lettres est annulé en arabe
+  (l'écriture est liée).
+- **Ce que la personne écrit et ce que le modèle répond** : `dir="auto"` sur la bulle, sur chaque
+  bloc de la réponse (`TexteRiche`), sur la zone de saisie (dès qu'elle contient du texte) et sur
+  un message en attente. Une réponse en arabe dans une interface française part donc de la
+  droite, ce qui change l'affichage des six autres langues sur ce seul point, voulu.
+- **Dates, nombres** : locales `es-ES`, `de-DE`, `ar-u-nu-latn` (chiffres occidentaux, calendrier
+  grégorien : « سبتمبر 2026 », mesuré avec Node 24). « 12/09/2026 14:05 », « 2:05 PM » et
+  « 1,2 MB » sont isolés (U+2066, U+2069) en arabe seulement, sans quoi la ligne les range à
+  l'envers (« PM 2:05 »). Format de date par défaut : jour d'abord, comme en français.
+- **Polices** : aucune embarquée ni téléchargée. Sous `:root:lang(ar)`, Geeza Pro (macOS), Segoe UI
+  (Windows), Noto Sans Arabic, Noto Naskh Arabic, Tahoma, placées avant le repli calé sur Arial,
+  qui a des lettres arabes et les aurait prises.
+- **Passerelle** : `X-Helix-Langue`, `?langue=` et `Accept-Language` acceptent `es`, `de`, `ar`
+  (`gateway/src/langue.ts`, liste `LANGUES`) ; les nombres des descriptions de `provision.ts`
+  suivent la locale ; une demande écrite en arabe, en espagnol ou en allemand est reconnue
+  (`plan.ts`), et la réponse demandée dans cette langue. L'espagnol et l'allemand ne l'emportent
+  que s'ils battent nettement le français et l'anglais (« de », « la », « un » sont aussi français).
+- **Electron** : `helix:langue` et la langue du système acceptent les sept ; les 24 messages de
+  mise à jour, les 11 raisons de refus d'une signature et les 18 textes de la zone de
+  notification et du menu sont traduits dans les trois langues (espagnol au « tú », allemand au
+  « Sie », arabe standard, noms de produits en caractères latins), sans relecture native.
+- **Aide intégrée** : « Changer la langue » cite les sept langues et dit le sens de l'arabe. **Deux
+  clés françaises ont changé** (le résumé et le corps de cette fiche) : traduites ici dans les six
+  catalogues, elles sont à reporter dans les vrais catalogues es, de et ar à la fusion, sans quoi
+  `node scripts/i18n.mjs` les dira manquantes.
+- **Contrôlé** : `npm run securite`, sections « 15 ter bis » (la passerelle répond dans les trois
+  langues, par en-tête, par adresse, par `Accept-Language`) et « 44 » (sept langues déclarées
+  dans l'interface, la passerelle, Electron et les relevés ; `dir` posé ; catalogues es, de, ar
+  aux clés d'`en.json`, trous `{n}` gardés ; aucun caractère de direction dans `ar.json` ; règles
+  de la feuille de style ; aucune classe physique dans 22 composants partagés ; détection de la
+  langue d'une demande ; motifs du § 15 quinquies dans les trois langues).
+- **Vu à l'écran** (instance jetable, faux modèle, Vite, navigateur intégré), en arabe forcé, les
+  phrases encore en anglais : écran de connexion et saisie du mot de passe, accueil du Chat, une
+  conversation (question et réponse en arabe, puis en français : listes, code en ligne, bloc de
+  code, citation), barre latérale dépliée et en rail, Réglages (Préférences, Connecteurs,
+  Abonnement, Mon usage, API développeur), Agents, Tâches (tableau et fenêtre « Nouvelle tâche »),
+  Cowork, Code, choix du modèle et notifications ; à 1280 px en clair, à 375 px en sombre. Un
+  relevé automatique sur 27 écrans, aux deux largeurs : aucun élément hors de la fenêtre, aucun
+  défilement de côté autre que ceux prévus (onglets des Réglages, tableau des tâches, blocs de
+  code). **Français, avant et après** : la position et la taille de chaque élément de ces 27
+  écrans et de la conversation, comparées entre le code d'avant et celui-ci (deux Vite sur la
+  même passerelle), à 1280 et 375 px : identiques, hors les trois cartes de langue ajoutées, le
+  logo animé et les lignes arabes de la conversation (alignées à droite, voulu).
+- **Reste** : relecture des trois langues par des personnes dont c'est la langue (catalogues et
+  textes d'Electron) ; **la ligne de commande (`cli/`) et l'extension VS Code
+  (`extensions/vscode/`) restent en français seulement** ; pas de sélecteur de langue sur l'écran
+  de première ouverture ni sur l'écran de connexion (la langue du système y est suivie, comme
+  avant) ; les scènes des captures du README (`scripts/captures/scenes/{es,de,ar}.mjs`) ne sont
+  pas écrites ; **pas regardés en arabe** : l'écran de première ouverture et le choix de
+  l'instance, Bibliothèque, Réunions, Groupes, Projets, Modèles, les autres pages de Réglages,
+  les cartes d'accord de Cowork et de Code, la file d'attente du Chat, le panneau de suivi de
+  Code, le comparateur de modèles, les fenêtres autres que « Nouvelle tâche », l'aide, le thème
+  sombre à 1280 px et le clair à 375 px (le relevé automatique les a parcourus, pas l'œil) ;
+  l'application de bureau en arabe n'est pas vue (pas d'Electron lancé) : sous macOS, les
+  pastilles de la fenêtre restent à gauche alors que la barre latérale passe à droite, elles se
+  posent alors sur la poignée vide de la zone principale, à regarder sur le poste ; le menu et
+  la zone de notification de Windows et de Linux dans les trois langues non plus ; l'écran avec
+  de vraies phrases arabes (longueurs, coupures) est à reparcourir une fois les catalogues posés ;
+  une vraie réponse de modèle dans ces langues pas essayée. Les phrases anglaises affichées dans
+  une page arabe montrent leur point final à gauche (« .Choose your account ») : c'est l'effet des
+  copies provisoires, il disparaît avec les phrases arabes.
 
 **Fait le 27/09/2026 : parcours complet de l'interface, contre une instance jetable.** Passerelle
 jetable (dossier de données temporaire, clé des données en fichier, LM Studio éteint), faux

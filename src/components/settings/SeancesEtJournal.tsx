@@ -268,12 +268,12 @@ export function SeancesEtJournal() {
                   <span className="block text-sm font-medium text-foreground [overflow-wrap:anywhere]">
                     {s.poste}
                     {s.courante && (
-                      <span className="ml-2 rounded-full bg-muted px-2 py-0.5 text-xs font-normal text-muted-foreground">
+                      <span className="ms-2 rounded-full bg-muted px-2 py-0.5 text-xs font-normal text-muted-foreground">
                         {t("ce poste")}
                       </span>
                     )}
                     {s.longue && (
-                      <span className="ml-2 rounded-full bg-muted px-2 py-0.5 text-xs font-normal text-muted-foreground">
+                      <span className="ms-2 rounded-full bg-muted px-2 py-0.5 text-xs font-normal text-muted-foreground">
                         {t("reste connecté")}
                       </span>
                     )}

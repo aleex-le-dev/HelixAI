@@ -166,7 +166,7 @@ export function TelechargerApps() {
                */}
               <div className="rounded-xl bg-muted/50 px-4 py-3 text-sm text-muted-foreground">
                 <p className="font-medium text-foreground">{t("Au premier lancement")}</p>
-                <ol className="mt-1 list-decimal space-y-0.5 pl-5">
+                <ol className="mt-1 list-decimal space-y-0.5 ps-5">
                   <li>{t("Ouvrez le fichier .zip : l'application apparaît à côté.")}</li>
                   <li>{t("Glissez-la dans le dossier Applications.")}</li>
                   <li>

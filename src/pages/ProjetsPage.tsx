@@ -133,7 +133,7 @@ export function ProjetsPage() {
                   <button
                     type="button"
                     onClick={() => setDetail(project)}
-                    className="min-w-0 flex-1 text-left"
+                    className="min-w-0 flex-1 text-start"
                   >
                     <span className="block truncate font-medium text-foreground">
                       {project.name}
@@ -333,7 +333,7 @@ function ChatsDuProjet({
               <button
                 type="button"
                 onClick={() => ouvrir(`/?c=${encodeURIComponent(chat.id)}`)}
-                className="flex w-full items-center gap-3 rounded-xl border border-border px-3 py-2.5 text-left transition-colors hover:bg-muted"
+                className="flex w-full items-center gap-3 rounded-xl border border-border px-3 py-2.5 text-start transition-colors hover:bg-muted"
               >
                 <MessageSquare size={15} strokeWidth={1.75} className="shrink-0 text-muted-foreground" />
                 <span className="min-w-0 flex-1">
@@ -446,7 +446,7 @@ function MembersModal({
 
   return (
     <Modal open onClose={fermer} size="md">
-      <h2 className="pr-8 text-lg font-semibold text-foreground">{project.name}</h2>
+      <h2 className="pe-8 text-lg font-semibold text-foreground">{project.name}</h2>
       <p className="mt-1 text-sm text-muted-foreground">
         {project.members.filter((m) => m.status === "actif").length}{" "}{t("membre(s) ·")}{" "}
         {project.members.filter((m) => m.status === "invite").length}{" "}{t("invitation(s) en attente")}

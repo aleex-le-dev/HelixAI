@@ -140,7 +140,7 @@ export function BasesConnaissances({ mesGroupes, groupes }: { mesGroupes: Groupe
               <button
                 type="button"
                 onClick={() => setOuverte(b.id)}
-                className="flex h-full w-full flex-col gap-2 rounded-2xl border border-border bg-card p-4 text-left transition-shadow hover:shadow-sm"
+                className="flex h-full w-full flex-col gap-2 rounded-2xl border border-border bg-card p-4 text-start transition-shadow hover:shadow-sm"
               >
                 <span className="flex items-start gap-3">
                   <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-muted">
@@ -303,7 +303,7 @@ function DetailBase({
 
   return (
     <Modal open onClose={onFermer} size="xl">
-      <div className="pr-8">
+      <div className="pe-8">
         <h2 className="text-lg font-semibold text-foreground">{base.nom}</h2>
         <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
           <PastilleBase base={base} groupes={groupes} />
@@ -389,10 +389,10 @@ function DetailBase({
         ) : (
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-border text-left text-xs text-muted-foreground">
+              <tr className="border-b border-border text-start text-xs text-muted-foreground">
                 <th className="py-2 font-medium">{t("Document")}</th>
                 <th className="py-2 font-medium">{t("État")}</th>
-                <th className="py-2 text-right font-medium">{t("Passages")}</th>
+                <th className="py-2 text-end font-medium">{t("Passages")}</th>
                 <th className="w-20" />
               </tr>
             </thead>
@@ -414,8 +414,8 @@ function DetailBase({
                   <td className="py-2 text-xs">
                     <EtatDocument d={d} />
                   </td>
-                  <td className="py-2 text-right tabular-nums text-muted-foreground">{d.etat === "pret" ? d.morceaux : ""}</td>
-                  <td className="py-2 text-right">
+                  <td className="py-2 text-end tabular-nums text-muted-foreground">{d.etat === "pret" ? d.morceaux : ""}</td>
+                  <td className="py-2 text-end">
                     {base.estProprietaire && (
                       <span className="flex justify-end gap-1">
                         {d.etat === "erreur" && (

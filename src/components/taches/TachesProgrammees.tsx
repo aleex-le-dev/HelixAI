@@ -252,7 +252,7 @@ export function TachesProgrammees() {
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-medium text-foreground">
                     {x.titre}
-                    {!x.active && <span className="ml-2 text-xs text-muted-foreground">{t("en pause")}</span>}
+                    {!x.active && <span className="ms-2 text-xs text-muted-foreground">{t("en pause")}</span>}
                   </p>
                   <p className="text-xs text-muted-foreground">
                     {decrireRythme(x.rythme, x.heure)}
@@ -284,7 +284,7 @@ export function TachesProgrammees() {
               </div>
               {derniere && (
                 <div className="mt-3 border-t border-border pt-3">
-                  <button type="button" className="flex w-full items-center gap-1.5 text-left text-xs text-muted-foreground" onClick={() => setOuverte(deplie ? null : x.id)}>
+                  <button type="button" className="flex w-full items-center gap-1.5 text-start text-xs text-muted-foreground" onClick={() => setOuverte(deplie ? null : x.id)}>
                     {deplie ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
                     {derniere.ok ? tf("Dernier compte rendu, le {0}", formaterDate(new Date(derniere.quand))) : tf("Dernière exécution en échec, le {0}", formaterDate(new Date(derniere.quand)))}
                     {derniere.agent ? ` · ${derniere.agent}` : ""}

@@ -61,7 +61,7 @@ export function ChoixPhotoAgent({
             e.stopPropagation();
             onChange(null);
           }}
-          className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full border border-border bg-card text-muted-foreground hover:text-destructive"
+          className="absolute -end-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full border border-border bg-card text-muted-foreground hover:text-destructive"
         >
           <X size={10} strokeWidth={2} />
         </button>

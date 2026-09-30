@@ -33,7 +33,8 @@ export function Switch({ checked, onChange, label, id, disabled }: SwitchProps) 
       <span
         className={cn(
           "inline-block h-5 w-5 transform rounded-full bg-popover shadow-sm transition-transform",
-          checked ? "translate-x-[22px]" : "translate-x-0.5",
+          // De droite à gauche (arabe), la pastille part de la droite et glisse vers la gauche (30/09/2026).
+          checked ? "translate-x-[22px] rtl:-translate-x-[22px]" : "translate-x-0.5 rtl:-translate-x-0.5",
         )}
       />
     </button>

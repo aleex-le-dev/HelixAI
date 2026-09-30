@@ -623,8 +623,9 @@ dont la bascule au coucher du soleil calculée sur le poste. ✅ **Dates et
 heures** : formats européen, américain ou ISO, 24 ou 12 heures, appliqués
 partout où une date s'affiche (journal d'audit, séances, tâches, usage,
 connecteurs, heures du soleil). Le choix suit la personne, pas le poste
-(`src/lib/formats.ts`). ✅ **Langue** (0.25.0, `ChoixLangue.tsx`) : français, anglais,
-chinois, pour ce poste ; la page se recharge. ✅ **À propos** : version installée et mise
+(`src/lib/formats.ts`). ✅ **Langue** (0.25.0, `ChoixLangue.tsx`) : sept langues depuis le
+30/09/2026 (English, Français, 中文, 日本語, Español, Deutsch, العربية), pour ce poste ; la page se
+recharge, et l'arabe retourne l'écran (« Langues et sens d'écriture », § 6). ✅ **À propos** : version installée et mise
 à jour réelle (`MiseAJour.tsx`, depuis 0.10.0). États, dont « aucune adresse de mise à
 jour n'est inscrite » (rien n'est contacté), « aucune version plus récente (vérifié
 le …) », « version X disponible » avec **« Installer maintenant »** quand l'archive (macOS)
@@ -1024,6 +1025,53 @@ Un petit script dans `index.html` repose le dernier thème appliqué **avant le
 premier rendu**, à partir de `localStorage`. Sans lui, l'application s'ouvrirait
 en clair puis virerait au sombre : un éclair blanc en pleine nuit.
 
+### Langues et sens d'écriture (30/09/2026)
+
+`src/lib/i18n.ts`, `src/components/settings/ChoixLangue.tsx`, `src/styles/index.css`,
+`src/styles/tokens.css`. Réglé dans Réglages, Préférences, rubrique Langue.
+
+| Langue | Code | Sens | Dates et nombres |
+|---|---|---|---|
+| English | `en` | gauche à droite | `en-US` |
+| Français (source) | `fr` | gauche à droite | `fr-FR` |
+| 中文 | `zh` | gauche à droite | `zh-CN` |
+| 日本語 | `ja` | gauche à droite | `ja-JP`, année d'abord |
+| Español | `es` | gauche à droite | `es-ES` |
+| Deutsch | `de` | gauche à droite | `de-DE` |
+| العربية | `ar` | **droite à gauche** | `ar-u-nu-latn` (chiffres occidentaux) |
+
+Sept cartes, chacune sous le nom de la langue dans cette langue : quatre par rangée
+sur un écran large, deux à 375 px. Sans choix, la langue du système est suivie si
+elle est servie ; sinon l'anglais.
+
+**En arabe, l'écran se retourne** :
+
+- la barre latérale passe à droite, dépliée comme en rail ; la zone principale à
+  gauche ; la navigation des Réglages à droite de la page ;
+- dans le Chat, la réponse part de la droite et la bulle de la personne se range à
+  gauche ; la flèche d'envoi est au bout gauche de la zone de saisie, le « + » à son
+  début, à droite ;
+- la croix d'une fenêtre est en haut à gauche ; les menus s'alignent sur le bord
+  droit de leur bouton quand ils s'alignaient sur le gauche ;
+- les flèches « retour » pointent vers la droite, les chevrons « suivant » vers la
+  gauche, l'icône de la barre latérale la dessine à droite ; les icônes sans
+  direction ne bougent pas ;
+- les barres de défilement suivent le système (à gauche).
+
+**Ce qui reste de gauche à droite dans une page arabe** : les blocs de code et le code
+en ligne, les chemins, les commandes, les adresses, les jetons, les numéros de
+version, les champs d'adresse, de mot de passe et de nombre, la valeur d'une ligne
+à copier, les graphiques (Mon usage, comparateur de modèles). Une date et son heure
+restent dans cet ordre (« 12/09/2026 14:05 »), les chiffres sont occidentaux.
+
+**Ce que vous écrivez s'aligne selon sa propre langue**, pas celle de l'interface :
+une question en arabe dans une interface française part de la droite, une réponse
+en français dans une interface arabe part de la gauche, paragraphe par paragraphe.
+
+Le sens est posé sur la page avant le premier rendu : l'écran ne s'affiche jamais
+une fois dans le mauvais sens. La ligne de commande et l'extension VS Code sont en
+français.
+
 ### Préparer Cowork, atelier bureautique
 
 `src/components/cowork/PreparerCowork.tsx`, `src/lib/atelier.ts`,
@@ -1323,9 +1371,10 @@ main, et le masquer ferait échouer une saisie sur deux sans rien protéger.
 sur la création de compte, l'adresse pré-remplie et verrouillée (c'est celle du
 code), avec un encart qui dit que le mot de passe n'appartiendra qu'à elle.
 
-**Réglages, Préférences → Langue (0.25.0)** : trois cartes, chacune portant le
-nom de sa langue dans sa propre langue — Français, English, 中文 — avec la part
-réellement traduite, mesurée sur le catalogue et non déclarée. Une phrase sous
+**Réglages, Préférences → Langue (0.25.0)** : trois cartes à l'origine, sept depuis le
+30/09/2026 (« Langues et sens d'écriture », § 6), chacune portant le
+nom de sa langue dans sa propre langue — Français, English, 中文 — avec, à l'origine, la part
+réellement traduite, mesurée sur le catalogue et non déclarée (ligne retirée le 25/09/2026). Une phrase sous
 le titre prévient que le choix recharge la page, et une autre, en bas, dit ce
 qui n'est jamais traduit : ce que vous écrivez, et certains messages venus de
 l'instance.

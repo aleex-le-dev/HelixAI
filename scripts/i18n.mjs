@@ -21,7 +21,8 @@ import { fileURLToPath } from "node:url";
 
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), "..");
 const ECRIRE = process.argv.includes("--ecrire");
-const LANGUES = ["en", "zh", "ja"];
+// L'espagnol, l'allemand et l'arabe depuis le 30/09/2026 : six catalogues, le français étant la source.
+const LANGUES = ["en", "zh", "ja", "es", "de", "ar"];
 
 const fichiers = execSync(`find "${RACINE}/src" -name '*.tsx' -o -name '*.ts'`, {
   encoding: "utf8",

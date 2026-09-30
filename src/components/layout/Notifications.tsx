@@ -93,7 +93,7 @@ export function Notifications({ size = 34 }: { size?: number }) {
           {aLire > 0 && (
             <span
               aria-hidden
-              className="pointer-events-none absolute right-1 top-1 flex h-[15px] min-w-[15px] items-center justify-center rounded-full bg-accent px-[3px] text-[9px] font-semibold leading-none text-accent-foreground"
+              className="pointer-events-none absolute end-1 top-1 flex h-[15px] min-w-[15px] items-center justify-center rounded-full bg-accent px-[3px] text-[9px] font-semibold leading-none text-accent-foreground"
             >
               {aLire > 9 ? "9+" : aLire}
             </span>
@@ -144,7 +144,7 @@ export function Notifications({ size = 34 }: { size?: number }) {
                   type="button"
                   onClick={() => ouvrir(n)}
                   className={cn(
-                    "flex w-full items-start gap-2.5 border-b border-border/60 px-3 py-2.5 text-left transition-colors last:border-b-0 hover:bg-muted/60",
+                    "flex w-full items-start gap-2.5 border-b border-border/60 px-3 py-2.5 text-start transition-colors last:border-b-0 hover:bg-muted/60",
                     !n.lue && "bg-accent/[0.06]",
                   )}
                 >

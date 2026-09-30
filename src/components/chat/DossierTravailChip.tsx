@@ -169,7 +169,7 @@ export function DossierTravailChip({
             setOpen(false);
           }}
           className={cn(
-            "mb-1 flex w-full items-start gap-2.5 rounded-lg border px-2.5 py-2 text-left transition-colors",
+            "mb-1 flex w-full items-start gap-2.5 rounded-lg border px-2.5 py-2 text-start transition-colors",
             toutLePoste
               ? "border-foreground/40 bg-muted"
               : "border-border hover:bg-muted",
@@ -197,7 +197,7 @@ export function DossierTravailChip({
               setOpen(false);
             });
           }}
-          className="mb-1 flex w-full items-center gap-2.5 rounded-lg border border-border px-2.5 py-2 text-left text-sm text-foreground transition-colors hover:bg-muted"
+          className="mb-1 flex w-full items-center gap-2.5 rounded-lg border border-border px-2.5 py-2 text-start text-sm text-foreground transition-colors hover:bg-muted"
         >
           <FolderSearch size={15} strokeWidth={1.75} className="shrink-0" />
           {t("Parcourir mon ordinateur...")}
@@ -231,7 +231,7 @@ export function DossierTravailChip({
           <button
             type="button"
             onClick={() => parcourir(contenu.parent!)}
-            className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-sm text-muted-foreground transition-colors hover:bg-muted"
+            className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-start text-sm text-muted-foreground transition-colors hover:bg-muted"
           >
             <CornerLeftUp size={15} strokeWidth={1.75} />
             {t("Dossier parent")}
@@ -249,7 +249,7 @@ export function DossierTravailChip({
             key={nom}
             type="button"
             onClick={() => parcourir(`${contenu.chemin}/${nom}`)}
-            className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-sm text-foreground transition-colors hover:bg-muted"
+            className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-start text-sm text-foreground transition-colors hover:bg-muted"
           >
             <Folder size={15} strokeWidth={1.75} className="shrink-0 text-muted-foreground" />
             <span className="min-w-0 truncate">{nom}</span>

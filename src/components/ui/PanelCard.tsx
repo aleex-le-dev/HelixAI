@@ -24,11 +24,11 @@ export function PanelCard({
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="flex w-full items-center gap-2 px-3.5 py-3 text-left"
+        className="flex w-full items-center gap-2 px-3.5 py-3 text-start"
         aria-expanded={open}
       >
         <span className="text-sm font-semibold text-foreground">{title}</span>
-        <span className="ml-auto flex items-center gap-2 text-muted-foreground">
+        <span className="ms-auto flex items-center gap-2 text-muted-foreground">
           {headerRight}
           <ChevronDown
             size={16}

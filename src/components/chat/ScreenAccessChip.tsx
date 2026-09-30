@@ -29,7 +29,7 @@ export function ScreenAccessChip({ modeleVoit = true }: { modeleVoit?: boolean }
         setOpen(false);
         navigate("/parametres/ecran");
       }}
-      className="mx-1 mb-1 flex w-[calc(100%-0.5rem)] items-center gap-2 rounded-lg px-2 py-2 text-left text-sm font-medium text-foreground transition-colors hover:bg-muted"
+      className="mx-1 mb-1 flex w-[calc(100%-0.5rem)] items-center gap-2 rounded-lg px-2 py-2 text-start text-sm font-medium text-foreground transition-colors hover:bg-muted"
     >
       <Settings2 size={15} strokeWidth={1.75} className="shrink-0 text-muted-foreground" />
       {texte}

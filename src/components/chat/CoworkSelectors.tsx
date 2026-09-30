@@ -35,7 +35,7 @@ function OptionRow({
       title={titre}
       aria-pressed={selected}
       className={cn(
-        "flex w-full items-start gap-3 rounded-lg px-2.5 py-2 text-left transition-colors",
+        "flex w-full items-start gap-3 rounded-lg px-2.5 py-2 text-start transition-colors",
         disabled ? "cursor-not-allowed opacity-45" : "hover:bg-muted",
         selected && "bg-muted/60",
       )}

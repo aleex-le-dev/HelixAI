@@ -128,7 +128,7 @@ export function Abonnement() {
             <div key={m.id} className="flex flex-col rounded-xl border border-border p-3">
               <p className="flex items-center gap-2 text-sm font-medium text-foreground">
                 <Cpu size={15} strokeWidth={1.75} className="shrink-0" /> {m.nom}
-                <span className="ml-auto whitespace-nowrap rounded-full bg-muted px-2 py-0.5 text-xs tabular-nums text-muted-foreground">
+                <span className="ms-auto whitespace-nowrap rounded-full bg-muted px-2 py-0.5 text-xs tabular-nums text-muted-foreground">
                   {tf("crédit ×{0}", facteur(m).toLocaleString(locale(), { maximumFractionDigits: 2 }))}
                 </span>
               </p>
@@ -151,7 +151,7 @@ export function Abonnement() {
           <h3 className="text-lg font-semibold text-foreground">{t("Les formules")}</h3>
           <SegmentedTabs
             size="sm"
-            className="ml-auto"
+            className="ms-auto"
             value={periode}
             onChange={(v) => setPeriode(v as Periode)}
             options={[
@@ -266,7 +266,7 @@ function CarteFormule({ formule, periode }: { formule: Formule; periode: Periode
           tf("Soit {0} par mois", euros(affiche / 12))
         ) : remise < formule.prix ? (
           <>
-            <span className="mr-1.5 whitespace-nowrap rounded-full bg-success/15 px-1.5 py-0.5 font-medium text-success">
+            <span className="me-1.5 whitespace-nowrap rounded-full bg-success/15 px-1.5 py-0.5 font-medium text-success">
               {tf("−{0} %", Math.round(LANCEMENT.taux * 100))}
             </span>
             {tf("les {0} premiers mois, puis {1}", LANCEMENT.mois, euros(formule.prix))}
@@ -282,7 +282,7 @@ function CarteFormule({ formule, periode }: { formule: Formule; periode: Periode
           {modeles.map((m, i) => (
             <div key={m.id} className="flex flex-wrap items-baseline justify-between gap-x-3 text-sm">
               <dt className="text-muted-foreground">
-                {i > 0 && <span className="mr-1 text-xs">{t("ou")}</span>}
+                {i > 0 && <span className="me-1 text-xs">{t("ou")}</span>}
                 {m.nom}
               </dt>
               <dd className="font-medium tabular-nums text-foreground">

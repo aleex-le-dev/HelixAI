@@ -433,7 +433,7 @@ export function LoginPage({ onSignedIn }: { onSignedIn: () => void }) {
                 key={account.id}
                 type="button"
                 onClick={() => pick(account)}
-                className="flex w-full items-center gap-3 rounded-xl border border-border bg-card px-4 py-3 text-left transition-colors hover:bg-muted"
+                className="flex w-full items-center gap-3 rounded-xl border border-border bg-card px-4 py-3 text-start transition-colors hover:bg-muted"
               >
                 <Avatar size={36} initials={account.initials} photo={account.photo} nom={account.fullName} />
                 <span className="min-w-0 flex-1">

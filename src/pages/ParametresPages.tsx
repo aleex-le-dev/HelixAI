@@ -294,7 +294,7 @@ export function ProfilSettings() {
             )}
             <div className="mt-5 flex items-center justify-end gap-2">
               {enregistre && !modifie && (
-                <span className="mr-auto inline-flex items-center gap-1.5 text-xs text-success">
+                <span className="me-auto inline-flex items-center gap-1.5 text-xs text-success">
                   <Check size={14} strokeWidth={2} />{" "}{t("Profil enregistré sur l'instance")}
                 </span>
               )}
@@ -486,7 +486,8 @@ export function PreferencesSettings() {
       {/*
        * L'anglais est la langue de référence et la langue par défaut du
        * logiciel ; les phrases françaises servent de clés aux traductions
-       * (src/lib/i18n.ts). L'interface se choisit parmi les quatre langues.
+       * (src/lib/i18n.ts). L'interface se choisit parmi les sept langues
+       * (l'arabe retourne l'écran, de droite à gauche).
        */}
       <ChoixLangue />
 
@@ -1237,7 +1238,7 @@ function McpServers() {
                   {s.tools.map((t) => (
                     <li key={t.name} className="text-xs">
                       <code className="text-foreground">{t.name}</code>
-                      <span className="ml-2 text-muted-foreground">
+                      <span className="ms-2 text-muted-foreground">
                         {t.description.split(".")[0]}
                       </span>
                     </li>

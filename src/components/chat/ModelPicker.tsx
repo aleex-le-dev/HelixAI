@@ -276,7 +276,7 @@ export function ModelBehaviorPicker({
           setOpen(false);
         }}
         className={cn(
-          "flex w-full items-center gap-2.5 rounded-lg px-2 py-2 text-left transition-colors hover:bg-muted",
+          "flex w-full items-center gap-2.5 rounded-lg px-2 py-2 text-start transition-colors hover:bg-muted",
           isSelected && "bg-muted",
         )}
       >
@@ -328,7 +328,7 @@ export function ModelBehaviorPicker({
           setOpen(false);
         }}
         disabled={id !== "auto" && !modele}
-        className="flex w-full items-start gap-2.5 rounded-lg px-2 py-2 text-left transition-colors hover:bg-muted disabled:opacity-50"
+        className="flex w-full items-start gap-2.5 rounded-lg px-2 py-2 text-start transition-colors hover:bg-muted disabled:opacity-50"
       >
         <Icone size={16} strokeWidth={1.75} className="mt-0.5 shrink-0 text-muted-foreground" />
         <span className="min-w-0 flex-1">
@@ -414,7 +414,7 @@ export function ModelBehaviorPicker({
               className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
             >
               <Boxes size={15} strokeWidth={1.75} />
-              <span className="flex-1 text-left">{t("Voir tous les modèles")}</span>
+              <span className="flex-1 text-start">{t("Voir tous les modèles")}</span>
               <ChevronRight size={15} strokeWidth={1.75} />
             </button>
             <div className="my-1 h-px bg-border" />
@@ -426,7 +426,7 @@ export function ModelBehaviorPicker({
                               <div className="min-w-0 flex-1">
                                 <p className="truncate text-sm text-foreground">
                                   {m.label}
-                                  <span className="ml-1.5 text-[11px] text-muted-foreground">{m.editeur}</span>
+                                  <span className="ms-1.5 text-[11px] text-muted-foreground">{m.editeur}</span>
                                 </p>
                                 <p
                                   className="truncate text-[11px] text-muted-foreground"
@@ -550,7 +550,7 @@ export function ModelBehaviorPicker({
                         ) : (
                           <Download size={15} strokeWidth={1.75} />
                         )}
-                        <span className="flex-1 text-left">
+                        <span className="flex-1 text-start">
                           {enCours ? installation?.message : t("Installer un modèle sur cette machine")}
                         </span>
                         <ChevronRight size={15} strokeWidth={1.75} />
@@ -566,7 +566,7 @@ export function ModelBehaviorPicker({
                         className="mt-1 flex w-full items-center gap-2 rounded-lg px-2 py-2 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                       >
                         <Boxes size={15} strokeWidth={1.75} />
-                        <span className="flex-1 text-left">{t("Voir tous les modèles")}</span>
+                        <span className="flex-1 text-start">{t("Voir tous les modèles")}</span>
                         <ChevronRight size={15} strokeWidth={1.75} />
                       </button>
                     )}
@@ -696,14 +696,14 @@ export function ReasoningPicker({
             onChange?.(l.id);
             setOpen(false);
           }}
-          className="flex w-full items-start gap-2 rounded-lg px-2.5 py-2 text-left text-sm text-foreground transition-colors hover:bg-muted"
+          className="flex w-full items-start gap-2 rounded-lg px-2.5 py-2 text-start text-sm text-foreground transition-colors hover:bg-muted"
         >
           <span className="min-w-0">
             <span className="block">{l.label}</span>
             <span className="block text-[11px] leading-snug text-muted-foreground">{l.aide}</span>
           </span>
           {current.id === l.id && (
-            <Check size={16} strokeWidth={2} className="ml-auto mt-0.5 shrink-0 text-foreground" />
+            <Check size={16} strokeWidth={2} className="ms-auto mt-0.5 shrink-0 text-foreground" />
           )}
         </button>
       ))}

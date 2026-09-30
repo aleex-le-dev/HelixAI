@@ -220,7 +220,7 @@ export function CodePage() {
             icon={PanelRight}
             label={t("Afficher le suivi")}
             onClick={() => setSuiviOuvert(true)}
-            className="absolute right-4 top-4 z-20"
+            className="absolute end-4 top-4 z-20"
           />
         )}
         <section className="flex min-w-0 flex-1 flex-col bg-dotted">
@@ -258,7 +258,7 @@ export function CodePage() {
             dossier={dossierAffiche}
             onArreter={moteur === "opencode" ? code.arreterAction : undefined}
             onFermer={() => setSuiviOuvert(false)}
-            className="fixed inset-y-0 right-0 z-40 shadow-lg lg:static lg:z-auto lg:shadow-none"
+            className="fixed inset-y-0 end-0 z-40 shadow-lg lg:static lg:z-auto lg:shadow-none"
           />
         )}
       </div>

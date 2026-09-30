@@ -1,6 +1,9 @@
 import en from "@/i18n/en.json";
 import zh from "@/i18n/zh.json";
 import ja from "@/i18n/ja.json";
+import es from "@/i18n/es.json";
+import de from "@/i18n/de.json";
+import ar from "@/i18n/ar.json";
 
 /**
  * La langue de l'interface.
@@ -52,6 +55,10 @@ export const LANGUES = [
   { code: "zh", nom: "Chinois", natif: "中文" },
   // Demandé par Medhi le 28/09/2026.
   { code: "ja", nom: "Japonais", natif: "日本語" },
+  // Demandés par Medhi le 30/09/2026 : l'espagnol, l'allemand et l'arabe.
+  { code: "es", nom: "Espagnol", natif: "Español" },
+  { code: "de", nom: "Allemand", natif: "Deutsch" },
+  { code: "ar", nom: "Arabe", natif: "العربية" },
 ] as const;
 
 export type Langue = (typeof LANGUES)[number]["code"];
@@ -63,6 +70,9 @@ const CATALOGUES: Record<Exclude<Langue, "fr">, Record<string, string>> = {
   en: en as Record<string, string>,
   zh: zh as Record<string, string>,
   ja: ja as Record<string, string>,
+  es: es as Record<string, string>,
+  de: de as Record<string, string>,
+  ar: ar as Record<string, string>,
 };
 
 function langueEnregistree(): Langue | null {
@@ -88,18 +98,18 @@ const PAR_DEFAUT: Langue = "en";
 /**
  * Langue du système, quand rien n'a été choisi.
  *
- * On ne devine que ce qu'on sait servir. Un poste en espagnol s'ouvre en
+ * On ne devine que ce qu'on sait servir. Un poste en italien s'ouvre en
  * anglais plutôt que de tomber dans une langue au hasard, et la personne
- * choisit elle-même.
+ * choisit elle-même. La première langue du système qu'on sait servir gagne
+ * (30/09/2026 : sept langues, la liste est `LANGUES` et plus une suite de
+ * `if`).
  */
 function langueDuSysteme(): Langue {
   try {
     for (const etiquette of navigator.languages ?? [navigator.language]) {
       const base = etiquette.toLowerCase().split("-")[0];
-      if (base === "en") return "en";
-      if (base === "zh") return "zh";
-      if (base === "ja") return "ja";
-      if (base === "fr") return "fr";
+      const connue = LANGUES.find((l) => l.code === base);
+      if (connue) return connue.code;
     }
   } catch {
     /* pas de navigateur : la langue par défaut */
@@ -111,6 +121,31 @@ const courante: Langue = langueEnregistree() ?? langueDuSysteme();
 
 /** La langue en cours d'affichage. */
 export const langue = (): Langue => courante;
+
+/**
+ * Le sens d'écriture d'une langue. L'arabe s'écrit de droite à gauche
+ * (30/09/2026) : la page entière se retourne (`dir="rtl"` sur `<html>`), et
+ * la mise en page suit parce qu'elle est écrite en propriétés logiques
+ * (`ms-`, `pe-`, `start-`, `text-start` : « début » et « fin » de ligne, et non
+ * « gauche » et « droite »). Les six autres langues restent de gauche à droite.
+ */
+const LANGUES_RTL: readonly Langue[] = ["ar"];
+export const sensDe = (code: Langue): "rtl" | "ltr" => (LANGUES_RTL.includes(code) ? "rtl" : "ltr");
+
+/** Le sens d'écriture de la langue affichée. */
+export const sens = (): "rtl" | "ltr" => sensDe(courante);
+
+/**
+ * Garde un morceau technique dans son sens, de gauche à droite, au milieu d'une
+ * phrase arabe : « 1,2 Mo », « 2:05 PM », « 12/09/2026 14:05 ». Sans cela,
+ * l'algorithme bidirectionnel range les morceaux séparés par une espace de
+ * droite à gauche, et l'écran affiche « PM 2:05 » ou l'heure avant la date.
+ * Deux caractères d'isolement (U+2066 et U+2069), qui ne s'impriment pas ; rien
+ * n'est ajouté dans les six langues qui s'écrivent de gauche à droite.
+ */
+export function isolerLtr(texte: string): string {
+  return sens() === "rtl" && texte ? `\u2066${texte}\u2069` : texte;
+}
 
 /** Une langue a-t-elle été choisie, ou suit-on encore le système ? */
 export const langueChoisie = (): boolean => langueEnregistree() !== null;
@@ -133,7 +168,13 @@ export function t(fr: string): string {
  * nombres, dates, tailles de fichiers.
  */
 export function locale(): string {
-  return { fr: "fr-FR", en: "en-US", zh: "zh-CN", ja: "ja-JP" }[courante];
+  /*
+   * L'arabe garde les chiffres occidentaux (`nu-latn`) : le reste de l'écran
+   * (dates assemblées par `formats.ts`, versions, tailles, prix) les écrit
+   * ainsi, et un écran qui mêle « ١٢ » et « 12 » se lit mal. Sans région :
+   * calendrier grégorien, mois de l'arabe standard (30/09/2026).
+   */
+  return { fr: "fr-FR", en: "en-US", zh: "zh-CN", ja: "ja-JP", es: "es-ES", de: "de-DE", ar: "ar-u-nu-latn" }[courante];
 }
 
 /**
@@ -142,17 +183,18 @@ export function locale(): string {
  * Les unités étaient écrites en dur, en français, à plusieurs endroits du
  * code : l'écran passait en anglais en continuant d'annoncer « 1 Go ». Les
  * unités françaises (o, Ko, Mo, Go) n'ont pas cours ailleurs, l'anglais, le
- * chinois et le japonais disant B, KB, MB, GB. La virgule décimale suit elle aussi la
+ * chinois, le japonais, l'espagnol, l'allemand et l'arabe disant B, KB, MB, GB. La virgule décimale suit elle aussi la
  * langue.
  */
 export function taille(octets: number): string {
   const unites = courante === "fr" ? ["o", "Ko", "Mo", "Go"] : ["B", "KB", "MB", "GB"];
   const nombre = (valeur: number, decimales: number) =>
     valeur.toLocaleString(locale(), { maximumFractionDigits: decimales });
-  if (octets < 1024) return `${octets} ${unites[0]}`;
-  if (octets < 1024 ** 2) return `${Math.max(1, Math.round(octets / 1024))} ${unites[1]}`;
-  if (octets < 1024 ** 3) return `${nombre(octets / 1024 ** 2, 1)} ${unites[2]}`;
-  return `${nombre(octets / 1024 ** 3, 2)} ${unites[3]}`;
+  // En arabe, le nombre et son unité latine restent dans cet ordre (voir `isolerLtr`).
+  if (octets < 1024) return isolerLtr(`${octets} ${unites[0]}`);
+  if (octets < 1024 ** 2) return isolerLtr(`${Math.max(1, Math.round(octets / 1024))} ${unites[1]}`);
+  if (octets < 1024 ** 3) return isolerLtr(`${nombre(octets / 1024 ** 2, 1)} ${unites[2]}`);
+  return isolerLtr(`${nombre(octets / 1024 ** 3, 2)} ${unites[3]}`);
 }
 
 /**
@@ -170,6 +212,7 @@ export function changerLangue(nouvelle: Langue): void {
   }
   try {
     document.documentElement.lang = nouvelle;
+    document.documentElement.dir = sensDe(nouvelle);
   } catch {
     /* pas de document */
   }
@@ -208,6 +251,14 @@ export function couverture(code: Langue): { traduites: number; total: number } {
  */
 try {
   document.documentElement.lang = courante;
+  /*
+   * Le sens d'écriture, posé ici et non dans un composant : ce module est
+   * chargé avant le premier rendu de React, l'écran ne s'affiche donc jamais
+   * une fois dans le mauvais sens. Toujours écrit, `ltr` compris : les
+   * variantes `rtl:` de Tailwind et les règles `[dir="rtl"]` de index.css
+   * s'appuient sur cet attribut (30/09/2026).
+   */
+  document.documentElement.dir = sensDe(courante);
 } catch {
   /* rendu hors navigateur */
 }

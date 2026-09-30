@@ -67,7 +67,7 @@ function Reasoning({ text, live, durees }: { text: string; live?: boolean; duree
         />
       </button>
       {open && (
-        <p className="mt-1.5 whitespace-pre-wrap border-l-2 border-border pl-3 text-xs leading-relaxed text-muted-foreground">
+        <p dir="auto" className="mt-1.5 whitespace-pre-wrap border-s-2 border-border ps-3 text-xs leading-relaxed text-muted-foreground">
           {text}
         </p>
       )}
@@ -123,7 +123,7 @@ function PlanSuivi({ etapes, revue }: { etapes: EtapePlan[]; revue?: "encours" |
           <li
             key={e.chemin ?? i}
             className="flex items-start gap-2 text-xs leading-relaxed"
-            style={{ paddingLeft: `${(e.profondeur ?? 0) * 1.1}rem` }}
+            style={{ paddingInlineStart: `${(e.profondeur ?? 0) * 1.1}rem` }}
           >
             {e.etat === "decoupee" ? (
               <ListTree size={12} strokeWidth={1.75} className="mt-0.5 shrink-0 text-muted-foreground" />
@@ -229,7 +229,7 @@ function ToolTraces({ traces }: { traces: ToolTrace[] }) {
               {duree && <span className="shrink-0 tabular-nums opacity-70">{duree}</span>}
             </button>
             {open && t.preview && (
-              <pre className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap break-words border-l-2 border-border pl-3 text-[11px] leading-relaxed text-muted-foreground">
+              <pre className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap break-words border-s-2 border-border ps-3 text-[11px] leading-relaxed text-muted-foreground">
                 {t.preview}
               </pre>
             )}
@@ -326,7 +326,7 @@ function Sources({ message }: { message: Message }) {
         </span>
       </button>
       {ouverte === c.n && (
-        <p className="mt-1 whitespace-pre-wrap border-l-2 border-border pl-3 text-[11px] leading-relaxed text-muted-foreground">
+        <p className="mt-1 whitespace-pre-wrap border-s-2 border-border ps-3 text-[11px] leading-relaxed text-muted-foreground">
           {c.extrait}
           {c.extrait.length >= 600 ? "..." : ""}
         </p>
@@ -439,7 +439,7 @@ function SourcesWeb({ message }: { message: Message }) {
             aria-expanded={autres}
             onClick={() => setAutres((a) => !a)}
             // À gauche : à 375 px, la phrase passe sur deux lignes, centrées par défaut dans un bouton (28/09/2026).
-            className="inline-flex items-center gap-1 text-left text-xs text-muted-foreground hover:text-foreground"
+            className="inline-flex items-center gap-1 text-start text-xs text-muted-foreground hover:text-foreground"
           >
             {enAvant.length > 0
               ? tf("{0} autre(s) résultat(s) de recherche, non cité(s)", reste.length)
@@ -465,13 +465,14 @@ function Bubble({ message }: { message: Message }) {
         <div className="flex max-w-[80%] flex-col items-end gap-2">
           <PiecesJointesMessage pieces={pieces} />
           {texte && (
-            <div className="max-w-full rounded-2xl rounded-br-md bg-muted px-4 py-2.5 text-[15px] leading-relaxed text-foreground">
+            <div className="max-w-full rounded-2xl rounded-ee-md bg-muted px-4 py-2.5 text-[15px] leading-relaxed text-foreground">
               {/*
                 Une adresse ou un chemin long, sans espace, passe à la ligne
                 n'importe où (tournée à l'écran du 28/09/2026) : à 375 px, il
                 élargissait la bulle et tout le Chat défilait de côté.
               */}
-              <p className="whitespace-pre-wrap [overflow-wrap:anywhere]">{texte}</p>
+              {/* `dir="auto"` : le message s'aligne selon sa propre langue, pas celle de l'interface (30/09/2026). */}
+              <p dir="auto" className="whitespace-pre-wrap [overflow-wrap:anywhere]">{texte}</p>
             </div>
           )}
         </div>
@@ -520,7 +521,7 @@ function Bubble({ message }: { message: Message }) {
             {/* Les modèles écrivent en Markdown : mis en forme, sans jamais interpréter de HTML. */}
             <TexteRiche texte={sansMarqueursInternes(message.content)} />
             {message.streaming && (
-              <span className="ml-0.5 inline-block h-4 w-[2px] translate-y-0.5 animate-pulse bg-foreground/70" />
+              <span className="ms-0.5 inline-block h-4 w-[2px] translate-y-0.5 animate-pulse bg-foreground/70" />
             )}
             {message.image && <ImageGeneree image={message.image} />}
           </div>

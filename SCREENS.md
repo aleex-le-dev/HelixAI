@@ -1341,8 +1341,10 @@ chaque message. « Créer une compétence » ouvre un formulaire de trois champs
 allumé, c'est-à-dire chez le prestataire qui héberge les modèles, jamais dans une
 installation en marque blanche. Il commence par dire que le logiciel est gratuit
 et que ce qui se paie est le calcul, avec ce que la plateforme comprend dans chaque
-formule ; puis les trois modèles hébergés à Paris (rapide, polyvalent, expert), avec
-ce qu'ils consomment du crédit ; puis les formules, sous un sélecteur Mensuel /
+formule ; puis les modèles hébergés en Europe (30/09/2026 : polyvalent, GLM-5.3 Flash,
+crédit ×1 ; rapide, DeepSeek V4.1 Flash, crédit ×2,5), avec ce qu'ils consomment du
+crédit, qui se décompte sur les jetons lus et écrits (les millions de jetons des cartes
+sont dits « environ ») ; puis les formules, sous un sélecteur Mensuel /
 Annuel : Particuliers (Découverte, Plus, Pro, Max, TTC) et Entreprises (Équipe,
 Équipe Premium, HT par poste, et Entreprise sur devis), avec le prix de lancement
 barré, les jetons par modèle et leur équivalent en échanges par jour et en tâches

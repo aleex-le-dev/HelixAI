@@ -8523,14 +8523,43 @@ console.log("\n38. Abonnement : grille du 29/09/2026, jetons, pire cas au prix d
     const formule = (id) => O.FORMULES.find((f) => f.id === id);
     const modele = (id) => O.MODELES_INCLUS.find((m) => m.id === id);
 
-    // Les coûts de Scaleway (29/09/2026), trois lus pour un écrit.
-    const couts = ["rapide", "polyvalent", "expert"].map((id) => O.coutParMillion(modele(id)));
+    // Les modèles du 30/09/2026 (hébergeurs européens), deux lus pour un écrit, marge de sécurité de 15 %.
+    const couts = ["polyvalent", "rapide"].map((id) => O.coutParMillion(modele(id)));
     verifier(
-      "modèles : Mistral Small 3.2 24B, DeepSeek V4 Flash, Qwen3.5 397B A17B, à Paris ; 0,20 / 0,50 / 1,35 € le million en Chat, crédit ×1 / ×2,5 / ×6,75",
-      O.MODELES_INCLUS.length === 3 && modele("rapide")?.modele === "Mistral Small 3.2 24B" && modele("polyvalent")?.modele === "DeepSeek V4 Flash" && modele("expert")?.modele === "Qwen3.5 397B A17B" &&
-        O.MODELES_INCLUS.every((m) => /Paris/.test(m.heberge)) &&
-        [0.2, 0.5, 1.35].every((c, i) => Math.abs(couts[i] - c) < 1e-9) && [1, 2.5, 6.75].every((x, i) => Math.abs(O.facteur(O.MODELES_INCLUS[i]) - x) < 1e-9),
+      "modèles : GLM-5.3 Flash (polyvalent, 0,20 / 0,60) et DeepSeek V4.1 Flash (rapide, 0,50 / 1,50), hébergés en Europe ; environ 0,38 et 0,96 € le million en Chat, crédit ×1 et ×2,5 ; plus de modèle noté moins bien que les autres et vendu plus cher",
+      O.MODELES_INCLUS.length === 2 && modele("polyvalent")?.modele === "GLM-5.3 Flash" && modele("rapide")?.modele === "DeepSeek V4.1 Flash" && !modele("expert") &&
+        modele("polyvalent").entree === 0.2 && modele("polyvalent").sortie === 0.6 && modele("rapide").entree === 0.5 && modele("rapide").sortie === 1.5 &&
+        O.MODELES_INCLUS.every((m) => m.heberge === "Europe") && !/Paris|France/.test(JSON.stringify(O.MODELES_INCLUS)) &&
+        O.LUS_PAR_ECRIT === 2 && O.MARGE_SECURITE === 0.15 &&
+        Math.abs(couts[0] - (0.4 + 0.6) / 3 * 1.15) < 1e-9 && Math.abs(couts[1] - (1.0 + 1.5) / 3 * 1.15) < 1e-9 &&
+        Math.abs(O.facteur(modele("polyvalent")) - 1) < 1e-9 && Math.abs(O.facteur(modele("rapide")) - 2.5) < 1e-9,
       couts.join(" / "),
+    );
+    /*
+     * « Je ne dois surtout pas payer pour les clients » (Medhi, 30/09/2026) : le crédit se décompte en
+     * euros, au coût réel des jetons lus et écrits plus la marge. Quel que soit l'usage (tout en lecture,
+     * tout en écriture, un mélange), vider le crédit coûte à l'hébergeur le crédit divisé par 1,15, jamais
+     * plus ; un plafond en jetons, lui, laisserait un abonné qui fait surtout écrire coûter jusqu'à 1,8 fois
+     * l'estimation.
+     */
+    const usages = [[1, 0], [0, 1], [2, 1], [1, 3], [10, 1]];
+    const factureHebergeur = (m, lus, ecrits) => (lus * m.entree + ecrits * m.sortie) / 1_000_000;
+    const pires = O.FORMULES.flatMap((f) => O.MODELES_INCLUS.filter((m) => f.modeles.includes(m.id)).flatMap((m) => usages.map(([a, b]) => {
+      // Combien de jetons de ce mélange le crédit paie-t-il, et que facture alors l'hébergeur ?
+      const unite = O.coutReel(m, a * 1_000_000, b * 1_000_000);
+      const n = O.creditMensuel(f) / unite;
+      return { f: f.id, m: m.id, facture: factureHebergeur(m, n * a * 1_000_000, n * b * 1_000_000), credit: O.creditMensuel(f), net: O.net(f, O.prixLancement(f)) };
+    })));
+    verifier(
+      "crédit décompté en euros, au coût réel (jetons lus et écrits, chacun à son prix, plus 15 %) : quel que soit l'usage, un crédit vidé coûte à l'hébergeur le crédit ÷ 1,15, moins que le net du prix de lancement",
+      typeof O.coutReel === "function" && Math.abs(O.coutReel(modele("polyvalent"), 1_000_000, 1_000_000) - (0.2 + 0.6) * 1.15) < 1e-9 &&
+        pires.every((x) => Math.abs(x.facture - x.credit / 1.15) < 1e-9 && x.facture < x.credit && x.credit < x.net),
+      pires.filter((x) => !(x.facture < x.credit && x.credit < x.net)).map((x) => `${x.f}/${x.m}`).join(", ") || `${pires.length} cas`,
+    );
+    verifier(
+      "témoin : avec un plafond en jetons, un abonné qui ne ferait qu'écrire coûterait 1,8 fois l'estimation (c'est ce que le décompte en euros évite)",
+      Math.abs(O.coutReel(modele("polyvalent"), 0, 1_000_000) / O.coutParMillion(modele("polyvalent")) - 1.8) < 1e-9,
+      String(O.coutReel(modele("polyvalent"), 0, 1_000_000) / O.coutParMillion(modele("polyvalent"))),
     );
 
     // Les prix : normal, lancement (−30 %, ramené en ,49 ou ,99), annuel (dix mois, en ,99).
@@ -8549,23 +8578,23 @@ console.log("\n38. Abonnement : grille du 29/09/2026, jetons, pire cas au prix d
         O.FORMULES.filter((f) => f.public === "entreprise").every((f) => f.postesMin === 2) &&
         Object.entries(attendus).every(([id, [normal, lance, an]]) => formule(id)?.prix === normal && O.prixLancement(formule(id)) === lance && O.prixAnnuel(formule(id)) === an) &&
         O.LANCEMENT.actif === true && O.LANCEMENT.taux === 0.3 && O.LANCEMENT.mois === 6 && O.MOIS_PAYES_PAR_AN === 10 &&
-        JSON.stringify(formule("decouverte").modeles) === '["rapide"]' && O.FORMULES.filter((f) => f.id !== "decouverte").every((f) => f.modeles.length === 3),
+        JSON.stringify(formule("decouverte").modeles) === '["polyvalent"]' && O.FORMULES.filter((f) => f.id !== "decouverte").every((f) => f.modeles.length === O.MODELES_INCLUS.length),
       prix.join(" | "),
     );
 
-    // Les jetons de la décision (arrondis au plus proche) ; le calcul doit y retomber au dixième près.
+    // Les jetons estimés du 30/09/2026 (polyvalent / rapide), affichés arrondis vers le bas.
     const jetons = {
-      plus: [30.9, 12.3, 4.6],
-      pro: [120.9, 48.4, 17.9],
-      max: [242.6, 97.1, 35.9],
-      equipe: [43.0, 17.2, 6.4],
-      "equipe-premium": [203.7, 81.5, 30.2],
+      plus: [16.1, 6.4],
+      pro: [63.0, 25.2],
+      max: [126.5, 50.6],
+      equipe: [22.4, 8.9],
+      "equipe-premium": [106.2, 42.5],
     };
     const calcules = O.FORMULES.map((f) => `${f.id} ${O.MODELES_INCLUS.map((m) => O.jetonsInclus(f, m).toFixed(2)).join("/")}`);
     verifier(
-      "jetons : Découverte 11 M en rapide ; Plus 30,9 / 12,3 / 4,6 M ; Pro 120,9 / 48,4 / 17,9 ; Max 242,6 / 97,1 / 35,9 ; Équipe 43,0 / 17,2 / 6,4 ; Premium 203,7 / 81,5 / 30,2 (au dixième près)",
-      Math.floor(O.jetonsInclus(formule("decouverte"), modele("rapide"))) === 11 &&
-        Object.entries(jetons).every(([id, valeurs]) => valeurs.every((v, i) => Math.abs(O.jetonsInclus(formule(id), O.MODELES_INCLUS[i]) - v) <= 0.1 + 1e-9)),
+      "jetons estimés : Découverte 5,9 M en polyvalent ; Plus 16,1 / 6,4 M ; Pro 63,0 / 25,2 ; Max 126,5 / 50,6 ; Équipe 22,4 / 8,9 ; Premium 106,2 / 42,5 (polyvalent / rapide, arrondis vers le bas)",
+      O.arrondiBas(O.jetonsInclus(formule("decouverte"), modele("polyvalent"))) === 5.9 &&
+        Object.entries(jetons).every(([id, valeurs]) => valeurs.every((v, i) => O.arrondiBas(O.jetonsInclus(formule(id), O.MODELES_INCLUS[i])) === v)),
       calcules.join(" | "),
     );
     verifier(
@@ -8605,10 +8634,10 @@ console.log("\n38. Abonnement : grille du 29/09/2026, jetons, pire cas au prix d
 
     // Les repères : 3 000 jetons l'échange, 150 000 la tâche.
     verifier(
-      "équivalences : un échange de Chat ≈ 3 000 jetons, une tâche d'agent ou de Code ≈ 150 000 ; Plus ≈ 342 échanges par jour en rapide, ≈ 82 tâches par mois en polyvalent",
+      "équivalences : un échange de Chat ≈ 3 000 jetons, une tâche d'agent ou de Code ≈ 150 000 ; Plus ≈ 178 échanges par jour ou ≈ 107 tâches par mois, en polyvalent",
       O.JETONS_PAR_ECHANGE === 3000 && O.JETONS_PAR_TACHE === 150_000 &&
-        O.echangesParJour(O.jetonsInclus(formule("plus"), modele("rapide"))) === 342 && O.tachesParMois(O.jetonsInclus(formule("plus"), modele("polyvalent"))) === 82,
-      `${O.echangesParJour(O.jetonsInclus(formule("plus"), modele("rapide")))} / ${O.tachesParMois(O.jetonsInclus(formule("plus"), modele("polyvalent")))}`,
+        O.echangesParJour(O.jetonsInclus(formule("plus"), modele("polyvalent"))) === 178 && O.tachesParMois(O.jetonsInclus(formule("plus"), modele("polyvalent"))) === 107,
+      `${O.echangesParJour(O.jetonsInclus(formule("plus"), modele("polyvalent")))} / ${O.tachesParMois(O.jetonsInclus(formule("plus"), modele("polyvalent")))}`,
     );
   } finally {
     rmSync(dossierOffre, { recursive: true, force: true });
@@ -8633,7 +8662,9 @@ console.log("\n38. Abonnement : grille du 29/09/2026, jetons, pire cas au prix d
   verifier(
     "écran d'abonnement : il dit que les formules ne sont pas ouvertes, que rien ne se paie ici, et la règle du crédit épuisé (modèle local, sans facture en plus)",
     phrasesEcran.includes("Ces formules ne sont pas encore ouvertes.") && phrasesEcran.some((p) => /^Aucun paiement n'est possible depuis cet écran/.test(p)) &&
-      phrasesEcran.some((p) => /crédit du mois est épuisé, le Chat passe au modèle local de votre machine, sans rien facturer de plus/.test(p)),
+      phrasesEcran.some((p) => /crédit du mois est épuisé, le Chat passe au modèle local de votre machine, sans rien facturer de plus/.test(p)) &&
+      // 30/09/2026 : hébergé en Europe (plus « à Paris »), jetons dits « environ », crédit décompté sur le lu et l'écrit.
+      !phrasesEcran.some((p) => /Paris|en France|la France/.test(p)) && phrasesEcran.includes("environ {0} millions de jetons") && phrasesEcran.some((p) => /crédit se décompte sur les jetons réellement lus et écrits/.test(p)),
     "Abonnement.tsx",
   );
   verifier(

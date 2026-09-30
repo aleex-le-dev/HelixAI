@@ -4524,6 +4524,36 @@ explicite. Pas essayé : la demande affichée pendant une vraie préparation d'a
 le panneau de suivi d'une session rouverte après rechargement repart vide (seule la suite
 s'y inscrit).
 
+**Fait le 30/09/2026 : les modèles de l'abonnement revus d'après le marché, et le crédit décompté
+en euros.** Medhi, en regardant Artificial Analysis : les trois modèles du 29/09 (Mistral Small 3.2,
+DeepSeek V4 Flash, Qwen3.5 397B) sont dépassés ; « hébergé en Europe suffit » ; « le meilleur
+rapport qualité-prix » ; « je ne dois surtout pas payer pour les clients ».
+- *Relevé du 30/09/2026* (indice d'intelligence d'Artificial Analysis, modèles à poids ouverts) :
+  MiMo-V2.6-Pro 46 (Xiaomi, MIT, sorti le 21/09, 0,43 / 0,87 $), GLM-5.3 45 (licence maison),
+  Kimi K3 44, GLM-5.3 Flash 42 (MIT), DeepSeek V4.1 Flash 39 (209 jetons par seconde),
+  MiMo-V2.6-Flash 38, DeepSeek V4 Flash 34, GLM-5.2 34, Qwen3.5 397B 18, Mistral Small 4 11.
+- *Hébergeurs* : Scaleway (Paris) et OVHcloud n'ont aucun des nouveaux ; Nebius les a dans ses
+  régions américaines seulement. En Europe : TensorX (société britannique, infrastructure dite
+  « souveraine en Europe »), Lyceum Technology, sference (société britannique, infrastructure dans
+  l'Espace économique européen) proposent GLM-5.3 Flash (0,20 / 0,50 à 0,60 $) et DeepSeek V4.1
+  Flash (0,50 / 1,50 $) ; TensorX a aussi GLM-5.3 (1,75 / 4,50 $) et Kimi K3 (3 / 15 $). Personne
+  n'héberge MiMo-V2.6-Pro en Europe. **Vu sur leurs pages publiques seulement** : le pays du centre
+  de données et le contrat de traitement des données sont à obtenir par écrit avant d'ouvrir.
+- *Retenu* (`src/config/offre.ts`) : polyvalent GLM-5.3 Flash (crédit ×1), rapide DeepSeek V4.1
+  Flash (crédit ×2,5) ; pas d'expert tant que MiMo-V2.6-Pro n'est pas hébergé en Europe (le rôle
+  reste dans le code). L'écran dit « Hébergé en Europe ».
+- *Ne jamais payer pour un abonné* : le crédit (60 % du net du prix normal, inchangé) se décompte
+  **en euros, au coût réel** des jetons lus et écrits, plus 15 % de marge de sécurité (`coutReel`) ;
+  vidé, il a coûté à l'hébergeur le crédit ÷ 1,15. Avant, un plafond en millions de jetons supposait
+  trois lus pour un écrit : un abonné qui fait surtout écrire (la réflexion se paie en jetons écrits)
+  aurait coûté jusqu'à 1,8 fois l'estimation. Les jetons affichés sont des estimations prudentes
+  (deux lus pour un écrit), dites « environ » : Découverte 5,9 M ; Plus 16,1 / 6,4 ; Pro 63,0 / 25,2 ;
+  Max 126,5 / 50,6 ; Équipe 22,4 / 8,9 ; Premium 106,2 / 42,5 (polyvalent / rapide).
+- **À faire avant d'ouvrir** : confirmations écrites de l'hébergeur ; le relais, qui décompte le
+  crédit avec `coutReel` sur les compteurs de jetons rendus par l'hébergeur et coupe à zéro ;
+  surveiller le prix de l'hébergeur et le change (la marge de 15 % et le dollar compté pour un euro
+  couvrent les petits écarts, pas un doublement).
+
 **Fait le 29/09/2026 : retrait d'un agent, cadre de focus, trois défauts d'écran.** Signalés par
 Medhi sous Windows, ou relevés par la tournée de la documentation :
 - *Retrait d'un agent* (`src/pages/AgentsPage.tsx`) : la corbeille d'une carte n'apparaissait qu'au

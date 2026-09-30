@@ -1278,9 +1278,10 @@ l'agent d'orchestration par défaut. Aucun tiret cadratin dans les textes affich
 - **Réglages → Abonnement** : l'offre d'hébergement des modèles en France, allumée
   dans la version du prestataire (`featureOverrides` de `src/config/branding.ts`),
   éteinte en marque blanche (0.24.0, grille refaite le 29/09/2026). La page dit que
-  le logiciel est gratuit et que ce qui se paie est le calcul ; elle présente trois
-  modèles hébergés à Paris (rapide, polyvalent, expert), qui consomment un même
-  crédit mensuel chacun à son tarif ; puis, sous un sélecteur Mensuel / Annuel, les
+  le logiciel est gratuit et que ce qui se paie est le calcul ; elle présente les
+  modèles hébergés en Europe (polyvalent et rapide, choisis le 30/09/2026 d'après
+  le marché du jour), qui consomment un même crédit mensuel chacun à son tarif, sur
+  ce qu'il lit et sur ce qu'il écrit ; puis, sous un sélecteur Mensuel / Annuel, les
   formules Particuliers (Découverte, Plus, Pro, Max, prix TTC) et Entreprises
   (Équipe, Équipe Premium, HT par poste, deux postes au moins ; Entreprise sur
   devis), avec le prix de lancement (−30 % les six premiers mois, en mensuel), les

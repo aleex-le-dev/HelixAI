@@ -9,7 +9,7 @@ import { t } from "@/lib/i18n";
  * toujours, et faire tourner ses propres modèles sur ses propres machines.
  *
  * Ce qui est vendu est le **calcul** : des modèles puissants, hébergés en
- * France, accessibles sans acheter de carte graphique ni gérer un serveur.
+ * Europe, accessibles sans acheter de carte graphique ni gérer un serveur.
  * C'est un service, pas une licence, et cette distinction n'est pas un détail
  * de communication : c'est elle qui rend l'abonnement compatible avec un
  * logiciel libre. La plateforme entière est comprise dans chaque formule parce
@@ -41,15 +41,33 @@ import { t } from "@/lib/i18n";
  *
  * ── D'où viennent les coûts de revient ──────────────────────────────────────
  *
- * Relevés le 29/09/2026 sur la page de prix de Scaleway (Generative APIs,
- * https://www.scaleway.com/en/pricing/model-as-a-service/), hébergement à
- * Paris, en euros par million de jetons, entrée puis sortie :
- *  - Mistral Small 3.2 24B : 0,15 et 0,35 ;
- *  - DeepSeek V4 Flash : 0,40 et 0,80 (0,08 en entrée lue en cache) ;
- *  - Qwen3.5 397B A17B : 0,60 et 3,60.
+ * Choix refait le 30/09/2026, à la demande de Medhi, d'après le marché du
+ * jour (Artificial Analysis, indice d'intelligence) : les trois modèles du
+ * 29/09 étaient dépassés (Mistral Small autour de 11, DeepSeek V4 Flash 34,
+ * Qwen3.5 397B 18 : l'« expert » valait moins que le « polyvalent », plus
+ * cher). Décision : « hébergé en Europe suffit », « le meilleur rapport
+ * qualité-prix », et « je ne dois surtout pas payer pour les clients ».
+ *
+ * Relevés le 30/09/2026 chez les hébergeurs qui annoncent une infrastructure
+ * en Europe (TensorX, Lyceum Technology, sference ; pages publiques et
+ * comparateur Requesty), en dollars par million de jetons, entrée puis sortie,
+ * en retenant le plus cher des trois :
+ *  - GLM-5.3 Flash (Z.ai, MIT, indice 42) : 0,20 et 0,60 ;
+ *  - DeepSeek V4.1 Flash (poids ouverts, indice 39, 209 jetons par seconde) :
+ *    0,50 et 1,50.
+ * Le dollar est compté pour un euro (il vaut moins : l'écart est une marge).
+ * Pas d'« expert » aujourd'hui : le meilleur modèle ouvert, MiMo-V2.6-Pro
+ * (Xiaomi, MIT, indice 46, 0,43 et 0,87 $), n'est encore hébergé par personne
+ * en Europe ; GLM-5.3 (indice 45) y est, mais neuf fois plus cher que sa
+ * version Flash pour trois points, et sous une licence qui n'est pas MIT. Le
+ * rôle « expert » reste dans le code : il suffit d'ajouter le modèle ici.
  * Ce sont des prix au jeton, pas une location de cartes : le coût suit
  * l'usage réel, et une formule peu servie ne coûte presque rien. Le cache
  * n'est pas compté : le calcul reste du côté prudent.
+ *
+ * Avant d'ouvrir les formules : le pays du centre de données et le contrat de
+ * traitement des données de l'hébergeur retenu sont à obtenir par écrit
+ * (PROJET.md) ; l'écran dit « Europe », ce que ces hébergeurs annoncent.
  *
  * ⚠ Rien ici n'est branché à un système de paiement. Cet écran présente une
  * offre ; il n'encaisse rien et ne promet aucune date.
@@ -67,75 +85,91 @@ export interface ModeleInclus {
   modele: string;
   /** Où tournent les cartes qui le font tourner. */
   heberge: string;
-  /** Prix de l'hébergeur, en euros par million de jetons lus. */
+  /** Prix de l'hébergeur par million de jetons lus (en dollars, comptés pour des euros). */
   entree: number;
-  /** Prix de l'hébergeur, en euros par million de jetons écrits. */
+  /** Prix de l'hébergeur par million de jetons écrits (réflexion comprise). */
   sortie: number;
   description: string;
 }
 
 /**
- * Trois jetons lus pour un écrit : la proportion observée en conversation, où
- * la question, l'historique et les documents joints pèsent plus lourd que la
- * réponse. C'est elle qui fait un seul prix par million à partir de deux.
+ * Deux jetons lus pour un écrit, pour les **estimations** affichées : ces
+ * modèles réfléchissent avant de répondre, et leur réflexion se paie au prix
+ * des jetons écrits, deux à trois fois plus chers que les jetons lus. (Trois
+ * pour un jusqu'au 29/09/2026 : trop optimiste pour des modèles qui
+ * raisonnent.)
  */
-export const LUS_PAR_ECRIT = 3;
+export const LUS_PAR_ECRIT = 2;
 
 /**
- * Trois modèles, pas davantage.
+ * Marge de sécurité sur le prix de l'hébergeur : le crédit se consomme au
+ * prix relevé **plus 15 %**. Elle absorbe une hausse de tarif, le change, et
+ * les arrondis de facturation de l'hébergeur : quand un abonné a vidé son
+ * crédit, il a coûté moins que ce crédit.
+ */
+export const MARGE_SECURITE = 0.15;
+
+/**
+ * Deux modèles aujourd'hui, pas douze.
  *
  * Un catalogue de douze modèles est un catalogue de douze décisions à prendre
- * pour quelqu'un qui veut juste travailler. On en garde un rapide, pour le
- * volume, un polyvalent, pour le travail de tous les jours et le code, et un
- * expert, pour ce qui est difficile. Tous sont à poids ouverts et tournent à
- * Paris ; le pays d'hébergement est affiché, comme partout dans le produit.
+ * pour quelqu'un qui veut juste travailler. On garde le meilleur rapport
+ * qualité-prix hébergé en Europe, pour tout, et le plus rapide, pour qui ne
+ * veut pas attendre. Tous sont à poids ouverts ; la région d'hébergement est
+ * affichée, comme partout dans le produit. Le premier de la liste est le
+ * moins cher : c'est lui qui vaut « crédit ×1 ».
  */
 export const MODELES_INCLUS: ModeleInclus[] = [
   {
-    id: "rapide",
-    nom: t("Rapide"),
-    modele: "Mistral Small 3.2 24B",
-    heberge: t("Paris, France"),
-    entree: 0.15,
-    sortie: 0.35,
-    description: t("Pour le courant : rédiger, résumer, trier, répondre. Le plus économe : c'est lui qui donne le plus de jetons."),
-  },
-  {
     id: "polyvalent",
     nom: t("Polyvalent"),
-    modele: "DeepSeek V4 Flash",
-    heberge: t("Paris, France"),
-    entree: 0.4,
-    sortie: 0.8,
-    description: t("Pour le travail de tous les jours : documents longs, agents, tâches de Code."),
+    modele: "GLM-5.3 Flash",
+    heberge: t("Europe"),
+    entree: 0.2,
+    sortie: 0.6,
+    description: t("Pour tout : rédiger, analyser des documents longs, agents, tâches de Code. Le meilleur rapport qualité-prix, et le plus économe : c'est lui qui donne le plus de jetons."),
   },
   {
-    id: "expert",
-    nom: t("Expert"),
-    modele: "Qwen3.5 397B A17B",
-    heberge: t("Paris, France"),
-    entree: 0.6,
-    sortie: 3.6,
-    description: t("Pour ce qui est difficile : analyse longue, raisonnement en plusieurs étapes, code complexe."),
+    id: "rapide",
+    nom: t("Rapide"),
+    modele: "DeepSeek V4.1 Flash",
+    heberge: t("Europe"),
+    entree: 0.5,
+    sortie: 1.5,
+    description: t("Pour ne pas attendre : il écrit nettement plus vite. À prendre quand la vitesse compte plus que le volume."),
   },
 ];
 
 /**
- * Coût de revient d'un million de jetons de Chat, entrée et sortie mélangées
- * (trois lus pour un écrit) : 0,20 € en rapide, 0,50 € en polyvalent, 1,35 €
- * en expert.
+ * Ce que coûte **réellement** un usage, en euros de crédit : les jetons lus
+ * et les jetons écrits, chacun à son prix, plus la marge de sécurité. C'est
+ * ainsi que le crédit doit se décompter le jour où les formules ouvrent (au
+ * relais, sur les compteurs de jetons que rend l'hébergeur), et pas en
+ * millions de jetons : un abonné qui fait surtout écrire le modèle coûte
+ * jusqu'à deux fois plus par jeton qu'un abonné qui lui fait surtout lire, et
+ * un plafond en jetons laisserait l'écart à la charge de la maison. Compté
+ * ainsi, le pire cas est connu d'avance : le crédit, jamais plus.
  */
-export function coutParMillion(modele: ModeleInclus): number {
-  return (LUS_PAR_ECRIT * modele.entree + modele.sortie) / (LUS_PAR_ECRIT + 1);
+export function coutReel(modele: ModeleInclus, jetonsLus: number, jetonsEcrits: number): number {
+  return ((jetonsLus * modele.entree + jetonsEcrits * modele.sortie) / 1_000_000) * (1 + MARGE_SECURITE);
 }
 
 /**
- * Ce qu'un modèle consomme du crédit, rapporté au modèle rapide : ×1, ×2,5,
- * ×6,75. C'est ce qu'on affiche plutôt que des prix au jeton, qu'aucun
- * abonné n'a à retenir.
+ * Coût d'un million de jetons de Chat, pour les **estimations** de l'écran :
+ * entrée et sortie mélangées (deux lus pour un écrit), marge comprise. Environ
+ * 0,38 € en polyvalent, 0,96 € en rapide.
+ */
+export function coutParMillion(modele: ModeleInclus): number {
+  return coutReel(modele, (LUS_PAR_ECRIT * 1_000_000) / (LUS_PAR_ECRIT + 1), 1_000_000 / (LUS_PAR_ECRIT + 1));
+}
+
+/**
+ * Ce qu'un modèle consomme du crédit, rapporté au moins cher : ×1, ×2,5.
+ * C'est ce qu'on affiche plutôt que des prix au jeton, qu'aucun abonné n'a à
+ * retenir.
  */
 export function facteur(modele: ModeleInclus): number {
-  const base = MODELES_INCLUS.find((m) => m.id === "rapide") ?? modele;
+  const base = MODELES_INCLUS.reduce((a, b) => (coutParMillion(b) < coutParMillion(a) ? b : a), modele);
   return coutParMillion(modele) / coutParMillion(base);
 }
 
@@ -200,7 +234,7 @@ export interface Formule {
   postesMin: number;
 }
 
-const TOUS: RoleModele[] = ["rapide", "polyvalent", "expert"];
+const TOUS: RoleModele[] = ["polyvalent", "rapide"];
 
 export const FORMULES: Formule[] = [
   {
@@ -209,7 +243,7 @@ export const FORMULES: Formule[] = [
     public: "particulier",
     prix: 4.99,
     pour: t("Pour essayer, quelques fois par semaine"),
-    modeles: ["rapide"],
+    modeles: ["polyvalent"],
     postesMin: 1,
   },
   {
@@ -305,10 +339,11 @@ export function creditMensuel(formule: Formule): number {
 }
 
 /**
- * Millions de jetons que le crédit du mois paie sur un modèle donné. Un seul
- * crédit, que chaque modèle consomme à son tarif : ces nombres ne
- * s'additionnent pas, ce sont trois façons de dépenser la même chose.
- * Valeur exacte ; l'écran arrondit vers le bas (`arrondiBas`).
+ * Millions de jetons que le crédit du mois paie sur un modèle donné, **en
+ * estimation** (`coutParMillion` : deux lus pour un écrit). Un seul crédit,
+ * en euros, que chaque modèle consomme à son tarif réel (`coutReel`) : ces
+ * nombres ne s'additionnent pas, ce sont plusieurs façons de dépenser la même
+ * chose. L'écran arrondit vers le bas (`arrondiBas`) et dit « environ ».
  */
 export function jetonsInclus(formule: Formule, modele: ModeleInclus): number {
   return creditMensuel(formule) / coutParMillion(modele);
@@ -343,7 +378,10 @@ export function prixAnnuel(formule: Formule): number {
 /**
  * Ce qui reste au pire, pour un mois payé `montant`, si l'abonné dépense tout
  * son crédit. Doit rester positif pour chaque formule, au prix de lancement
- * comme au prix normal (contrôlé par `npm run securite`).
+ * comme au prix normal (contrôlé par `npm run securite`). Le crédit étant en
+ * euros et décompté au coût réel plus la marge, ce reste ne dépend pas de la
+ * façon dont l'abonné se sert des modèles ; l'hébergeur, lui, aura facturé le
+ * crédit divisé par (1 + MARGE_SECURITE).
  */
 export function resteAuPireCas(formule: Formule, montant: number): number {
   return net(formule, montant) - creditMensuel(formule);

@@ -34,7 +34,7 @@ import { locale, t, tf } from "@/lib/i18n";
  * Que le logiciel reste gratuit. C'est contre-intuitif, et si ce n'est pas dit
  * en premier, tout le reste se lit comme un logiciel qu'on essaie de vendre
  * après l'avoir donné. Ce qui est vendu, c'est le **calcul** : des modèles
- * puissants qui tournent sur des cartes à Paris, pour qui n'a pas envie
+ * puissants qui tournent sur des cartes en Europe, pour qui n'a pas envie
  * d'acheter la carte. La plateforme entière est comprise dans chaque formule,
  * et l'écran la montre avant les prix.
  *
@@ -82,7 +82,7 @@ function plateforme(): string[] {
     t("Réunions : enregistrement, transcription, compte rendu"),
     t("Extension VS Code et ligne de commande"),
     t("Vos fichiers, vos Chats et vos réglages restent sur vos machines"),
-    t("Modèles hébergés en France, logiciel libre au code public"),
+    t("Modèles hébergés en Europe, logiciel libre au code public"),
   ];
 }
 
@@ -102,7 +102,7 @@ export function Abonnement() {
           {branding.name}{" "}{t("est un logiciel libre : vous pouvez l'installer sur vos machines, gratuitement et pour toujours, et y faire tourner vos propres modèles. C'est le cas aujourd'hui sur ce poste, et rien ne vous oblige à en changer.")}
         </p>
         <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-          {t("Un modèle vraiment puissant demande une carte graphique à plusieurs milliers d'euros, et quelqu'un pour l'entretenir. L'abonnement vous donne accès à ces modèles sans acheter la carte : ils tournent sur des serveurs à Paris, et vos demandes ne quittent pas la France.")}
+          {t("Un modèle vraiment puissant demande une carte graphique à plusieurs milliers d'euros, et quelqu'un pour l'entretenir. L'abonnement vous donne accès à ces modèles sans acheter la carte : ils tournent sur des serveurs en Europe, et vos demandes ne quittent pas l'Europe.")}
         </p>
 
         <h4 className="mt-5 text-sm font-semibold text-foreground">
@@ -119,11 +119,11 @@ export function Abonnement() {
       </Card>
 
       <Card className="mt-6">
-        <h3 className="text-lg font-semibold text-foreground">{t("Trois modèles hébergés")}</h3>
+        <h3 className="text-lg font-semibold text-foreground">{t("Les modèles hébergés")}</h3>
         <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
-          {t("Chaque formule donne un crédit de calcul par mois. Chaque modèle le consomme à son tarif : le rapide le moins, l'expert le plus.")}
+          {t("Chaque formule donne un crédit de calcul par mois. Chaque modèle le consomme à son tarif, sur ce qu'il lit et sur ce qu'il écrit, réflexion comprise : les millions de jetons affichés plus bas sont des estimations.")}
         </p>
-        <div className="mt-4 grid gap-3 cq-md:grid-cols-3">
+        <div className="mt-4 grid gap-3 cq-md:grid-cols-2">
           {MODELES_INCLUS.map((m) => (
             <div key={m.id} className="flex flex-col rounded-xl border border-border p-3">
               <p className="flex items-center gap-2 text-sm font-medium text-foreground">
@@ -136,13 +136,13 @@ export function Abonnement() {
               <p className="mt-2 text-xs leading-relaxed text-muted-foreground">{m.description}</p>
               <p className="mt-auto flex items-center gap-1.5 pt-2 text-xs text-muted-foreground">
                 <MapPin size={13} strokeWidth={1.75} className="shrink-0" />
-                {tf("Hébergé à {0}", m.heberge)}
+                {tf("Hébergé en {0}", m.heberge)}
               </p>
             </div>
           ))}
         </div>
         <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
-          {t("Les modèles sont à poids ouverts, d'où qu'ils viennent. C'est ce qui permet de les faire tourner sur des machines en France plutôt que d'envoyer vos documents chez leur éditeur : le pays du modèle compte moins que le pays de la machine qui le fait tourner.")}
+          {t("Les modèles sont à poids ouverts, d'où qu'ils viennent. C'est ce qui permet de les faire tourner sur des machines en Europe plutôt que d'envoyer vos documents chez leur éditeur : le pays du modèle compte moins que le pays de la machine qui le fait tourner.")}
         </p>
       </Card>
 
@@ -183,7 +183,7 @@ export function Abonnement() {
 
         <div className="mt-5 space-y-1.5 text-xs leading-relaxed text-muted-foreground">
           <p>
-            {t("Les jetons d'une formule sont trois façons de dépenser le même crédit : tout sur un modèle, ou un mélange. Ils ne s'additionnent pas.")}
+            {t("Les jetons d'une formule sont plusieurs façons de dépenser le même crédit : tout sur un modèle, ou un mélange. Ils ne s'additionnent pas. Le crédit se décompte sur les jetons réellement lus et écrits : un modèle qui réfléchit longtemps écrit plus, et consomme plus.")}
           </p>
           <p>
             {t("Quand le crédit du mois est épuisé, le Chat passe au modèle local de votre machine, sans rien facturer de plus.")}
@@ -238,9 +238,8 @@ function unite(pub: Public, periode: Periode): string {
 
 function CarteFormule({ formule, periode }: { formule: Formule; periode: Periode }) {
   const modeles = MODELES_INCLUS.filter((m) => formule.modeles.includes(m.id));
-  const rapide = modeles.find((m) => m.id === "rapide") ?? modeles[0];
-  // Les tâches se comptent sur le polyvalent, fait pour elles ; Découverte n'a que le rapide.
-  const pourTaches = modeles.find((m) => m.id === "polyvalent") ?? rapide;
+  // Les équivalences se comptent sur le polyvalent : toutes les formules l'ont, et c'est lui qui donne le plus (30/09/2026).
+  const repere = modeles.find((m) => m.id === "polyvalent") ?? modeles[0];
   const annuel = periode === "annuel";
   const remise = !annuel && LANCEMENT.actif ? prixLancement(formule) : formule.prix;
   const affiche = annuel ? prixAnnuel(formule) : remise;
@@ -286,22 +285,20 @@ function CarteFormule({ formule, periode }: { formule: Formule; periode: Periode
                 {m.nom}
               </dt>
               <dd className="font-medium tabular-nums text-foreground">
-                {tf("{0} millions de jetons", millions(jetonsInclus(formule, m)))}
+                {tf("environ {0} millions de jetons", millions(jetonsInclus(formule, m)))}
               </dd>
             </div>
           ))}
         </dl>
         <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
-          {tf("Environ {0} échanges de Chat par jour avec le modèle rapide", entier(echangesParJour(jetonsInclus(formule, rapide))))}
+          {tf("Environ {0} échanges de Chat par jour avec le modèle polyvalent", entier(echangesParJour(jetonsInclus(formule, repere))))}
           {", "}
-          {pourTaches.id === "polyvalent"
-            ? tf("ou environ {0} tâches d'agent ou de Code par mois avec le polyvalent.", entier(tachesParMois(jetonsInclus(formule, pourTaches))))
-            : tf("ou environ {0} tâches d'agent ou de Code par mois.", entier(tachesParMois(jetonsInclus(formule, pourTaches))))}
+          {tf("ou environ {0} tâches d'agent ou de Code par mois.", entier(tachesParMois(jetonsInclus(formule, repere))))}
         </p>
       </div>
 
       <ul className="mt-3 space-y-1.5">
-        <Ligne>{formule.modeles.length === MODELES_INCLUS.length ? t("Les trois modèles hébergés") : t("Le modèle rapide")}</Ligne>
+        <Ligne>{formule.modeles.length === MODELES_INCLUS.length ? t("Tous les modèles hébergés") : t("Le modèle polyvalent")}</Ligne>
         <Ligne>{entreprise ? tf("{0} postes minimum", formule.postesMin) : t("Un poste")}</Ligne>
         <Ligne>{t("Toute la plateforme")}</Ligne>
       </ul>

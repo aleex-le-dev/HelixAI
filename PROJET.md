@@ -5802,6 +5802,24 @@ de cette section) ; ce qui est dit plus bas des « phrases encore en anglais » 
   « Toujours autoriser ») sont traduits sans avoir été lus sur un système dans ces langues ;
   relecture par des personnes dont c'est la langue.
 
+**Fait le 02/10/2026 : l'écran Code ne s'ouvre pas sous Linux (« Réessayer »).** Signalé par
+Medhi. « Réessayer » n'existe que sur l'écran d'installation d'OpenCode (`InstallerOpencode.tsx`) :
+c'est l'installation qui échouait, pas la session. Essai écrit pour voir : `scripts/essai-code-ci.mjs`
+(passerelle jetable, faux moteur, vrai OpenCode posé par Helix, une session ouverte comme l'écran,
+une demande, la réponse dans le flux). Résultats : Mac, réussi ; Linux Debian 12 arm64 (conteneur),
+réussi ; Linux Debian 12 x64 émulé, réussi ; **Linux Alpine arm64 : la variante ordinaire
+d'OpenCode ne démarre pas** (`spawn … ENOENT`, la bibliothèque C attendue manque). Corrigé dans
+`opencodePrive.ts` : chaque système a ses variantes publiées (ordinaire, puis « baseline » pour
+les processeurs x64 sans AVX2, puis « musl »), essayées dans l'ordre **seulement** quand la
+précédente s'est téléchargée et vérifiée mais ne démarre pas ; le message final dit ce que le
+système a répondu. Sous Alpine, la variante musl démarre et la session répond (même essai).
+**Cause sur le poste de Medhi non vue** : processeur sans AVX2 (machine virtuelle) ou bibliothèque
+C ancienne, supposés ; le repli « baseline » n'a pas pu être déclenché ici (l'émulation x64 du Mac
+a AVX2). L'essai tourne maintenant à chaque push sur `main` (job `code-linux`). Écueil vu au
+passage : une propriété dans les paramètres d'un constructeur (`constructor(readonly x)`) fait
+refuser le fichier par Node, qui ne lit que du TypeScript sans transformation : la passerelle ne
+démarrait plus (vu dans l'essai, corrigé avant tout commit).
+
 **Fait le 30/09/2026, après la 2026.930.1 : retours de Medhi sur son PC Windows.**
 - **« L'instance de vos agents ne s'est pas ouverte à temps »**, plusieurs « Réessayer » avant que
   l'agent soit en service. Helix laissait 45 s à OpenClaw pour ouvrir son port, puis l'arrêtait et

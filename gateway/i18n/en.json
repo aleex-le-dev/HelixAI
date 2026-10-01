@@ -1180,6 +1180,7 @@
   "OpenCode n'a pas pu être décompressé : {0}": "OpenCode could not be extracted: {0}",
   "OpenCode n'est pas publié pour ce système ({0}).": "OpenCode is not published for this system ({0}).",
   "OpenCode n'est pas publié pour ce système.": "OpenCode is not published for this system.",
+  "OpenCode s'est installé mais ne démarre pas sur cette machine ({0}).": "OpenCode installed but does not start on this machine ({0}).",
   "OpenCode s'est installé mais ne démarre pas sur cette machine.": "OpenCode installed but does not start on this machine.",
   "OpenRouter refuse cette clé.": "OpenRouter rejects this key.",
   "Orange demande un mot de passe dédié aux logiciels de messagerie, à générer depuis votre espace client.": "Orange requires a dedicated password for mail software, to be generated from your customer area.",

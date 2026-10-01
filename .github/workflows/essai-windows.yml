@@ -79,6 +79,34 @@ jobs:
 
   # La réflexion du modèle sous Linux (29/09/2026) : la passerelle seule (node gateway/src),
   # le moteur sans interface de LM Studio (llmster) posé par elle, et les mêmes flux gardés.
+  code-linux:
+    name: Session de l'écran Code sous Linux
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Récupérer le code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+
+      # Sans `npm ci` : la passerelle n'a aucune dépendance. OpenCode est celui que Helix pose lui-même.
+      - name: Une session Code, comme l'écran l'ouvre (vrai OpenCode, faux moteur)
+        run: node scripts/essai-code-ci.mjs --sortie essai-code-sortie
+
+      - name: Garder le journal
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: essai-code-linux
+          path: essai-code-sortie
+          if-no-files-found: warn
+          retention-days: 14
+
   reflexion-linux:
     name: Réflexion du modèle sous Linux
     runs-on: ubuntu-latest

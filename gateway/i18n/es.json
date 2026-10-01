@@ -1180,6 +1180,7 @@
   "OpenCode n'a pas pu être décompressé : {0}": "No se ha podido descomprimir OpenCode: {0}",
   "OpenCode n'est pas publié pour ce système ({0}).": "OpenCode no está publicado para este sistema ({0}).",
   "OpenCode n'est pas publié pour ce système.": "OpenCode no está publicado para este sistema.",
+  "OpenCode s'est installé mais ne démarre pas sur cette machine ({0}).": "OpenCode se ha instalado pero no arranca en este ordenador ({0}).",
   "OpenCode s'est installé mais ne démarre pas sur cette machine.": "OpenCode se ha instalado pero no arranca en esta máquina.",
   "OpenRouter refuse cette clé.": "OpenRouter rechaza esta clave.",
   "Orange demande un mot de passe dédié aux logiciels de messagerie, à générer depuis votre espace client.": "Orange exige una contraseña específica para los programas de correo, que se genera desde tu área de cliente.",

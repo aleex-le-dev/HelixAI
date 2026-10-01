@@ -1180,6 +1180,7 @@
   "OpenCode n'a pas pu être décompressé : {0}": "OpenCode を展開できませんでした：{0}",
   "OpenCode n'est pas publié pour ce système ({0}).": "このシステム（{0}）向けの OpenCode は公開されていません。",
   "OpenCode n'est pas publié pour ce système.": "このシステム向けの OpenCode は公開されていません。",
+  "OpenCode s'est installé mais ne démarre pas sur cette machine ({0}).": "OpenCode はインストールされましたが、このマシンでは起動しません（{0}）。",
   "OpenCode s'est installé mais ne démarre pas sur cette machine.": "OpenCode はインストールされましたが、このマシンでは起動しません。",
   "OpenRouter refuse cette clé.": "OpenRouter がこのキーを拒否しています。",
   "Orange demande un mot de passe dédié aux logiciels de messagerie, à générer depuis votre espace client.": "Orange では、メールソフト専用のパスワードが必要です。お客様ページで発行してください。",

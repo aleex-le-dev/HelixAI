@@ -1180,6 +1180,7 @@
   "OpenCode n'a pas pu être décompressé : {0}": "无法解压 OpenCode：{0}",
   "OpenCode n'est pas publié pour ce système ({0}).": "OpenCode 未针对此系统发布（{0}）。",
   "OpenCode n'est pas publié pour ce système.": "OpenCode 未针对此系统发布。",
+  "OpenCode s'est installé mais ne démarre pas sur cette machine ({0}).": "OpenCode 已安装，但无法在此计算机上启动（{0}）。",
   "OpenCode s'est installé mais ne démarre pas sur cette machine.": "OpenCode 已安装，但无法在本机启动。",
   "OpenRouter refuse cette clé.": "OpenRouter 拒绝此密钥。",
   "Orange demande un mot de passe dédié aux logiciels de messagerie, à générer depuis votre espace client.": "Orange 要求为邮件软件使用专用密码，请在客户空间中生成。",

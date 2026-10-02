@@ -93,8 +93,12 @@ jobs:
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 24
+          cache: npm
 
-      # Sans `npm ci` : la passerelle n'a aucune dépendance. OpenCode est celui que Helix pose lui-même.
+      # La passerelle importe le SDK MCP (gateway/src/mcp.ts) : sans lui elle ne démarre pas (vu le 02/10/2026). OpenCode, lui, est celui que Helix pose.
+      - name: Dépendances
+        run: npm ci
+
       - name: Une session Code, comme l'écran l'ouvre (vrai OpenCode, faux moteur)
         run: node scripts/essai-code-ci.mjs --sortie essai-code-sortie
 

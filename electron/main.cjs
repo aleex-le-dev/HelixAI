@@ -140,6 +140,7 @@ const NOM_AFFICHE = (() => {
 /** Arrêt volontaire : empêche le redémarrage automatique à la fermeture. */
 let arretDemande = false;
 let redemarrages = 0;
+let utiliseServeurDev = false;
 
 /** Vérifie que la passerelle répond. */
 function ping(port) {
@@ -153,6 +154,29 @@ function ping(port) {
       req.destroy();
       resolve(false);
     });
+  });
+}
+
+/** Vérifie si le serveur de développement Vite répond. */
+function pingDev(url) {
+  return new Promise((resolve) => {
+    try {
+      const u = new URL(url);
+      const req = http.get(
+        { host: u.hostname, port: Number(u.port || 80), path: "/", timeout: 1200 },
+        (res) => {
+          res.resume();
+          resolve(res.statusCode >= 200 && res.statusCode < 500);
+        },
+      );
+      req.on("error", () => resolve(false));
+      req.on("timeout", () => {
+        req.destroy();
+        resolve(false);
+      });
+    } catch {
+      resolve(false);
+    }
   });
 }
 
@@ -1101,13 +1125,16 @@ function createWindow() {
   const token = readInstanceToken();
   if (token) query.token = token;
 
-  if (isDev) {
-    const params = new URLSearchParams(query).toString();
+  const params = new URLSearchParams(query).toString();
+  if (utiliseServeurDev) {
     mainWindow.loadURL(`${DEV_URL}?${params}`);
   } else {
-    const params = new URLSearchParams(query).toString();
     mainWindow.loadURL(`${ORIGINE_APP}/index.html?${params}`);
   }
+
+  mainWindow.webContents.on("did-fail-load", (_event, code, desc, url) => {
+    console.error(`[helix] échec du chargement (${code}: ${desc}) sur ${url}`);
+  });
 
   /*
    * Windows et Linux : fermer cache la fenêtre, l'application continue dans
@@ -1289,8 +1316,14 @@ app.whenReady().then(async () => {
       },
     });
   }
-  // En développement, l'interface vient du serveur Vite : rien à servir ici.
-  if (!isDev) servirInterface();
+  if (isDev && (await pingDev(DEV_URL))) {
+    utiliseServeurDev = true;
+    console.log(`[helix] serveur de développement Vite détecté sur ${DEV_URL}.`);
+  } else if (isDev) {
+    console.log("[helix] aucun serveur Vite détecté : chargement de l'interface construite (dist/).");
+  }
+  // En développement avec serveur Vite : rien à servir ici. Sinon on sert le bundle dist/.
+  if (!utiliseServeurDev) servirInterface();
   installerBotReunion(() => mainWindow);
   // Avant d'ouvrir la fenêtre : elle lit le coffre à son premier script.
   if (!isDev) await reprendreAncienStockage();
